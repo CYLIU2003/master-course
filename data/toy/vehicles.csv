@@ -1,0 +1,5 @@
+vehicle_id,vehicle_type,home_depot,battery_capacity,soc_init,soc_min,soc_max,soc_target_end,charge_power_max,discharge_power_max,fixed_use_cost,max_operating_time,max_distance,charge_efficiency,fuel_tank_capacity,fuel_cost_coeff,co2_emission_coeff
+BEV_01,BEV,depot_A,200.0,160.0,20.0,200.0,100.0,60.0,,5000.0,14.0,400.0,0.95,,,
+BEV_02,BEV,depot_A,200.0,160.0,20.0,200.0,100.0,60.0,,5000.0,14.0,400.0,0.95,,,
+BEV_03,BEV,depot_A,150.0,120.0,15.0,150.0,80.0,50.0,,5000.0,12.0,350.0,0.95,,,
+ICE_01,ICE,depot_A,,,,,,,,,14.0,500.0,,100.0,145.0,2.58
