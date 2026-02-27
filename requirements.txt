@@ -1,0 +1,6 @@
+streamlit>=1.30.0
+plotly>=5.18.0
+pandas>=2.0.0
+scipy>=1.11.0
+# gurobipy は別途 Gurobi ライセンスが必要
+# pip install gurobipy

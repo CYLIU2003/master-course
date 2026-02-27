@@ -1,0 +1,199 @@
+{
+  "meta": {
+    "name": "electric_bus_pv_charging_scheduling_prototype",
+    "version": "0.1.0",
+    "description": "Prototype MILP configuration for electric bus scheduling, charging, PV usage, and grid purchase optimization.",
+    "intended_solver": "gurobi",
+    "intended_language": "python",
+    "units": {
+      "energy": "kWh",
+      "power": "kW",
+      "time": "h",
+      "price": "JPY_per_kWh"
+    }
+  },
+  "model_options": {
+    "objective": {
+      "minimize_grid_energy_cost": true,
+      "include_charger_use_cost": false,
+      "include_battery_degradation_cost": false,
+      "include_terminal_soc_penalty": false,
+      "include_unserved_trip_penalty": false
+    },
+    "features": {
+      "enable_pv": true,
+      "enable_grid_purchase": true,
+      "enable_terminal_soc_constraint": false,
+      "enable_demand_charge": false,
+      "enable_v2g": false,
+      "enable_stochastic_inputs": false
+    },
+    "time_discretization": {
+      "delta_h": 0.5,
+      "start_time": "06:00",
+      "end_time": "22:00",
+      "num_periods": 32,
+      "time_labels": [
+        "06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30",
+        "10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30",
+        "14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30",
+        "18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30"
+      ]
+    }
+  },
+  "sets": {
+    "buses": ["bus_1", "bus_2", "bus_3"],
+    "trips": ["trip_1", "trip_2", "trip_3", "trip_4", "trip_5", "trip_6"],
+    "depots": ["depot_A", "terminal_B"],
+    "charger_types": ["slow", "fast"]
+  },
+  "bus_params": {
+    "bus_1": {
+      "cap_kwh": 300.0,
+      "soc_init_kwh": 240.0,
+      "soc_min_kwh": 60.0,
+      "soc_max_kwh": 300.0
+    },
+    "bus_2": {
+      "cap_kwh": 300.0,
+      "soc_init_kwh": 210.0,
+      "soc_min_kwh": 60.0,
+      "soc_max_kwh": 300.0
+    },
+    "bus_3": {
+      "cap_kwh": 300.0,
+      "soc_init_kwh": 180.0,
+      "soc_min_kwh": 60.0,
+      "soc_max_kwh": 300.0
+    }
+  },
+  "trip_params": {
+    "trip_1": {
+      "start_t": 1,
+      "end_t": 3,
+      "energy_kwh": 40.0,
+      "start_node": "depot_A",
+      "end_node": "terminal_B"
+    },
+    "trip_2": {
+      "start_t": 4,
+      "end_t": 6,
+      "energy_kwh": 38.0,
+      "start_node": "terminal_B",
+      "end_node": "depot_A"
+    },
+    "trip_3": {
+      "start_t": 8,
+      "end_t": 10,
+      "energy_kwh": 42.0,
+      "start_node": "depot_A",
+      "end_node": "terminal_B"
+    },
+    "trip_4": {
+      "start_t": 12,
+      "end_t": 14,
+      "energy_kwh": 45.0,
+      "start_node": "terminal_B",
+      "end_node": "depot_A"
+    },
+    "trip_5": {
+      "start_t": 18,
+      "end_t": 20,
+      "energy_kwh": 40.0,
+      "start_node": "depot_A",
+      "end_node": "terminal_B"
+    },
+    "trip_6": {
+      "start_t": 22,
+      "end_t": 24,
+      "energy_kwh": 39.0,
+      "start_node": "terminal_B",
+      "end_node": "depot_A"
+    }
+  },
+  "charger_params": {
+    "depot_A": {
+      "slow": {
+        "power_kw": 50.0,
+        "count": 2
+      },
+      "fast": {
+        "power_kw": 150.0,
+        "count": 1
+      }
+    },
+    "terminal_B": {
+      "slow": {
+        "power_kw": 40.0,
+        "count": 1
+      },
+      "fast": {
+        "power_kw": 120.0,
+        "count": 1
+      }
+    }
+  },
+  "energy_params": {
+    "charge_efficiency": 0.95,
+    "pv_gen_kwh": [
+      0,0,0,0,0,0,5,10,15,25,35,45,55,60,58,50,
+      40,28,18,10,4,0,0,0,0,0,0,0,0,0,0,0
+    ],
+    "grid_price_yen_per_kwh": [
+      18,18,18,18,20,20,22,22,24,24,26,26,28,28,28,28,
+      30,30,32,32,34,34,30,30,28,28,25,25,22,22,20,20
+    ]
+  },
+  "precomputed_helpers": {
+    "overlap_pairs": [],
+    "trip_active": {
+      "trip_1": [0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_2": [0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_3": [0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_4": [0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_5": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_6": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0]
+    },
+    "trip_energy_at_time": {
+      "trip_1": [0,13.3333,13.3333,13.3334,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_2": [0,0,0,0,12.6667,12.6667,12.6666,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_3": [0,0,0,0,0,0,0,0,14.0,14.0,14.0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_4": [0,0,0,0,0,0,0,0,0,0,0,0,15.0,15.0,15.0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_5": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,13.3333,13.3333,13.3334,0,0,0,0,0,0,0,0,0,0,0],
+      "trip_6": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,13.0,13.0,13.0,0,0,0,0,0,0,0]
+    },
+    "bus_can_charge_at": {
+      "description": "For prototype use, edit manually or generate from route logic in Python.",
+      "default_rule": "charging allowed at both depot_A and terminal_B when the bus is idle",
+      "manual_override_example": {
+        "bus_1": {
+          "depot_A": [1,0,0,0,0,0,0,1,1,0,0,1,0,0,0,1,1,1,0,0,0,1,0,0,0,1,1,1,1,1,1,1],
+          "terminal_B": [0,0,0,1,1,1,1,0,0,1,1,0,1,1,1,0,0,0,1,1,1,0,1,1,1,0,0,0,0,0,0,0]
+        }
+      }
+    }
+  },
+  "case_study_controls": {
+    "notes": [
+      "Edit bus count, trip count, PV, and grid prices first.",
+      "If location logic is not implemented yet, you can temporarily relax location constraints.",
+      "For first debugging, solve with only assignment + SOC + charging linkage.",
+      "Then add PV and power balance."
+    ],
+    "recommended_debug_order": [
+      "assignment_only",
+      "assignment_plus_soc",
+      "assignment_soc_charging",
+      "full_with_pv"
+    ]
+  },
+  "result_fields_to_export": [
+    "objective_value",
+    "x_assignment",
+    "soc_time_series",
+    "charge_schedule_y",
+    "charge_energy_e",
+    "pv_use",
+    "grid_buy"
+  ]
+}

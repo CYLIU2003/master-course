@@ -1,0 +1,325 @@
+{
+  "meta": {
+    "file_purpose": "車両性能・電気代・燃料代などの属物要因を、運行データや制約データとは分離して管理するためのJSON",
+    "version": "0.2-prototype",
+    "derived_date": "2026-02-27",
+    "sources": [
+      {
+        "type": "spreadsheet",
+        "file": "バス性能比較.xlsx",
+        "sheet": "Sheet1",
+        "note": "車両性能比較表をJSON化"
+      },
+      {
+        "type": "conversation_context",
+        "note": "先に整理した研究予定PPT由来のケース区分・感度分析軸を補助的に反映"
+      }
+    ],
+    "editing_policy": {
+      "safe_to_edit_fields": [
+        "electricity_tariff",
+        "fuel_price",
+        "charging_assets",
+        "scenario_parameters",
+        "vehicle_assignment_candidates"
+      ],
+      "caution_fields": [
+        "vehicle_catalog"
+      ]
+    }
+  },
+  "research_scope": {
+    "fleet_modes": [
+      "BEV",
+      "ICE"
+    ],
+    "future_extension": [
+      "HEV"
+    ],
+    "evaluation_cases": [
+      {
+        "case_id": "A",
+        "name": "ICEのみ（現状比較）"
+      },
+      {
+        "case_id": "B",
+        "name": "BEVのみ（完全電動化）"
+      },
+      {
+        "case_id": "C",
+        "name": "混成（BEV/ICE）"
+      },
+      {
+        "case_id": "D",
+        "name": "混成 + PVあり（提案ケース）"
+      }
+    ],
+    "sensitivity_axes": [
+      "PV容量",
+      "BEV比率",
+      "充電器台数",
+      "契約電力上限",
+      "時間帯別電力単価",
+      "軽油単価"
+    ]
+  },
+  "vehicle_catalog": {
+    "bev": [
+      {
+        "manufacturer": "BYD",
+        "model_name": "K8 2.0",
+        "capacity_persons": 80,
+        "source_trace": {
+          "source_file": "バス性能比較.xlsx",
+          "sheet": "Sheet1"
+        },
+        "vehicle_id": "BYD_K8_2.0",
+        "category": "BEV",
+        "battery_capacity_kwh": 314,
+        "rated_output_text": "150(75*2)",
+        "max_output_text": "200(100*2)",
+        "nominal_range_km": 240,
+        "nominal_efficiency_km_per_kwh": 0.76,
+        "battery_type": "リン酸鉄リチウムイオン",
+        "charging_limit_text": "<90kW",
+        "charging_power_candidates_kw": [
+          50,
+          90
+        ],
+        "co2_g_per_km": null,
+        "notes": []
+      },
+      {
+        "manufacturer": "Jバス(日野)",
+        "model_name": "ZEV ブルーリボン",
+        "capacity_persons": 70,
+        "source_trace": {
+          "source_file": "バス性能比較.xlsx",
+          "sheet": "Sheet1"
+        },
+        "vehicle_id": "Jバス(日野)_ZEV_ブルーリボン",
+        "category": "BEV",
+        "battery_capacity_kwh": 242,
+        "rated_output_text": "174(87*2)",
+        "max_output_text": "250(125*2)",
+        "nominal_range_km": 360,
+        "nominal_efficiency_km_per_kwh": 1.48,
+        "battery_type": "リチウムイオン",
+        "charging_limit_text": "<50kW",
+        "charging_power_candidates_kw": [
+          30,
+          50
+        ],
+        "co2_g_per_km": null,
+        "notes": []
+      },
+      {
+        "manufacturer": "Jバス(いすゞ)",
+        "model_name": "エルガ EV",
+        "capacity_persons": 70,
+        "source_trace": {
+          "source_file": "バス性能比較.xlsx",
+          "sheet": "Sheet1"
+        },
+        "vehicle_id": "Jバス(いすゞ)_エルガ_EV",
+        "category": "BEV",
+        "battery_capacity_kwh": 242,
+        "rated_output_text": "174(87*2)",
+        "max_output_text": "250(125*2)",
+        "nominal_range_km": 360,
+        "nominal_efficiency_km_per_kwh": 1.48,
+        "battery_type": "リチウムイオン",
+        "charging_limit_text": "<50kW",
+        "charging_power_candidates_kw": [
+          30,
+          50
+        ],
+        "co2_g_per_km": null,
+        "notes": []
+      }
+    ],
+    "ice": [
+      {
+        "manufacturer": "Jバス(日野)",
+        "model_name": "ブルーリボン",
+        "capacity_persons": 77,
+        "source_trace": {
+          "source_file": "バス性能比較.xlsx",
+          "sheet": "Sheet1"
+        },
+        "vehicle_id": "Jバス(日野)_ブルーリボン",
+        "category": "ICE",
+        "engine_max_output_text": "177 /2400",
+        "fuel_efficiency_km_per_l": 5.35,
+        "co2_g_per_km": 475,
+        "notes": [
+          "(AT)2KG-KV290N4"
+        ]
+      },
+      {
+        "manufacturer": "Jバス(いすゞ)",
+        "model_name": "エルガ",
+        "capacity_persons": 77,
+        "source_trace": {
+          "source_file": "バス性能比較.xlsx",
+          "sheet": "Sheet1"
+        },
+        "vehicle_id": "Jバス(いすゞ)_エルガ",
+        "category": "ICE",
+        "engine_max_output_text": "177 /2400",
+        "fuel_efficiency_km_per_l": 5.35,
+        "co2_g_per_km": 475,
+        "notes": [
+          "(AT)2KG-LV290N4"
+        ]
+      },
+      {
+        "manufacturer": "三菱ふそう",
+        "model_name": "エアロスター",
+        "capacity_persons": 79,
+        "source_trace": {
+          "source_file": "バス性能比較.xlsx",
+          "sheet": "Sheet1"
+        },
+        "vehicle_id": "三菱ふそう_エアロスター",
+        "category": "ICE",
+        "engine_max_output_text": "199 /2400",
+        "fuel_efficiency_km_per_l": 4.52,
+        "co2_g_per_km": 572,
+        "notes": [
+          "(AT)2KG-MP38FK"
+        ]
+      }
+    ],
+    "future_extension": [
+      {
+        "category": "HEV",
+        "status": "not_included_yet",
+        "reason": "諸元データ収集中"
+      }
+    ]
+  },
+  "energy_price_factors": {
+    "electricity_tariff": {
+      "currency": "JPY",
+      "unit_energy": "yen_per_kwh",
+      "unit_demand": "yen_per_kw_month",
+      "pricing_mode": "tou_plus_optional_demand",
+      "notes": [
+        "研究予定PPTでは『需要料金を上限制約として扱うか、コスト化するか要指導』という整理に合わせて両対応できるようにしてある",
+        "値はテンプレート。実データが取れたら差し替える"
+      ],
+      "energy_charge_tou_yen_per_kwh": {
+        "offpeak": 18.0,
+        "mid": 26.0,
+        "peak": 35.0
+      },
+      "demand_charge_yen_per_kw_month": null,
+      "contract_power_limit_kw": null,
+      "sellback_price_yen_per_kwh": null
+    },
+    "fuel_price": {
+      "fuel_type": "diesel",
+      "currency": "JPY",
+      "unit": "yen_per_l",
+      "diesel_yen_per_l": 145.0,
+      "notes": [
+        "テンプレート値。ケーススタディの基準値・高騰ケース・低下ケースで感度分析しやすいよう単独項目に分離"
+      ]
+    },
+    "emission_factor_reference": {
+      "grid_kgco2_per_kwh": null,
+      "diesel_kgco2_per_l": null,
+      "notes": [
+        "LCAや運用時CO2比較に使う場合のみ設定"
+      ]
+    }
+  },
+  "charging_assets": {
+    "candidate_depots": [
+      "目黒営業所",
+      "弦巻営業所",
+      "瀬田営業所"
+    ],
+    "charger_types": {
+      "normal_50kw": {
+        "rated_power_kw": 50,
+        "count": 2,
+        "efficiency": 0.95
+      },
+      "fast_90kw": {
+        "rated_power_kw": 90,
+        "count": 1,
+        "efficiency": 0.95
+      }
+    },
+    "pv_assets": {
+      "enabled": true,
+      "installed_capacity_kw": null,
+      "daily_profile_mode": "external_timeseries_or_case_assumption"
+    }
+  },
+  "scenario_parameters": {
+    "default_case": "D",
+    "vehicle_assignment_candidates": {
+      "bev_models_enabled": [
+        "BYD_K8_2.0",
+        "Jバス(日野)_ZEV_ブルーリボン",
+        "Jバス(いすゞ)_エルガ_EV"
+      ],
+      "ice_models_enabled": [
+        "Jバス(日野)_ブルーリボン",
+        "Jバス(いすゞ)_エルガ",
+        "三菱ふそう_エアロスター"
+      ]
+    },
+    "fleet_mix_examples": [
+      {
+        "name": "ice_only",
+        "bev_ratio": 0.0
+      },
+      {
+        "name": "mixed_30",
+        "bev_ratio": 0.3
+      },
+      {
+        "name": "mixed_50",
+        "bev_ratio": 0.5
+      },
+      {
+        "name": "bev_only",
+        "bev_ratio": 1.0
+      }
+    ],
+    "sensitivity_defaults": {
+      "pv_capacity_kw_cases": [
+        0,
+        100,
+        200,
+        300
+      ],
+      "charger_count_cases": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "contract_power_kw_cases": [
+        100,
+        150,
+        200,
+        300
+      ],
+      "diesel_price_yen_per_l_cases": [
+        130,
+        145,
+        160
+      ],
+      "peak_energy_price_yen_per_kwh_cases": [
+        30,
+        35,
+        40
+      ]
+    }
+  }
+}

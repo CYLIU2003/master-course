@@ -1,0 +1,11 @@
+{
+  "meta": {
+    "description": "主モデル設定から属物要因を外部JSON参照にした試作スタブ",
+    "use_with": "solve_ebus_gurobi.py を拡張する場合は asset_factors_file を先に読んでマージする"
+  },
+  "asset_factors_file": "ebus_asset_factors.json",
+  "notes": [
+    "運行時刻表・便情報・時間離散化は従来の ebus_prototype_config.json 側で管理",
+    "車両性能、電気代、燃料代、充電設備候補はこの外部ファイルに分離"
+  ]
+}
