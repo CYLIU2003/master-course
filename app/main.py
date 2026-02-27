@@ -2,12 +2,31 @@
 main.py — Streamlit アプリケーション エントリーポイント
 
 電気バス運行・充電スケジューリング最適化シミュレータ
+
+起動方法:
+    streamlit run app/main.py
+
+エラー: python -u app/main.py では動作しません。
 """
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
+
+# 直接 python 実行時の早期エラーメッセージ
+# 注意: streamlit run 時は sys.argv[0] に "streamlit" が入る
+_via_streamlit = any("streamlit" in str(a).lower() for a in sys.argv)
+if not _via_streamlit and __name__ == "__main__":
+    print(
+        "\n"
+        "[ERROR] このアプリは Streamlit ウェブアプリです。\n"
+        "  python -u app/main.py  ← この起動方法は使用できません。\n"
+        "\n"
+        "正しい起動方法:\n"
+        "  streamlit run app/main.py\n"
+    )
+    sys.exit(1)
 
 import streamlit as st
 import pandas as pd
@@ -49,6 +68,296 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ---------------------------------------------------------------------------
+# カスタム CSS ・ HTML 基盤
+# ---------------------------------------------------------------------------
+st.markdown("""
+<style>
+/* ===== グローバルリセット & ベース ===== */
+:root {
+    --color-primary:   #1a6fbf;
+    --color-accent:    #00a99d;
+    --color-warn:      #e07b39;
+    --color-bg:        #f5f7fa;
+    --color-card:      #ffffff;
+    --color-border:    #dde3ec;
+    --color-text:      #1f2b3e;
+    --color-muted:     #6b7a99;
+    --radius:          10px;
+    --shadow-sm:       0 2px 6px rgba(0,0,0,.07);
+    --shadow-md:       0 4px 16px rgba(0,0,0,.10);
+}
+
+/* ページ全体の背景 */
+.stApp { background: var(--color-bg) !important; }
+
+/* サイドバー */
+[data-testid="stSidebar"] > div:first-child {
+    background: linear-gradient(180deg, #1a2942 0%, #243655 100%) !important;
+    border-right: 1px solid #1a2942;
+}
+[data-testid="stSidebar"] * { color: #dce6f5 !important; }
+[data-testid="stSidebar"] .stButton > button {
+    background: var(--color-accent) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: var(--radius) !important;
+    font-weight: 600 !important;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: #008f85 !important;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+[data-testid="stSidebar"] input,
+[data-testid="stSidebar"] select,
+[data-testid="stSidebar"] .stSelectbox > div > div {
+    background: rgba(255,255,255,.08) !important;
+    color: #dce6f5 !important;
+    border: 1px solid rgba(255,255,255,.15) !important;
+    border-radius: 6px !important;
+}
+[data-testid="stSidebar"] .stSlider .stMarkdown p { color: #b8cbdd !important; }
+
+/* ヘッダーバナー */
+.ebus-header {
+    background: linear-gradient(135deg, #1a2942 0%, #1a6fbf 60%, #00a99d 100%);
+    border-radius: var(--radius);
+    padding: 28px 36px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+.ebus-header-icon { font-size: 3rem; line-height: 1; }
+.ebus-header-text h1 {
+    margin: 0;
+    font-size: 1.9rem;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: -.5px;
+}
+.ebus-header-text p {
+    margin: 4px 0 0;
+    font-size: .88rem;
+    color: rgba(255,255,255,.75);
+}
+.ebus-badge {
+    display: inline-block;
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.3);
+    color: #fff;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: .75rem;
+    font-weight: 600;
+    margin-top: 8px;
+    letter-spacing: .4px;
+}
+
+/* カードコンポーネント */
+.ebus-card {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 16px;
+}
+.ebus-card-title {
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* KPI メトリクグリッド */
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+.metric-card {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+    text-align: center;
+    transition: box-shadow .2s;
+}
+.metric-card:hover { box-shadow: var(--shadow-md); }
+.metric-card .metric-label {
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--color-muted);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    margin-bottom: 6px;
+}
+.metric-card .metric-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--color-primary);
+    line-height: 1;
+}
+.metric-card .metric-unit {
+    font-size: .7rem;
+    color: var(--color-muted);
+    margin-top: 3px;
+}
+.metric-card.accent .metric-value { color: var(--color-accent); }
+.metric-card.warn   .metric-value { color: var(--color-warn); }
+
+/* ソルバータブパネル */
+.solver-panel {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+}
+.solver-desc {
+    font-size: .85rem;
+    color: var(--color-muted);
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: #f0f5ff;
+    border-left: 3px solid var(--color-primary);
+    border-radius: 0 6px 6px 0;
+}
+
+/* セクションヘッダー */
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 24px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--color-border);
+}
+.section-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--color-text);
+}
+.section-header .section-icon {
+    width: 28px; height: 28px;
+    background: var(--color-primary);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: .9rem;
+}
+
+/* 比較テーブル */
+.compare-table-wrap {
+    overflow-x: auto;
+    border-radius: var(--radius);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+}
+.compare-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+}
+.compare-table-wrap th {
+    background: var(--color-primary);
+    color: #fff;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 700;
+    letter-spacing: .3px;
+}
+.compare-table-wrap td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+.compare-table-wrap tr:last-child td { border-bottom: none; }
+.compare-table-wrap tr:hover td { background: #f8fafc; }
+
+/* インフォボックス */
+.info-box {
+    background: #eef5ff;
+    border: 1px solid #b3d0ff;
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    font-size: .88rem;
+    color: var(--color-text);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+.info-box .info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+
+/* フッター */
+.ebus-footer {
+    margin-top: 40px;
+    padding: 16px 24px;
+    background: var(--color-card);
+    border-top: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: .75rem;
+    color: var(--color-muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Streamlit デフォルト要素の調整 */
+.stButton > button {
+    border-radius: var(--radius) !important;
+    font-weight: 600 !important;
+    transition: all .2s !important;
+}
+.stButton > button[kind="primary"] {
+    background: var(--color-primary) !important;
+    border-color: var(--color-primary) !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background: #155aa8 !important;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+[data-testid="stMetric"] {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow-sm);
+}
+[data-testid="stExpander"] {
+    background: var(--color-card);
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--radius) !important;
+}
+.stTabs [data-baseweb="tab-list"] {
+    background: transparent;
+    gap: 4px;
+    border-bottom: 2px solid var(--color-border);
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px 8px 0 0;
+    padding: 8px 18px;
+    font-weight: 600;
+    font-size: .88rem;
+}
+.stTabs [aria-selected="true"] {
+    background: var(--color-primary) !important;
+    color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -287,28 +596,70 @@ else:
 # ---------------------------------------------------------------------------
 # メインコンテンツ
 # ---------------------------------------------------------------------------
-st.title("🚌 電気バス運行・充電 最適化シミュレータ")
-st.markdown(
-    "PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 — 試作アプリケーション"
-)
+
+# ヘッダーバナー (HTML)
+st.markdown("""
+<div class="ebus-header">
+  <div class="ebus-header-icon">🚌</div>
+  <div class="ebus-header-text">
+    <h1>E-Bus Sim — 電気バス最適化シミュレータ</h1>
+    <p>PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 — 試作アプリケーション</p>
+    <span class="ebus-badge">v0.2.0&nbsp;•&nbsp;Gurobi / ALNS / GA / ABC</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 cfg = st.session_state.config
 
 if cfg is None:
-    st.info("👈 サイドバーから設定を行い「設定を適用」を押してください。")
+    st.markdown("""
+    <div class="info-box">
+      <div class="info-icon">ℹ️</div>
+      <div>左のサイドバーでパラメータを設定し、<b>🔄 設定を適用</b>ボタンを押すか、JSON をインポートしてください。</div>
+    </div>
+    """, unsafe_allow_html=True)
     st.stop()
 
-# ---- 設定概要 ----
-st.markdown("---")
-st.subheader("📋 現在の設定概要")
+# ---- 設定概要 (HTMLカード) ----
+st.markdown("""
+<div class="section-header">
+  <div class="section-icon">📊</div>
+  <h3>現在の設定概要</h3>
+</div>
+""", unsafe_allow_html=True)
 
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("バス台数", cfg.num_buses)
-col2.metric("便数", cfg.num_trips)
-col3.metric("時間スロット数", cfg.num_periods)
-col4.metric("充電拠点数", len(cfg.depots))
-col5.metric("PV", "有効" if cfg.enable_pv else "無効")
+pv_status = "✅ 有効" if cfg.enable_pv else "❌ 無効"
+demand_status = "✅ 有効" if cfg.enable_demand_charge else "—"
 
+st.markdown(f"""
+<div class="metric-grid">
+  <div class="metric-card">
+    <div class="metric-label">🚌 バス台数</div>
+    <div class="metric-value">{cfg.num_buses}</div>
+    <div class="metric-unit">台</div>
+  </div>
+  <div class="metric-card accent">
+    <div class="metric-label">🗓️ 便数</div>
+    <div class="metric-value">{cfg.num_trips}</div>
+    <div class="metric-unit">本</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">⏱️ 時間スロット</div>
+    <div class="metric-value">{cfg.num_periods}</div>
+    <div class="metric-unit">スロット ({cfg.delta_h}h)</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">🔌 充電拠点数</div>
+    <div class="metric-value">{len(cfg.depots)}</div>
+    <div class="metric-unit">拠点</div>
+  </div>
+  <div class="metric-card {'accent' if cfg.enable_pv else 'warn'}">
+    <div class="metric-label">☀️ PV</div>
+    <div class="metric-value" style="font-size:1.3rem">{pv_status}</div>
+    <div class="metric-unit">デマンド: {demand_status}</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 # 設定の詳細表示
 with st.expander("🔍 詳細設定を表示"):
     tab_bus, tab_trip, tab_charger, tab_energy = st.tabs(
@@ -377,14 +728,16 @@ with st.expander("📦 設定 JSON をエクスポート"):
     )
 
 
-# ---------------------------------------------------------------------------
-# ソルバー実行パネル
-# ---------------------------------------------------------------------------
-st.markdown("---")
-st.subheader("🧮 ソルバー実行")
+# ---- ソルバー実行パネル ----
+st.markdown("""
+<div class="section-header">
+  <div class="section-icon">🧠</div>
+  <h3>ソルバー実行</h3>
+</div>
+""", unsafe_allow_html=True)
 
 solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_compare = st.tabs(
-    ["Gurobi (MILP)", "ALNS", "GA", "ABC", "比較"]
+    ["🔬 Gurobi (MILP)", "🎡 ALNS", "🧬 GA", "🐝 ABC", "📊 比較"]
 )
 
 # ---- Gurobi タブ ----
@@ -804,7 +1157,9 @@ with solver_tab_compare:
 # ---------------------------------------------------------------------------
 # フッター
 # ---------------------------------------------------------------------------
-st.markdown("---")
-st.caption(
-    "E-Bus Sim v0.1.0 — PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 試作アプリ"
-)
+st.markdown("""
+<div class="ebus-footer">
+  <span>🚌 <b>E-Bus Sim v0.2.0</b> — PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 試作アプリ</span>
+  <span>Gurobi (MILP) &nbsp;•&nbsp; ALNS &nbsp;•&nbsp; GA &nbsp;•&nbsp; ABC</span>
+</div>
+""", unsafe_allow_html=True)
