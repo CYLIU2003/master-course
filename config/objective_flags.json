@@ -1,0 +1,27 @@
+{
+  "_comment": "目的関数・制約の ON/OFF フラグ (仕様書 §9.3, §10)",
+  "objective_terms": {
+    "vehicle_fixed_cost": true,
+    "electricity_cost": true,
+    "demand_charge_cost": false,
+    "fuel_cost": true,
+    "deadhead_cost": true,
+    "battery_degradation_cost": false,
+    "emission_cost": false,
+    "unserved_penalty": true,
+    "slack_penalty": true
+  },
+  "constraints": {
+    "assignment": true,
+    "soc": true,
+    "charging": true,
+    "charger_capacity": true,
+    "energy_balance": true,
+    "pv_grid": false,
+    "battery_degradation": false,
+    "v2g": false,
+    "demand_charge": false,
+    "operating_time_limit": true,
+    "distance_limit": true
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "_comment": "仕様書 §12.10 config.json - 実験設定ファイル",
+  "time_step_min": 15,
+  "num_periods": 64,
+  "start_time": "05:00",
+  "end_time": "21:00",
+  "planning_horizon_hours": 16.0,
+
+  "allow_partial_service": false,
+  "enable_pv": false,
+  "enable_v2g": false,
+  "enable_battery_degradation": false,
+  "enable_demand_charge": false,
+  "use_soft_soc_constraint": false,
+
+  "solver": {
+    "time_limit_sec": 300,
+    "mip_gap": 0.01,
+    "threads": 0,
+    "presolve": -1,
+    "verbose": false
+  },
+
+  "objective_weights": {
+    "vehicle_fixed_cost": 1.0,
+    "electricity_cost": 1.0,
+    "demand_charge_cost": 1.0,
+    "fuel_cost": 1.0,
+    "deadhead_cost": 1.0,
+    "battery_degradation_cost": 1.0,
+    "emission_cost": 0.0,
+    "unserved_penalty": 10000.0,
+    "slack_penalty": 1000000.0
+  },
+
+  "big_m": {
+    "BIG_M_ASSIGN": 1000000,
+    "BIG_M_CHARGE": 1000000,
+    "BIG_M_SOC": 1000000,
+    "EPSILON": 1e-6
+  },
+
+  "paths": {
+    "vehicles_csv": "data/toy/vehicles.csv",
+    "tasks_csv": "data/toy/tasks.csv",
+    "chargers_csv": "data/toy/chargers.csv",
+    "sites_csv": "data/toy/sites.csv",
+    "pv_profile_csv": "data/toy/pv_profile.csv",
+    "electricity_price_csv": "data/toy/electricity_price.csv",
+    "travel_connection_csv": "data/toy/travel_connection.csv",
+    "compat_vehicle_task_csv": "data/toy/compatibility_vehicle_task.csv",
+    "compat_vehicle_charger_csv": "data/toy/compatibility_vehicle_charger.csv",
+    "output_dir": "outputs"
+  }
+}

@@ -15,8 +15,8 @@ import sys
 from pathlib import Path
 
 # 直接 python 実行時の早期エラーメッセージ
-# 注意: streamlit run 時は sys.argv[0] に "streamlit" が入る
-_via_streamlit = any("streamlit" in str(a).lower() for a in sys.argv)
+# streamlit run 時は sys.modules に 'streamlit' が既にロードされている
+_via_streamlit = "streamlit" in sys.modules
 if not _via_streamlit and __name__ == "__main__":
     print(
         "\n"
@@ -424,12 +424,70 @@ else:
     st.sidebar.subheader("🚌 車両性能")
 
     cap_kwh = st.sidebar.number_input("バッテリ容量 [kWh]", 50.0, 1000.0, 300.0, step=10.0)
-    soc_init_ratio = st.sidebar.slider("初期 SOC [%]", 30, 100, 80) / 100.0
-    soc_min_ratio = st.sidebar.slider("SOC 下限 [%]", 5, 50, 20) / 100.0
+    soc_init_ratio = st.sidebar.slider("初期 SOC [%]（全バス共通）", 30, 100, 80) / 100.0
+    soc_min_ratio = st.sidebar.slider("SOC 下限 [%]（充電下限バッファ）", 5, 50, 20) / 100.0
+    soc_max_ratio = st.sidebar.slider("SOC 上限 [%]（充電上限バッファ）", 60, 100, 95) / 100.0
     efficiency = st.sidebar.number_input(
         "電費 [km/kWh]", 0.3, 3.0, 1.0, step=0.1,
         help="BEV の電費。値が大きいほど燃費が良い",
     )
+
+    # ---- 個別バス SOC 設定 ----
+    with st.sidebar.expander(f"🔋 個別バス SOC 設定（{num_buses}台）", expanded=False):
+        st.caption("各バスの初期SOC・下限・上限 [%] を個別に設定できます。\n一括適用で上のスライダー値を全バスに反映します。")
+
+        if st.button("⬇ 全バスに一括適用（上の値で上書き）", key="bulk_soc_apply"):
+            for _bi in range(num_buses):
+                st.session_state[f"bsoc_{_bi}_init"] = int(soc_init_ratio * 100)
+                st.session_state[f"bsoc_{_bi}_min"] = int(soc_min_ratio * 100)
+                st.session_state[f"bsoc_{_bi}_max"] = int(soc_max_ratio * 100)
+
+        bus_soc_configs: dict = {}
+        for _bi in range(num_buses):
+            _bid = f"bus_{_bi + 1}"
+            st.markdown(f"**{_bid}**")
+            _c1, _c2, _c3 = st.columns(3)
+
+            # デフォルト値（未設定時はグローバルスライダーの値）
+            _def_init = int(soc_init_ratio * 100)
+            _def_min  = int(soc_min_ratio * 100)
+            _def_max  = int(soc_max_ratio * 100)
+
+            with _c1:
+                _b_init = st.number_input(
+                    f"初期%_{_bid}", min_value=10, max_value=100,
+                    value=_def_init, step=5,
+                    key=f"bsoc_{_bi}_init",
+                    label_visibility="collapsed",
+                )
+                st.caption(f"初期 {_b_init}%")
+            with _c2:
+                _b_min = st.number_input(
+                    f"下限%_{_bid}", min_value=5, max_value=90,
+                    value=_def_min, step=5,
+                    key=f"bsoc_{_bi}_min",
+                    label_visibility="collapsed",
+                )
+                st.caption(f"下限 {_b_min}%")
+            with _c3:
+                _b_max = st.number_input(
+                    f"上限%_{_bid}", min_value=50, max_value=100,
+                    value=_def_max, step=5,
+                    key=f"bsoc_{_bi}_max",
+                    label_visibility="collapsed",
+                )
+                st.caption(f"上限 {_b_max}%")
+
+            if _b_min >= _b_max:
+                st.warning(f"{_bid}: 下限 ≥ 上限、設定を確認してください")
+            if _b_init < _b_min or _b_init > _b_max:
+                st.warning(f"{_bid}: 初期SOCが [下限, 上限] 範囲外です")
+
+            bus_soc_configs[_bid] = {
+                "init_ratio": _b_init / 100.0,
+                "min_ratio":  _b_min  / 100.0,
+                "max_ratio":  _b_max  / 100.0,
+            }
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("🔌 充電設備")
@@ -488,13 +546,18 @@ else:
 
         buses = []
         for i in range(num_buses):
+            _bid = f"bus_{i+1}"
+            _bcfg = bus_soc_configs.get(_bid, {})
+            _init_r = _bcfg.get("init_ratio", soc_init_ratio)
+            _min_r  = _bcfg.get("min_ratio",  soc_min_ratio)
+            _max_r  = _bcfg.get("max_ratio",  soc_max_ratio)
             buses.append(BusSpec(
-                bus_id=f"bus_{i+1}",
+                bus_id=_bid,
                 category="BEV",
                 cap_kwh=cap_kwh,
-                soc_init_kwh=round(cap_kwh * soc_init_ratio, 1),
-                soc_min_kwh=round(cap_kwh * soc_min_ratio, 1),
-                soc_max_kwh=cap_kwh,
+                soc_init_kwh=round(cap_kwh * _init_r, 1),
+                soc_min_kwh=round(cap_kwh * _min_r, 1),
+                soc_max_kwh=round(cap_kwh * _max_r, 1),
                 efficiency_km_per_kwh=efficiency,
             ))
 

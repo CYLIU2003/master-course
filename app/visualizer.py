@@ -293,6 +293,6 @@ def make_kpi_table(result: SolveResult) -> Dict[str, Any]:
         "総買電量 [kWh]": f"{result.total_grid_kwh:,.1f}",
         "PV利用量 [kWh]": f"{result.total_pv_kwh:,.1f}",
         "最低SOC [kWh]": f"{result.min_soc_kwh:,.1f}",
-        "最大同時充電台数": result.max_simultaneous_chargers,
+        "最大同時充電台数": str(result.max_simultaneous_chargers),
         "計算時間 [秒]": f"{result.solve_time_sec:.2f}",
     }

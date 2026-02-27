@@ -1,0 +1,9 @@
+vehicle_id,charger_id,feasible
+BEV_01,CHG_FAST_01,true
+BEV_01,CHG_SLOW_01,true
+BEV_02,CHG_FAST_01,true
+BEV_02,CHG_SLOW_01,true
+BEV_03,CHG_FAST_01,true
+BEV_03,CHG_SLOW_01,true
+ICE_01,CHG_FAST_01,false
+ICE_01,CHG_SLOW_01,false
