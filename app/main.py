@@ -28,6 +28,8 @@ from app.model_core import (
 )
 from app.solver_gurobi import VALID_STAGES, is_gurobi_available, solve_gurobi
 from app.solver_alns import ALNSParams, solve_alns
+from app.solver_ga import GAParams, solve_ga
+from app.solver_abc import ABCParams, solve_abc
 from app.visualizer import (
     make_kpi_table,
     plot_alns_convergence,
@@ -58,6 +60,10 @@ if "result_gurobi" not in st.session_state:
     st.session_state.result_gurobi = None
 if "result_alns" not in st.session_state:
     st.session_state.result_alns = None
+if "result_ga" not in st.session_state:
+    st.session_state.result_ga = None
+if "result_abc" not in st.session_state:
+    st.session_state.result_abc = None
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +279,8 @@ else:
         st.session_state.config = precompute_helpers(cfg)
         st.session_state.result_gurobi = None
         st.session_state.result_alns = None
+        st.session_state.result_ga = None
+        st.session_state.result_abc = None
         st.sidebar.success("設定を適用しました")
 
 
@@ -375,8 +383,8 @@ with st.expander("📦 設定 JSON をエクスポート"):
 st.markdown("---")
 st.subheader("🧮 ソルバー実行")
 
-solver_tab_gurobi, solver_tab_alns, solver_tab_compare = st.tabs(
-    ["Gurobi (MILP)", "ALNS", "比較"]
+solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_compare = st.tabs(
+    ["Gurobi (MILP)", "ALNS", "GA", "ABC", "比較"]
 )
 
 # ---- Gurobi タブ ----
@@ -520,58 +528,277 @@ with solver_tab_alns:
             st.plotly_chart(plot_assignment_gantt(cfg, res_a, title="便割当 (ALNS)"), use_container_width=True)
 
 
+# ---- GA タブ ----
+with solver_tab_ga:
+    st.markdown("GA (遺伝的アルゴリズム) — 集団ベース進化的最適化。コスト・時間の比較用。")
+
+    gc1, gc2, gc3 = st.columns(3)
+    with gc1:
+        ga_pop = st.number_input("集団サイズ", 10, 200, 30, step=10, key="ga_pop")
+        ga_gens = st.number_input("最大世代数", 20, 2000, 200, step=20, key="ga_gens")
+    with gc2:
+        ga_cross = st.number_input("交叉率", 0.5, 1.0, 0.85, step=0.05, format="%.2f", key="ga_cross")
+        ga_mut = st.number_input("突然変異率", 0.01, 0.5, 0.15, step=0.01, format="%.2f", key="ga_mut")
+    with gc3:
+        ga_tourn = st.number_input("トーナメントサイズ", 2, 10, 3, step=1, key="ga_tourn")
+        ga_elite = st.number_input("エリート数", 1, 10, 2, step=1, key="ga_elite")
+        ga_seed = st.number_input("乱数シード", 0, 9999, 42, step=1, key="ga_seed")
+
+    ga_no_improve = st.number_input("改善なし上限", 10, 500, 50, step=10, key="ga_no_improve")
+
+    if st.button("▶️ GA で求解", type="primary"):
+        ga_params = GAParams(
+            population_size=ga_pop,
+            max_generations=ga_gens,
+            max_no_improve=ga_no_improve,
+            crossover_rate=ga_cross,
+            mutation_rate=ga_mut,
+            tournament_size=ga_tourn,
+            elitism_count=ga_elite,
+            seed=ga_seed,
+        )
+
+        progress_bar_ga = st.progress(0.0)
+        status_text_ga = st.empty()
+
+        def ga_callback(gen: int, cur: float, best: float):
+            progress_bar_ga.progress(min(gen / ga_gens, 1.0))
+            cost_str = f"{best:,.0f}" if best < float("inf") else "N/A"
+            status_text_ga.text(f"世代 {gen}/{ga_gens} | 最良: {cost_str} 円")
+
+        result_ga = solve_ga(cfg, params=ga_params, callback=ga_callback)
+        st.session_state.result_ga = result_ga
+        progress_bar_ga.progress(1.0)
+
+        if result_ga.status == "FEASIBLE":
+            st.success(f"✅ 実行可能解を取得 — コスト: {result_ga.objective_value:,.0f} 円")
+        else:
+            st.error(f"❌ ステータス: {result_ga.status}")
+
+    res_ga = st.session_state.result_ga
+    if res_ga is not None and res_ga.status != "INFEASIBLE":
+        st.markdown("#### 📊 GA 結果")
+
+        kpi = make_kpi_table(res_ga)
+        kpi_df = pd.DataFrame([kpi]).T
+        kpi_df.columns = ["値"]
+        st.table(kpi_df)
+
+        # 収束曲線
+        st.plotly_chart(plot_alns_convergence(res_ga, title="GA 収束曲線"), use_container_width=True)
+
+        if res_ga.soc_series:
+            st.plotly_chart(plot_soc_timeseries(cfg, res_ga, title="SOC 推移 (GA)"), use_container_width=True)
+
+        if res_ga.grid_buy or res_ga.pv_use:
+            col_ga1, col_ga2 = st.columns(2)
+            with col_ga1:
+                st.plotly_chart(plot_power_balance(cfg, res_ga, title="電力バランス (GA)"), use_container_width=True)
+            with col_ga2:
+                st.plotly_chart(plot_cost_breakdown(cfg, res_ga, title="買電コスト (GA)"), use_container_width=True)
+
+        if res_ga.assignment:
+            st.plotly_chart(plot_assignment_gantt(cfg, res_ga, title="便割当 (GA)"), use_container_width=True)
+
+
+# ---- ABC タブ ----
+with solver_tab_abc:
+    st.markdown("ABC (人工蜂コロニー) — 群知能ベース最適化。コスト・時間の比較用。")
+
+    ac1, ac2, ac3 = st.columns(3)
+    with ac1:
+        abc_colony = st.number_input("コロニーサイズ（食料源数）", 10, 200, 30, step=10, key="abc_colony")
+        abc_iters = st.number_input("最大サイクル数", 20, 2000, 200, step=20, key="abc_iters")
+    with ac2:
+        abc_limit = st.number_input("limit（偵察蜂発動閾値）", 5, 100, 20, step=5, key="abc_limit")
+        abc_perturb = st.slider("近傍変更便数", 1, 10, 3, key="abc_perturb")
+    with ac3:
+        abc_no_improve = st.number_input("改善なし上限", 10, 500, 50, step=10, key="abc_no_improve")
+        abc_seed = st.number_input("乱数シード", 0, 9999, 42, step=1, key="abc_seed")
+
+    if st.button("▶️ ABC で求解", type="primary"):
+        abc_params = ABCParams(
+            colony_size=abc_colony,
+            max_iterations=abc_iters,
+            max_no_improve=abc_no_improve,
+            limit=abc_limit,
+            perturbation_size=abc_perturb,
+            seed=abc_seed,
+        )
+
+        progress_bar_abc = st.progress(0.0)
+        status_text_abc = st.empty()
+
+        def abc_callback(cyc: int, cur: float, best: float):
+            progress_bar_abc.progress(min(cyc / abc_iters, 1.0))
+            cost_str = f"{best:,.0f}" if best < float("inf") else "N/A"
+            status_text_abc.text(f"サイクル {cyc}/{abc_iters} | 最良: {cost_str} 円")
+
+        result_abc = solve_abc(cfg, params=abc_params, callback=abc_callback)
+        st.session_state.result_abc = result_abc
+        progress_bar_abc.progress(1.0)
+
+        if result_abc.status == "FEASIBLE":
+            st.success(f"✅ 実行可能解を取得 — コスト: {result_abc.objective_value:,.0f} 円")
+        else:
+            st.error(f"❌ ステータス: {result_abc.status}")
+
+    res_abc = st.session_state.result_abc
+    if res_abc is not None and res_abc.status != "INFEASIBLE":
+        st.markdown("#### 📊 ABC 結果")
+
+        kpi = make_kpi_table(res_abc)
+        kpi_df = pd.DataFrame([kpi]).T
+        kpi_df.columns = ["値"]
+        st.table(kpi_df)
+
+        # 収束曲線
+        st.plotly_chart(plot_alns_convergence(res_abc, title="ABC 収束曲線"), use_container_width=True)
+
+        if res_abc.soc_series:
+            st.plotly_chart(plot_soc_timeseries(cfg, res_abc, title="SOC 推移 (ABC)"), use_container_width=True)
+
+        if res_abc.grid_buy or res_abc.pv_use:
+            col_abc1, col_abc2 = st.columns(2)
+            with col_abc1:
+                st.plotly_chart(plot_power_balance(cfg, res_abc, title="電力バランス (ABC)"), use_container_width=True)
+            with col_abc2:
+                st.plotly_chart(plot_cost_breakdown(cfg, res_abc, title="買電コスト (ABC)"), use_container_width=True)
+
+        if res_abc.assignment:
+            st.plotly_chart(plot_assignment_gantt(cfg, res_abc, title="便割当 (ABC)"), use_container_width=True)
+
+
 # ---- 比較タブ ----
 with solver_tab_compare:
-    st.markdown("### Gurobi vs ALNS 比較")
+    st.markdown("### 全ソルバー比較 — コスト・計算時間")
 
     res_g = st.session_state.result_gurobi
     res_a = st.session_state.result_alns
+    res_ga = st.session_state.result_ga
+    res_abc = st.session_state.result_abc
 
-    if res_g is None and res_a is None:
+    all_results = {
+        "Gurobi (MILP)": res_g,
+        "ALNS": res_a,
+        "GA": res_ga,
+        "ABC": res_abc,
+    }
+    available = {k: v for k, v in all_results.items() if v is not None}
+
+    if not available:
         st.info("少なくとも 1 つのソルバーを実行してください。")
     else:
+        # ---- KPI 比較テーブル ----
         compare_data = {}
-        if res_g is not None:
-            compare_data["Gurobi (MILP)"] = make_kpi_table(res_g)
-        if res_a is not None:
-            compare_data["ALNS"] = make_kpi_table(res_a)
+        for name, res in available.items():
+            compare_data[name] = make_kpi_table(res)
+        compare_df = pd.DataFrame(compare_data)
+        st.table(compare_df)
 
-        if compare_data:
-            compare_df = pd.DataFrame(compare_data)
-            st.table(compare_df)
+        # ---- コスト比較棒グラフ ----
+        st.markdown("#### 目的関数値（総コスト）比較")
+        import plotly.graph_objects as go
 
-        # SOC 比較
-        if res_g is not None and res_a is not None:
-            if res_g.soc_series and res_a.soc_series:
-                st.markdown("#### SOC 推移比較")
-                import plotly.graph_objects as go
-                labels = make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods)
-                labels_ext = labels + ["END"]
+        cost_names = []
+        cost_vals = []
+        cost_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
+        for i, (name, res) in enumerate(available.items()):
+            if res.objective_value is not None:
+                cost_names.append(name)
+                cost_vals.append(res.objective_value)
 
-                fig = go.Figure()
-                for bus_id in res_g.soc_series:
-                    fig.add_trace(go.Scatter(
-                        x=labels_ext[:len(res_g.soc_series[bus_id])],
-                        y=res_g.soc_series[bus_id],
-                        name=f"{bus_id} (Gurobi)",
+        if cost_vals:
+            fig_cost = go.Figure(go.Bar(
+                x=cost_names,
+                y=cost_vals,
+                marker_color=cost_colors[:len(cost_names)],
+                text=[f"{v:,.0f}" for v in cost_vals],
+                textposition="auto",
+            ))
+            fig_cost.update_layout(
+                title="ソルバー別 目的関数値 [円]",
+                yaxis_title="コスト [円]",
+                height=400,
+            )
+            st.plotly_chart(fig_cost, use_container_width=True)
+
+        # ---- 計算時間比較 ----
+        st.markdown("#### 計算時間比較")
+        time_names = []
+        time_vals = []
+        for name, res in available.items():
+            time_names.append(name)
+            time_vals.append(res.solve_time_sec)
+
+        if time_vals:
+            fig_time = go.Figure(go.Bar(
+                x=time_names,
+                y=time_vals,
+                marker_color=cost_colors[:len(time_names)],
+                text=[f"{v:.2f}s" for v in time_vals],
+                textposition="auto",
+            ))
+            fig_time.update_layout(
+                title="ソルバー別 計算時間 [秒]",
+                yaxis_title="時間 [秒]",
+                height=400,
+            )
+            st.plotly_chart(fig_time, use_container_width=True)
+
+        # ---- 収束曲線比較（メタヒューリスティクス同士）----
+        meta_results = {k: v for k, v in available.items() if v.iteration_log}
+        if len(meta_results) >= 2:
+            st.markdown("#### 収束曲線比較")
+            fig_conv = go.Figure()
+            line_styles = ["solid", "dash", "dot", "dashdot"]
+            for i, (name, res) in enumerate(meta_results.items()):
+                iters = [e["iteration"] for e in res.iteration_log]
+                bests = [e.get("best_cost") for e in res.iteration_log]
+                fig_conv.add_trace(go.Scatter(
+                    x=iters,
+                    y=bests,
+                    mode="lines",
+                    name=name,
+                    line=dict(
+                        color=cost_colors[i % len(cost_colors)],
+                        dash=line_styles[i % len(line_styles)],
+                    ),
+                ))
+            fig_conv.update_layout(
+                title="収束曲線比較 (最良コスト)",
+                xaxis_title="反復 / 世代 / サイクル",
+                yaxis_title="コスト [円]",
+                hovermode="x unified",
+                height=450,
+            )
+            st.plotly_chart(fig_conv, use_container_width=True)
+
+        # ---- SOC 比較 ----
+        results_with_soc = {k: v for k, v in available.items() if v.soc_series}
+        if len(results_with_soc) >= 2:
+            st.markdown("#### SOC 推移比較")
+            labels = make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods)
+            labels_ext = labels + ["END"]
+
+            fig_soc = go.Figure()
+            dash_styles = ["solid", "dash", "dot", "dashdot"]
+            for s_idx, (s_name, s_res) in enumerate(results_with_soc.items()):
+                for bus_id in s_res.soc_series:
+                    fig_soc.add_trace(go.Scatter(
+                        x=labels_ext[:len(s_res.soc_series[bus_id])],
+                        y=s_res.soc_series[bus_id],
+                        name=f"{bus_id} ({s_name})",
                         mode="lines",
-                        line=dict(dash="solid"),
+                        line=dict(dash=dash_styles[s_idx % len(dash_styles)]),
                     ))
-                for bus_id in res_a.soc_series:
-                    fig.add_trace(go.Scatter(
-                        x=labels_ext[:len(res_a.soc_series[bus_id])],
-                        y=res_a.soc_series[bus_id],
-                        name=f"{bus_id} (ALNS)",
-                        mode="lines",
-                        line=dict(dash="dash"),
-                    ))
-                fig.update_layout(
-                    title="SOC 推移比較: Gurobi vs ALNS",
-                    xaxis_title="時刻",
-                    yaxis_title="SOC [kWh]",
-                    height=450,
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            fig_soc.update_layout(
+                title="SOC 推移比較: 全ソルバー",
+                xaxis_title="時刻",
+                yaxis_title="SOC [kWh]",
+                height=500,
+            )
+            st.plotly_chart(fig_soc, use_container_width=True)
 
 
 # ---------------------------------------------------------------------------
