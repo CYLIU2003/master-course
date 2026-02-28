@@ -5,11 +5,11 @@ Electric bus scheduling / charging / PV co-optimization prototype for Gurobi.
 Usage examples
 --------------
 python solve_ebus_gurobi.py \
-    --config ebus_prototype_config.json \
+    --config config/ebus_prototype_config.json \
     --stage assignment_only
 
 python solve_ebus_gurobi.py \
-    --config ebus_prototype_config.json \
+    --config config/ebus_prototype_config.json \
     --stage full_with_pv \
     --output result_full_with_pv.json
 
@@ -22,7 +22,7 @@ Stages
 
 Notes
 -----
-- This script is designed to match the JSON structure in ebus_prototype_config.json.
+- This script is designed to match the JSON structure in config/ebus_prototype_config.json.
 - It intentionally keeps the first prototype MILP simple.
 - Location consistency is implemented in a relaxed prototype form:
   if manual bus_can_charge_at data is absent, charging is allowed at every node when idle.

@@ -198,24 +198,180 @@ Gurobi がインストールされている環境でのみ使用可能です。
 
 ---
 
+## 新アーキテクチャ (`src/` モジュール)
+
+### 概要
+
+`src/` ディレクトリには、修士論文の仕様書に準拠した**新しいモジュール型アーキテクチャ**が実装されています。CSV ベースのデータ入力、モード切替（先行研究再現 + 提案手法）、シミュレータ検証、実行可能性診断を統合しています。
+
+### データパイプライン
+
+```
+CSV (data/toy/*.csv)
+  ↓  data_loader.py
+ProblemData
+  ↓  model_sets.py
+ModelSets (K_BEV, K_ICE, R, C, T, ...)
+  ↓  parameter_builder.py
+DerivedParams (task_energy_bev, task_lut, vehicle_lut, ...)
+  ↓  model_factory.py / milp_model.py
+Gurobi Model → MILPResult
+  ↓  simulator.py
+SimulationResult + FeasibilityReport
+  ↓  result_exporter.py
+CSV / JSON / Markdown
+```
+
+### モード一覧
+
+| モード | 出典 | 特徴フラグ |
+|---|---|---|
+| `mode_A_journey_charge` | He et al. (2023) | 便割当固定 (greedy) + 充電LP のみ |
+| `mode_B_resource_assignment` | Chen et al. (2023) | 便割当+充電 MILP、PV/V2G なし |
+| `thesis_mode` | 提案手法 | 全機能有効: PV、デマンド料金、V2G、電池劣化 |
+
+### CLI 実行
+
+```bash
+# 基本実行 (thesis_mode)
+python run_experiment.py
+
+# モード指定
+python run_experiment.py --mode mode_A_journey_charge
+python run_experiment.py --mode mode_B_resource_assignment
+
+# オプション
+python run_experiment.py --config config/experiment_config.json --time-limit 300 --mode thesis_mode
+```
+
+### Streamlit での利用
+
+Streamlit アプリの「🆕 新アーキ (src/)」タブから新モジュールを利用できます:
+
+1. config JSON パスを指定（デフォルト: `config/experiment_config.json`）
+2. PV / デマンド料金 / V2G / 電池劣化のトグルを設定
+3. 「📥 データ読込」でデータをロード
+4. モデルモード（mode_A / mode_B / thesis_mode）を選択
+5. ソルバー（Gurobi MILP / ALNS / 両方）を選択
+6. 「▶️ 求解実行」で最適化 → 結果・グラフ・実行可能性診断を確認
+
+### データ形式 (CSV)
+
+`data/toy/` に含まれるサンプルデータ:
+
+| ファイル | 内容 |
+|---|---|
+| `vehicles.csv` | 車両定義 (vehicle_id, type, cap_kwh, soc_init, soc_min, soc_max, ...) |
+| `tasks.csv` | タスク定義 (task_id, distance_km, energy_kwh, start_time_idx, end_time_idx, ...) |
+| `chargers.csv` | 充電器定義 (charger_id, site_id, power_kw, count, ...) |
+| `sites.csv` | 拠点定義 (site_id, grid_capacity_kw, pv_capacity_kw, ...) |
+| `tou_rates.csv` | TOU 電力単価 (time_idx, price_yen_per_kwh) |
+| `pv_generation.csv` | PV 発電量 (time_idx, site_id, gen_kw) |
+| `vehicle_task_feasibility.csv` | 車両–タスク割当可否 |
+| `vehicle_charger_access.csv` | 車両–充電器アクセス可否 |
+| `weights.csv` | 目的関数の重み係数 (9 項目) |
+
+設定ファイル `config/experiment_config.json` でデータディレクトリと計画パラメータを記述:
+
+```json
+{
+  "data_dir": "data/toy",
+  "num_periods": 64,
+  "delta_t_hour": 0.25,
+  "enable_pv": true,
+  "enable_demand_charge": true,
+  "enable_v2g": false,
+  "enable_battery_degradation": true
+}
+```
+
+### 目的関数（9 項目加重和）
+
+$$\min \sum_{i=1}^{9} w_i \cdot f_i(x)$$
+
+| # | 項目 | 説明 |
+|---|---|---|
+| 1 | 電力量料金 | TOU 単価 × 系統買電量 |
+| 2 | デマンド料金 | ピーク電力 × デマンド単価 |
+| 3 | ICE 燃料費 | 軽油単価 × 燃料消費量 |
+| 4 | ICE CO₂コスト | CO₂排出量 × 炭素価格 |
+| 5 | 電池劣化コスト | 充電電力量 × 劣化係数 |
+| 6 | 未担当ペナルティ | 未割当タスク数 × ペナルティ |
+| 7 | PV 余剰ペナルティ | PV 発電量 − PV 利用量 |
+| 8 | V2G 収益 (負コスト) | 放電量 × 売電単価 |
+| 9 | 終端 SOC 偏差 | SOC 末値との差分ペナルティ |
+
+### シミュレーション & 実行可能性診断
+
+`simulator.py` により MILP/ALNS 結果を独立検証:
+
+- **SOC トレース再計算**: 全 BEV の時系列 SOC を再構築
+- **電力収支検証**: 系統受電・PV 利用・デマンドピークを算出
+- **6 カテゴリ診断** (`FeasibilityReport`):
+  1. タスク重複違反
+  2. SOC 下限違反
+  3. SOC 上限違反
+  4. 充電器容量超過
+  5. 運行中充電
+  6. 系統容量超過
+
+---
+
 ## ファイル構成
 
 ```
 master-course/
-├── app/
-│   ├── __init__.py          # パッケージ初期化
-│   ├── main.py              # Streamlit メインアプリ
-│   ├── model_core.py        # コアモデル・データ構造
-│   ├── solver_gurobi.py     # Gurobi (MILP) ソルバー
-│   ├── solver_alns.py       # ALNS ソルバー
-│   ├── solver_ga.py         # GA（遺伝的アルゴリズム）ソルバー
-│   ├── solver_abc.py        # ABC（人工蜂コロニー）ソルバー
-│   └── visualizer.py        # Plotly 可視化モジュール
-├── constant/                # 研究資料（数理モデル定義、制約一覧等）
-├── ebus_prototype_config.json      # プロトタイプ設定 JSON
-├── ebus_asset_factors.json         # 属物要因 JSON（車両カタログ等）
-├── ebus_config_with_asset_ref.json # 外部ファイル参照スタブ
-├── solve_ebus_gurobi.py            # 既存の CLI ソルバー
+├── src/                              # 🆕 新アーキテクチャ (仕様書準拠)
+│   ├── __init__.py                   # パッケージ初期化・使用例
+│   ├── data_schema.py                # ProblemData / Vehicle / Task / Charger / Site
+│   ├── data_loader.py                # CSV → ProblemData ローダー
+│   ├── model_sets.py                 # ModelSets 構築
+│   ├── parameter_builder.py          # DerivedParams 構築 (LUT)
+│   ├── objective.py                  # 9 項目加重和目的関数
+│   ├── milp_model.py                 # Gurobi MILP モデル構築 / 結果抽出
+│   ├── model_factory.py              # モード切替 (mode_A / mode_B / thesis_mode)
+│   ├── solver_runner.py              # MILP 実行ヘルパー
+│   ├── solver_alns.py                # ALNS メタヒューリスティクス
+│   ├── simulator.py                  # シミュレーション検証 + 実行可能性診断
+│   ├── visualization.py              # matplotlib 可視化 (日本語対応)
+│   ├── result_exporter.py            # CSV / JSON / Markdown エクスポート
+│   └── constraints/                  # 制約モジュール (分割)
+│       ├── __init__.py
+│       ├── assignment.py             # 割当制約
+│       ├── charging.py               # 充電制約
+│       ├── charger_capacity.py       # 充電器容量制約
+│       ├── energy_balance.py         # SOC 推移制約
+│       ├── pv_grid.py                # PV / 系統電力制約
+│       ├── battery_degradation.py    # 電池劣化制約
+│       └── optional_v2g.py           # V2G オプション制約
+├── app/                              # Streamlit GUI (旧 + 新アーキ統合)
+│   ├── __init__.py                   # パッケージ初期化
+│   ├── main.py                       # Streamlit メインアプリ
+│   ├── model_core.py                 # コアモデル・データ構造 (旧)
+│   ├── solver_gurobi.py              # Gurobi (MILP) ソルバー (旧)
+│   ├── solver_alns.py                # ALNS ソルバー (旧)
+│   ├── solver_ga.py                  # GA ソルバー
+│   ├── solver_abc.py                 # ABC ソルバー
+│   └── visualizer.py                 # Plotly 可視化モジュール
+├── config/
+│   └── experiment_config.json        # 実験設定 JSON
+├── data/
+│   └── toy/                          # サンプルデータ (CSV)
+│       ├── vehicles.csv
+│       ├── tasks.csv
+│       ├── chargers.csv
+│       ├── sites.csv
+│       ├── tou_rates.csv
+│       ├── pv_generation.csv
+│       ├── vehicle_task_feasibility.csv
+│       ├── vehicle_charger_access.csv
+│       └── weights.csv
+├── constant/                         # 研究資料（数理モデル定義、制約一覧等）
+├── run_experiment.py                 # 🆕 CLI エントリポイント
+├── ebus_prototype_config.json        # プロトタイプ設定 JSON (旧)
+├── ebus_asset_factors.json           # 属物要因 JSON
+├── ebus_config_with_asset_ref.json   # 外部ファイル参照スタブ
+├── solve_ebus_gurobi.py              # 既存の CLI ソルバー
 ├── requirements.txt
 └── README.md
 ```
@@ -504,14 +660,17 @@ $$\min \sum_{t \in T} \text{grid\_price}[t] \times \text{grid\_buy}[t]$$
 - [x] GA（遺伝的アルゴリズム）ソルバーの追加
 - [x] ABC（人工蜂コロニー）ソルバーの追加
 - [x] 全ソルバーのコスト・計算時間比較機能
-- [ ] BEV/ICE 混成フリートの明示的サポート
+- [x] BEV/ICE 混成フリートの明示的サポート（`src/` で実装済み）
+- [x] バッテリ劣化コストの簡易モデル（`src/` で実装済み）
+- [x] V2G 拡張（`src/` で実装済み）
+- [x] CSV ベースデータ入力 + モード切替 + CLI 実行（`src/` + `run_experiment.py`）
+- [x] シミュレータ検証 + 実行可能性診断（`src/simulator.py`）
+- [x] ALNS の新データ構造対応（`src/solver_alns.py`）
 - [ ] HEV 車両の追加
 - [ ] 車両カタログ (`ebus_asset_factors.json`) からの自動インポート
 - [ ] TOU 料金のカスタム時間帯設定
 - [ ] バッチ感度分析（パラメータスイープ）
-- [ ] 結果の CSV/Excel エクスポート
-- [ ] バッテリ劣化コストの簡易モデル
-- [ ] V2G 拡張
+- [ ] 結果の CSV/Excel エクスポート（`src/result_exporter.py` で一部対応済み）
 
 ---
 

@@ -393,7 +393,7 @@ if config_mode == "JSON インポート":
         help="ebus_prototype_config.json 形式",
     )
     # ローカルファイル自動読み込み
-    default_json = Path(__file__).resolve().parent.parent / "ebus_prototype_config.json"
+    default_json = Path(__file__).resolve().parent.parent / "config" / "ebus_prototype_config.json"
     if uploaded is not None:
         raw = json.loads(uploaded.read().decode("utf-8"))
         # 一時ファイルに書き出して読み込み
@@ -799,8 +799,8 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_compare = st.tabs(
-    ["🔬 Gurobi (MILP)", "🎡 ALNS", "🧬 GA", "🐝 ABC", "📊 比較"]
+solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_src, solver_tab_compare = st.tabs(
+    ["🔬 Gurobi (MILP)", "🎡 ALNS", "🧬 GA", "🐝 ABC", "🆕 新アーキ (src/)", "📊 比較"]
 )
 
 # ---- Gurobi タブ ----
@@ -1083,6 +1083,313 @@ with solver_tab_abc:
 
         if res_abc.assignment:
             st.plotly_chart(plot_assignment_gantt(cfg, res_abc, title="便割当 (ABC)"), use_container_width=True)
+
+
+# ---- 新アーキテクチャ (src/) タブ ----
+with solver_tab_src:
+    st.markdown("""
+    <div class="solver-desc">
+    <b>新アーキテクチャ (src/)</b> — CSV ベースのデータ読込、モード切替 (mode_A / mode_B / thesis_mode)、
+    ALNS 比較実験、実行可能性診断を統合したパネルです。
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- セッション初期化 ---
+    if "src_data" not in st.session_state:
+        st.session_state.src_data = None
+    if "src_milp_result" not in st.session_state:
+        st.session_state.src_milp_result = None
+    if "src_alns_result" not in st.session_state:
+        st.session_state.src_alns_result = None
+    if "src_sim_result" not in st.session_state:
+        st.session_state.src_sim_result = None
+
+    # --- データ読込 ---
+    st.markdown("##### 📂 データ読込")
+    src_config_path = st.text_input(
+        "config JSON パス",
+        value="config/experiment_config.json",
+        key="src_config_path",
+        help="config/experiment_config.json 形式の設定ファイル",
+    )
+
+    src_col1, src_col2 = st.columns(2)
+    with src_col1:
+        src_enable_pv = st.checkbox("PV 有効", value=True, key="src_pv")
+        src_enable_demand = st.checkbox("デマンド料金", value=True, key="src_demand")
+    with src_col2:
+        src_enable_v2g = st.checkbox("V2G", value=False, key="src_v2g")
+        src_enable_deg = st.checkbox("電池劣化", value=True, key="src_deg")
+
+    if st.button("📥 データ読込", key="src_load"):
+        try:
+            from src.data_loader import load_problem_data
+            from src.model_sets import build_model_sets
+            from src.parameter_builder import build_derived_params
+
+            _src_data = load_problem_data(src_config_path)
+            _src_data.enable_pv = src_enable_pv
+            _src_data.enable_demand_charge = src_enable_demand
+            _src_data.enable_v2g = src_enable_v2g
+            _src_data.enable_battery_degradation = src_enable_deg
+
+            _src_ms = build_model_sets(_src_data)
+            _src_dp = build_derived_params(_src_data, _src_ms)
+            st.session_state.src_data = (_src_data, _src_ms, _src_dp)
+            st.session_state.src_milp_result = None
+            st.session_state.src_alns_result = None
+            st.session_state.src_sim_result = None
+            st.success(
+                f"✅ データ読込完了: BEV {len(_src_ms.K_BEV)} 台, ICE {len(_src_ms.K_ICE)} 台, "
+                f"タスク {len(_src_ms.R)} 件, 充電器 {len(_src_ms.C)} 基, "
+                f"スロット {_src_data.num_periods}"
+            )
+        except Exception as e:
+            st.error(f"❌ データ読込エラー: {e}")
+
+    if st.session_state.src_data is not None:
+        _src_data, _src_ms, _src_dp = st.session_state.src_data
+
+        st.markdown("---")
+        st.markdown("##### 🧠 モード選択 & 求解")
+
+        from src.model_factory import AVAILABLE_MODES, MODE_DESCRIPTIONS
+
+        src_mode = st.selectbox(
+            "モデルモード",
+            AVAILABLE_MODES,
+            index=2,  # thesis_mode
+            format_func=lambda m: f"{m}",
+            key="src_mode",
+        )
+        st.caption(MODE_DESCRIPTIONS.get(src_mode, ""))
+
+        src_solver = st.radio(
+            "ソルバー",
+            ["Gurobi (MILP)", "ALNS", "両方 (比較)"],
+            horizontal=True,
+            key="src_solver",
+        )
+
+        src_sc1, src_sc2 = st.columns(2)
+        with src_sc1:
+            src_time_limit = st.number_input("MILP 制限時間 [秒]", 10.0, 3600.0, 120.0, step=10.0, key="src_tlim")
+        with src_sc2:
+            src_alns_iters = st.number_input("ALNS 反復回数", 20, 5000, 200, step=50, key="src_alns_it")
+
+        if st.button("▶️ 求解実行", type="primary", key="src_solve"):
+            run_milp = src_solver in ("Gurobi (MILP)", "両方 (比較)")
+            run_alns = src_solver in ("ALNS", "両方 (比較)")
+
+            # --- MILP ---
+            if run_milp:
+                with st.spinner("Gurobi (src/) で最適化中..."):
+                    try:
+                        from src.model_factory import build_model_by_mode, generate_greedy_assignment
+                        from src.milp_model import extract_result as _extract
+                        from src.simulator import simulate as _simulate
+                        import time as _time
+
+                        if src_mode == "mode_A_journey_charge":
+                            fixed = generate_greedy_assignment(_src_data, _src_ms, _src_dp)
+                            _model, _vars = build_model_by_mode(
+                                src_mode, _src_data, _src_ms, _src_dp, fixed_assignment=fixed
+                            )
+                        else:
+                            _model, _vars = build_model_by_mode(
+                                src_mode, _src_data, _src_ms, _src_dp
+                            )
+                        _model.Params.OutputFlag = 0
+                        _model.Params.TimeLimit = src_time_limit
+                        _t0 = _time.perf_counter()
+                        _model.optimize()
+                        _elapsed = _time.perf_counter() - _t0
+                        _milp_res = _extract(_model, _src_data, _src_ms, _src_dp, _vars, _elapsed)
+                        st.session_state.src_milp_result = _milp_res
+
+                        _sim = _simulate(_src_data, _src_ms, _src_dp, _milp_res)
+                        st.session_state.src_sim_result = _sim
+
+                        if _milp_res.status == "OPTIMAL":
+                            st.success(f"✅ MILP OPTIMAL — {_milp_res.objective_value:,.0f} 円 ({_elapsed:.2f}s)")
+                        elif _milp_res.status == "INFEASIBLE":
+                            st.error(f"❌ INFEASIBLE: {_milp_res.infeasibility_info}")
+                        else:
+                            st.warning(f"⚠️ Status: {_milp_res.status}")
+                    except Exception as e:
+                        st.error(f"❌ MILP エラー: {e}")
+
+            # --- ALNS ---
+            if run_alns:
+                with st.spinner("ALNS (src/) で最適化中..."):
+                    try:
+                        from src.solver_alns import solve_alns as _solve_alns
+                        from src.solver_alns import ALNSParams as _ALNSParams
+
+                        _alns_params = _ALNSParams(
+                            max_iterations=src_alns_iters,
+                            max_no_improve=max(src_alns_iters // 5, 20),
+                        )
+                        _alns_res = _solve_alns(_src_data, _src_ms, _src_dp, params=_alns_params)
+                        st.session_state.src_alns_result = _alns_res
+
+                        if _alns_res.status == "FEASIBLE":
+                            st.success(f"✅ ALNS FEASIBLE — {_alns_res.objective_value:,.0f} 円 ({_alns_res.solve_time_sec:.2f}s)")
+                        else:
+                            st.error(f"❌ ALNS Status: {_alns_res.status}")
+                    except Exception as e:
+                        st.error(f"❌ ALNS エラー: {e}")
+
+        # --- 結果表示 ---
+        _milp_res = st.session_state.src_milp_result
+        _alns_res = st.session_state.src_alns_result
+        _sim_res = st.session_state.src_sim_result
+
+        if _milp_res is not None or _alns_res is not None:
+            st.markdown("---")
+            st.markdown("##### 📊 結果")
+
+            # KPI 比較テーブル
+            _src_kpi = {}
+            if _milp_res is not None and _milp_res.objective_value is not None:
+                _src_kpi["MILP"] = {
+                    "ステータス": _milp_res.status,
+                    "目的関数値 [円]": f"{_milp_res.objective_value:,.0f}",
+                    "計算時間 [秒]": f"{_milp_res.solve_time_sec:.2f}",
+                    "割当タスク数": sum(len(v) for v in _milp_res.assignment.values()),
+                    "未割当": len(_milp_res.unserved_tasks),
+                }
+            if _alns_res is not None and _alns_res.objective_value is not None:
+                _src_kpi["ALNS"] = {
+                    "ステータス": _alns_res.status,
+                    "目的関数値 [円]": f"{_alns_res.objective_value:,.0f}",
+                    "計算時間 [秒]": f"{_alns_res.solve_time_sec:.2f}",
+                    "割当タスク数": sum(len(v) for v in _alns_res.assignment.values()),
+                    "未割当": len(_alns_res.unserved_tasks),
+                }
+            if _src_kpi:
+                st.dataframe(pd.DataFrame(_src_kpi), use_container_width=True)
+
+            # シミュレーション結果
+            if _sim_res is not None:
+                st.markdown("##### 📈 シミュレーション評価")
+                sm1, sm2, sm3, sm4 = st.columns(4)
+                with sm1:
+                    st.metric("タスク担当率", f"{_sim_res.served_task_ratio*100:.1f}%")
+                with sm2:
+                    st.metric("系統受電量", f"{_sim_res.total_grid_kwh:.1f} kWh")
+                with sm3:
+                    st.metric("電力量料金", f"¥{_sim_res.total_energy_cost:,.0f}")
+                with sm4:
+                    st.metric("デマンド料金", f"¥{_sim_res.total_demand_charge:,.0f}")
+
+                sm5, sm6, sm7, sm8 = st.columns(4)
+                with sm5:
+                    st.metric("劣化コスト", f"¥{_sim_res.total_degradation_cost:,.0f}")
+                with sm6:
+                    st.metric("総コスト", f"¥{_sim_res.total_operating_cost:,.0f}")
+                with sm7:
+                    st.metric("SOC 最低値", f"{_sim_res.soc_min_kwh:.1f} kWh")
+                with sm8:
+                    st.metric("SOC 違反", f"{len(_sim_res.soc_violations)} 件")
+
+            # 実行可能性診断
+            if _sim_res is not None and _sim_res.feasibility_report is not None:
+                with st.expander("🔍 実行可能性診断 (Feasibility Report)"):
+                    st.text(_sim_res.feasibility_report.summary())
+
+            # グラフ (MILP 結果の SOC 推移)
+            if _milp_res is not None and _milp_res.soc_series:
+                st.markdown("##### SOC 推移 (src/ MILP)")
+                import plotly.graph_objects as _pgo
+                _fig_soc = _pgo.Figure()
+                for _k, _soc in _milp_res.soc_series.items():
+                    _fig_soc.add_trace(_pgo.Scatter(
+                        x=list(range(len(_soc))),
+                        y=_soc,
+                        name=_k,
+                        mode="lines",
+                    ))
+                _veh0 = list(_src_dp.vehicle_lut.values())[0] if _src_dp.vehicle_lut else None
+                if _veh0 and _veh0.soc_min is not None:
+                    _fig_soc.add_hline(y=_veh0.soc_min, line_dash="dash", line_color="red",
+                                       annotation_text="SOC 下限")
+                _fig_soc.update_layout(
+                    title="SOC 推移 [kWh]",
+                    xaxis_title="time_idx",
+                    yaxis_title="SOC [kWh]",
+                    height=400,
+                )
+                st.plotly_chart(_fig_soc, use_container_width=True)
+
+            # 系統受電グラフ
+            if _milp_res is not None and _milp_res.grid_import_kw:
+                st.markdown("##### 系統受電電力 (src/ MILP)")
+                _fig_grid = _pgo.Figure()
+                for _site, _series in _milp_res.grid_import_kw.items():
+                    _fig_grid.add_trace(_pgo.Scatter(
+                        x=list(range(len(_series))),
+                        y=_series,
+                        name=f"Grid {_site}",
+                        mode="lines+markers",
+                    ))
+                if _milp_res.pv_used_kw:
+                    for _site, _series in _milp_res.pv_used_kw.items():
+                        _fig_grid.add_trace(_pgo.Scatter(
+                            x=list(range(len(_series))),
+                            y=_series,
+                            name=f"PV {_site}",
+                            fill="tozeroy",
+                            line=dict(dash="dot"),
+                        ))
+                _fig_grid.update_layout(
+                    title="受電電力 & PV 自家消費 [kW]",
+                    xaxis_title="time_idx",
+                    yaxis_title="[kW]",
+                    height=400,
+                )
+                st.plotly_chart(_fig_grid, use_container_width=True)
+
+            # 割当ガントチャート
+            if _milp_res is not None and _milp_res.assignment:
+                st.markdown("##### 車両運行ガントチャート (src/ MILP)")
+                _gantt_data = []
+                for _k, _tasks in _milp_res.assignment.items():
+                    for _r in _tasks:
+                        _t = _src_dp.task_lut.get(_r)
+                        if _t:
+                            _gantt_data.append({
+                                "車両": _k,
+                                "タスク": _r,
+                                "開始": _t.start_time_idx,
+                                "終了": _t.end_time_idx,
+                            })
+                if _gantt_data:
+                    _gdf = pd.DataFrame(_gantt_data)
+                    _fig_gantt = _pgo.Figure()
+                    _colors = ["#4CAF50", "#2196F3", "#FF9800", "#9C27B0", "#F44336", "#00BCD4", "#795548", "#607D8B"]
+                    for _i, _k in enumerate(sorted(_gdf["車両"].unique())):
+                        _kdf = _gdf[_gdf["車両"] == _k]
+                        for _, _row in _kdf.iterrows():
+                            _fig_gantt.add_trace(_pgo.Bar(
+                                x=[_row["終了"] - _row["開始"] + 1],
+                                y=[_k],
+                                base=_row["開始"],
+                                orientation="h",
+                                name=_row["タスク"],
+                                marker_color=_colors[_i % len(_colors)],
+                                text=_row["タスク"],
+                                textposition="inside",
+                                showlegend=False,
+                                hovertext=f"{_row['タスク']} ({_row['開始']}-{_row['終了']})",
+                            ))
+                    _fig_gantt.update_layout(
+                        title="車両運行ガントチャート",
+                        xaxis_title="time_idx",
+                        barmode="stack",
+                        height=max(250, len(_milp_res.assignment) * 60),
+                    )
+                    st.plotly_chart(_fig_gantt, use_container_width=True)
 
 
 # ---- 比較タブ ----
