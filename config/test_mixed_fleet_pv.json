@@ -1,0 +1,85 @@
+{
+  "_comment": "テストケース5: mixed_fleet_pv — 混成車両 + PV + TOU + 行路制約の統合ケース",
+  "time_step_min": 15,
+  "num_periods": 64,
+  "start_time": "05:00",
+  "end_time": "21:00",
+  "planning_horizon_hours": 16.0,
+  "allow_partial_service": false,
+  "enable_pv": true,
+  "enable_v2g": false,
+  "enable_battery_degradation": true,
+  "enable_demand_charge": true,
+  "mode": "thesis_mode_route_editable",
+  "energy_model_level": 2,
+  "fuel_model_enabled": true,
+  "allow_deadhead": true,
+  "service_day_type": "weekday",
+  "route_length_multiplier": 1.0,
+  "duty_assignment": {
+    "enabled": true,
+    "duties_csv_path": "data/fleet/vehicle_duties.csv",
+    "duty_legs_csv_path": "data/fleet/duty_legs.csv",
+    "allow_duty_swap": false,
+    "enforce_depot_match": true,
+    "enforce_vehicle_type_match": true
+  },
+  "delay_resilience_test": {
+    "enabled": true,
+    "n_scenarios": 10,
+    "delay_probability": 0.10,
+    "delay_mean_min": 4.0,
+    "seed": 100
+  },
+  "gap_analysis": {
+    "enabled": true
+  },
+  "passenger_load": {
+    "enabled": true,
+    "csv_path": "data/external/passenger_load_profile.csv",
+    "default_load_factor": 0.5
+  },
+  "tariff": {
+    "enabled": true,
+    "csv_path": "data/external/tariff.csv"
+  },
+  "uncertainty": {
+    "enabled": false
+  },
+  "solver": {
+    "time_limit_sec": 600,
+    "mip_gap": 0.01
+  },
+  "objective_weights": {
+    "vehicle_fixed_cost": 1.0,
+    "electricity_cost": 1.0,
+    "demand_charge_cost": 1.0,
+    "fuel_cost": 1.0,
+    "deadhead_cost": 1.0,
+    "battery_degradation_cost": 1.0,
+    "emission_cost": 5.0,
+    "unserved_penalty": 10000.0,
+    "slack_penalty": 1000000.0
+  },
+  "paths": {
+    "vehicles_csv": "data/toy/vehicles.csv",
+    "tasks_csv": "data/toy/tasks.csv",
+    "chargers_csv": "data/toy/chargers.csv",
+    "sites_csv": "data/toy/sites.csv",
+    "pv_profile_csv": "data/toy/pv_profile.csv",
+    "electricity_price_csv": "data/toy/electricity_price.csv",
+    "travel_connection_csv": "data/toy/travel_connection.csv",
+    "compat_vehicle_task_csv": "data/toy/compatibility_vehicle_task.csv",
+    "compat_vehicle_charger_csv": "data/toy/compatibility_vehicle_charger.csv",
+    "output_dir": "outputs/test_mixed_fleet_pv"
+  },
+  "v3_data_dir": "data",
+  "route_master_dir": "data/route_master",
+  "fleet_dir": "data/fleet",
+  "infra_dir": "data/infra",
+  "external_dir": "data/external",
+  "derived_dir": "data/derived",
+  "route_edit_rules": {
+    "powertrain_comparison": ["BEV", "ICE", "HEV"]
+  }
+}

@@ -24,6 +24,9 @@ from src.schemas.fleet_entities import VehicleType, VehicleInstance
 from src.preprocess.route_builder import validate_route_network, build_variant_segments
 from src.preprocess.trip_generator import generate_all_trips
 from src.preprocess.deadhead_builder import build_deadhead_arcs
+from src.preprocess.duty_loader import load_vehicle_duties, validate_duties, build_duty_trip_mapping, identify_charging_opportunities
+from src.preprocess.passenger_load import load_passenger_load_profile, build_load_factor_map, apply_load_factor_to_trips
+from src.preprocess.tariff_loader import load_tariff_csv, build_electricity_prices_from_tariff
 
 
 def _load_csv(path: Path) -> List[Dict[str, str]]:
@@ -312,8 +315,65 @@ def build_inputs(config_path: str = "config/experiment_config.json") -> dict:
     if arcs:
         _write_deadhead_arcs_csv(arcs, derived_dir / "deadhead_arcs.csv")
 
+    # --- 行路データ読込 (spec_v3 §6) ---
+    duty_cfg = cfg.get("duty_assignment", {})
+    duties = []
+    if duty_cfg.get("enabled", False):
+        duties_csv = duty_cfg.get("duties_csv_path", "data/fleet/vehicle_duties.csv")
+        legs_csv = duty_cfg.get("duty_legs_csv_path", "data/fleet/duty_legs.csv")
+        try:
+            duties = load_vehicle_duties(duties_csv, legs_csv)
+            duty_errors = validate_duties(duties, {t.trip_id for t in trips})
+            if duty_errors:
+                print(f"  [warn] 行路整合性: {len(duty_errors)} 件")
+                for e in duty_errors[:5]:
+                    print(f"    {e}")
+            # 充電機会の識別
+            identify_charging_opportunities(duties)
+            print(f"  duties loaded: {len(duties)}")
+        except Exception as e:
+            print(f"  [warn] 行路データ読込失敗: {e}")
+
+    # --- 乗客負荷プロファイル (spec_v3 §7) ---
+    load_cfg = cfg.get("passenger_load", {})
+    load_factor_map = {}
+    if load_cfg.get("enabled", False):
+        load_csv_path = load_cfg.get("csv_path", "data/external/passenger_load_profile.csv")
+        try:
+            profiles = load_passenger_load_profile(load_csv_path)
+            load_factor_map = build_load_factor_map(profiles)
+            trips = apply_load_factor_to_trips(trips, load_factor_map,
+                                                default_factor=load_cfg.get("default_load_factor", 0.5))
+            print(f"  passenger load profiles: {len(profiles)} entries applied")
+        except Exception as e:
+            print(f"  [warn] 乗客負荷プロファイル読込失敗: {e}")
+
+    # --- TOU 電力料金 (spec_v3 §9) ---
+    tariff_cfg = cfg.get("tariff", {})
+    tariff_prices = []
+    if tariff_cfg.get("enabled", False):
+        tariff_csv_path = tariff_cfg.get("csv_path", "data/external/tariff.csv")
+        try:
+            tariff_rows = load_tariff_csv(tariff_csv_path)
+            tariff_prices = build_electricity_prices_from_tariff(
+                tariff_rows,
+                num_periods=cfg.get("num_periods", 64),
+                delta_t_min=cfg.get("time_step_min", 15),
+                start_time=cfg.get("start_time", "05:00"),
+            )
+            print(f"  TOU tariff loaded: {len(tariff_rows)} bands → {len(tariff_prices)} price slots")
+        except Exception as e:
+            print(f"  [warn] 電力料金データ読込失敗: {e}")
+
     print(f"[build_inputs] 完了")
-    return {"trips": trips, "deadhead_arcs": arcs, "errors": errors}
+    return {
+        "trips": trips,
+        "deadhead_arcs": arcs,
+        "errors": errors,
+        "duties": duties,
+        "load_factor_map": load_factor_map,
+        "tariff_prices": tariff_prices,
+    }
 
 
 def main():

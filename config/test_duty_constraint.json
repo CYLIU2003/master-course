@@ -1,0 +1,53 @@
+{
+  "_comment": "テストケース3: duty_constraint — 行路制約付き割当の効果比較",
+  "time_step_min": 15,
+  "num_periods": 64,
+  "start_time": "05:00",
+  "end_time": "21:00",
+  "planning_horizon_hours": 16.0,
+  "allow_partial_service": false,
+  "enable_pv": false,
+  "enable_v2g": false,
+  "enable_battery_degradation": true,
+  "enable_demand_charge": true,
+  "mode": "thesis_mode_route_editable",
+  "energy_model_level": 1,
+  "fuel_model_enabled": true,
+  "allow_deadhead": true,
+  "service_day_type": "weekday",
+  "route_length_multiplier": 1.0,
+  "duty_assignment": {
+    "enabled": true,
+    "duties_csv_path": "data/fleet/vehicle_duties.csv",
+    "duty_legs_csv_path": "data/fleet/duty_legs.csv",
+    "allow_duty_swap": false,
+    "enforce_depot_match": true,
+    "enforce_vehicle_type_match": true
+  },
+  "delay_resilience_test": {
+    "enabled": true,
+    "n_scenarios": 20,
+    "delay_probability": 0.15,
+    "delay_mean_min": 5.0,
+    "seed": 42
+  },
+  "solver": {
+    "time_limit_sec": 300,
+    "mip_gap": 0.01
+  },
+  "paths": {
+    "vehicles_csv": "data/toy/vehicles.csv",
+    "tasks_csv": "data/toy/tasks.csv",
+    "chargers_csv": "data/toy/chargers.csv",
+    "sites_csv": "data/toy/sites.csv",
+    "electricity_price_csv": "data/toy/electricity_price.csv",
+    "travel_connection_csv": "data/toy/travel_connection.csv",
+    "compat_vehicle_task_csv": "data/toy/compatibility_vehicle_task.csv",
+    "compat_vehicle_charger_csv": "data/toy/compatibility_vehicle_charger.csv",
+    "output_dir": "outputs/test_duty_constraint"
+  },
+  "v3_data_dir": "data",
+  "route_master_dir": "data/route_master",
+  "fleet_dir": "data/fleet",
+  "derived_dir": "data/derived"
+}

@@ -33,6 +33,8 @@ AVAILABLE_MODES = [
     "mode_route_sensitivity",
     "mode_uncertainty_eval",
     "thesis_mode_route_editable",
+    # v3 行路モード (spec_v3 §6)
+    "mode_duty_constrained",
 ]
 
 # 各モードのデフォルト制約フラグ
@@ -107,6 +109,9 @@ MODE_FLAGS: Dict[str, Dict[str, bool]] = {
 
     # 修論完全モード: route-detail 2層 + BEV/ICE 比較 + 全機能
     "thesis_mode_route_editable": None,  # → data.enable_* で制御
+
+    # v3 行路制約モード: duty ベースの割当を強制
+    "mode_duty_constrained": None,  # → data.enable_* + duty_assignment で制御
 }
 
 # 各モードの説明
@@ -153,6 +158,13 @@ MODE_DESCRIPTIONS: Dict[str, str] = {
         "- BEV / ICE / HEV パワートレイン比較を同一路線データで実施\n"
         "- PV 自家消費、V2G、電池劣化、デマンド料金を全て有効化可能\n"
         "- route_edit_rules で路線・停留所・セグメントを動的編集"
+    ),
+    "mode_duty_constrained": (
+        "行路制約モード (spec_v3 §6 行路設定表)\n"
+        "- 行路 (vehicle_duties.csv) に基づく車両-トリップバンドリング\n"
+        "- 各行路は 1 台の車両に排他的に割り当て\n"
+        "- 行路内のトリップ順序・充電機会を尊重\n"
+        "- 遅延耐性分析・ギャップ分析と連携"
     ),
 }
 
@@ -252,6 +264,10 @@ def build_model_by_mode(
         # GeneratedTrip の BEV/ICE 両推定値は data.tasks に格納済み前提
         # (pipeline.build_inputs → pipeline.solve で注入)
         pass
+
+    # mode_duty_constrained: 行路の duty_assignment を必ず有効化
+    if mode == "mode_duty_constrained":
+        data.duty_assignment_enabled = True
 
     # === Mode A: 割当を固定 ===
     if mode == "mode_A_journey_charge" and fixed_assignment:
