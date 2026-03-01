@@ -439,7 +439,7 @@ st.markdown("""
 # ===========================================================================
 tab_settings, solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_src, solver_tab_compare, solver_tab_milp_only, solver_tab_alns_only, solver_tab_alns_milp, tab_map = st.tabs(
     ["⚙️ 設定", "🔬 Gurobi (MILP)", "🎡 ALNS", "🧬 GA", "🐝 ABC", "🆕 新アーキ (src/)", "📊 比較",
-     "🎯 MILP専用", "🔄 ALNS専用", "⚡ ALNS+MILP", "🗺️ 地図エディタ"]
+     "🎯 MILP専用", "🔄 ALNS専用", "⚡ ALNS+MILP", "�️ 路線詳細"]
 )
 
 # ===========================================================================
@@ -491,14 +491,14 @@ with tab_settings:
                 soc_min_ratio = st.slider("SOC 下限 [%]", 5, 50, 20, key="cfg_soc_min") / 100.0
             soc_max_ratio = st.slider("SOC 上限 [%]", 60, 100, 95, key="cfg_soc_max") / 100.0
 
-        # ---- 🛣️ 路線設定 (NEW!) ----
-        with st.expander("🛣️ 路線設定", expanded=False):
+        # ---- 🛣️ 路線設定 ----
+        with st.expander("🛣️ 路線詳細設定", expanded=False):
             st.markdown("""
-            路線・停留所・セグメント・ダイヤを編集します。  
-            v3 パイプライン (`python -m src.pipeline.build_inputs`) で使用されるデータです。
+            路線・停留所・セグメント・車庫を編集します。  
+            「単純編集」でテーブル入力、「地図入力」で地図上クリック配置が選べます。
             """)
-            from app.route_editor import render_route_editor
-            render_route_editor(data_dir="data")
+            from app.route_detail_editor import render_route_detail_editor
+            render_route_detail_editor(data_dir="data")
 
         # ---- 🔌 充電設備 ----
         with st.expander("🔌 充電設備"):
@@ -1709,18 +1709,18 @@ with solver_tab_alns_milp:
 with tab_map:
     st.markdown("""
     <div class="section-header">
-      <div class="section-icon">🗺️</div>
-      <h3>地図ベース路線・デポ・充電拠点エディタ</h3>
+      <div class="section-icon">�️</div>
+      <h3>路線詳細エディタ</h3>
     </div>
     """, unsafe_allow_html=True)
 
     try:
-        from app.map_editor import render_map_editor
-        render_map_editor(data_dir="data")
-    except ImportError as e:
+        from app.route_detail_editor import render_route_detail_editor
+        render_route_detail_editor(data_dir="data")
+    except Exception as e:
         st.error(
-            f"map_editor の読み込みに失敗しました: {e}\n\n"
-            "folium / streamlit-folium をインストールしてください:\n"
+            f"路線エディタの読み込みに失敗しました: {e}\n\n"
+            "地図モードを使う場合は以下をインストールしてください:\n"
             "```\npip install folium streamlit-folium\n```"
         )
 
