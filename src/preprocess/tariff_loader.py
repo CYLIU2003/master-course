@@ -39,67 +39,103 @@ def load_tariff_csv(
 
 def build_electricity_prices_from_tariff(
     tariff_rows: List[Dict[str, str]],
-    site_ids: List[str],
+    site_ids: Optional[List[str]] = None,
     num_periods: int = 64,
     delta_t_min: float = 15.0,
     start_hour: float = 5.0,
+    start_time: Optional[str] = None,
     base_load_kw: float = 10.0,
 ) -> List[ElectricityPrice]:
     """tariff.csv → ElectricityPrice リストに変換する。
 
     time_band ベースの料金を各 time_idx に展開する。
+    CSV は 2 形式に対応:
+      - 形式A: site_id, start_hour, end_hour, energy_price_jpy_per_kwh, ...
+      - 形式B: period_start, period_end, energy_price_jpy_kwh, ... (HH:MM)
 
     Parameters
     ----------
     tariff_rows : CSV 行リスト
-    site_ids : 対象サイト一覧
+    site_ids : 対象サイト一覧 (None → ["*"])
     num_periods : タイムステップ数
     delta_t_min : 1ステップ [min]
-    start_hour : 計画開始時間 [h]
+    start_hour : 計画開始時間 [h] (start_time が指定された場合は上書き)
+    start_time : 計画開始時間 "HH:MM" 形式 (優先)
     base_load_kw : デフォルト基礎負荷
 
     Returns
     -------
     List[ElectricityPrice]
     """
-    # site_id → [(start_hour, end_hour, price, sell_back)] のマッピング
-    tariff_map: Dict[str, List[Tuple[float, float, float, float]]] = {}
-    for row in tariff_rows:
-        sid = row.get("site_id", "")
-        try:
-            sh = float(row.get("start_hour", "0"))
-            eh = float(row.get("end_hour", "24"))
-            price = float(row.get("energy_price_jpy_per_kwh", "20"))
-            sell = float(row.get("sell_back_price_jpy_per_kwh", "0"))
-        except (ValueError, TypeError):
-            continue
-        tariff_map.setdefault(sid, []).append((sh, eh, price, sell))
+    if start_time is not None:
+        parts = start_time.split(":")
+        start_hour = int(parts[0]) + int(parts[1]) / 60.0
 
+    if site_ids is None:
+        site_ids = ["*"]
+
+    # CSV 形式の自動判定
+    tariff_bands: List[Tuple[float, float, float, float]] = []
+    if tariff_rows and "period_start" in tariff_rows[0]:
+        # 形式B: period_start(HH:MM), period_end(HH:MM), energy_price_jpy_kwh
+        for row in tariff_rows:
+            try:
+                ps = row.get("period_start", "00:00")
+                pe = row.get("period_end", "24:00")
+                ps_parts = ps.split(":")
+                pe_parts = pe.split(":")
+                sh = int(ps_parts[0]) + int(ps_parts[1]) / 60.0
+                eh = int(pe_parts[0]) + int(pe_parts[1]) / 60.0
+                price = float(row.get("energy_price_jpy_kwh", row.get("energy_price_jpy_per_kwh", "20")))
+                sell = float(row.get("sell_back_price_jpy_per_kwh", "0"))
+                tariff_bands.append((sh, eh, price, sell))
+            except (ValueError, TypeError):
+                continue
+    else:
+        # 形式A: site_id, start_hour, end_hour, energy_price_jpy_per_kwh
+        site_tariff_map: Dict[str, List[Tuple[float, float, float, float]]] = {}
+        for row in tariff_rows:
+            sid = row.get("site_id", "*")
+            try:
+                sh = float(row.get("start_hour", "0"))
+                eh = float(row.get("end_hour", "24"))
+                price = float(row.get("energy_price_jpy_per_kwh", "20"))
+                sell = float(row.get("sell_back_price_jpy_per_kwh", "0"))
+            except (ValueError, TypeError):
+                continue
+            site_tariff_map.setdefault(sid, []).append((sh, eh, price, sell))
+
+        # site_ids の全バンドをフラット化 (形式A 用)
+        prices_A: List[ElectricityPrice] = []
+        for t_idx in range(num_periods):
+            current_hour = start_hour + t_idx * (delta_t_min / 60.0)
+            for sid in site_ids:
+                bands = site_tariff_map.get(sid, site_tariff_map.get("*", []))
+                ep, sp = 20.0, 0.0
+                for sh, eh, price, sell in bands:
+                    if sh <= current_hour < eh:
+                        ep, sp = price, sell
+                        break
+                prices_A.append(ElectricityPrice(
+                    site_id=sid, time_idx=t_idx,
+                    grid_energy_price=ep, sell_back_price=sp,
+                    base_load_kw=base_load_kw,
+                ))
+        return prices_A
+
+    # 形式B: tariff_bands を site_ids × time_idx に展開
     prices: List[ElectricityPrice] = []
     for t_idx in range(num_periods):
         current_hour = start_hour + t_idx * (delta_t_min / 60.0)
+        ep, sp = 20.0, 0.0
+        for sh, eh, price, sell in tariff_bands:
+            if sh <= current_hour < eh:
+                ep, sp = price, sell
+                break
         for sid in site_ids:
-            bands = tariff_map.get(sid, [])
-            ep = 20.0  # default price
-            sp = 0.0
-            for sh, eh, price, sell in bands:
-                if sh <= current_hour < eh:
-                    ep = price
-                    sp = sell
-                    break
-            # fallback: "*" (全サイト共通)
-            if not bands:
-                for sh, eh, price, sell in tariff_map.get("*", []):
-                    if sh <= current_hour < eh:
-                        ep = price
-                        sp = sell
-                        break
-
             prices.append(ElectricityPrice(
-                site_id=sid,
-                time_idx=t_idx,
-                grid_energy_price=ep,
-                sell_back_price=sp,
+                site_id=sid, time_idx=t_idx,
+                grid_energy_price=ep, sell_back_price=sp,
                 base_load_kw=base_load_kw,
             ))
     return prices
