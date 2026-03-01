@@ -1,9 +1,9 @@
 segment_id,route_id,direction,from_stop_id,to_stop_id,distance_km,runtime_min,grade_avg_pct,signal_count,traffic_level,congestion_index,speed_limit_kmh,road_type
-seg_out_01,route_101,outbound,stop_A,stop_1,3.0,8.0,0.5,4,medium,1.10,40,urban
+seg_out_01,route_101,outbound,stop_A,stop_1,3.0,8.0,0.5,4,medium,1.1,40,urban
 seg_out_02,route_101,outbound,stop_1,stop_2,2.5,6.0,1.2,3,medium,1.05,50,arterial
-seg_out_03,route_101,outbound,stop_2,stop_3,3.5,9.0,2.0,2,low,1.00,60,suburban
+seg_out_03,route_101,outbound,stop_2,stop_3,3.5,9.0,2.0,2,low,1.0,60,suburban
 seg_out_04,route_101,outbound,stop_3,stop_B,3.5,8.0,-0.5,2,low,0.95,60,suburban
-seg_in_01,route_101,inbound,stop_B_in,stop_3_in,3.5,8.0,0.5,2,low,1.00,60,suburban
+seg_in_01,route_101,inbound,stop_B_in,stop_3_in,3.5,8.0,0.5,2,low,1.0,60,suburban
 seg_in_02,route_101,inbound,stop_3_in,stop_2_in,3.5,9.0,-2.0,2,low,0.95,60,suburban
 seg_in_03,route_101,inbound,stop_2_in,stop_1_in,2.5,6.0,-1.2,3,medium,1.05,50,arterial
-seg_in_04,route_101,inbound,stop_1_in,stop_A_in,3.0,8.0,-0.5,4,medium,1.10,40,urban
+seg_in_04,route_101,inbound,stop_1_in,stop_A_in,3.0,8.0,-0.5,4,medium,1.1,40,urban
