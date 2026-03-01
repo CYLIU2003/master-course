@@ -93,6 +93,34 @@
     "enforce_vehicle_type_match": true
   },
 
+  "alns": {
+    "_comment": "ALNS パラメータ (mode_alns_only / mode_alns_milp 共通)",
+    "max_iterations": 500,
+    "max_no_improve": 100,
+    "init_temp": 1000.0,
+    "cooling_rate": 0.995,
+    "destroy_ratio_min": 0.1,
+    "destroy_ratio_max": 0.4,
+    "seed": 42
+  },
+
+  "milp_flag_overrides": null,
+
+  "soc_threshold": {
+    "_comment": "SOC 閾値自動充電 (§10.5 拡張)",
+    "enabled": false,
+    "trigger_ratio": 0.20,
+    "resume_ratio": 0.40
+  },
+
+  "depot_charger_cost": {
+    "_comment": "デポ・充電器コストモデリング",
+    "depot_detour_cost_per_km": 80.0,
+    "charger_daily_fixed_cost": 500.0,
+    "depots_csv_path": "data/infra/depots.csv",
+    "depot_charger_distances_csv_path": "data/infra/depot_charger_distances.csv"
+  },
+
   "gap_analysis": {
     "_comment": "最適化 vs シミュレーション ギャップ分析 (spec_v3 §9)",
     "enabled": false

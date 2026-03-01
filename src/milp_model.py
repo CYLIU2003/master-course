@@ -225,6 +225,17 @@ def build_milp_model(
     if flags.get("duty_assignment", False) and data.duty_assignment_enabled and data.duty_list:
         add_duty_assignment_constraints(model, data, ms, dp, vars)
 
+    # ===== SOC 閾値自動充電制約 =====
+    if flags.get("soc_threshold", False) and "soc" in vars and "z_charge" in vars:
+        from .constraints.soc_threshold_charging import add_soc_threshold_charging_constraints
+        trigger_ratio = getattr(data, "_soc_trigger_ratio", 0.20)
+        resume_ratio = getattr(data, "_soc_resume_ratio", 0.40)
+        add_soc_threshold_charging_constraints(
+            model, data, ms, dp, vars,
+            trigger_ratio=trigger_ratio,
+            resume_ratio=resume_ratio,
+        )
+
     # ===== 目的関数設定 =====
     build_objective(model, data, ms, dp, vars)
 

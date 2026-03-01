@@ -35,6 +35,10 @@ AVAILABLE_MODES = [
     "thesis_mode_route_editable",
     # v3 行路モード (spec_v3 §6)
     "mode_duty_constrained",
+    # v4 解法分離モード — MILP/ALNS/ALNS+MILP 比較検証用
+    "mode_milp_only",
+    "mode_alns_only",
+    "mode_alns_milp",
 ]
 
 # 各モードのデフォルト制約フラグ
@@ -112,6 +116,16 @@ MODE_FLAGS: Dict[str, Dict[str, bool]] = {
 
     # v3 行路制約モード: duty ベースの割当を強制
     "mode_duty_constrained": None,  # → data.enable_* + duty_assignment で制御
+
+    # v4 解法分離モード (MILP/ALNS/ALNS+MILP 比較検証)
+    # mode_milp_only: 既存 MILP モデルをそのまま解く (flags は外部設定で変更可)
+    "mode_milp_only": None,  # → data.enable_* で制御
+
+    # mode_alns_only: ALNS で便割当 → 簡易ヒューリスティック充電 (pipeline で dispatch)
+    "mode_alns_only": None,  # → pipeline/solve.py で ALNS を呼び出し
+
+    # mode_alns_milp: ALNS 割当 → MILP で充電/SOC 厳密最適化 (pipeline で dispatch)
+    "mode_alns_milp": None,  # → pipeline/solve.py で ALNS+MILP を呼び出し
 }
 
 # 各モードの説明
@@ -165,6 +179,26 @@ MODE_DESCRIPTIONS: Dict[str, str] = {
         "- 各行路は 1 台の車両に排他的に割り当て\n"
         "- 行路内のトリップ順序・充電機会を尊重\n"
         "- 遅延耐性分析・ギャップ分析と連携"
+    ),
+    # v4 解法分離モード
+    "mode_milp_only": (
+        "MILP 専用モード (v4 解法分離)\n"
+        "- 既存の MILP モデルをそのまま解く\n"
+        "- model_factory の各種フラグ (充電/PV/行路/V2G 等) を外部設定で変更可能\n"
+        "- Gurobi (MILP) の厳密解法を使用"
+    ),
+    "mode_alns_only": (
+        "ALNS 専用モード (v4 解法分離)\n"
+        "- 便割当を ALNS (破壊・修復オペレータ + SA) で探索\n"
+        "- 充電スケジュールは簡易ヒューリスティックまたは内側 LP\n"
+        "- 大規模問題で Gurobi MILP が時間切れになる場合に使用"
+    ),
+    "mode_alns_milp": (
+        "ALNS+MILP ハイブリッドモード (v4 解法分離)\n"
+        "- Phase 1: ALNS で便チェーン割当を探索\n"
+        "- Phase 2: ALNS 割当を固定し MILP で充電/SOC/電力料金を厳密最適化\n"
+        "- 合計コストが改善する場合のみ MILP 解を採用\n"
+        "- 大規模問題と厳密解の両立を目指す"
     ),
 }
 

@@ -1,0 +1,8 @@
+depot_id,charger_id,distance_km,travel_time_min,energy_kwh_bev,notes
+depot_main,chg_depot_fast_1,0.0,0.0,0.0,デポ内充電器
+depot_main,chg_depot_fast_2,0.0,0.0,0.0,デポ内充電器
+depot_main,chg_depot_fast_3,0.0,0.0,0.0,デポ内充電器
+depot_main,chg_depot_normal_1,0.0,0.0,0.0,デポ内充電器
+depot_main,chg_depot_normal_2,0.0,0.0,0.0,デポ内充電器
+depot_main,chg_term_B_1,2.5,8.0,3.0,終点ターミナル充電器
+depot_sub,chg_term_B_1,1.2,4.0,1.44,終点ターミナル充電器

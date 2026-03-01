@@ -166,4 +166,54 @@ def build_objective(
             for t in range(len(T) + 1):
                 obj_expr += w["slack_penalty"] * slack_soc[k, t]
 
+    # ===== w10: デポ充電インフラコスト (距離 + 電力複合) =====
+    depot_infra_weight = w.get("depot_charger_cost", 0.0)
+    if depot_infra_weight > 0:
+        # デポ距離関連: 車両がデポ外充電器へ迂回する場合の走行コスト
+        depot_detour_cost_per_km = w.get("depot_detour_cost_per_km", 80.0)  # 円/km
+        # 充電器設置コスト (日割): 設置 site 数 × 日額固定費
+        charger_daily_cost = w.get("charger_daily_fixed_cost", 500.0)  # 円/基/日
+
+        # 充電器利用実績 → 充電器固定費 (利用された充電器のみ)
+        z = vars.get("z_charge")
+        if z is not None:
+            charger_used = {}
+            for c in C:
+                charger_used[c] = model.addVar(
+                    vtype=GRB.BINARY, name=f"charger_used[{c}]")
+                for t in T:
+                    for k_bev in K_BEV:
+                        if c in ms.vehicle_charger_feasible.get(k_bev, set()):
+                            model.addConstr(
+                                charger_used[c] >= z[k_bev, c, t],
+                                name=f"charger_used_link[{c},{k_bev},{t}]",
+                            )
+                obj_expr += depot_infra_weight * charger_daily_cost * charger_used[c]
+
+        # 充電迂回距離コスト
+        y = vars.get("y_follow")
+        if y is not None:
+            for k in K_ALL:
+                for r1_id in R:
+                    for r2_id in R:
+                        if r1_id == r2_id:
+                            continue
+                        # depot/charger 迂回弧のみ (通常の trip-to-trip は w5 でカバー)
+                        if r2_id.startswith("__charger_") or r2_id.startswith("__depot_"):
+                            dh_dist = dp.deadhead_distance_km.get(r1_id, {}).get(r2_id, 0.0)
+                            if dh_dist > 0 and (k, r1_id, r2_id) in y:
+                                obj_expr += (
+                                    depot_infra_weight
+                                    * depot_detour_cost_per_km
+                                    * dh_dist
+                                    * y[k, r1_id, r2_id]
+                                )
+
+    # ===== w11: 充電電力ピークシェービング =====
+    peak_shaving_weight = w.get("peak_shaving_cost", 0.0)
+    if peak_shaving_weight > 0 and peak is not None:
+        # ピーク電力に対するペナルティ (デマンドチャージとは別のインセンティブ)
+        for site_id in ms.I_CHARGE:
+            obj_expr += peak_shaving_weight * peak[site_id]
+
     model.setObjective(obj_expr, GRB.MINIMIZE)
