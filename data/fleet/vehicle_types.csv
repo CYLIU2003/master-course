@@ -1,0 +1,4 @@
+vehicle_type_id,powertrain,name,manufacturer,battery_capacity_kwh,usable_soc_min,usable_soc_max,base_energy_rate_kwh_per_km,charging_power_max_kw,charging_efficiency,fuel_tank_l,base_fuel_rate_l_per_km,hvac_power_kw,seating_capacity,weight_kg,body_length_m,degradation_rate_per_cycle,eol_soh_threshold,fixed_daily_cost,variable_cost_per_km,notes
+vtype_bev_200,BEV,次世代電気バス200,ElectroBus,200,0.15,0.95,1.20,50.0,0.92,,,,75,17000,12.0,0.00005,0.80,15000,120,BEV 200kWh 大型
+vtype_ice_std,ICE,標準ディーゼルバス,JBusCorp,,,,,,,,0.32,8.0,75,17500,12.0,,,8000,90,ICE 標準型
+vtype_hev_eco,HEV,ハイブリッドバス,HyperBus,,,,,,,,0.22,7.0,75,17200,12.0,,,10000,100,HEV 省燃費型

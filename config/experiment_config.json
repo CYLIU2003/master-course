@@ -51,5 +51,42 @@
     "compat_vehicle_task_csv": "data/toy/compatibility_vehicle_task.csv",
     "compat_vehicle_charger_csv": "data/toy/compatibility_vehicle_charger.csv",
     "output_dir": "outputs"
-  }
+  },
+
+  "_comment_v3": "=== spec_v3 §11 追加フィールド (2 層構造・route-editable 対応) ===",
+
+  "mode": "thesis_mode_route_editable",
+  "energy_model_level": 1,
+  "fuel_model_enabled": true,
+  "allow_deadhead": true,
+  "allow_partial_charging": true,
+  "service_day_type": "weekday",
+  "route_length_multiplier": 1.0,
+
+  "uncertainty": {
+    "enabled": false,
+    "n_scenarios": 10,
+    "seed": 42,
+    "energy_range": [0.85, 1.15],
+    "travel_time_range": [0.90, 1.20],
+    "congestion_range": [0.95, 1.30],
+    "temp_range": [-5.0, 5.0],
+    "load_range": [0.5, 1.0],
+    "rain_range": [0.0, 1.0]
+  },
+
+  "route_edit_rules": {
+    "_comment": "route-detail 層のパラメータ上書きルール (thesis_mode_route_editable 用)",
+    "segment_distance_overrides": {},
+    "segment_grade_overrides": {},
+    "timetable_headway_overrides": {},
+    "powertrain_comparison": ["BEV", "ICE", "HEV"]
+  },
+
+  "v3_data_dir": "data",
+  "route_master_dir": "data/route_master",
+  "fleet_dir": "data/fleet",
+  "infra_dir": "data/infra",
+  "external_dir": "data/external",
+  "derived_dir": "data/derived"
 }

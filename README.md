@@ -317,61 +317,187 @@ $$\min \sum_{i=1}^{9} w_i \cdot f_i(x)$$
 
 ---
 
+## v3 アーキテクチャ — Route-Editable 2 層構造 (spec_v3 / agent_route_editable)
+
+### 設計思想
+
+先行研究モデルは「便リスト」を固定入力として受け取りますが、本研究では **路線・停留所・セグメント** までを明示的にモデル化し、路線編集 → アクチュアルな便生成 → 最適化という連続フローを実現します。
+
+```
+[Layer A: route-detail 層]                    [Layer B: trip abstraction 層]
+Route / Terminal / Stop
+  ↓ RouteVariant (segment_id_list)
+Segment (distance_km, grade_avg_pct, ...)   ──→  GeneratedTrip (energy_kwh, fuel_l, ...)
+  ↓ TimetablePattern (headway, start, end)         ↓
+ServiceCalendarRow (date → service_day_type)   DeadheadArc (空車回送弧)
+                                                   ↓
+                                            最適化モデル (milp_model.py)
+```
+
+### エネルギーモデル 3 レベル
+
+| Level | 計算方法 | 用途 |
+|---|---|---|
+| 0 | `base_rate × distance` | 先行研究再現・固定入力 |
+| 1 | 路線係数線形モデル (距離・勾配・停留所・乗客・渋滞・HVAC) | 標準解析 |
+| 2 | セグメント集計 (stops を 1 区間ずつ積算) | 高精度・区間感度 |
+
+### パワートレイン比較
+
+同一の路線 (Layer A) データから BEV / ICE / HEV を横並びで評価:
+
+- **BEV**: `estimate_trip_energy_bev()` → `energy_kwh` (充電スケジュールに入力)
+- **ICE**: `estimate_trip_fuel_ice()` → `fuel_l` (燃料コスト比較)
+- **HEV**: `estimate_trip_fuel_hev()` (ICE × efficiency)
+
+### 新モード一覧 (spec_v3 §8)
+
+| モード | 説明 | エネルギーモデル | 特記 |
+|---|---|---|---|
+| `mode_simple_reproduction` | 先行研究再現 (固定 trip 入力) | Level 0 | PV/V2G/劣化/デマンド料金 無効 |
+| `mode_route_sensitivity` | 路線距離スケーリング感度 | Level 1 | `route_length_multiplier`: 0.5〜2.0 |
+| `mode_uncertainty_eval` | シナリオサンプリング + ALNS ループ | Level 1 | `n_scenarios` 件の ScenarioTripEnergy |
+| `thesis_mode_route_editable` | 完全 2 層構造 + BEV/ICE 比較 | Level 1/2 | `route_edit_rules` で路線動的編集 |
+
+### Pipeline CLI (spec_v3 §5)
+
+```bash
+# Step 1: route_master/fleet CSVから GeneratedTrip と DeadheadArc を生成
+python -m src.pipeline.build_inputs --config config/experiment_config.json
+
+# Step 2: モード指定して最適化ソルバー実行
+python -m src.pipeline.solve --config config/experiment_config.json --mode thesis_mode_route_editable
+
+# Step 3: シミュレーション評価 (SOC トレース + 実行可能性診断)
+python -m src.pipeline.simulate --config config/experiment_config.json
+
+# Step 4: KPI レポート生成 (Markdown + CSV → outputs/)
+python -m src.pipeline.report --config config/experiment_config.json
+```
+
+### v3 データフォルダ構成
+
+```
+data/
+├── route_master/               # Layer A: 路線マスタ (手動編集可能)
+│   ├── routes.csv              # 路線定義 (route_id, total_distance_km, ...)
+│   ├── terminals.csv           # ターミナル/デポ (has_depot, has_charger, ...)
+│   ├── stops.csv               # 停留所 (route / direction / sequence)
+│   ├── segments.csv            # 区間 (distance_km, grade_avg_pct, signal_count, ...)
+│   ├── route_variants.json     # 運行パターン (segment_id_list)
+│   ├── timetable_patterns.csv  # ダイヤパターン (headway_min, start_time, end_time)
+│   └── service_calendar.csv    # 運行日種別 (date → weekday/holiday)
+├── fleet/
+│   ├── vehicle_types.csv       # 車種定義 (BEV/ICE/HEV, battery/fuel params)
+│   └── vehicles.csv            # 個別車両 (depot_id, initial_soc_kwh)
+├── infra/
+│   ├── charger_sites.csv       # 充電拠点 (max_grid_kw, pv_capacity_kw)
+│   ├── chargers.csv            # 充電器 (power_kw, compatible_vehicle_types)
+│   └── depot_grid_limits.csv   # 系統契約電力 (contract_demand_kw)
+├── external/
+│   ├── tariff.csv              # TOU 電力単価 (period_start → price_jpy_kwh)
+│   ├── weather_timeseries.csv  # 気象データ (temp, rain, wind)
+│   ├── passenger_load_profile.csv  # 乗客荷重プロファイル
+│   └── traffic_profile.csv     # 交通渋滞プロファイル
+└── derived/                    # 自動生成 (build_inputs が出力)
+    ├── generated_trips.csv     # Layer B: GeneratedTrip 一覧
+    ├── deadhead_arcs.csv       # DeadheadArc 一覧
+    └── scenario_trip_energy.csv  # シナリオ別エネルギー
+```
+
+### v3 設定フィールド (config/experiment_config.json)
+
+```json
+{
+  "mode": "thesis_mode_route_editable",
+  "energy_model_level": 1,
+  "fuel_model_enabled": true,
+  "allow_deadhead": true,
+  "allow_partial_charging": true,
+  "service_day_type": "weekday",
+  "route_length_multiplier": 1.0,
+  "uncertainty": {
+    "enabled": false,
+    "n_scenarios": 10,
+    "seed": 42,
+    "energy_range": [0.85, 1.15],
+    "travel_time_range": [0.90, 1.20]
+  },
+  "route_edit_rules": {
+    "segment_distance_overrides": {},
+    "powertrain_comparison": ["BEV", "ICE", "HEV"]
+  }
+}
+```
+
+---
+
 ## ファイル構成
 
 ```
 master-course/
 ├── src/                              # 🆕 新アーキテクチャ (仕様書準拠)
-│   ├── __init__.py                   # パッケージ初期化・使用例
-│   ├── data_schema.py                # ProblemData / Vehicle / Task / Charger / Site
-│   ├── data_loader.py                # CSV → ProblemData ローダー
-│   ├── model_sets.py                 # ModelSets 構築
-│   ├── parameter_builder.py          # DerivedParams 構築 (LUT)
-│   ├── objective.py                  # 9 項目加重和目的関数
-│   ├── milp_model.py                 # Gurobi MILP モデル構築 / 結果抽出
-│   ├── model_factory.py              # モード切替 (mode_A / mode_B / thesis_mode)
-│   ├── solver_runner.py              # MILP 実行ヘルパー
-│   ├── solver_alns.py                # ALNS メタヒューリスティクス
-│   ├── simulator.py                  # シミュレーション検証 + 実行可能性診断
-│   ├── visualization.py              # matplotlib 可視化 (日本語対応)
-│   ├── result_exporter.py            # CSV / JSON / Markdown エクスポート
-│   └── constraints/                  # 制約モジュール (分割)
+│   ├── __init__.py
+│   ├── data_schema.py
+│   ├── data_loader.py
+│   ├── model_sets.py
+│   ├── parameter_builder.py
+│   ├── objective.py
+│   ├── milp_model.py
+│   ├── model_factory.py              # モード切替 (mode_A / mode_B / thesis_mode / v3 新4モード)
+│   ├── solver_runner.py
+│   ├── solver_alns.py
+│   ├── simulator.py
+│   ├── visualization.py
+│   ├── result_exporter.py
+│   ├── schemas/                      # 🆕 v3 エンティティ定義
+│   │   ├── __init__.py
+│   │   ├── route_entities.py         # Route, Terminal, Stop, Segment, RouteVariant, GeneratedTrip, DeadheadArc
+│   │   ├── fleet_entities.py         # VehicleType (BEV/ICE/HEV/PHEV), VehicleInstance
+│   │   └── trip_entities.py          # ScenarioTripEnergy
+│   ├── preprocess/                   # 🆕 v3 前処理パイプライン
+│   │   ├── __init__.py
+│   │   ├── route_builder.py          # 路線ネットワーク検証・統計
+│   │   ├── timetable_generator.py    # 発車時刻生成・運行日展開
+│   │   ├── trip_generator.py         # GeneratedTrip 生成
+│   │   ├── energy_model.py           # BEV エネルギー Level 0/1/2
+│   │   ├── fuel_model.py             # ICE/HEV 燃料推定
+│   │   ├── deadhead_builder.py       # DeadheadArc 生成・接続行列
+│   │   └── scenario_generator.py     # 不確実性シナリオ生成
+│   ├── pipeline/                     # 🆕 v3 CLI パイプライン
+│   │   ├── __init__.py
+│   │   ├── build_inputs.py           # route_master CSV → generated_trips, deadhead_arcs
+│   │   ├── solve.py                  # モード別ソルバー実行
+│   │   ├── simulate.py               # シミュレーション評価
+│   │   └── report.py                 # KPI レポート生成
+│   └── constraints/
 │       ├── __init__.py
-│       ├── assignment.py             # 割当制約
-│       ├── charging.py               # 充電制約
-│       ├── charger_capacity.py       # 充電器容量制約
-│       ├── energy_balance.py         # SOC 推移制約
-│       ├── pv_grid.py                # PV / 系統電力制約
-│       ├── battery_degradation.py    # 電池劣化制約
-│       └── optional_v2g.py           # V2G オプション制約
-├── app/                              # Streamlit GUI (旧 + 新アーキ統合)
-│   ├── __init__.py                   # パッケージ初期化
-│   ├── main.py                       # Streamlit メインアプリ
-│   ├── model_core.py                 # コアモデル・データ構造 (旧)
-│   ├── solver_gurobi.py              # Gurobi (MILP) ソルバー (旧)
-│   ├── solver_alns.py                # ALNS ソルバー (旧)
-│   ├── solver_ga.py                  # GA ソルバー
-│   ├── solver_abc.py                 # ABC ソルバー
-│   └── visualizer.py                 # Plotly 可視化モジュール
+│       ├── assignment.py
+│       ├── charging.py
+│       ├── charger_capacity.py
+│       ├── energy_balance.py
+│       ├── pv_grid.py
+│       ├── battery_degradation.py
+│       └── optional_v2g.py
+├── app/                              # Streamlit GUI
+│   ├── main.py
+│   ├── model_core.py
+│   ├── solver_gurobi.py
+│   ├── solver_alns.py
+│   ├── solver_ga.py
+│   ├── solver_abc.py
+│   └── visualizer.py
 ├── config/
-│   └── experiment_config.json        # 実験設定 JSON
+│   └── experiment_config.json        # 実験設定 JSON (v3 フィールド追加済み)
 ├── data/
-│   └── toy/                          # サンプルデータ (CSV)
-│       ├── vehicles.csv
-│       ├── tasks.csv
-│       ├── chargers.csv
-│       ├── sites.csv
-│       ├── tou_rates.csv
-│       ├── pv_generation.csv
-│       ├── vehicle_task_feasibility.csv
-│       ├── vehicle_charger_access.csv
-│       └── weights.csv
-├── constant/                         # 研究資料（数理モデル定義、制約一覧等）
-├── run_experiment.py                 # 🆕 CLI エントリポイント
-├── ebus_prototype_config.json        # プロトタイプ設定 JSON (旧)
-├── ebus_asset_factors.json           # 属物要因 JSON
-├── ebus_config_with_asset_ref.json   # 外部ファイル参照スタブ
-├── solve_ebus_gurobi.py              # 既存の CLI ソルバー
+│   ├── route_master/                 # 🆕 v3 路線マスタ CSV
+│   ├── fleet/                        # 🆕 v3 車両定義 CSV
+│   ├── infra/                        # 🆕 v3 充電インフラ CSV
+│   ├── external/                     # 🆕 v3 外部データ (TOU/気象/乗客/交通)
+│   ├── derived/                      # 🆕 v3 自動生成 (build_inputs が出力)
+│   └── toy/                          # 既存サンプルデータ (旧アーキ用)
+├── constant/                         # 研究資料
+├── run_experiment.py                 # CLI エントリポイント
 ├── requirements.txt
 └── README.md
 ```
@@ -666,10 +792,14 @@ $$\min \sum_{t \in T} \text{grid\_price}[t] \times \text{grid\_buy}[t]$$
 - [x] CSV ベースデータ入力 + モード切替 + CLI 実行（`src/` + `run_experiment.py`）
 - [x] シミュレータ検証 + 実行可能性診断（`src/simulator.py`）
 - [x] ALNS の新データ構造対応（`src/solver_alns.py`）
-- [ ] HEV 車両の追加
-- [ ] 車両カタログ (`ebus_asset_factors.json`) からの自動インポート
-- [ ] TOU 料金のカスタム時間帯設定
-- [ ] バッチ感度分析（パラメータスイープ）
+- [x] **v3 2層 route-editable アーキテクチャ** (`src/schemas/`, `src/preprocess/`)
+- [x] **エネルギーモデル Level 0/1/2** + ICE/HEV 燃料モデル (`src/preprocess/energy_model.py`, `fuel_model.py`)
+- [x] **Pipeline CLI** `build_inputs → solve → simulate → report` (`src/pipeline/`)
+- [x] **4 新モード**: `mode_simple_reproduction`, `mode_route_sensitivity`, `mode_uncertainty_eval`, `thesis_mode_route_editable`
+- [x] **サンプルデータ** `data/route_master/`, `data/fleet/`, `data/infra/`, `data/external/` 作成
+- [ ] HEV 車両の MILP モデル統合 (現在は燃料コスト比較のみ)
+- [ ] `route_edit_rules` による動的路線編集 UI (Streamlit 連携)
+- [ ] バッチ感度分析（パラメータスイープ + Pareto フロンティア可視化）
 - [ ] 結果の CSV/Excel エクスポート（`src/result_exporter.py` で一部対応済み）
 
 ---

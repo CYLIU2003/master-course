@@ -1,0 +1,3 @@
+site_id,site_name,terminal_id,lat,lon,site_type,max_grid_kw,pv_capacity_kw,notes
+site_depot_A,デポ充電拠点,terminal_A,35.6895,139.6917,depot,300.0,50.0,メインデポ・PV設置済み
+site_terminal_B,終点充電拠点,terminal_B,35.7010,139.7200,terminal,100.0,0.0,終点折返し待機充電

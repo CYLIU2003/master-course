@@ -1,0 +1,13 @@
+period_start,period_end,passenger_load_factor,day_type,notes
+06:00,07:00,0.30,weekday,早朝低需要
+07:00,09:00,0.85,weekday,朝ラッシュ
+09:00,11:00,0.50,weekday,朝中間
+11:00,13:00,0.45,weekday,昼間
+13:00,16:00,0.40,weekday,午後
+16:00,18:00,0.80,weekday,夕方ラッシュ
+18:00,20:00,0.55,weekday,夜間前半
+20:00,22:00,0.30,weekday,夜間後半
+07:00,09:00,0.60,holiday,休日朝
+09:00,12:00,0.55,holiday,休日午前
+12:00,18:00,0.65,holiday,休日午後(お出かけ)
+18:00,21:00,0.45,holiday,休日夜
