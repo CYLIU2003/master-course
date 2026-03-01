@@ -1,0 +1,3 @@
+route_id,fare_type,base_fare_jpy,per_km_fare_jpy,zone_boundary_km,zone_increment_jpy,notes
+R001,flat,220,0,0,0,均一運賃 220円
+R002,distance,180,10,0,0,初乗り180円 + 10円/km

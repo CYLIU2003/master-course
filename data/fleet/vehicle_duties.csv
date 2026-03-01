@@ -1,0 +1,6 @@
+duty_id,duty_name,depot_id,route_id,service_day_type,pull_out_time,pull_in_time,pull_out_terminal_id,pull_in_terminal_id,required_vehicle_type,driver_group,max_work_time_min,max_continuous_drive_min,required_break_min
+D001,朝ラッシュ便A,depot_main,R01,weekday,05:30,14:30,T_A,T_A,BEV,group_A,540,240,30
+D002,朝ラッシュ便B,depot_main,R01,weekday,06:00,15:00,T_A,T_A,,group_A,540,240,30
+D003,昼便C,depot_main,R01,weekday,09:00,18:00,T_A,T_A,,group_B,540,240,30
+D004,夕ラッシュ便D,depot_main,R01,weekday,14:00,22:00,T_A,T_A,BEV,group_B,480,240,30
+D005,全日便E,depot_sub,R01,weekday,06:30,20:00,T_B,T_B,,group_C,810,240,45

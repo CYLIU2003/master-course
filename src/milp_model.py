@@ -46,6 +46,7 @@ from .constraints.energy_balance import (
 from .constraints.pv_grid import add_pv_grid_constraints
 from .constraints.battery_degradation import add_battery_degradation_constraints
 from .constraints.optional_v2g import add_v2g_constraints
+from .constraints.duty_assignment import add_duty_assignment_constraints
 from .objective import build_objective
 
 
@@ -123,6 +124,7 @@ def build_milp_model(
             "battery_degradation": data.enable_battery_degradation,
             "v2g": data.enable_v2g,
             "demand_charge": data.enable_demand_charge,
+            "duty_assignment": data.duty_assignment_enabled,
         }
 
     model = gp.Model("ebus_milp")
@@ -218,6 +220,10 @@ def build_milp_model(
 
     if flags.get("v2g", False):
         add_v2g_constraints(model, data, ms, dp, vars)
+
+    # ===== §6 行路制約 (duty assignment) =====
+    if flags.get("duty_assignment", False) and data.duty_assignment_enabled and data.duty_list:
+        add_duty_assignment_constraints(model, data, ms, dp, vars)
 
     # ===== 目的関数設定 =====
     build_objective(model, data, ms, dp, vars)

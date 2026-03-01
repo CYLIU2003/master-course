@@ -17,6 +17,12 @@ from .route_entities import (
 )
 from .fleet_entities import VehicleType, VehicleInstance
 from .trip_entities import ScenarioTripEnergy
+from .duty_entities import (
+    DutyLeg,
+    VehicleDuty,
+    DutyChargingSlot,
+    DutyAssignmentConfig,
+)
 
 __all__ = [
     "Route", "Terminal", "Stop", "Segment",
@@ -24,4 +30,5 @@ __all__ = [
     "GeneratedTrip", "DeadheadArc",
     "VehicleType", "VehicleInstance",
     "ScenarioTripEnergy",
+    "DutyLeg", "VehicleDuty", "DutyChargingSlot", "DutyAssignmentConfig",
 ]

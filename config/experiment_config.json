@@ -83,6 +83,43 @@
     "powertrain_comparison": ["BEV", "ICE", "HEV"]
   },
 
+  "duty_assignment": {
+    "_comment": "行路設定表による車両配分 (spec_v3 §6)",
+    "enabled": false,
+    "duties_csv_path": "data/fleet/vehicle_duties.csv",
+    "duty_legs_csv_path": "data/fleet/duty_legs.csv",
+    "allow_duty_swap": false,
+    "enforce_depot_match": true,
+    "enforce_vehicle_type_match": true
+  },
+
+  "gap_analysis": {
+    "_comment": "最適化 vs シミュレーション ギャップ分析 (spec_v3 §9)",
+    "enabled": false
+  },
+
+  "delay_resilience_test": {
+    "_comment": "遅延耐性テスト (spec_v3 §10)",
+    "enabled": false,
+    "n_scenarios": 10,
+    "delay_probability": 0.15,
+    "delay_mean_min": 5.0,
+    "seed": 42
+  },
+
+  "passenger_load": {
+    "_comment": "乗客負荷プロファイル (spec_v3 §7)",
+    "enabled": false,
+    "csv_path": "data/external/passenger_load_profile.csv",
+    "default_load_factor": 0.5
+  },
+
+  "tariff": {
+    "_comment": "TOU 電力料金従量 (spec_v3 §9)",
+    "enabled": false,
+    "csv_path": "data/external/tariff.csv"
+  },
+
   "v3_data_dir": "data",
   "route_master_dir": "data/route_master",
   "fleet_dir": "data/fleet",

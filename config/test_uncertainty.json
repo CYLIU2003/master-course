@@ -1,0 +1,52 @@
+{
+  "_comment": "テストケース4: uncertainty_case — 不確実性シナリオ評価",
+  "time_step_min": 15,
+  "num_periods": 64,
+  "start_time": "05:00",
+  "end_time": "21:00",
+  "planning_horizon_hours": 16.0,
+  "allow_partial_service": true,
+  "enable_pv": false,
+  "enable_v2g": false,
+  "enable_battery_degradation": true,
+  "enable_demand_charge": true,
+  "mode": "mode_uncertainty_eval",
+  "energy_model_level": 2,
+  "fuel_model_enabled": true,
+  "allow_deadhead": true,
+  "service_day_type": "weekday",
+  "route_length_multiplier": 1.0,
+  "duty_assignment": {
+    "enabled": false
+  },
+  "uncertainty": {
+    "enabled": true,
+    "n_scenarios": 20,
+    "seed": 42,
+    "energy_range": [0.85, 1.20],
+    "travel_time_range": [0.90, 1.30],
+    "congestion_range": [0.90, 1.40],
+    "temp_range": [-5.0, 10.0],
+    "load_range": [0.3, 1.0],
+    "rain_range": [0.0, 1.0]
+  },
+  "solver": {
+    "time_limit_sec": 300,
+    "mip_gap": 0.02
+  },
+  "paths": {
+    "vehicles_csv": "data/toy/vehicles.csv",
+    "tasks_csv": "data/toy/tasks.csv",
+    "chargers_csv": "data/toy/chargers.csv",
+    "sites_csv": "data/toy/sites.csv",
+    "electricity_price_csv": "data/toy/electricity_price.csv",
+    "travel_connection_csv": "data/toy/travel_connection.csv",
+    "compat_vehicle_task_csv": "data/toy/compatibility_vehicle_task.csv",
+    "compat_vehicle_charger_csv": "data/toy/compatibility_vehicle_charger.csv",
+    "output_dir": "outputs/test_uncertainty"
+  },
+  "v3_data_dir": "data",
+  "route_master_dir": "data/route_master",
+  "fleet_dir": "data/fleet",
+  "derived_dir": "data/derived"
+}

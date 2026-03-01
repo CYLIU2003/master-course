@@ -14,7 +14,7 @@ MILP・ALNS 共通の入力スキーマ。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +220,21 @@ class ProblemData:
     BIG_M_CHARGE: float = 1e6
     BIG_M_SOC: float = 1e6
     EPSILON: float = 1e-6
+
+    # --- 行路 (duty) 関連 (spec_v3 §6 行路設定表) ---
+    duty_assignment_enabled: bool = False
+    duty_enforce_depot_match: bool = True
+    duty_enforce_vehicle_type_match: bool = True
+    duty_allow_swap: bool = False
+    # duty_list は src.schemas.duty_entities.VehicleDuty のリスト (import cycle 回避のため Any)
+    duty_list: List[Any] = field(default_factory=list)
+    # duty_trip_mapping: duty_id -> [task_id, ...]
+    duty_trip_mapping: Dict[str, List[str]] = field(default_factory=dict)
+
+    # --- 乗客負荷 (spec_v3 §7 trip 負荷率) ---
+    passenger_load_enabled: bool = False
+    # task_id -> load_factor (0.0 ~ 1.0+)
+    task_load_factors: Dict[str, float] = field(default_factory=dict)
 
     # --- 派生集合キャッシュ (model_sets.py が埋める) ---
     K_BEV: List[str] = field(default_factory=list)
