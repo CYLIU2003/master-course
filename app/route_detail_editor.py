@@ -271,12 +271,32 @@ def _render_simple_editor(data: dict, data_dir: str) -> None:
     route_df = data["route"]
 
     st.markdown("### 🛤️ 路線概要")
+    st.markdown(
+        '<div style="background:#f5f5dc; border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:0.82em; line-height:1.6;">'
+        '<b>route_id</b>=路線の一意ID &nbsp;│&nbsp; '
+        '<b>route_name</b>=路線の表示名 &nbsp;│&nbsp; '
+        '<b>direction</b>=outbound(往路)/inbound(復路)'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     if route_df is not None and len(route_df) > 0:
+        route_col_config = {
+            "route_id": st.column_config.TextColumn(
+                "路線 ID", help="路線の一意識別子（例: route_101）",
+            ),
+            "route_name": st.column_config.TextColumn(
+                "路線名", help="路線の表示名",
+            ),
+            "direction": st.column_config.TextColumn(
+                "方向", help="outbound=往路、inbound=復路",
+            ),
+        }
         edited_route = st.data_editor(
             route_df,
             width='stretch',
             num_rows="dynamic",
             key=_sk("simple_route"),
+            column_config=route_col_config,
         )
     else:
         edited_route = route_df
@@ -288,11 +308,20 @@ def _render_simple_editor(data: dict, data_dir: str) -> None:
     # === バス停編集 ===
     st.markdown("---")
     st.markdown("### 🚏 バス停一覧")
-    st.caption(
-        "行を追加・削除してバス停を編集できます。"
-        " `distance_from_prev_km` は前のバス停からの距離です。"
-        " `is_depot` にチェックすると車庫停留所になります。"
-        " `is_revenue_stop` にチェックすると営業運転の停車地になります。"
+    st.markdown(
+        '<div style="background:#f0f7ff; border-radius:8px; padding:10px 14px; margin-bottom:10px; font-size:0.85em; line-height:1.7;">'
+        '<b>📖 列の説明</b><br>'
+        '<b>順序</b> … 路線内でのバス停の並び順（1から連番） &nbsp;│&nbsp; '
+        '<b>停留所 ID</b> … 一意の識別子（例: stop_A） &nbsp;│&nbsp; '
+        '<b>停留所名</b> … 表示名（例: 中央公園前）<br>'
+        '<b>方向</b> … outbound=往路 / inbound=復路 &nbsp;│&nbsp; '
+        '<b>前停距離 [km]</b> … ひとつ前のバス停からの距離（最初は 0）<br>'
+        '<b>緯度・経度</b> … バス停の位置（地図モードで自動入力可） &nbsp;│&nbsp; '
+        '<b>車庫</b> … ✅ ならこの停留所が車庫を兼ねる<br>'
+        '<b>営業停車</b> … ✅ なら旅客の乗降がある停留所（回送専用なら外す） &nbsp;│&nbsp; '
+        '<b>ターミナル</b> … ✅ なら路線の起終点'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
     # 表示用にカラムを選択・並び替え
@@ -305,20 +334,46 @@ def _render_simple_editor(data: dict, data_dir: str) -> None:
     display_cols = [c for c in display_cols if c in stops_df.columns]
 
     column_config = {
-        "sequence": st.column_config.NumberColumn("順序", min_value=1, step=1),
-        "stop_id": st.column_config.TextColumn("停留所 ID"),
-        "stop_name": st.column_config.TextColumn("停留所名"),
+        "sequence": st.column_config.NumberColumn(
+            "順序", min_value=1, step=1,
+            help="路線内でのバス停の並び順（1 から連番）",
+        ),
+        "stop_id": st.column_config.TextColumn(
+            "停留所 ID",
+            help="一意の識別子（例: stop_A）。CSV内のキーとして使用",
+        ),
+        "stop_name": st.column_config.TextColumn(
+            "停留所名",
+            help="バス停の表示名（例: 中央公園前）",
+        ),
         "direction": st.column_config.SelectboxColumn(
             "方向", options=["outbound", "inbound"], default="outbound",
+            help="outbound = 往路（デポ→終点）、inbound = 復路（終点→デポ）",
         ),
         "distance_from_prev_km": st.column_config.NumberColumn(
-            "前停からの距離 [km]", min_value=0.0, step=0.1, format="%.3f",
+            "前停距離 [km]", min_value=0.0, step=0.1, format="%.3f",
+            help="ひとつ前のバス停からの距離 [km]。最初のバス停は 0",
         ),
-        "lat": st.column_config.NumberColumn("緯度", format="%.6f"),
-        "lon": st.column_config.NumberColumn("経度", format="%.6f"),
-        "is_depot": st.column_config.CheckboxColumn("車庫", default=False),
-        "is_revenue_stop": st.column_config.CheckboxColumn("営業停車", default=True),
-        "is_terminal": st.column_config.CheckboxColumn("ターミナル", default=False),
+        "lat": st.column_config.NumberColumn(
+            "緯度", format="%.6f",
+            help="バス停の緯度（北緯）。地図モードではクリックで自動入力",
+        ),
+        "lon": st.column_config.NumberColumn(
+            "経度", format="%.6f",
+            help="バス停の経度（東経）。地図モードではクリックで自動入力",
+        ),
+        "is_depot": st.column_config.CheckboxColumn(
+            "車庫", default=False,
+            help="✅ = この停留所が車庫（デポ）を兼ねる。バスが出庫・入庫する地点",
+        ),
+        "is_revenue_stop": st.column_config.CheckboxColumn(
+            "営業停車", default=True,
+            help="✅ = 旅客の乗降がある停留所。回送専用なら外す",
+        ),
+        "is_terminal": st.column_config.CheckboxColumn(
+            "ターミナル", default=False,
+            help="✅ = 路線の起点または終点となるターミナル駅",
+        ),
     }
 
     edited_stops = st.data_editor(
@@ -377,24 +432,68 @@ def _render_simple_editor(data: dict, data_dir: str) -> None:
     # === 車庫（デポ）編集 ===
     st.markdown("---")
     st.markdown("### 🅿️ 車庫（デポ）一覧")
-    st.caption(
-        "`on_route=True`: 路線上にある車庫、`on_route=False`: 路線外にある車庫。"
-        " 路線外の車庫からはデッドヘッド（回送）が必要です。"
-        " `is_revenue_stop=True` にすると営業運転でも停車します。"
+    st.markdown(
+        '<div style="background:#fff5f5; border-radius:8px; padding:10px 14px; margin-bottom:10px; font-size:0.85em; line-height:1.7;">'
+        '<b>📖 列の説明</b><br>'
+        '<b>車庫 ID</b> … 一意の識別子（例: depot_main） &nbsp;│&nbsp; '
+        '<b>車庫名</b> … 表示名（例: メインデポ）<br>'
+        '<b>緯度・経度</b> … 車庫の位置 &nbsp;│&nbsp; '
+        '<b>路線上</b> … ✅ = 路線ルート上にある車庫。❌ = 路線外（回送が必要）<br>'
+        '<b>最寄りバス停</b> … 路線外デポの場合、最も近いバス停 ID &nbsp;│&nbsp; '
+        '<b>営業停車</b> … ✅ = 旅客の乗降もある（営業運転で停まる）<br>'
+        '<b>駐車容量</b> … 同時に駐車できるバスの台数 &nbsp;│&nbsp; '
+        '<b>夜間充電</b> … ✅ = 夜間にバスを充電する機能あり<br>'
+        '<b>系統接続 [kW]</b> … 電力系統の最大接続容量 &nbsp;│&nbsp; '
+        '<b>備考</b> … 自由記入'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
     depot_column_config = {
-        "depot_id": st.column_config.TextColumn("車庫 ID"),
-        "depot_name": st.column_config.TextColumn("車庫名"),
-        "lat": st.column_config.NumberColumn("緯度", format="%.6f"),
-        "lon": st.column_config.NumberColumn("経度", format="%.6f"),
-        "on_route": st.column_config.CheckboxColumn("路線上", default=True),
-        "nearest_stop_id": st.column_config.TextColumn("最寄りバス停"),
-        "is_revenue_stop": st.column_config.CheckboxColumn("営業停車", default=False),
-        "parking_capacity": st.column_config.NumberColumn("駐車容量", min_value=0, step=1),
-        "overnight_charging": st.column_config.CheckboxColumn("夜間充電", default=True),
-        "grid_connection_kw": st.column_config.NumberColumn("系統接続 [kW]", min_value=0.0, step=10.0),
-        "notes": st.column_config.TextColumn("備考"),
+        "depot_id": st.column_config.TextColumn(
+            "車庫 ID",
+            help="車庫の一意識別子（例: depot_main）。CSV内のキー",
+        ),
+        "depot_name": st.column_config.TextColumn(
+            "車庫名",
+            help="車庫の表示名（例: メインデポ）",
+        ),
+        "lat": st.column_config.NumberColumn(
+            "緯度", format="%.6f",
+            help="車庫の緯度（北緯）",
+        ),
+        "lon": st.column_config.NumberColumn(
+            "経度", format="%.6f",
+            help="車庫の経度（東経）",
+        ),
+        "on_route": st.column_config.CheckboxColumn(
+            "路線上", default=True,
+            help="✅ = 路線ルート上にある車庫。❌ = 路線外にあり、出入庫にデッドヘッド（回送）が必要",
+        ),
+        "nearest_stop_id": st.column_config.TextColumn(
+            "最寄りバス停",
+            help="路線外デポの場合、最も近い路線上のバス停 ID を指定",
+        ),
+        "is_revenue_stop": st.column_config.CheckboxColumn(
+            "営業停車", default=False,
+            help="✅ = 営業運転でも旅客の乗降がある停車地として扱う",
+        ),
+        "parking_capacity": st.column_config.NumberColumn(
+            "駐車容量", min_value=0, step=1,
+            help="同時に駐車できるバスの最大台数",
+        ),
+        "overnight_charging": st.column_config.CheckboxColumn(
+            "夜間充電", default=True,
+            help="✅ = この車庫で夜間にバスを充電できる",
+        ),
+        "grid_connection_kw": st.column_config.NumberColumn(
+            "系統接続 [kW]", min_value=0.0, step=10.0,
+            help="電力系統への最大接続容量 [kW]。充電器の合計出力上限",
+        ),
+        "notes": st.column_config.TextColumn(
+            "備考",
+            help="自由記入の補足メモ",
+        ),
     }
 
     depot_display_cols = [c for c in DEPOTS_COLS if c in depots_df.columns]
@@ -741,6 +840,17 @@ def _render_map_editor(data: dict, data_dir: str) -> None:
     map_tabs = st.tabs(["🚏 バス停", "🅿️ 車庫"])
 
     with map_tabs[0]:
+        st.markdown(
+            '<div style="background:#f0f7ff; border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:0.82em; line-height:1.6;">'
+            '<b>順序</b>=並び順 │ <b>停留所ID</b>=一意キー │ <b>停留所名</b>=表示名 │ '
+            '<b>方向</b>=outbound(往路)/inbound(復路) │ '
+            '<b>前停距離</b>=前バス停からの距離[km]<br>'
+            '<b>緯度/経度</b>=地理座標 │ '
+            '<b>車庫</b>=✅で車庫兼用 │ <b>営業停車</b>=✅で旅客乗降あり │ '
+            '<b>ターミナル</b>=✅で路線起終点'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         map_stop_cols = [
             "sequence", "stop_id", "stop_name", "direction",
             "distance_from_prev_km", "lat", "lon",
@@ -753,9 +863,40 @@ def _render_map_editor(data: dict, data_dir: str) -> None:
             num_rows="dynamic",
             key=_sk("map_edit_stops"),
             column_config={
-                "is_depot": st.column_config.CheckboxColumn("車庫", default=False),
-                "is_revenue_stop": st.column_config.CheckboxColumn("営業停車", default=True),
-                "distance_from_prev_km": st.column_config.NumberColumn("前停距離[km]", format="%.3f"),
+                "sequence": st.column_config.NumberColumn(
+                    "順序", help="路線内でのバス停の並び順",
+                ),
+                "stop_id": st.column_config.TextColumn(
+                    "停留所 ID", help="一意の識別子（例: stop_A）",
+                ),
+                "stop_name": st.column_config.TextColumn(
+                    "停留所名", help="バス停の表示名",
+                ),
+                "direction": st.column_config.TextColumn(
+                    "方向", help="outbound=往路、inbound=復路",
+                ),
+                "distance_from_prev_km": st.column_config.NumberColumn(
+                    "前停距離[km]", format="%.3f",
+                    help="ひとつ前のバス停からの距離 [km]",
+                ),
+                "lat": st.column_config.NumberColumn(
+                    "緯度", format="%.6f", help="北緯",
+                ),
+                "lon": st.column_config.NumberColumn(
+                    "経度", format="%.6f", help="東経",
+                ),
+                "is_depot": st.column_config.CheckboxColumn(
+                    "車庫", default=False,
+                    help="✅ = この停留所が車庫を兼ねる",
+                ),
+                "is_revenue_stop": st.column_config.CheckboxColumn(
+                    "営業停車", default=True,
+                    help="✅ = 旅客の乗降がある停留所",
+                ),
+                "is_terminal": st.column_config.CheckboxColumn(
+                    "ターミナル", default=False,
+                    help="✅ = 路線の起点または終点",
+                ),
             },
         )
         # 非表示列を復元
@@ -764,6 +905,18 @@ def _render_map_editor(data: dict, data_dir: str) -> None:
                 edited_stops_map[c] = stops_df[c].values[:len(edited_stops_map)] if len(stops_df) >= len(edited_stops_map) else ""
 
     with map_tabs[1]:
+        st.markdown(
+            '<div style="background:#fff5f5; border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:0.82em; line-height:1.6;">'
+            '<b>車庫ID</b>=一意キー │ <b>車庫名</b>=表示名 │ '
+            '<b>緯度/経度</b>=位置 │ '
+            '<b>路線上</b>=✅で路線上の車庫(❌は路線外→回送必要)<br>'
+            '<b>最寄りバス停</b>=路線外の場合の最寄り │ '
+            '<b>営業停車</b>=✅で旅客乗降あり │ '
+            '<b>駐車容量</b>=最大駐車台数 │ <b>夜間充電</b>=✅で充電可 │ '
+            '<b>系統接続[kW]</b>=電力上限'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         depot_disp = [c for c in DEPOTS_COLS if c in depots_df.columns]
         edited_depots_map = st.data_editor(
             depots_df[depot_disp] if depot_disp else depots_df,
@@ -771,8 +924,42 @@ def _render_map_editor(data: dict, data_dir: str) -> None:
             num_rows="dynamic",
             key=_sk("map_edit_depots"),
             column_config={
-                "on_route": st.column_config.CheckboxColumn("路線上", default=True),
-                "is_revenue_stop": st.column_config.CheckboxColumn("営業停車", default=False),
+                "depot_id": st.column_config.TextColumn(
+                    "車庫 ID", help="車庫の一意識別子",
+                ),
+                "depot_name": st.column_config.TextColumn(
+                    "車庫名", help="車庫の表示名",
+                ),
+                "lat": st.column_config.NumberColumn(
+                    "緯度", format="%.6f", help="北緯",
+                ),
+                "lon": st.column_config.NumberColumn(
+                    "経度", format="%.6f", help="東経",
+                ),
+                "on_route": st.column_config.CheckboxColumn(
+                    "路線上", default=True,
+                    help="✅=路線上の車庫。❌=路線外（回送が必要）",
+                ),
+                "nearest_stop_id": st.column_config.TextColumn(
+                    "最寄りバス停",
+                    help="路線外デポの場合、最も近いバス停ID",
+                ),
+                "is_revenue_stop": st.column_config.CheckboxColumn(
+                    "営業停車", default=False,
+                    help="✅=営業運転で旅客が乗降する",
+                ),
+                "parking_capacity": st.column_config.NumberColumn(
+                    "駐車容量", help="同時駐車できる最大台数",
+                ),
+                "overnight_charging": st.column_config.CheckboxColumn(
+                    "夜間充電", help="✅=夜間にバスを充電可能",
+                ),
+                "grid_connection_kw": st.column_config.NumberColumn(
+                    "系統接続[kW]", help="電力系統の最大接続容量",
+                ),
+                "notes": st.column_config.TextColumn(
+                    "備考", help="自由記入",
+                ),
             },
         )
 
