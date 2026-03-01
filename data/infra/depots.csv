@@ -1,0 +1,3 @@
+depot_id,depot_name,terminal_id,lat,lon,parking_capacity,charger_site_id,overnight_charging,has_workshop,grid_connection_kw,notes
+depot_main,メインデポ,terminal_A,35.6895,139.6917,20,site_depot_A,True,True,300.0,本社併設・急速＋普通充電器完備
+depot_sub,サブデポ,terminal_C,35.7100,139.7050,8,site_depot_sub,True,False,150.0,小規模分散型デポ

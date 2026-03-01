@@ -437,8 +437,9 @@ st.markdown("""
 # ===========================================================================
 # タブ構成: 設定 → ソルバー → 比較
 # ===========================================================================
-tab_settings, solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_src, solver_tab_compare = st.tabs(
-    ["⚙️ 設定", "🔬 Gurobi (MILP)", "🎡 ALNS", "🧬 GA", "🐝 ABC", "🆕 新アーキ (src/)", "📊 比較"]
+tab_settings, solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_src, solver_tab_compare, solver_tab_milp_only, solver_tab_alns_only, solver_tab_alns_milp, tab_map = st.tabs(
+    ["⚙️ 設定", "🔬 Gurobi (MILP)", "🎡 ALNS", "🧬 GA", "🐝 ABC", "🆕 新アーキ (src/)", "📊 比較",
+     "🎯 MILP専用", "🔄 ALNS専用", "⚡ ALNS+MILP", "🗺️ 地図エディタ"]
 )
 
 # ===========================================================================
@@ -1491,12 +1492,245 @@ with solver_tab_compare:
             st.plotly_chart(fig_soc, use_container_width=True)
 
 
+# ===========================================================================
+# 🎯 MILP 専用タブ (mode_milp_only)
+# ===========================================================================
+with solver_tab_milp_only:
+    st.markdown("""
+    <div class="section-header">
+      <div class="section-icon">🎯</div>
+      <h3>MILP 専用モード — mode_milp_only</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption(
+        "src/ パイプラインの MILP 専用モード。data/ の CSV・JSON を直接読み込み、"
+        "Gurobi で厳密最適化を実行します。"
+    )
+
+    milp_only_col1, milp_only_col2 = st.columns(2)
+    with milp_only_col1:
+        milp_config_path = st.text_input(
+            "設定ファイル", "config/experiment_config.json",
+            key="milp_only_config")
+        milp_time_limit = st.number_input(
+            "制限時間 [秒]", 10.0, 3600.0, 300.0, step=10.0,
+            key="milp_only_timelimit")
+    with milp_only_col2:
+        milp_mip_gap = st.number_input(
+            "MIP Gap", 0.001, 0.1, 0.01, step=0.005,
+            key="milp_only_gap")
+        milp_flag_overrides_str = st.text_area(
+            "Flag Overrides (JSON)", '{}',
+            key="milp_only_flags", height=100)
+
+    if st.button("🎯 MILP 専用モードで求解", key="btn_milp_only", type="primary"):
+        with st.spinner("MILP を求解中..."):
+            try:
+                import json as _json
+                overrides = _json.loads(milp_flag_overrides_str) if milp_flag_overrides_str.strip() else None
+                # 一時的に config を上書き
+                _cfg_path = Path(milp_config_path)
+                with open(_cfg_path, encoding="utf-8") as f:
+                    _cfg = json.load(f)
+                _cfg["time_limit_sec"] = milp_time_limit
+                _cfg["mip_gap"] = milp_mip_gap
+                if overrides:
+                    _cfg["milp_flag_overrides"] = overrides
+
+                import tempfile, os
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+                    json.dump(_cfg, tmp, ensure_ascii=False, indent=2)
+                    tmp_path = tmp.name
+
+                from src.pipeline.solve import solve as src_solve
+                result = src_solve(tmp_path, mode="mode_milp_only")
+                os.unlink(tmp_path)
+
+                st.success(
+                    f"✅ status={result['result'].status}, "
+                    f"obj={result['result'].objective_value:.2f}, "
+                    f"time={result['result'].solve_time_sec:.2f}s"
+                )
+                if result.get("sim_result"):
+                    st.json({"simulator_feasible": True})
+            except Exception as e:
+                st.error(f"エラー: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+
+
+# ===========================================================================
+# 🔄 ALNS 専用タブ (mode_alns_only)
+# ===========================================================================
+with solver_tab_alns_only:
+    st.markdown("""
+    <div class="section-header">
+      <div class="section-icon">🔄</div>
+      <h3>ALNS 専用モード — mode_alns_only</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption(
+        "ALNS (Adaptive Large Neighbourhood Search) のみで便割当 + 簡易充電を求解します。"
+    )
+
+    alns_only_col1, alns_only_col2 = st.columns(2)
+    with alns_only_col1:
+        alns_only_config = st.text_input(
+            "設定ファイル", "config/experiment_config.json",
+            key="alns_only_config")
+        alns_only_iters = st.number_input(
+            "最大反復数", 50, 5000, 500, step=50,
+            key="alns_only_iters")
+        alns_only_no_improve = st.number_input(
+            "改善停止反復数", 10, 1000, 100, step=10,
+            key="alns_only_no_improve")
+    with alns_only_col2:
+        alns_only_temp = st.number_input(
+            "初期温度", 100.0, 10000.0, 1000.0, step=100.0,
+            key="alns_only_temp")
+        alns_only_cooling = st.number_input(
+            "冷却率", 0.900, 0.999, 0.995, step=0.001, format="%.3f",
+            key="alns_only_cooling")
+        alns_only_seed = st.number_input(
+            "乱数シード", 0, 999, 42,
+            key="alns_only_seed")
+
+    if st.button("🔄 ALNS 専用モードで求解", key="btn_alns_only", type="primary"):
+        with st.spinner("ALNS を求解中..."):
+            try:
+                _cfg_path = Path(alns_only_config)
+                with open(_cfg_path, encoding="utf-8") as f:
+                    _cfg = json.load(f)
+                _cfg["alns"] = {
+                    "max_iterations": alns_only_iters,
+                    "max_no_improve": alns_only_no_improve,
+                    "init_temp": alns_only_temp,
+                    "cooling_rate": alns_only_cooling,
+                    "seed": alns_only_seed,
+                }
+
+                import tempfile, os
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+                    json.dump(_cfg, tmp, ensure_ascii=False, indent=2)
+                    tmp_path = tmp.name
+
+                from src.pipeline.solve import solve as src_solve
+                result = src_solve(tmp_path, mode="mode_alns_only")
+                os.unlink(tmp_path)
+
+                st.success(
+                    f"✅ status={result['result'].status}, "
+                    f"obj={result['result'].objective_value:.2f}, "
+                    f"time={result['result'].solve_time_sec:.2f}s"
+                )
+            except Exception as e:
+                st.error(f"エラー: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+
+
+# ===========================================================================
+# ⚡ ALNS+MILP ハイブリッドタブ (mode_alns_milp)
+# ===========================================================================
+with solver_tab_alns_milp:
+    st.markdown("""
+    <div class="section-header">
+      <div class="section-icon">⚡</div>
+      <h3>ALNS+MILP ハイブリッド — mode_alns_milp</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption(
+        "Phase 1: ALNS で便割当を高速探索 → Phase 2: MILP で充電/SOC/電力料金を厳密最適化。"
+        " 大規模問題でも MILP 品質の充電スケジュールが得られます。"
+    )
+
+    hybrid_col1, hybrid_col2 = st.columns(2)
+    with hybrid_col1:
+        hybrid_config = st.text_input(
+            "設定ファイル", "config/experiment_config.json",
+            key="hybrid_config")
+        hybrid_alns_iters = st.number_input(
+            "ALNS 最大反復数", 50, 5000, 500, step=50,
+            key="hybrid_alns_iters")
+        hybrid_milp_timelimit = st.number_input(
+            "MILP 制限時間 [秒]", 10.0, 3600.0, 300.0, step=10.0,
+            key="hybrid_milp_timelimit")
+    with hybrid_col2:
+        hybrid_alns_temp = st.number_input(
+            "ALNS 初期温度", 100.0, 10000.0, 1000.0, step=100.0,
+            key="hybrid_alns_temp")
+        hybrid_cooling = st.number_input(
+            "冷却率", 0.900, 0.999, 0.995, step=0.001, format="%.3f",
+            key="hybrid_cooling")
+        hybrid_mip_gap = st.number_input(
+            "MILP MIP Gap", 0.001, 0.1, 0.01, step=0.005,
+            key="hybrid_mip_gap")
+
+    if st.button("⚡ ALNS+MILP で求解", key="btn_alns_milp", type="primary"):
+        with st.spinner("ALNS フェーズ → MILP フェーズ 実行中..."):
+            try:
+                _cfg_path = Path(hybrid_config)
+                with open(_cfg_path, encoding="utf-8") as f:
+                    _cfg = json.load(f)
+                _cfg["alns"] = {
+                    "max_iterations": hybrid_alns_iters,
+                    "max_no_improve": 100,
+                    "init_temp": hybrid_alns_temp,
+                    "cooling_rate": hybrid_cooling,
+                    "seed": 42,
+                }
+                _cfg["time_limit_sec"] = hybrid_milp_timelimit
+                _cfg["mip_gap"] = hybrid_mip_gap
+
+                import tempfile, os
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+                    json.dump(_cfg, tmp, ensure_ascii=False, indent=2)
+                    tmp_path = tmp.name
+
+                from src.pipeline.solve import solve as src_solve
+                result = src_solve(tmp_path, mode="mode_alns_milp")
+                os.unlink(tmp_path)
+
+                st.success(
+                    f"✅ method={result['method']}, "
+                    f"status={result['result'].status}, "
+                    f"obj={result['result'].objective_value:.2f}, "
+                    f"time={result['result'].solve_time_sec:.2f}s"
+                )
+            except Exception as e:
+                st.error(f"エラー: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+
+
+# ===========================================================================
+# 🗺️ 地図エディタタブ
+# ===========================================================================
+with tab_map:
+    st.markdown("""
+    <div class="section-header">
+      <div class="section-icon">🗺️</div>
+      <h3>地図ベース路線・デポ・充電拠点エディタ</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+    try:
+        from app.map_editor import render_map_editor
+        render_map_editor(data_dir="data")
+    except ImportError as e:
+        st.error(
+            f"map_editor の読み込みに失敗しました: {e}\n\n"
+            "folium / streamlit-folium をインストールしてください:\n"
+            "```\npip install folium streamlit-folium\n```"
+        )
+
+
 # ---------------------------------------------------------------------------
 # フッター
 # ---------------------------------------------------------------------------
 st.markdown("""
 <div class="ebus-footer">
-  <span>🚌 <b>E-Bus Sim v0.3.0 — Route-Editable</b> — PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 試作アプリ</span>
-  <span>Gurobi (MILP) &nbsp;•&nbsp; ALNS &nbsp;•&nbsp; GA &nbsp;•&nbsp; ABC</span>
+  <span>🚌 <b>E-Bus Sim v0.4.0 — Route-Editable + Multi-Solver</b> — PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 試作アプリ</span>
+  <span>Gurobi (MILP) &nbsp;•&nbsp; ALNS &nbsp;•&nbsp; GA &nbsp;•&nbsp; ABC &nbsp;•&nbsp; ALNS+MILP</span>
 </div>
 """, unsafe_allow_html=True)
