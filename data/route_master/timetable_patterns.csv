@@ -1,0 +1,5 @@
+pattern_id,route_id,service_day_type,headway_min,start_time,end_time,first_departure,last_departure,variant_id
+pat_101_wd_out,route_101,weekday,20,06:00,22:00,06:00,21:40,var_101_out_full
+pat_101_wd_in,route_101,weekday,20,06:31,22:31,06:31,22:11,var_101_in_full
+pat_101_hol_out,route_101,holiday,30,07:00,21:00,07:00,20:30,var_101_out_full
+pat_101_hol_in,route_101,holiday,30,07:31,21:31,07:31,21:01,var_101_in_full

@@ -1,0 +1,3 @@
+site_id,contract_demand_kw,demand_charge_per_kw,billing_period_months,notes
+site_depot_A,300.0,1800.0,1,デポ 低圧電力契約
+site_terminal_B,100.0,1800.0,1,終点低圧電力契約

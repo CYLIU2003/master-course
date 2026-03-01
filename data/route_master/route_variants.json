@@ -1,0 +1,28 @@
+[
+  {
+    "variant_id": "var_101_out_full",
+    "route_id": "route_101",
+    "direction": "outbound",
+    "variant_name": "全区間往路",
+    "start_terminal_id": "terminal_A",
+    "end_terminal_id": "terminal_B",
+    "segment_id_list": ["seg_out_01", "seg_out_02", "seg_out_03", "seg_out_04"],
+    "total_distance_km": 12.5,
+    "total_runtime_min": 31.0,
+    "is_primary": true,
+    "notes": "全区間往路 (デポ → 終点)"
+  },
+  {
+    "variant_id": "var_101_in_full",
+    "route_id": "route_101",
+    "direction": "inbound",
+    "variant_name": "全区間復路",
+    "start_terminal_id": "terminal_B",
+    "end_terminal_id": "terminal_A",
+    "segment_id_list": ["seg_in_01", "seg_in_02", "seg_in_03", "seg_in_04"],
+    "total_distance_km": 12.5,
+    "total_runtime_min": 31.0,
+    "is_primary": true,
+    "notes": "全区間復路 (終点 → デポ)"
+  }
+]

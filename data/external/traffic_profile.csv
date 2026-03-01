@@ -1,0 +1,10 @@
+period_start,period_end,traffic_level,congestion_index,day_type,notes
+06:00,07:00,low,1.00,weekday,早朝スムーズ
+07:00,09:00,high,1.25,weekday,朝渋滞
+09:00,11:00,medium,1.10,weekday,朝残渋滞
+11:00,16:00,low,1.00,weekday,日中スムーズ
+16:00,18:00,high,1.20,weekday,夕渋滞
+18:00,22:00,medium,1.08,weekday,夜間軽渋滞
+07:00,12:00,medium,1.05,holiday,休日軽渋滞
+12:00,18:00,medium,1.10,holiday,休日混雑
+18:00,21:00,low,1.02,holiday,休日夜間

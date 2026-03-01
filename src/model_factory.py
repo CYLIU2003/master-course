@@ -28,6 +28,11 @@ AVAILABLE_MODES = [
     "mode_A_journey_charge",
     "mode_B_resource_assignment",
     "thesis_mode",
+    # v3 新モード (spec_v3 §8 / agent_route_editable §4)
+    "mode_simple_reproduction",
+    "mode_route_sensitivity",
+    "mode_uncertainty_eval",
+    "thesis_mode_route_editable",
 ]
 
 # 各モードのデフォルト制約フラグ
@@ -58,6 +63,50 @@ MODE_FLAGS: Dict[str, Dict[str, bool]] = {
     },
     # Thesis mode: 全フラグを data のフラグに従う
     "thesis_mode": None,  # → build_milp_model に None を渡し data.enable_* で決まる
+
+    # --- v3 新モード (spec_v3 §8 / agent_route_editable §4) ---
+
+    # 先行研究再現: 固定トリップ入力, 充電のみ最適化 (Level-0 エネルギーモデル)
+    "mode_simple_reproduction": {
+        "assignment": True,
+        "soc": True,
+        "charging": True,
+        "charger_capacity": True,
+        "energy_balance": True,
+        "pv_grid": False,
+        "battery_degradation": False,
+        "v2g": False,
+        "demand_charge": False,
+    },
+
+    # 路線長感度分析 (Chen et al. 2023 の距離スケーリング)
+    "mode_route_sensitivity": {
+        "assignment": True,
+        "soc": True,
+        "charging": True,
+        "charger_capacity": True,
+        "energy_balance": True,
+        "pv_grid": False,
+        "battery_degradation": False,
+        "v2g": False,
+        "demand_charge": False,
+    },
+
+    # 不確実性評価: シナリオサンプリング → ALNS ループ
+    "mode_uncertainty_eval": {
+        "assignment": True,
+        "soc": True,
+        "charging": True,
+        "charger_capacity": True,
+        "energy_balance": True,
+        "pv_grid": False,
+        "battery_degradation": False,
+        "v2g": False,
+        "demand_charge": False,
+    },
+
+    # 修論完全モード: route-detail 2層 + BEV/ICE 比較 + 全機能
+    "thesis_mode_route_editable": None,  # → data.enable_* で制御
 }
 
 # 各モードの説明
@@ -78,6 +127,32 @@ MODE_DESCRIPTIONS: Dict[str, str] = {
         "修論独自モード: PV + demand charge + mixed fleet + uncertainty\n"
         "- config の enable_* フラグに従って全機能を有効化\n"
         "- PV 自家消費、V2G、電池劣化、デマンド料金を選択的に追加"
+    ),
+    # v3 新モード説明
+    "mode_simple_reproduction": (
+        "先行研究再現・簡易モード (spec_v3 §8.1)\n"
+        "- 外部固定トリップを直接入力 (route-detail 生成不要)\n"
+        "- Level-0 エネルギーモデル (base_rate × distance)\n"
+        "- PV/V2G/劣化/デマンド料金は無効"
+    ),
+    "mode_route_sensitivity": (
+        "路線長感度分析モード (spec_v3 §8.2 / Chen et al. 2023)\n"
+        "- route_length_multiplier でセグメント距離を均一スケーリング\n"
+        "- エネルギー・コストへの感度を系統的に評価\n"
+        "- 0.5〜2.0 の range でパラメトリックスイープ"
+    ),
+    "mode_uncertainty_eval": (
+        "不確実性評価モード (spec_v3 §8.3)\n"
+        "- ScenarioTripEnergy を n_scenarios 件生成\n"
+        "- 各シナリオに対して ALNS を実行し分布を推定\n"
+        "- Pareto フロンティア: 期待コスト vs SOC 違反確率"
+    ),
+    "thesis_mode_route_editable": (
+        "修論完全モード: route-detail 2層構造 (spec_v3 §8.4 / agent_route_editable §4)\n"
+        "- Layer A (route-detail) → Layer B (trip abstraction) パイプライン使用\n"
+        "- BEV / ICE / HEV パワートレイン比較を同一路線データで実施\n"
+        "- PV 自家消費、V2G、電池劣化、デマンド料金を全て有効化可能\n"
+        "- route_edit_rules で路線・停留所・セグメントを動的編集"
     ),
 }
 
@@ -161,6 +236,22 @@ def build_model_by_mode(
     flags = get_mode_flags(mode, data, flag_overrides)
 
     model, vars_ = build_milp_model(data, ms, dp, flags)
+
+    # === v3 新モード固有の前処理 ===
+
+    # mode_route_sensitivity: セグメント距離をスケーリング
+    if mode == "mode_route_sensitivity":
+        multiplier = getattr(data, "route_length_multiplier", 1.0)
+        if multiplier != 1.0:
+            for task in data.tasks:
+                task.distance_km = getattr(task, "distance_km", 0.0) * multiplier
+                task.energy_kwh = getattr(task, "energy_kwh", 0.0) * multiplier
+
+    # thesis_mode_route_editable: 両パワートレインの cost を merged
+    if mode == "thesis_mode_route_editable":
+        # GeneratedTrip の BEV/ICE 両推定値は data.tasks に格納済み前提
+        # (pipeline.build_inputs → pipeline.solve で注入)
+        pass
 
     # === Mode A: 割当を固定 ===
     if mode == "mode_A_journey_charge" and fixed_assignment:

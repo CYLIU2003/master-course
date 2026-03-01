@@ -1,0 +1,6 @@
+period_start,period_end,tariff_type,energy_price_jpy_kwh,notes
+05:00,08:00,off-peak,15.0,早朝割引
+08:00,13:00,peak,28.0,朝ピーク
+13:00,17:00,mid,22.0,昼間
+17:00,22:00,peak,28.0,夕方ピーク
+22:00,05:00,off-peak,12.0,深夜割引

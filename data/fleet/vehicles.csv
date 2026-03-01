@@ -1,0 +1,11 @@
+vehicle_id,vehicle_type_id,depot_id,initial_soc_kwh,availability,license_plate,manufacture_year,notes
+bev_001,vtype_bev_200,terminal_A,160.0,true,EV-101,2022,BEV 1号車
+bev_002,vtype_bev_200,terminal_A,160.0,true,EV-102,2022,BEV 2号車
+bev_003,vtype_bev_200,terminal_A,160.0,true,EV-103,2023,BEV 3号車
+bev_004,vtype_bev_200,terminal_A,160.0,true,EV-104,2023,BEV 4号車
+bev_005,vtype_bev_200,terminal_A,160.0,true,EV-105,2023,BEV 5号車
+ice_001,vtype_ice_std,terminal_A,,true,DI-101,2019,ICE 1号車
+ice_002,vtype_ice_std,terminal_A,,true,DI-102,2019,ICE 2号車
+ice_003,vtype_ice_std,terminal_A,,true,DI-103,2020,ICE 3号車
+hev_001,vtype_hev_eco,terminal_A,,true,HY-101,2021,HEV 1号車
+hev_002,vtype_hev_eco,terminal_A,,true,HY-102,2021,HEV 2号車

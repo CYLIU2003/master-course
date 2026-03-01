@@ -1,0 +1,7 @@
+charger_id,site_id,charger_type,power_kw,num_connectors,compatible_vehicle_types,notes
+chg_depot_fast_1,site_depot_A,DC_fast,50.0,1,vtype_bev_200,急速充電器1
+chg_depot_fast_2,site_depot_A,DC_fast,50.0,1,vtype_bev_200,急速充電器2
+chg_depot_fast_3,site_depot_A,DC_fast,50.0,1,vtype_bev_200,急速充電器3
+chg_depot_normal_1,site_depot_A,AC_normal,22.0,1,vtype_bev_200,普通充電器1
+chg_depot_normal_2,site_depot_A,AC_normal,22.0,1,vtype_bev_200,普通充電器2
+chg_term_B_1,site_terminal_B,DC_fast,50.0,1,vtype_bev_200,終点急速充電器
