@@ -15,7 +15,7 @@ from src.schemas.route_entities import GeneratedTrip
 
 
 def load_passenger_load_profile(
-    csv_path: Path,
+    csv_path,
 ) -> List[Dict[str, str]]:
     """passenger_load_profile.csv を読み込む。
 
@@ -26,6 +26,7 @@ def load_passenger_load_profile(
     -------
     List[Dict[str, str]]
     """
+    csv_path = Path(csv_path)
     if not csv_path.exists():
         print(f"  [warn] {csv_path} が存在しません")
         return []
@@ -38,18 +39,41 @@ def build_load_factor_map(
 ) -> Dict[Tuple[str, str, str], float]:
     """(route_id, direction_id, time_band) → load_factor マッピングを構築。
 
-    time_band: "morning_peak" | "midday" | "evening_peak" | "night" | "all_day"
+    2 つの CSV 形式に対応:
+      - 形式A: route_id, direction_id, time_band, load_factor
+      - 形式B: period_start, period_end, passenger_load_factor, day_type  (HH:MM)
+
+    形式B の場合は period を time_band に自動変換し、route_id="" として格納する。
     """
     mapping: Dict[Tuple[str, str, str], float] = {}
-    for row in profile_rows:
-        route_id = row.get("route_id", "")
-        direction_id = row.get("direction_id", "")
-        time_band = row.get("time_band", "all_day")
-        try:
-            lf = float(row.get("load_factor", "0.5"))
-        except (ValueError, TypeError):
-            lf = 0.5
-        mapping[(route_id, direction_id, time_band)] = lf
+
+    if profile_rows and "period_start" in profile_rows[0]:
+        # 形式B: 時刻帯ベース → time_band に変換
+        for row in profile_rows:
+            try:
+                ps = row.get("period_start", "00:00")
+                lf = float(row.get("passenger_load_factor", row.get("load_factor", "0.5")))
+                day_type = row.get("day_type", "weekday")
+            except (ValueError, TypeError):
+                continue
+            band = _classify_time_band(ps)
+            # route_id="", direction_id="" で全路線共通
+            key = ("", "", f"{band}_{day_type}")
+            mapping[key] = lf
+            # day_type なしのフォールバックも登録
+            mapping.setdefault(("", "", band), lf)
+    else:
+        # 形式A: route_id / direction_id / time_band
+        for row in profile_rows:
+            route_id = row.get("route_id", "")
+            direction_id = row.get("direction_id", "")
+            time_band = row.get("time_band", "all_day")
+            try:
+                lf = float(row.get("load_factor", "0.5"))
+            except (ValueError, TypeError):
+                lf = 0.5
+            mapping[(route_id, direction_id, time_band)] = lf
+
     return mapping
 
 
@@ -72,15 +96,14 @@ def _classify_time_band(departure_time: str) -> str:
 def apply_load_factor_to_trips(
     trips: List[GeneratedTrip],
     load_factor_map: Dict[Tuple[str, str, str], float],
-    default_load_factor: float = 0.5,
-) -> Dict[str, float]:
-    """各 trip に対する passenger_load_factor を決定する。
+    default_factor: float = 0.5,
+) -> List[GeneratedTrip]:
+    """各 trip に対する passenger_load_factor を決定し、trip に付与して返す。
 
     Returns
     -------
-    Dict[trip_id, load_factor]
+    List[GeneratedTrip]  (元のリストをそのまま返す; load_factor は trip 属性に設定)
     """
-    result: Dict[str, float] = {}
     for trip in trips:
         band = _classify_time_band(trip.departure_time)
         key = (trip.route_id, trip.direction_id, band)
@@ -89,12 +112,15 @@ def apply_load_factor_to_trips(
             # fallback: route_id + all_day
             lf = load_factor_map.get((trip.route_id, trip.direction_id, "all_day"))
         if lf is None:
-            # fallback: route_id のみ
-            lf = load_factor_map.get((trip.route_id, "", "all_day"))
+            # fallback: route_id="" (全路線共通)
+            lf = load_factor_map.get(("", "", band))
         if lf is None:
-            lf = default_load_factor
-        result[trip.trip_id] = lf
-    return result
+            lf = load_factor_map.get(("", "", "all_day"))
+        if lf is None:
+            lf = default_factor
+        # GeneratedTrip にload_factor属性を動的に付与
+        trip.passenger_load_factor = lf  # type: ignore[attr-defined]
+    return trips
 
 
 def compute_demand_kpi(

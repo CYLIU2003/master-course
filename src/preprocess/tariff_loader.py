@@ -146,7 +146,7 @@ def build_electricity_prices_from_tariff(
 # ---------------------------------------------------------------------------
 
 def load_fare_table(
-    csv_path: Path,
+    csv_path,
 ) -> List[Dict[str, str]]:
     """fare_table.csv を読み込む。
 
@@ -154,6 +154,7 @@ def load_fare_table(
         route_id, fare_type, base_fare_jpy, per_km_fare_jpy,
         zone_fare_jpy, max_fare_jpy, discount_pct_ic_card
     """
+    csv_path = Path(csv_path)
     if not csv_path.exists():
         return []
     with open(csv_path, encoding="utf-8") as f:
