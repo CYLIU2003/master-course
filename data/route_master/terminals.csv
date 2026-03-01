@@ -1,3 +1,3 @@
 terminal_id,terminal_name,lat,lon,has_depot,has_charger,depot_capacity,notes
-terminal_A,起点デポ,35.6895,139.6917,true,true,20,メインデポ・急速充電器完備
-terminal_B,終点ターミナル,35.7010,139.7200,false,true,0,終点折返し待機
+terminal_A,起点デポ,35.6895,139.6917,True,True,20,メインデポ・急速充電器完備
+terminal_B,終点ターミナル,35.701,139.72,False,True,0,終点折返し待機

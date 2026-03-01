@@ -375,397 +375,436 @@ if "result_abc" not in st.session_state:
     st.session_state.result_abc = None
 
 
-
 # ---------------------------------------------------------------------------
-# サイドバー: 設定モード選択 (最小化)
+# サイドバー: 設定パネル
 # ---------------------------------------------------------------------------
-st.sidebar.markdown("""
-<div style="text-align:center; padding: 12px 0 8px;">
-  <span style="font-size:2rem;">🚌</span><br>
-  <span style="font-size:.95rem; font-weight:700; letter-spacing:.5px;">E-Bus Sim</span>
-</div>
-""", unsafe_allow_html=True)
+st.sidebar.title("⚙️ シミュレーション設定")
 
 config_mode = st.sidebar.radio(
     "設定方法",
     ["手動設定", "JSON インポート"],
-    help="手動で調整するか、既存 JSON を読み込むか選択",
+    help="手動でパラメータを調整するか、既存JSONを読み込むか選択",
 )
 
 if config_mode == "JSON インポート":
     uploaded = st.sidebar.file_uploader(
-        "設定 JSON をアップロード",
+        "設定JSON をアップロード",
         type=["json"],
         help="ebus_prototype_config.json 形式",
     )
+    # ローカルファイル自動読み込み
     default_json = Path(__file__).resolve().parent.parent / "config" / "ebus_prototype_config.json"
     if uploaded is not None:
         raw = json.loads(uploaded.read().decode("utf-8"))
+        # 一時ファイルに書き出して読み込み
         tmp_path = Path(__file__).resolve().parent / "_tmp_upload.json"
         tmp_path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
         st.session_state.config = load_config_from_json(tmp_path)
-        st.sidebar.success("✅ JSON を読み込みました")
+        st.sidebar.success("JSON を読み込みました")
     elif default_json.exists():
         if st.sidebar.button("デフォルト JSON を読み込む"):
             st.session_state.config = load_config_from_json(default_json)
-            st.sidebar.success("✅ デフォルト設定を読み込みました")
+            st.sidebar.success("デフォルト設定を読み込みました")
 
-# サイドバーステータス
-st.sidebar.markdown("---")
-if st.session_state.config is not None:
-    st.sidebar.success("✅ 設定適用済み")
-elif config_mode == "手動設定":
-    st.sidebar.info("⚙️ 設定タブで設定を適用してください")
+else:
+    # ============================================================
+    # 手動設定モード
+    # ============================================================
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📐 システム規模")
+
+    num_buses = st.sidebar.slider("バス台数", 1, 20, 3, help="BEV バスの台数")
+    num_trips = st.sidebar.slider("便数", 1, 30, 6, help="運行便の数")
+    delta_h = st.sidebar.selectbox("時間刻み [h]", [0.25, 0.5, 1.0], index=1)
+    start_hour = st.sidebar.slider("開始時刻", 0, 12, 6)
+    end_hour = st.sidebar.slider("終了時刻", 12, 24, 22)
+    num_periods = int((end_hour - start_hour) / delta_h)
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🚌 車両性能")
+
+    cap_kwh = st.sidebar.number_input("バッテリ容量 [kWh]", 50.0, 1000.0, 300.0, step=10.0)
+    soc_init_ratio = st.sidebar.slider("初期 SOC [%]（全バス共通）", 30, 100, 80) / 100.0
+    soc_min_ratio = st.sidebar.slider("SOC 下限 [%]（充電下限バッファ）", 5, 50, 20) / 100.0
+    soc_max_ratio = st.sidebar.slider("SOC 上限 [%]（充電上限バッファ）", 60, 100, 95) / 100.0
+    efficiency = st.sidebar.number_input(
+        "電費 [km/kWh]", 0.3, 3.0, 1.0, step=0.1,
+        help="BEV の電費。値が大きいほど燃費が良い",
+    )
+
+    # ---- 個別バス SOC 設定 ----
+    with st.sidebar.expander(f"🔋 個別バス SOC 設定（{num_buses}台）", expanded=False):
+        st.caption("各バスの初期SOC・下限・上限 [%] を個別に設定できます。\n一括適用で上のスライダー値を全バスに反映します。")
+
+        if st.button("⬇ 全バスに一括適用（上の値で上書き）", key="bulk_soc_apply"):
+            for _bi in range(num_buses):
+                st.session_state[f"bsoc_{_bi}_init"] = int(soc_init_ratio * 100)
+                st.session_state[f"bsoc_{_bi}_min"] = int(soc_min_ratio * 100)
+                st.session_state[f"bsoc_{_bi}_max"] = int(soc_max_ratio * 100)
+
+        bus_soc_configs: dict = {}
+        for _bi in range(num_buses):
+            _bid = f"bus_{_bi + 1}"
+            st.markdown(f"**{_bid}**")
+            _c1, _c2, _c3 = st.columns(3)
+
+            # デフォルト値（未設定時はグローバルスライダーの値）
+            _def_init = int(soc_init_ratio * 100)
+            _def_min  = int(soc_min_ratio * 100)
+            _def_max  = int(soc_max_ratio * 100)
+
+            with _c1:
+                _b_init = st.number_input(
+                    f"初期%_{_bid}", min_value=10, max_value=100,
+                    value=_def_init, step=5,
+                    key=f"bsoc_{_bi}_init",
+                    label_visibility="collapsed",
+                )
+                st.caption(f"初期 {_b_init}%")
+            with _c2:
+                _b_min = st.number_input(
+                    f"下限%_{_bid}", min_value=5, max_value=90,
+                    value=_def_min, step=5,
+                    key=f"bsoc_{_bi}_min",
+                    label_visibility="collapsed",
+                )
+                st.caption(f"下限 {_b_min}%")
+            with _c3:
+                _b_max = st.number_input(
+                    f"上限%_{_bid}", min_value=50, max_value=100,
+                    value=_def_max, step=5,
+                    key=f"bsoc_{_bi}_max",
+                    label_visibility="collapsed",
+                )
+                st.caption(f"上限 {_b_max}%")
+
+            if _b_min >= _b_max:
+                st.warning(f"{_bid}: 下限 ≥ 上限、設定を確認してください")
+            if _b_init < _b_min or _b_init > _b_max:
+                st.warning(f"{_bid}: 初期SOCが [下限, 上限] 範囲外です")
+
+            bus_soc_configs[_bid] = {
+                "init_ratio": _b_init / 100.0,
+                "min_ratio":  _b_min  / 100.0,
+                "max_ratio":  _b_max  / 100.0,
+            }
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🔌 充電設備")
+
+    num_depots = st.sidebar.slider("充電拠点数", 1, 5, 2)
+    slow_power = st.sidebar.number_input("普通充電出力 [kW]", 10.0, 200.0, 50.0, step=10.0)
+    slow_count = st.sidebar.number_input("普通充電器台数", 0, 10, 2, step=1)
+    fast_power = st.sidebar.number_input("急速充電出力 [kW]", 50.0, 500.0, 150.0, step=10.0)
+    fast_count = st.sidebar.number_input("急速充電器台数", 0, 10, 1, step=1)
+    charge_eff = st.sidebar.slider("充電効率", 0.80, 1.00, 0.95, step=0.01)
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("☀️ PV・電力料金")
+
+    enable_pv = st.sidebar.checkbox("PV を有効にする", value=True)
+    pv_scale = st.sidebar.slider(
+        "PV 出力倍率", 0.0, 5.0, 1.0, step=0.1,
+        help="デフォルト PV プロファイルのスケール倍率",
+    )
+
+    price_mode = st.sidebar.selectbox(
+        "電力料金モード",
+        ["デフォルト TOU", "一律 [円/kWh]"],
+    )
+    flat_price = 25.0
+    if price_mode == "一律 [円/kWh]":
+        flat_price = st.sidebar.number_input("電力単価 [円/kWh]", 10.0, 100.0, 25.0, step=1.0)
+
+    diesel_price = st.sidebar.number_input(
+        "軽油単価 [円/L]", 80.0, 250.0, 145.0, step=5.0,
+        help="ICE 比較用",
+    )
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🔧 拡張オプション")
+
+    enable_terminal_soc = st.sidebar.checkbox("終端 SOC 条件", value=False)
+    terminal_soc_ratio = 0.5
+    if enable_terminal_soc:
+        terminal_soc_ratio = st.sidebar.slider("終端 SOC [%]", 20, 80, 50) / 100.0
+
+    enable_demand_charge = st.sidebar.checkbox("デマンドチャージ", value=False)
+    contract_power = None
+    if enable_demand_charge:
+        contract_power = st.sidebar.number_input(
+            "契約電力上限 [kW]", 50.0, 1000.0, 200.0, step=10.0,
+        )
+
+    # ---- 便を自動生成 ----
+    if st.sidebar.button("🔄 設定を適用", type="primary"):
+        import random as _rng
+
+        _rng.seed(42)
+
+        depots = [f"depot_{chr(65 + i)}" for i in range(num_depots)]
+
+        buses = []
+        for i in range(num_buses):
+            _bid = f"bus_{i+1}"
+            _bcfg = bus_soc_configs.get(_bid, {})
+            _init_r = _bcfg.get("init_ratio", soc_init_ratio)
+            _min_r  = _bcfg.get("min_ratio",  soc_min_ratio)
+            _max_r  = _bcfg.get("max_ratio",  soc_max_ratio)
+            buses.append(BusSpec(
+                bus_id=_bid,
+                category="BEV",
+                cap_kwh=cap_kwh,
+                soc_init_kwh=round(cap_kwh * _init_r, 1),
+                soc_min_kwh=round(cap_kwh * _min_r, 1),
+                soc_max_kwh=round(cap_kwh * _max_r, 1),
+                efficiency_km_per_kwh=efficiency,
+            ))
+
+        trips = []
+        used_slots = []
+        for i in range(num_trips):
+            # 均等に配置して重複を制御
+            slot_start = int(i * (num_periods - 3) / max(num_trips, 1))
+            duration = _rng.randint(2, 4)
+            slot_end = min(slot_start + duration, num_periods - 1)
+            energy = round(_rng.uniform(25, 55), 1)
+            sn = depots[i % len(depots)]
+            en = depots[(i + 1) % len(depots)]
+            trips.append(TripSpec(
+                trip_id=f"trip_{i+1}",
+                start_t=slot_start,
+                end_t=slot_end,
+                energy_kwh=energy,
+                start_node=sn,
+                end_node=en,
+            ))
+
+        chargers = []
+        for depot in depots:
+            if slow_count > 0:
+                chargers.append(ChargerSpec(
+                    depot=depot, charger_type="slow",
+                    power_kw=slow_power, count=slow_count,
+                    efficiency=charge_eff,
+                ))
+            if fast_count > 0:
+                chargers.append(ChargerSpec(
+                    depot=depot, charger_type="fast",
+                    power_kw=fast_power, count=fast_count,
+                    efficiency=charge_eff,
+                ))
+
+        # PV プロファイル（ベル曲線近似）
+        import math
+        pv_profile = []
+        for t in range(num_periods):
+            hour = start_hour + t * delta_h
+            if 6 <= hour <= 18:
+                val = 60.0 * math.exp(-0.5 * ((hour - 12.0) / 3.0) ** 2)
+            else:
+                val = 0.0
+            pv_profile.append(round(val * pv_scale, 2))
+
+        # 電力単価
+        if price_mode == "一律 [円/kWh]":
+            prices = [flat_price] * num_periods
+        else:
+            prices = []
+            for t in range(num_periods):
+                hour = start_hour + t * delta_h
+                if hour < 8 or hour >= 22:
+                    prices.append(18.0)
+                elif hour < 10:
+                    prices.append(22.0)
+                elif hour < 16:
+                    prices.append(30.0)
+                elif hour < 20:
+                    prices.append(34.0)
+                else:
+                    prices.append(25.0)
+
+        charger_type_list = list(set(c.charger_type for c in chargers))
+
+        cfg = ProblemConfig(
+            num_buses=num_buses,
+            num_trips=num_trips,
+            num_periods=num_periods,
+            delta_h=delta_h,
+            start_time=f"{start_hour:02d}:00",
+            end_time=f"{end_hour:02d}:00",
+            buses=buses,
+            trips=trips,
+            depots=depots,
+            charger_types=charger_type_list if charger_type_list else ["slow", "fast"],
+            chargers=chargers,
+            charge_efficiency=charge_eff,
+            pv_gen_kwh=pv_profile,
+            grid_price_yen_per_kwh=prices,
+            diesel_yen_per_l=diesel_price,
+            enable_pv=enable_pv,
+            enable_terminal_soc=enable_terminal_soc,
+            terminal_soc_kwh=round(cap_kwh * terminal_soc_ratio, 1) if enable_terminal_soc else None,
+            enable_demand_charge=enable_demand_charge,
+            contract_power_kw=contract_power,
+        )
+        st.session_state.config = precompute_helpers(cfg)
+        st.session_state.result_gurobi = None
+        st.session_state.result_alns = None
+        st.session_state.result_ga = None
+        st.session_state.result_abc = None
+        st.sidebar.success("設定を適用しました")
 
 
 # ---------------------------------------------------------------------------
 # メインコンテンツ
 # ---------------------------------------------------------------------------
 
-# ヘッダーバナー
+# ヘッダーバナー (HTML)
 st.markdown("""
 <div class="ebus-header">
   <div class="ebus-header-icon">🚌</div>
   <div class="ebus-header-text">
     <h1>E-Bus Sim — 電気バス最適化シミュレータ</h1>
     <p>PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 — 試作アプリケーション</p>
-    <span class="ebus-badge">v0.3.0&nbsp;•&nbsp;Route-Editable&nbsp;•&nbsp;Gurobi / ALNS / GA / ABC</span>
+    <span class="ebus-badge">v0.2.0&nbsp;•&nbsp;Gurobi / ALNS / GA / ABC</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ===========================================================================
-# タブ構成: 設定 → ソルバー → 比較
-# ===========================================================================
-tab_settings, solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_src, solver_tab_compare = st.tabs(
-    ["⚙️ 設定", "🔬 Gurobi (MILP)", "🎡 ALNS", "🧬 GA", "🐝 ABC", "🆕 新アーキ (src/)", "📊 比較"]
-)
-
-# ===========================================================================
-# ⚙️ 設定タブ
-# ===========================================================================
-with tab_settings:
-    if config_mode == "JSON インポート":
-        # --- JSON インポートモード ---
-        if st.session_state.config is not None:
-            st.success("✅ JSON を読み込み済みです。サイドバーから別の JSON を読み込めます。")
-        else:
-            st.info("サイドバーから JSON ファイルを読み込んでください。")
-    else:
-        # --- 手動設定モード ---
-        st.markdown("""
-        <div class="section-header">
-          <div class="section-icon">⚙️</div>
-          <h3>シミュレーション設定</h3>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ---- 📐 システム規模 ----
-        with st.expander("📐 システム規模", expanded=True):
-            sc1, sc2, sc3, sc4 = st.columns(4)
-            with sc1:
-                num_buses = st.number_input("バス台数", 1, 20, 3, key="cfg_num_buses")
-            with sc2:
-                num_trips = st.number_input("便数", 1, 30, 6, key="cfg_num_trips")
-            with sc3:
-                delta_h = st.selectbox("時間刻み [h]", [0.25, 0.5, 1.0], index=1, key="cfg_delta_h")
-            with sc4:
-                pass
-            sc5, sc6 = st.columns(2)
-            with sc5:
-                start_hour = st.slider("開始時刻", 0, 12, 6, key="cfg_start_hour")
-            with sc6:
-                end_hour = st.slider("終了時刻", 12, 24, 22, key="cfg_end_hour")
-            num_periods = int((end_hour - start_hour) / delta_h)
-            st.caption(f"📊 計画スロット数: **{num_periods}** ({start_hour}:00 〜 {end_hour}:00, Δt={delta_h}h)")
-
-        # ---- 🚌 車両性能 ----
-        with st.expander("🚌 車両性能"):
-            vc1, vc2 = st.columns(2)
-            with vc1:
-                cap_kwh = st.number_input("バッテリ容量 [kWh]", 50.0, 1000.0, 300.0, step=10.0, key="cfg_cap")
-                soc_init_ratio = st.slider("初期 SOC [%]", 30, 100, 80, key="cfg_soc_init") / 100.0
-            with vc2:
-                efficiency = st.number_input("電費 [km/kWh]", 0.3, 3.0, 1.0, step=0.1, key="cfg_eff")
-                soc_min_ratio = st.slider("SOC 下限 [%]", 5, 50, 20, key="cfg_soc_min") / 100.0
-            soc_max_ratio = st.slider("SOC 上限 [%]", 60, 100, 95, key="cfg_soc_max") / 100.0
-
-        # ---- 🛣️ 路線設定 (NEW!) ----
-        with st.expander("🛣️ 路線設定", expanded=False):
-            st.markdown("""
-            路線・停留所・セグメント・ダイヤを編集します。  
-            v3 パイプライン (`python -m src.pipeline.build_inputs`) で使用されるデータです。
-            """)
-            from app.route_editor import render_route_editor
-            render_route_editor(data_dir="data")
-
-        # ---- 🔌 充電設備 ----
-        with st.expander("🔌 充電設備"):
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                num_depots = st.slider("充電拠点数", 1, 5, 2, key="cfg_depots")
-                slow_power = st.number_input("普通充電出力 [kW]", 10.0, 200.0, 50.0, step=10.0, key="cfg_slow_pw")
-                slow_count = st.number_input("普通充電器台数", 0, 10, 2, step=1, key="cfg_slow_cnt")
-            with cc2:
-                charge_eff = st.slider("充電効率", 0.80, 1.00, 0.95, step=0.01, key="cfg_ch_eff")
-                fast_power = st.number_input("急速充電出力 [kW]", 50.0, 500.0, 150.0, step=10.0, key="cfg_fast_pw")
-                fast_count = st.number_input("急速充電器台数", 0, 10, 1, step=1, key="cfg_fast_cnt")
-
-        # ---- ☀️ エネルギー ----
-        with st.expander("☀️ PV・電力料金"):
-            ec1, ec2 = st.columns(2)
-            with ec1:
-                enable_pv = st.checkbox("PV を有効にする", value=True, key="cfg_enable_pv")
-                pv_scale = st.slider("PV 出力倍率", 0.0, 5.0, 1.0, step=0.1, key="cfg_pv_scale")
-            with ec2:
-                price_mode = st.selectbox("電力料金モード", ["デフォルト TOU", "一律 [円/kWh]"], key="cfg_price_mode")
-                flat_price = 25.0
-                if price_mode == "一律 [円/kWh]":
-                    flat_price = st.number_input("電力単価 [円/kWh]", 10.0, 100.0, 25.0, step=1.0, key="cfg_flat_price")
-            diesel_price = st.number_input("軽油単価 [円/L]", 80.0, 250.0, 145.0, step=5.0, key="cfg_diesel", help="ICE 比較用")
-
-        # ---- 🔧 拡張オプション ----
-        with st.expander("🔧 拡張オプション"):
-            oc1, oc2 = st.columns(2)
-            with oc1:
-                enable_terminal_soc = st.checkbox("終端 SOC 条件", value=False, key="cfg_term_soc")
-                terminal_soc_ratio = 0.5
-                if enable_terminal_soc:
-                    terminal_soc_ratio = st.slider("終端 SOC [%]", 20, 80, 50, key="cfg_term_ratio") / 100.0
-            with oc2:
-                enable_demand_charge = st.checkbox("デマンドチャージ", value=False, key="cfg_demand")
-                contract_power = None
-                if enable_demand_charge:
-                    contract_power = st.number_input("契約電力上限 [kW]", 50.0, 1000.0, 200.0, step=10.0, key="cfg_contract")
-
-        # ---- 🔄 設定を適用ボタン ----
-        st.markdown("---")
-        if st.button("🔄 設定を適用", type="primary", key="apply_config", use_container_width=True):
-            import random as _rng
-            import math
-
-            _rng.seed(42)
-            depots = [f"depot_{chr(65 + i)}" for i in range(num_depots)]
-
-            buses = []
-            for i in range(num_buses):
-                buses.append(BusSpec(
-                    bus_id=f"bus_{i+1}",
-                    category="BEV",
-                    cap_kwh=cap_kwh,
-                    soc_init_kwh=round(cap_kwh * soc_init_ratio, 1),
-                    soc_min_kwh=round(cap_kwh * soc_min_ratio, 1),
-                    soc_max_kwh=round(cap_kwh * soc_max_ratio, 1),
-                    efficiency_km_per_kwh=efficiency,
-                ))
-
-            trips = []
-            for i in range(num_trips):
-                slot_start = int(i * (num_periods - 3) / max(num_trips, 1))
-                duration = _rng.randint(2, 4)
-                slot_end = min(slot_start + duration, num_periods - 1)
-                energy = round(_rng.uniform(25, 55), 1)
-                sn = depots[i % len(depots)]
-                en = depots[(i + 1) % len(depots)]
-                trips.append(TripSpec(
-                    trip_id=f"trip_{i+1}",
-                    start_t=slot_start,
-                    end_t=slot_end,
-                    energy_kwh=energy,
-                    start_node=sn,
-                    end_node=en,
-                ))
-
-            chargers = []
-            for depot in depots:
-                if slow_count > 0:
-                    chargers.append(ChargerSpec(
-                        depot=depot, charger_type="slow",
-                        power_kw=slow_power, count=slow_count,
-                        efficiency=charge_eff,
-                    ))
-                if fast_count > 0:
-                    chargers.append(ChargerSpec(
-                        depot=depot, charger_type="fast",
-                        power_kw=fast_power, count=fast_count,
-                        efficiency=charge_eff,
-                    ))
-
-            pv_profile = []
-            for t in range(num_periods):
-                hour = start_hour + t * delta_h
-                if 6 <= hour <= 18:
-                    val = 60.0 * math.exp(-0.5 * ((hour - 12.0) / 3.0) ** 2)
-                else:
-                    val = 0.0
-                pv_profile.append(round(val * pv_scale, 2))
-
-            if price_mode == "一律 [円/kWh]":
-                prices = [flat_price] * num_periods
-            else:
-                prices = []
-                for t in range(num_periods):
-                    hour = start_hour + t * delta_h
-                    if hour < 8 or hour >= 22:
-                        prices.append(18.0)
-                    elif hour < 10:
-                        prices.append(22.0)
-                    elif hour < 16:
-                        prices.append(30.0)
-                    elif hour < 20:
-                        prices.append(34.0)
-                    else:
-                        prices.append(25.0)
-
-            charger_type_list = list(set(c.charger_type for c in chargers))
-
-            _new_cfg = ProblemConfig(
-                num_buses=num_buses,
-                num_trips=num_trips,
-                num_periods=num_periods,
-                delta_h=delta_h,
-                start_time=f"{start_hour:02d}:00",
-                end_time=f"{end_hour:02d}:00",
-                buses=buses,
-                trips=trips,
-                depots=depots,
-                charger_types=charger_type_list if charger_type_list else ["slow", "fast"],
-                chargers=chargers,
-                charge_efficiency=charge_eff,
-                pv_gen_kwh=pv_profile,
-                grid_price_yen_per_kwh=prices,
-                diesel_yen_per_l=diesel_price,
-                enable_pv=enable_pv,
-                enable_terminal_soc=enable_terminal_soc,
-                terminal_soc_kwh=round(cap_kwh * terminal_soc_ratio, 1) if enable_terminal_soc else None,
-                enable_demand_charge=enable_demand_charge,
-                contract_power_kw=contract_power,
-            )
-            st.session_state.config = precompute_helpers(_new_cfg)
-            st.session_state.result_gurobi = None
-            st.session_state.result_alns = None
-            st.session_state.result_ga = None
-            st.session_state.result_abc = None
-            st.success("✅ 設定を適用しました")
-
-    # ---- 現在の設定概要 (常に表示) ----
-    cfg = st.session_state.config
-    if cfg is not None:
-        st.markdown("""
-        <div class="section-header">
-          <div class="section-icon">📊</div>
-          <h3>現在の設定概要</h3>
-        </div>
-        """, unsafe_allow_html=True)
-
-        pv_status = "✅ 有効" if cfg.enable_pv else "❌ 無効"
-        demand_status = "✅ 有効" if cfg.enable_demand_charge else "—"
-
-        st.markdown(f"""
-        <div class="metric-grid">
-          <div class="metric-card">
-            <div class="metric-label">🚌 バス台数</div>
-            <div class="metric-value">{cfg.num_buses}</div>
-            <div class="metric-unit">台</div>
-          </div>
-          <div class="metric-card accent">
-            <div class="metric-label">🗓️ 便数</div>
-            <div class="metric-value">{cfg.num_trips}</div>
-            <div class="metric-unit">本</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">⏱️ 時間スロット</div>
-            <div class="metric-value">{cfg.num_periods}</div>
-            <div class="metric-unit">スロット ({cfg.delta_h}h)</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">🔌 充電拠点数</div>
-            <div class="metric-value">{len(cfg.depots)}</div>
-            <div class="metric-unit">拠点</div>
-          </div>
-          <div class="metric-card {'accent' if cfg.enable_pv else 'warn'}">
-            <div class="metric-label">☀️ PV</div>
-            <div class="metric-value" style="font-size:1.3rem">{pv_status}</div>
-            <div class="metric-unit">デマンド: {demand_status}</div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        with st.expander("🔍 詳細設定を表示"):
-            tab_bus, tab_trip, tab_charger, tab_energy = st.tabs(
-                ["バス", "便", "充電器", "エネルギー"]
-            )
-            with tab_bus:
-                bus_data = [
-                    {
-                        "ID": b.bus_id,
-                        "カテゴリ": b.category,
-                        "容量 [kWh]": b.cap_kwh,
-                        "初期SOC [kWh]": b.soc_init_kwh,
-                        "SOC下限 [kWh]": b.soc_min_kwh,
-                        "SOC上限 [kWh]": b.soc_max_kwh,
-                        "電費 [km/kWh]": b.efficiency_km_per_kwh,
-                    }
-                    for b in cfg.buses
-                ]
-                st.dataframe(pd.DataFrame(bus_data), use_container_width=True)
-
-            with tab_trip:
-                labels = make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods)
-                trip_data = [
-                    {
-                        "ID": t.trip_id,
-                        "開始": labels[t.start_t] if t.start_t < len(labels) else t.start_t,
-                        "終了": labels[min(t.end_t, len(labels)-1)] if t.end_t < len(labels) else t.end_t,
-                        "消費 [kWh]": t.energy_kwh,
-                        "出発地": t.start_node,
-                        "到着地": t.end_node,
-                    }
-                    for t in cfg.trips
-                ]
-                st.dataframe(pd.DataFrame(trip_data), use_container_width=True)
-
-            with tab_charger:
-                charger_data = [
-                    {
-                        "拠点": c.depot,
-                        "種別": c.charger_type,
-                        "出力 [kW]": c.power_kw,
-                        "台数": c.count,
-                        "効率": c.efficiency,
-                    }
-                    for c in cfg.chargers
-                ]
-                st.dataframe(pd.DataFrame(charger_data), use_container_width=True)
-
-            with tab_energy:
-                _labels = make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods)
-                energy_df = pd.DataFrame({
-                    "時刻": _labels[:cfg.num_periods],
-                    "PV発電 [kWh]": cfg.pv_gen_kwh[:cfg.num_periods],
-                    "電力単価 [円/kWh]": cfg.grid_price_yen_per_kwh[:cfg.num_periods],
-                })
-                st.dataframe(energy_df, use_container_width=True)
-
-        # JSON エクスポート
-        with st.expander("📦 設定 JSON をエクスポート"):
-            cfg_dict = config_to_dict(cfg)
-            st.json(cfg_dict)
-            st.download_button(
-                "設定JSONをダウンロード",
-                data=json.dumps(cfg_dict, ensure_ascii=False, indent=2),
-                file_name="ebus_config_export.json",
-                mime="application/json",
-            )
-
-# ---- cfg 参照を更新 ----
 cfg = st.session_state.config
 
+if cfg is None:
+    st.markdown("""
+    <div class="info-box">
+      <div class="info-icon">ℹ️</div>
+      <div>左のサイドバーでパラメータを設定し、<b>🔄 設定を適用</b>ボタンを押すか、JSON をインポートしてください。</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
+
+# ---- 設定概要 (HTMLカード) ----
+st.markdown("""
+<div class="section-header">
+  <div class="section-icon">📊</div>
+  <h3>現在の設定概要</h3>
+</div>
+""", unsafe_allow_html=True)
+
+pv_status = "✅ 有効" if cfg.enable_pv else "❌ 無効"
+demand_status = "✅ 有効" if cfg.enable_demand_charge else "—"
+
+st.markdown(f"""
+<div class="metric-grid">
+  <div class="metric-card">
+    <div class="metric-label">🚌 バス台数</div>
+    <div class="metric-value">{cfg.num_buses}</div>
+    <div class="metric-unit">台</div>
+  </div>
+  <div class="metric-card accent">
+    <div class="metric-label">🗓️ 便数</div>
+    <div class="metric-value">{cfg.num_trips}</div>
+    <div class="metric-unit">本</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">⏱️ 時間スロット</div>
+    <div class="metric-value">{cfg.num_periods}</div>
+    <div class="metric-unit">スロット ({cfg.delta_h}h)</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">🔌 充電拠点数</div>
+    <div class="metric-value">{len(cfg.depots)}</div>
+    <div class="metric-unit">拠点</div>
+  </div>
+  <div class="metric-card {'accent' if cfg.enable_pv else 'warn'}">
+    <div class="metric-label">☀️ PV</div>
+    <div class="metric-value" style="font-size:1.3rem">{pv_status}</div>
+    <div class="metric-unit">デマンド: {demand_status}</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+# 設定の詳細表示
+with st.expander("🔍 詳細設定を表示"):
+    tab_bus, tab_trip, tab_charger, tab_energy = st.tabs(
+        ["バス", "便", "充電器", "エネルギー"]
+    )
+    with tab_bus:
+        bus_data = [
+            {
+                "ID": b.bus_id,
+                "カテゴリ": b.category,
+                "容量 [kWh]": b.cap_kwh,
+                "初期SOC [kWh]": b.soc_init_kwh,
+                "SOC下限 [kWh]": b.soc_min_kwh,
+                "SOC上限 [kWh]": b.soc_max_kwh,
+                "電費 [km/kWh]": b.efficiency_km_per_kwh,
+            }
+            for b in cfg.buses
+        ]
+        st.dataframe(pd.DataFrame(bus_data), use_container_width=True)
+
+    with tab_trip:
+        labels = make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods)
+        trip_data = [
+            {
+                "ID": t.trip_id,
+                "開始": labels[t.start_t] if t.start_t < len(labels) else t.start_t,
+                "終了": labels[min(t.end_t, len(labels)-1)] if t.end_t < len(labels) else t.end_t,
+                "消費 [kWh]": t.energy_kwh,
+                "出発地": t.start_node,
+                "到着地": t.end_node,
+            }
+            for t in cfg.trips
+        ]
+        st.dataframe(pd.DataFrame(trip_data), use_container_width=True)
+
+    with tab_charger:
+        charger_data = [
+            {
+                "拠点": c.depot,
+                "種別": c.charger_type,
+                "出力 [kW]": c.power_kw,
+                "台数": c.count,
+                "効率": c.efficiency,
+            }
+            for c in cfg.chargers
+        ]
+        st.dataframe(pd.DataFrame(charger_data), use_container_width=True)
+
+    with tab_energy:
+        energy_df = pd.DataFrame({
+            "時刻": labels[:cfg.num_periods],
+            "PV発電 [kWh]": cfg.pv_gen_kwh[:cfg.num_periods],
+            "電力単価 [円/kWh]": cfg.grid_price_yen_per_kwh[:cfg.num_periods],
+        })
+        st.dataframe(energy_df, use_container_width=True)
+
+# JSON エクスポート
+with st.expander("📦 設定 JSON をエクスポート"):
+    cfg_dict = config_to_dict(cfg)
+    st.json(cfg_dict)
+    st.download_button(
+        "設定JSONをダウンロード",
+        data=json.dumps(cfg_dict, ensure_ascii=False, indent=2),
+        file_name="ebus_config_export.json",
+        mime="application/json",
+    )
+
+
+# ---- ソルバー実行パネル ----
+st.markdown("""
+<div class="section-header">
+  <div class="section-icon">🧠</div>
+  <h3>ソルバー実行</h3>
+</div>
+""", unsafe_allow_html=True)
+
+solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_src, solver_tab_compare = st.tabs(
+    ["🔬 Gurobi (MILP)", "🎡 ALNS", "🧬 GA", "🐝 ABC", "🆕 新アーキ (src/)", "📊 比較"]
+)
 
 # ---- Gurobi タブ ----
 with solver_tab_gurobi:
-    if cfg is None:
-        st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
     if not is_gurobi_available():
         st.warning("⚠️ Gurobi (gurobipy) がインストールされていません。ALNS を使用してください。")
     else:
@@ -839,8 +878,6 @@ with solver_tab_gurobi:
 
 # ---- ALNS タブ ----
 with solver_tab_alns:
-    if cfg is None:
-        st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
     st.markdown("ALNS (Adaptive Large Neighbourhood Search) — 大規模問題向けメタヒューリスティクス")
 
     acol1, acol2, acol3 = st.columns(3)
@@ -909,8 +946,6 @@ with solver_tab_alns:
 
 # ---- GA タブ ----
 with solver_tab_ga:
-    if cfg is None:
-        st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
     st.markdown("GA (遺伝的アルゴリズム) — 集団ベース進化的最適化。コスト・時間の比較用。")
 
     gc1, gc2, gc3 = st.columns(3)
@@ -984,8 +1019,6 @@ with solver_tab_ga:
 
 # ---- ABC タブ ----
 with solver_tab_abc:
-    if cfg is None:
-        st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
     st.markdown("ABC (人工蜂コロニー) — 群知能ベース最適化。コスト・時間の比較用。")
 
     ac1, ac2, ac3 = st.columns(3)
@@ -1468,8 +1501,8 @@ with solver_tab_compare:
         results_with_soc = {k: v for k, v in available.items() if v.soc_series}
         if len(results_with_soc) >= 2:
             st.markdown("#### SOC 推移比較")
-            labels = make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods) if cfg else []
-            labels_ext = (labels + ["END"]) if labels else []
+            labels = make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods)
+            labels_ext = labels + ["END"]
 
             fig_soc = go.Figure()
             dash_styles = ["solid", "dash", "dot", "dashdot"]
@@ -1496,7 +1529,7 @@ with solver_tab_compare:
 # ---------------------------------------------------------------------------
 st.markdown("""
 <div class="ebus-footer">
-  <span>🚌 <b>E-Bus Sim v0.3.0 — Route-Editable</b> — PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 試作アプリ</span>
+  <span>🚌 <b>E-Bus Sim v0.2.0</b> — PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 試作アプリ</span>
   <span>Gurobi (MILP) &nbsp;•&nbsp; ALNS &nbsp;•&nbsp; GA &nbsp;•&nbsp; ABC</span>
 </div>
 """, unsafe_allow_html=True)
