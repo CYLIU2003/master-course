@@ -1,0 +1,2 @@
+site_id,site_type,grid_import_limit_kw,contract_demand_limit_kw,site_transformer_limit_kw
+depot_A,depot,200.0,200.0,250.0

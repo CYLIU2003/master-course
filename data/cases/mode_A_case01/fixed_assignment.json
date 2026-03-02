@@ -1,0 +1,9 @@
+{
+    "description": "Fixed vehicle-trip assignment for mode_A_case01",
+    "note": "B1 does morning trips (T01, T02), B2 does midday trips (T03, T04), B3 does afternoon trips (T05, T06)",
+    "assignment": {
+        "B1": ["T01", "T02"],
+        "B2": ["T03", "T04"],
+        "B3": ["T05", "T06"]
+    }
+}

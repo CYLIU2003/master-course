@@ -1,0 +1,2 @@
+case_name,run_mode,status,timestamp,objective_value,total_energy_cost,total_demand_charge,total_fuel_cost,vehicle_fixed_cost,unmet_trips,soc_min_margin_kwh,charger_utilization,peak_grid_power_kw,solve_time_sec
+mode_B_case01,mode_B_resource_assignment,OPTIMAL,2026-03-02T18:02:07,9594.052631578947,2796.05,0.0,1798.0,5000.0,0,37.25,0.0625,35.0,0.093

@@ -1,0 +1,77 @@
+{
+  "_comment": "mode_A_case01 — 先行研究再現: journey 後充電 decision (He et al. 2023, TRD 115)",
+  "_description": "3台BEV固定割当, 6タスク, 充電decision最適化のみ, PV/V2G/デマンド料金なし",
+
+  "time_step_min": 15,
+  "num_periods": 64,
+  "start_time": "05:00",
+  "end_time": "21:00",
+  "planning_horizon_hours": 16.0,
+
+  "allow_partial_service": false,
+  "enable_pv": false,
+  "enable_v2g": false,
+  "enable_battery_degradation": false,
+  "enable_demand_charge": false,
+  "use_soft_soc_constraint": false,
+
+  "mode": "mode_A_journey_charge",
+
+  "solver": {
+    "time_limit_sec": 120,
+    "mip_gap": 0.01,
+    "threads": 0,
+    "presolve": -1,
+    "verbose": false
+  },
+
+  "objective_weights": {
+    "vehicle_fixed_cost": 1.0,
+    "electricity_cost": 1.0,
+    "demand_charge_cost": 0.0,
+    "fuel_cost": 0.0,
+    "deadhead_cost": 1.0,
+    "battery_degradation_cost": 0.0,
+    "emission_cost": 0.0,
+    "unserved_penalty": 10000.0,
+    "slack_penalty": 1000000.0
+  },
+
+  "big_m": {
+    "BIG_M_ASSIGN": 1000000,
+    "BIG_M_CHARGE": 1000000,
+    "BIG_M_SOC": 1000000,
+    "EPSILON": 1e-6
+  },
+
+  "paths": {
+    "vehicles_csv": "data/cases/mode_A_case01/vehicles.csv",
+    "tasks_csv": "data/cases/mode_A_case01/tasks.csv",
+    "chargers_csv": "data/cases/mode_A_case01/chargers.csv",
+    "sites_csv": "data/cases/mode_A_case01/sites.csv",
+    "pv_profile_csv": "data/cases/mode_A_case01/pv_profile.csv",
+    "electricity_price_csv": "data/cases/mode_A_case01/electricity_price.csv",
+    "travel_connection_csv": "data/cases/mode_A_case01/travel_connection.csv",
+    "compat_vehicle_task_csv": "data/cases/mode_A_case01/compatibility_vehicle_task.csv",
+    "compat_vehicle_charger_csv": "data/cases/mode_A_case01/compatibility_vehicle_charger.csv",
+    "output_dir": "outputs"
+  },
+
+  "fixed_assignment_path": "data/cases/mode_A_case01/fixed_assignment.json",
+
+  "gap_analysis": { "enabled": false },
+  "delay_resilience_test": { "enabled": false },
+  "uncertainty": { "enabled": false },
+
+  "alns": {
+    "max_iterations": 500,
+    "max_no_improve": 100,
+    "init_temp": 1000.0,
+    "cooling_rate": 0.995,
+    "destroy_ratio_min": 0.1,
+    "destroy_ratio_max": 0.4,
+    "seed": 42
+  },
+
+  "milp_flag_overrides": null
+}

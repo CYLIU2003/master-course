@@ -28,21 +28,31 @@ def _load_duty_data(cfg: dict, data: Any, run_mode: str) -> None:
     duty_cfg = cfg.get("duty_assignment", {})
     if duty_cfg.get("enabled", False) or run_mode == "mode_duty_constrained":
         try:
-            from src.preprocess.duty_loader import load_vehicle_duties, build_duty_trip_mapping
-            duties_csv = duty_cfg.get("duties_csv_path", "data/fleet/vehicle_duties.csv")
+            from src.preprocess.duty_loader import (
+                load_vehicle_duties,
+                build_duty_trip_mapping,
+            )
+
+            duties_csv = duty_cfg.get(
+                "duties_csv_path", "data/fleet/vehicle_duties.csv"
+            )
             legs_csv = duty_cfg.get("duty_legs_csv_path", "data/fleet/duty_legs.csv")
             duties = load_vehicle_duties(duties_csv, legs_csv)
             data.duty_assignment_enabled = True
             data.duty_list = duties
             data.duty_trip_mapping = build_duty_trip_mapping(duties)
             data.duty_enforce_depot_match = duty_cfg.get("enforce_depot_match", True)
-            data.duty_enforce_vehicle_type_match = duty_cfg.get("enforce_vehicle_type_match", True)
+            data.duty_enforce_vehicle_type_match = duty_cfg.get(
+                "enforce_vehicle_type_match", True
+            )
             print(f"  duties loaded: {len(duties)}")
         except Exception as e:
             print(f"  [warn] 行路読込スキップ: {e}")
 
 
-def _solve_milp_core(cfg, data, ms, dp, run_mode, fixed_assignment=None, flag_overrides=None):
+def _solve_milp_core(
+    cfg, data, ms, dp, run_mode, fixed_assignment=None, flag_overrides=None
+):
     """MILP モデルを構築して Gurobi で求解する共通ロジック。"""
     from src.model_factory import build_model_by_mode, generate_greedy_assignment
     from src.milp_model import extract_result
@@ -52,13 +62,17 @@ def _solve_milp_core(cfg, data, ms, dp, run_mode, fixed_assignment=None, flag_ov
         fixed = generate_greedy_assignment(data, ms, dp)
 
     model, _vars = build_model_by_mode(
-        run_mode, data, ms, dp,
+        run_mode,
+        data,
+        ms,
+        dp,
         fixed_assignment=fixed,
         flag_overrides=flag_overrides,
     )
     model.Params.OutputFlag = 0
-    model.Params.TimeLimit = cfg.get("time_limit_sec",
-                                      cfg.get("solver", {}).get("time_limit_sec", 300.0))
+    model.Params.TimeLimit = cfg.get(
+        "time_limit_sec", cfg.get("solver", {}).get("time_limit_sec", 300.0)
+    )
     mip_gap = cfg.get("mip_gap", cfg.get("solver", {}).get("mip_gap", 0.01))
     model.Params.MIPGap = mip_gap
 
@@ -116,8 +130,10 @@ def _solve_alns_milp(cfg, data, ms, dp, flag_overrides=None):
     alns_result = solve_alns(data, ms, dp, params=alns_params)
     alns_time = _time.perf_counter() - t0
 
-    print(f"  [ALNS] status={alns_result.status}, obj={alns_result.objective_value}, "
-          f"time={alns_time:.2f}s")
+    print(
+        f"  [ALNS] status={alns_result.status}, obj={alns_result.objective_value}, "
+        f"time={alns_time:.2f}s"
+    )
 
     # ---- Phase 2: MILP (割当固定) ----
     fixed_assignment = alns_result.assignment  # {vehicle_id: [task_id, ...]}
@@ -139,13 +155,17 @@ def _solve_alns_milp(cfg, data, ms, dp, flag_overrides=None):
         }
 
         model, _vars = build_model_by_mode(
-            "mode_A_journey_charge", data, ms, dp,
+            "mode_A_journey_charge",
+            data,
+            ms,
+            dp,
             fixed_assignment=fixed_assignment,
             flag_overrides=milp_flags,
         )
         model.Params.OutputFlag = 0
-        model.Params.TimeLimit = cfg.get("time_limit_sec",
-                                          cfg.get("solver", {}).get("time_limit_sec", 300.0))
+        model.Params.TimeLimit = cfg.get(
+            "time_limit_sec", cfg.get("solver", {}).get("time_limit_sec", 300.0)
+        )
         mip_gap = cfg.get("mip_gap", cfg.get("solver", {}).get("mip_gap", 0.01))
         model.Params.MIPGap = mip_gap
 
@@ -154,18 +174,26 @@ def _solve_alns_milp(cfg, data, ms, dp, flag_overrides=None):
         milp_time = _time.perf_counter() - t1
 
         milp_result = extract_result(model, data, ms, dp, _vars, milp_time)
-        print(f"  [MILP] status={milp_result.status}, obj={milp_result.objective_value}, "
-              f"time={milp_time:.2f}s")
+        print(
+            f"  [MILP] status={milp_result.status}, obj={milp_result.objective_value}, "
+            f"time={milp_time:.2f}s"
+        )
 
         # コストが改善した場合のみ MILP 解を採用
         alns_obj = alns_result.objective_value or float("inf")
         milp_obj = milp_result.objective_value or float("inf")
 
-        if milp_obj < alns_obj and milp_result.status in ("OPTIMAL", "TIME_LIMIT", "FEASIBLE"):
+        if milp_obj < alns_obj and milp_result.status in (
+            "OPTIMAL",
+            "TIME_LIMIT",
+            "FEASIBLE",
+        ):
             print(f"  [ALNS+MILP] MILP 解を採用: {milp_obj:.2f} < {alns_obj:.2f}")
             final_result = milp_result
         else:
-            print(f"  [ALNS+MILP] ALNS 解を維持: ALNS={alns_obj:.2f}, MILP={milp_obj:.2f}")
+            print(
+                f"  [ALNS+MILP] ALNS 解を維持: ALNS={alns_obj:.2f}, MILP={milp_obj:.2f}"
+            )
             final_result = alns_result
             milp_time = 0.0
 
@@ -211,10 +239,16 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
         _load_duty_data(cfg, data, run_mode)
         flag_overrides = cfg.get("milp_flag_overrides", None)
         result, milp_time = _solve_milp_core(
-            cfg, data, ms, dp, "thesis_mode",
+            cfg,
+            data,
+            ms,
+            dp,
+            "thesis_mode",
             flag_overrides=flag_overrides,
         )
-        print(f"  status={result.status}, obj={result.objective_value}, time={milp_time:.2f}s")
+        print(
+            f"  status={result.status}, obj={result.objective_value}, time={milp_time:.2f}s"
+        )
 
     # ================================================================
     # mode_alns_only — ALNS のみ
@@ -223,7 +257,9 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
         method = "ALNS"
         result, alns_params_used = _solve_alns_core(cfg, data, ms, dp)
         alns_time = result.solve_time_sec
-        print(f"  status={result.status}, obj={result.objective_value}, time={alns_time:.2f}s")
+        print(
+            f"  status={result.status}, obj={result.objective_value}, time={alns_time:.2f}s"
+        )
 
     # ================================================================
     # mode_alns_milp — ALNS 割当 → MILP 充電最適化
@@ -231,36 +267,50 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
     elif run_mode == "mode_alns_milp":
         method = "ALNS+MILP"
         flag_overrides = cfg.get("milp_flag_overrides", None)
-        result, _alns_r, _milp_r, alns_time, milp_time, alns_params_used = \
+        result, _alns_r, _milp_r, alns_time, milp_time, alns_params_used = (
             _solve_alns_milp(cfg, data, ms, dp, flag_overrides)
+        )
 
     # ================================================================
     # 既存モード (thesis_mode, mode_A, mode_B, etc.)
     # ================================================================
-    elif run_mode in ("thesis_mode", "mode_B_resource_assignment", "mode_A_journey_charge",
-                       "thesis_mode_route_editable", "mode_duty_constrained"):
+    elif run_mode in (
+        "thesis_mode",
+        "mode_B_resource_assignment",
+        "mode_A_journey_charge",
+        "thesis_mode_route_editable",
+        "mode_duty_constrained",
+    ):
         method = "MILP"
         _load_duty_data(cfg, data, run_mode)
         result, milp_time = _solve_milp_core(cfg, data, ms, dp, run_mode)
-        print(f"  status={result.status}, obj={result.objective_value}, time={milp_time:.2f}s")
+        print(
+            f"  status={result.status}, obj={result.objective_value}, time={milp_time:.2f}s"
+        )
 
     elif run_mode in ("mode_simple_reproduction", "mode_route_sensitivity"):
         method = "MILP"
         result, milp_time = _solve_milp_core(cfg, data, ms, dp, "thesis_mode")
-        print(f"  status={result.status}, obj={result.objective_value}, time={milp_time:.2f}s")
+        print(
+            f"  status={result.status}, obj={result.objective_value}, time={milp_time:.2f}s"
+        )
 
     elif run_mode == "mode_uncertainty_eval":
         from src.solver_alns import solve_alns, ALNSParams
+
         method = "ALNS"
-        n_scenarios = cfg.get("uncertainty", {}).get("n_scenarios",
-                              cfg.get("n_scenarios", 5))
+        n_scenarios = cfg.get("uncertainty", {}).get(
+            "n_scenarios", cfg.get("n_scenarios", 5)
+        )
         results = []
         for i in range(n_scenarios):
             res = solve_alns(data, ms, dp, params=ALNSParams(max_iterations=100))
             results.append(res)
         result = min(results, key=lambda r: r.objective_value or float("inf"))
         alns_time = sum(r.solve_time_sec for r in results)
-        print(f"  uncertainty: {n_scenarios} scenarios, best obj={result.objective_value}")
+        print(
+            f"  uncertainty: {n_scenarios} scenarios, best obj={result.objective_value}"
+        )
 
     else:
         raise ValueError(f"Unknown mode: {run_mode}")
@@ -273,6 +323,7 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
     sim_result = None
     try:
         from src.simulator import simulate
+
         sim_result = simulate(data, ms, dp, result)
     except Exception as e:
         print(f"  [warn] シミュレータ検証スキップ: {e}")
@@ -280,11 +331,13 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
     # ================================================================
     # outputs/ に保存
     # ================================================================
-    out_root = Path(cfg.get("output_dir",
-                    cfg.get("paths", {}).get("output_dir", "outputs")))
+    out_root = Path(
+        cfg.get("output_dir", cfg.get("paths", {}).get("output_dir", "outputs"))
+    )
 
     try:
         from src.result_exporter import export_all
+
         if sim_result is not None:
             export_all(data, ms, dp, result, sim_result, out_root)
         else:
@@ -297,11 +350,13 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
     # ================================================================
     try:
         from src.pipeline.logger import ExperimentLogger, record_result
+
         logger = ExperimentLogger(
             csv_path=out_root / "experiment_log.csv",
             sqlite_path=out_root / "experiment_log.sqlite",
         )
         from src.model_factory import get_mode_flags
+
         milp_flags = None
         try:
             milp_flags_raw = get_mode_flags(run_mode, data)
@@ -335,7 +390,8 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
     if cfg.get("gap_analysis", {}).get("enabled", False) and sim_result is not None:
         try:
             from src.pipeline.gap_analysis import run_gap_analysis, export_gap_report
-            gap_report = run_gap_analysis(result, sim_result, data, ms, dp)
+
+            gap_report = run_gap_analysis(data, ms, dp, result, sim_result)
             export_gap_report(gap_report, out_root / "gap_analysis.md")
             print(f"  gap analysis: {gap_report.total_issues} issue(s) detected")
         except Exception as e:
@@ -347,10 +403,17 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
     delay_cfg = cfg.get("delay_resilience_test", {})
     if delay_cfg.get("enabled", False):
         try:
-            from src.pipeline.delay_resilience import run_delay_resilience_test, export_delay_report
+            from src.pipeline.delay_resilience import (
+                run_delay_resilience_test,
+                export_delay_report,
+            )
+
+            # duties / trips は route-editable モード時のみ data に存在する
+            duties = getattr(data, "duty_list", [])
+            trips = getattr(data, "generated_trips", [])
             delay_report = run_delay_resilience_test(
-                result=result,
-                data=data,
+                duties=duties,
+                trips=trips,
                 n_scenarios=delay_cfg.get("n_scenarios", 10),
                 delay_probability=delay_cfg.get("delay_probability", 0.15),
                 delay_mean_min=delay_cfg.get("delay_mean_min", 5.0),
@@ -368,6 +431,7 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
 def _export_minimal(result, out_root):
     """SimulationResult なしで最低限の結果を保存する。"""
     from datetime import datetime
+
     ts = datetime.now().strftime("%Y%m%d_%H%M")
     run_dir = Path(out_root) / f"run_{ts}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -385,16 +449,26 @@ def _export_minimal(result, out_root):
 def main():
     parser = argparse.ArgumentParser(description="solve — 最適化パイプライン")
     parser.add_argument("--config", default="config/experiment_config.json")
-    parser.add_argument("--mode", default=None,
-                        choices=[
-                            "mode_milp_only", "mode_alns_only", "mode_alns_milp",
-                            "thesis_mode", "mode_A_journey_charge", "mode_B_resource_assignment",
-                            "thesis_mode_route_editable", "mode_duty_constrained",
-                            "mode_simple_reproduction", "mode_route_sensitivity",
-                            "mode_uncertainty_eval",
-                        ])
-    parser.add_argument("--time-limit", type=float, default=None,
-                        help="ソルバー制限時間 [秒]")
+    parser.add_argument(
+        "--mode",
+        default=None,
+        choices=[
+            "mode_milp_only",
+            "mode_alns_only",
+            "mode_alns_milp",
+            "thesis_mode",
+            "mode_A_journey_charge",
+            "mode_B_resource_assignment",
+            "thesis_mode_route_editable",
+            "mode_duty_constrained",
+            "mode_simple_reproduction",
+            "mode_route_sensitivity",
+            "mode_uncertainty_eval",
+        ],
+    )
+    parser.add_argument(
+        "--time-limit", type=float, default=None, help="ソルバー制限時間 [秒]"
+    )
     args = parser.parse_args()
 
     if args.time_limit is not None:
@@ -403,7 +477,10 @@ def main():
             cfg = json.load(f)
         cfg["time_limit_sec"] = args.time_limit
         import tempfile, os
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as tmp:
             json.dump(cfg, tmp, ensure_ascii=False, indent=2)
             tmp_path = tmp.name
         try:

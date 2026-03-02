@@ -24,11 +24,20 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+try:
+    import folium
+    from streamlit_folium import st_folium
+
+    FOLIUM_AVAILABLE = True
+except ImportError:
+    FOLIUM_AVAILABLE = False
+
 
 # ---------------------------------------------------------------------------
 # 定数
 # ---------------------------------------------------------------------------
 _PREFIX = "_dpe_"
+_DEFAULT_CENTER = (35.6895, 139.6917)  # 東京（データなし時のフォールバック）
 
 GARAGES_COLS = [
     "depot_id",
@@ -192,85 +201,318 @@ def _save_data(
 
 
 # ---------------------------------------------------------------------------
+# 営業所マップ
+# ---------------------------------------------------------------------------
+
+
+def _build_garages_map(
+    garages_df: pd.DataFrame,
+    selected_depot: Optional[str] = None,
+) -> "folium.Map":
+    """全営業所をマーカーで描画した Folium マップを返す。
+    マーカーの tooltip に __garage__{depot_id} を埋め込み、
+    st_folium の last_object_clicked_tooltip で選択を検知する。
+    選択中の営業所は赤、その他は darkred で表示。
+    """
+    all_coords: list[tuple[float, float]] = []
+    if (
+        len(garages_df) > 0
+        and "lat" in garages_df.columns
+        and "lon" in garages_df.columns
+    ):
+        valid = garages_df.dropna(subset=["lat", "lon"])
+        valid = valid[
+            (valid["lat"].astype(float) != 0) & (valid["lon"].astype(float) != 0)
+        ]
+        if len(valid) > 0:
+            all_coords = list(
+                zip(valid["lat"].astype(float), valid["lon"].astype(float))
+            )
+
+    center = (
+        (
+            sum(c[0] for c in all_coords) / len(all_coords),
+            sum(c[1] for c in all_coords) / len(all_coords),
+        )
+        if all_coords
+        else _DEFAULT_CENTER
+    )
+
+    m = folium.Map(location=list(center), zoom_start=13, tiles="cartodbpositron")
+
+    for _, row in garages_df.iterrows():
+        lat = row.get("lat", 0)
+        lon = row.get("lon", 0)
+        if pd.isna(lat) or pd.isna(lon) or float(lat) == 0:
+            continue
+        gid = str(row.get("depot_id", ""))
+        gname = str(row.get("depot_name", gid))
+        cap = row.get("parking_capacity", "—")
+        grid = row.get("grid_connection_kw", "—")
+        is_sel = gid == selected_depot
+
+        folium.Marker(
+            location=[float(lat), float(lon)],
+            icon=folium.Icon(
+                color="red" if is_sel else "darkred",
+                icon="home",
+                prefix="glyphicon",
+            ),
+            tooltip=f"__garage__{gid}",
+            popup=folium.Popup(
+                f"<b>{gname}</b><br>"
+                f"ID: {gid}<br>"
+                f"駐車台数: {cap} 台<br>"
+                f"系統接続: {grid} kW",
+                max_width=220,
+            ),
+        ).add_to(m)
+
+    return m
+
+
+# ---------------------------------------------------------------------------
 # 営業所一覧パネル
 # ---------------------------------------------------------------------------
 
 
 def _render_garages_panel(garages_df: pd.DataFrame) -> pd.DataFrame:
-    st.markdown("### 🏢 営業所一覧")
-    st.markdown(
-        '<div style="background:#f5f5dc;border-radius:8px;padding:8px 14px;margin-bottom:8px;font-size:0.83em;">'
-        "<b>depot_id</b>=営業所の一意ID │ <b>depot_name</b>=表示名 │ "
-        "<b>parking_capacity</b>=駐車台数 │ <b>grid_connection_kw</b>=系統接続[kW]<br>"
-        "<b>overnight_charging</b>=夜間充電可否 │ <b>has_workshop</b>=整備工場あり"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    """左: 営業所リスト＋追加フォーム / 右: 地図（クリックで選択・位置入力）。
+    選択中の営業所は下部フォームで属性編集できる。
+    テーブル一括編集は折りたたみ expander に収納。
+    """
+    sel_key = _sk("sel_garage_map")
+    if sel_key not in st.session_state:
+        st.session_state[sel_key] = None
 
-    edited = st.data_editor(
-        garages_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        key=_sk("garages_editor"),
-        column_config={
-            "depot_id": st.column_config.TextColumn("営業所 ID", help="例: depot_main"),
-            "depot_name": st.column_config.TextColumn("営業所名"),
-            "city": st.column_config.TextColumn("市区町村"),
-            "address": st.column_config.TextColumn("住所"),
-            "lat": st.column_config.NumberColumn("緯度", format="%.6f"),
-            "lon": st.column_config.NumberColumn("経度", format="%.6f"),
-            "parking_capacity": st.column_config.NumberColumn(
-                "駐車台数", min_value=0, step=1
-            ),
-            "grid_connection_kw": st.column_config.NumberColumn(
-                "系統接続 [kW]",
-                min_value=0.0,
-                step=10.0,
-                format="%.0f",
-            ),
-            "overnight_charging": st.column_config.CheckboxColumn(
-                "夜間充電", default=True
-            ),
-            "has_workshop": st.column_config.CheckboxColumn("整備工場", default=False),
-            "notes": st.column_config.TextColumn("備考"),
-        },
-    )
+    # --- 2カラムレイアウト ---
+    left_col, right_col = st.columns([1, 3])
 
-    # クイック追加
-    st.markdown("#### ➕ 営業所をすばやく追加")
-    with st.form(key=_sk("add_garage"), clear_on_submit=True):
-        gc = st.columns([1, 2, 1, 1, 1])
-        with gc[0]:
-            g_id = st.text_input("営業所 ID", placeholder="depot_north")
-        with gc[1]:
-            g_name = st.text_input("営業所名", placeholder="北営業所")
-        with gc[2]:
-            g_cap = st.number_input("駐車台数", min_value=1, value=10)
-        with gc[3]:
-            g_grid = st.number_input("系統 [kW]", min_value=0.0, value=150.0, step=10.0)
-        with gc[4]:
-            g_add = st.form_submit_button("追加")
-        if g_add and g_id:
-            new_g = pd.DataFrame(
-                [
-                    {
-                        "depot_id": g_id,
-                        "depot_name": g_name,
-                        "city": "",
-                        "address": "",
-                        "lat": 0.0,
-                        "lon": 0.0,
-                        "parking_capacity": g_cap,
-                        "grid_connection_kw": g_grid,
-                        "overnight_charging": True,
-                        "has_workshop": False,
-                        "notes": "",
-                    }
-                ]
+    with left_col:
+        st.markdown("#### 🏢 営業所一覧")
+        depot_ids = garages_df["depot_id"].dropna().tolist()
+        depot_ids = [d for d in depot_ids if d]
+
+        for did in depot_ids:
+            row = garages_df[garages_df["depot_id"] == did]
+            dname = row["depot_name"].iloc[0] if len(row) > 0 else did
+            is_sel = st.session_state[sel_key] == did
+            if st.button(
+                f"{'●' if is_sel else '○'} {dname}",
+                key=_sk(f"btn_depot_{did}"),
+                use_container_width=True,
+                type="primary" if is_sel else "secondary",
+            ):
+                st.session_state[sel_key] = did
+                st.rerun()
+
+        st.markdown("---")
+        with st.expander("＋ 営業所を追加", expanded=False):
+            # 地図クリックで位置が仮セットされていれば反映
+            pend_lat = float(st.session_state.get(_sk("pending_lat"), 0.0))
+            pend_lon = float(st.session_state.get(_sk("pending_lon"), 0.0))
+            with st.form(key=_sk("add_garage_form"), clear_on_submit=True):
+                g_id = st.text_input("営業所 ID", placeholder="depot_north")
+                g_name = st.text_input("営業所名", placeholder="北営業所")
+                g_city = st.text_input("市区町村")
+                g_lat = st.number_input(
+                    "緯度", value=pend_lat, format="%.6f", step=0.0001
+                )
+                g_lon = st.number_input(
+                    "経度", value=pend_lon, format="%.6f", step=0.0001
+                )
+                g_cap = st.number_input("駐車台数", min_value=1, value=10, step=1)
+                g_grid = st.number_input(
+                    "系統接続 [kW]", min_value=0.0, value=150.0, step=10.0
+                )
+                g_add = st.form_submit_button("追加")
+            if g_add and g_id:
+                new_g = pd.DataFrame(
+                    [
+                        {
+                            "depot_id": g_id,
+                            "depot_name": g_name,
+                            "city": g_city,
+                            "address": "",
+                            "lat": g_lat,
+                            "lon": g_lon,
+                            "parking_capacity": g_cap,
+                            "grid_connection_kw": g_grid,
+                            "overnight_charging": True,
+                            "has_workshop": False,
+                            "notes": "",
+                        }
+                    ]
+                )
+                garages_df = pd.concat([garages_df, new_g], ignore_index=True)
+                st.session_state[sel_key] = g_id
+                st.session_state.pop(_sk("pending_lat"), None)
+                st.session_state.pop(_sk("pending_lon"), None)
+                st.success(f"営業所 '{g_id}' を追加しました。")
+
+    with right_col:
+        st.markdown("#### 地図（マーカーをクリックで選択 / 空きをクリックで位置入力）")
+        if FOLIUM_AVAILABLE:
+            gmap = _build_garages_map(garages_df, st.session_state[sel_key])
+            map_result = st_folium(
+                gmap,
+                key=_sk("garages_map"),
+                height=320,
+                use_container_width=True,
+                returned_objects=["last_object_clicked_tooltip", "last_clicked"],
             )
-            edited = pd.concat([edited, new_g], ignore_index=True)
-            st.success(f"営業所 '{g_id}' を追加しました。")
-    return edited
+            tooltip_val = (
+                map_result.get("last_object_clicked_tooltip") if map_result else None
+            )
+            last_clicked = map_result.get("last_clicked") if map_result else None
+
+            # マーカークリック → 営業所を選択
+            if tooltip_val and str(tooltip_val).startswith("__garage__"):
+                gid = str(tooltip_val)[len("__garage__") :]
+                if gid in depot_ids and gid != st.session_state[sel_key]:
+                    st.session_state[sel_key] = gid
+                    st.rerun()
+
+            # 空地クリック → 位置を仮セット（追加フォームに反映）
+            elif last_clicked:
+                lat_c = last_clicked.get("lat")
+                lng_c = last_clicked.get("lng")
+                if lat_c and lng_c:
+                    prev_lat = st.session_state.get(_sk("pending_lat"))
+                    prev_lon = st.session_state.get(_sk("pending_lon"))
+                    if prev_lat != lat_c or prev_lon != lng_c:
+                        st.session_state[_sk("pending_lat")] = float(lat_c)
+                        st.session_state[_sk("pending_lon")] = float(lng_c)
+                        st.rerun()
+            # 仮位置の表示
+            if st.session_state.get(_sk("pending_lat")):
+                st.caption(
+                    f"📍 クリック位置: "
+                    f"({st.session_state[_sk('pending_lat')]:.5f}, "
+                    f"{st.session_state[_sk('pending_lon')]:.5f})"
+                    " → 左の「＋ 営業所を追加」に反映済み"
+                )
+        else:
+            st.info(
+                "folium が利用できません。`pip install folium streamlit-folium` を実行してください。"
+            )
+
+    # --- 選択中の営業所の属性編集フォーム ---
+    selected = st.session_state.get(sel_key)
+    if selected and selected in garages_df["depot_id"].tolist():
+        st.markdown("---")
+        ri = garages_df[garages_df["depot_id"] == selected]
+        i0 = ri.index[0]
+        r = ri.iloc[0]
+        st.markdown(f"**編集中: {r.get('depot_name', selected)}** (ID: `{selected}`)")
+        with st.expander("✏️ 営業所属性を編集", expanded=True):
+            with st.form(key=_sk(f"edit_garage_{selected}"), clear_on_submit=False):
+                ec = st.columns([2, 2, 2])
+                with ec[0]:
+                    new_name = st.text_input(
+                        "営業所名", value=str(r.get("depot_name", "") or "")
+                    )
+                    new_city = st.text_input(
+                        "市区町村", value=str(r.get("city", "") or "")
+                    )
+                    new_addr = st.text_input(
+                        "住所", value=str(r.get("address", "") or "")
+                    )
+                with ec[1]:
+                    new_lat = st.number_input(
+                        "緯度",
+                        value=float(r.get("lat") or 0.0),
+                        format="%.6f",
+                        step=0.0001,
+                    )
+                    new_lon = st.number_input(
+                        "経度",
+                        value=float(r.get("lon") or 0.0),
+                        format="%.6f",
+                        step=0.0001,
+                    )
+                    new_cap = st.number_input(
+                        "駐車台数",
+                        min_value=0,
+                        value=int(r.get("parking_capacity") or 0),
+                        step=1,
+                    )
+                with ec[2]:
+                    new_grid = st.number_input(
+                        "系統接続 [kW]",
+                        min_value=0.0,
+                        value=float(r.get("grid_connection_kw") or 0.0),
+                        step=10.0,
+                        format="%.0f",
+                    )
+                    new_overnight = st.checkbox(
+                        "夜間充電可",
+                        value=bool(r.get("overnight_charging", True)),
+                    )
+                    new_workshop = st.checkbox(
+                        "整備工場あり",
+                        value=bool(r.get("has_workshop", False)),
+                    )
+                new_notes = st.text_input("備考", value=str(r.get("notes", "") or ""))
+                attr_save = st.form_submit_button("属性を更新")
+            if attr_save:
+                garages_df.at[i0, "depot_name"] = new_name
+                garages_df.at[i0, "city"] = new_city
+                garages_df.at[i0, "address"] = new_addr
+                garages_df.at[i0, "lat"] = new_lat
+                garages_df.at[i0, "lon"] = new_lon
+                garages_df.at[i0, "parking_capacity"] = new_cap
+                garages_df.at[i0, "grid_connection_kw"] = new_grid
+                garages_df.at[i0, "overnight_charging"] = new_overnight
+                garages_df.at[i0, "has_workshop"] = new_workshop
+                garages_df.at[i0, "notes"] = new_notes
+                st.success(
+                    "属性を更新しました。「💾 営業所データを保存」で確定してください。"
+                )
+
+    # --- テーブル一括編集（折りたたみ） ---
+    st.markdown("---")
+    with st.expander("📋 テーブルで一括編集", expanded=False):
+        st.markdown(
+            '<div style="background:#f5f5dc;border-radius:8px;padding:8px 14px;'
+            'margin-bottom:8px;font-size:0.83em;">'
+            "<b>depot_id</b>=営業所の一意ID │ <b>depot_name</b>=表示名 │ "
+            "<b>parking_capacity</b>=駐車台数 │ <b>grid_connection_kw</b>=系統接続[kW]<br>"
+            "<b>overnight_charging</b>=夜間充電可否 │ <b>has_workshop</b>=整備工場あり"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        garages_df = st.data_editor(
+            garages_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key=_sk("garages_editor"),
+            column_config={
+                "depot_id": st.column_config.TextColumn(
+                    "営業所 ID", help="例: depot_main"
+                ),
+                "depot_name": st.column_config.TextColumn("営業所名"),
+                "city": st.column_config.TextColumn("市区町村"),
+                "address": st.column_config.TextColumn("住所"),
+                "lat": st.column_config.NumberColumn("緯度", format="%.6f"),
+                "lon": st.column_config.NumberColumn("経度", format="%.6f"),
+                "parking_capacity": st.column_config.NumberColumn(
+                    "駐車台数", min_value=0, step=1
+                ),
+                "grid_connection_kw": st.column_config.NumberColumn(
+                    "系統接続 [kW]", min_value=0.0, step=10.0, format="%.0f"
+                ),
+                "overnight_charging": st.column_config.CheckboxColumn(
+                    "夜間充電", default=True
+                ),
+                "has_workshop": st.column_config.CheckboxColumn(
+                    "整備工場", default=False
+                ),
+                "notes": st.column_config.TextColumn("備考"),
+            },
+        )
+
+    return garages_df
 
 
 # ---------------------------------------------------------------------------
