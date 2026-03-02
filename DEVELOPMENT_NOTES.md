@@ -1,310 +1,183 @@
-# E-Bus Sim 開発メモ
+# E-Bus Scheduling Optimization — Research Experiment Log
 
-## アプリ概要
-
-**E-Bus Sim**（電気バス最適化シミュレータ）は、PV出力を考慮した混成フリートの電気バス充電・運行スケジューリングを最適化する Streamlit アプリです。
-
-- 起動コマンド: `streamlit run app/main.py`
-- バージョン: v0.4.0
+> **目的**: 電気バス運行・充電スケジューリング最適化の修士論文研究実験ログ。
+> GUI変更履歴は `app/CHANGELOG.md` へ移動済み。本ファイルは実験・結果・設計判断のみ記録する。
 
 ---
 
-## 変更履歴
+## アーキテクチャ方針
 
-### v2 — 路線プロフィールエディタ全面書き直し & タブ統合
+```
+src/         研究コア (schema / loader / optimizer / simulator / analysis / exporter)
+app/         可視化・観察レイヤー (GUIはsrc.pipeline.*を呼ぶのみ、ソルバーロジックなし)
+config/      実験設定JSON (ExperimentConfig)
+data/        入力データ CSV (cases/ = 実験用, toy/ = 検証用)
+results/     出力KPI (kpi.json, kpi.csv, report.md)
+tests/       回帰テスト
+```
 
-**route_profile_editor.py を全面書き直し（v2）:**
-
-- **左クリックで停留所を即追加**（フォーム入力不要、自動命名「停留所N」）
-- **右クリックで最寄り停留所を削除**（Leaflet `contextmenu` イベントを JS 注入で捕捉）
-- 各停留所に `outbound_only` / `inbound_only` フラグを設定可能
-- 往路から復路を自動生成（`_generate_inbound_stops` 関数）。`outbound_only=True` の停留所は復路に含めない
-- 路線ごとに `garage_id`（管理営業所）をドロップダウンで選択（`garages.csv` から参照）
-- `st.rerun()` による即時反映
-- セッションキーの適切な管理（`_rpe_` プレフィックス、路線ID別スコープ）
-- stop_id の一意生成（`stop_{route_id}_{seq:03d}`）
-- 距離自動計算（haversine）
-- 保存時に `routes.csv` の `num_stops` / `total_distance_km` を自動更新
-- テーブル編集モード（folium 未インストール時のフォールバック）
-- 番号ラベル付きマーカー、色分け（始終点=赤, 車庫=紫, 片道=オレンジ, 通常=青）
-
-**Cities Skylines 風ツールバー + JS 注入の技術的詳細（v2.1 修正済み）:**
-
-streamlit-folium の JS バンドル（`main.bf2f01a4.js`）では `onMapClick(t)` がローカル関数として定義されており、`debouncedUpdateComponentValue` も window に非公開。編集ツールバーと操作検出には以下の方式を採用:
-
-**JS 注入方法（重要）:**
-
-- `folium.Element(...).add_to(m)` は HTML に反映されない（branca の Element はテンプレート経由）
-- 正しい方法: `m.get_root().script.add_child(BrancaElement(生JSコード))` (`<script>` タグなし)
-- streamlit-folium は `t.innerHTML = script + "window.map = map_div; ..."` の形でスクリプトを実行するため、注入コードは `window.map` 設定より前に実行される
-- そのため `inject()` 内で `if(!map){ setTimeout(inject, 300); return; }` のリトライが必須
-
-**クリックアクション伝達の仕組み:**
-
-1. `m.get_root().script.add_child(BrancaElement(_EDITOR_JS))` で Cities Skylines 風ツールバーを注入
-2. ツールバーのモード（`'add'` / `'delete'` / `'none'`）を JS 変数 `MODE` で管理
-3. マップクリック時: `window.__GLOBAL_DATA__.lat_lng_clicked = { lat, lng, _action: MODE }` をセット
-4. streamlit-folium の `debouncedUpdateComponentValue`（250ms debounce）が `last_clicked` として Python に返す
-5. Python 側で `last_clicked.get("_action", "none")` により動作を分岐
-6. `action not in ("add", "delete")` の場合はスキップ（`"none"` モードでの誤動作防止）
-
-**右クリックショートカット:**
-
-- `map.on('contextmenu', ...)` で `pendingRC = true` をセット → `map.fire('click', ...)` で合成クリック発火
-- `map.on('click', ...)` ハンドラが `pendingRC` を見て `action = 'delete'` として処理
-
-**CSVスキーマ拡張:**
-
-- `routes.csv` に `garage_id` 列を追加（管理営業所の紐付け）
-- `stops.csv` に `outbound_only`, `inbound_only` 列を追加（片道フラグ）
-
-**main.py タブ統合:**
-
-- サイドバー「🛣️ 路線詳細設定」エキスパンダーから旧エディタの直接呼び出しを削除（`_rde_` キー重複エラーの解消）。新タブへの誘導メッセージに変更
-- `🗺️ 路線詳細` タブに非推奨（レガシー）の警告を表示。セグメント編集が必要な場合のみ使用する旨を明記
-- `🚌 路線管理` タブが正式な路線編集ポイントとなる
-- `🏢 営業所管理` タブが営業所・車両・行路の編集ポイント
-
-### v1 — 初期実装
-
-- `route_profile_editor.py` 初版作成
-- `depot_profile_editor.py` 新規作成
-- `data/operations/` ディレクトリ以下に `garages.csv`, `vehicles.csv`, `work_schedules.csv` を新規作成
-- `data/route_master/timetable.csv` 新規作成
-- `main.py` に `🚌 路線管理` / `🏢 営業所管理` タブを追加
+**優先実装順**: `mode_A_journey_charge` → `mode_B_resource_assignment` → optimizer/simulator一貫性検証 → thesis_mode 拡張
 
 ---
 
-## 追加機能の設計方針
+## 10 KPI (全モード共通)
 
-### 1. 路線プロフィール管理（`🚌 路線管理` タブ）
-
-- **複数路線**を追加・編集・削除できる
-- 各路線は「停留所リスト」と「時刻表（便単位の発着情報）」を保持する
-- **行路（便チェーン）は路線側では管理しない** — 行路は営業所側が責任を持つ
-- 地図入力（folium + streamlit-folium）に対応（ライブラリが未インストールでも手入力で動作する）
-- 各停留所に `outbound_only` / `inbound_only` フラグを設定可能
-- 復路は往路から自動生成（`outbound_only=True` の停留所は復路に含めない）
-- 路線ごとに管理営業所（`garage_id`）を選択（営業所の追加・編集は営業所管理タブで行う、路線側ではドロップダウン参照のみ）
-
-### 2. 営業所・車両プロフィール管理＋配車計画（`🏢 営業所管理` タブ）
-
-- **複数営業所**を管理する
-- 各営業所に**車両**を所属させる
-- 時刻表から便を選んで**便チェーン（行路）**を編成する
-- 路線間移動の許可/禁止を**営業所単位**で設定できる
-- 便チェーン：ある便が終わったら同じまたは別路線の別運用に入る連鎖構造
+| KPI | 説明 |
+|-----|------|
+| `objective_value` | ソルバー目的関数値 [円] |
+| `total_energy_cost` | 電力購入コスト [円] |
+| `total_demand_charge` | デマンド料金 [円] |
+| `total_fuel_cost` | 燃料コスト [円] |
+| `vehicle_fixed_cost` | 車両固定使用コスト [円] |
+| `unmet_trips` | 未対応タスク数 |
+| `soc_min_margin_kwh` | 全車両・全スロットでのSOC下限余裕の最小値 [kWh] |
+| `charger_utilization` | 充電器稼働率 [%] |
+| `peak_grid_power_kw` | グリッドピーク電力 [kW] |
+| `solve_time_sec` | ソルバー求解時間 [s] |
 
 ---
 
-## 既知の課題
+## 実験記録
 
-### 旧エディタとの CSV 競合
+### [EXP-001] mode_A_case01 — 先行研究再現ベースライン
 
-`route_detail_editor.py`（旧）と `route_profile_editor.py`（新）は **共に `routes.csv` と `stops.csv` に書き込む**。旧エディタは新スキーマの列（`garage_id`, `outbound_only`, `inbound_only`）を認識しないため、旧エディタで保存すると新列が失われる可能性がある。
+- **日付**: 2026年初頭
+- **目的**: He et al. 2023 (TRD 115) 型「行路後充電決定」の再現
+- **設定**: `config/cases/mode_A_case01.json`
+- **データ**: `data/cases/mode_A_case01/` — 3台BEV, 6タスク, 64スロット(15分/スロット)
 
-**対策**: 旧エディタは非推奨とし、`🗺️ 路線詳細` タブに警告を表示。セグメント（`segments.csv`）の編集が必要な場合のみ旧エディタを使用する。
+**結果:**
+```
+status         : OPTIMAL
+objective_value: 20,172 円
+solve_time_sec : 0.039 s
+unmet_trips    : 0
+```
 
-### 旧エディタにあって新エディタにない機能
-
-- セグメント（`segments.csv`）の自動生成
-- 充電拠点レイヤー（`charger_sites.csv`）の地図表示
-- `is_revenue_stop` の編集UI
-- 方向別統計パネル
-
-これらは将来の拡張で追加予定。
-
----
-
-## データ構造・CSVスキーマ
-
-### `data/route_master/routes.csv`
-
-| カラム | 説明 |
-|--------|------|
-| `route_id` | 路線ID（ユニーク） |
-| `route_name` | 路線名 |
-| `operator` | 運行事業者 |
-| `city` | 所在市区町村 |
-| `total_distance_km` | 総距離（自動計算） |
-| `num_stops` | 停留所数（自動計算） |
-| `description` | 説明 |
-| `garage_id` | 管理営業所ID（`garages.csv` 参照） |
-
-### `data/route_master/stops.csv`
-
-| カラム | 説明 |
-|--------|------|
-| `stop_id` | 停留所ID（ユニーク） |
-| `stop_name` | 停留所名 |
-| `route_id` | 路線ID |
-| `direction` | 方向（outbound / inbound） |
-| `sequence` | 順番 |
-| `lat` / `lon` | 緯度・経度 |
-| `is_terminal` | ターミナルフラグ |
-| `terminal_id` | ターミナルID |
-| `is_depot` | デポフラグ |
-| `is_revenue_stop` | 営業停留所フラグ |
-| `distance_from_prev_km` | 前停留所からの距離（km） |
-| `outbound_only` | 往路のみフラグ |
-| `inbound_only` | 復路のみフラグ |
-
-### `data/route_master/timetable.csv`
-
-時刻表。便（trip）単位で発着情報を記録する。
-
-| カラム | 説明 |
-|--------|------|
-| `trip_id` | 便ID（ユニーク） |
-| `route_id` | 路線ID |
-| `direction` | 方向（outbound / inbound） |
-| `service_type` | 運行種別（weekday / saturday / holiday 等） |
-| `dep_time` | 出発時刻（HH:MM） |
-| `arr_time` | 到着時刻（HH:MM） |
-| `from_stop_id` | 出発停留所ID |
-| `to_stop_id` | 終着停留所ID |
-| `travel_time_min` | 所要時間（分） |
-| `notes` | 備考（始発・終発・ラッシュ等） |
-
-### `data/operations/garages.csv`
-
-営業所マスタ。
-
-| カラム | 説明 |
-|--------|------|
-| `depot_id` | 営業所ID（ユニーク） |
-| `depot_name` | 営業所名 |
-| `city` | 所在市区町村 |
-| `address` | 住所 |
-| `lat` / `lon` | 緯度・経度 |
-| `parking_capacity` | 駐車可能台数 |
-| `grid_connection_kw` | 系統接続容量（kW） |
-| `overnight_charging` | 夜間充電可否 |
-| `has_workshop` | 整備工場の有無 |
-| `notes` | 備考 |
-
-### `data/operations/vehicles.csv`
-
-車両マスタ。
-
-| カラム | 説明 |
-|--------|------|
-| `vehicle_id` | 車両ID（ユニーク） |
-| `vehicle_type` | 車両タイプ（BEV_large / BEV_mid 等） |
-| `garage_id` | 所属営業所ID |
-| `route_assignments` | 担当路線ID（カンマ区切り） |
-| `battery_capacity_kwh` | バッテリー容量（kWh） |
-| `soc_min_ratio` | SOC下限比率 |
-| `soc_max_ratio` | SOC上限比率 |
-| `efficiency_km_per_kwh` | 電費（km/kWh） |
-| `status` | 稼働状況（active / inactive） |
-| `notes` | 備考 |
-
-### `data/operations/work_schedules.csv`
-
-行路（便チェーン）マスタ。
-
-| カラム | 説明 |
-|--------|------|
-| `work_id` | 行路ID（ユニーク） |
-| `garage_id` | 担当営業所ID |
-| `vehicle_id` | 担当車両ID |
-| `service_date` | 運行日（YYYY-MM-DD） |
-| `trips` | 便IDリスト（カンマ区切り、順序通り） |
-| `total_trips` | 便数 |
-| `start_time` | 行路開始時刻 |
-| `end_time` | 行路終了時刻 |
-| `total_km` | 総走行距離（km） |
-| `notes` | 備考（朝行路・昼行路等） |
+**判定**: ✅ PASS — mode_A パイプライン動作確認。固定割当前提の充電最適化が正常動作。
 
 ---
 
-## ファイル一覧と役割
+### [EXP-002] toy_mode_A_case01 — 手計算検証トイケース
 
-### 新規作成ファイル
+- **日付**: 2026-03-02
+- **目的**: mode_A ソルバーの正しさを手計算で検証
+- **設定**: `config/cases/toy_mode_A_case01.json`
+- **データ**: `data/toy/mode_A_case01/` — 2台BEV, 5タスク, 1充電器(C1:50kW), 20スロット(60分/スロット)
 
-| ファイル | 役割 |
-|----------|------|
-| `app/route_profile_editor.py` | 路線プロフィール管理エディタ v2。複数路線・停留所・時刻表・地図入力・片道フラグ・復路自動生成 |
-| `app/depot_profile_editor.py` | 営業所・車両・行路（便チェーン）管理エディタ |
-| `data/route_master/timetable.csv` | 時刻表CSVサンプル |
-| `data/operations/garages.csv` | 営業所マスタCSVサンプル |
-| `data/operations/vehicles.csv` | 車両マスタCSVサンプル |
-| `data/operations/work_schedules.csv` | 行路（便チェーン）マスタCSVサンプル |
+**設定詳細:**
+- V1 → {T1(20kWh), T2(20kWh), T3(20kWh)} 固定割当、合計消費60kWh
+- V2 → {T4(20kWh), T5(10kWh)} 固定割当、合計消費30kWh
+- TOU料金: t=0–7: **10円/kWh** (安価), t=8–19: 30円/kWh (高価)
+- 各車両: soc_init=80kWh, soc_min=20kWh, soc_target_end=50kWh, fixed_use_cost=3,000円
 
-### 既存ファイル（参照・変更済み）
+**手計算 (修正版):**
+- V1: 80 → (60消費) → 20kWh。target=50 → 充電必要量 = **30kWh**
+- V2: 80 → (30消費) → 50kWh = target → 追加充電 **不要**
+- 最適行動: 安価スロット(t=0–7)に30kWhを充電 → **30 × 10 = 300円**
+- 固定コスト: 2台 × 3,000 = **6,000円**
+- **期待合計: 6,300円**
 
-| ファイル | 役割 | 変更内容 |
-|----------|------|----------|
-| `app/main.py` | メインStreamlitアプリ | `🚌路線管理`・`🏢営業所管理`タブ追加、サイドバー旧エディタ呼び出し削除、旧タブに非推奨警告追加 |
-| `data/route_master/routes.csv` | 路線マスタ | `garage_id` 列追加 |
-| `data/route_master/stops.csv` | 停留所マスタ | `outbound_only`, `inbound_only` 列追加 |
+**実際の結果:**
+```
+status             : OPTIMAL
+objective_value    : 6,300 円
+total_energy_cost  :   300 円
+vehicle_fixed_cost : 6,000 円
+unmet_trips        : 0
+peak_grid_power_kw : 20.0 kW
+solve_time_sec     : 0.017 s
+```
 
-### レガシーファイル（変更なし・非推奨）
+**判定**: ✅ PASS — ソルバー結果が手計算と完全一致。
 
-| ファイル | 役割 |
-|----------|------|
-| `app/route_detail_editor.py` | 旧路線詳細エディタ（単路線・停留所・デポ・セグメント編集）。`🗺️ 路線詳細` タブで使用（非推奨） |
-| `app/map_editor.py` | 旧地図ベースエディタ（ターミナル・デポ・充電拠点・停留所） |
-| `app/route_editor.py` | 旧ルートエディタ（CSV読込・編集・保存） |
+> **NOTE (修正)**: 当初の手計算では soc_init=80 と soc_target_end=50 を無視して「90kWh × 10円 = 900円」と誤推定していた。正しくは V2 が充電不要であり合計は 300円。
 
-### ディレクトリ構造
+---
+
+### [EXP-003] mode_B_case01 — 車両割当＋充電同時最適化
+
+- **日付**: 2026-03-02
+- **目的**: mode_B (vehicle-trip assignment + charging) の動作確認
+- **設定**: `config/cases/mode_B_case01.json`
+- **データ**: `data/cases/mode_B_case01/` — 3台BEV + 1台ICE, 8タスク
+
+**結果:**
+```
+status             : OPTIMAL
+objective_value    : 9,594 円
+total_energy_cost  : 2,796 円
+total_fuel_cost    : 1,798 円  (ICE使用: 約12.4L × 145円/L)
+vehicle_fixed_cost : 5,000 円  (BEV 1台使用)
+unmet_trips        : 0
+charger_utilization:   6.25%
+peak_grid_power_kw : 35.0 kW
+solve_time_sec     : 0.093 s
+```
+
+**判定**: ✅ PASS — mode_B 動作確認。ICE 車両の燃料コストが非ゼロで整合。充電器稼働率 6.25% は BEV 使用台数が少ないため妥当。
+
+---
+
+## テスト状況
+
+```
+tests/test_simulator.py  — 6テスト全通過
+  test_soc_lower_limit_violation        ✅
+  test_simultaneous_charger_overload    ✅
+  test_task_sequence_time_overlap       ✅
+  test_end_of_day_soc_violation         ✅
+  test_grid_capacity_violation          ✅
+  test_ok_schedule_passes_all_checks    ✅
+```
+
+実行コマンド: `python -m pytest tests/test_simulator.py -v`
+
+---
+
+## バグ修正履歴
+
+| 日付 | ファイル | 修正内容 |
+|------|----------|----------|
+| 初期 | `src/data_loader.py` | `_find_project_root()` 追加 — `.git/` or `src/` を上位探索し、`config/cases/*.json` パス解決を修正 |
+| 初期 | `src/pipeline/solve.py` | `run_gap_analysis()` 引数順序修正 (result, sim_result, data, ms, dp → data, ms, dp, result, sim_result) |
+| 初期 | `src/pipeline/solve.py` | `run_delay_resilience_test()` の `duties` / `trips` 引数を `getattr` で安全取得 |
+
+---
+
+## 次のステップ (優先度順)
+
+1. **mode_B vs mode_A 比較実験**: 同一トリップセットで両モードを解き、mode_B の目的関数値 ≤ mode_A を確認 (緩和方向の理論的保証)
+2. **Simulator 一貫性検証**: optimizer の充電スケジュールを simulator に通してフィジビリティ確認 (SOC violationがゼロであること)
+3. **thesis_mode 設計**: デマンド料金・PV統合・V2G の追加検討
+4. **感度分析**: TOU料金比 (安価/高価)、充電器容量、soc_target_end を変えたパラメータスイープ
+
+---
+
+## ファイル構成 (研究関連のみ)
 
 ```
 master-course/
-├── app/
-│   ├── main.py                    ← タブ統合済み
-│   ├── route_profile_editor.py    ← v2 全面書き直し
-│   ├── depot_profile_editor.py    ← 新規作成
-│   ├── route_detail_editor.py     ← レガシー（非推奨）
-│   ├── map_editor.py              ← レガシー（非推奨）
-│   └── route_editor.py            ← レガシー（非推奨）
+├── src/
+│   ├── pipeline/solve.py     ← 正規パイプライン入口 solve(config_path, mode)
+│   ├── data_loader.py        ← load_problem_data() + _find_project_root()
+│   ├── milp_model.py         ← MILPResult, build_milp_model()
+│   ├── simulator.py          ← SimulationResult, simulate(), check_schedule_feasibility()
+│   ├── model_sets.py         ← build_model_sets()
+│   └── parameter_builder.py  ← build_derived_params()
+├── config/cases/
+│   ├── mode_A_case01.json         ← EXP-001 [VERIFIED]
+│   ├── mode_B_case01.json         ← EXP-003 [VERIFIED]
+│   └── toy_mode_A_case01.json     ← EXP-002 [VERIFIED]
 ├── data/
-│   ├── route_master/
-│   │   ├── timetable.csv          ← 新規作成
-│   │   ├── routes.csv             ← garage_id 列追加
-│   │   ├── stops.csv              ← outbound_only, inbound_only 列追加
-│   │   └── ...
-│   ├── operations/                ← 新規ディレクトリ
-│   │   ├── garages.csv            ← 新規作成
-│   │   ├── vehicles.csv           ← 新規作成
-│   │   └── work_schedules.csv     ← 新規作成
-│   └── infra/
-│       └── depots.csv             ← 既存（旧エディタ用）
-├── DEVELOPMENT_NOTES.md           ← 本ファイル
-└── README.md
+│   ├── cases/mode_A_case01/       ← 3BEV, 6tasks, 64slots
+│   ├── cases/mode_B_case01/       ← 3BEV+1ICE, 8tasks
+│   └── toy/mode_A_case01/         ← 2BEV, 5tasks, 20slots (手計算検証用)
+├── results/
+│   ├── mode_A_case01/             ← kpi.json, kpi.csv, report.md
+│   ├── mode_B_case01/             ← kpi.json, kpi.csv, report.md
+│   └── toy_mode_A_case01/         ← kpi.json, kpi.csv, report.md
+├── tests/test_simulator.py        ← 6 tests, all PASS
+├── docs/reproduction/mode_A_reproduction_spec.md
+└── run_case.py                    ← CLI実行ハーネス
 ```
-
----
-
-## 起動方法
-
-```bash
-# 依存ライブラリのインストール
-pip install streamlit pandas folium streamlit-folium
-
-# アプリ起動
-streamlit run app/main.py
-```
-
-地図入力機能（folium）がない環境でも、手入力モードでアプリは動作します。
-
----
-
-## タブ構成（main.py）
-
-| タブ | 内容 |
-|------|------|
-| ⚙️ 設定 | 問題設定・パラメータ入力 |
-| 🔬 Gurobi (MILP) | Gurobi MILPソルバー |
-| 🎡 ALNS | 適応的大近傍探索 |
-| 🧬 GA | 遺伝的アルゴリズム |
-| 🐝 ABC | 人工蜂群アルゴリズム |
-| 🆕 新アーキ (src/) | 新アーキテクチャ |
-| 📊 比較 | ソルバー比較 |
-| 🎯 MILP専用 | MILP専用モード |
-| 🔄 ALNS専用 | ALNS専用モード |
-| ⚡ ALNS+MILP | ハイブリッドモード |
-| 🗺️ 路線詳細 | レガシー路線詳細エディタ（**非推奨** — セグメント編集用） |
-| 🚌 路線管理 | **正式** 複数路線・時刻表・地図入力・片道フラグ・復路自動生成 |
-| 🏢 営業所管理 | **正式** 営業所・車両・行路（便チェーン）管理 |
