@@ -2087,20 +2087,7 @@ with tab_depot_profile:
 
         render_depot_profile_editor(data_dir="data")
     except Exception as e:
-        st.error(
-            f"営業所管理エディタの読み込みに失敗しました: {e}\n\nエラー詳細: {{e}}"
-        )
-
-    try:
-        from app.route_detail_editor import render_route_detail_editor
-
-        render_route_detail_editor(data_dir="data")
-    except Exception as e:
-        st.error(
-            f"路線エディタの読み込みに失敗しました: {e}\n\n"
-            "地図モードを使う場合は以下をインストールしてください:\n"
-            "```\npip install folium streamlit-folium\n```"
-        )
+        st.error(f"営業所管理エディタの読み込みに失敗しました: {e}\n\nエラー詳細: {e}")
 
 
 # ---------------------------------------------------------------------------
