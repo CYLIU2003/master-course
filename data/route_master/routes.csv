@@ -1,2 +1,2 @@
-route_id,route_name,operator,city,total_distance_km,num_stops,description
-route_101,中央幹線101号,市交通局,サンプル市,12.5,6,デポ〜ターミナルB 往復路線
+route_id,route_name,operator,city,total_distance_km,num_stops,description,garage_id
+route_101,中央幹線101号,市交通局,サンプル市,14.59,18,デポ〜ターミナルB 往復路線,depot_main

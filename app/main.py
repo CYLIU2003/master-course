@@ -446,39 +446,64 @@ st.markdown(
 )
 
 # ===========================================================================
-# タブ構成: 設定 → ソルバー → 比較
+# タブ構成: 設定 → ソルバー → 比較 → 路線詳細 → 路線・営業所管理
 # ===========================================================================
 (
     tab_settings,
-    solver_tab_gurobi,
-    solver_tab_alns,
-    solver_tab_ga,
-    solver_tab_abc,
-    solver_tab_src,
-    solver_tab_compare,
-    solver_tab_milp_only,
-    solver_tab_alns_only,
-    solver_tab_alns_milp,
+    tab_solvers,
+    tab_compare,
     tab_map,
-    tab_route_profile,
-    tab_depot_profile,
+    tab_route_depot,
 ) = st.tabs(
     [
         "⚙️ 設定",
-        "🔬 Gurobi (MILP)",
-        "🎡 ALNS",
-        "🧬 GA",
-        "🐝 ABC",
-        "🆕 新アーキ (src/)",
-        "📊 比較",
-        "🎯 MILP専用",
-        "🔄 ALNS専用",
-        "⚡ ALNS+MILP",
+        "🔬 ソルバー",
+        "📊 比較・専用",
         "🗺️ 路線詳細",
-        "🚌 路線管理",
-        "🏢 営業所管理",
+        "🚌 路線・営業所管理",
     ]
 )
+
+# 内部サブタブを各親タブ内で定義
+with tab_solvers:
+    (
+        solver_tab_gurobi,
+        solver_tab_alns,
+        solver_tab_ga,
+        solver_tab_abc,
+        solver_tab_src,
+    ) = st.tabs(
+        [
+            "🔬 Gurobi (MILP)",
+            "🎡 ALNS",
+            "🧬 GA",
+            "🐝 ABC",
+            "🆕 新アーキ (src/)",
+        ]
+    )
+
+with tab_compare:
+    (
+        solver_tab_compare,
+        solver_tab_milp_only,
+        solver_tab_alns_only,
+        solver_tab_alns_milp,
+    ) = st.tabs(
+        [
+            "📊 全比較",
+            "🎯 MILP専用",
+            "🔄 ALNS専用",
+            "⚡ ALNS+MILP",
+        ]
+    )
+
+with tab_route_depot:
+    tab_route_profile, tab_depot_profile = st.tabs(
+        [
+            "🚌 路線管理",
+            "🏢 営業所管理",
+        ]
+    )
 
 # ===========================================================================
 # ⚙️ 設定タブ
@@ -550,13 +575,9 @@ with tab_settings:
 
         # ---- 🛣️ 路線設定 ----
         with st.expander("🛣️ 路線詳細設定", expanded=False):
-            st.markdown("""
-            路線・停留所・セグメント・車庫を編集します。  
-            「単純編集」でテーブル入力、「地図入力」で地図上クリック配置が選べます。
-            """)
-            from app.route_detail_editor import render_route_detail_editor
-
-            render_route_detail_editor(data_dir="data")
+            st.info(
+                "路線・停留所・営業所の編集は **🚌 路線・営業所管理** タブで行ってください。"
+            )
 
         # ---- 🔌 充電設備 ----
         with st.expander("🔌 充電設備"):
@@ -2052,10 +2073,15 @@ with tab_map:
         """
     <div class="section-header">
       <div class="section-icon">🗺️</div>
-      <h3>路線詳細エディタ</h3>
+      <h3>路線詳細エディタ（レガシー）</h3>
     </div>
     """,
         unsafe_allow_html=True,
+    )
+
+    st.warning(
+        "⚠️ このタブは旧版エディタです。今後は **🚌 路線管理** タブをご利用ください。\n\n"
+        "セグメント（segments.csv）の編集が必要な場合のみ、こちらを使用してください。"
     )
 
     try:
