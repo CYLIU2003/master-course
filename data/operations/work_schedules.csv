@@ -1,0 +1,6 @@
+work_id,garage_id,vehicle_id,service_date,trips,total_trips,start_time,end_time,total_km,notes
+work_101_A_0401,depot_main,bus_101,2024-04-01,"trip_101_ob_0600,trip_101_ib_0640,trip_101_ob_0700,trip_101_ib_0740",4,06:00,08:15,50.0,朝行路A
+work_101_B_0401,depot_main,bus_102,2024-04-01,"trip_101_ob_0800,trip_101_ib_0850,trip_101_ob_0900,trip_101_ib_0945",4,08:00,10:25,52.0,朝行路B
+work_101_C_0401,depot_main,bus_103,2024-04-01,"trip_101_ob_1000,trip_101_ib_1045,trip_101_ob_1200,trip_101_ib_1245",4,10:00,13:20,50.0,昼行路
+work_101_D_0401,depot_main,bus_101,2024-04-01,"trip_101_ob_1600,trip_101_ib_1650,trip_101_ob_1800,trip_101_ib_1850",4,16:00,19:35,52.0,夕行路A
+work_101_E_0401,depot_main,bus_102,2024-04-01,"trip_101_ob_2000,trip_101_ib_2045,trip_101_ob_2200,trip_101_ib_2245",4,20:00,23:20,50.0,夜行路

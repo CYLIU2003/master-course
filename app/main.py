@@ -8,6 +8,7 @@ main.py — Streamlit アプリケーション エントリーポイント
 
 エラー: python -u app/main.py では動作しません。
 """
+
 from __future__ import annotations
 
 import json
@@ -72,7 +73,8 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # カスタム CSS ・ HTML 基盤
 # ---------------------------------------------------------------------------
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* ===== グローバルリセット & ベース ===== */
 :root {
@@ -357,7 +359,9 @@ st.markdown("""
     color: white !important;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -375,16 +379,18 @@ if "result_abc" not in st.session_state:
     st.session_state.result_abc = None
 
 
-
 # ---------------------------------------------------------------------------
 # サイドバー: 設定モード選択 (最小化)
 # ---------------------------------------------------------------------------
-st.sidebar.markdown("""
+st.sidebar.markdown(
+    """
 <div style="text-align:center; padding: 12px 0 8px;">
   <span style="font-size:2rem;">🚌</span><br>
   <span style="font-size:.95rem; font-weight:700; letter-spacing:.5px;">E-Bus Sim</span>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 config_mode = st.sidebar.radio(
     "設定方法",
@@ -398,7 +404,9 @@ if config_mode == "JSON インポート":
         type=["json"],
         help="ebus_prototype_config.json 形式",
     )
-    default_json = Path(__file__).resolve().parent.parent / "config" / "ebus_prototype_config.json"
+    default_json = (
+        Path(__file__).resolve().parent.parent / "config" / "ebus_prototype_config.json"
+    )
     if uploaded is not None:
         raw = json.loads(uploaded.read().decode("utf-8"))
         tmp_path = Path(__file__).resolve().parent / "_tmp_upload.json"
@@ -423,7 +431,8 @@ elif config_mode == "手動設定":
 # ---------------------------------------------------------------------------
 
 # ヘッダーバナー
-st.markdown("""
+st.markdown(
+    """
 <div class="ebus-header">
   <div class="ebus-header-icon">🚌</div>
   <div class="ebus-header-text">
@@ -432,14 +441,43 @@ st.markdown("""
     <span class="ebus-badge">v0.3.0&nbsp;•&nbsp;Route-Editable&nbsp;•&nbsp;Gurobi / ALNS / GA / ABC</span>
   </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ===========================================================================
 # タブ構成: 設定 → ソルバー → 比較
 # ===========================================================================
-tab_settings, solver_tab_gurobi, solver_tab_alns, solver_tab_ga, solver_tab_abc, solver_tab_src, solver_tab_compare, solver_tab_milp_only, solver_tab_alns_only, solver_tab_alns_milp, tab_map = st.tabs(
-    ["⚙️ 設定", "🔬 Gurobi (MILP)", "🎡 ALNS", "🧬 GA", "🐝 ABC", "🆕 新アーキ (src/)", "📊 比較",
-     "🎯 MILP専用", "🔄 ALNS専用", "⚡ ALNS+MILP", "�️ 路線詳細"]
+(
+    tab_settings,
+    solver_tab_gurobi,
+    solver_tab_alns,
+    solver_tab_ga,
+    solver_tab_abc,
+    solver_tab_src,
+    solver_tab_compare,
+    solver_tab_milp_only,
+    solver_tab_alns_only,
+    solver_tab_alns_milp,
+    tab_map,
+    tab_route_profile,
+    tab_depot_profile,
+) = st.tabs(
+    [
+        "⚙️ 設定",
+        "🔬 Gurobi (MILP)",
+        "🎡 ALNS",
+        "🧬 GA",
+        "🐝 ABC",
+        "🆕 新アーキ (src/)",
+        "📊 比較",
+        "🎯 MILP専用",
+        "🔄 ALNS専用",
+        "⚡ ALNS+MILP",
+        "🗺️ 路線詳細",
+        "🚌 路線管理",
+        "🏢 営業所管理",
+    ]
 )
 
 # ===========================================================================
@@ -449,17 +487,22 @@ with tab_settings:
     if config_mode == "JSON インポート":
         # --- JSON インポートモード ---
         if st.session_state.config is not None:
-            st.success("✅ JSON を読み込み済みです。サイドバーから別の JSON を読み込めます。")
+            st.success(
+                "✅ JSON を読み込み済みです。サイドバーから別の JSON を読み込めます。"
+            )
         else:
             st.info("サイドバーから JSON ファイルを読み込んでください。")
     else:
         # --- 手動設定モード ---
-        st.markdown("""
+        st.markdown(
+            """
         <div class="section-header">
           <div class="section-icon">⚙️</div>
           <h3>シミュレーション設定</h3>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         # ---- 📐 システム規模 ----
         with st.expander("📐 システム規模", expanded=True):
@@ -469,7 +512,9 @@ with tab_settings:
             with sc2:
                 num_trips = st.number_input("便数", 1, 30, 6, key="cfg_num_trips")
             with sc3:
-                delta_h = st.selectbox("時間刻み [h]", [0.25, 0.5, 1.0], index=1, key="cfg_delta_h")
+                delta_h = st.selectbox(
+                    "時間刻み [h]", [0.25, 0.5, 1.0], index=1, key="cfg_delta_h"
+                )
             with sc4:
                 pass
             sc5, sc6 = st.columns(2)
@@ -478,18 +523,30 @@ with tab_settings:
             with sc6:
                 end_hour = st.slider("終了時刻", 12, 24, 22, key="cfg_end_hour")
             num_periods = int((end_hour - start_hour) / delta_h)
-            st.caption(f"📊 計画スロット数: **{num_periods}** ({start_hour}:00 〜 {end_hour}:00, Δt={delta_h}h)")
+            st.caption(
+                f"📊 計画スロット数: **{num_periods}** ({start_hour}:00 〜 {end_hour}:00, Δt={delta_h}h)"
+            )
 
         # ---- 🚌 車両性能 ----
         with st.expander("🚌 車両性能"):
             vc1, vc2 = st.columns(2)
             with vc1:
-                cap_kwh = st.number_input("バッテリ容量 [kWh]", 50.0, 1000.0, 300.0, step=10.0, key="cfg_cap")
-                soc_init_ratio = st.slider("初期 SOC [%]", 30, 100, 80, key="cfg_soc_init") / 100.0
+                cap_kwh = st.number_input(
+                    "バッテリ容量 [kWh]", 50.0, 1000.0, 300.0, step=10.0, key="cfg_cap"
+                )
+                soc_init_ratio = (
+                    st.slider("初期 SOC [%]", 30, 100, 80, key="cfg_soc_init") / 100.0
+                )
             with vc2:
-                efficiency = st.number_input("電費 [km/kWh]", 0.3, 3.0, 1.0, step=0.1, key="cfg_eff")
-                soc_min_ratio = st.slider("SOC 下限 [%]", 5, 50, 20, key="cfg_soc_min") / 100.0
-            soc_max_ratio = st.slider("SOC 上限 [%]", 60, 100, 95, key="cfg_soc_max") / 100.0
+                efficiency = st.number_input(
+                    "電費 [km/kWh]", 0.3, 3.0, 1.0, step=0.1, key="cfg_eff"
+                )
+                soc_min_ratio = (
+                    st.slider("SOC 下限 [%]", 5, 50, 20, key="cfg_soc_min") / 100.0
+                )
+            soc_max_ratio = (
+                st.slider("SOC 上限 [%]", 60, 100, 95, key="cfg_soc_max") / 100.0
+            )
 
         # ---- 🛣️ 路線設定 ----
         with st.expander("🛣️ 路線詳細設定", expanded=False):
@@ -498,6 +555,7 @@ with tab_settings:
             「単純編集」でテーブル入力、「地図入力」で地図上クリック配置が選べます。
             """)
             from app.route_detail_editor import render_route_detail_editor
+
             render_route_detail_editor(data_dir="data")
 
         # ---- 🔌 充電設備 ----
@@ -505,43 +563,100 @@ with tab_settings:
             cc1, cc2 = st.columns(2)
             with cc1:
                 num_depots = st.slider("充電拠点数", 1, 5, 2, key="cfg_depots")
-                slow_power = st.number_input("普通充電出力 [kW]", 10.0, 200.0, 50.0, step=10.0, key="cfg_slow_pw")
-                slow_count = st.number_input("普通充電器台数", 0, 10, 2, step=1, key="cfg_slow_cnt")
+                slow_power = st.number_input(
+                    "普通充電出力 [kW]", 10.0, 200.0, 50.0, step=10.0, key="cfg_slow_pw"
+                )
+                slow_count = st.number_input(
+                    "普通充電器台数", 0, 10, 2, step=1, key="cfg_slow_cnt"
+                )
             with cc2:
-                charge_eff = st.slider("充電効率", 0.80, 1.00, 0.95, step=0.01, key="cfg_ch_eff")
-                fast_power = st.number_input("急速充電出力 [kW]", 50.0, 500.0, 150.0, step=10.0, key="cfg_fast_pw")
-                fast_count = st.number_input("急速充電器台数", 0, 10, 1, step=1, key="cfg_fast_cnt")
+                charge_eff = st.slider(
+                    "充電効率", 0.80, 1.00, 0.95, step=0.01, key="cfg_ch_eff"
+                )
+                fast_power = st.number_input(
+                    "急速充電出力 [kW]",
+                    50.0,
+                    500.0,
+                    150.0,
+                    step=10.0,
+                    key="cfg_fast_pw",
+                )
+                fast_count = st.number_input(
+                    "急速充電器台数", 0, 10, 1, step=1, key="cfg_fast_cnt"
+                )
 
         # ---- ☀️ エネルギー ----
         with st.expander("☀️ PV・電力料金"):
             ec1, ec2 = st.columns(2)
             with ec1:
-                enable_pv = st.checkbox("PV を有効にする", value=True, key="cfg_enable_pv")
-                pv_scale = st.slider("PV 出力倍率", 0.0, 5.0, 1.0, step=0.1, key="cfg_pv_scale")
+                enable_pv = st.checkbox(
+                    "PV を有効にする", value=True, key="cfg_enable_pv"
+                )
+                pv_scale = st.slider(
+                    "PV 出力倍率", 0.0, 5.0, 1.0, step=0.1, key="cfg_pv_scale"
+                )
             with ec2:
-                price_mode = st.selectbox("電力料金モード", ["デフォルト TOU", "一律 [円/kWh]"], key="cfg_price_mode")
+                price_mode = st.selectbox(
+                    "電力料金モード",
+                    ["デフォルト TOU", "一律 [円/kWh]"],
+                    key="cfg_price_mode",
+                )
                 flat_price = 25.0
                 if price_mode == "一律 [円/kWh]":
-                    flat_price = st.number_input("電力単価 [円/kWh]", 10.0, 100.0, 25.0, step=1.0, key="cfg_flat_price")
-            diesel_price = st.number_input("軽油単価 [円/L]", 80.0, 250.0, 145.0, step=5.0, key="cfg_diesel", help="ICE 比較用")
+                    flat_price = st.number_input(
+                        "電力単価 [円/kWh]",
+                        10.0,
+                        100.0,
+                        25.0,
+                        step=1.0,
+                        key="cfg_flat_price",
+                    )
+            diesel_price = st.number_input(
+                "軽油単価 [円/L]",
+                80.0,
+                250.0,
+                145.0,
+                step=5.0,
+                key="cfg_diesel",
+                help="ICE 比較用",
+            )
 
         # ---- 🔧 拡張オプション ----
         with st.expander("🔧 拡張オプション"):
             oc1, oc2 = st.columns(2)
             with oc1:
-                enable_terminal_soc = st.checkbox("終端 SOC 条件", value=False, key="cfg_term_soc")
+                enable_terminal_soc = st.checkbox(
+                    "終端 SOC 条件", value=False, key="cfg_term_soc"
+                )
                 terminal_soc_ratio = 0.5
                 if enable_terminal_soc:
-                    terminal_soc_ratio = st.slider("終端 SOC [%]", 20, 80, 50, key="cfg_term_ratio") / 100.0
+                    terminal_soc_ratio = (
+                        st.slider("終端 SOC [%]", 20, 80, 50, key="cfg_term_ratio")
+                        / 100.0
+                    )
             with oc2:
-                enable_demand_charge = st.checkbox("デマンドチャージ", value=False, key="cfg_demand")
+                enable_demand_charge = st.checkbox(
+                    "デマンドチャージ", value=False, key="cfg_demand"
+                )
                 contract_power = None
                 if enable_demand_charge:
-                    contract_power = st.number_input("契約電力上限 [kW]", 50.0, 1000.0, 200.0, step=10.0, key="cfg_contract")
+                    contract_power = st.number_input(
+                        "契約電力上限 [kW]",
+                        50.0,
+                        1000.0,
+                        200.0,
+                        step=10.0,
+                        key="cfg_contract",
+                    )
 
         # ---- 🔄 設定を適用ボタン ----
         st.markdown("---")
-        if st.button("🔄 設定を適用", type="primary", key="apply_config", use_container_width=True):
+        if st.button(
+            "🔄 設定を適用",
+            type="primary",
+            key="apply_config",
+            use_container_width=True,
+        ):
             import random as _rng
             import math
 
@@ -550,15 +665,17 @@ with tab_settings:
 
             buses = []
             for i in range(num_buses):
-                buses.append(BusSpec(
-                    bus_id=f"bus_{i+1}",
-                    category="BEV",
-                    cap_kwh=cap_kwh,
-                    soc_init_kwh=round(cap_kwh * soc_init_ratio, 1),
-                    soc_min_kwh=round(cap_kwh * soc_min_ratio, 1),
-                    soc_max_kwh=round(cap_kwh * soc_max_ratio, 1),
-                    efficiency_km_per_kwh=efficiency,
-                ))
+                buses.append(
+                    BusSpec(
+                        bus_id=f"bus_{i + 1}",
+                        category="BEV",
+                        cap_kwh=cap_kwh,
+                        soc_init_kwh=round(cap_kwh * soc_init_ratio, 1),
+                        soc_min_kwh=round(cap_kwh * soc_min_ratio, 1),
+                        soc_max_kwh=round(cap_kwh * soc_max_ratio, 1),
+                        efficiency_km_per_kwh=efficiency,
+                    )
+                )
 
             trips = []
             for i in range(num_trips):
@@ -568,29 +685,39 @@ with tab_settings:
                 energy = round(_rng.uniform(25, 55), 1)
                 sn = depots[i % len(depots)]
                 en = depots[(i + 1) % len(depots)]
-                trips.append(TripSpec(
-                    trip_id=f"trip_{i+1}",
-                    start_t=slot_start,
-                    end_t=slot_end,
-                    energy_kwh=energy,
-                    start_node=sn,
-                    end_node=en,
-                ))
+                trips.append(
+                    TripSpec(
+                        trip_id=f"trip_{i + 1}",
+                        start_t=slot_start,
+                        end_t=slot_end,
+                        energy_kwh=energy,
+                        start_node=sn,
+                        end_node=en,
+                    )
+                )
 
             chargers = []
             for depot in depots:
                 if slow_count > 0:
-                    chargers.append(ChargerSpec(
-                        depot=depot, charger_type="slow",
-                        power_kw=slow_power, count=slow_count,
-                        efficiency=charge_eff,
-                    ))
+                    chargers.append(
+                        ChargerSpec(
+                            depot=depot,
+                            charger_type="slow",
+                            power_kw=slow_power,
+                            count=slow_count,
+                            efficiency=charge_eff,
+                        )
+                    )
                 if fast_count > 0:
-                    chargers.append(ChargerSpec(
-                        depot=depot, charger_type="fast",
-                        power_kw=fast_power, count=fast_count,
-                        efficiency=charge_eff,
-                    ))
+                    chargers.append(
+                        ChargerSpec(
+                            depot=depot,
+                            charger_type="fast",
+                            power_kw=fast_power,
+                            count=fast_count,
+                            efficiency=charge_eff,
+                        )
+                    )
 
             pv_profile = []
             for t in range(num_periods):
@@ -630,7 +757,9 @@ with tab_settings:
                 buses=buses,
                 trips=trips,
                 depots=depots,
-                charger_types=charger_type_list if charger_type_list else ["slow", "fast"],
+                charger_types=charger_type_list
+                if charger_type_list
+                else ["slow", "fast"],
                 chargers=chargers,
                 charge_efficiency=charge_eff,
                 pv_gen_kwh=pv_profile,
@@ -638,7 +767,9 @@ with tab_settings:
                 diesel_yen_per_l=diesel_price,
                 enable_pv=enable_pv,
                 enable_terminal_soc=enable_terminal_soc,
-                terminal_soc_kwh=round(cap_kwh * terminal_soc_ratio, 1) if enable_terminal_soc else None,
+                terminal_soc_kwh=round(cap_kwh * terminal_soc_ratio, 1)
+                if enable_terminal_soc
+                else None,
                 enable_demand_charge=enable_demand_charge,
                 contract_power_kw=contract_power,
             )
@@ -652,17 +783,21 @@ with tab_settings:
     # ---- 現在の設定概要 (常に表示) ----
     cfg = st.session_state.config
     if cfg is not None:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="section-header">
           <div class="section-icon">📊</div>
           <h3>現在の設定概要</h3>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         pv_status = "✅ 有効" if cfg.enable_pv else "❌ 無効"
         demand_status = "✅ 有効" if cfg.enable_demand_charge else "—"
 
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div class="metric-grid">
           <div class="metric-card">
             <div class="metric-label">🚌 バス台数</div>
@@ -684,13 +819,15 @@ with tab_settings:
             <div class="metric-value">{len(cfg.depots)}</div>
             <div class="metric-unit">拠点</div>
           </div>
-          <div class="metric-card {'accent' if cfg.enable_pv else 'warn'}">
+          <div class="metric-card {"accent" if cfg.enable_pv else "warn"}">
             <div class="metric-label">☀️ PV</div>
             <div class="metric-value" style="font-size:1.3rem">{pv_status}</div>
             <div class="metric-unit">デマンド: {demand_status}</div>
           </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         with st.expander("🔍 詳細設定を表示"):
             tab_bus, tab_trip, tab_charger, tab_energy = st.tabs(
@@ -716,8 +853,12 @@ with tab_settings:
                 trip_data = [
                     {
                         "ID": t.trip_id,
-                        "開始": labels[t.start_t] if t.start_t < len(labels) else t.start_t,
-                        "終了": labels[min(t.end_t, len(labels)-1)] if t.end_t < len(labels) else t.end_t,
+                        "開始": labels[t.start_t]
+                        if t.start_t < len(labels)
+                        else t.start_t,
+                        "終了": labels[min(t.end_t, len(labels) - 1)]
+                        if t.end_t < len(labels)
+                        else t.end_t,
                         "消費 [kWh]": t.energy_kwh,
                         "出発地": t.start_node,
                         "到着地": t.end_node,
@@ -741,11 +882,15 @@ with tab_settings:
 
             with tab_energy:
                 _labels = make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods)
-                energy_df = pd.DataFrame({
-                    "時刻": _labels[:cfg.num_periods],
-                    "PV発電 [kWh]": cfg.pv_gen_kwh[:cfg.num_periods],
-                    "電力単価 [円/kWh]": cfg.grid_price_yen_per_kwh[:cfg.num_periods],
-                })
+                energy_df = pd.DataFrame(
+                    {
+                        "時刻": _labels[: cfg.num_periods],
+                        "PV発電 [kWh]": cfg.pv_gen_kwh[: cfg.num_periods],
+                        "電力単価 [円/kWh]": cfg.grid_price_yen_per_kwh[
+                            : cfg.num_periods
+                        ],
+                    }
+                )
                 st.dataframe(energy_df, use_container_width=True)
 
         # JSON エクスポート
@@ -768,22 +913,29 @@ with solver_tab_gurobi:
     if cfg is None:
         st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
     if not is_gurobi_available():
-        st.warning("⚠️ Gurobi (gurobipy) がインストールされていません。ALNS を使用してください。")
+        st.warning(
+            "⚠️ Gurobi (gurobipy) がインストールされていません。ALNS を使用してください。"
+        )
     else:
         gcol1, gcol2, gcol3 = st.columns(3)
         with gcol1:
             stage = st.selectbox("ステージ", VALID_STAGES, index=len(VALID_STAGES) - 1)
         with gcol2:
-            time_limit = st.number_input("制限時間 [秒]", 10.0, 3600.0, 300.0, step=10.0)
+            time_limit = st.number_input(
+                "制限時間 [秒]", 10.0, 3600.0, 300.0, step=10.0
+            )
         with gcol3:
-            mip_gap = st.number_input("MIP Gap", 0.001, 0.5, 0.01, step=0.005, format="%.3f")
+            mip_gap = st.number_input(
+                "MIP Gap", 0.001, 0.5, 0.01, step=0.005, format="%.3f"
+            )
 
         verbose = st.checkbox("Gurobi ログ表示", value=False)
 
         if st.button("▶️ Gurobi で求解", type="primary"):
             with st.spinner("Gurobi で最適化中..."):
                 result = solve_gurobi(
-                    cfg, stage=stage,
+                    cfg,
+                    stage=stage,
                     time_limit_sec=time_limit,
                     mip_gap=mip_gap,
                     verbose=verbose,
@@ -791,7 +943,9 @@ with solver_tab_gurobi:
                 st.session_state.result_gurobi = result
 
             if result.status == "OPTIMAL":
-                st.success(f"✅ 最適解を取得 — 目的関数値: {result.objective_value:,.0f} 円")
+                st.success(
+                    f"✅ 最適解を取得 — 目的関数値: {result.objective_value:,.0f} 円"
+                )
             elif result.status == "INFEASIBLE":
                 st.error("❌ 実行不能 — 制約を緩和してください")
             else:
@@ -813,23 +967,31 @@ with solver_tab_gurobi:
         if res_g.grid_buy or res_g.pv_use:
             col_a, col_b = st.columns(2)
             with col_a:
-                st.plotly_chart(plot_power_balance(cfg, res_g), use_container_width=True)
+                st.plotly_chart(
+                    plot_power_balance(cfg, res_g), use_container_width=True
+                )
             with col_b:
-                st.plotly_chart(plot_cost_breakdown(cfg, res_g), use_container_width=True)
+                st.plotly_chart(
+                    plot_cost_breakdown(cfg, res_g), use_container_width=True
+                )
 
         if res_g.assignment:
             st.plotly_chart(plot_assignment_gantt(cfg, res_g), use_container_width=True)
 
         # 結果ダウンロード
-        result_json = json.dumps({
-            "solver": res_g.solver_name,
-            "status": res_g.status,
-            "objective": res_g.objective_value,
-            "assignment": res_g.assignment,
-            "grid_buy": {str(k): v for k, v in res_g.grid_buy.items()},
-            "pv_use": {str(k): v for k, v in res_g.pv_use.items()},
-            "soc_series": res_g.soc_series,
-        }, ensure_ascii=False, indent=2)
+        result_json = json.dumps(
+            {
+                "solver": res_g.solver_name,
+                "status": res_g.status,
+                "objective": res_g.objective_value,
+                "assignment": res_g.assignment,
+                "grid_buy": {str(k): v for k, v in res_g.grid_buy.items()},
+                "pv_use": {str(k): v for k, v in res_g.pv_use.items()},
+                "soc_series": res_g.soc_series,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
         st.download_button(
             "結果 JSON をダウンロード",
             data=result_json,
@@ -842,7 +1004,9 @@ with solver_tab_gurobi:
 with solver_tab_alns:
     if cfg is None:
         st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
-    st.markdown("ALNS (Adaptive Large Neighbourhood Search) — 大規模問題向けメタヒューリスティクス")
+    st.markdown(
+        "ALNS (Adaptive Large Neighbourhood Search) — 大規模問題向けメタヒューリスティクス"
+    )
 
     acol1, acol2, acol3 = st.columns(3)
     with acol1:
@@ -850,7 +1014,9 @@ with solver_tab_alns:
         alns_no_improve = st.number_input("改善なし上限", 10, 1000, 100, step=10)
     with acol2:
         alns_temp = st.number_input("初期温度", 100.0, 10000.0, 1000.0, step=100.0)
-        alns_cooling = st.number_input("冷却率", 0.90, 0.999, 0.995, step=0.001, format="%.3f")
+        alns_cooling = st.number_input(
+            "冷却率", 0.90, 0.999, 0.995, step=0.001, format="%.3f"
+        )
     with acol3:
         alns_seed = st.number_input("乱数シード", 0, 9999, 42, step=1)
         alns_destroy_max = st.slider("最大破壊率", 0.1, 0.8, 0.4, step=0.05)
@@ -878,7 +1044,9 @@ with solver_tab_alns:
         progress_bar.progress(1.0)
 
         if result_a.status == "FEASIBLE":
-            st.success(f"✅ 実行可能解を取得 — コスト: {result_a.objective_value:,.0f} 円")
+            st.success(
+                f"✅ 実行可能解を取得 — コスト: {result_a.objective_value:,.0f} 円"
+            )
         else:
             st.error(f"❌ ステータス: {result_a.status}")
 
@@ -895,38 +1063,60 @@ with solver_tab_alns:
         st.plotly_chart(plot_alns_convergence(res_a), use_container_width=True)
 
         if res_a.soc_series:
-            st.plotly_chart(plot_soc_timeseries(cfg, res_a, title="SOC 推移 (ALNS)"), use_container_width=True)
+            st.plotly_chart(
+                plot_soc_timeseries(cfg, res_a, title="SOC 推移 (ALNS)"),
+                use_container_width=True,
+            )
 
         if res_a.grid_buy or res_a.pv_use:
             col_a, col_b = st.columns(2)
             with col_a:
-                st.plotly_chart(plot_power_balance(cfg, res_a, title="電力バランス (ALNS)"), use_container_width=True)
+                st.plotly_chart(
+                    plot_power_balance(cfg, res_a, title="電力バランス (ALNS)"),
+                    use_container_width=True,
+                )
             with col_b:
-                st.plotly_chart(plot_cost_breakdown(cfg, res_a, title="買電コスト (ALNS)"), use_container_width=True)
+                st.plotly_chart(
+                    plot_cost_breakdown(cfg, res_a, title="買電コスト (ALNS)"),
+                    use_container_width=True,
+                )
 
         if res_a.assignment:
-            st.plotly_chart(plot_assignment_gantt(cfg, res_a, title="便割当 (ALNS)"), use_container_width=True)
+            st.plotly_chart(
+                plot_assignment_gantt(cfg, res_a, title="便割当 (ALNS)"),
+                use_container_width=True,
+            )
 
 
 # ---- GA タブ ----
 with solver_tab_ga:
     if cfg is None:
         st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
-    st.markdown("GA (遺伝的アルゴリズム) — 集団ベース進化的最適化。コスト・時間の比較用。")
+    st.markdown(
+        "GA (遺伝的アルゴリズム) — 集団ベース進化的最適化。コスト・時間の比較用。"
+    )
 
     gc1, gc2, gc3 = st.columns(3)
     with gc1:
         ga_pop = st.number_input("集団サイズ", 10, 200, 30, step=10, key="ga_pop")
         ga_gens = st.number_input("最大世代数", 20, 2000, 200, step=20, key="ga_gens")
     with gc2:
-        ga_cross = st.number_input("交叉率", 0.5, 1.0, 0.85, step=0.05, format="%.2f", key="ga_cross")
-        ga_mut = st.number_input("突然変異率", 0.01, 0.5, 0.15, step=0.01, format="%.2f", key="ga_mut")
+        ga_cross = st.number_input(
+            "交叉率", 0.5, 1.0, 0.85, step=0.05, format="%.2f", key="ga_cross"
+        )
+        ga_mut = st.number_input(
+            "突然変異率", 0.01, 0.5, 0.15, step=0.01, format="%.2f", key="ga_mut"
+        )
     with gc3:
-        ga_tourn = st.number_input("トーナメントサイズ", 2, 10, 3, step=1, key="ga_tourn")
+        ga_tourn = st.number_input(
+            "トーナメントサイズ", 2, 10, 3, step=1, key="ga_tourn"
+        )
         ga_elite = st.number_input("エリート数", 1, 10, 2, step=1, key="ga_elite")
         ga_seed = st.number_input("乱数シード", 0, 9999, 42, step=1, key="ga_seed")
 
-    ga_no_improve = st.number_input("改善なし上限", 10, 500, 50, step=10, key="ga_no_improve")
+    ga_no_improve = st.number_input(
+        "改善なし上限", 10, 500, 50, step=10, key="ga_no_improve"
+    )
 
     if st.button("▶️ GA で求解", type="primary"):
         ga_params = GAParams(
@@ -953,7 +1143,9 @@ with solver_tab_ga:
         progress_bar_ga.progress(1.0)
 
         if result_ga.status == "FEASIBLE":
-            st.success(f"✅ 実行可能解を取得 — コスト: {result_ga.objective_value:,.0f} 円")
+            st.success(
+                f"✅ 実行可能解を取得 — コスト: {result_ga.objective_value:,.0f} 円"
+            )
         else:
             st.error(f"❌ ステータス: {result_ga.status}")
 
@@ -967,20 +1159,34 @@ with solver_tab_ga:
         st.table(kpi_df)
 
         # 収束曲線
-        st.plotly_chart(plot_alns_convergence(res_ga, title="GA 収束曲線"), use_container_width=True)
+        st.plotly_chart(
+            plot_alns_convergence(res_ga, title="GA 収束曲線"), use_container_width=True
+        )
 
         if res_ga.soc_series:
-            st.plotly_chart(plot_soc_timeseries(cfg, res_ga, title="SOC 推移 (GA)"), use_container_width=True)
+            st.plotly_chart(
+                plot_soc_timeseries(cfg, res_ga, title="SOC 推移 (GA)"),
+                use_container_width=True,
+            )
 
         if res_ga.grid_buy or res_ga.pv_use:
             col_ga1, col_ga2 = st.columns(2)
             with col_ga1:
-                st.plotly_chart(plot_power_balance(cfg, res_ga, title="電力バランス (GA)"), use_container_width=True)
+                st.plotly_chart(
+                    plot_power_balance(cfg, res_ga, title="電力バランス (GA)"),
+                    use_container_width=True,
+                )
             with col_ga2:
-                st.plotly_chart(plot_cost_breakdown(cfg, res_ga, title="買電コスト (GA)"), use_container_width=True)
+                st.plotly_chart(
+                    plot_cost_breakdown(cfg, res_ga, title="買電コスト (GA)"),
+                    use_container_width=True,
+                )
 
         if res_ga.assignment:
-            st.plotly_chart(plot_assignment_gantt(cfg, res_ga, title="便割当 (GA)"), use_container_width=True)
+            st.plotly_chart(
+                plot_assignment_gantt(cfg, res_ga, title="便割当 (GA)"),
+                use_container_width=True,
+            )
 
 
 # ---- ABC タブ ----
@@ -991,13 +1197,21 @@ with solver_tab_abc:
 
     ac1, ac2, ac3 = st.columns(3)
     with ac1:
-        abc_colony = st.number_input("コロニーサイズ（食料源数）", 10, 200, 30, step=10, key="abc_colony")
-        abc_iters = st.number_input("最大サイクル数", 20, 2000, 200, step=20, key="abc_iters")
+        abc_colony = st.number_input(
+            "コロニーサイズ（食料源数）", 10, 200, 30, step=10, key="abc_colony"
+        )
+        abc_iters = st.number_input(
+            "最大サイクル数", 20, 2000, 200, step=20, key="abc_iters"
+        )
     with ac2:
-        abc_limit = st.number_input("limit（偵察蜂発動閾値）", 5, 100, 20, step=5, key="abc_limit")
+        abc_limit = st.number_input(
+            "limit（偵察蜂発動閾値）", 5, 100, 20, step=5, key="abc_limit"
+        )
         abc_perturb = st.slider("近傍変更便数", 1, 10, 3, key="abc_perturb")
     with ac3:
-        abc_no_improve = st.number_input("改善なし上限", 10, 500, 50, step=10, key="abc_no_improve")
+        abc_no_improve = st.number_input(
+            "改善なし上限", 10, 500, 50, step=10, key="abc_no_improve"
+        )
         abc_seed = st.number_input("乱数シード", 0, 9999, 42, step=1, key="abc_seed")
 
     if st.button("▶️ ABC で求解", type="primary"):
@@ -1023,7 +1237,9 @@ with solver_tab_abc:
         progress_bar_abc.progress(1.0)
 
         if result_abc.status == "FEASIBLE":
-            st.success(f"✅ 実行可能解を取得 — コスト: {result_abc.objective_value:,.0f} 円")
+            st.success(
+                f"✅ 実行可能解を取得 — コスト: {result_abc.objective_value:,.0f} 円"
+            )
         else:
             st.error(f"❌ ステータス: {result_abc.status}")
 
@@ -1037,30 +1253,48 @@ with solver_tab_abc:
         st.table(kpi_df)
 
         # 収束曲線
-        st.plotly_chart(plot_alns_convergence(res_abc, title="ABC 収束曲線"), use_container_width=True)
+        st.plotly_chart(
+            plot_alns_convergence(res_abc, title="ABC 収束曲線"),
+            use_container_width=True,
+        )
 
         if res_abc.soc_series:
-            st.plotly_chart(plot_soc_timeseries(cfg, res_abc, title="SOC 推移 (ABC)"), use_container_width=True)
+            st.plotly_chart(
+                plot_soc_timeseries(cfg, res_abc, title="SOC 推移 (ABC)"),
+                use_container_width=True,
+            )
 
         if res_abc.grid_buy or res_abc.pv_use:
             col_abc1, col_abc2 = st.columns(2)
             with col_abc1:
-                st.plotly_chart(plot_power_balance(cfg, res_abc, title="電力バランス (ABC)"), use_container_width=True)
+                st.plotly_chart(
+                    plot_power_balance(cfg, res_abc, title="電力バランス (ABC)"),
+                    use_container_width=True,
+                )
             with col_abc2:
-                st.plotly_chart(plot_cost_breakdown(cfg, res_abc, title="買電コスト (ABC)"), use_container_width=True)
+                st.plotly_chart(
+                    plot_cost_breakdown(cfg, res_abc, title="買電コスト (ABC)"),
+                    use_container_width=True,
+                )
 
         if res_abc.assignment:
-            st.plotly_chart(plot_assignment_gantt(cfg, res_abc, title="便割当 (ABC)"), use_container_width=True)
+            st.plotly_chart(
+                plot_assignment_gantt(cfg, res_abc, title="便割当 (ABC)"),
+                use_container_width=True,
+            )
 
 
 # ---- 新アーキテクチャ (src/) タブ ----
 with solver_tab_src:
-    st.markdown("""
+    st.markdown(
+        """
     <div class="solver-desc">
     <b>新アーキテクチャ (src/)</b> — CSV ベースのデータ読込、モード切替 (mode_A / mode_B / thesis_mode)、
     ALNS 比較実験、実行可能性診断を統合したパネルです。
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # --- セッション初期化 ---
     if "src_data" not in st.session_state:
@@ -1141,9 +1375,13 @@ with solver_tab_src:
 
         src_sc1, src_sc2 = st.columns(2)
         with src_sc1:
-            src_time_limit = st.number_input("MILP 制限時間 [秒]", 10.0, 3600.0, 120.0, step=10.0, key="src_tlim")
+            src_time_limit = st.number_input(
+                "MILP 制限時間 [秒]", 10.0, 3600.0, 120.0, step=10.0, key="src_tlim"
+            )
         with src_sc2:
-            src_alns_iters = st.number_input("ALNS 反復回数", 20, 5000, 200, step=50, key="src_alns_it")
+            src_alns_iters = st.number_input(
+                "ALNS 反復回数", 20, 5000, 200, step=50, key="src_alns_it"
+            )
 
         if st.button("▶️ 求解実行", type="primary", key="src_solve"):
             run_milp = src_solver in ("Gurobi (MILP)", "両方 (比較)")
@@ -1153,15 +1391,24 @@ with solver_tab_src:
             if run_milp:
                 with st.spinner("Gurobi (src/) で最適化中..."):
                     try:
-                        from src.model_factory import build_model_by_mode, generate_greedy_assignment
+                        from src.model_factory import (
+                            build_model_by_mode,
+                            generate_greedy_assignment,
+                        )
                         from src.milp_model import extract_result as _extract
                         from src.simulator import simulate as _simulate
                         import time as _time
 
                         if src_mode == "mode_A_journey_charge":
-                            fixed = generate_greedy_assignment(_src_data, _src_ms, _src_dp)
+                            fixed = generate_greedy_assignment(
+                                _src_data, _src_ms, _src_dp
+                            )
                             _model, _vars = build_model_by_mode(
-                                src_mode, _src_data, _src_ms, _src_dp, fixed_assignment=fixed
+                                src_mode,
+                                _src_data,
+                                _src_ms,
+                                _src_dp,
+                                fixed_assignment=fixed,
                             )
                         else:
                             _model, _vars = build_model_by_mode(
@@ -1172,14 +1419,18 @@ with solver_tab_src:
                         _t0 = _time.perf_counter()
                         _model.optimize()
                         _elapsed = _time.perf_counter() - _t0
-                        _milp_res = _extract(_model, _src_data, _src_ms, _src_dp, _vars, _elapsed)
+                        _milp_res = _extract(
+                            _model, _src_data, _src_ms, _src_dp, _vars, _elapsed
+                        )
                         st.session_state.src_milp_result = _milp_res
 
                         _sim = _simulate(_src_data, _src_ms, _src_dp, _milp_res)
                         st.session_state.src_sim_result = _sim
 
                         if _milp_res.status == "OPTIMAL":
-                            st.success(f"✅ MILP OPTIMAL — {_milp_res.objective_value:,.0f} 円 ({_elapsed:.2f}s)")
+                            st.success(
+                                f"✅ MILP OPTIMAL — {_milp_res.objective_value:,.0f} 円 ({_elapsed:.2f}s)"
+                            )
                         elif _milp_res.status == "INFEASIBLE":
                             st.error(f"❌ INFEASIBLE: {_milp_res.infeasibility_info}")
                         else:
@@ -1198,11 +1449,15 @@ with solver_tab_src:
                             max_iterations=src_alns_iters,
                             max_no_improve=max(src_alns_iters // 5, 20),
                         )
-                        _alns_res = _solve_alns(_src_data, _src_ms, _src_dp, params=_alns_params)
+                        _alns_res = _solve_alns(
+                            _src_data, _src_ms, _src_dp, params=_alns_params
+                        )
                         st.session_state.src_alns_result = _alns_res
 
                         if _alns_res.status == "FEASIBLE":
-                            st.success(f"✅ ALNS FEASIBLE — {_alns_res.objective_value:,.0f} 円 ({_alns_res.solve_time_sec:.2f}s)")
+                            st.success(
+                                f"✅ ALNS FEASIBLE — {_alns_res.objective_value:,.0f} 円 ({_alns_res.solve_time_sec:.2f}s)"
+                            )
                         else:
                             st.error(f"❌ ALNS Status: {_alns_res.status}")
                     except Exception as e:
@@ -1243,7 +1498,9 @@ with solver_tab_src:
                 st.markdown("##### 📈 シミュレーション評価")
                 sm1, sm2, sm3, sm4 = st.columns(4)
                 with sm1:
-                    st.metric("タスク担当率", f"{_sim_res.served_task_ratio*100:.1f}%")
+                    st.metric(
+                        "タスク担当率", f"{_sim_res.served_task_ratio * 100:.1f}%"
+                    )
                 with sm2:
                     st.metric("系統受電量", f"{_sim_res.total_grid_kwh:.1f} kWh")
                 with sm3:
@@ -1270,18 +1527,29 @@ with solver_tab_src:
             if _milp_res is not None and _milp_res.soc_series:
                 st.markdown("##### SOC 推移 (src/ MILP)")
                 import plotly.graph_objects as _pgo
+
                 _fig_soc = _pgo.Figure()
                 for _k, _soc in _milp_res.soc_series.items():
-                    _fig_soc.add_trace(_pgo.Scatter(
-                        x=list(range(len(_soc))),
-                        y=_soc,
-                        name=_k,
-                        mode="lines",
-                    ))
-                _veh0 = list(_src_dp.vehicle_lut.values())[0] if _src_dp.vehicle_lut else None
+                    _fig_soc.add_trace(
+                        _pgo.Scatter(
+                            x=list(range(len(_soc))),
+                            y=_soc,
+                            name=_k,
+                            mode="lines",
+                        )
+                    )
+                _veh0 = (
+                    list(_src_dp.vehicle_lut.values())[0]
+                    if _src_dp.vehicle_lut
+                    else None
+                )
                 if _veh0 and _veh0.soc_min is not None:
-                    _fig_soc.add_hline(y=_veh0.soc_min, line_dash="dash", line_color="red",
-                                       annotation_text="SOC 下限")
+                    _fig_soc.add_hline(
+                        y=_veh0.soc_min,
+                        line_dash="dash",
+                        line_color="red",
+                        annotation_text="SOC 下限",
+                    )
                 _fig_soc.update_layout(
                     title="SOC 推移 [kWh]",
                     xaxis_title="time_idx",
@@ -1295,21 +1563,25 @@ with solver_tab_src:
                 st.markdown("##### 系統受電電力 (src/ MILP)")
                 _fig_grid = _pgo.Figure()
                 for _site, _series in _milp_res.grid_import_kw.items():
-                    _fig_grid.add_trace(_pgo.Scatter(
-                        x=list(range(len(_series))),
-                        y=_series,
-                        name=f"Grid {_site}",
-                        mode="lines+markers",
-                    ))
-                if _milp_res.pv_used_kw:
-                    for _site, _series in _milp_res.pv_used_kw.items():
-                        _fig_grid.add_trace(_pgo.Scatter(
+                    _fig_grid.add_trace(
+                        _pgo.Scatter(
                             x=list(range(len(_series))),
                             y=_series,
-                            name=f"PV {_site}",
-                            fill="tozeroy",
-                            line=dict(dash="dot"),
-                        ))
+                            name=f"Grid {_site}",
+                            mode="lines+markers",
+                        )
+                    )
+                if _milp_res.pv_used_kw:
+                    for _site, _series in _milp_res.pv_used_kw.items():
+                        _fig_grid.add_trace(
+                            _pgo.Scatter(
+                                x=list(range(len(_series))),
+                                y=_series,
+                                name=f"PV {_site}",
+                                fill="tozeroy",
+                                line=dict(dash="dot"),
+                            )
+                        )
                 _fig_grid.update_layout(
                     title="受電電力 & PV 自家消費 [kW]",
                     xaxis_title="time_idx",
@@ -1326,31 +1598,44 @@ with solver_tab_src:
                     for _r in _tasks:
                         _t = _src_dp.task_lut.get(_r)
                         if _t:
-                            _gantt_data.append({
-                                "車両": _k,
-                                "タスク": _r,
-                                "開始": _t.start_time_idx,
-                                "終了": _t.end_time_idx,
-                            })
+                            _gantt_data.append(
+                                {
+                                    "車両": _k,
+                                    "タスク": _r,
+                                    "開始": _t.start_time_idx,
+                                    "終了": _t.end_time_idx,
+                                }
+                            )
                 if _gantt_data:
                     _gdf = pd.DataFrame(_gantt_data)
                     _fig_gantt = _pgo.Figure()
-                    _colors = ["#4CAF50", "#2196F3", "#FF9800", "#9C27B0", "#F44336", "#00BCD4", "#795548", "#607D8B"]
+                    _colors = [
+                        "#4CAF50",
+                        "#2196F3",
+                        "#FF9800",
+                        "#9C27B0",
+                        "#F44336",
+                        "#00BCD4",
+                        "#795548",
+                        "#607D8B",
+                    ]
                     for _i, _k in enumerate(sorted(_gdf["車両"].unique())):
                         _kdf = _gdf[_gdf["車両"] == _k]
                         for _, _row in _kdf.iterrows():
-                            _fig_gantt.add_trace(_pgo.Bar(
-                                x=[_row["終了"] - _row["開始"] + 1],
-                                y=[_k],
-                                base=_row["開始"],
-                                orientation="h",
-                                name=_row["タスク"],
-                                marker_color=_colors[_i % len(_colors)],
-                                text=_row["タスク"],
-                                textposition="inside",
-                                showlegend=False,
-                                hovertext=f"{_row['タスク']} ({_row['開始']}-{_row['終了']})",
-                            ))
+                            _fig_gantt.add_trace(
+                                _pgo.Bar(
+                                    x=[_row["終了"] - _row["開始"] + 1],
+                                    y=[_k],
+                                    base=_row["開始"],
+                                    orientation="h",
+                                    name=_row["タスク"],
+                                    marker_color=_colors[_i % len(_colors)],
+                                    text=_row["タスク"],
+                                    textposition="inside",
+                                    showlegend=False,
+                                    hovertext=f"{_row['タスク']} ({_row['開始']}-{_row['終了']})",
+                                )
+                            )
                     _fig_gantt.update_layout(
                         title="車両運行ガントチャート",
                         xaxis_title="time_idx",
@@ -1400,13 +1685,15 @@ with solver_tab_compare:
                 cost_vals.append(res.objective_value)
 
         if cost_vals:
-            fig_cost = go.Figure(go.Bar(
-                x=cost_names,
-                y=cost_vals,
-                marker_color=cost_colors[:len(cost_names)],
-                text=[f"{v:,.0f}" for v in cost_vals],
-                textposition="auto",
-            ))
+            fig_cost = go.Figure(
+                go.Bar(
+                    x=cost_names,
+                    y=cost_vals,
+                    marker_color=cost_colors[: len(cost_names)],
+                    text=[f"{v:,.0f}" for v in cost_vals],
+                    textposition="auto",
+                )
+            )
             fig_cost.update_layout(
                 title="ソルバー別 目的関数値 [円]",
                 yaxis_title="コスト [円]",
@@ -1423,13 +1710,15 @@ with solver_tab_compare:
             time_vals.append(res.solve_time_sec)
 
         if time_vals:
-            fig_time = go.Figure(go.Bar(
-                x=time_names,
-                y=time_vals,
-                marker_color=cost_colors[:len(time_names)],
-                text=[f"{v:.2f}s" for v in time_vals],
-                textposition="auto",
-            ))
+            fig_time = go.Figure(
+                go.Bar(
+                    x=time_names,
+                    y=time_vals,
+                    marker_color=cost_colors[: len(time_names)],
+                    text=[f"{v:.2f}s" for v in time_vals],
+                    textposition="auto",
+                )
+            )
             fig_time.update_layout(
                 title="ソルバー別 計算時間 [秒]",
                 yaxis_title="時間 [秒]",
@@ -1446,16 +1735,18 @@ with solver_tab_compare:
             for i, (name, res) in enumerate(meta_results.items()):
                 iters = [e["iteration"] for e in res.iteration_log]
                 bests = [e.get("best_cost") for e in res.iteration_log]
-                fig_conv.add_trace(go.Scatter(
-                    x=iters,
-                    y=bests,
-                    mode="lines",
-                    name=name,
-                    line=dict(
-                        color=cost_colors[i % len(cost_colors)],
-                        dash=line_styles[i % len(line_styles)],
-                    ),
-                ))
+                fig_conv.add_trace(
+                    go.Scatter(
+                        x=iters,
+                        y=bests,
+                        mode="lines",
+                        name=name,
+                        line=dict(
+                            color=cost_colors[i % len(cost_colors)],
+                            dash=line_styles[i % len(line_styles)],
+                        ),
+                    )
+                )
             fig_conv.update_layout(
                 title="収束曲線比較 (最良コスト)",
                 xaxis_title="反復 / 世代 / サイクル",
@@ -1469,20 +1760,26 @@ with solver_tab_compare:
         results_with_soc = {k: v for k, v in available.items() if v.soc_series}
         if len(results_with_soc) >= 2:
             st.markdown("#### SOC 推移比較")
-            labels = make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods) if cfg else []
+            labels = (
+                make_time_labels(cfg.start_time, cfg.delta_h, cfg.num_periods)
+                if cfg
+                else []
+            )
             labels_ext = (labels + ["END"]) if labels else []
 
             fig_soc = go.Figure()
             dash_styles = ["solid", "dash", "dot", "dashdot"]
             for s_idx, (s_name, s_res) in enumerate(results_with_soc.items()):
                 for bus_id in s_res.soc_series:
-                    fig_soc.add_trace(go.Scatter(
-                        x=labels_ext[:len(s_res.soc_series[bus_id])],
-                        y=s_res.soc_series[bus_id],
-                        name=f"{bus_id} ({s_name})",
-                        mode="lines",
-                        line=dict(dash=dash_styles[s_idx % len(dash_styles)]),
-                    ))
+                    fig_soc.add_trace(
+                        go.Scatter(
+                            x=labels_ext[: len(s_res.soc_series[bus_id])],
+                            y=s_res.soc_series[bus_id],
+                            name=f"{bus_id} ({s_name})",
+                            mode="lines",
+                            line=dict(dash=dash_styles[s_idx % len(dash_styles)]),
+                        )
+                    )
             fig_soc.update_layout(
                 title="SOC 推移比較: 全ソルバー",
                 xaxis_title="時刻",
@@ -1496,12 +1793,15 @@ with solver_tab_compare:
 # 🎯 MILP 専用タブ (mode_milp_only)
 # ===========================================================================
 with solver_tab_milp_only:
-    st.markdown("""
+    st.markdown(
+        """
     <div class="section-header">
       <div class="section-icon">🎯</div>
       <h3>MILP 専用モード — mode_milp_only</h3>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
     st.caption(
         "src/ パイプラインの MILP 専用モード。data/ の CSV・JSON を直接読み込み、"
         "Gurobi で厳密最適化を実行します。"
@@ -1510,24 +1810,29 @@ with solver_tab_milp_only:
     milp_only_col1, milp_only_col2 = st.columns(2)
     with milp_only_col1:
         milp_config_path = st.text_input(
-            "設定ファイル", "config/experiment_config.json",
-            key="milp_only_config")
+            "設定ファイル", "config/experiment_config.json", key="milp_only_config"
+        )
         milp_time_limit = st.number_input(
-            "制限時間 [秒]", 10.0, 3600.0, 300.0, step=10.0,
-            key="milp_only_timelimit")
+            "制限時間 [秒]", 10.0, 3600.0, 300.0, step=10.0, key="milp_only_timelimit"
+        )
     with milp_only_col2:
         milp_mip_gap = st.number_input(
-            "MIP Gap", 0.001, 0.1, 0.01, step=0.005,
-            key="milp_only_gap")
+            "MIP Gap", 0.001, 0.1, 0.01, step=0.005, key="milp_only_gap"
+        )
         milp_flag_overrides_str = st.text_area(
-            "Flag Overrides (JSON)", '{}',
-            key="milp_only_flags", height=100)
+            "Flag Overrides (JSON)", "{}", key="milp_only_flags", height=100
+        )
 
     if st.button("🎯 MILP 専用モードで求解", key="btn_milp_only", type="primary"):
         with st.spinner("MILP を求解中..."):
             try:
                 import json as _json
-                overrides = _json.loads(milp_flag_overrides_str) if milp_flag_overrides_str.strip() else None
+
+                overrides = (
+                    _json.loads(milp_flag_overrides_str)
+                    if milp_flag_overrides_str.strip()
+                    else None
+                )
                 # 一時的に config を上書き
                 _cfg_path = Path(milp_config_path)
                 with open(_cfg_path, encoding="utf-8") as f:
@@ -1538,11 +1843,15 @@ with solver_tab_milp_only:
                     _cfg["milp_flag_overrides"] = overrides
 
                 import tempfile, os
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", delete=False, encoding="utf-8"
+                ) as tmp:
                     json.dump(_cfg, tmp, ensure_ascii=False, indent=2)
                     tmp_path = tmp.name
 
                 from src.pipeline.solve import solve as src_solve
+
                 result = src_solve(tmp_path, mode="mode_milp_only")
                 os.unlink(tmp_path)
 
@@ -1556,6 +1865,7 @@ with solver_tab_milp_only:
             except Exception as e:
                 st.error(f"エラー: {e}")
                 import traceback
+
                 st.code(traceback.format_exc())
 
 
@@ -1563,12 +1873,15 @@ with solver_tab_milp_only:
 # 🔄 ALNS 専用タブ (mode_alns_only)
 # ===========================================================================
 with solver_tab_alns_only:
-    st.markdown("""
+    st.markdown(
+        """
     <div class="section-header">
       <div class="section-icon">🔄</div>
       <h3>ALNS 専用モード — mode_alns_only</h3>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
     st.caption(
         "ALNS (Adaptive Large Neighbourhood Search) のみで便割当 + 簡易充電を求解します。"
     )
@@ -1576,24 +1889,28 @@ with solver_tab_alns_only:
     alns_only_col1, alns_only_col2 = st.columns(2)
     with alns_only_col1:
         alns_only_config = st.text_input(
-            "設定ファイル", "config/experiment_config.json",
-            key="alns_only_config")
+            "設定ファイル", "config/experiment_config.json", key="alns_only_config"
+        )
         alns_only_iters = st.number_input(
-            "最大反復数", 50, 5000, 500, step=50,
-            key="alns_only_iters")
+            "最大反復数", 50, 5000, 500, step=50, key="alns_only_iters"
+        )
         alns_only_no_improve = st.number_input(
-            "改善停止反復数", 10, 1000, 100, step=10,
-            key="alns_only_no_improve")
+            "改善停止反復数", 10, 1000, 100, step=10, key="alns_only_no_improve"
+        )
     with alns_only_col2:
         alns_only_temp = st.number_input(
-            "初期温度", 100.0, 10000.0, 1000.0, step=100.0,
-            key="alns_only_temp")
+            "初期温度", 100.0, 10000.0, 1000.0, step=100.0, key="alns_only_temp"
+        )
         alns_only_cooling = st.number_input(
-            "冷却率", 0.900, 0.999, 0.995, step=0.001, format="%.3f",
-            key="alns_only_cooling")
-        alns_only_seed = st.number_input(
-            "乱数シード", 0, 999, 42,
-            key="alns_only_seed")
+            "冷却率",
+            0.900,
+            0.999,
+            0.995,
+            step=0.001,
+            format="%.3f",
+            key="alns_only_cooling",
+        )
+        alns_only_seed = st.number_input("乱数シード", 0, 999, 42, key="alns_only_seed")
 
     if st.button("🔄 ALNS 専用モードで求解", key="btn_alns_only", type="primary"):
         with st.spinner("ALNS を求解中..."):
@@ -1610,11 +1927,15 @@ with solver_tab_alns_only:
                 }
 
                 import tempfile, os
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", delete=False, encoding="utf-8"
+                ) as tmp:
                     json.dump(_cfg, tmp, ensure_ascii=False, indent=2)
                     tmp_path = tmp.name
 
                 from src.pipeline.solve import solve as src_solve
+
                 result = src_solve(tmp_path, mode="mode_alns_only")
                 os.unlink(tmp_path)
 
@@ -1626,6 +1947,7 @@ with solver_tab_alns_only:
             except Exception as e:
                 st.error(f"エラー: {e}")
                 import traceback
+
                 st.code(traceback.format_exc())
 
 
@@ -1633,12 +1955,15 @@ with solver_tab_alns_only:
 # ⚡ ALNS+MILP ハイブリッドタブ (mode_alns_milp)
 # ===========================================================================
 with solver_tab_alns_milp:
-    st.markdown("""
+    st.markdown(
+        """
     <div class="section-header">
       <div class="section-icon">⚡</div>
       <h3>ALNS+MILP ハイブリッド — mode_alns_milp</h3>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
     st.caption(
         "Phase 1: ALNS で便割当を高速探索 → Phase 2: MILP で充電/SOC/電力料金を厳密最適化。"
         " 大規模問題でも MILP 品質の充電スケジュールが得られます。"
@@ -1647,24 +1972,35 @@ with solver_tab_alns_milp:
     hybrid_col1, hybrid_col2 = st.columns(2)
     with hybrid_col1:
         hybrid_config = st.text_input(
-            "設定ファイル", "config/experiment_config.json",
-            key="hybrid_config")
+            "設定ファイル", "config/experiment_config.json", key="hybrid_config"
+        )
         hybrid_alns_iters = st.number_input(
-            "ALNS 最大反復数", 50, 5000, 500, step=50,
-            key="hybrid_alns_iters")
+            "ALNS 最大反復数", 50, 5000, 500, step=50, key="hybrid_alns_iters"
+        )
         hybrid_milp_timelimit = st.number_input(
-            "MILP 制限時間 [秒]", 10.0, 3600.0, 300.0, step=10.0,
-            key="hybrid_milp_timelimit")
+            "MILP 制限時間 [秒]",
+            10.0,
+            3600.0,
+            300.0,
+            step=10.0,
+            key="hybrid_milp_timelimit",
+        )
     with hybrid_col2:
         hybrid_alns_temp = st.number_input(
-            "ALNS 初期温度", 100.0, 10000.0, 1000.0, step=100.0,
-            key="hybrid_alns_temp")
+            "ALNS 初期温度", 100.0, 10000.0, 1000.0, step=100.0, key="hybrid_alns_temp"
+        )
         hybrid_cooling = st.number_input(
-            "冷却率", 0.900, 0.999, 0.995, step=0.001, format="%.3f",
-            key="hybrid_cooling")
+            "冷却率",
+            0.900,
+            0.999,
+            0.995,
+            step=0.001,
+            format="%.3f",
+            key="hybrid_cooling",
+        )
         hybrid_mip_gap = st.number_input(
-            "MILP MIP Gap", 0.001, 0.1, 0.01, step=0.005,
-            key="hybrid_mip_gap")
+            "MILP MIP Gap", 0.001, 0.1, 0.01, step=0.005, key="hybrid_mip_gap"
+        )
 
     if st.button("⚡ ALNS+MILP で求解", key="btn_alns_milp", type="primary"):
         with st.spinner("ALNS フェーズ → MILP フェーズ 実行中..."):
@@ -1683,11 +2019,15 @@ with solver_tab_alns_milp:
                 _cfg["mip_gap"] = hybrid_mip_gap
 
                 import tempfile, os
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", delete=False, encoding="utf-8"
+                ) as tmp:
                     json.dump(_cfg, tmp, ensure_ascii=False, indent=2)
                     tmp_path = tmp.name
 
                 from src.pipeline.solve import solve as src_solve
+
                 result = src_solve(tmp_path, mode="mode_alns_milp")
                 os.unlink(tmp_path)
 
@@ -1700,6 +2040,7 @@ with solver_tab_alns_milp:
             except Exception as e:
                 st.error(f"エラー: {e}")
                 import traceback
+
                 st.code(traceback.format_exc())
 
 
@@ -1707,15 +2048,52 @@ with solver_tab_alns_milp:
 # 🗺️ 地図エディタタブ
 # ===========================================================================
 with tab_map:
-    st.markdown("""
+    st.markdown(
+        """
     <div class="section-header">
-      <div class="section-icon">�️</div>
+      <div class="section-icon">🗺️</div>
       <h3>路線詳細エディタ</h3>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     try:
         from app.route_detail_editor import render_route_detail_editor
+
+        render_route_detail_editor(data_dir="data")
+    except Exception as e:
+        st.error(
+            f"路線エディタの読み込みに失敗しました: {e}\n\n"
+            "地図モードを使う場合は以下をインストールしてください:\n"
+            "```\npip install folium streamlit-folium\n```"
+        )
+
+with tab_route_profile:
+    try:
+        from app.route_profile_editor import render_route_profile_editor
+
+        render_route_profile_editor(data_dir="data")
+    except Exception as e:
+        st.error(
+            f"路線管理エディタの読み込みに失敗しました: {e}\n\n"
+            "地図モードを使う場合は以下をインストールしてください:\n"
+            "```\npip install folium streamlit-folium\n```"
+        )
+
+with tab_depot_profile:
+    try:
+        from app.depot_profile_editor import render_depot_profile_editor
+
+        render_depot_profile_editor(data_dir="data")
+    except Exception as e:
+        st.error(
+            f"営業所管理エディタの読み込みに失敗しました: {e}\n\nエラー詳細: {{e}}"
+        )
+
+    try:
+        from app.route_detail_editor import render_route_detail_editor
+
         render_route_detail_editor(data_dir="data")
     except Exception as e:
         st.error(
@@ -1728,9 +2106,12 @@ with tab_map:
 # ---------------------------------------------------------------------------
 # フッター
 # ---------------------------------------------------------------------------
-st.markdown("""
+st.markdown(
+    """
 <div class="ebus-footer">
   <span>🚌 <b>E-Bus Sim v0.4.0 — Route-Editable + Multi-Solver</b> — PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 試作アプリ</span>
   <span>Gurobi (MILP) &nbsp;•&nbsp; ALNS &nbsp;•&nbsp; GA &nbsp;•&nbsp; ABC &nbsp;•&nbsp; ALNS+MILP</span>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
