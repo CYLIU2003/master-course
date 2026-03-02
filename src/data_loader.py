@@ -5,6 +5,7 @@ data_loader.py — CSV / JSON 入力読込 → ProblemData 変換
   - CSV / JSON を読み込み、data_schema の内部データクラスへ変換する
   - 欠損・型・単位整合を検証する
 """
+
 from __future__ import annotations
 
 import json
@@ -14,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 try:
     import pandas as pd
+
     _PD_AVAILABLE = True
 except ImportError:
     _PD_AVAILABLE = False
@@ -35,6 +37,7 @@ from .data_schema import (
 # ---------------------------------------------------------------------------
 # ヘルパー
 # ---------------------------------------------------------------------------
+
 
 def _na(val: Any) -> Optional[float]:
     """空文字・NaN → None、それ以外は float に変換"""
@@ -73,6 +76,7 @@ def _read_csv(path: Path) -> List[Dict[str, str]]:
 # ---------------------------------------------------------------------------
 # 個別ローダー
 # ---------------------------------------------------------------------------
+
 
 def load_vehicles(path: Path) -> List[Vehicle]:
     rows = _read_csv(path)
@@ -147,7 +151,9 @@ def load_sites(path: Path) -> List[Site]:
             site_type=r["site_type"],
             grid_import_limit_kw=float(r.get("grid_import_limit_kw") or 9999.0),
             contract_demand_limit_kw=float(r.get("contract_demand_limit_kw") or 9999.0),
-            site_transformer_limit_kw=float(r.get("site_transformer_limit_kw") or 9999.0),
+            site_transformer_limit_kw=float(
+                r.get("site_transformer_limit_kw") or 9999.0
+            ),
         )
         sites.append(s)
     return sites
@@ -222,6 +228,7 @@ def load_vehicle_charger_compat(path: Path) -> List[VehicleChargerCompat]:
 # config.json ローダー
 # ---------------------------------------------------------------------------
 
+
 def load_config(path: Path) -> Dict[str, Any]:
     with open(path, encoding="utf-8") as f:
         return json.load(f)
@@ -231,6 +238,26 @@ def load_config(path: Path) -> Dict[str, Any]:
 # メインエントリポイント: config.json から全データを読込
 # ---------------------------------------------------------------------------
 
+
+def _find_project_root(config_path: Path) -> Path:
+    """
+    config_path の上位を辿って project root を探す。
+
+    src/ ディレクトリ または .git/ がある最初の親を返す。
+    見つからない場合は config の 2 つ上を返す（後方互換）。
+
+    これにより config/experiment_config.json も config/cases/*.json も
+    同じ project root を指せる。
+    """
+    p = config_path.resolve().parent
+    for _ in range(6):
+        if (p / "src").is_dir() or (p / ".git").is_dir():
+            return p
+        p = p.parent
+    # フォールバック: 2 つ上 (旧来の挙動)
+    return config_path.resolve().parent.parent
+
+
 def load_problem_data(config_path: str | Path) -> ProblemData:
     """
     config.json を起点に全 CSV を読み込んで ProblemData を返す。
@@ -238,7 +265,7 @@ def load_problem_data(config_path: str | Path) -> ProblemData:
     Parameters
     ----------
     config_path : str | Path
-        config/experiment_config.json へのパス
+        config/experiment_config.json または config/cases/*.json へのパス
 
     Returns
     -------
@@ -246,7 +273,9 @@ def load_problem_data(config_path: str | Path) -> ProblemData:
         MILP / シミュレータへの統一入力
     """
     cfg = load_config(Path(config_path))
-    root = Path(config_path).parent.parent  # project root
+    root = _find_project_root(
+        Path(config_path)
+    )  # project root (src/ or .git/ がある階層)
 
     paths = cfg.get("paths", {})
 
@@ -278,11 +307,15 @@ def load_problem_data(config_path: str | Path) -> ProblemData:
 
     vehicle_task_compat: List[VehicleTaskCompat] = []
     if abs_path("compat_vehicle_task_csv"):
-        vehicle_task_compat = load_vehicle_task_compat(abs_path("compat_vehicle_task_csv"))
+        vehicle_task_compat = load_vehicle_task_compat(
+            abs_path("compat_vehicle_task_csv")
+        )
 
     vehicle_charger_compat: List[VehicleChargerCompat] = []
     if abs_path("compat_vehicle_charger_csv"):
-        vehicle_charger_compat = load_vehicle_charger_compat(abs_path("compat_vehicle_charger_csv"))
+        vehicle_charger_compat = load_vehicle_charger_compat(
+            abs_path("compat_vehicle_charger_csv")
+        )
 
     # --- パラメータ ---
     weights = cfg.get("objective_weights", {})
@@ -310,7 +343,10 @@ def load_problem_data(config_path: str | Path) -> ProblemData:
         enable_battery_degradation=bool(cfg.get("enable_battery_degradation", False)),
         enable_demand_charge=bool(cfg.get("enable_demand_charge", False)),
         use_soft_soc_constraint=bool(cfg.get("use_soft_soc_constraint", False)),
-        objective_weights={**ProblemData.__dataclass_fields__["objective_weights"].default_factory(), **weights},
+        objective_weights={
+            **ProblemData.__dataclass_fields__["objective_weights"].default_factory(),
+            **weights,
+        },
         BIG_M_ASSIGN=float(big_m.get("BIG_M_ASSIGN", 1e6)),
         BIG_M_CHARGE=float(big_m.get("BIG_M_CHARGE", 1e6)),
         BIG_M_SOC=float(big_m.get("BIG_M_SOC", 1e6)),

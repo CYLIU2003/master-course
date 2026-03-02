@@ -1,0 +1,3 @@
+site_id,site_type,grid_import_limit_kw,contract_demand_limit_kw,site_transformer_limit_kw
+depot,depot,100.0,100.0,100.0
+stop_A,terminal,9999.0,9999.0,9999.0

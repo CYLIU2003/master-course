@@ -1,0 +1,16 @@
+{
+  "case_name": "mode_A_case01",
+  "run_mode": "mode_A_journey_charge",
+  "status": "OPTIMAL",
+  "timestamp": "2026-03-02T17:48:48",
+  "objective_value": 20172.315789473683,
+  "total_energy_cost": 5172.32,
+  "total_demand_charge": 0.0,
+  "total_fuel_cost": 0.0,
+  "vehicle_fixed_cost": 15000.0,
+  "unmet_trips": 0,
+  "soc_min_margin_kwh": 65.0,
+  "charger_utilization": 0.4688,
+  "peak_grid_power_kw": 55.0,
+  "solve_time_sec": 0.039
+}

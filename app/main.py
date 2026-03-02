@@ -377,6 +377,10 @@ if "result_ga" not in st.session_state:
     st.session_state.result_ga = None
 if "result_abc" not in st.session_state:
     st.session_state.result_abc = None
+if "research_pipeline_result" not in st.session_state:
+    st.session_state.research_pipeline_result = None
+if "research_pipeline_data" not in st.session_state:
+    st.session_state.research_pipeline_data = None
 
 
 # ---------------------------------------------------------------------------
@@ -452,6 +456,7 @@ st.markdown(
     tab_settings,
     tab_solvers,
     tab_compare,
+    tab_research,
     tab_map,
     tab_route_depot,
 ) = st.tabs(
@@ -459,6 +464,7 @@ st.markdown(
         "⚙️ 設定",
         "🔬 ソルバー",
         "📊 比較・専用",
+        "📡 研究ダッシュボード",
         "🗺️ 路線詳細",
         "🚌 路線・営業所管理",
     ]
@@ -933,7 +939,7 @@ cfg = st.session_state.config
 with solver_tab_gurobi:
     if cfg is None:
         st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
-    if not is_gurobi_available():
+    elif not is_gurobi_available():
         st.warning(
             "⚠️ Gurobi (gurobipy) がインストールされていません。ALNS を使用してください。"
         )
@@ -1025,284 +1031,294 @@ with solver_tab_gurobi:
 with solver_tab_alns:
     if cfg is None:
         st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
-    st.markdown(
-        "ALNS (Adaptive Large Neighbourhood Search) — 大規模問題向けメタヒューリスティクス"
-    )
-
-    acol1, acol2, acol3 = st.columns(3)
-    with acol1:
-        alns_iters = st.number_input("最大反復回数", 50, 5000, 500, step=50)
-        alns_no_improve = st.number_input("改善なし上限", 10, 1000, 100, step=10)
-    with acol2:
-        alns_temp = st.number_input("初期温度", 100.0, 10000.0, 1000.0, step=100.0)
-        alns_cooling = st.number_input(
-            "冷却率", 0.90, 0.999, 0.995, step=0.001, format="%.3f"
-        )
-    with acol3:
-        alns_seed = st.number_input("乱数シード", 0, 9999, 42, step=1)
-        alns_destroy_max = st.slider("最大破壊率", 0.1, 0.8, 0.4, step=0.05)
-
-    if st.button("▶️ ALNS で求解", type="primary"):
-        params = ALNSParams(
-            max_iterations=alns_iters,
-            max_no_improve=alns_no_improve,
-            init_temp=alns_temp,
-            cooling_rate=alns_cooling,
-            seed=alns_seed,
-            destroy_ratio_max=alns_destroy_max,
+    else:
+        st.markdown(
+            "ALNS (Adaptive Large Neighbourhood Search) — 大規模問題向けメタヒューリスティクス"
         )
 
-        progress_bar = st.progress(0.0)
-        status_text = st.empty()
-
-        def alns_callback(it: int, cur: float, best: float):
-            progress_bar.progress(min(it / alns_iters, 1.0))
-            cost_str = f"{best:,.0f}" if best < float("inf") else "N/A"
-            status_text.text(f"反復 {it}/{alns_iters} | 最良: {cost_str} 円")
-
-        result_a = solve_alns(cfg, params=params, callback=alns_callback)
-        st.session_state.result_alns = result_a
-        progress_bar.progress(1.0)
-
-        if result_a.status == "FEASIBLE":
-            st.success(
-                f"✅ 実行可能解を取得 — コスト: {result_a.objective_value:,.0f} 円"
+        acol1, acol2, acol3 = st.columns(3)
+        with acol1:
+            alns_iters = st.number_input("最大反復回数", 50, 5000, 500, step=50)
+            alns_no_improve = st.number_input("改善なし上限", 10, 1000, 100, step=10)
+        with acol2:
+            alns_temp = st.number_input("初期温度", 100.0, 10000.0, 1000.0, step=100.0)
+            alns_cooling = st.number_input(
+                "冷却率", 0.90, 0.999, 0.995, step=0.001, format="%.3f"
             )
-        else:
-            st.error(f"❌ ステータス: {result_a.status}")
+        with acol3:
+            alns_seed = st.number_input("乱数シード", 0, 9999, 42, step=1)
+            alns_destroy_max = st.slider("最大破壊率", 0.1, 0.8, 0.4, step=0.05)
 
-    res_a = st.session_state.result_alns
-    if res_a is not None and res_a.status != "INFEASIBLE":
-        st.markdown("#### 📊 ALNS 結果")
-
-        kpi = make_kpi_table(res_a)
-        kpi_df = pd.DataFrame([kpi]).T
-        kpi_df.columns = ["値"]
-        st.table(kpi_df)
-
-        # 収束曲線
-        st.plotly_chart(plot_alns_convergence(res_a), use_container_width=True)
-
-        if res_a.soc_series:
-            st.plotly_chart(
-                plot_soc_timeseries(cfg, res_a, title="SOC 推移 (ALNS)"),
-                use_container_width=True,
+        if st.button("▶️ ALNS で求解", type="primary"):
+            params = ALNSParams(
+                max_iterations=alns_iters,
+                max_no_improve=alns_no_improve,
+                init_temp=alns_temp,
+                cooling_rate=alns_cooling,
+                seed=alns_seed,
+                destroy_ratio_max=alns_destroy_max,
             )
 
-        if res_a.grid_buy or res_a.pv_use:
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.plotly_chart(
-                    plot_power_balance(cfg, res_a, title="電力バランス (ALNS)"),
-                    use_container_width=True,
+            progress_bar = st.progress(0.0)
+            status_text = st.empty()
+
+            def alns_callback(it: int, cur: float, best: float):
+                progress_bar.progress(min(it / alns_iters, 1.0))
+                cost_str = f"{best:,.0f}" if best < float("inf") else "N/A"
+                status_text.text(f"反復 {it}/{alns_iters} | 最良: {cost_str} 円")
+
+            result_a = solve_alns(cfg, params=params, callback=alns_callback)
+            st.session_state.result_alns = result_a
+            progress_bar.progress(1.0)
+
+            if result_a.status == "FEASIBLE":
+                st.success(
+                    f"✅ 実行可能解を取得 — コスト: {result_a.objective_value:,.0f} 円"
                 )
-            with col_b:
+            else:
+                st.error(f"❌ ステータス: {result_a.status}")
+
+        res_a = st.session_state.result_alns
+        if res_a is not None and res_a.status != "INFEASIBLE":
+            st.markdown("#### 📊 ALNS 結果")
+
+            kpi = make_kpi_table(res_a)
+            kpi_df = pd.DataFrame([kpi]).T
+            kpi_df.columns = ["値"]
+            st.table(kpi_df)
+
+            # 収束曲線
+            st.plotly_chart(plot_alns_convergence(res_a), use_container_width=True)
+
+            if res_a.soc_series:
                 st.plotly_chart(
-                    plot_cost_breakdown(cfg, res_a, title="買電コスト (ALNS)"),
+                    plot_soc_timeseries(cfg, res_a, title="SOC 推移 (ALNS)"),
                     use_container_width=True,
                 )
 
-        if res_a.assignment:
-            st.plotly_chart(
-                plot_assignment_gantt(cfg, res_a, title="便割当 (ALNS)"),
-                use_container_width=True,
-            )
+            if res_a.grid_buy or res_a.pv_use:
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.plotly_chart(
+                        plot_power_balance(cfg, res_a, title="電力バランス (ALNS)"),
+                        use_container_width=True,
+                    )
+                with col_b:
+                    st.plotly_chart(
+                        plot_cost_breakdown(cfg, res_a, title="買電コスト (ALNS)"),
+                        use_container_width=True,
+                    )
+
+            if res_a.assignment:
+                st.plotly_chart(
+                    plot_assignment_gantt(cfg, res_a, title="便割当 (ALNS)"),
+                    use_container_width=True,
+                )
 
 
 # ---- GA タブ ----
 with solver_tab_ga:
     if cfg is None:
         st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
-    st.markdown(
-        "GA (遺伝的アルゴリズム) — 集団ベース進化的最適化。コスト・時間の比較用。"
-    )
-
-    gc1, gc2, gc3 = st.columns(3)
-    with gc1:
-        ga_pop = st.number_input("集団サイズ", 10, 200, 30, step=10, key="ga_pop")
-        ga_gens = st.number_input("最大世代数", 20, 2000, 200, step=20, key="ga_gens")
-    with gc2:
-        ga_cross = st.number_input(
-            "交叉率", 0.5, 1.0, 0.85, step=0.05, format="%.2f", key="ga_cross"
-        )
-        ga_mut = st.number_input(
-            "突然変異率", 0.01, 0.5, 0.15, step=0.01, format="%.2f", key="ga_mut"
-        )
-    with gc3:
-        ga_tourn = st.number_input(
-            "トーナメントサイズ", 2, 10, 3, step=1, key="ga_tourn"
-        )
-        ga_elite = st.number_input("エリート数", 1, 10, 2, step=1, key="ga_elite")
-        ga_seed = st.number_input("乱数シード", 0, 9999, 42, step=1, key="ga_seed")
-
-    ga_no_improve = st.number_input(
-        "改善なし上限", 10, 500, 50, step=10, key="ga_no_improve"
-    )
-
-    if st.button("▶️ GA で求解", type="primary"):
-        ga_params = GAParams(
-            population_size=ga_pop,
-            max_generations=ga_gens,
-            max_no_improve=ga_no_improve,
-            crossover_rate=ga_cross,
-            mutation_rate=ga_mut,
-            tournament_size=ga_tourn,
-            elitism_count=ga_elite,
-            seed=ga_seed,
+    else:
+        st.markdown(
+            "GA (遺伝的アルゴリズム) — 集団ベース進化的最適化。コスト・時間の比較用。"
         )
 
-        progress_bar_ga = st.progress(0.0)
-        status_text_ga = st.empty()
-
-        def ga_callback(gen: int, cur: float, best: float):
-            progress_bar_ga.progress(min(gen / ga_gens, 1.0))
-            cost_str = f"{best:,.0f}" if best < float("inf") else "N/A"
-            status_text_ga.text(f"世代 {gen}/{ga_gens} | 最良: {cost_str} 円")
-
-        result_ga = solve_ga(cfg, params=ga_params, callback=ga_callback)
-        st.session_state.result_ga = result_ga
-        progress_bar_ga.progress(1.0)
-
-        if result_ga.status == "FEASIBLE":
-            st.success(
-                f"✅ 実行可能解を取得 — コスト: {result_ga.objective_value:,.0f} 円"
+        gc1, gc2, gc3 = st.columns(3)
+        with gc1:
+            ga_pop = st.number_input("集団サイズ", 10, 200, 30, step=10, key="ga_pop")
+            ga_gens = st.number_input(
+                "最大世代数", 20, 2000, 200, step=20, key="ga_gens"
             )
-        else:
-            st.error(f"❌ ステータス: {result_ga.status}")
+        with gc2:
+            ga_cross = st.number_input(
+                "交叉率", 0.5, 1.0, 0.85, step=0.05, format="%.2f", key="ga_cross"
+            )
+            ga_mut = st.number_input(
+                "突然変異率", 0.01, 0.5, 0.15, step=0.01, format="%.2f", key="ga_mut"
+            )
+        with gc3:
+            ga_tourn = st.number_input(
+                "トーナメントサイズ", 2, 10, 3, step=1, key="ga_tourn"
+            )
+            ga_elite = st.number_input("エリート数", 1, 10, 2, step=1, key="ga_elite")
+            ga_seed = st.number_input("乱数シード", 0, 9999, 42, step=1, key="ga_seed")
 
-    res_ga = st.session_state.result_ga
-    if res_ga is not None and res_ga.status != "INFEASIBLE":
-        st.markdown("#### 📊 GA 結果")
-
-        kpi = make_kpi_table(res_ga)
-        kpi_df = pd.DataFrame([kpi]).T
-        kpi_df.columns = ["値"]
-        st.table(kpi_df)
-
-        # 収束曲線
-        st.plotly_chart(
-            plot_alns_convergence(res_ga, title="GA 収束曲線"), use_container_width=True
+        ga_no_improve = st.number_input(
+            "改善なし上限", 10, 500, 50, step=10, key="ga_no_improve"
         )
 
-        if res_ga.soc_series:
+        if st.button("▶️ GA で求解", type="primary"):
+            ga_params = GAParams(
+                population_size=ga_pop,
+                max_generations=ga_gens,
+                max_no_improve=ga_no_improve,
+                crossover_rate=ga_cross,
+                mutation_rate=ga_mut,
+                tournament_size=ga_tourn,
+                elitism_count=ga_elite,
+                seed=ga_seed,
+            )
+
+            progress_bar_ga = st.progress(0.0)
+            status_text_ga = st.empty()
+
+            def ga_callback(gen: int, cur: float, best: float):
+                progress_bar_ga.progress(min(gen / ga_gens, 1.0))
+                cost_str = f"{best:,.0f}" if best < float("inf") else "N/A"
+                status_text_ga.text(f"世代 {gen}/{ga_gens} | 最良: {cost_str} 円")
+
+            result_ga = solve_ga(cfg, params=ga_params, callback=ga_callback)
+            st.session_state.result_ga = result_ga
+            progress_bar_ga.progress(1.0)
+
+            if result_ga.status == "FEASIBLE":
+                st.success(
+                    f"✅ 実行可能解を取得 — コスト: {result_ga.objective_value:,.0f} 円"
+                )
+            else:
+                st.error(f"❌ ステータス: {result_ga.status}")
+
+        res_ga = st.session_state.result_ga
+        if res_ga is not None and res_ga.status != "INFEASIBLE":
+            st.markdown("#### 📊 GA 結果")
+
+            kpi = make_kpi_table(res_ga)
+            kpi_df = pd.DataFrame([kpi]).T
+            kpi_df.columns = ["値"]
+            st.table(kpi_df)
+
+            # 収束曲線
             st.plotly_chart(
-                plot_soc_timeseries(cfg, res_ga, title="SOC 推移 (GA)"),
+                plot_alns_convergence(res_ga, title="GA 収束曲線"),
                 use_container_width=True,
             )
 
-        if res_ga.grid_buy or res_ga.pv_use:
-            col_ga1, col_ga2 = st.columns(2)
-            with col_ga1:
+            if res_ga.soc_series:
                 st.plotly_chart(
-                    plot_power_balance(cfg, res_ga, title="電力バランス (GA)"),
-                    use_container_width=True,
-                )
-            with col_ga2:
-                st.plotly_chart(
-                    plot_cost_breakdown(cfg, res_ga, title="買電コスト (GA)"),
+                    plot_soc_timeseries(cfg, res_ga, title="SOC 推移 (GA)"),
                     use_container_width=True,
                 )
 
-        if res_ga.assignment:
-            st.plotly_chart(
-                plot_assignment_gantt(cfg, res_ga, title="便割当 (GA)"),
-                use_container_width=True,
-            )
+            if res_ga.grid_buy or res_ga.pv_use:
+                col_ga1, col_ga2 = st.columns(2)
+                with col_ga1:
+                    st.plotly_chart(
+                        plot_power_balance(cfg, res_ga, title="電力バランス (GA)"),
+                        use_container_width=True,
+                    )
+                with col_ga2:
+                    st.plotly_chart(
+                        plot_cost_breakdown(cfg, res_ga, title="買電コスト (GA)"),
+                        use_container_width=True,
+                    )
+
+            if res_ga.assignment:
+                st.plotly_chart(
+                    plot_assignment_gantt(cfg, res_ga, title="便割当 (GA)"),
+                    use_container_width=True,
+                )
 
 
 # ---- ABC タブ ----
 with solver_tab_abc:
     if cfg is None:
         st.warning("⚙️ 設定タブでパラメータを設定し「🔄 設定を適用」を押してください。")
-    st.markdown("ABC (人工蜂コロニー) — 群知能ベース最適化。コスト・時間の比較用。")
+    else:
+        st.markdown("ABC (人工蜂コロニー) — 群知能ベース最適化。コスト・時間の比較用。")
 
-    ac1, ac2, ac3 = st.columns(3)
-    with ac1:
-        abc_colony = st.number_input(
-            "コロニーサイズ（食料源数）", 10, 200, 30, step=10, key="abc_colony"
-        )
-        abc_iters = st.number_input(
-            "最大サイクル数", 20, 2000, 200, step=20, key="abc_iters"
-        )
-    with ac2:
-        abc_limit = st.number_input(
-            "limit（偵察蜂発動閾値）", 5, 100, 20, step=5, key="abc_limit"
-        )
-        abc_perturb = st.slider("近傍変更便数", 1, 10, 3, key="abc_perturb")
-    with ac3:
-        abc_no_improve = st.number_input(
-            "改善なし上限", 10, 500, 50, step=10, key="abc_no_improve"
-        )
-        abc_seed = st.number_input("乱数シード", 0, 9999, 42, step=1, key="abc_seed")
-
-    if st.button("▶️ ABC で求解", type="primary"):
-        abc_params = ABCParams(
-            colony_size=abc_colony,
-            max_iterations=abc_iters,
-            max_no_improve=abc_no_improve,
-            limit=abc_limit,
-            perturbation_size=abc_perturb,
-            seed=abc_seed,
-        )
-
-        progress_bar_abc = st.progress(0.0)
-        status_text_abc = st.empty()
-
-        def abc_callback(cyc: int, cur: float, best: float):
-            progress_bar_abc.progress(min(cyc / abc_iters, 1.0))
-            cost_str = f"{best:,.0f}" if best < float("inf") else "N/A"
-            status_text_abc.text(f"サイクル {cyc}/{abc_iters} | 最良: {cost_str} 円")
-
-        result_abc = solve_abc(cfg, params=abc_params, callback=abc_callback)
-        st.session_state.result_abc = result_abc
-        progress_bar_abc.progress(1.0)
-
-        if result_abc.status == "FEASIBLE":
-            st.success(
-                f"✅ 実行可能解を取得 — コスト: {result_abc.objective_value:,.0f} 円"
+        ac1, ac2, ac3 = st.columns(3)
+        with ac1:
+            abc_colony = st.number_input(
+                "コロニーサイズ（食料源数）", 10, 200, 30, step=10, key="abc_colony"
             )
-        else:
-            st.error(f"❌ ステータス: {result_abc.status}")
+            abc_iters = st.number_input(
+                "最大サイクル数", 20, 2000, 200, step=20, key="abc_iters"
+            )
+        with ac2:
+            abc_limit = st.number_input(
+                "limit（偵察蜂発動閾値）", 5, 100, 20, step=5, key="abc_limit"
+            )
+            abc_perturb = st.slider("近傍変更便数", 1, 10, 3, key="abc_perturb")
+        with ac3:
+            abc_no_improve = st.number_input(
+                "改善なし上限", 10, 500, 50, step=10, key="abc_no_improve"
+            )
+            abc_seed = st.number_input(
+                "乱数シード", 0, 9999, 42, step=1, key="abc_seed"
+            )
 
-    res_abc = st.session_state.result_abc
-    if res_abc is not None and res_abc.status != "INFEASIBLE":
-        st.markdown("#### 📊 ABC 結果")
+        if st.button("▶️ ABC で求解", type="primary"):
+            abc_params = ABCParams(
+                colony_size=abc_colony,
+                max_iterations=abc_iters,
+                max_no_improve=abc_no_improve,
+                limit=abc_limit,
+                perturbation_size=abc_perturb,
+                seed=abc_seed,
+            )
 
-        kpi = make_kpi_table(res_abc)
-        kpi_df = pd.DataFrame([kpi]).T
-        kpi_df.columns = ["値"]
-        st.table(kpi_df)
+            progress_bar_abc = st.progress(0.0)
+            status_text_abc = st.empty()
 
-        # 収束曲線
-        st.plotly_chart(
-            plot_alns_convergence(res_abc, title="ABC 収束曲線"),
-            use_container_width=True,
-        )
+            def abc_callback(cyc: int, cur: float, best: float):
+                progress_bar_abc.progress(min(cyc / abc_iters, 1.0))
+                cost_str = f"{best:,.0f}" if best < float("inf") else "N/A"
+                status_text_abc.text(
+                    f"サイクル {cyc}/{abc_iters} | 最良: {cost_str} 円"
+                )
 
-        if res_abc.soc_series:
+            result_abc = solve_abc(cfg, params=abc_params, callback=abc_callback)
+            st.session_state.result_abc = result_abc
+            progress_bar_abc.progress(1.0)
+
+            if result_abc.status == "FEASIBLE":
+                st.success(
+                    f"✅ 実行可能解を取得 — コスト: {result_abc.objective_value:,.0f} 円"
+                )
+            else:
+                st.error(f"❌ ステータス: {result_abc.status}")
+
+        res_abc = st.session_state.result_abc
+        if res_abc is not None and res_abc.status != "INFEASIBLE":
+            st.markdown("#### 📊 ABC 結果")
+
+            kpi = make_kpi_table(res_abc)
+            kpi_df = pd.DataFrame([kpi]).T
+            kpi_df.columns = ["値"]
+            st.table(kpi_df)
+
+            # 収束曲線
             st.plotly_chart(
-                plot_soc_timeseries(cfg, res_abc, title="SOC 推移 (ABC)"),
+                plot_alns_convergence(res_abc, title="ABC 収束曲線"),
                 use_container_width=True,
             )
 
-        if res_abc.grid_buy or res_abc.pv_use:
-            col_abc1, col_abc2 = st.columns(2)
-            with col_abc1:
+            if res_abc.soc_series:
                 st.plotly_chart(
-                    plot_power_balance(cfg, res_abc, title="電力バランス (ABC)"),
-                    use_container_width=True,
-                )
-            with col_abc2:
-                st.plotly_chart(
-                    plot_cost_breakdown(cfg, res_abc, title="買電コスト (ABC)"),
+                    plot_soc_timeseries(cfg, res_abc, title="SOC 推移 (ABC)"),
                     use_container_width=True,
                 )
 
-        if res_abc.assignment:
-            st.plotly_chart(
-                plot_assignment_gantt(cfg, res_abc, title="便割当 (ABC)"),
-                use_container_width=True,
-            )
+            if res_abc.grid_buy or res_abc.pv_use:
+                col_abc1, col_abc2 = st.columns(2)
+                with col_abc1:
+                    st.plotly_chart(
+                        plot_power_balance(cfg, res_abc, title="電力バランス (ABC)"),
+                        use_container_width=True,
+                    )
+                with col_abc2:
+                    st.plotly_chart(
+                        plot_cost_breakdown(cfg, res_abc, title="買電コスト (ABC)"),
+                        use_container_width=True,
+                    )
+
+            if res_abc.assignment:
+                st.plotly_chart(
+                    plot_assignment_gantt(cfg, res_abc, title="便割当 (ABC)"),
+                    use_container_width=True,
+                )
 
 
 # ---- 新アーキテクチャ (src/) タブ ----
@@ -2117,13 +2133,370 @@ with tab_depot_profile:
 
 
 # ---------------------------------------------------------------------------
+# 📡 研究ダッシュボード タブ
+# ---------------------------------------------------------------------------
+# 役割: src.pipeline.* を呼び出すだけ。ソルバーロジックはここに持たない。
+# 両 GUI と CLI が同じ ExperimentConfig JSON を使うことで一致した結果を保証。
+# ---------------------------------------------------------------------------
+with tab_research:
+    st.markdown(
+        """
+    <div class="section-header">
+      <div class="section-icon">📡</div>
+      <h3>研究パイプライン ダッシュボード</h3>
+    </div>
+    <p style="color:var(--color-muted); font-size:.88rem; margin-bottom:16px;">
+    CSV ケースデータ → <code>src.pipeline.solve</code> → 10 KPI + 可視化。<br>
+    このタブは <strong>ソルバーロジックを持ちません</strong>。
+    GUI も CLI も同じ <code>config/cases/*.json</code> を読みます。
+    </p>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    from app.pipeline_bridge import (
+        list_cases,
+        load_config_meta,
+        run_solve,
+        extract_10_kpis,
+        build_charger_totals,
+        build_time_labels,
+        make_feasibility_dict,
+    )
+    from app.visualizer import (
+        plot_soc_src,
+        plot_charger_occupancy_src,
+        plot_site_power_src,
+        plot_feasibility_radar,
+        plot_gantt_src,
+    )
+
+    # ---- ケース選択 ----
+    st.markdown("##### ケース選択")
+
+    _cases = list_cases()
+    _case_names = [name for name, _ in _cases]
+    _case_paths = {name: str(path) for name, path in _cases}
+
+    _rd_col1, _rd_col2 = st.columns([2, 1])
+    with _rd_col1:
+        _use_custom = st.checkbox(
+            "カスタム設定ファイルを直接指定",
+            value=False,
+            key="rd_custom_cfg",
+        )
+    with _rd_col2:
+        if _case_names:
+            st.caption(f"{len(_case_names)} ケース見つかりました")
+        else:
+            st.caption("config/cases/ にケースなし")
+
+    if _use_custom:
+        _rd_config_path = st.text_input(
+            "設定 JSON パス",
+            value="config/experiment_config.json",
+            key="rd_cfg_path",
+        )
+    elif _case_names:
+        _rd_selected_case = st.selectbox(
+            "実験ケース",
+            _case_names,
+            key="rd_case",
+        )
+        _rd_config_path = _case_paths.get(_rd_selected_case, "")
+    else:
+        st.info(
+            "config/cases/ に .json ファイルがありません。まず実験ケースを作成してください。"
+        )
+        _rd_config_path = st.text_input(
+            "設定 JSON パス (フォールバック)",
+            value="config/experiment_config.json",
+            key="rd_cfg_path_fallback",
+        )
+
+    # 設定ファイルのメタ情報を表示
+    if _rd_config_path:
+        try:
+            _rd_meta = load_config_meta(_rd_config_path)
+            _rd_meta_mode = _rd_meta.get("mode", "(未設定)")
+            st.caption(
+                f"設定ファイル: `{_rd_config_path}` | 設定上のモード: `{_rd_meta_mode}`"
+            )
+        except Exception:
+            st.caption(f"設定ファイル: `{_rd_config_path}`")
+
+    # ---- モード上書き ----
+    st.markdown("##### モード選択")
+    try:
+        from src.model_factory import AVAILABLE_MODES, MODE_DESCRIPTIONS
+
+        _rd_mode_options = ["(設定ファイルのモードを使用)"] + list(AVAILABLE_MODES)
+    except Exception:
+        _rd_mode_options = ["(設定ファイルのモードを使用)"]
+        MODE_DESCRIPTIONS = {}
+
+    _rd_mode_raw = st.selectbox(
+        "モード上書き",
+        _rd_mode_options,
+        key="rd_mode",
+        help="(設定ファイルのモードを使用) を選ぶと config の mode フィールドをそのまま使います",
+    )
+    _rd_mode = None if _rd_mode_raw.startswith("(") else _rd_mode_raw
+    if _rd_mode:
+        st.caption(MODE_DESCRIPTIONS.get(_rd_mode, ""))
+
+    st.markdown("---")
+
+    # ---- ソルバー実行ボタン ----
+    _rd_btn_col, _rd_status_col = st.columns([1, 3])
+    with _rd_btn_col:
+        _rd_run = st.button(
+            "▶ パイプライン実行",
+            type="primary",
+            key="rd_run",
+        )
+    with _rd_status_col:
+        _rd_clear = st.button("🗑 結果クリア", key="rd_clear")
+        if _rd_clear:
+            st.session_state.research_pipeline_result = None
+            st.session_state.research_pipeline_data = None
+            st.rerun()
+
+    if _rd_run and _rd_config_path:
+        with st.spinner("src.pipeline.solve を実行中... (Gurobi が必要です)"):
+            try:
+                # データも保持してグラフ用ラベル生成に使う
+                from src.data_loader import load_problem_data
+                from src.model_sets import build_model_sets
+                from src.parameter_builder import build_derived_params
+
+                _rd_data = load_problem_data(_rd_config_path)
+                _rd_ms = build_model_sets(_rd_data)
+                _rd_dp = build_derived_params(_rd_data, _rd_ms)
+                st.session_state.research_pipeline_data = (_rd_data, _rd_ms, _rd_dp)
+
+                _rd_pipe = run_solve(_rd_config_path, _rd_mode)
+                st.session_state.research_pipeline_result = _rd_pipe
+
+                _rd_r = _rd_pipe.get("result")
+                if _rd_r and _rd_r.status == "OPTIMAL":
+                    st.success(
+                        f"OPTIMAL — 目的関数値: {_rd_r.objective_value:,.0f} 円 "
+                        f"({_rd_r.solve_time_sec:.2f} 秒)"
+                    )
+                elif _rd_r and _rd_r.status == "INFEASIBLE":
+                    st.error(f"INFEASIBLE: {_rd_r.infeasibility_info}")
+                else:
+                    st.warning(f"ステータス: {_rd_r.status if _rd_r else 'None'}")
+            except Exception as _rd_err:
+                st.error(f"パイプラインエラー: {_rd_err}")
+                import traceback as _tb
+
+                with st.expander("スタックトレース"):
+                    st.code(_tb.format_exc())
+
+    # ---- 結果表示 ----
+    _rd_pipe = st.session_state.research_pipeline_result
+    _rd_stored = st.session_state.research_pipeline_data
+
+    if _rd_pipe is not None:
+        _rd_r = _rd_pipe.get("result")
+        _rd_sim = _rd_pipe.get("sim_result")
+        _rd_method = _rd_pipe.get("method", "")
+
+        if _rd_r is None:
+            st.warning("結果オブジェクトが空です。")
+        else:
+            # ---- 10 KPI テーブル ----
+            st.markdown("#### 10 KPI サマリ")
+            _rd_kpis = extract_10_kpis(_rd_r, _rd_sim)
+            _rd_kpi_display = {
+                "KPI": [
+                    "目的関数値",
+                    "電力量料金 [円]",
+                    "デマンド料金 [円]",
+                    "燃料費 [円]",
+                    "車両固定費 [円]",
+                    "未割当タスク数",
+                    "最低 SOC [kWh]",
+                    "充電器平均利用率",
+                    "ピーク受電電力 [kW]",
+                    "求解時間 [秒]",
+                ],
+                "値": [
+                    f"{_rd_kpis['objective_value']:,.0f}"
+                    if _rd_kpis["objective_value"] is not None
+                    else "N/A",
+                    f"{_rd_kpis['total_energy_cost']:,.0f}"
+                    if _rd_kpis["total_energy_cost"] is not None
+                    else "N/A",
+                    f"{_rd_kpis['total_demand_charge']:,.0f}"
+                    if _rd_kpis["total_demand_charge"] is not None
+                    else "N/A",
+                    f"{_rd_kpis['total_fuel_cost']:,.0f}"
+                    if _rd_kpis["total_fuel_cost"] is not None
+                    else "N/A",
+                    "N/A",
+                    str(_rd_kpis["unmet_trips"]),
+                    f"{_rd_kpis['soc_min_margin_kwh']:.2f}"
+                    if _rd_kpis["soc_min_margin_kwh"] is not None
+                    else "N/A",
+                    f"{_rd_kpis['charger_utilization']:.3f}"
+                    if _rd_kpis["charger_utilization"] is not None
+                    else "N/A",
+                    f"{_rd_kpis['peak_grid_power_kw']:.2f}"
+                    if _rd_kpis["peak_grid_power_kw"] is not None
+                    else "N/A",
+                    f"{_rd_kpis['solve_time_sec']:.2f}"
+                    if _rd_kpis["solve_time_sec"] is not None
+                    else "N/A",
+                ],
+                "ステータス": [
+                    "OK" if _rd_r.status == "OPTIMAL" else _rd_r.status,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "OK" if _rd_kpis["unmet_trips"] == 0 else "NG",
+                    "OK" if (_rd_kpis["soc_min_margin_kwh"] or 0.0) >= 0 else "NG",
+                    "",
+                    "",
+                    "",
+                ],
+            }
+            st.dataframe(
+                pd.DataFrame(_rd_kpi_display), use_container_width=True, hide_index=True
+            )
+
+            # ---- 実行可能性ダッシュボード ----
+            if _rd_sim is not None and _rd_sim.feasibility_report is not None:
+                st.markdown("#### 実行可能性ダッシュボード")
+                _rd_feas_dict = make_feasibility_dict(_rd_sim.feasibility_report)
+                _rd_fc1, _rd_fc2 = st.columns([1, 1])
+                with _rd_fc1:
+                    st.plotly_chart(
+                        plot_feasibility_radar(_rd_feas_dict),
+                        use_container_width=True,
+                    )
+                with _rd_fc2:
+                    for _cat, _ok in _rd_feas_dict.items():
+                        _icon = "✅" if _ok else "❌"
+                        st.write(f"{_icon} **{_cat}**")
+                    if _rd_sim.feasibility_report.issues:
+                        with st.expander(
+                            f"問題詳細 ({len(_rd_sim.feasibility_report.issues)} 件)"
+                        ):
+                            for _iss in _rd_sim.feasibility_report.issues[:30]:
+                                st.write(f"- {_iss}")
+
+            # ---- 時刻ラベル生成 ----
+            _rd_labels = None
+            if _rd_stored is not None:
+                try:
+                    _rd_data_obj = _rd_stored[0]
+                    _rd_labels = build_time_labels(_rd_data_obj)
+                except Exception:
+                    pass
+
+            # ---- ガント (便割当) ----
+            if _rd_r.assignment:
+                st.markdown("#### 便割当スケジュール")
+                _rd_task_info: dict = {}
+                if _rd_stored is not None:
+                    try:
+                        _rd_dp2 = _rd_stored[2]
+                        for _tid, _t in _rd_dp2.task_lut.items():
+                            _rd_task_info[_tid] = {
+                                "start": getattr(_t, "start_time_idx", 0),
+                                "end": getattr(_t, "end_time_idx", 1),
+                                "energy": getattr(_t, "energy_required_kwh_bev", 0.0),
+                            }
+                    except Exception:
+                        pass
+                _rd_n_periods = 64
+                if _rd_stored is not None:
+                    try:
+                        _rd_n_periods = _rd_stored[0].num_periods
+                    except Exception:
+                        pass
+                st.plotly_chart(
+                    plot_gantt_src(
+                        _rd_r.assignment,
+                        _rd_task_info,
+                        charge_schedule=_rd_r.charge_schedule,
+                        num_periods=_rd_n_periods,
+                        time_labels=_rd_labels,
+                    ),
+                    use_container_width=True,
+                )
+
+            # ---- SOC トレース ----
+            if _rd_r.soc_series:
+                st.markdown("#### SOC 推移")
+                _rd_soc_mins: dict = {}
+                if _rd_stored is not None:
+                    try:
+                        _rd_dp2 = _rd_stored[2]
+                        for _vid in _rd_r.soc_series:
+                            _veh = _rd_dp2.vehicle_lut.get(_vid)
+                            if _veh:
+                                _rd_soc_mins[_vid] = (
+                                    getattr(_veh, "soc_min", 0.0) or 0.0
+                                )
+                    except Exception:
+                        pass
+                st.plotly_chart(
+                    plot_soc_src(
+                        _rd_r.soc_series,
+                        time_labels=_rd_labels,
+                        soc_min_lines=_rd_soc_mins or None,
+                    ),
+                    use_container_width=True,
+                )
+
+            # ---- 充電器稼働状況 ----
+            if _rd_r.charge_schedule:
+                st.markdown("#### 充電器稼働状況")
+                _rd_c_totals = build_charger_totals(_rd_r)
+                if _rd_c_totals:
+                    st.plotly_chart(
+                        plot_charger_occupancy_src(
+                            _rd_c_totals, time_labels=_rd_labels
+                        ),
+                        use_container_width=True,
+                    )
+
+            # ---- サイト電力収支 ----
+            if _rd_r.grid_import_kw:
+                st.markdown("#### サイト電力収支")
+                st.plotly_chart(
+                    plot_site_power_src(
+                        _rd_r.grid_import_kw,
+                        pv_used=_rd_r.pv_used_kw or None,
+                        time_labels=_rd_labels,
+                    ),
+                    use_container_width=True,
+                )
+
+            # ---- 出力ディレクトリリンク ----
+            st.markdown("---")
+            st.info(
+                "結果ファイルは `outputs/` ディレクトリに保存されています。"
+                " CLI からも同じコマンドで再現できます:\n\n"
+                f"```\npython -m src.pipeline.solve --config {_rd_config_path}"
+                + (f" --mode {_rd_mode}" if _rd_mode else "")
+                + "\n```"
+            )
+
+
+# ---------------------------------------------------------------------------
 # フッター
 # ---------------------------------------------------------------------------
 st.markdown(
     """
 <div class="ebus-footer">
-  <span>🚌 <b>E-Bus Sim v0.4.0 — Route-Editable + Multi-Solver</b> — PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 試作アプリ</span>
-  <span>Gurobi (MILP) &nbsp;•&nbsp; ALNS &nbsp;•&nbsp; GA &nbsp;•&nbsp; ABC &nbsp;•&nbsp; ALNS+MILP</span>
+  <span>🚌 <b>E-Bus Sim v0.5.0 — Research Dashboard + Multi-Solver</b> — PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化 試作アプリ</span>
+  <span>Gurobi (MILP) &nbsp;•&nbsp; ALNS &nbsp;•&nbsp; GA &nbsp;•&nbsp; ABC &nbsp;•&nbsp; src.pipeline</span>
 </div>
 """,
     unsafe_allow_html=True,

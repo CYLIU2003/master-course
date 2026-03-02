@@ -1,0 +1,16 @@
+from_task_id,to_task_id,can_follow,deadhead_time_slot,deadhead_distance_km,deadhead_energy_kwh
+T01,T02,true,1,0.0,0.0
+T01,T03,false,0,0.0,0.0
+T01,T04,true,1,0.0,0.0
+T01,T05,false,0,0.0,0.0
+T01,T06,true,1,0.0,0.0
+T02,T03,true,2,15.0,5.0
+T02,T04,true,2,15.0,5.0
+T02,T05,true,2,15.0,5.0
+T02,T06,true,2,15.0,5.0
+T03,T04,true,1,0.0,0.0
+T03,T05,false,0,0.0,0.0
+T03,T06,true,1,0.0,0.0
+T04,T05,true,2,15.0,5.0
+T04,T06,true,2,15.0,5.0
+T05,T06,true,1,0.0,0.0

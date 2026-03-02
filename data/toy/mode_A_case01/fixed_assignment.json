@@ -1,0 +1,8 @@
+{
+    "description": "Toy case fixed assignment: V1 gets T1,T2,T3; V2 gets T4,T5",
+    "note": "2 vehicles, 5 tasks. hand-calculable: total consumption = V1:60kWh + V2:30kWh = 90kWh. Optimal: charge during low-price slots (t=0-7, 10 yen/kWh).",
+    "assignment": {
+        "V1": ["T1", "T2", "T3"],
+        "V2": ["T4", "T5"]
+    }
+}

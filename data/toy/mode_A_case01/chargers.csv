@@ -1,0 +1,2 @@
+charger_id,site_id,power_max_kw,efficiency,power_min_kw
+C1,depot,50.0,1.0,0.0

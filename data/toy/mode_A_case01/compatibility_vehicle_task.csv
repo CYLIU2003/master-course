@@ -1,0 +1,11 @@
+vehicle_id,task_id,feasible
+V1,T1,true
+V1,T2,true
+V1,T3,true
+V1,T4,true
+V1,T5,true
+V2,T1,true
+V2,T2,true
+V2,T3,true
+V2,T4,true
+V2,T5,true

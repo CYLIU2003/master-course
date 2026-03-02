@@ -1,0 +1,9 @@
+vehicle_id,charger_id,feasible
+B1,CHG_FAST,true
+B1,CHG_SLOW,true
+B2,CHG_FAST,true
+B2,CHG_SLOW,true
+B3,CHG_FAST,true
+B3,CHG_SLOW,true
+I1,CHG_FAST,false
+I1,CHG_SLOW,false

@@ -1,0 +1,6 @@
+task_id,start_time_idx,end_time_idx,origin,destination,distance_km,energy_required_kwh_bev,fuel_required_liter_ice,required_vehicle_type,demand_cover,penalty_unserved
+T1,0,3,depot,stop_A,0.0,20.0,0.0,,true,10000.0
+T2,4,7,stop_A,depot,0.0,20.0,0.0,,true,10000.0
+T3,8,11,depot,stop_A,0.0,20.0,0.0,,true,10000.0
+T4,12,15,stop_A,depot,0.0,20.0,0.0,,true,10000.0
+T5,16,19,depot,stop_A,0.0,10.0,0.0,,true,10000.0
