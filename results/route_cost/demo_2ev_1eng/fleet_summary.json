@@ -1,0 +1,38 @@
+[
+  {
+    "vehicle_id": "ev_01",
+    "vehicle_type": "ev_bus",
+    "bus_category": null,
+    "trips_assigned": 3,
+    "total_fuel_L": 0.0,
+    "total_energy_kWh": 79.8,
+    "total_charging_kWh": 18.947,
+    "soc_min": 0.9,
+    "soc_final": 1.0,
+    "daily_capex_yen": 12500.0
+  },
+  {
+    "vehicle_id": "ev_02",
+    "vehicle_type": "ev_bus",
+    "bus_category": null,
+    "trips_assigned": 3,
+    "total_fuel_L": 0.0,
+    "total_energy_kWh": 80.4,
+    "total_charging_kWh": 18.947,
+    "soc_min": 0.9,
+    "soc_final": 1.0,
+    "daily_capex_yen": 12500.0
+  },
+  {
+    "vehicle_id": "eng_hino_rep",
+    "vehicle_type": "engine_bus",
+    "bus_category": null,
+    "trips_assigned": 1,
+    "total_fuel_L": 4.462,
+    "total_energy_kWh": 0.0,
+    "total_charging_kWh": 0.0,
+    "soc_min": null,
+    "soc_final": null,
+    "daily_capex_yen": 6389.0
+  }
+]

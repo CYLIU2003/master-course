@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dispatch_input.schema.json",
+  "title": "DispatchInput",
+  "description": "Timetable-driven dispatch planning input for one service day.",
+  "type": "object",
+  "required": [
+    "service_date",
+    "stops",
+    "trips",
+    "turnaround_rules",
+    "deadhead_rules",
+    "vehicle_profiles"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "service_date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Operating date in ISO 8601 format (YYYY-MM-DD).",
+      "examples": ["2024-06-01"]
+    },
+    "stops": {
+      "type": "array",
+      "description": "All stops referenced by trips, turnaround rules, and deadhead rules.",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["stop_id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "stop_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique identifier for this stop."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable name of the stop."
+          },
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "WGS-84 latitude (optional)."
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "WGS-84 longitude (optional)."
+          }
+        }
+      }
+    },
+    "trips": {
+      "type": "array",
+      "description": "Revenue trips that make up the timetable. Every trip must be covered by exactly one vehicle duty.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "trip_id",
+          "route_id",
+          "origin",
+          "destination",
+          "departure_time",
+          "arrival_time",
+          "distance_km",
+          "allowed_vehicle_types"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "trip_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique trip identifier within this service date."
+          },
+          "route_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Route this trip belongs to."
+          },
+          "origin": {
+            "type": "string",
+            "minLength": 1,
+            "description": "stop_id of the trip origin."
+          },
+          "destination": {
+            "type": "string",
+            "minLength": 1,
+            "description": "stop_id of the trip destination."
+          },
+          "departure_time": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "Scheduled departure time in HH:MM (24-hour).",
+            "examples": ["07:00", "13:45"]
+          },
+          "arrival_time": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "Scheduled arrival time in HH:MM (24-hour).",
+            "examples": ["07:30", "14:20"]
+          },
+          "distance_km": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Revenue trip distance in kilometres."
+          },
+          "allowed_vehicle_types": {
+            "type": "array",
+            "description": "Vehicle types permitted to operate this trip.",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "examples": [["BEV"], ["BEV", "ICE"]]
+          }
+        }
+      }
+    },
+    "turnaround_rules": {
+      "type": "array",
+      "description": "Minimum layover times at specific stops.",
+      "items": {
+        "type": "object",
+        "required": ["stop_id", "min_turnaround_min"],
+        "additionalProperties": false,
+        "properties": {
+          "stop_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stop to which this rule applies."
+          },
+          "min_turnaround_min": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Minimum turnaround (layover) time in minutes."
+          }
+        }
+      }
+    },
+    "deadhead_rules": {
+      "type": "array",
+      "description": "Non-revenue (deadhead) travel times between stop pairs.",
+      "items": {
+        "type": "object",
+        "required": ["from_stop", "to_stop", "travel_time_min"],
+        "additionalProperties": false,
+        "properties": {
+          "from_stop": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Origin stop of the deadhead movement."
+          },
+          "to_stop": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Destination stop of the deadhead movement."
+          },
+          "travel_time_min": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "One-way deadhead travel time in minutes. Reverse direction is NOT assumed equal."
+          }
+        }
+      }
+    },
+    "vehicle_profiles": {
+      "type": "array",
+      "description": "Capability descriptors for each vehicle type used on this service date.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["vehicle_type", "powertrain"],
+        "additionalProperties": false,
+        "properties": {
+          "vehicle_type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique vehicle type identifier (e.g. 'BEV', 'ICE')."
+          },
+          "powertrain": {
+            "type": "string",
+            "enum": ["electric", "engine"],
+            "description": "Powertrain family. Determines which energy fields are required."
+          },
+          "battery_capacity_kwh": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Battery capacity in kWh. Required when powertrain='electric'."
+          },
+          "energy_consumption_kwh_per_km": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Mean energy draw in kWh/km. Required when powertrain='electric'."
+          },
+          "fuel_tank_capacity_l": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Fuel tank capacity in litres. Required when powertrain='engine'."
+          },
+          "fuel_consumption_l_per_km": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Mean fuel consumption in L/km. Required when powertrain='engine'."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "powertrain": { "const": "electric" } },
+              "required": ["powertrain"]
+            },
+            "then": {
+              "required": ["battery_capacity_kwh", "energy_consumption_kwh_per_km"]
+            }
+          },
+          {
+            "if": {
+              "properties": { "powertrain": { "const": "engine" } },
+              "required": ["powertrain"]
+            },
+            "then": {
+              "required": ["fuel_tank_capacity_l", "fuel_consumption_l_per_km"]
+            }
+          }
+        ]
+      }
+    },
+    "fleet": {
+      "type": "object",
+      "description": "Optional fleet size constraints per vehicle type.",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Maximum number of vehicles of this type available."
+      }
+    },
+    "dispatch_constraints": {
+      "type": "object",
+      "description": "Optional global dispatch constraints.",
+      "additionalProperties": false,
+      "properties": {
+        "default_turnaround_min": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 10,
+          "description": "Fallback turnaround time in minutes when no stop-specific rule exists."
+        },
+        "max_duty_duration_min": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum total spread (first departure to last arrival) for a single duty."
+        },
+        "max_trips_per_duty": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of revenue trips in a single duty."
+        }
+      }
+    }
+  }
+}

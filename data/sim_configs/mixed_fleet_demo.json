@@ -1,0 +1,119 @@
+{
+  "label": "mixed_fleet_demo",
+  "delta_t_min": 30,
+  "time_horizon_hours": 24.0,
+  "diesel_price_yen_per_L": 150.0,
+  "charger_site_limit_kW": 200.0,
+  "num_chargers": 3,
+  "tariff": {
+    "flat_price_yen_per_kWh": 25.0,
+    "demand_charge_yen_per_kW_month": 1500.0,
+    "contract_power_limit_kW": 200.0,
+    "contract_penalty_mode": "hard_limit",
+    "cost_time_basis": "daily"
+  },
+  "fleet": [
+    {
+      "vehicle_id": "ev_demo_01",
+      "vehicle_type": "ev_bus",
+      "passenger_capacity": 60,
+      "battery_capacity_kWh": 300.0,
+      "usable_battery_capacity_kWh": 270.0,
+      "initial_soc": 1.0,
+      "min_soc": 0.15,
+      "max_soc": 1.0,
+      "energy_consumption_kWh_per_km_base": 1.2,
+      "charging_power_max_kW": 90.0,
+      "charging_efficiency": 0.95,
+      "purchase_cost_yen": 50000000,
+      "residual_value_yen": 5000000,
+      "lifetime_year": 12.0,
+      "operation_days_per_year": 300.0
+    },
+    {
+      "vehicle_id": "ev_demo_02",
+      "vehicle_type": "ev_bus",
+      "passenger_capacity": 60,
+      "battery_capacity_kWh": 300.0,
+      "usable_battery_capacity_kWh": 270.0,
+      "initial_soc": 1.0,
+      "min_soc": 0.15,
+      "max_soc": 1.0,
+      "energy_consumption_kWh_per_km_base": 1.2,
+      "charging_power_max_kW": 90.0,
+      "charging_efficiency": 0.95,
+      "purchase_cost_yen": 50000000,
+      "residual_value_yen": 5000000,
+      "lifetime_year": 12.0,
+      "operation_days_per_year": 300.0
+    },
+    {
+      "vehicle_id": "hino_2sg_hl2anbp_04",
+      "vehicle_type": "engine_bus",
+      "passenger_capacity": 79,
+      "fuel_economy_km_per_L": 5.38,
+      "diesel_consumption_L_per_km": 0.185874,
+      "fuel_tank_capacity_L": 150.0,
+      "purchase_cost_yen": 20000000,
+      "residual_value_yen": 0,
+      "lifetime_year": 12.0,
+      "operation_days_per_year": 300.0
+    },
+    {
+      "vehicle_id": "hino_2dg_hx9jlce_05",
+      "vehicle_type": "engine_bus",
+      "passenger_capacity": 28,
+      "fuel_economy_km_per_L": 4.66,
+      "diesel_consumption_L_per_km": 0.214592,
+      "fuel_tank_capacity_L": 150.0,
+      "purchase_cost_yen": 20000000,
+      "residual_value_yen": 0,
+      "lifetime_year": 12.0,
+      "operation_days_per_year": 300.0
+    }
+  ],
+  "route_profile": [
+    {
+      "trip_id": "trip_01",
+      "route_id": "R1",
+      "start_time": "07:00",
+      "end_time": "08:30",
+      "distance_km": 50.0
+    },
+    {
+      "trip_id": "trip_02",
+      "route_id": "R1",
+      "start_time": "09:00",
+      "end_time": "10:30",
+      "distance_km": 50.0
+    },
+    {
+      "trip_id": "trip_03",
+      "route_id": "R2",
+      "start_time": "10:00",
+      "end_time": "11:30",
+      "distance_km": 60.0
+    },
+    {
+      "trip_id": "trip_04",
+      "route_id": "R2",
+      "start_time": "13:00",
+      "end_time": "14:30",
+      "distance_km": 55.0
+    },
+    {
+      "trip_id": "trip_05",
+      "route_id": "R1",
+      "start_time": "15:00",
+      "end_time": "16:30",
+      "distance_km": 50.0
+    },
+    {
+      "trip_id": "trip_06",
+      "route_id": "R2",
+      "start_time": "17:00",
+      "end_time": "18:30",
+      "distance_km": 60.0
+    }
+  ]
+}

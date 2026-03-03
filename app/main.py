@@ -450,27 +450,38 @@ st.markdown(
 )
 
 # ===========================================================================
-# タブ構成: 設定 → ソルバー → 比較 → 路線詳細 → 路線・営業所管理
+# タブ構成: 設定 → ソルバー → 比較 → 研究ダッシュボード
 # ===========================================================================
 (
     tab_settings,
     tab_solvers,
     tab_compare,
     tab_research,
-    tab_map,
-    tab_route_depot,
 ) = st.tabs(
     [
         "⚙️ 設定",
         "🔬 ソルバー",
         "📊 比較・専用",
         "📡 研究ダッシュボード",
-        "🗺️ 路線詳細",
-        "🚌 路線・営業所管理",
     ]
 )
 
 # 内部サブタブを各親タブ内で定義
+with tab_settings:
+    (
+        settings_tab_vehicle,
+        settings_tab_route,
+        settings_tab_depot,
+        settings_tab_advanced,
+    ) = st.tabs(
+        [
+            "🚌 車両管理",
+            "🚌 路線管理",
+            "🏢 営業所管理",
+            "🔧 システム規模・適用",
+        ]
+    )
+
 with tab_solvers:
     (
         solver_tab_gurobi,
@@ -503,20 +514,11 @@ with tab_compare:
         ]
     )
 
-with tab_route_depot:
-    tab_route_profile, tab_depot_profile = st.tabs(
-        [
-            "🚌 路線管理",
-            "🏢 営業所管理",
-        ]
-    )
-
 # ===========================================================================
-# ⚙️ 設定タブ
+# ⚙️ 設定タブ > 車両管理 サブタブ
 # ===========================================================================
-with tab_settings:
+with settings_tab_vehicle:
     if config_mode == "JSON インポート":
-        # --- JSON インポートモード ---
         if st.session_state.config is not None:
             st.success(
                 "✅ JSON を読み込み済みです。サイドバーから別の JSON を読み込めます。"
@@ -524,12 +526,63 @@ with tab_settings:
         else:
             st.info("サイドバーから JSON ファイルを読み込んでください。")
     else:
-        # --- 手動設定モード ---
         st.markdown(
             """
         <div class="section-header">
-          <div class="section-icon">⚙️</div>
-          <h3>シミュレーション設定</h3>
+          <div class="section-icon">🚌</div>
+          <h3>車両・充電・電力設定</h3>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+        # ---- 🚌 フリート車両設定 ----
+        from app.vehicle_fleet_editor import render_vehicle_fleet_editor
+
+        render_vehicle_fleet_editor()
+
+        # Global fallback EV params (used when fleet is empty)
+        with st.expander(
+            "🚌 グローバル EV デフォルト（フリート未設定時に使用）", expanded=False
+        ):
+            vc1, vc2 = st.columns(2)
+            with vc1:
+                cap_kwh = st.number_input(
+                    "バッテリ容量 [kWh]", 50.0, 1000.0, 300.0, step=10.0, key="cfg_cap"
+                )
+                soc_init_ratio = (
+                    st.slider("初期 SOC [%]", 30, 100, 80, key="cfg_soc_init") / 100.0
+                )
+            with vc2:
+                efficiency = st.number_input(
+                    "電費 [km/kWh]", 0.3, 3.0, 1.0, step=0.1, key="cfg_eff"
+                )
+                soc_min_ratio = (
+                    st.slider("SOC 下限 [%]", 5, 50, 20, key="cfg_soc_min") / 100.0
+                )
+            soc_max_ratio = (
+                st.slider("SOC 上限 [%]", 60, 100, 95, key="cfg_soc_max") / 100.0
+            )
+
+        st.info("💡 充電設備・電力設定は **🏢 営業所管理** タブで行えます。")
+
+# ===========================================================================
+# ⚙️ 設定タブ > システム規模・適用 サブタブ
+# ===========================================================================
+with settings_tab_advanced:
+    if config_mode == "JSON インポート":
+        if st.session_state.config is not None:
+            st.success(
+                "✅ JSON を読み込み済みです。サイドバーから別の JSON を読み込めます。"
+            )
+        else:
+            st.info("サイドバーから JSON ファイルを読み込んでください。")
+    else:
+        st.markdown(
+            """
+        <div class="section-header">
+          <div class="section-icon">🔧</div>
+          <h3>システム規模・拡張オプション</h3>
         </div>
         """,
             unsafe_allow_html=True,
@@ -556,96 +609,6 @@ with tab_settings:
             num_periods = int((end_hour - start_hour) / delta_h)
             st.caption(
                 f"📊 計画スロット数: **{num_periods}** ({start_hour}:00 〜 {end_hour}:00, Δt={delta_h}h)"
-            )
-
-        # ---- 🚌 車両性能 ----
-        with st.expander("🚌 車両性能"):
-            vc1, vc2 = st.columns(2)
-            with vc1:
-                cap_kwh = st.number_input(
-                    "バッテリ容量 [kWh]", 50.0, 1000.0, 300.0, step=10.0, key="cfg_cap"
-                )
-                soc_init_ratio = (
-                    st.slider("初期 SOC [%]", 30, 100, 80, key="cfg_soc_init") / 100.0
-                )
-            with vc2:
-                efficiency = st.number_input(
-                    "電費 [km/kWh]", 0.3, 3.0, 1.0, step=0.1, key="cfg_eff"
-                )
-                soc_min_ratio = (
-                    st.slider("SOC 下限 [%]", 5, 50, 20, key="cfg_soc_min") / 100.0
-                )
-            soc_max_ratio = (
-                st.slider("SOC 上限 [%]", 60, 100, 95, key="cfg_soc_max") / 100.0
-            )
-
-        # ---- 🛣️ 路線設定 ----
-        with st.expander("🛣️ 路線詳細設定", expanded=False):
-            st.info(
-                "路線・停留所・営業所の編集は **🚌 路線・営業所管理** タブで行ってください。"
-            )
-
-        # ---- 🔌 充電設備 ----
-        with st.expander("🔌 充電設備"):
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                num_depots = st.slider("充電拠点数", 1, 5, 2, key="cfg_depots")
-                slow_power = st.number_input(
-                    "普通充電出力 [kW]", 10.0, 200.0, 50.0, step=10.0, key="cfg_slow_pw"
-                )
-                slow_count = st.number_input(
-                    "普通充電器台数", 0, 10, 2, step=1, key="cfg_slow_cnt"
-                )
-            with cc2:
-                charge_eff = st.slider(
-                    "充電効率", 0.80, 1.00, 0.95, step=0.01, key="cfg_ch_eff"
-                )
-                fast_power = st.number_input(
-                    "急速充電出力 [kW]",
-                    50.0,
-                    500.0,
-                    150.0,
-                    step=10.0,
-                    key="cfg_fast_pw",
-                )
-                fast_count = st.number_input(
-                    "急速充電器台数", 0, 10, 1, step=1, key="cfg_fast_cnt"
-                )
-
-        # ---- ☀️ エネルギー ----
-        with st.expander("☀️ PV・電力料金"):
-            ec1, ec2 = st.columns(2)
-            with ec1:
-                enable_pv = st.checkbox(
-                    "PV を有効にする", value=True, key="cfg_enable_pv"
-                )
-                pv_scale = st.slider(
-                    "PV 出力倍率", 0.0, 5.0, 1.0, step=0.1, key="cfg_pv_scale"
-                )
-            with ec2:
-                price_mode = st.selectbox(
-                    "電力料金モード",
-                    ["デフォルト TOU", "一律 [円/kWh]"],
-                    key="cfg_price_mode",
-                )
-                flat_price = 25.0
-                if price_mode == "一律 [円/kWh]":
-                    flat_price = st.number_input(
-                        "電力単価 [円/kWh]",
-                        10.0,
-                        100.0,
-                        25.0,
-                        step=1.0,
-                        key="cfg_flat_price",
-                    )
-            diesel_price = st.number_input(
-                "軽油単価 [円/L]",
-                80.0,
-                250.0,
-                145.0,
-                step=5.0,
-                key="cfg_diesel",
-                help="ICE 比較用",
             )
 
         # ---- 🔧 拡張オプション ----
@@ -678,6 +641,10 @@ with tab_settings:
 
         # ---- 🔄 設定を適用ボタン ----
         st.markdown("---")
+        st.info(
+            "💡 車両設定は **🚌 車両管理** タブで、充電設備・電力設定は **🏢 営業所管理** タブで行い、"
+            "ここで台数・時間軸を設定してから「設定を適用」を押してください。"
+        )
         if st.button(
             "🔄 設定を適用",
             type="primary",
@@ -687,22 +654,90 @@ with tab_settings:
             import random as _rng
             import math
 
-            _rng.seed(42)
-            depots = [f"depot_{chr(65 + i)}" for i in range(num_depots)]
+            # 他タブの session_state から値を取得（Streamlit の widget key 経由）
+            _cap_kwh = st.session_state.get("cfg_cap", 300.0)
+            _soc_init_ratio = st.session_state.get("cfg_soc_init", 80) / 100.0
+            _soc_min_ratio = st.session_state.get("cfg_soc_min", 20) / 100.0
+            _soc_max_ratio = st.session_state.get("cfg_soc_max", 95) / 100.0
+            _efficiency = st.session_state.get("cfg_eff", 1.0)
+            _num_depots = st.session_state.get("cfg_depots", 2)
+            _slow_power = st.session_state.get("cfg_slow_pw", 50.0)
+            _slow_count = st.session_state.get("cfg_slow_cnt", 2)
+            _charge_eff = st.session_state.get("cfg_ch_eff", 0.95)
+            _fast_power = st.session_state.get("cfg_fast_pw", 150.0)
+            _fast_count = st.session_state.get("cfg_fast_cnt", 1)
+            _enable_pv = st.session_state.get("cfg_enable_pv", True)
+            _pv_scale = st.session_state.get("cfg_pv_scale", 1.0)
+            _price_mode = st.session_state.get("cfg_price_mode", "デフォルト TOU")
+            _flat_price = st.session_state.get("cfg_flat_price", 25.0)
+            _diesel_price = st.session_state.get("cfg_diesel", 145.0)
 
-            buses = []
-            for i in range(num_buses):
-                buses.append(
-                    BusSpec(
-                        bus_id=f"bus_{i + 1}",
-                        category="BEV",
-                        cap_kwh=cap_kwh,
-                        soc_init_kwh=round(cap_kwh * soc_init_ratio, 1),
-                        soc_min_kwh=round(cap_kwh * soc_min_ratio, 1),
-                        soc_max_kwh=round(cap_kwh * soc_max_ratio, 1),
-                        efficiency_km_per_kwh=efficiency,
+            _rng.seed(42)
+            depots = [f"depot_{chr(65 + i)}" for i in range(_num_depots)]
+
+            from app.vehicle_fleet_editor import (
+                get_fleet_vehicles as _get_fleet_vehicles,
+            )
+
+            _fleet_veh = _get_fleet_vehicles()
+            if _fleet_veh:
+                buses = []
+                for veh in _fleet_veh:
+                    if veh.get("vehicle_type") == "electric":
+                        _cap = float(veh.get("battery_capacity_kWh", _cap_kwh))
+                        _econ = float(veh.get("energy_consumption_kWh_per_km", 1.0))
+                        _eff_km = 1.0 / _econ if _econ > 0 else 1.0
+                        buses.append(
+                            BusSpec(
+                                bus_id=veh["vehicle_id"],
+                                category="BEV",
+                                cap_kwh=_cap,
+                                soc_init_kwh=round(
+                                    _cap
+                                    * float(veh.get("initial_soc", _soc_init_ratio)),
+                                    1,
+                                ),
+                                soc_min_kwh=round(
+                                    _cap * float(veh.get("min_soc", _soc_min_ratio)), 1
+                                ),
+                                soc_max_kwh=round(
+                                    _cap * float(veh.get("max_soc", _soc_max_ratio)), 1
+                                ),
+                                efficiency_km_per_kwh=_eff_km,
+                            )
+                        )
+                    else:
+                        _fcons = float(veh.get("fuel_consumption_L_per_km", 0.2))
+                        _co2_kg = float(veh.get("co2_emission_kg_per_L", 2.58))
+                        buses.append(
+                            BusSpec(
+                                bus_id=veh["vehicle_id"],
+                                category="ICE",
+                                cap_kwh=0.0,
+                                soc_init_kwh=0.0,
+                                soc_min_kwh=0.0,
+                                soc_max_kwh=0.0,
+                                fuel_efficiency_km_per_l=float(
+                                    veh.get("fuel_efficiency_km_per_L", 5.0)
+                                ),
+                                co2_g_per_km=round(_fcons * _co2_kg * 1000, 2),
+                            )
+                        )
+                num_buses = len(buses)
+            else:
+                buses = []
+                for i in range(num_buses):
+                    buses.append(
+                        BusSpec(
+                            bus_id=f"bus_{i + 1}",
+                            category="BEV",
+                            cap_kwh=_cap_kwh,
+                            soc_init_kwh=round(_cap_kwh * _soc_init_ratio, 1),
+                            soc_min_kwh=round(_cap_kwh * _soc_min_ratio, 1),
+                            soc_max_kwh=round(_cap_kwh * _soc_max_ratio, 1),
+                            efficiency_km_per_kwh=_efficiency,
+                        )
                     )
-                )
 
             trips = []
             for i in range(num_trips):
@@ -725,24 +760,24 @@ with tab_settings:
 
             chargers = []
             for depot in depots:
-                if slow_count > 0:
+                if _slow_count > 0:
                     chargers.append(
                         ChargerSpec(
                             depot=depot,
                             charger_type="slow",
-                            power_kw=slow_power,
-                            count=slow_count,
-                            efficiency=charge_eff,
+                            power_kw=_slow_power,
+                            count=_slow_count,
+                            efficiency=_charge_eff,
                         )
                     )
-                if fast_count > 0:
+                if _fast_count > 0:
                     chargers.append(
                         ChargerSpec(
                             depot=depot,
                             charger_type="fast",
-                            power_kw=fast_power,
-                            count=fast_count,
-                            efficiency=charge_eff,
+                            power_kw=_fast_power,
+                            count=_fast_count,
+                            efficiency=_charge_eff,
                         )
                     )
 
@@ -753,10 +788,10 @@ with tab_settings:
                     val = 60.0 * math.exp(-0.5 * ((hour - 12.0) / 3.0) ** 2)
                 else:
                     val = 0.0
-                pv_profile.append(round(val * pv_scale, 2))
+                pv_profile.append(round(val * _pv_scale, 2))
 
-            if price_mode == "一律 [円/kWh]":
-                prices = [flat_price] * num_periods
+            if _price_mode == "一律 [円/kWh]":
+                prices = [_flat_price] * num_periods
             else:
                 prices = []
                 for t in range(num_periods):
@@ -788,13 +823,13 @@ with tab_settings:
                 if charger_type_list
                 else ["slow", "fast"],
                 chargers=chargers,
-                charge_efficiency=charge_eff,
+                charge_efficiency=_charge_eff,
                 pv_gen_kwh=pv_profile,
                 grid_price_yen_per_kwh=prices,
-                diesel_yen_per_l=diesel_price,
-                enable_pv=enable_pv,
+                diesel_yen_per_l=_diesel_price,
+                enable_pv=_enable_pv,
                 enable_terminal_soc=enable_terminal_soc,
-                terminal_soc_kwh=round(cap_kwh * terminal_soc_ratio, 1)
+                terminal_soc_kwh=round(_cap_kwh * terminal_soc_ratio, 1)
                 if enable_terminal_soc
                 else None,
                 enable_demand_charge=enable_demand_charge,
@@ -2082,36 +2117,9 @@ with solver_tab_alns_milp:
 
 
 # ===========================================================================
-# 🗺️ 地図エディタタブ
+# ⚙️ 設定タブ > 路線管理 サブタブ
 # ===========================================================================
-with tab_map:
-    st.markdown(
-        """
-    <div class="section-header">
-      <div class="section-icon">🗺️</div>
-      <h3>路線詳細エディタ（レガシー）</h3>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    st.warning(
-        "⚠️ このタブは旧版エディタです。今後は **🚌 路線管理** タブをご利用ください。\n\n"
-        "セグメント（segments.csv）の編集が必要な場合のみ、こちらを使用してください。"
-    )
-
-    try:
-        from app.route_detail_editor import render_route_detail_editor
-
-        render_route_detail_editor(data_dir="data")
-    except Exception as e:
-        st.error(
-            f"路線エディタの読み込みに失敗しました: {e}\n\n"
-            "地図モードを使う場合は以下をインストールしてください:\n"
-            "```\npip install folium streamlit-folium\n```"
-        )
-
-with tab_route_profile:
+with settings_tab_route:
     try:
         from app.route_profile_editor import render_route_profile_editor
 
@@ -2123,7 +2131,10 @@ with tab_route_profile:
             "```\npip install folium streamlit-folium\n```"
         )
 
-with tab_depot_profile:
+# ===========================================================================
+# ⚙️ 設定タブ > 営業所管理 サブタブ
+# ===========================================================================
+with settings_tab_depot:
     try:
         from app.depot_profile_editor import render_depot_profile_editor
 
@@ -2154,339 +2165,382 @@ with tab_research:
         unsafe_allow_html=True,
     )
 
-    from app.pipeline_bridge import (
-        list_cases,
-        load_config_meta,
-        run_solve,
-        extract_10_kpis,
-        build_charger_totals,
-        build_time_labels,
-        make_feasibility_dict,
-    )
-    from app.visualizer import (
-        plot_soc_src,
-        plot_charger_occupancy_src,
-        plot_site_power_src,
-        plot_feasibility_radar,
-        plot_gantt_src,
+    _rt_tab_pipeline, _rt_tab_pareto = st.tabs(
+        ["🔬 研究パイプライン", "📊 パレート分析"]
     )
 
-    # ---- ケース選択 ----
-    st.markdown("##### ケース選択")
-
-    _cases = list_cases()
-    _case_names = [name for name, _ in _cases]
-    _case_paths = {name: str(path) for name, path in _cases}
-
-    _rd_col1, _rd_col2 = st.columns([2, 1])
-    with _rd_col1:
-        _use_custom = st.checkbox(
-            "カスタム設定ファイルを直接指定",
-            value=False,
-            key="rd_custom_cfg",
+    with _rt_tab_pipeline:
+        from app.pipeline_bridge import (
+            list_cases,
+            load_config_meta,
+            run_solve,
+            extract_10_kpis,
+            build_charger_totals,
+            build_time_labels,
+            make_feasibility_dict,
         )
-    with _rd_col2:
-        if _case_names:
-            st.caption(f"{len(_case_names)} ケース見つかりました")
-        else:
-            st.caption("config/cases/ にケースなし")
-
-    if _use_custom:
-        _rd_config_path = st.text_input(
-            "設定 JSON パス",
-            value="config/experiment_config.json",
-            key="rd_cfg_path",
-        )
-    elif _case_names:
-        _rd_selected_case = st.selectbox(
-            "実験ケース",
-            _case_names,
-            key="rd_case",
-        )
-        _rd_config_path = _case_paths.get(_rd_selected_case, "")
-    else:
-        st.info(
-            "config/cases/ に .json ファイルがありません。まず実験ケースを作成してください。"
-        )
-        _rd_config_path = st.text_input(
-            "設定 JSON パス (フォールバック)",
-            value="config/experiment_config.json",
-            key="rd_cfg_path_fallback",
+        from app.visualizer import (
+            plot_soc_src,
+            plot_charger_occupancy_src,
+            plot_site_power_src,
+            plot_feasibility_radar,
+            plot_gantt_src,
         )
 
-    # 設定ファイルのメタ情報を表示
-    if _rd_config_path:
-        try:
-            _rd_meta = load_config_meta(_rd_config_path)
-            _rd_meta_mode = _rd_meta.get("mode", "(未設定)")
-            st.caption(
-                f"設定ファイル: `{_rd_config_path}` | 設定上のモード: `{_rd_meta_mode}`"
+        # ---- ケース選択 ----
+        st.markdown("##### ケース選択")
+
+        _cases = list_cases()
+        _case_names = [name for name, _ in _cases]
+        _case_paths = {name: str(path) for name, path in _cases}
+
+        _rd_col1, _rd_col2 = st.columns([2, 1])
+        with _rd_col1:
+            _use_custom = st.checkbox(
+                "カスタム設定ファイルを直接指定",
+                value=False,
+                key="rd_custom_cfg",
             )
-        except Exception:
-            st.caption(f"設定ファイル: `{_rd_config_path}`")
+        with _rd_col2:
+            if _case_names:
+                st.caption(f"{len(_case_names)} ケース見つかりました")
+            else:
+                st.caption("config/cases/ にケースなし")
 
-    # ---- モード上書き ----
-    st.markdown("##### モード選択")
-    try:
-        from src.model_factory import AVAILABLE_MODES, MODE_DESCRIPTIONS
+        if _use_custom:
+            _rd_config_path = st.text_input(
+                "設定 JSON パス",
+                value="config/experiment_config.json",
+                key="rd_cfg_path",
+            )
+        elif _case_names:
+            _rd_selected_case = st.selectbox(
+                "実験ケース",
+                _case_names,
+                key="rd_case",
+            )
+            _rd_config_path = _case_paths.get(_rd_selected_case, "")
+        else:
+            st.info(
+                "config/cases/ に .json ファイルがありません。まず実験ケースを作成してください。"
+            )
+            _rd_config_path = st.text_input(
+                "設定 JSON パス (フォールバック)",
+                value="config/experiment_config.json",
+                key="rd_cfg_path_fallback",
+            )
 
-        _rd_mode_options = ["(設定ファイルのモードを使用)"] + list(AVAILABLE_MODES)
-    except Exception:
-        _rd_mode_options = ["(設定ファイルのモードを使用)"]
-        MODE_DESCRIPTIONS = {}
-
-    _rd_mode_raw = st.selectbox(
-        "モード上書き",
-        _rd_mode_options,
-        key="rd_mode",
-        help="(設定ファイルのモードを使用) を選ぶと config の mode フィールドをそのまま使います",
-    )
-    _rd_mode = None if _rd_mode_raw.startswith("(") else _rd_mode_raw
-    if _rd_mode:
-        st.caption(MODE_DESCRIPTIONS.get(_rd_mode, ""))
-
-    st.markdown("---")
-
-    # ---- ソルバー実行ボタン ----
-    _rd_btn_col, _rd_status_col = st.columns([1, 3])
-    with _rd_btn_col:
-        _rd_run = st.button(
-            "▶ パイプライン実行",
-            type="primary",
-            key="rd_run",
-        )
-    with _rd_status_col:
-        _rd_clear = st.button("🗑 結果クリア", key="rd_clear")
-        if _rd_clear:
-            st.session_state.research_pipeline_result = None
-            st.session_state.research_pipeline_data = None
-            st.rerun()
-
-    if _rd_run and _rd_config_path:
-        with st.spinner("src.pipeline.solve を実行中... (Gurobi が必要です)"):
+        # 設定ファイルのメタ情報を表示
+        if _rd_config_path:
             try:
-                # データも保持してグラフ用ラベル生成に使う
-                from src.data_loader import load_problem_data
-                from src.model_sets import build_model_sets
-                from src.parameter_builder import build_derived_params
+                _rd_meta = load_config_meta(_rd_config_path)
+                _rd_meta_mode = _rd_meta.get("mode", "(未設定)")
+                st.caption(
+                    f"設定ファイル: `{_rd_config_path}` | 設定上のモード: `{_rd_meta_mode}`"
+                )
+            except Exception:
+                st.caption(f"設定ファイル: `{_rd_config_path}`")
 
-                _rd_data = load_problem_data(_rd_config_path)
-                _rd_ms = build_model_sets(_rd_data)
-                _rd_dp = build_derived_params(_rd_data, _rd_ms)
-                st.session_state.research_pipeline_data = (_rd_data, _rd_ms, _rd_dp)
+        # ---- モード上書き ----
+        st.markdown("##### モード選択")
+        try:
+            from src.model_factory import AVAILABLE_MODES, MODE_DESCRIPTIONS
 
-                _rd_pipe = run_solve(_rd_config_path, _rd_mode)
-                st.session_state.research_pipeline_result = _rd_pipe
+            _rd_mode_options = ["(設定ファイルのモードを使用)"] + list(AVAILABLE_MODES)
+        except Exception:
+            _rd_mode_options = ["(設定ファイルのモードを使用)"]
+            MODE_DESCRIPTIONS = {}
 
-                _rd_r = _rd_pipe.get("result")
-                if _rd_r and _rd_r.status == "OPTIMAL":
-                    st.success(
-                        f"OPTIMAL — 目的関数値: {_rd_r.objective_value:,.0f} 円 "
-                        f"({_rd_r.solve_time_sec:.2f} 秒)"
-                    )
-                elif _rd_r and _rd_r.status == "INFEASIBLE":
-                    st.error(f"INFEASIBLE: {_rd_r.infeasibility_info}")
-                else:
-                    st.warning(f"ステータス: {_rd_r.status if _rd_r else 'None'}")
-            except Exception as _rd_err:
-                st.error(f"パイプラインエラー: {_rd_err}")
-                import traceback as _tb
+        _rd_mode_raw = st.selectbox(
+            "モード上書き",
+            _rd_mode_options,
+            key="rd_mode",
+            help="(設定ファイルのモードを使用) を選ぶと config の mode フィールドをそのまま使います",
+        )
+        _rd_mode = None if _rd_mode_raw.startswith("(") else _rd_mode_raw
+        if _rd_mode:
+            st.caption(MODE_DESCRIPTIONS.get(_rd_mode, ""))
 
-                with st.expander("スタックトレース"):
-                    st.code(_tb.format_exc())
+        st.markdown("---")
 
-    # ---- 結果表示 ----
-    _rd_pipe = st.session_state.research_pipeline_result
-    _rd_stored = st.session_state.research_pipeline_data
-
-    if _rd_pipe is not None:
-        _rd_r = _rd_pipe.get("result")
-        _rd_sim = _rd_pipe.get("sim_result")
-        _rd_method = _rd_pipe.get("method", "")
-
-        if _rd_r is None:
-            st.warning("結果オブジェクトが空です。")
-        else:
-            # ---- 10 KPI テーブル ----
-            st.markdown("#### 10 KPI サマリ")
-            _rd_kpis = extract_10_kpis(_rd_r, _rd_sim)
-            _rd_kpi_display = {
-                "KPI": [
-                    "目的関数値",
-                    "電力量料金 [円]",
-                    "デマンド料金 [円]",
-                    "燃料費 [円]",
-                    "車両固定費 [円]",
-                    "未割当タスク数",
-                    "最低 SOC [kWh]",
-                    "充電器平均利用率",
-                    "ピーク受電電力 [kW]",
-                    "求解時間 [秒]",
-                ],
-                "値": [
-                    f"{_rd_kpis['objective_value']:,.0f}"
-                    if _rd_kpis["objective_value"] is not None
-                    else "N/A",
-                    f"{_rd_kpis['total_energy_cost']:,.0f}"
-                    if _rd_kpis["total_energy_cost"] is not None
-                    else "N/A",
-                    f"{_rd_kpis['total_demand_charge']:,.0f}"
-                    if _rd_kpis["total_demand_charge"] is not None
-                    else "N/A",
-                    f"{_rd_kpis['total_fuel_cost']:,.0f}"
-                    if _rd_kpis["total_fuel_cost"] is not None
-                    else "N/A",
-                    "N/A",
-                    str(_rd_kpis["unmet_trips"]),
-                    f"{_rd_kpis['soc_min_margin_kwh']:.2f}"
-                    if _rd_kpis["soc_min_margin_kwh"] is not None
-                    else "N/A",
-                    f"{_rd_kpis['charger_utilization']:.3f}"
-                    if _rd_kpis["charger_utilization"] is not None
-                    else "N/A",
-                    f"{_rd_kpis['peak_grid_power_kw']:.2f}"
-                    if _rd_kpis["peak_grid_power_kw"] is not None
-                    else "N/A",
-                    f"{_rd_kpis['solve_time_sec']:.2f}"
-                    if _rd_kpis["solve_time_sec"] is not None
-                    else "N/A",
-                ],
-                "ステータス": [
-                    "OK" if _rd_r.status == "OPTIMAL" else _rd_r.status,
-                    "",
-                    "",
-                    "",
-                    "",
-                    "OK" if _rd_kpis["unmet_trips"] == 0 else "NG",
-                    "OK" if (_rd_kpis["soc_min_margin_kwh"] or 0.0) >= 0 else "NG",
-                    "",
-                    "",
-                    "",
-                ],
-            }
-            st.dataframe(
-                pd.DataFrame(_rd_kpi_display), use_container_width=True, hide_index=True
+        # ---- ソルバー実行ボタン ----
+        _rd_btn_col, _rd_status_col = st.columns([1, 3])
+        with _rd_btn_col:
+            _rd_run = st.button(
+                "▶ パイプライン実行",
+                type="primary",
+                key="rd_run",
             )
+        with _rd_status_col:
+            _rd_clear = st.button("🗑 結果クリア", key="rd_clear")
+            if _rd_clear:
+                st.session_state.research_pipeline_result = None
+                st.session_state.research_pipeline_data = None
+                st.rerun()
 
-            # ---- 実行可能性ダッシュボード ----
-            if _rd_sim is not None and _rd_sim.feasibility_report is not None:
-                st.markdown("#### 実行可能性ダッシュボード")
-                _rd_feas_dict = make_feasibility_dict(_rd_sim.feasibility_report)
-                _rd_fc1, _rd_fc2 = st.columns([1, 1])
-                with _rd_fc1:
-                    st.plotly_chart(
-                        plot_feasibility_radar(_rd_feas_dict),
-                        use_container_width=True,
-                    )
-                with _rd_fc2:
-                    for _cat, _ok in _rd_feas_dict.items():
-                        _icon = "✅" if _ok else "❌"
-                        st.write(f"{_icon} **{_cat}**")
-                    if _rd_sim.feasibility_report.issues:
-                        with st.expander(
-                            f"問題詳細 ({len(_rd_sim.feasibility_report.issues)} 件)"
-                        ):
-                            for _iss in _rd_sim.feasibility_report.issues[:30]:
-                                st.write(f"- {_iss}")
-
-            # ---- 時刻ラベル生成 ----
-            _rd_labels = None
-            if _rd_stored is not None:
+        if _rd_run and _rd_config_path:
+            with st.spinner("src.pipeline.solve を実行中... (Gurobi が必要です)"):
                 try:
-                    _rd_data_obj = _rd_stored[0]
-                    _rd_labels = build_time_labels(_rd_data_obj)
-                except Exception:
-                    pass
+                    # データも保持してグラフ用ラベル生成に使う
+                    from src.data_loader import load_problem_data
+                    from src.model_sets import build_model_sets
+                    from src.parameter_builder import build_derived_params
 
-            # ---- ガント (便割当) ----
-            if _rd_r.assignment:
-                st.markdown("#### 便割当スケジュール")
-                _rd_task_info: dict = {}
-                if _rd_stored is not None:
-                    try:
-                        _rd_dp2 = _rd_stored[2]
-                        for _tid, _t in _rd_dp2.task_lut.items():
-                            _rd_task_info[_tid] = {
-                                "start": getattr(_t, "start_time_idx", 0),
-                                "end": getattr(_t, "end_time_idx", 1),
-                                "energy": getattr(_t, "energy_required_kwh_bev", 0.0),
-                            }
-                    except Exception:
-                        pass
-                _rd_n_periods = 64
-                if _rd_stored is not None:
-                    try:
-                        _rd_n_periods = _rd_stored[0].num_periods
-                    except Exception:
-                        pass
-                st.plotly_chart(
-                    plot_gantt_src(
-                        _rd_r.assignment,
-                        _rd_task_info,
-                        charge_schedule=_rd_r.charge_schedule,
-                        num_periods=_rd_n_periods,
-                        time_labels=_rd_labels,
-                    ),
+                    _rd_data = load_problem_data(_rd_config_path)
+                    _rd_ms = build_model_sets(_rd_data)
+                    _rd_dp = build_derived_params(_rd_data, _rd_ms)
+                    st.session_state.research_pipeline_data = (_rd_data, _rd_ms, _rd_dp)
+
+                    _rd_pipe = run_solve(_rd_config_path, _rd_mode)
+                    st.session_state.research_pipeline_result = _rd_pipe
+
+                    _rd_r = _rd_pipe.get("result")
+                    if _rd_r and _rd_r.status == "OPTIMAL":
+                        st.success(
+                            f"OPTIMAL — 目的関数値: {_rd_r.objective_value:,.0f} 円 "
+                            f"({_rd_r.solve_time_sec:.2f} 秒)"
+                        )
+                    elif _rd_r and _rd_r.status == "INFEASIBLE":
+                        st.error(f"INFEASIBLE: {_rd_r.infeasibility_info}")
+                    else:
+                        st.warning(f"ステータス: {_rd_r.status if _rd_r else 'None'}")
+                except Exception as _rd_err:
+                    st.error(f"パイプラインエラー: {_rd_err}")
+                    import traceback as _tb
+
+                    with st.expander("スタックトレース"):
+                        st.code(_tb.format_exc())
+
+        # ---- 結果表示 ----
+        _rd_pipe = st.session_state.research_pipeline_result
+        _rd_stored = st.session_state.research_pipeline_data
+
+        if _rd_pipe is not None:
+            _rd_r = _rd_pipe.get("result")
+            _rd_sim = _rd_pipe.get("sim_result")
+            _rd_method = _rd_pipe.get("method", "")
+
+            if _rd_r is None:
+                st.warning("結果オブジェクトが空です。")
+            else:
+                # ---- 10 KPI テーブル ----
+                st.markdown("#### 10 KPI サマリ")
+                _rd_kpis = extract_10_kpis(_rd_r, _rd_sim)
+                _rd_kpi_display = {
+                    "KPI": [
+                        "目的関数値",
+                        "電力量料金 [円]",
+                        "デマンド料金 [円]",
+                        "燃料費 [円]",
+                        "車両固定費 [円]",
+                        "未割当タスク数",
+                        "最低 SOC [kWh]",
+                        "充電器平均利用率",
+                        "ピーク受電電力 [kW]",
+                        "求解時間 [秒]",
+                    ],
+                    "値": [
+                        f"{_rd_kpis['objective_value']:,.0f}"
+                        if _rd_kpis["objective_value"] is not None
+                        else "N/A",
+                        f"{_rd_kpis['total_energy_cost']:,.0f}"
+                        if _rd_kpis["total_energy_cost"] is not None
+                        else "N/A",
+                        f"{_rd_kpis['total_demand_charge']:,.0f}"
+                        if _rd_kpis["total_demand_charge"] is not None
+                        else "N/A",
+                        f"{_rd_kpis['total_fuel_cost']:,.0f}"
+                        if _rd_kpis["total_fuel_cost"] is not None
+                        else "N/A",
+                        "N/A",
+                        str(_rd_kpis["unmet_trips"]),
+                        f"{_rd_kpis['soc_min_margin_kwh']:.2f}"
+                        if _rd_kpis["soc_min_margin_kwh"] is not None
+                        else "N/A",
+                        f"{_rd_kpis['charger_utilization']:.3f}"
+                        if _rd_kpis["charger_utilization"] is not None
+                        else "N/A",
+                        f"{_rd_kpis['peak_grid_power_kw']:.2f}"
+                        if _rd_kpis["peak_grid_power_kw"] is not None
+                        else "N/A",
+                        f"{_rd_kpis['solve_time_sec']:.2f}"
+                        if _rd_kpis["solve_time_sec"] is not None
+                        else "N/A",
+                    ],
+                    "ステータス": [
+                        "OK" if _rd_r.status == "OPTIMAL" else _rd_r.status,
+                        "",
+                        "",
+                        "",
+                        "",
+                        "OK" if _rd_kpis["unmet_trips"] == 0 else "NG",
+                        "OK" if (_rd_kpis["soc_min_margin_kwh"] or 0.0) >= 0 else "NG",
+                        "",
+                        "",
+                        "",
+                    ],
+                }
+                st.dataframe(
+                    pd.DataFrame(_rd_kpi_display),
                     use_container_width=True,
+                    hide_index=True,
                 )
 
-            # ---- SOC トレース ----
-            if _rd_r.soc_series:
-                st.markdown("#### SOC 推移")
-                _rd_soc_mins: dict = {}
+                # ---- 実行可能性ダッシュボード ----
+                if _rd_sim is not None and _rd_sim.feasibility_report is not None:
+                    st.markdown("#### 実行可能性ダッシュボード")
+                    _rd_feas_dict = make_feasibility_dict(_rd_sim.feasibility_report)
+                    _rd_fc1, _rd_fc2 = st.columns([1, 1])
+                    with _rd_fc1:
+                        st.plotly_chart(
+                            plot_feasibility_radar(_rd_feas_dict),
+                            use_container_width=True,
+                        )
+                    with _rd_fc2:
+                        for _cat, _ok in _rd_feas_dict.items():
+                            _icon = "✅" if _ok else "❌"
+                            st.write(f"{_icon} **{_cat}**")
+                        if _rd_sim.feasibility_report.issues:
+                            with st.expander(
+                                f"問題詳細 ({len(_rd_sim.feasibility_report.issues)} 件)"
+                            ):
+                                for _iss in _rd_sim.feasibility_report.issues[:30]:
+                                    st.write(f"- {_iss}")
+
+                # ---- 時刻ラベル生成 ----
+                _rd_labels = None
                 if _rd_stored is not None:
                     try:
-                        _rd_dp2 = _rd_stored[2]
-                        for _vid in _rd_r.soc_series:
-                            _veh = _rd_dp2.vehicle_lut.get(_vid)
-                            if _veh:
-                                _rd_soc_mins[_vid] = (
-                                    getattr(_veh, "soc_min", 0.0) or 0.0
-                                )
+                        _rd_data_obj = _rd_stored[0]
+                        _rd_labels = build_time_labels(_rd_data_obj)
                     except Exception:
                         pass
-                st.plotly_chart(
-                    plot_soc_src(
-                        _rd_r.soc_series,
-                        time_labels=_rd_labels,
-                        soc_min_lines=_rd_soc_mins or None,
-                    ),
-                    use_container_width=True,
-                )
 
-            # ---- 充電器稼働状況 ----
-            if _rd_r.charge_schedule:
-                st.markdown("#### 充電器稼働状況")
-                _rd_c_totals = build_charger_totals(_rd_r)
-                if _rd_c_totals:
+                # ---- ガント (便割当) ----
+                if _rd_r.assignment:
+                    st.markdown("#### 便割当スケジュール")
+                    _rd_task_info: dict = {}
+                    if _rd_stored is not None:
+                        try:
+                            _rd_dp2 = _rd_stored[2]
+                            for _tid, _t in _rd_dp2.task_lut.items():
+                                _rd_task_info[_tid] = {
+                                    "start": getattr(_t, "start_time_idx", 0),
+                                    "end": getattr(_t, "end_time_idx", 1),
+                                    "energy": getattr(
+                                        _t, "energy_required_kwh_bev", 0.0
+                                    ),
+                                }
+                        except Exception:
+                            pass
+                    _rd_n_periods = 64
+                    if _rd_stored is not None:
+                        try:
+                            _rd_n_periods = _rd_stored[0].num_periods
+                        except Exception:
+                            pass
                     st.plotly_chart(
-                        plot_charger_occupancy_src(
-                            _rd_c_totals, time_labels=_rd_labels
+                        plot_gantt_src(
+                            _rd_r.assignment,
+                            _rd_task_info,
+                            charge_schedule=_rd_r.charge_schedule,
+                            num_periods=_rd_n_periods,
+                            time_labels=_rd_labels,
                         ),
                         use_container_width=True,
                     )
 
-            # ---- サイト電力収支 ----
-            if _rd_r.grid_import_kw:
-                st.markdown("#### サイト電力収支")
-                st.plotly_chart(
-                    plot_site_power_src(
-                        _rd_r.grid_import_kw,
-                        pv_used=_rd_r.pv_used_kw or None,
-                        time_labels=_rd_labels,
-                    ),
-                    use_container_width=True,
+                # ---- SOC トレース ----
+                if _rd_r.soc_series:
+                    st.markdown("#### SOC 推移")
+                    _rd_soc_mins: dict = {}
+                    if _rd_stored is not None:
+                        try:
+                            _rd_dp2 = _rd_stored[2]
+                            for _vid in _rd_r.soc_series:
+                                _veh = _rd_dp2.vehicle_lut.get(_vid)
+                                if _veh:
+                                    _rd_soc_mins[_vid] = (
+                                        getattr(_veh, "soc_min", 0.0) or 0.0
+                                    )
+                        except Exception:
+                            pass
+                    st.plotly_chart(
+                        plot_soc_src(
+                            _rd_r.soc_series,
+                            time_labels=_rd_labels,
+                            soc_min_lines=_rd_soc_mins or None,
+                        ),
+                        use_container_width=True,
+                    )
+
+                # ---- 充電器稼働状況 ----
+                if _rd_r.charge_schedule:
+                    st.markdown("#### 充電器稼働状況")
+                    _rd_c_totals = build_charger_totals(_rd_r)
+                    if _rd_c_totals:
+                        st.plotly_chart(
+                            plot_charger_occupancy_src(
+                                _rd_c_totals, time_labels=_rd_labels
+                            ),
+                            use_container_width=True,
+                        )
+
+                # ---- サイト電力収支 ----
+                if _rd_r.grid_import_kw:
+                    st.markdown("#### サイト電力収支")
+                    st.plotly_chart(
+                        plot_site_power_src(
+                            _rd_r.grid_import_kw,
+                            pv_used=_rd_r.pv_used_kw or None,
+                            time_labels=_rd_labels,
+                        ),
+                        use_container_width=True,
+                    )
+
+                # ---- 出力ディレクトリリンク ----
+                st.markdown("---")
+                # Excel ダウンロードボタン
+                if _rd_stored is not None and _rd_sim is not None:
+                    try:
+                        from src.result_exporter import (
+                            export_excel_bytes as _excel_bytes,
+                        )
+
+                        _xl_data, _xl_ms, _xl_dp = _rd_stored
+                        _xlsx = _excel_bytes(
+                            _xl_data,
+                            _xl_ms,
+                            _xl_dp,
+                            _rd_r,
+                            _rd_sim,
+                            run_label=_rd_config_path,
+                        )
+                        st.download_button(
+                            label="📥 結果を Excel でダウンロード (results.xlsx)",
+                            data=_xlsx,
+                            file_name="results.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="rd_excel_download",
+                        )
+                    except ImportError:
+                        st.caption(
+                            "Excel エクスポートには `pip install openpyxl` が必要です。"
+                        )
+                    except Exception as _xl_err:
+                        st.caption(f"Excel 生成エラー: {_xl_err}")
+                st.info(
+                    "結果ファイルは `outputs/` ディレクトリに保存されています。"
+                    " CLI からも同じコマンドで再現できます:\n\n"
+                    f"```\npython -m src.pipeline.solve --config {_rd_config_path}"
+                    + (f" --mode {_rd_mode}" if _rd_mode else "")
+                    + "\n```"
                 )
 
-            # ---- 出力ディレクトリリンク ----
-            st.markdown("---")
-            st.info(
-                "結果ファイルは `outputs/` ディレクトリに保存されています。"
-                " CLI からも同じコマンドで再現できます:\n\n"
-                f"```\npython -m src.pipeline.solve --config {_rd_config_path}"
-                + (f" --mode {_rd_mode}" if _rd_mode else "")
-                + "\n```"
-            )
+    with _rt_tab_pareto:
+        from app.pareto_page import render_pareto_page
+
+        render_pareto_page()
 
 
 # ---------------------------------------------------------------------------
