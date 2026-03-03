@@ -529,187 +529,278 @@ with tab_settings:
             """
         <div class="section-header">
           <div class="section-icon">⚙️</div>
-          <h3>シミュレーション設定</h3>
+          <h3>修論シミュレーション設定（再設計版）</h3>
         </div>
         """,
             unsafe_allow_html=True,
         )
 
-        # ---- 📐 システム規模 ----
-        with st.expander("📐 システム規模", expanded=True):
-            sc1, sc2, sc3, sc4 = st.columns(4)
-            with sc1:
-                num_buses = st.number_input("バス台数", 1, 20, 3, key="cfg_num_buses")
-            with sc2:
-                num_trips = st.number_input("便数", 1, 30, 6, key="cfg_num_trips")
-            with sc3:
+        st.info(
+            "📚 constant/masters_thesis_simulation_spec_v3.md などの設計方針に合わせ、"
+            "『ケーステンプレート → 運行条件 → 車両/充電/エネルギー』の順で設定できる構成に変更しています。"
+        )
+
+        thesis_templates = {
+            "都市内高頻度（修論標準）": {
+                "num_buses": 8,
+                "num_trips": 64,
+                "delta_h": 0.25,
+                "start_hour": 5,
+                "end_hour": 24,
+                "trip_distance": 12.0,
+                "runtime_min": 40,
+                "layover_min": 8,
+                "peak_ratio": 1.6,
+                "cap_kwh": 320.0,
+                "soc_init": 85,
+                "soc_min": 20,
+                "soc_max": 95,
+                "eff_km_per_kwh": 1.15,
+                "num_depots": 2,
+                "slow_power": 60.0,
+                "slow_count": 4,
+                "fast_power": 180.0,
+                "fast_count": 2,
+                "charge_eff": 0.95,
+                "enable_pv": True,
+                "pv_scale": 1.0,
+                "diesel": 145.0,
+                "enable_terminal_soc": True,
+                "terminal_soc": 45,
+                "enable_demand": True,
+                "contract_power": 600.0,
+            },
+            "郊外長距離": {
+                "num_buses": 6,
+                "num_trips": 36,
+                "delta_h": 0.5,
+                "start_hour": 5,
+                "end_hour": 23,
+                "trip_distance": 22.0,
+                "runtime_min": 65,
+                "layover_min": 12,
+                "peak_ratio": 1.3,
+                "cap_kwh": 420.0,
+                "soc_init": 90,
+                "soc_min": 18,
+                "soc_max": 96,
+                "eff_km_per_kwh": 0.95,
+                "num_depots": 3,
+                "slow_power": 90.0,
+                "slow_count": 3,
+                "fast_power": 220.0,
+                "fast_count": 2,
+                "charge_eff": 0.94,
+                "enable_pv": True,
+                "pv_scale": 1.2,
+                "diesel": 145.0,
+                "enable_terminal_soc": True,
+                "terminal_soc": 50,
+                "enable_demand": True,
+                "contract_power": 700.0,
+            },
+            "ピーク偏重（朝夕混雑）": {
+                "num_buses": 9,
+                "num_trips": 72,
+                "delta_h": 0.25,
+                "start_hour": 5,
+                "end_hour": 24,
+                "trip_distance": 10.0,
+                "runtime_min": 35,
+                "layover_min": 7,
+                "peak_ratio": 2.0,
+                "cap_kwh": 300.0,
+                "soc_init": 85,
+                "soc_min": 22,
+                "soc_max": 95,
+                "eff_km_per_kwh": 1.10,
+                "num_depots": 2,
+                "slow_power": 50.0,
+                "slow_count": 4,
+                "fast_power": 200.0,
+                "fast_count": 3,
+                "charge_eff": 0.95,
+                "enable_pv": False,
+                "pv_scale": 0.0,
+                "diesel": 145.0,
+                "enable_terminal_soc": False,
+                "terminal_soc": 40,
+                "enable_demand": True,
+                "contract_power": 650.0,
+            },
+            "論文再現ミニマム": {
+                "num_buses": 3,
+                "num_trips": 10,
+                "delta_h": 0.5,
+                "start_hour": 6,
+                "end_hour": 22,
+                "trip_distance": 8.0,
+                "runtime_min": 30,
+                "layover_min": 8,
+                "peak_ratio": 1.0,
+                "cap_kwh": 300.0,
+                "soc_init": 80,
+                "soc_min": 20,
+                "soc_max": 95,
+                "eff_km_per_kwh": 1.0,
+                "num_depots": 2,
+                "slow_power": 50.0,
+                "slow_count": 2,
+                "fast_power": 150.0,
+                "fast_count": 1,
+                "charge_eff": 0.95,
+                "enable_pv": True,
+                "pv_scale": 1.0,
+                "diesel": 145.0,
+                "enable_terminal_soc": False,
+                "terminal_soc": 50,
+                "enable_demand": False,
+                "contract_power": 300.0,
+            },
+        }
+
+        template_name = st.selectbox(
+            "ケーステンプレート",
+            list(thesis_templates.keys()),
+            key="cfg_template_name",
+            help="修論の代表ケースを初期値として読み込みます。必要に応じて下で自由に上書きできます。",
+        )
+        defaults = thesis_templates[template_name]
+        if st.session_state.get("cfg_template_applied") != template_name:
+            for _k, _v in defaults.items():
+                st.session_state[f"cfg2_{_k}"] = _v
+            st.session_state["cfg_template_applied"] = template_name
+
+        sec_a, sec_b = st.columns([1.2, 1.0])
+        with sec_a:
+            st.markdown("#### 1) 実験スケール・時間")
+            a1, a2, a3 = st.columns(3)
+            with a1:
+                num_buses = st.number_input("バス台数", 1, 80, key="cfg2_num_buses")
+            with a2:
+                num_trips = st.number_input("便数", 1, 400, key="cfg2_num_trips")
+            with a3:
                 delta_h = st.selectbox(
-                    "時間刻み [h]", [0.25, 0.5, 1.0], index=1, key="cfg_delta_h"
+                    "時間刻み [h]", [0.25, 0.5, 1.0], key="cfg2_delta_h"
                 )
-            with sc4:
-                pass
-            sc5, sc6 = st.columns(2)
-            with sc5:
-                start_hour = st.slider("開始時刻", 0, 12, 6, key="cfg_start_hour")
-            with sc6:
-                end_hour = st.slider("終了時刻", 12, 24, 22, key="cfg_end_hour")
+            a4, a5 = st.columns(2)
+            with a4:
+                start_hour = st.slider("運行開始時刻", 0, 18, key="cfg2_start_hour")
+            with a5:
+                end_hour = st.slider("運行終了時刻", 6, 24, key="cfg2_end_hour")
+            if end_hour <= start_hour:
+                st.error("終了時刻は開始時刻より後にしてください。")
             num_periods = int((end_hour - start_hour) / delta_h)
-            st.caption(
-                f"📊 計画スロット数: **{num_periods}** ({start_hour}:00 〜 {end_hour}:00, Δt={delta_h}h)"
-            )
+            st.caption(f"計画スロット数: {num_periods}（{start_hour}:00〜{end_hour}:00, Δt={delta_h}h）")
 
-        # ---- 🚌 車両性能 ----
-        with st.expander("🚌 車両性能"):
-            vc1, vc2 = st.columns(2)
-            with vc1:
-                cap_kwh = st.number_input(
-                    "バッテリ容量 [kWh]", 50.0, 1000.0, 300.0, step=10.0, key="cfg_cap"
+            st.markdown("#### 2) 路線・運行条件（Trip自動生成）")
+            b1, b2, b3 = st.columns(3)
+            with b1:
+                mean_trip_distance = st.number_input(
+                    "平均片道距離 [km]", 1.0, 80.0, step=0.5, key="cfg2_trip_distance"
                 )
-                soc_init_ratio = (
-                    st.slider("初期 SOC [%]", 30, 100, 80, key="cfg_soc_init") / 100.0
-                )
-            with vc2:
-                efficiency = st.number_input(
-                    "電費 [km/kWh]", 0.3, 3.0, 1.0, step=0.1, key="cfg_eff"
-                )
-                soc_min_ratio = (
-                    st.slider("SOC 下限 [%]", 5, 50, 20, key="cfg_soc_min") / 100.0
-                )
-            soc_max_ratio = (
-                st.slider("SOC 上限 [%]", 60, 100, 95, key="cfg_soc_max") / 100.0
-            )
+            with b2:
+                mean_runtime_min = st.slider("平均運行時間 [分]", 10, 150, key="cfg2_runtime_min")
+            with b3:
+                layover_min = st.slider("折返し余裕時間 [分]", 0, 40, key="cfg2_layover_min")
 
-        # ---- 🛣️ 路線設定 ----
-        with st.expander("🛣️ 路線詳細設定", expanded=False):
-            st.info(
-                "路線・停留所・営業所の編集は **🚌 路線・営業所管理** タブで行ってください。"
-            )
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                peak_ratio = st.slider(
+                    "朝夕ピーク倍率", 1.0, 2.5, step=0.1, key="cfg2_peak_ratio"
+                )
+            with c2:
+                congestion_level = st.slider("混雑係数", 0.5, 1.8, 1.0, step=0.05)
+            with c3:
+                weather_impact = st.slider("気象負荷係数", 0.9, 1.3, 1.0, step=0.01)
 
-        # ---- 🔌 充電設備 ----
-        with st.expander("🔌 充電設備"):
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                num_depots = st.slider("充電拠点数", 1, 5, 2, key="cfg_depots")
-                slow_power = st.number_input(
-                    "普通充電出力 [kW]", 10.0, 200.0, 50.0, step=10.0, key="cfg_slow_pw"
-                )
-                slow_count = st.number_input(
-                    "普通充電器台数", 0, 10, 2, step=1, key="cfg_slow_cnt"
-                )
-            with cc2:
-                charge_eff = st.slider(
-                    "充電効率", 0.80, 1.00, 0.95, step=0.01, key="cfg_ch_eff"
-                )
-                fast_power = st.number_input(
-                    "急速充電出力 [kW]",
-                    50.0,
-                    500.0,
-                    150.0,
-                    step=10.0,
-                    key="cfg_fast_pw",
-                )
-                fast_count = st.number_input(
-                    "急速充電器台数", 0, 10, 1, step=1, key="cfg_fast_cnt"
-                )
+        with sec_b:
+            st.markdown("#### 3) 車両・SOC条件")
+            d1, d2 = st.columns(2)
+            with d1:
+                cap_kwh = st.number_input("バッテリ容量 [kWh]", 120.0, 700.0, step=10.0, key="cfg2_cap_kwh")
+                soc_init_ratio = st.slider("初期 SOC [%]", 30, 100, key="cfg2_soc_init") / 100.0
+            with d2:
+                efficiency = st.number_input("電費 [km/kWh]", 0.5, 2.5, step=0.05, key="cfg2_eff_km_per_kwh")
+                soc_min_ratio = st.slider("SOC 下限 [%]", 5, 40, key="cfg2_soc_min") / 100.0
+            soc_max_ratio = st.slider("SOC 上限 [%]", 60, 100, key="cfg2_soc_max") / 100.0
 
-        # ---- ☀️ エネルギー ----
-        with st.expander("☀️ PV・電力料金"):
-            ec1, ec2 = st.columns(2)
-            with ec1:
-                enable_pv = st.checkbox(
-                    "PV を有効にする", value=True, key="cfg_enable_pv"
-                )
-                pv_scale = st.slider(
-                    "PV 出力倍率", 0.0, 5.0, 1.0, step=0.1, key="cfg_pv_scale"
-                )
-            with ec2:
+            st.markdown("#### 4) 充電インフラ")
+            e1, e2 = st.columns(2)
+            with e1:
+                num_depots = st.slider("充電拠点数", 1, 6, key="cfg2_num_depots")
+                slow_power = st.number_input("普通充電出力 [kW]", 20.0, 200.0, step=10.0, key="cfg2_slow_power")
+                slow_count = st.number_input("普通充電器台数", 0, 20, step=1, key="cfg2_slow_count")
+            with e2:
+                fast_power = st.number_input("急速充電出力 [kW]", 60.0, 400.0, step=10.0, key="cfg2_fast_power")
+                fast_count = st.number_input("急速充電器台数", 0, 20, step=1, key="cfg2_fast_count")
+                charge_eff = st.slider("充電効率", 0.80, 1.0, key="cfg2_charge_eff")
+
+            st.markdown("#### 5) エネルギー・研究オプション")
+            f1, f2 = st.columns(2)
+            with f1:
+                enable_pv = st.checkbox("PV を有効化", key="cfg2_enable_pv")
+                pv_scale = st.slider("PV 出力倍率", 0.0, 5.0, step=0.1, key="cfg2_pv_scale")
+                diesel_price = st.number_input("軽油単価 [円/L]", 80.0, 300.0, step=1.0, key="cfg2_diesel")
+            with f2:
                 price_mode = st.selectbox(
-                    "電力料金モード",
-                    ["デフォルト TOU", "一律 [円/kWh]"],
-                    key="cfg_price_mode",
+                    "電力単価プロファイル",
+                    ["研究標準TOU", "深夜割安", "一律単価"],
                 )
-                flat_price = 25.0
-                if price_mode == "一律 [円/kWh]":
-                    flat_price = st.number_input(
-                        "電力単価 [円/kWh]",
-                        10.0,
-                        100.0,
-                        25.0,
-                        step=1.0,
-                        key="cfg_flat_price",
-                    )
-            diesel_price = st.number_input(
-                "軽油単価 [円/L]",
-                80.0,
-                250.0,
-                145.0,
-                step=5.0,
-                key="cfg_diesel",
-                help="ICE 比較用",
-            )
-
-        # ---- 🔧 拡張オプション ----
-        with st.expander("🔧 拡張オプション"):
-            oc1, oc2 = st.columns(2)
-            with oc1:
-                enable_terminal_soc = st.checkbox(
-                    "終端 SOC 条件", value=False, key="cfg_term_soc"
-                )
-                terminal_soc_ratio = 0.5
+                flat_price = st.number_input("一律単価 [円/kWh]", 10.0, 80.0, 25.0, step=1.0)
+                enable_terminal_soc = st.checkbox("終端 SOC 条件", key="cfg2_enable_terminal_soc")
+                terminal_soc_ratio = st.session_state.get("cfg2_terminal_soc", 50) / 100.0
                 if enable_terminal_soc:
-                    terminal_soc_ratio = (
-                        st.slider("終端 SOC [%]", 20, 80, 50, key="cfg_term_ratio")
-                        / 100.0
-                    )
-            with oc2:
-                enable_demand_charge = st.checkbox(
-                    "デマンドチャージ", value=False, key="cfg_demand"
-                )
+                    terminal_soc_ratio = st.slider("終端 SOC [%]", 20, 90, key="cfg2_terminal_soc") / 100.0
+                enable_demand_charge = st.checkbox("デマンドチャージ制約", key="cfg2_enable_demand")
                 contract_power = None
                 if enable_demand_charge:
                     contract_power = st.number_input(
-                        "契約電力上限 [kW]",
-                        50.0,
-                        1000.0,
-                        200.0,
-                        step=10.0,
-                        key="cfg_contract",
+                        "契約電力上限 [kW]", 50.0, 2000.0, step=10.0, key="cfg2_contract_power"
                     )
 
-        # ---- 🔄 設定を適用ボタン ----
         st.markdown("---")
-        if st.button(
-            "🔄 設定を適用",
-            type="primary",
-            key="apply_config",
-            use_container_width=True,
-        ):
-            import random as _rng
+        if st.button("🔄 この設定でケースを生成して適用", type="primary", use_container_width=True):
             import math
 
-            _rng.seed(42)
+            if end_hour <= start_hour:
+                st.error("時間設定が不正です。終了時刻を見直してください。")
+                st.stop()
+
             depots = [f"depot_{chr(65 + i)}" for i in range(num_depots)]
 
-            buses = []
-            for i in range(num_buses):
-                buses.append(
-                    BusSpec(
-                        bus_id=f"bus_{i + 1}",
-                        category="BEV",
-                        cap_kwh=cap_kwh,
-                        soc_init_kwh=round(cap_kwh * soc_init_ratio, 1),
-                        soc_min_kwh=round(cap_kwh * soc_min_ratio, 1),
-                        soc_max_kwh=round(cap_kwh * soc_max_ratio, 1),
-                        efficiency_km_per_kwh=efficiency,
-                    )
+            buses = [
+                BusSpec(
+                    bus_id=f"bus_{i + 1}",
+                    category="BEV",
+                    cap_kwh=cap_kwh,
+                    soc_init_kwh=round(cap_kwh * soc_init_ratio, 1),
+                    soc_min_kwh=round(cap_kwh * soc_min_ratio, 1),
+                    soc_max_kwh=round(cap_kwh * soc_max_ratio, 1),
+                    efficiency_km_per_kwh=efficiency,
                 )
+                for i in range(num_buses)
+            ]
+
+            duration_slots = max(1, int(round(mean_runtime_min / (delta_h * 60))))
+            layover_slots = max(0, int(round(layover_min / (delta_h * 60))))
+            total_cycle_slots = max(1, duration_slots + layover_slots)
 
             trips = []
             for i in range(num_trips):
-                slot_start = int(i * (num_periods - 3) / max(num_trips, 1))
-                duration = _rng.randint(2, 4)
-                slot_end = min(slot_start + duration, num_periods - 1)
-                energy = round(_rng.uniform(25, 55), 1)
+                ratio = i / max(num_trips - 1, 1)
+                base_slot = int(ratio * max(num_periods - total_cycle_slots - 1, 0))
+
+                hour = start_hour + base_slot * delta_h
+                peak_factor = peak_ratio if (7 <= hour <= 9 or 17 <= hour <= 20) else 1.0
+                shifted_slot = int(min(num_periods - duration_slots - 1, base_slot * peak_factor / max(peak_ratio, 1.0)))
+                slot_start = max(0, shifted_slot)
+                slot_end = min(slot_start + duration_slots, num_periods - 1)
+
+                distance_km = max(1.0, mean_trip_distance * (0.9 + 0.2 * ((i % 5) / 4)))
+                energy_kwh = distance_km / max(efficiency, 0.1)
+                energy_kwh *= congestion_level * weather_impact
+
                 sn = depots[i % len(depots)]
                 en = depots[(i + 1) % len(depots)]
                 trips.append(
@@ -717,7 +808,8 @@ with tab_settings:
                         trip_id=f"trip_{i + 1}",
                         start_t=slot_start,
                         end_t=slot_end,
-                        energy_kwh=energy,
+                        energy_kwh=round(energy_kwh, 2),
+                        distance_km=round(distance_km, 2),
                         start_node=sn,
                         end_node=en,
                     )
@@ -749,14 +841,25 @@ with tab_settings:
             pv_profile = []
             for t in range(num_periods):
                 hour = start_hour + t * delta_h
-                if 6 <= hour <= 18:
-                    val = 60.0 * math.exp(-0.5 * ((hour - 12.0) / 3.0) ** 2)
-                else:
-                    val = 0.0
-                pv_profile.append(round(val * pv_scale, 2))
+                base = 80.0 * math.exp(-0.5 * ((hour - 12.0) / 2.8) ** 2) if 6 <= hour <= 18 else 0.0
+                pv_profile.append(round(base * pv_scale if enable_pv else 0.0, 2))
 
-            if price_mode == "一律 [円/kWh]":
+            if price_mode == "一律単価":
                 prices = [flat_price] * num_periods
+            elif price_mode == "深夜割安":
+                prices = []
+                for t in range(num_periods):
+                    hour = start_hour + t * delta_h
+                    if hour < 7 or hour >= 23:
+                        prices.append(15.0)
+                    elif hour < 10:
+                        prices.append(24.0)
+                    elif hour < 17:
+                        prices.append(30.0)
+                    elif hour < 21:
+                        prices.append(38.0)
+                    else:
+                        prices.append(24.0)
             else:
                 prices = []
                 for t in range(num_periods):
@@ -772,7 +875,7 @@ with tab_settings:
                     else:
                         prices.append(25.0)
 
-            charger_type_list = list(set(c.charger_type for c in chargers))
+            charger_type_list = sorted(set(c.charger_type for c in chargers))
 
             _new_cfg = ProblemConfig(
                 num_buses=num_buses,
@@ -784,9 +887,7 @@ with tab_settings:
                 buses=buses,
                 trips=trips,
                 depots=depots,
-                charger_types=charger_type_list
-                if charger_type_list
-                else ["slow", "fast"],
+                charger_types=charger_type_list if charger_type_list else ["slow", "fast"],
                 chargers=chargers,
                 charge_efficiency=charge_eff,
                 pv_gen_kwh=pv_profile,
@@ -794,18 +895,17 @@ with tab_settings:
                 diesel_yen_per_l=diesel_price,
                 enable_pv=enable_pv,
                 enable_terminal_soc=enable_terminal_soc,
-                terminal_soc_kwh=round(cap_kwh * terminal_soc_ratio, 1)
-                if enable_terminal_soc
-                else None,
+                terminal_soc_kwh=round(cap_kwh * terminal_soc_ratio, 1) if enable_terminal_soc else None,
                 enable_demand_charge=enable_demand_charge,
                 contract_power_kw=contract_power,
             )
+
             st.session_state.config = precompute_helpers(_new_cfg)
             st.session_state.result_gurobi = None
             st.session_state.result_alns = None
             st.session_state.result_ga = None
             st.session_state.result_abc = None
-            st.success("✅ 設定を適用しました")
+            st.success("✅ 設定を適用しました（修論ケース生成完了）")
 
     # ---- 現在の設定概要 (常に表示) ----
     cfg = st.session_state.config
