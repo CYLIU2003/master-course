@@ -1,0 +1,16 @@
+{
+  "label": "demo_2ev_1eng",
+  "time_basis": "daily",
+  "delta_t_min": 30,
+  "vehicle_capex_cost_yen": 31389.0,
+  "fuel_cost_yen": 669.0,
+  "electricity_cost_yen": 682.0,
+  "demand_charge_yen": 108000.0,
+  "contract_excess_cost_yen": 0.0,
+  "grid_basic_charge_yen": 0.0,
+  "total_cost_yen": 140740.0,
+  "peak_demand_kW": 72.0,
+  "total_grid_purchase_kWh": 37.89,
+  "total_fuel_consumption_L": 4.46,
+  "unassigned_trips": 1
+}

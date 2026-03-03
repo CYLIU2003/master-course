@@ -1,0 +1,74 @@
+[
+  {
+    "trip_id": "T001",
+    "vehicle_id": "ev_01",
+    "route_id": "R01",
+    "start_time": "06:00",
+    "end_time": "07:30",
+    "effective_distance_km": 25.0,
+    "assigned": true
+  },
+  {
+    "trip_id": "T002",
+    "vehicle_id": "ev_02",
+    "route_id": "R01",
+    "start_time": "06:15",
+    "end_time": "07:45",
+    "effective_distance_km": 25.0,
+    "assigned": true
+  },
+  {
+    "trip_id": "T003",
+    "vehicle_id": "ev_01",
+    "route_id": "R02",
+    "start_time": "07:30",
+    "end_time": "08:30",
+    "effective_distance_km": 19.5,
+    "assigned": true
+  },
+  {
+    "trip_id": "T004",
+    "vehicle_id": "ev_01",
+    "route_id": "R01",
+    "start_time": "10:00",
+    "end_time": "11:30",
+    "effective_distance_km": 22.0,
+    "assigned": true
+  },
+  {
+    "trip_id": "T005",
+    "vehicle_id": "ev_02",
+    "route_id": "R02",
+    "start_time": "11:00",
+    "end_time": "12:00",
+    "effective_distance_km": 18.0,
+    "assigned": true
+  },
+  {
+    "trip_id": "T006",
+    "vehicle_id": "ev_02",
+    "route_id": "R01",
+    "start_time": "16:30",
+    "end_time": "18:00",
+    "effective_distance_km": 24.0,
+    "assigned": true
+  },
+  {
+    "trip_id": "T007",
+    "vehicle_id": "eng_hino_rep",
+    "route_id": "R01",
+    "start_time": "17:00",
+    "end_time": "18:30",
+    "effective_distance_km": 24.0,
+    "assigned": true
+  },
+  {
+    "trip_id": "T008",
+    "vehicle_id": null,
+    "route_id": "R02",
+    "start_time": "17:30",
+    "end_time": "18:30",
+    "effective_distance_km": 18.0,
+    "assigned": false
+  }
+]

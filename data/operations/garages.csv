@@ -1,4 +1,4 @@
 depot_id,depot_name,city,address,lat,lon,parking_capacity,grid_connection_kw,overnight_charging,has_workshop,notes
 depot_main,中央営業所,サンプル市,中央区1-1-1,35.6895,139.6917,20,300.0,True,True,本社併設・急速＋普通充電器完備
-depot_east,東営業所,サンプル市,東区5-2-3,35.7050,139.7300,12,200.0,True,False,分散型営業所
-depot_west,西営業所,サンプル市,西区3-8-1,35.6800,139.6600,8,150.0,True,False,小規模拠点
+depot_east,東営業所,サンプル市,東区5-2-3,35.705,139.73,12,200.0,True,False,分散型営業所
+depot_west,西営業所,サンプル市,西区3-8-1,35.68,139.66,8,150.0,True,False,小規模拠点

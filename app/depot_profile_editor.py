@@ -1057,6 +1057,68 @@ def render_depot_profile_editor(data_dir: str = "data") -> None:
                     allow_cross_route,
                 )
 
+    # ---- ⚙️ 充電設備・電力設定 ----
+    st.markdown("---")
+    st.markdown(
+        """
+    <div class="section-header">
+      <div class="section-icon">⚡</div>
+      <h3>充電設備・電力設定</h3>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("🔌 充電設備", expanded=False):
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            st.slider("充電拠点数", 1, 5, 2, key="cfg_depots")
+            st.number_input(
+                "普通充電出力 [kW]", 10.0, 200.0, 50.0, step=10.0, key="cfg_slow_pw"
+            )
+            st.number_input("普通充電器台数", 0, 10, 2, step=1, key="cfg_slow_cnt")
+        with cc2:
+            st.slider("充電効率", 0.80, 1.00, 0.95, step=0.01, key="cfg_ch_eff")
+            st.number_input(
+                "急速充電出力 [kW]",
+                50.0,
+                500.0,
+                150.0,
+                step=10.0,
+                key="cfg_fast_pw",
+            )
+            st.number_input("急速充電器台数", 0, 10, 1, step=1, key="cfg_fast_cnt")
+
+    with st.expander("☀️ PV・電力料金", expanded=False):
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            st.checkbox("PV を有効にする", value=True, key="cfg_enable_pv")
+            st.slider("PV 出力倍率", 0.0, 5.0, 1.0, step=0.1, key="cfg_pv_scale")
+        with ec2:
+            price_mode = st.selectbox(
+                "電力料金モード",
+                ["デフォルト TOU", "一律 [円/kWh]"],
+                key="cfg_price_mode",
+            )
+            if price_mode == "一律 [円/kWh]":
+                st.number_input(
+                    "電力単価 [円/kWh]",
+                    10.0,
+                    100.0,
+                    25.0,
+                    step=1.0,
+                    key="cfg_flat_price",
+                )
+        st.number_input(
+            "軽油単価 [円/L]",
+            80.0,
+            250.0,
+            145.0,
+            step=5.0,
+            key="cfg_diesel",
+            help="ICE 比較用",
+        )
+
     # ---- 保存ボタン ----
     st.markdown("---")
     col_save, col_info = st.columns([1, 3])

@@ -1,0 +1,377 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Route-profile driven fleet simulation input",
+  "type": "object",
+  "required": [
+    "simulation_settings",
+    "fleet",
+    "route_profile",
+    "tariffs"
+  ],
+  "properties": {
+    "simulation_settings": {
+      "type": "object",
+      "required": [
+        "delta_t_min",
+        "start_time",
+        "end_time",
+        "time_basis",
+        "contract_mode"
+      ],
+      "properties": {
+        "delta_t_min": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440
+        },
+        "start_time": {
+          "type": "string",
+          "description": "ISO8601 local time, e.g., 2026-03-02T00:00"
+        },
+        "end_time": {
+          "type": "string",
+          "description": "ISO8601 local time, exclusive end"
+        },
+        "time_basis": {
+          "type": "string",
+          "enum": [
+            "daily",
+            "monthly"
+          ]
+        },
+        "contract_mode": {
+          "type": "string",
+          "enum": [
+            "hard_limit",
+            "soft_penalty"
+          ]
+        },
+        "contract_power_limit_kW": {
+          "type": "number",
+          "minimum": 0
+        },
+        "penalty_yen_per_kW": {
+          "type": "number",
+          "minimum": 0
+        },
+        "charger_site_limit_kW": {
+          "type": "number",
+          "minimum": 0
+        },
+        "num_chargers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "fleet": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "vehicle_id",
+          "vehicle_type",
+          "purchase_cost_yen",
+          "depot_id"
+        ],
+        "properties": {
+          "vehicle_id": {
+            "type": "string"
+          },
+          "vehicle_type": {
+            "type": "string",
+            "enum": [
+              "ev_bus",
+              "engine_bus"
+            ]
+          },
+          "manufacturer": {
+            "type": "string"
+          },
+          "model_code": {
+            "type": "string"
+          },
+          "bus_category": {
+            "type": "string",
+            "enum": [
+              "route_bus",
+              "general_bus"
+            ],
+            "default": "route_bus"
+          },
+          "passenger_capacity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "purchase_cost_yen": {
+            "type": "number",
+            "minimum": 0
+          },
+          "lifetime_year": {
+            "type": "number",
+            "minimum": 0
+          },
+          "operation_days_per_year": {
+            "type": "number",
+            "minimum": 0
+          },
+          "residual_value_yen": {
+            "type": "number",
+            "minimum": 0
+          },
+          "depot_id": {
+            "type": "string"
+          },
+          "route_compatibility": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "battery_capacity_kWh": {
+            "type": "number",
+            "minimum": 0
+          },
+          "usable_battery_capacity_kWh": {
+            "type": "number",
+            "minimum": 0
+          },
+          "initial_soc": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "min_soc": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "max_soc": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "energy_consumption_kWh_per_km_base": {
+            "type": "number",
+            "minimum": 0
+          },
+          "charging_power_max_kW": {
+            "type": "number",
+            "minimum": 0
+          },
+          "charging_efficiency": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "fuel_economy_km_per_L": {
+            "type": "number",
+            "minimum": 0
+          },
+          "diesel_consumption_L_per_km": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "vehicle_type": {
+                  "const": "ev_bus"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "usable_battery_capacity_kWh",
+                "initial_soc",
+                "min_soc",
+                "max_soc",
+                "energy_consumption_kWh_per_km_base",
+                "charging_power_max_kW",
+                "charging_efficiency"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "vehicle_type": {
+                  "const": "engine_bus"
+                }
+              }
+            },
+            "then": {
+              "anyOf": [
+                {
+                  "required": [
+                    "diesel_consumption_L_per_km"
+                  ]
+                },
+                {
+                  "required": [
+                    "fuel_economy_km_per_L"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "route_profile": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "route_id",
+          "trip_id",
+          "start_time",
+          "end_time",
+          "distance_km"
+        ],
+        "properties": {
+          "route_id": {
+            "type": "string"
+          },
+          "trip_id": {
+            "type": "string"
+          },
+          "start_time": {
+            "type": "string"
+          },
+          "end_time": {
+            "type": "string"
+          },
+          "distance_km": {
+            "type": "number",
+            "minimum": 0
+          },
+          "deadhead_distance_before_km": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0
+          },
+          "deadhead_distance_after_km": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0
+          },
+          "required_bus_type": {
+            "type": "string",
+            "enum": [
+              "any",
+              "ev_bus",
+              "engine_bus"
+            ],
+            "default": "any"
+          },
+          "average_speed_kmh": {
+            "type": "number",
+            "minimum": 0
+          },
+          "stop_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "load_factor": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "elevation_factor": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "start_terminal": {
+            "type": "string"
+          },
+          "end_terminal": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "tariffs": {
+      "type": "object",
+      "required": [
+        "tou_price_yen_per_kWh",
+        "diesel_price_yen_per_L",
+        "demand_charge_yen_per_kW_month"
+      ],
+      "properties": {
+        "tou_price_yen_per_kWh": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "start_time",
+              "end_time",
+              "price_yen_per_kWh"
+            ],
+            "properties": {
+              "start_time": {
+                "type": "string"
+              },
+              "end_time": {
+                "type": "string"
+              },
+              "price_yen_per_kWh": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "demand_charge_yen_per_kW_month": {
+          "type": "number",
+          "minimum": 0
+        },
+        "grid_basic_charge_yen": {
+          "type": "number",
+          "minimum": 0
+        },
+        "diesel_price_yen_per_L": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pv_generation_kWh": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "time",
+              "kWh"
+            ],
+            "properties": {
+              "time": {
+                "type": "string"
+              },
+              "kWh": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

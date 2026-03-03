@@ -51,6 +51,7 @@ ROUTES_COLS = [
     "operator",
     "city",
     "garage_id",  # 管理営業所
+    "route_type",  # "bidirectional" | "circular"
     "total_distance_km",
     "num_stops",
     "description",
@@ -82,6 +83,12 @@ TIMETABLE_COLS = [
     "to_stop_id",
     "travel_time_min",
     "notes",
+]
+TRIP_STOPS_COLS = [
+    "trip_id",
+    "stop_id",
+    "stop_sequence",
+    "passing_time",
 ]
 
 
@@ -122,6 +129,8 @@ def _ensure_cols(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
                 df[c] = 0.0
             elif c in ("sequence", "num_stops", "travel_time_min"):
                 df[c] = 0
+            elif c == "route_type":
+                df[c] = "bidirectional"
             else:
                 df[c] = ""
     return df
@@ -138,6 +147,16 @@ def _parse_time_to_min(t: str) -> int:
     if not m:
         return 0
     return int(m.group(1)) * 60 + int(m.group(2))
+
+
+def _min_to_hhmm(minutes: int) -> str:
+    """Convert integer minutes-from-midnight to 'HH:MM' string.
+
+    Handles midnight wraparound: 1440 → '00:00', 1500 → '01:00', etc.
+    """
+    minutes = minutes % (24 * 60)
+    h, m = divmod(minutes, 60)
+    return f"{h:02d}:{m:02d}"
 
 
 def _compute_distances(df: pd.DataFrame) -> pd.DataFrame:
@@ -177,6 +196,90 @@ def _generate_inbound_stops(outbound: pd.DataFrame, route_id: str) -> pd.DataFra
     return _ensure_cols(inbound, STOPS_COLS)
 
 
+def _generate_segments(stops_df: pd.DataFrame, route_id: str) -> pd.DataFrame:
+    """停留所リストからセグメント DataFrame を自動生成する。
+
+    各連続停留所ペアについて:
+    - distance_km: distance_from_prev_km があればそれを使い、なければ Haversine 計算
+    - runtime_min: distance / 25 km/h * 60 (デフォルト平均速度)
+    - grade_avg_pct: 0.0
+    - congestion_index: 1.0
+    - road_type: "urban"
+    """
+    rows = []
+    for direction in stops_df["direction"].unique():
+        sub = (
+            stops_df[stops_df["direction"] == direction]
+            .sort_values("sequence")
+            .reset_index(drop=True)
+        )
+        ids = sub["stop_id"].tolist()
+        for i in range(len(ids) - 1):
+            from_row = sub.iloc[i]
+            to_row = sub.iloc[i + 1]
+            dist = to_row.get("distance_from_prev_km", 0.0)
+            if pd.isna(dist) or float(dist) == 0:
+                la1, lo1 = from_row.get("lat"), from_row.get("lon")
+                la2, lo2 = to_row.get("lat"), to_row.get("lon")
+                try:
+                    if all(
+                        v is not None and not pd.isna(v) for v in [la1, lo1, la2, lo2]
+                    ):
+                        dist = round(
+                            _haversine_km(
+                                float(la1), float(lo1), float(la2), float(lo2)
+                            ),
+                            3,
+                        )
+                    else:
+                        dist = 0.0
+                except (TypeError, ValueError):
+                    dist = 0.0
+            avg_speed_kmh = 25.0
+            runtime = (
+                round(float(dist) / avg_speed_kmh * 60.0, 1) if float(dist) > 0 else 0.0
+            )
+            dir_abbr = str(direction)[:3]
+            rows.append(
+                {
+                    "segment_id": f"seg_{dir_abbr}_{i + 1:02d}",
+                    "route_id": route_id,
+                    "direction": direction,
+                    "from_stop_id": ids[i],
+                    "to_stop_id": ids[i + 1],
+                    "distance_km": round(float(dist), 3),
+                    "runtime_min": runtime,
+                    "grade_avg_pct": 0.0,
+                    "signal_count": 0,
+                    "traffic_level": "medium",
+                    "congestion_index": 1.0,
+                    "speed_limit_kmh": 40,
+                    "road_type": "urban",
+                }
+            )
+    return (
+        pd.DataFrame(rows)
+        if rows
+        else pd.DataFrame(
+            columns=[
+                "segment_id",
+                "route_id",
+                "direction",
+                "from_stop_id",
+                "to_stop_id",
+                "distance_km",
+                "runtime_min",
+                "grade_avg_pct",
+                "signal_count",
+                "traffic_level",
+                "congestion_index",
+                "speed_limit_kmh",
+                "road_type",
+            ]
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # データ読み込み / 保存
 # ---------------------------------------------------------------------------
@@ -191,6 +294,7 @@ def _load_data(data_dir: str) -> dict:
     stops_df = _load_csv(rm / "stops.csv")
     timetable_df = _load_csv(rm / "timetable.csv")
     garages_df = _load_csv(ops / "garages.csv")
+    trip_stops_df = _load_csv(rm / "trip_stops.csv")
 
     if routes_df is None:
         routes_df = pd.DataFrame(columns=ROUTES_COLS)
@@ -207,11 +311,16 @@ def _load_data(data_dir: str) -> dict:
     if garages_df is None:
         garages_df = pd.DataFrame(columns=["depot_id", "depot_name"])
 
+    if trip_stops_df is None:
+        trip_stops_df = pd.DataFrame(columns=TRIP_STOPS_COLS)
+    trip_stops_df = _ensure_cols(trip_stops_df, TRIP_STOPS_COLS)
+
     return {
         "routes": routes_df,
         "stops": stops_df,
         "timetable": timetable_df,
         "garages": garages_df,
+        "trip_stops": trip_stops_df,
     }
 
 
@@ -220,13 +329,22 @@ def _save_data(
     routes_df: pd.DataFrame,
     stops_df: pd.DataFrame,
     timetable_df: pd.DataFrame,
+    segments_df: Optional[pd.DataFrame] = None,
+    trip_stops_df: Optional[pd.DataFrame] = None,
 ) -> list[str]:
     d = Path(data_dir) / "route_master"
     d.mkdir(parents=True, exist_ok=True)
     routes_df.to_csv(d / "routes.csv", index=False, encoding="utf-8")
     stops_df.to_csv(d / "stops.csv", index=False, encoding="utf-8")
     timetable_df.to_csv(d / "timetable.csv", index=False, encoding="utf-8")
-    return ["routes.csv", "stops.csv", "timetable.csv"]
+    saved = ["routes.csv", "stops.csv", "timetable.csv"]
+    if segments_df is not None and len(segments_df) > 0:
+        segments_df.to_csv(d / "segments.csv", index=False, encoding="utf-8")
+        saved.append("segments.csv")
+    if trip_stops_df is not None and len(trip_stops_df) > 0:
+        trip_stops_df.to_csv(d / "trip_stops.csv", index=False, encoding="utf-8")
+        saved.append("trip_stops.csv")
+    return saved
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +365,11 @@ def _render_routes_panel(
             "管理営業所",
             options=garage_ids if garage_ids else ["(未登録)"],
             help="営業所の追加・編集は「営業所管理」タブで行います",
+        ),
+        "route_type": st.column_config.SelectboxColumn(
+            "路線タイプ",
+            options=["bidirectional", "circular"],
+            help="bidirectional: 往復路線 / circular: 循環路線",
         ),
         "total_distance_km": st.column_config.NumberColumn(
             "総距離 [km]", format="%.1f", min_value=0.0
@@ -270,7 +393,7 @@ def _render_add_route_form(
 ) -> pd.DataFrame:
     """新規路線追加フォームのみ（左カラムの Expander 内で使用）。"""
     with st.form(key=_sk("add_route_form"), clear_on_submit=True):
-        rc = st.columns([1, 2, 2, 1, 1])
+        rc = st.columns([1, 2, 2, 1, 1, 1])
         with rc[0]:
             r_id = st.text_input("路線 ID", placeholder="route_102")
         with rc[1]:
@@ -282,6 +405,12 @@ def _render_add_route_form(
                 "営業所", options=[""] + garage_ids, key=_sk("add_route_garage")
             )
         with rc[4]:
+            r_type = st.selectbox(
+                "タイプ",
+                options=["bidirectional", "circular"],
+                key=_sk("add_route_type"),
+            )
+        with rc[5]:
             r_add = st.form_submit_button("追加")
         if r_add and r_id:
             new = pd.DataFrame(
@@ -292,6 +421,7 @@ def _render_add_route_form(
                         "operator": r_op,
                         "city": "",
                         "garage_id": r_garage,
+                        "route_type": r_type,
                         "total_distance_km": 0.0,
                         "num_stops": 0,
                         "description": "",
@@ -660,7 +790,11 @@ _EDITOR_JS = """(function () {
 """
 
 
-def _build_map(outbound: pd.DataFrame, inbound: pd.DataFrame) -> "folium.Map":
+def _build_map(
+    outbound: pd.DataFrame,
+    inbound: pd.DataFrame,
+    charger_sites_df: Optional[pd.DataFrame] = None,
+) -> "folium.Map":
     """停留所データから folium.Map を構築して返す。"""
     center_lat, center_lon = _DEFAULT_CENTER
     valid = outbound.dropna(subset=["lat", "lon"])
@@ -757,6 +891,36 @@ def _build_map(outbound: pd.DataFrame, inbound: pd.DataFrame) -> "folium.Map":
             tooltip="復路 (inbound, 自動生成)",
         ).add_to(m)
 
+    # 充電拠点レイヤー
+    if charger_sites_df is not None and len(charger_sites_df) > 0:
+        fg_cs = folium.FeatureGroup(name="⚡ 充電拠点")
+        for _, row in charger_sites_df.iterrows():
+            lat = row.get("lat")
+            lon = row.get("lon")
+            try:
+                if lat is None or lon is None or pd.isna(lat) or pd.isna(lon):
+                    continue
+                lat, lon = float(lat), float(lon)
+                if lat == 0.0 and lon == 0.0:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            site_name = str(
+                row.get("site_name", row.get("name", row.get("site_id", "")))
+            )
+            max_kw = row.get("max_power_kW", row.get("max_grid_kw", ""))
+            folium.Marker(
+                location=[lat, lon],
+                icon=folium.Icon(color="green", icon="flash", prefix="glyphicon"),
+                popup=folium.Popup(
+                    f"<b>{site_name}</b><br>最大出力: {max_kw} kW",
+                    max_width=200,
+                ),
+                tooltip=f"⚡ {site_name}",
+            ).add_to(fg_cs)
+        fg_cs.add_to(m)
+        folium.LayerControl().add_to(m)
+
     return m
 
 
@@ -782,6 +946,7 @@ def _render_map_editor(
     stops_df: pd.DataFrame,
     route_id: str,
     routes_df: pd.DataFrame,
+    charger_sites_df: "pd.DataFrame | None" = None,
 ) -> pd.DataFrame:
     """
     地図上での直接編集:
@@ -834,7 +999,7 @@ def _render_map_editor(
     )
 
     # --- 地図描画 ---
-    m = _build_map(outbound, inbound)
+    m = _build_map(outbound, inbound, charger_sites_df=charger_sites_df)
 
     # --- 地図表示 + クリックイベント取得 ---
     map_result = st_folium(
@@ -1187,35 +1352,234 @@ def _render_table_editor(stops_df: pd.DataFrame, route_id: str) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def _render_timetable_panel(
-    timetable_df: pd.DataFrame, route_id: str, stops_df: pd.DataFrame
+def _calc_passing_times(
+    trip_id: str,
+    dep_min: int,
+    arr_min: int,
+    ordered_stops_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    sub = (
-        timetable_df[timetable_df["route_id"] == route_id].copy()
-        if len(timetable_df) > 0
-        else timetable_df.copy()
+    """停留所ごとの通過時刻を距離比例で補間して返す。
+
+    Parameters
+    ----------
+    trip_id : str
+    dep_min : int  — departure time in minutes from midnight
+    arr_min : int  — arrival time in minutes from midnight (may exceed 1440)
+    ordered_stops_df : pd.DataFrame
+        停留所を sequence 順に並べたもの。
+        'stop_id' と 'distance_from_prev_km' カラムが必要。
+
+    Returns
+    -------
+    pd.DataFrame with TRIP_STOPS_COLS columns.
+    """
+    if len(ordered_stops_df) == 0:
+        return pd.DataFrame(columns=TRIP_STOPS_COLS)
+
+    stops = ordered_stops_df.reset_index(drop=True).copy()
+    # 累積距離を計算
+    stops["_cum_dist"] = stops["distance_from_prev_km"].fillna(0.0).cumsum()
+    total_dist = float(stops["_cum_dist"].iloc[-1])
+    travel_min = arr_min - dep_min
+
+    rows = []
+    for seq, row in stops.iterrows():
+        if total_dist > 0:
+            frac = float(row["_cum_dist"]) / total_dist
+        else:
+            # 距離が全部 0 の場合は等分割
+            frac = seq / max(len(stops) - 1, 1)
+        passing_min = dep_min + round(travel_min * frac)
+        rows.append(
+            {
+                "trip_id": trip_id,
+                "stop_id": row["stop_id"],
+                "stop_sequence": int(seq) + 1,
+                "passing_time": _min_to_hhmm(passing_min),
+            }
+        )
+    return pd.DataFrame(rows, columns=TRIP_STOPS_COLS)
+
+
+def _generate_trips_from_headway(
+    route_id: str,
+    direction: str,
+    headway_min: int,
+    start_time: str,
+    end_time: str,
+    service_type: str,
+    from_stop_id: str,
+    to_stop_id: str,
+    travel_time_min: int,
+) -> pd.DataFrame:
+    """ヘッドウェイから便一覧を生成する。
+
+    Trip IDs are auto-named as:
+        trip_{route_id_no_prefix}_{dir_code}_{HHMM}
+    where dir_code is 'ob' for outbound, 'ib' for inbound, 'cr' for circular.
+    """
+    dir_code = {"outbound": "ob", "inbound": "ib", "circular": "cr"}.get(
+        direction, "ob"
     )
+    rid_short = route_id.replace("route_", "")
 
-    st.markdown(f"#### 時刻表 -- `{route_id}`")
-    st.caption("行路 (便チェーン) は「営業所管理」タブで組み立てます。")
+    start_min = _parse_time_to_min(start_time)
+    end_min = _parse_time_to_min(end_time)
+    if end_min <= start_min:
+        end_min += 24 * 60  # overnight service
 
-    route_stops = (
-        stops_df[stops_df["route_id"] == route_id] if len(stops_df) > 0 else stops_df
+    rows = []
+    t = start_min
+    while t <= end_min:
+        dep_hhmm = _min_to_hhmm(t)
+        arr_min = t + travel_time_min
+        arr_hhmm = _min_to_hhmm(arr_min)
+        trip_id = f"trip_{rid_short}_{dir_code}_{dep_hhmm.replace(':', '')}"
+        rows.append(
+            {
+                "trip_id": trip_id,
+                "route_id": route_id,
+                "direction": direction,
+                "service_type": service_type,
+                "dep_time": dep_hhmm,
+                "arr_time": arr_hhmm,
+                "from_stop_id": from_stop_id,
+                "to_stop_id": to_stop_id,
+                "travel_time_min": travel_time_min,
+                "notes": "",
+            }
+        )
+        t += headway_min
+
+    if not rows:
+        return pd.DataFrame(columns=TIMETABLE_COLS)
+    return pd.DataFrame(rows, columns=TIMETABLE_COLS)
+
+
+def _render_direction_timetable(
+    sub_df: pd.DataFrame,
+    direction: str,
+    route_id: str,
+    route_stops_df: pd.DataFrame,
+    trip_stops_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """1 方向分の時刻表パネルをレンダリングし、編集後の (timetable_slice, trip_stops_df) を返す。"""
+    # 方向別の停留所を抽出
+    dir_stops = (
+        route_stops_df[route_stops_df["direction"] == direction].sort_values("sequence")
+        if len(route_stops_df) > 0
+        else route_stops_df
     )
-    stop_ids = route_stops["stop_id"].tolist() if len(route_stops) > 0 else []
+    stop_ids = dir_stops["stop_id"].tolist() if len(dir_stops) > 0 else []
+    from_stop = stop_ids[0] if stop_ids else ""
+    to_stop = stop_ids[-1] if len(stop_ids) > 1 else from_stop
 
-    display_cols = [c for c in TIMETABLE_COLS if c in sub.columns]
-    sorted_sub = (
-        sub[display_cols].sort_values(["direction", "dep_time"])
-        if len(sub) > 0
-        else sub[display_cols]
+    # セッションステートキー
+    wk_key = _sk(f"working_tt_{route_id}_{direction}")
+    if wk_key not in st.session_state:
+        st.session_state[wk_key] = sub_df.copy()
+
+    # ---- ヘッドウェイ一括生成 ----
+    with st.expander("⚡ ヘッドウェイから一括生成", expanded=False):
+        # --- バンドテーブル初期化 ---
+        bands_key = _sk(f"hw_bands_{route_id}_{direction}")
+        if bands_key not in st.session_state:
+            st.session_state[bands_key] = pd.DataFrame(
+                {
+                    "start_time": ["06:00", "09:00", "17:00", "20:00"],
+                    "end_time": ["09:00", "17:00", "20:00", "22:00"],
+                    "headway_min": [10, 20, 10, 30],
+                }
+            )
+
+        st.caption("時間帯ごとにヘッドウェイを設定できます。行の追加・削除が可能です。")
+        edited_bands = st.data_editor(
+            st.session_state[bands_key],
+            num_rows="dynamic",
+            use_container_width=True,
+            key=_sk(f"hw_bands_editor_{route_id}_{direction}"),
+            column_config={
+                "start_time": st.column_config.TextColumn("始発", help="HH:MM"),
+                "end_time": st.column_config.TextColumn("終発", help="HH:MM"),
+                "headway_min": st.column_config.NumberColumn(
+                    "間隔 [分]", min_value=1, step=1
+                ),
+            },
+        )
+        st.session_state[bands_key] = edited_bands
+
+        hc = st.columns([1, 1, 1, 1])
+        with hc[0]:
+            hw_svc = st.selectbox(
+                "運行区分",
+                ["weekday", "holiday", "all"],
+                key=_sk(f"hw_svc_{route_id}_{direction}"),
+            )
+        with hc[1]:
+            hw_travel = st.number_input(
+                "所要 [分]",
+                min_value=1,
+                value=30,
+                step=1,
+                key=_sk(f"hw_travel_{route_id}_{direction}"),
+            )
+        with hc[2]:
+            hw_replace = st.checkbox(
+                "既存便を置き換える",
+                value=False,
+                key=_sk(f"hw_replace_{route_id}_{direction}"),
+            )
+        with hc[3]:
+            hw_gen = st.button(
+                "生成", key=_sk(f"hw_gen_{route_id}_{direction}"), type="primary"
+            )
+        if hw_gen:
+            band_results = []
+            for _, band_row in edited_bands.iterrows():
+                band_trips = _generate_trips_from_headway(
+                    route_id=route_id,
+                    direction=direction,
+                    headway_min=int(band_row["headway_min"]),
+                    start_time=str(band_row["start_time"]),
+                    end_time=str(band_row["end_time"]),
+                    service_type=hw_svc,
+                    from_stop_id=from_stop,
+                    to_stop_id=to_stop,
+                    travel_time_min=int(hw_travel),
+                )
+                band_results.append(band_trips)
+            if band_results:
+                new_trips = pd.concat(band_results, ignore_index=True).drop_duplicates(
+                    subset=["trip_id"]
+                )
+            else:
+                new_trips = pd.DataFrame(columns=TIMETABLE_COLS)
+            if hw_replace:
+                st.session_state[wk_key] = new_trips
+            else:
+                st.session_state[wk_key] = pd.concat(
+                    [st.session_state[wk_key], new_trips], ignore_index=True
+                ).drop_duplicates(subset=["trip_id"])
+            # Force data_editor reinit by deleting its key
+            editor_key = _sk(f"tt_editor_{route_id}_{direction}")
+            if editor_key in st.session_state:
+                del st.session_state[editor_key]
+            st.success(f"{len(new_trips)} 便を生成しました。")
+
+    # ---- テーブル編集 ----
+    working = st.session_state[wk_key]
+    display_cols = [c for c in TIMETABLE_COLS if c in working.columns]
+    sorted_working = (
+        working[display_cols].sort_values("dep_time")
+        if len(working) > 0
+        else working[display_cols]
     )
 
     cc = {
         "trip_id": st.column_config.TextColumn("便 ID"),
-        "route_id": st.column_config.TextColumn("路線 ID"),
+        "route_id": st.column_config.TextColumn("路線 ID", disabled=True),
         "direction": st.column_config.SelectboxColumn(
-            "方向", options=["outbound", "inbound"], default="outbound"
+            "方向", options=["outbound", "inbound", "circular"], default=direction
         ),
         "service_type": st.column_config.SelectboxColumn(
             "運行区分", options=["weekday", "holiday", "all"], default="weekday"
@@ -1234,88 +1598,135 @@ def _render_timetable_panel(
         )
 
     edited = st.data_editor(
-        sorted_sub,
+        sorted_working,
         num_rows="dynamic",
         use_container_width=True,
-        key=_sk(f"timetable_{route_id}"),
+        key=_sk(f"tt_editor_{route_id}_{direction}"),
         column_config=cc,
     )
     edited["route_id"] = route_id
+    # Sync session state with edits
+    st.session_state[wk_key] = edited
 
-    # クイック追加フォーム
-    with st.form(key=_sk(f"add_trip_{route_id}"), clear_on_submit=True):
-        tc = st.columns([2, 1, 1, 1, 1, 1])
-        with tc[0]:
-            t_id = st.text_input(
-                "便 ID", placeholder=f"trip_{route_id.replace('route_', '')}_ob_0600"
-            )
-        with tc[1]:
-            t_dir = st.selectbox(
-                "方向", ["outbound", "inbound"], key=_sk(f"at_dir_{route_id}")
-            )
-        with tc[2]:
-            t_dep = st.text_input("発車", value="06:00", key=_sk(f"at_dep_{route_id}"))
-        with tc[3]:
-            t_arr = st.text_input("到着", value="06:35", key=_sk(f"at_arr_{route_id}"))
-        with tc[4]:
-            t_svc = st.selectbox(
-                "区分", ["weekday", "holiday", "all"], key=_sk(f"at_svc_{route_id}")
-            )
-        with tc[5]:
-            t_add = st.form_submit_button("追加")
-
-        if t_add and t_id:
-            dep_m = _parse_time_to_min(t_dep)
-            arr_m = _parse_time_to_min(t_arr)
-            if arr_m < dep_m:
-                arr_m += 24 * 60
-            from_s = stop_ids[0] if stop_ids else ""
-            to_s = stop_ids[-1] if len(stop_ids) > 1 else from_s
-            if t_dir == "inbound" and stop_ids:
-                from_s, to_s = to_s, from_s
-            new_t = pd.DataFrame(
-                [
-                    {
-                        "trip_id": t_id,
-                        "route_id": route_id,
-                        "direction": t_dir,
-                        "service_type": t_svc,
-                        "dep_time": t_dep,
-                        "arr_time": t_arr,
-                        "from_stop_id": from_s,
-                        "to_stop_id": to_s,
-                        "travel_time_min": arr_m - dep_m,
-                        "notes": "",
-                    }
-                ]
-            )
-            edited = pd.concat([edited, new_t], ignore_index=True)
-            st.success(f"便 '{t_id}' を追加しました。")
-
-    # サマリー
-    if len(sub) > 0:
-        with st.expander("便数サマリー", expanded=False):
-            rows = []
-            for d in sorted(sub["direction"].unique()):
-                for sv in sorted(sub["service_type"].unique()):
-                    ss = sub[(sub["direction"] == d) & (sub["service_type"] == sv)]
-                    if len(ss) == 0:
-                        continue
-                    times = ss["dep_time"].apply(_parse_time_to_min)
-                    rows.append(
-                        {
-                            "方向": d,
-                            "区分": sv,
-                            "便数": len(ss),
-                            "始発": ss.loc[times.idxmin(), "dep_time"],
-                            "終発": ss.loc[times.idxmax(), "dep_time"],
-                        }
-                    )
-            if rows:
-                st.dataframe(
-                    pd.DataFrame(rows), use_container_width=True, hide_index=True
+    # ---- 中間停留所 通過時刻計算 ----
+    if len(dir_stops) > 2:
+        with st.expander("🚏 中間停留所 通過時刻計算", expanded=False):
+            trip_ids = edited["trip_id"].dropna().tolist() if len(edited) > 0 else []
+            if trip_ids:
+                sel_trip = st.selectbox(
+                    "便を選択",
+                    trip_ids,
+                    key=_sk(f"calc_trip_{route_id}_{direction}"),
                 )
-    return edited
+                trip_row = edited[edited["trip_id"] == sel_trip]
+                if len(trip_row) > 0:
+                    tr = trip_row.iloc[0]
+                    dep_m = _parse_time_to_min(str(tr["dep_time"]))
+                    arr_m = _parse_time_to_min(str(tr["arr_time"]))
+                    if arr_m < dep_m:
+                        arr_m += 24 * 60
+                    preview = _calc_passing_times(sel_trip, dep_m, arr_m, dir_stops)
+                    st.dataframe(preview, use_container_width=True, hide_index=True)
+
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        if st.button(
+                            "この便を保存",
+                            key=_sk(f"save_one_trip_{route_id}_{direction}_{sel_trip}"),
+                        ):
+                            # Remove old entries for this trip_id then append
+                            trip_stops_df = trip_stops_df[
+                                trip_stops_df["trip_id"] != sel_trip
+                            ]
+                            trip_stops_df = pd.concat(
+                                [trip_stops_df, preview], ignore_index=True
+                            )
+                            st.success(f"便 '{sel_trip}' の通過時刻を保存しました。")
+                    with sc2:
+                        if st.button(
+                            "全便を一括計算・保存",
+                            key=_sk(f"save_all_trips_{route_id}_{direction}"),
+                        ):
+                            for _, trow in edited.iterrows():
+                                tid = str(trow["trip_id"])
+                                if not tid:
+                                    continue
+                                dm = _parse_time_to_min(str(trow["dep_time"]))
+                                am = _parse_time_to_min(str(trow["arr_time"]))
+                                if am < dm:
+                                    am += 24 * 60
+                                calc = _calc_passing_times(tid, dm, am, dir_stops)
+                                trip_stops_df = trip_stops_df[
+                                    trip_stops_df["trip_id"] != tid
+                                ]
+                                trip_stops_df = pd.concat(
+                                    [trip_stops_df, calc], ignore_index=True
+                                )
+                            st.success(f"{len(edited)} 便分の通過時刻を保存しました。")
+            else:
+                st.info(
+                    "便がありません。先にヘッドウェイ生成またはテーブルで便を追加してください。"
+                )
+
+    return edited, trip_stops_df
+
+
+def _render_timetable_panel(
+    timetable_df: pd.DataFrame,
+    route_id: str,
+    stops_df: pd.DataFrame,
+    route_type: str = "bidirectional",
+    trip_stops_df: Optional[pd.DataFrame] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """時刻表パネルをレンダリングする。
+
+    Returns
+    -------
+    (edited_timetable_for_route, updated_trip_stops_df)
+    """
+    if trip_stops_df is None:
+        trip_stops_df = pd.DataFrame(columns=TRIP_STOPS_COLS)
+
+    sub = (
+        timetable_df[timetable_df["route_id"] == route_id].copy()
+        if len(timetable_df) > 0
+        else timetable_df.copy()
+    )
+
+    st.markdown(f"#### 時刻表 -- `{route_id}`")
+    st.caption("行路 (便チェーン) は「営業所管理」タブで組み立てます。")
+
+    route_stops = (
+        stops_df[stops_df["route_id"] == route_id] if len(stops_df) > 0 else stops_df
+    )
+
+    if route_type == "circular":
+        # 循環路線 — 単一方向セクション
+        circular_sub = sub[sub["direction"].isin(["outbound", "circular"])].copy()
+        edited_circ, trip_stops_df = _render_direction_timetable(
+            circular_sub, "circular", route_id, route_stops, trip_stops_df
+        )
+        # direction を "circular" に統一
+        edited_circ["direction"] = "circular"
+        return edited_circ, trip_stops_df
+    else:
+        # 往復路線 — 往路 / 復路タブ
+        ob_sub = sub[sub["direction"] == "outbound"].copy()
+        ib_sub = sub[sub["direction"] == "inbound"].copy()
+
+        tab_ob, tab_ib = st.tabs(["➡️ 往路 (outbound)", "⬅️ 復路 (inbound)"])
+
+        with tab_ob:
+            edited_ob, trip_stops_df = _render_direction_timetable(
+                ob_sub, "outbound", route_id, route_stops, trip_stops_df
+            )
+        with tab_ib:
+            edited_ib, trip_stops_df = _render_direction_timetable(
+                ib_sub, "inbound", route_id, route_stops, trip_stops_df
+            )
+
+        combined = pd.concat([edited_ob, edited_ib], ignore_index=True)
+        return combined, trip_stops_df
 
 
 # ---------------------------------------------------------------------------
@@ -1342,6 +1753,16 @@ def render_route_profile_editor(data_dir: str = "data") -> None:
     stops_df = data["stops"].copy()
     timetable_df = data["timetable"].copy()
     garages_df = data["garages"]
+    trip_stops_df = data["trip_stops"].copy()
+
+    # 充電サイトCSVを読み込む（存在しない場合はNone）
+    charger_sites_df: "pd.DataFrame | None" = None
+    _charger_path = Path(data_dir) / "infra" / "charger_sites.csv"
+    if _charger_path.exists():
+        try:
+            charger_sites_df = pd.read_csv(_charger_path)
+        except Exception:
+            charger_sites_df = None
 
     garage_ids = (
         garages_df["depot_id"].dropna().tolist()
@@ -1466,7 +1887,7 @@ def render_route_profile_editor(data_dir: str = "data") -> None:
             with st.form(
                 key=_sk(f"route_attr_form_{selected_route}"), clear_on_submit=False
             ):
-                ac = st.columns([2, 2, 2, 1])
+                ac = st.columns([2, 2, 2, 1, 1])
                 with ac[0]:
                     new_name = st.text_input(
                         "路線名",
@@ -1494,6 +1915,21 @@ def render_route_profile_editor(data_dir: str = "data") -> None:
                         key=_sk(f"attr_garage_{selected_route}"),
                     )
                 with ac[3]:
+                    _rt_options = ["bidirectional", "circular"]
+                    _rt_current = str(routes_df.at[i0, "route_type"] or "bidirectional")
+                    _rt_idx = (
+                        _rt_options.index(_rt_current)
+                        if _rt_current in _rt_options
+                        else 0
+                    )
+                    new_route_type = st.selectbox(
+                        "タイプ",
+                        options=_rt_options,
+                        index=_rt_idx,
+                        key=_sk(f"attr_rtype_{selected_route}"),
+                        help="bidirectional: 往復 / circular: 循環",
+                    )
+                with ac[4]:
                     new_city = st.text_input(
                         "市区町村",
                         value=str(routes_df.at[i0, "city"] or ""),
@@ -1504,6 +1940,7 @@ def render_route_profile_editor(data_dir: str = "data") -> None:
                     routes_df.at[i0, "route_name"] = new_name
                     routes_df.at[i0, "operator"] = new_op
                     routes_df.at[i0, "garage_id"] = new_garage
+                    routes_df.at[i0, "route_type"] = new_route_type
                     routes_df.at[i0, "city"] = new_city
                     st.success(
                         "路線属性を更新しました。「💾 路線データを保存」で確定してください。"
@@ -1530,20 +1967,42 @@ def render_route_profile_editor(data_dir: str = "data") -> None:
 
     with sub_tab_stops:
         if "地図" in edit_mode:
-            edited_stops = _render_map_editor(stops_df, selected_route, routes_df)
+            edited_stops = _render_map_editor(
+                stops_df, selected_route, routes_df, charger_sites_df=charger_sites_df
+            )
         else:
             edited_stops = _render_table_editor(stops_df, selected_route)
 
     with sub_tab_tt:
         current_stops = edited_stops if edited_stops is not None else stops_df
-        edited_tt = _render_timetable_panel(timetable_df, selected_route, current_stops)
+        # Extract route_type for selected route
+        _ri = routes_df[routes_df["route_id"] == selected_route]
+        _route_type = (
+            str(_ri.iloc[0].get("route_type", "bidirectional") or "bidirectional")
+            if len(_ri) > 0
+            else "bidirectional"
+        )
+        edited_tt, trip_stops_df = _render_timetable_panel(
+            timetable_df,
+            selected_route,
+            current_stops,
+            route_type=_route_type,
+            trip_stops_df=trip_stops_df,
+        )
 
     # ---- 保存 ----
     st.markdown("---")
-    c1, c2 = st.columns([1, 3])
+    c1, c2, c3 = st.columns([1, 1, 3])
     with c1:
         save = st.button("💾 路線データを保存", type="primary", key=_sk("save_btn"))
     with c2:
+        auto_seg = st.checkbox(
+            "🔧 セグメント自動生成",
+            value=True,
+            key=_sk("auto_seg_chk"),
+            help="停留所リストから segments.csv を自動生成して一緒に保存します（25 km/h 基準）",
+        )
+    with c3:
         if save:
             # 停留所マージ
             if edited_stops is not None:
@@ -1571,7 +2030,21 @@ def render_route_profile_editor(data_dir: str = "data") -> None:
                     float(rsub["distance_from_prev_km"].sum()), 2
                 )
 
-            saved = _save_data(data_dir, routes_df, merged_stops, merged_tt)
+            # セグメント自動生成
+            segments_to_save = None
+            if auto_seg:
+                route_stops = merged_stops[merged_stops["route_id"] == selected_route]
+                if len(route_stops) >= 2:
+                    segments_to_save = _generate_segments(route_stops, selected_route)
+
+            saved = _save_data(
+                data_dir,
+                routes_df,
+                merged_stops,
+                merged_tt,
+                segments_to_save,
+                trip_stops_df=trip_stops_df,
+            )
             st.success(f"保存しました: {', '.join(saved)}")
 
             # セッションクリア (地図用)

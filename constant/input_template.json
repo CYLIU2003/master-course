@@ -1,0 +1,91 @@
+{
+  "simulation_settings": {
+    "delta_t_min": 30,
+    "start_time": "2026-03-02T00:00",
+    "end_time": "2026-03-03T00:00",
+    "time_basis": "daily",
+    "contract_mode": "hard_limit",
+    "contract_power_limit_kW": 200,
+    "charger_site_limit_kW": 200,
+    "num_chargers": 4,
+    "notes": "edit as needed"
+  },
+  "fleet": [
+    {
+      "vehicle_id": "EV_01",
+      "vehicle_type": "ev_bus",
+      "purchase_cost_yen": 50000000,
+      "lifetime_year": 12,
+      "operation_days_per_year": 300,
+      "residual_value_yen": 5000000,
+      "depot_id": "DEPOT_01",
+      "usable_battery_capacity_kWh": 280,
+      "initial_soc": 0.9,
+      "min_soc": 0.2,
+      "max_soc": 0.95,
+      "energy_consumption_kWh_per_km_base": 1.25,
+      "charging_power_max_kW": 150,
+      "charging_efficiency": 0.95
+    },
+    {
+      "vehicle_id": "ENG_01",
+      "vehicle_type": "engine_bus",
+      "purchase_cost_yen": 25000000,
+      "lifetime_year": 12,
+      "operation_days_per_year": 300,
+      "residual_value_yen": 2000000,
+      "depot_id": "DEPOT_01",
+      "fuel_economy_km_per_L": 4.8
+    }
+  ],
+  "route_profile": [
+    {
+      "route_id": "R1",
+      "trip_id": "R1_001",
+      "start_time": "2026-03-02T06:00",
+      "end_time": "2026-03-02T07:10",
+      "distance_km": 35.0,
+      "deadhead_distance_before_km": 2.0,
+      "deadhead_distance_after_km": 2.0
+    },
+    {
+      "route_id": "R1",
+      "trip_id": "R1_002",
+      "start_time": "2026-03-02T08:00",
+      "end_time": "2026-03-02T09:10",
+      "distance_km": 35.0,
+      "deadhead_distance_before_km": 2.0,
+      "deadhead_distance_after_km": 2.0
+    },
+    {
+      "route_id": "R2",
+      "trip_id": "R2_001",
+      "start_time": "2026-03-02T10:00",
+      "end_time": "2026-03-02T11:00",
+      "distance_km": 28.0
+    }
+  ],
+  "tariffs": {
+    "tou_price_yen_per_kWh": [
+      {
+        "start_time": "2026-03-02T00:00",
+        "end_time": "2026-03-02T08:00",
+        "price_yen_per_kWh": 18.0
+      },
+      {
+        "start_time": "2026-03-02T08:00",
+        "end_time": "2026-03-02T22:00",
+        "price_yen_per_kWh": 32.0
+      },
+      {
+        "start_time": "2026-03-02T22:00",
+        "end_time": "2026-03-03T00:00",
+        "price_yen_per_kWh": 20.0
+      }
+    ],
+    "diesel_price_yen_per_L": 150.0,
+    "demand_charge_yen_per_kW_month": 1200.0,
+    "grid_basic_charge_yen": 0.0,
+    "pv_generation_kWh": []
+  }
+}

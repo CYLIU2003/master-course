@@ -368,6 +368,154 @@ def normalize_records(raw_records: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Phase 2: Vehicle selector
+# ---------------------------------------------------------------------------
+
+
+def select_vehicles(
+    normalized: list[dict],
+    mode: str = "exact_match",
+    manufacturer: str | None = None,
+    bus_category: str | None = None,
+    capacity_min: int | None = None,
+    capacity_max: int | None = None,
+    gvw_min: int | None = None,
+    gvw_max: int | None = None,
+    power_min: float | None = None,
+    power_max: float | None = None,
+    model_code: str | None = None,
+    top_n: int = 1,
+) -> list[dict]:
+    """
+    Select engine bus records from the normalized list according to *mode*.
+
+    Parameters
+    ----------
+    normalized : list[dict]
+        Output of normalize_records() — all 85 records with derived indicators.
+    mode : str
+        One of:
+          - ``exact_match``        : closest to all specified criteria (scored distance)
+          - ``representative``     : median fuel_economy within filtered group
+          - ``conservative``       : lowest fuel_economy (highest consumption) in group
+          - ``best_efficiency``    : highest fuel_economy in group
+    manufacturer : str | None
+        Case-insensitive substring match against the "manufacturer" field.
+        E.g. "hino", "isuzu", "mitsubishifuso"
+    bus_category : str | None
+        ``"route_bus"`` or ``"coach_bus"``.
+    capacity_min, capacity_max : int | None
+        Inclusive range for passenger_capacity.
+    gvw_min, gvw_max : int | None
+        Inclusive range for gross_vehicle_weight_kg.
+    power_min, power_max : float | None
+        Inclusive range for max_power_kW.
+    model_code : str | None
+        Exact string match on the model_code field (priority filter).
+    top_n : int
+        How many records to return (for exact_match, the top-N closest).
+
+    Returns
+    -------
+    list[dict]
+        Matching records (may be empty if no candidates found).
+    """
+    # --- Step 1: hard filters ---
+    candidates = [r for r in normalized if (r.get("fuel_economy_km_per_L") or 0) > 0]
+
+    if model_code is not None:
+        exact = [r for r in candidates if r.get("model_code") == model_code]
+        if exact:
+            return exact[:top_n]
+        # fall through to soft filter if model_code not found
+
+    if manufacturer is not None:
+        mfr_lower = manufacturer.lower()
+        candidates = [
+            r for r in candidates if mfr_lower in (r.get("manufacturer") or "").lower()
+        ]
+
+    if bus_category is not None:
+        candidates = [r for r in candidates if r.get("bus_category") == bus_category]
+
+    if capacity_min is not None:
+        candidates = [
+            r for r in candidates if (r.get("passenger_capacity") or 0) >= capacity_min
+        ]
+    if capacity_max is not None:
+        candidates = [
+            r
+            for r in candidates
+            if (r.get("passenger_capacity") or 9999) <= capacity_max
+        ]
+
+    if gvw_min is not None:
+        candidates = [
+            r for r in candidates if (r.get("gross_vehicle_weight_kg") or 0) >= gvw_min
+        ]
+    if gvw_max is not None:
+        candidates = [
+            r
+            for r in candidates
+            if (r.get("gross_vehicle_weight_kg") or 999999) <= gvw_max
+        ]
+
+    if power_min is not None:
+        candidates = [
+            r for r in candidates if (r.get("max_power_kW") or 0) >= power_min
+        ]
+    if power_max is not None:
+        candidates = [
+            r for r in candidates if (r.get("max_power_kW") or 9999) <= power_max
+        ]
+
+    if not candidates:
+        return []
+
+    # --- Step 2: selection mode ---
+    if mode == "conservative":
+        # lowest fuel_economy = highest consumption
+        return sorted(candidates, key=lambda r: r["fuel_economy_km_per_L"])[:top_n]
+
+    if mode == "best_efficiency":
+        return sorted(
+            candidates, key=lambda r: r["fuel_economy_km_per_L"], reverse=True
+        )[:top_n]
+
+    if mode == "representative":
+        fes = [r["fuel_economy_km_per_L"] for r in candidates]
+        median_fe = statistics.median(fes)
+        return sorted(
+            candidates, key=lambda m: abs(m["fuel_economy_km_per_L"] - median_fe)
+        )[:top_n]
+
+    # mode == "exact_match" (default)
+    # Score each candidate by L2-distance in normalised space.
+    # Dimensions used (when user provided a constraint mid-point):
+    #   fuel_economy, passenger_capacity, gross_vehicle_weight_kg, max_power_kW
+    def _score(r: dict) -> float:
+        score = 0.0
+        # capacity: normalise by 100
+        if capacity_min is not None and capacity_max is not None:
+            mid = (capacity_min + capacity_max) / 2.0
+            v = r.get("passenger_capacity") or mid
+            score += ((v - mid) / 100.0) ** 2
+        # gvw: normalise by 10000
+        if gvw_min is not None and gvw_max is not None:
+            mid = (gvw_min + gvw_max) / 2.0
+            v = r.get("gross_vehicle_weight_kg") or mid
+            score += ((v - mid) / 10000.0) ** 2
+        # power: normalise by 100
+        if power_min is not None and power_max is not None:
+            mid = (power_min + power_max) / 2.0
+            v = r.get("max_power_kW") or mid
+            score += ((v - mid) / 100.0) ** 2
+        return score
+
+    return sorted(candidates, key=_score)[:top_n]
+
+
+# ---------------------------------------------------------------------------
 # Simulation vehicle library selection
 # ---------------------------------------------------------------------------
 
