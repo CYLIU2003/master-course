@@ -1,7 +1,8 @@
 vehicle_id,vehicle_type,garage_id,route_assignments,battery_capacity_kwh,soc_min_ratio,soc_max_ratio,efficiency_km_per_kwh,status,notes
-bus_101,BEV_large,depot_main,"route_101,route_102",300.0,0.2,0.95,1.0,active,主力車両
+bus_101,BEV_large,depot_main,route_101,300.0,0.2,0.95,1.0,active,主力車両
 bus_102,BEV_large,depot_main,route_101,300.0,0.2,0.95,1.0,active,
 bus_103,BEV_mid,depot_main,route_101,200.0,0.2,0.95,1.1,active,中型
 bus_201,BEV_large,depot_east,route_201,300.0,0.2,0.95,1.0,active,
 bus_202,BEV_mid,depot_east,route_201,200.0,0.2,0.95,1.1,active,
 bus_301,BEV_mid,depot_west,route_301,200.0,0.2,0.95,1.1,active,
+bus_104,BEV_large,depot_main,,300.0,0.2,0.95,1.0,active,

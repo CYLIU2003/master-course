@@ -77,6 +77,43 @@ WORK_COLS = [
     "notes",
 ]
 
+_GARAGE_DRAG_JS = """(function () {
+  'use strict';
+  function resolveMap() {
+    if (window.map && typeof window.map.getContainer === 'function') return window.map;
+    var mapEl = document.querySelector('.folium-map') || document.querySelector('.leaflet-container');
+    if (mapEl && mapEl.id && window[mapEl.id] && typeof window[mapEl.id].getContainer === 'function') {
+      return window[mapEl.id];
+    }
+    return null;
+  }
+
+  function bindDrag() {
+    var map = resolveMap();
+    if (!map) { setTimeout(bindDrag, 250); return; }
+    map.eachLayer(function (layer) {
+      if (!layer || !layer.options || !layer.options.draggable) return;
+      if (layer.__ebGarageDragBound) return;
+      var title = String(layer.options.title || '');
+      if (title.indexOf('__garage__') !== 0) return;
+      layer.__ebGarageDragBound = true;
+      layer.on('dragend', function (evt) {
+        var ll = evt && evt.target && evt.target.getLatLng ? evt.target.getLatLng() : null;
+        if (!ll || !window.__GLOBAL_DATA__) return;
+        window.__GLOBAL_DATA__.lat_lng_clicked = {
+          lat: ll.lat,
+          lng: ll.lng,
+          _action: 'move_depot',
+          depot_id: title.slice('__garage__'.length)
+        };
+      });
+    });
+  }
+
+  bindDrag();
+})();
+"""
+
 
 # ---------------------------------------------------------------------------
 # ヘルパー
@@ -239,6 +276,9 @@ def _build_garages_map(
     )
 
     m = folium.Map(location=list(center), zoom_start=13, tiles="cartodbpositron")
+    from branca.element import Element as BrancaElement
+
+    m.get_root().script.add_child(BrancaElement(f"<script>{_GARAGE_DRAG_JS}</script>"))
 
     for _, row in garages_df.iterrows():
         lat = row.get("lat", 0)
@@ -253,6 +293,8 @@ def _build_garages_map(
 
         folium.Marker(
             location=[float(lat), float(lon)],
+            draggable=True,
+            title=f"__garage__{gid}",
             icon=folium.Icon(
                 color="red" if is_sel else "darkred",
                 icon="home",
@@ -282,8 +324,20 @@ def _render_garages_panel(garages_df: pd.DataFrame) -> pd.DataFrame:
     テーブル一括編集は折りたたみ expander に収納。
     """
     sel_key = _sk("sel_garage_map")
+    pending_moves_key = _sk("pending_garage_moves")
     if sel_key not in st.session_state:
         st.session_state[sel_key] = None
+    if pending_moves_key not in st.session_state:
+        st.session_state[pending_moves_key] = {}
+
+    pending_moves: dict[str, dict] = st.session_state.get(pending_moves_key, {}) or {}
+    garages_view = garages_df.copy()
+    if pending_moves and len(garages_view) > 0 and "depot_id" in garages_view.columns:
+        for depot_id, move in pending_moves.items():
+            m = garages_view["depot_id"] == depot_id
+            if m.any():
+                garages_view.loc[m, "lat"] = float(move["lat"])
+                garages_view.loc[m, "lon"] = float(move["lon"])
 
     # --- 2カラムレイアウト ---
     left_col, right_col = st.columns([1, 3])
@@ -345,15 +399,20 @@ def _render_garages_panel(garages_df: pd.DataFrame) -> pd.DataFrame:
                     ]
                 )
                 garages_df = pd.concat([garages_df, new_g], ignore_index=True)
+                st.session_state[_sk("buf_garages")] = garages_df
+                st.session_state.pop(_sk("garages_editor"), None)
                 st.session_state[sel_key] = g_id
                 st.session_state.pop(_sk("pending_lat"), None)
                 st.session_state.pop(_sk("pending_lon"), None)
-                st.success(f"営業所 '{g_id}' を追加しました。")
+                st.toast(f"営業所 '{g_id}' を追加しました。", icon="✅")
+                st.rerun()
 
     with right_col:
-        st.markdown("#### 地図（マーカーをクリックで選択 / 空きをクリックで位置入力）")
+        st.markdown(
+            "#### 地図（マーカーをクリックで選択 / 空きをクリックで位置入力 / ドラッグで一時移動）"
+        )
         if FOLIUM_AVAILABLE:
-            gmap = _build_garages_map(garages_df, st.session_state[sel_key])
+            gmap = _build_garages_map(garages_view, st.session_state[sel_key])
             map_result = st_folium(
                 gmap,
                 key=_sk("garages_map"),
@@ -375,6 +434,21 @@ def _render_garages_panel(garages_df: pd.DataFrame) -> pd.DataFrame:
 
             # 空地クリック → 位置を仮セット（追加フォームに反映）
             elif last_clicked:
+                if str(last_clicked.get("_action", "")) == "move_depot":
+                    moved_id = str(last_clicked.get("depot_id", "") or "")
+                    lat_c = last_clicked.get("lat")
+                    lng_c = last_clicked.get("lng")
+                    if moved_id and lat_c is not None and lng_c is not None:
+                        pending = dict(
+                            st.session_state.get(pending_moves_key, {}) or {}
+                        )
+                        pending[moved_id] = {"lat": float(lat_c), "lon": float(lng_c)}
+                        st.session_state[pending_moves_key] = pending
+                        st.toast(
+                            f"一時移動: {moved_id} (未適用)",
+                            icon="📍",
+                        )
+                        st.rerun()
                 lat_c = last_clicked.get("lat")
                 lng_c = last_clicked.get("lng")
                 if lat_c and lng_c:
@@ -392,6 +466,30 @@ def _render_garages_panel(garages_df: pd.DataFrame) -> pd.DataFrame:
                     f"{st.session_state[_sk('pending_lon')]:.5f})"
                     " → 左の「＋ 営業所を追加」に反映済み"
                 )
+
+            current_pending = st.session_state.get(pending_moves_key, {}) or {}
+            if current_pending:
+                st.info(f"ドラッグ移動の未適用変更: {len(current_pending)} 件")
+                mc1, mc2 = st.columns(2)
+                with mc1:
+                    if st.button("✅ ドラッグ移動を適用", key=_sk("apply_garage_drag")):
+                        for depot_id, move in current_pending.items():
+                            mm = garages_df["depot_id"] == depot_id
+                            if mm.any():
+                                garages_df.loc[mm, "lat"] = float(move["lat"])
+                                garages_df.loc[mm, "lon"] = float(move["lon"])
+                        st.session_state[_sk("buf_garages")] = garages_df
+                        st.session_state.pop(_sk("garages_editor"), None)
+                        st.session_state[pending_moves_key] = {}
+                        st.toast("営業所のドラッグ移動を適用しました", icon="✅")
+                        st.rerun()
+                with mc2:
+                    if st.button(
+                        "🗑️ ドラッグ移動を破棄", key=_sk("discard_garage_drag")
+                    ):
+                        st.session_state[pending_moves_key] = {}
+                        st.toast("未適用のドラッグ移動を破棄しました", icon="🧹")
+                        st.rerun()
         else:
             st.info(
                 "folium が利用できません。`pip install folium streamlit-folium` を実行してください。"
@@ -466,9 +564,13 @@ def _render_garages_panel(garages_df: pd.DataFrame) -> pd.DataFrame:
                 garages_df.at[i0, "overnight_charging"] = new_overnight
                 garages_df.at[i0, "has_workshop"] = new_workshop
                 garages_df.at[i0, "notes"] = new_notes
-                st.success(
-                    "属性を更新しました。「💾 営業所データを保存」で確定してください。"
+                st.session_state[_sk("buf_garages")] = garages_df
+                st.session_state.pop(_sk("garages_editor"), None)
+                st.toast(
+                    "属性を更新しました。「💾 営業所データを保存」で確定してください。",
+                    icon="✅",
                 )
+                st.rerun()
 
     # --- テーブル一括編集（折りたたみ） ---
     st.markdown("---")
@@ -626,7 +728,10 @@ def _render_vehicles_panel(
                 ]
             )
             edited = pd.concat([edited, new_v], ignore_index=True)
-            st.success(f"車両 '{v_id}' を追加しました。")
+            st.session_state[_sk("buf_vehicles")] = edited
+            st.session_state.pop(_sk("vehicles_editor"), None)
+            st.toast(f"車両 '{v_id}' を追加しました。", icon="✅")
+            st.rerun()
     return edited
 
 
@@ -910,9 +1015,22 @@ def _render_work_schedule_panel(
                     ]
                 )
                 edited = pd.concat([edited, new_work], ignore_index=True)
-                st.success(
+                # Buffer: merge edited subset back into full work_df
+                _other = (
+                    work_df[work_df["garage_id"] != selected_garage]
+                    if len(work_df) > 0
+                    else work_df
+                )
+                st.session_state[_sk("buf_work")] = pd.concat(
+                    [_other, edited], ignore_index=True
+                )
+                _wk = _sk(f"work_{selected_garage}")
+                if _wk in st.session_state:
+                    del st.session_state[_wk]
+                st.toast(
                     f"行路 '{b_work_id}' を追加しました（{len(selected_trip_ids)} 便）"
                 )
+                st.rerun()
             else:
                 st.error("行路 ID と便を入力してください。")
 
@@ -996,11 +1114,12 @@ def render_depot_profile_editor(
     )
 
     data = _load_data(data_dir)
-    garages_df = data["garages"].copy()
-    vehicles_df = data["vehicles"].copy()
-    work_df = data["work"].copy()
     timetable_df = data["timetable"]
     routes_df = data["routes"]
+    # Prefer session_state buffers over disk (edits survive st.rerun())
+    garages_df = st.session_state.get(_sk("buf_garages"), data["garages"]).copy()
+    vehicles_df = st.session_state.get(_sk("buf_vehicles"), data["vehicles"]).copy()
+    work_df = st.session_state.get(_sk("buf_work"), data["work"]).copy()
 
     # ---- 上部タブ ----
     tab_garages, tab_vehicles, tab_dispatch = st.tabs(
@@ -1051,7 +1170,8 @@ def render_depot_profile_editor(
                 )
             else:
                 st.markdown(f"---")
-                work_df = _render_work_schedule_panel(
+                _full_work = work_df.copy()
+                _garage_work = _render_work_schedule_panel(
                     work_df,
                     timetable_df,
                     vehicles_df,
@@ -1059,6 +1179,14 @@ def render_depot_profile_editor(
                     selected_garage,
                     allow_cross_route,
                 )
+                # Merge: keep other garages' rows intact, replace
+                # only the selected garage's rows with the edited subset.
+                _other_work = (
+                    _full_work[_full_work["garage_id"] != selected_garage]
+                    if len(_full_work) > 0
+                    else _full_work
+                )
+                work_df = pd.concat([_other_work, _garage_work], ignore_index=True)
 
     if show_energy_settings:
         # ---- ⚙️ 充電設備・電力設定 ----
@@ -1132,6 +1260,14 @@ def render_depot_profile_editor(
 
     # ---- 保存ボタン ----
     st.markdown("---")
+    # Unsaved changes indicator
+    _has_unsaved = any(
+        _sk(k) in st.session_state for k in ("buf_garages", "buf_vehicles", "buf_work")
+    )
+    if _has_unsaved:
+        st.warning(
+            "⚠️ 未保存の変更があります。「営業所データを保存」で確定してください。"
+        )
     col_save, col_info = st.columns([1, 3])
     with col_save:
         save_clicked = st.button(
@@ -1142,4 +1278,20 @@ def render_depot_profile_editor(
     with col_info:
         if save_clicked:
             saved = _save_data(data_dir, garages_df, vehicles_df, work_df)
+            # Clear all session_state buffers so next load reads fresh disk data
+            for _buf_key in ("buf_garages", "buf_vehicles", "buf_work"):
+                sk = _sk(_buf_key)
+                if sk in st.session_state:
+                    del st.session_state[sk]
+            # Clear data_editor widget keys so they don't override fresh data
+            for _wk in ("garages_editor", "vehicles_editor"):
+                sk = _sk(_wk)
+                if sk in st.session_state:
+                    del st.session_state[sk]
+            # Clear per-garage work editor keys
+            for gid in garages_df["depot_id"].dropna().tolist():
+                sk = _sk(f"work_{gid}")
+                if sk in st.session_state:
+                    del st.session_state[sk]
             st.success(f"保存しました: {', '.join(saved)}")
+            st.rerun()

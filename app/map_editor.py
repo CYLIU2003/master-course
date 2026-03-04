@@ -11,6 +11,7 @@ app/map_editor.py — folium 地図ベース路線・デポ・充電器配置エ
 
 依存: folium, streamlit-folium
 """
+
 from __future__ import annotations
 
 import json
@@ -24,6 +25,7 @@ try:
     import folium
     from folium.plugins import Draw, MarkerCluster
     from streamlit_folium import st_folium
+
     FOLIUM_AVAILABLE = True
 except ImportError:
     FOLIUM_AVAILABLE = False
@@ -100,8 +102,14 @@ def _add_terminals_layer(
         if pd.isna(lat) or pd.isna(lon):
             continue
 
-        is_depot = str(row.get("has_depot", row.get("is_depot", False))).lower() in ("true", "1", "yes")
-        has_charger = str(row.get("has_charger", row.get("has_charger_site", False))).lower() in ("true", "1", "yes")
+        is_depot = str(row.get("has_depot", row.get("is_depot", False))).lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        has_charger = str(
+            row.get("has_charger", row.get("has_charger_site", False))
+        ).lower() in ("true", "1", "yes")
 
         if is_depot:
             color = COLOR_DEPOT
@@ -298,7 +306,9 @@ def render_map_editor(data_dir: str = "data") -> None:
     # ---- 地図からの座標更新 ----
     if map_data and map_data.get("last_object_clicked"):
         clicked = map_data["last_object_clicked"]
-        st.info(f"クリック位置: lat={clicked.get('lat', ''):.6f}, lon={clicked.get('lng', ''):.6f}")
+        st.info(
+            f"クリック位置: lat={clicked.get('lat', ''):.6f}, lon={clicked.get('lng', ''):.6f}"
+        )
 
     # ---- 新規ポイント追加 ----
     st.markdown("---")
@@ -324,63 +334,81 @@ def render_map_editor(data_dir: str = "data") -> None:
 
         if new_type == "停留所":
             if stops_df is not None:
-                new_row = pd.DataFrame([{
-                    "stop_id": new_id,
-                    "route_id": "",
-                    "direction_id": "outbound",
-                    "stop_sequence": len(stops_df) + 1,
-                    "stop_name": new_name,
-                    "lat": lat,
-                    "lon": lon,
-                }])
+                new_row = pd.DataFrame(
+                    [
+                        {
+                            "stop_id": new_id,
+                            "route_id": "",
+                            "direction_id": "outbound",
+                            "stop_sequence": len(stops_df) + 1,
+                            "stop_name": new_name,
+                            "lat": lat,
+                            "lon": lon,
+                        }
+                    ]
+                )
                 stops_df = pd.concat([stops_df, new_row], ignore_index=True)
                 st.session_state["_map_stops_df"] = stops_df
         elif new_type == "デポ":
             if depots_df is not None:
-                new_row = pd.DataFrame([{
-                    "depot_id": new_id,
-                    "depot_name": new_name,
-                    "terminal_id": "",
-                    "lat": lat,
-                    "lon": lon,
-                    "parking_capacity": 10,
-                    "charger_site_id": "",
-                    "overnight_charging": True,
-                    "has_workshop": False,
-                    "grid_connection_kw": 150.0,
-                    "notes": "",
-                }])
+                new_row = pd.DataFrame(
+                    [
+                        {
+                            "depot_id": new_id,
+                            "depot_name": new_name,
+                            "terminal_id": "",
+                            "lat": lat,
+                            "lon": lon,
+                            "parking_capacity": 10,
+                            "charger_site_id": "",
+                            "overnight_charging": True,
+                            "has_workshop": False,
+                            "grid_connection_kw": 150.0,
+                            "notes": "",
+                        }
+                    ]
+                )
                 depots_df = pd.concat([depots_df, new_row], ignore_index=True)
                 st.session_state["_map_depots_df"] = depots_df
             else:
-                depots_df = pd.DataFrame([{
-                    "depot_id": new_id,
-                    "depot_name": new_name,
-                    "terminal_id": "",
-                    "lat": lat,
-                    "lon": lon,
-                    "parking_capacity": 10,
-                    "charger_site_id": "",
-                    "overnight_charging": True,
-                    "has_workshop": False,
-                    "grid_connection_kw": 150.0,
-                    "notes": "",
-                }])
+                depots_df = pd.DataFrame(
+                    [
+                        {
+                            "depot_id": new_id,
+                            "depot_name": new_name,
+                            "terminal_id": "",
+                            "lat": lat,
+                            "lon": lon,
+                            "parking_capacity": 10,
+                            "charger_site_id": "",
+                            "overnight_charging": True,
+                            "has_workshop": False,
+                            "grid_connection_kw": 150.0,
+                            "notes": "",
+                        }
+                    ]
+                )
                 st.session_state["_map_depots_df"] = depots_df
         elif new_type == "充電拠点":
             if charger_sites_df is not None:
-                new_row = pd.DataFrame([{
-                    "site_id": new_id,
-                    "site_name": new_name,
-                    "terminal_id": "",
-                    "lat": lat,
-                    "lon": lon,
-                    "site_type": "charge_only",
-                    "max_grid_kw": 100.0,
-                    "pv_capacity_kw": 0.0,
-                    "notes": "",
-                }])
-                charger_sites_df = pd.concat([charger_sites_df, new_row], ignore_index=True)
+                new_row = pd.DataFrame(
+                    [
+                        {
+                            "site_id": new_id,
+                            "site_name": new_name,
+                            "terminal_id": "",
+                            "lat": lat,
+                            "lon": lon,
+                            "site_type": "charge_only",
+                            "max_grid_kw": 100.0,
+                            "pv_capacity_kw": 0.0,
+                            "notes": "",
+                        }
+                    ]
+                )
+                charger_sites_df = pd.concat(
+                    [charger_sites_df, new_row], ignore_index=True
+                )
                 st.session_state["_map_charger_sites_df"] = charger_sites_df
 
         st.success(f"追加しました: {new_type} '{new_name}' ({lat:.6f}, {lon:.6f})")
@@ -390,15 +418,19 @@ def render_map_editor(data_dir: str = "data") -> None:
     st.markdown("---")
     st.subheader("📋 データ表編集")
 
-    edit_tabs = st.tabs(["🏢 ターミナル", "🅿️ デポ", "⚡ 充電拠点", "⚡ 充電器", "🚏 停留所"])
+    edit_tabs = st.tabs(
+        ["🏢 ターミナル", "🅿️ デポ", "⚡ 充電拠点", "⚡ 充電器", "🚏 停留所"]
+    )
 
     edited_data = {}
 
     with edit_tabs[0]:
         if terminals_df is not None:
             edited_data["terminals"] = st.data_editor(
-                terminals_df, num_rows="dynamic",
-                use_container_width=True, key="map_edit_terminals",
+                terminals_df,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="map_edit_terminals",
             )
         else:
             st.info("terminals.csv が見つかりません。")
@@ -407,18 +439,24 @@ def render_map_editor(data_dir: str = "data") -> None:
         depots_df_use = st.session_state.get("_map_depots_df", depots_df)
         if depots_df_use is not None:
             edited_data["depots"] = st.data_editor(
-                depots_df_use, num_rows="dynamic",
-                use_container_width=True, key="map_edit_depots",
+                depots_df_use,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="map_edit_depots",
             )
         else:
-            st.info("depots.csv が見つかりません。data/infra/depots.csv を作成してください。")
+            st.info(
+                "depots.csv が見つかりません。data/infra/depots.csv を作成してください。"
+            )
 
     with edit_tabs[2]:
         cs_df_use = st.session_state.get("_map_charger_sites_df", charger_sites_df)
         if cs_df_use is not None:
             edited_data["charger_sites"] = st.data_editor(
-                cs_df_use, num_rows="dynamic",
-                use_container_width=True, key="map_edit_charger_sites",
+                cs_df_use,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="map_edit_charger_sites",
             )
         else:
             st.info("charger_sites.csv が見つかりません。")
@@ -426,8 +464,10 @@ def render_map_editor(data_dir: str = "data") -> None:
     with edit_tabs[3]:
         if chargers_df is not None:
             edited_data["chargers"] = st.data_editor(
-                chargers_df, num_rows="dynamic",
-                use_container_width=True, key="map_edit_chargers",
+                chargers_df,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="map_edit_chargers",
             )
         else:
             st.info("chargers.csv が見つかりません。")
@@ -436,8 +476,10 @@ def render_map_editor(data_dir: str = "data") -> None:
         stops_df_use = st.session_state.get("_map_stops_df", stops_df)
         if stops_df_use is not None:
             edited_data["stops"] = st.data_editor(
-                stops_df_use, num_rows="dynamic",
-                use_container_width=True, key="map_edit_stops",
+                stops_df_use,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="map_edit_stops",
             )
         else:
             st.info("stops.csv が見つかりません。")
@@ -447,7 +489,9 @@ def render_map_editor(data_dir: str = "data") -> None:
     col_save, col_status = st.columns([1, 3])
     with col_save:
         save_clicked = st.button(
-            "💾 地図データを保存", type="primary", key="save_map_data",
+            "💾 地図データを保存",
+            type="primary",
+            key="save_map_data",
         )
     with col_status:
         if save_clicked:
@@ -467,5 +511,6 @@ def render_map_editor(data_dir: str = "data") -> None:
                     saved_files.append(str(out_path.name))
             if saved_files:
                 st.success(f"保存しました: {', '.join(saved_files)}")
+                st.rerun()
             else:
                 st.warning("保存するデータがありません。")

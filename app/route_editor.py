@@ -4,6 +4,7 @@ route_editor.py — Streamlit 路線データ編集コンポーネント
 data/route_master/ と data/fleet/ の CSV を読み込み、
 st.data_editor で編集 → 保存できる UI を提供する。
 """
+
 from __future__ import annotations
 
 import json
@@ -70,7 +71,9 @@ def render_route_editor(data_dir: str = "data") -> None:
             variants_data = json.load(f)
 
     if not _csvs:
-        st.info("CSV ファイルが見つかりません。data/route_master/ にサンプル CSV を配置してください。")
+        st.info(
+            "CSV ファイルが見つかりません。data/route_master/ にサンプル CSV を配置してください。"
+        )
         return
 
     # ---- 編集タブ ----
@@ -105,7 +108,9 @@ def render_route_editor(data_dir: str = "data") -> None:
                 st.caption("route_variants.json は JSON エディタで編集してください。")
             else:
                 path, df = _csvs[key]
-                st.caption(f"`{path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path}`")
+                st.caption(
+                    f"`{path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path}`"
+                )
 
                 # セグメントは感度パラメータを強調
                 if key == "segments":
@@ -148,8 +153,7 @@ def render_route_editor(data_dir: str = "data") -> None:
                 st.metric("総走行時間", f"{seg_df['runtime_min'].sum():.0f} min")
             with col3:
                 avg_speed = (
-                    seg_df["distance_km"].sum()
-                    / (seg_df["runtime_min"].sum() / 60.0)
+                    seg_df["distance_km"].sum() / (seg_df["runtime_min"].sum() / 60.0)
                     if seg_df["runtime_min"].sum() > 0
                     else 0
                 )
@@ -161,7 +165,9 @@ def render_route_editor(data_dir: str = "data") -> None:
     st.markdown("---")
     col_save, col_status = st.columns([1, 3])
     with col_save:
-        save_clicked = st.button("💾 路線データを保存", type="primary", key="save_route_data")
+        save_clicked = st.button(
+            "💾 路線データを保存", type="primary", key="save_route_data"
+        )
     with col_status:
         if save_clicked:
             saved = []
@@ -171,3 +177,4 @@ def render_route_editor(data_dir: str = "data") -> None:
                     df_edited.to_csv(path, index=False, encoding="utf-8")
                     saved.append(str(path.name))
             st.success(f"保存しました: {', '.join(saved)}")
+            st.rerun()
