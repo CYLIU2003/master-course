@@ -1,5 +1,5 @@
-import { NavLink, useLocation } from "react-router-dom";
-import { useUIStore, type ActiveTab } from "@/stores/ui-store";
+import { NavLink } from "react-router-dom";
+import { useUIStore } from "@/stores/ui-store";
 
 interface SidebarProps {
   open: boolean;
