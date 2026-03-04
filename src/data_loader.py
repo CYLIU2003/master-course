@@ -13,6 +13,8 @@ import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+pd = None
+
 try:
     import pandas as pd
 
@@ -61,6 +63,7 @@ def _bool_col(val: Any) -> bool:
 def _read_csv(path: Path) -> List[Dict[str, str]]:
     """pandas なしでも動く簡易 CSV 読み込み"""
     if _PD_AVAILABLE:
+        assert pd is not None
         df = pd.read_csv(path, dtype=str).fillna("")
         return df.to_dict(orient="records")
     rows: List[Dict[str, str]] = []
@@ -71,6 +74,113 @@ def _read_csv(path: Path) -> List[Dict[str, str]]:
         vals = [v.strip() for v in line.split(",")]
         rows.append(dict(zip(headers, vals)))
     return rows
+
+
+def _load_required_csv_path(root: Path, paths: Dict[str, str], key: str) -> Path:
+    rel = paths.get(key)
+    if not rel:
+        raise FileNotFoundError(f"config.paths['{key}'] is required")
+    resolved = root / rel
+    if not resolved.exists():
+        raise FileNotFoundError(f"Required CSV not found for '{key}': {resolved}")
+    return resolved
+
+
+def _rebuild_from_build_inputs(
+    data: ProblemData,
+    cfg: Dict[str, Any],
+    config_path: str | Path,
+    dispatch_cfg: Dict[str, Any],
+) -> None:
+    """Use src.pipeline.build_inputs outputs as the canonical trip/arc source."""
+    from src.pipeline.build_inputs import build_inputs
+    from src.preprocess.trip_converter import (
+        build_vehicle_task_compat,
+        convert_deadhead_arcs_to_connections,
+        convert_trips_to_tasks,
+    )
+
+    built = build_inputs(str(config_path))
+    trips = built.get("trips", [])
+    arcs = built.get("deadhead_arcs", [])
+
+    delta_t_min = float(cfg.get("time_step_min", 15))
+    start_time = str(cfg.get("start_time", "05:00"))
+    default_penalty = float(dispatch_cfg.get("default_penalty_unserved", 10000.0))
+    replace_tasks = bool(dispatch_cfg.get("replace_tasks_from_build_inputs", True))
+
+    if replace_tasks and trips:
+        data.tasks = convert_trips_to_tasks(
+            trips,
+            start_time=start_time,
+            delta_t_min=delta_t_min,
+            default_penalty=default_penalty,
+        )
+        if not data.vehicle_task_compat:
+            data.vehicle_task_compat = build_vehicle_task_compat(
+                data.vehicles, data.tasks
+            )
+
+    data.travel_connections = convert_deadhead_arcs_to_connections(
+        arcs,
+        delta_t_min=delta_t_min,
+    )
+    setattr(
+        data,
+        "_dispatch_preprocess_report",
+        {
+            "source": "build_inputs",
+            "trip_count": len(trips),
+            "edge_count": len(arcs),
+            "generated_connections": len(data.travel_connections),
+            "vehicle_types": tuple(),
+            "warnings": tuple(),
+            "replace_tasks": replace_tasks,
+        },
+    )
+
+
+def _resolve_optional_path(root: Path, path_str: Optional[str]) -> Optional[Path]:
+    if not path_str:
+        return None
+    candidate = root / path_str
+    return candidate if candidate.exists() else None
+
+
+def _load_turnaround_rules_csv(path: Optional[Path]) -> Dict[str, int]:
+    if path is None:
+        return {}
+    rows = _read_csv(path)
+    rules: Dict[str, int] = {}
+    for r in rows:
+        stop_id = str(r.get("stop_id", "")).strip()
+        if not stop_id:
+            continue
+        try:
+            mins = int(float(r.get("min_turnaround_min", 0) or 0))
+        except (TypeError, ValueError):
+            mins = 0
+        rules[stop_id] = max(0, mins)
+    return rules
+
+
+def _load_deadhead_rules_csv(path: Optional[Path]) -> Dict[tuple[str, str], int]:
+    if path is None:
+        return {}
+    rows = _read_csv(path)
+    rules: Dict[tuple[str, str], int] = {}
+    for r in rows:
+        from_stop = str(r.get("from_stop", r.get("from_stop_id", ""))).strip()
+        to_stop = str(r.get("to_stop", r.get("to_stop_id", ""))).strip()
+        if not from_stop or not to_stop or from_stop == to_stop:
+            continue
+        try:
+            mins = int(float(r.get("travel_time_min", 0) or 0))
+        except (TypeError, ValueError):
+            mins = 0
+        # current dispatch context API treats 0 as "no rule" for different stops
+        rules[(from_stop, to_stop)] = max(1, mins)
+    return rules
 
 
 # ---------------------------------------------------------------------------
@@ -286,36 +396,49 @@ def load_problem_data(config_path: str | Path) -> ProblemData:
         p = root / rel
         return p if p.exists() else None
 
+    def abs_path_from(value: Optional[str]) -> Optional[Path]:
+        if not value:
+            return None
+        p = root / value
+        return p if p.exists() else None
+
     # --- 必須 CSV ---
-    vehicles = load_vehicles(abs_path("vehicles_csv"))
-    tasks = load_tasks(abs_path("tasks_csv"))
-    chargers = load_chargers(abs_path("chargers_csv"))
-    sites = load_sites(abs_path("sites_csv"))
+    vehicles_csv = _load_required_csv_path(root, paths, "vehicles_csv")
+    tasks_csv = _load_required_csv_path(root, paths, "tasks_csv")
+    chargers_csv = _load_required_csv_path(root, paths, "chargers_csv")
+    sites_csv = _load_required_csv_path(root, paths, "sites_csv")
+
+    vehicles = load_vehicles(vehicles_csv)
+    tasks = load_tasks(tasks_csv)
+    chargers = load_chargers(chargers_csv)
+    sites = load_sites(sites_csv)
 
     # --- 任意 CSV ---
+    pv_profile_csv = abs_path("pv_profile_csv")
+    electricity_price_csv = abs_path("electricity_price_csv")
+    travel_connection_csv = abs_path("travel_connection_csv")
+    compat_vehicle_task_csv = abs_path("compat_vehicle_task_csv")
+    compat_vehicle_charger_csv = abs_path("compat_vehicle_charger_csv")
+
     pv_profiles: List[PVProfile] = []
-    if abs_path("pv_profile_csv"):
-        pv_profiles = load_pv_profile(abs_path("pv_profile_csv"))
+    if pv_profile_csv:
+        pv_profiles = load_pv_profile(pv_profile_csv)
 
     electricity_prices: List[ElectricityPrice] = []
-    if abs_path("electricity_price_csv"):
-        electricity_prices = load_electricity_price(abs_path("electricity_price_csv"))
+    if electricity_price_csv:
+        electricity_prices = load_electricity_price(electricity_price_csv)
 
     travel_connections: List[TravelConnection] = []
-    if abs_path("travel_connection_csv"):
-        travel_connections = load_travel_connection(abs_path("travel_connection_csv"))
+    if travel_connection_csv:
+        travel_connections = load_travel_connection(travel_connection_csv)
 
     vehicle_task_compat: List[VehicleTaskCompat] = []
-    if abs_path("compat_vehicle_task_csv"):
-        vehicle_task_compat = load_vehicle_task_compat(
-            abs_path("compat_vehicle_task_csv")
-        )
+    if compat_vehicle_task_csv:
+        vehicle_task_compat = load_vehicle_task_compat(compat_vehicle_task_csv)
 
     vehicle_charger_compat: List[VehicleChargerCompat] = []
-    if abs_path("compat_vehicle_charger_csv"):
-        vehicle_charger_compat = load_vehicle_charger_compat(
-            abs_path("compat_vehicle_charger_csv")
-        )
+    if compat_vehicle_charger_csv:
+        vehicle_charger_compat = load_vehicle_charger_compat(compat_vehicle_charger_csv)
 
     # --- パラメータ ---
     weights = cfg.get("objective_weights", {})
@@ -352,4 +475,71 @@ def load_problem_data(config_path: str | Path) -> ProblemData:
         BIG_M_SOC=float(big_m.get("BIG_M_SOC", 1e6)),
         EPSILON=float(big_m.get("EPSILON", 1e-6)),
     )
+
+    # --- dispatch 前処理 (時刻表ファースト接続グラフ由来の can_follow 生成) ---
+    dispatch_cfg = cfg.get("dispatch_preprocess", {})
+    dispatch_enabled = bool(dispatch_cfg.get("enabled", True))
+    source = (
+        str(dispatch_cfg.get("connection_source", "dispatch_graph")).strip().lower()
+    )
+    force_rebuild = bool(dispatch_cfg.get("force_rebuild_travel_connections", False))
+    rebuild_when_missing = bool(dispatch_cfg.get("rebuild_when_missing", True))
+    should_rebuild = force_rebuild or (
+        rebuild_when_missing and len(data.travel_connections) == 0
+    )
+
+    if (
+        dispatch_enabled
+        and should_rebuild
+        and source in ("build_inputs", "build_inputs_arcs")
+    ):
+        try:
+            _rebuild_from_build_inputs(
+                data=data,
+                cfg=cfg,
+                config_path=config_path,
+                dispatch_cfg=dispatch_cfg,
+            )
+        except Exception as exc:
+            print(f"  [warn] dispatch_preprocess(build_inputs) スキップ: {exc}")
+
+    if (
+        dispatch_enabled
+        and should_rebuild
+        and source in ("dispatch_graph", "dispatch_graph_if_missing")
+    ):
+        try:
+            from src.dispatch.problemdata_adapter import (
+                build_travel_connections_via_dispatch,
+            )
+
+            turnaround_path = abs_path("turnaround_rules_csv")
+            if turnaround_path is None:
+                turnaround_path = abs_path_from(
+                    dispatch_cfg.get("turnaround_rules_csv")
+                )
+
+            deadhead_path = abs_path("deadhead_rules_csv")
+            if deadhead_path is None:
+                deadhead_path = abs_path_from(dispatch_cfg.get("deadhead_rules_csv"))
+
+            turnaround_rules = _load_turnaround_rules_csv(turnaround_path)
+            deadhead_rules = _load_deadhead_rules_csv(deadhead_path)
+            default_turnaround_min = int(dispatch_cfg.get("default_turnaround_min", 10))
+            service_date = str(
+                dispatch_cfg.get("service_date", cfg.get("service_date", "1970-01-01"))
+            )
+
+            travel_connections, report = build_travel_connections_via_dispatch(
+                data=data,
+                service_date=service_date,
+                default_turnaround_min=default_turnaround_min,
+                turnaround_rules=turnaround_rules,
+                deadhead_rules=deadhead_rules,
+            )
+            data.travel_connections = travel_connections
+            setattr(data, "_dispatch_preprocess_report", report)
+        except Exception as exc:
+            print(f"  [warn] dispatch_preprocess スキップ: {exc}")
+
     return data

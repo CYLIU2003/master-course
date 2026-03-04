@@ -18,9 +18,9 @@ This greedy baseline is replaceable by a MILP solver later; the interface
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from .feasibility import FeasibilityEngine
+from .graph_builder import ConnectionGraphBuilder
 from .models import DispatchContext, DutyLeg, Trip, VehicleDuty
 
 
@@ -28,7 +28,7 @@ class DispatchGenerator:
     """Greedy dispatcher: timetable → VehicleDuty list."""
 
     def __init__(self) -> None:
-        self._engine = FeasibilityEngine()
+        self._graph_builder = ConnectionGraphBuilder()
 
     def generate_greedy_duties(
         self,
@@ -42,6 +42,16 @@ class DispatchGenerator:
         Only trips that include *vehicle_type* in their allowed_vehicle_types
         are considered.
         """
+        graph = self._graph_builder.build(context, vehicle_type)
+        return self.generate_greedy_duties_from_graph(context, vehicle_type, graph)
+
+    def generate_greedy_duties_from_graph(
+        self,
+        context: DispatchContext,
+        vehicle_type: str,
+        graph: Dict[str, List[str]],
+    ) -> List[VehicleDuty]:
+        """Generate duties using a precomputed feasible-connection graph."""
         # Filter and sort eligible trips by departure time, then trip_id for
         # determinism when departure times are equal.
         eligible: List[Trip] = sorted(
@@ -61,10 +71,11 @@ class DispatchGenerator:
             best_arrival: int = -1  # latest arrival wins (tightest fit)
 
             for idx, (last_trip, _legs) in enumerate(open_duties):
-                result = self._engine.can_connect(
-                    last_trip, trip, context, vehicle_type
-                )
-                if result.feasible and last_trip.arrival_min > best_arrival:
+                feasible_successors = graph.get(last_trip.trip_id, [])
+                if (
+                    trip.trip_id in feasible_successors
+                    and last_trip.arrival_min > best_arrival
+                ):
                     best_arrival = last_trip.arrival_min
                     best_idx = idx
 

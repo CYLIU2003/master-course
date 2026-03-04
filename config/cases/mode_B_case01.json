@@ -16,6 +16,12 @@
   "use_soft_soc_constraint": false,
 
   "mode": "mode_B_resource_assignment",
+  "dispatch_preprocess": {
+    "enabled": true,
+    "connection_source": "dispatch_graph",
+    "rebuild_when_missing": false,
+    "force_rebuild_travel_connections": false
+  },
 
   "solver": {
     "time_limit_sec": 120,

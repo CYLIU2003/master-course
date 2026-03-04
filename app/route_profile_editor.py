@@ -307,6 +307,22 @@ def _load_data(data_dir: str) -> dict:
     if timetable_df is None:
         timetable_df = pd.DataFrame(columns=TIMETABLE_COLS)
     timetable_df = _ensure_cols(timetable_df, TIMETABLE_COLS)
+    # Streamlit data_editor の TextColumn と型不一致を避けるため、
+    # 時刻表の文字列列は明示的に文字列へ正規化する。
+    timetable_text_cols = [
+        "trip_id",
+        "route_id",
+        "direction",
+        "service_type",
+        "dep_time",
+        "arr_time",
+        "from_stop_id",
+        "to_stop_id",
+        "notes",
+    ]
+    for col in timetable_text_cols:
+        if col in timetable_df.columns:
+            timetable_df[col] = timetable_df[col].fillna("").astype(str)
 
     if garages_df is None:
         garages_df = pd.DataFrame(columns=["depot_id", "depot_name"])

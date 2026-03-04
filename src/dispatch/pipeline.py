@@ -31,11 +31,17 @@ class PipelineResult:
     duties: List[VehicleDuty]
     graph: Dict[str, List[str]]  # adjacency list
     validation: Dict[str, ValidationResult]  # duty_id → result
+    uncovered_trip_ids: List[str] = field(default_factory=list)
+    duplicate_trip_ids: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
     @property
     def all_valid(self) -> bool:
-        return all(v.valid for v in self.validation.values())
+        return (
+            all(v.valid for v in self.validation.values())
+            and not self.uncovered_trip_ids
+            and not self.duplicate_trip_ids
+        )
 
     @property
     def invalid_duties(self) -> List[str]:
@@ -80,7 +86,11 @@ class TimetableDispatchPipeline:
         graph = self._graph_builder.build(context, vehicle_type)
 
         # Step 3 — generate greedy duties
-        duties = self._dispatcher.generate_greedy_duties(context, vehicle_type)
+        duties = self._dispatcher.generate_greedy_duties_from_graph(
+            context,
+            vehicle_type,
+            graph,
+        )
 
         # Step 4 — validate every duty
         validation: Dict[str, ValidationResult] = {}
@@ -95,12 +105,43 @@ class TimetableDispatchPipeline:
                 for err in result.errors:
                     warnings.append(f"[{duty_id}] {err}")
 
+        # Step 6 — coverage / uniqueness across all eligible trips
+        eligible_trip_ids = {
+            t.trip_id for t in context.trips if vehicle_type in t.allowed_vehicle_types
+        }
+        assigned_trip_ids: List[str] = []
+        for duty in duties:
+            assigned_trip_ids.extend(duty.trip_ids)
+
+        assigned_once = set(assigned_trip_ids)
+        uncovered_trip_ids = sorted(eligible_trip_ids - assigned_once)
+
+        seen: set[str] = set()
+        duplicate_trip_ids: List[str] = []
+        for trip_id in assigned_trip_ids:
+            if trip_id in seen:
+                duplicate_trip_ids.append(trip_id)
+            seen.add(trip_id)
+
+        if uncovered_trip_ids:
+            warnings.append(
+                "Uncovered trips detected for "
+                f"vehicle_type='{vehicle_type}': {', '.join(uncovered_trip_ids)}"
+            )
+        if duplicate_trip_ids:
+            warnings.append(
+                "Duplicate trip assignments detected for "
+                f"vehicle_type='{vehicle_type}': {', '.join(sorted(set(duplicate_trip_ids)))}"
+            )
+
         return PipelineResult(
             service_date=context.service_date,
             vehicle_type=vehicle_type,
             duties=duties,
             graph=graph,
             validation=validation,
+            uncovered_trip_ids=uncovered_trip_ids,
+            duplicate_trip_ids=sorted(set(duplicate_trip_ids)),
             warnings=warnings,
         )
 

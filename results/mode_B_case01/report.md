@@ -2,7 +2,7 @@
 
 - **モード**: mode_B_resource_assignment
 - **ステータス**: OPTIMAL
-- **実行日時**: 2026-03-02T18:02:07
+- **実行日時**: 2026-03-04T15:05:19
 
 ## 10 KPI サマリ
 
@@ -17,7 +17,7 @@
 | soc_min_margin_kwh | 37.25 | kWh |
 | charger_utilization | 6.25% | - |
 | peak_grid_power_kw | 35.00 | kW |
-| solve_time_sec | 0.093 | 秒 |
+| solve_time_sec | 0.124 | 秒 |
 
 ## 車両割当サマリ
 

@@ -50,6 +50,14 @@ def _load_duty_data(cfg: dict, data: Any, run_mode: str) -> None:
             print(f"  [warn] 行路読込スキップ: {e}")
 
 
+def _report_field(report: Any, key: str, default: Any = None) -> Any:
+    if report is None:
+        return default
+    if isinstance(report, dict):
+        return report.get(key, default)
+    return getattr(report, key, default)
+
+
 def _solve_milp_core(
     cfg, data, ms, dp, run_mode, fixed_assignment=None, flag_overrides=None
 ):
@@ -206,7 +214,10 @@ def _solve_alns_milp(cfg, data, ms, dp, flag_overrides=None):
     return final_result, alns_result, milp_result, alns_time, milp_time, alns_params
 
 
-def solve(config_path: str = "config/experiment_config.json", mode: str = None) -> dict:
+def solve(
+    config_path: str = "config/experiment_config.json",
+    mode: Optional[str] = None,
+) -> dict:
     """
     config に基づいてソルバーを実行し、raw solution を outputs/ に保存する。
     """
@@ -222,6 +233,19 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
     from src.parameter_builder import build_derived_params
 
     data = load_problem_data(config_path)
+
+    dispatch_report = getattr(data, "_dispatch_preprocess_report", None)
+    if dispatch_report is not None:
+        vehicle_types = _report_field(dispatch_report, "vehicle_types", tuple())
+        print(
+            "  [dispatch] "
+            f"source={_report_field(dispatch_report, 'source', 'dispatch_graph')}, "
+            f"trips={_report_field(dispatch_report, 'trip_count', 0)}, "
+            f"edges={_report_field(dispatch_report, 'edge_count', 0)}, "
+            f"connections={_report_field(dispatch_report, 'generated_connections', 0)}, "
+            f"vehicle_types={list(vehicle_types) if vehicle_types else []}"
+        )
+
     ms = build_model_sets(data)
     dp = build_derived_params(data, ms)
 
@@ -425,7 +449,12 @@ def solve(config_path: str = "config/experiment_config.json", mode: str = None) 
             print(f"  [warn] 遅延耐性テストスキップ: {e}")
 
     print(f"[solve] 完了 → {out_root} (total={total_time:.2f}s)")
-    return {"result": result, "sim_result": sim_result, "method": method}
+    return {
+        "result": result,
+        "sim_result": sim_result,
+        "method": method,
+        "dispatch_preprocess": dispatch_report,
+    }
 
 
 def _export_minimal(result, out_root):

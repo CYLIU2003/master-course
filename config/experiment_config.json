@@ -56,6 +56,17 @@
   "_comment_v3": "=== spec_v3 §11 追加フィールド (2 層構造・route-editable 対応) ===",
 
   "mode": "thesis_mode_route_editable",
+  "dispatch_preprocess": {
+    "_comment": "travel_connection 生成ルート切替: dispatch_graph | build_inputs | none",
+    "enabled": true,
+    "connection_source": "dispatch_graph",
+    "rebuild_when_missing": true,
+    "force_rebuild_travel_connections": false,
+    "default_turnaround_min": 10,
+    "turnaround_rules_csv": "data/operations/turnaround_rules.csv",
+    "deadhead_rules_csv": "data/operations/deadhead_rules.csv",
+    "replace_tasks_from_build_inputs": true
+  },
   "energy_model_level": 1,
   "fuel_model_enabled": true,
   "allow_deadhead": true,

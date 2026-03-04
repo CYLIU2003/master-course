@@ -469,6 +469,8 @@ data/
 }
 ```
 
+`dispatch_preprocess` options reference: `docs/dispatch_preprocess_config.md`
+
 ---
 
 ## ファイル構成

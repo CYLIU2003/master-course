@@ -2,7 +2,7 @@
 
 - **モード**: mode_A_journey_charge
 - **ステータス**: OPTIMAL
-- **実行日時**: 2026-03-02T17:48:48
+- **実行日時**: 2026-03-04T15:02:15
 
 ## 10 KPI サマリ
 
@@ -17,7 +17,7 @@
 | soc_min_margin_kwh | 65.00 | kWh |
 | charger_utilization | 46.88% | - |
 | peak_grid_power_kw | 55.00 | kW |
-| solve_time_sec | 0.039 | 秒 |
+| solve_time_sec | 0.023 | 秒 |
 
 ## 車両割当サマリ
 

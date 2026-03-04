@@ -1,0 +1,5 @@
+stop_id,min_turnaround_min,notes
+stop_route_101_001,5,Terminal A – outbound origin  # adjust as needed
+stop_route_101_018,5,Terminal B – outbound destination  # adjust as needed
+stop_route_101_018_in,5,Terminal B – inbound origin  # adjust as needed
+stop_route_101_001_in,5,Terminal A – inbound destination  # adjust as needed

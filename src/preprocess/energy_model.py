@@ -18,22 +18,22 @@ from src.schemas.fleet_entities import VehicleType
 # デフォルト係数 (spec_v3 §5.3 Level 1 標準式)
 # ---------------------------------------------------------------------------
 _DEFAULT_BETA = {
-    "dist":       1.20,   # [kWh/km]  base distance energy rate
-    "time":       0.00,   # [kWh/h]   idle/aux per hour (speed-dependent)
-    "grade_up":   0.05,   # [kWh / (%·km)]
-    "grade_down": 0.02,   # [kWh / (%·km)]  回生で一部回収
-    "stop":       0.03,   # [kWh/stop]  stop-start penalty
-    "load":       0.30,   # [kWh/km per load_factor=1.0]
-    "cong":       0.10,   # [kWh/km per unit congestion_index]
-    "hvac":       1.00,   # [kWh/h]  HVAC average power
-    "min_idle":   0.05,   # [kWh/km]  lower bound (aux only)
+    "dist": 1.20,  # [kWh/km]  base distance energy rate
+    "time": 0.00,  # [kWh/h]   idle/aux per hour (speed-dependent)
+    "grade_up": 0.05,  # [kWh / (%·km)]
+    "grade_down": 0.02,  # [kWh / (%·km)]  回生で一部回収
+    "stop": 0.03,  # [kWh/stop]  stop-start penalty
+    "load": 0.30,  # [kWh/km per load_factor=1.0]
+    "cong": 0.10,  # [kWh/km per unit congestion_index]
+    "hvac": 1.00,  # [kWh/h]  HVAC average power
+    "min_idle": 0.05,  # [kWh/km]  lower bound (aux only)
 }
 
 
 def _get_beta(vt: VehicleType, key: str) -> float:
     """VehicleType の属性 or デフォルトから係数取得。"""
     attr_map = {
-        "dist":       "base_energy_rate_kwh_per_km",
+        "dist": "base_energy_rate_kwh_per_km",
     }
     if key == "dist" and vt.base_energy_rate_kwh_per_km is not None:
         return vt.base_energy_rate_kwh_per_km
@@ -82,14 +82,23 @@ def estimate_segment_energy_bev(
 
     e_dist = beta_d * dist
     e_grade_up = max(grade, 0.0) * dist * beta_g_up
-    e_grade_regen = max(-grade, 0.0) * dist * beta_g_dn   # regen recovery
+    e_grade_regen = max(-grade, 0.0) * dist * beta_g_dn  # regen recovery
     e_stop = signals * beta_ss
     e_traffic = congestion * dist * beta_tr
     e_load = passenger_load_factor * dist * beta_ld
     e_time = runtime_h * beta_time
     e_hvac = hvac_power_kw * runtime_h
 
-    raw = e_dist + e_grade_up - e_grade_regen + e_stop + e_traffic + e_load + e_time + e_hvac
+    raw = (
+        e_dist
+        + e_grade_up
+        - e_grade_regen
+        + e_stop
+        + e_traffic
+        + e_load
+        + e_time
+        + e_hvac
+    )
     e_min = _DEFAULT_BETA["min_idle"] * dist
     energy = max(raw, e_min)
 
@@ -143,22 +152,26 @@ def estimate_trip_energy_bev(
         )
         stop_count = sum((s.signal_count or 0) for s in segments)
         cong_index = (
-            sum((s.congestion_index or 0.0) * s.distance_km for s in segments) / total_dist
-            if total_dist > 0 else 0.0
+            sum((s.congestion_index or 0.0) * s.distance_km for s in segments)
+            / total_dist
+            if total_dist > 0
+            else 0.0
         )
 
         beta_d = _get_beta(vehicle_type, "dist")
-        hvac_kw = (vehicle_type.hvac_power_kw_cooling or 0.0 +
-                   vehicle_type.hvac_power_kw_heating or 0.0) / 2.0
+        hvac_kw = (
+            (vehicle_type.hvac_power_kw_cooling or 0.0)
+            + (vehicle_type.hvac_power_kw_heating or 0.0)
+        ) / 2.0
 
-        e_dist  = beta_d * total_dist
-        e_gu    = grade_up_dist * _DEFAULT_BETA["grade_up"]
-        e_gd    = grade_dn_dist * _DEFAULT_BETA["grade_down"]
-        e_stop  = stop_count * _DEFAULT_BETA["stop"]
-        e_load  = passenger_load_factor * total_dist * _DEFAULT_BETA["load"]
-        e_cong  = cong_index * total_dist * _DEFAULT_BETA["cong"]
-        e_hvac  = hvac_kw * total_run_h
-        e_time  = total_run_h * _DEFAULT_BETA["time"]
+        e_dist = beta_d * total_dist
+        e_gu = grade_up_dist * _DEFAULT_BETA["grade_up"]
+        e_gd = grade_dn_dist * _DEFAULT_BETA["grade_down"]
+        e_stop = stop_count * _DEFAULT_BETA["stop"]
+        e_load = passenger_load_factor * total_dist * _DEFAULT_BETA["load"]
+        e_cong = cong_index * total_dist * _DEFAULT_BETA["cong"]
+        e_hvac = hvac_kw * total_run_h
+        e_time = total_run_h * _DEFAULT_BETA["time"]
 
         raw = e_dist + e_gu - e_gd + e_stop + e_load + e_cong + e_hvac + e_time
         energy = max(raw, _DEFAULT_BETA["min_idle"] * total_dist)
@@ -177,7 +190,7 @@ def estimate_trip_energy_bev(
     total_energy = 0.0
     combined_bd: Dict[str, float] = {}
     for seg in segments:
-        hvac_kw = (vehicle_type.hvac_power_kw_cooling or 0.0)
+        hvac_kw = vehicle_type.hvac_power_kw_cooling or 0.0
         e_seg, bd_seg = estimate_segment_energy_bev(
             seg, vehicle_type, passenger_load_factor, hvac_kw
         )
@@ -203,7 +216,10 @@ def estimate_trip_fuel_ice_from_segments(
         cong_pen = (s.congestion_index or 0.0) * s.distance_km * 0.02
         load_pen = passenger_load_factor * s.distance_km * 0.01
         fuel += grade_pen + cong_pen + load_pen
-    bd = {"distance": round(rate * total_dist, 4), "correction": round(fuel - rate * total_dist, 4)}
+    bd = {
+        "distance": round(rate * total_dist, 4),
+        "correction": round(fuel - rate * total_dist, 4),
+    }
     return round(fuel, 4), bd
 
 
