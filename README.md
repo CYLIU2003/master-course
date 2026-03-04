@@ -95,6 +95,7 @@ master-course/
 |  |- routers/                # scenarios/master-data/graph/simulation/optimization/jobs
 |  |- store/                  # scenario_store(JSON), job_store(in-memory)
 |  `- mappers/                # Python dataclass <-> API DTO mapping
+|- app/                       # Legacy Streamlit UI (frozen)
 |- src/
 |  |- dispatch/               # timetable-driven dispatch core
 |  `- pipeline/               # build_inputs / solve / simulate / report
