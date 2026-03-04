@@ -1,8 +1,11 @@
-streamlit>=1.30.0
-plotly>=5.18.0
+# Core scientific stack
 pandas>=2.0.0
 scipy>=1.11.0
-folium>=0.15.0
-streamlit-folium>=0.18.0
-# gurobipy は別途 Gurobi ライセンスが必要
+plotly>=5.18.0
+
+# BFF backend
+fastapi>=0.115.0
+uvicorn>=0.32.0
+
+# Optional solver (requires separate Gurobi license)
 # pip install gurobipy

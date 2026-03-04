@@ -1,6 +1,0 @@
-vehicle_id,vehicle_type,task_id,start_time_idx,end_time_idx,origin,destination,distance_km,energy_kwh_bev
-V1,BEV,T1,0,3,depot,stop_A,0.0,20.0
-V1,BEV,T3,8,11,depot,stop_A,0.0,20.0
-V1,BEV,T5,16,19,depot,stop_A,0.0,10.0
-V2,BEV,T2,4,7,stop_A,depot,0.0,20.0
-V2,BEV,T4,12,15,stop_A,depot,0.0,20.0

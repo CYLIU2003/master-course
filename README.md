@@ -1,38 +1,93 @@
-# Master Course - EV Bus Dispatch Planning
+# EV Bus Dispatch Planning System (Master Course)
 
-電気バスの配車・充電・電力コスト最適化を扱う研究用プロジェクトです。
+このリポジトリは、修士研究向けの **EVバス配車・充電計画・運行最適化** プロジェクトです。  
+現在の `main` は、**新フロント思想（React + FastAPI BFF + Pythonコア）** を前提とした構成です。
 
-## Branch Policy
+---
 
-- `main`: 現行開発ブランチ。**React frontend + FastAPI BFF + Python最適化コア** を対象に開発。
-- `old`: 旧 Streamlit UI を凍結保存するためのブランチ（参照専用）。
+## 1. まず最初に: ブランチ方針
 
-> 以後のUI開発は `frontend/` を主系として進めます。
+### `main`（現行）
 
-## Current Architecture
+- 採用アーキテクチャ: **frontend-first + API-driven**
+- UI: `frontend/`（React + TypeScript）
+- Backend for Frontend: `bff/`（FastAPI）
+- 研究ロジック: `src/`（dispatch / pipeline / optimizer / simulator）
+
+### `old`（凍結）
+
+- 旧 Streamlit UI 系資産を保持する退避ブランチ
+- 参照用、基本的に今後は更新しない
+
+> つまり、今後の機能追加・改修は `main` 上で `frontend/` と `bff/` を中心に進めます。
+
+---
+
+## 2. 設計思想（新フロント思想）
+
+### 2.1 Frontendのドメイン設計
+
+- 中心概念は `Depot`（営業所）
+- `Vehicle` は必ず1つの `depotId` に所属
+- `Route` は独立エンティティ
+- 権限制御は2層
+  - `DepotRoutePermission`
+  - `VehicleRoutePermission`
+
+### 2.2 UI構成
+
+- 主タブは2つ
+  1. `Planning`（営業所・車両・路線のマスタ管理）
+  2. `Simulation`（シミュレーション環境設定）
+- その下に `Dispatch` / `Results` を常設
+
+### 2.3 バックエンド通信方針
+
+- Frontendは `/api` だけを叩く
+- BFFが Pythonコア（`src/`）を呼び出す
+- 重い処理はジョブ化
+  - `POST` で `job_id` 発行
+  - `GET /api/jobs/{job_id}` で進捗ポーリング
+
+---
+
+## 3. システム全体像
 
 ```text
-frontend (React + TS)
-   -> /api
-bff (FastAPI BFF)
-   -> src/dispatch (timetable-driven dispatch)
-   -> src/pipeline (solve/simulate/report)
-   -> src/* core modules
+React Frontend (frontend/)
+  -> HTTP /api
+FastAPI BFF (bff/)
+  -> src.dispatch (timetable-first dispatch)
+  -> src.pipeline (build_inputs / solve / simulate / report)
+  -> src.* (model, constraints, simulator)
 ```
 
-## Quick Start (main)
+---
 
-### 1) Backend BFF
+## 4. クイックスタート
+
+## 4.1 前提
+
+- Python 3.11+ 推奨
+- Node.js 18+ 推奨
+- npm 9+ 推奨
+
+## 4.2 Python依存をインストール
 
 ```bash
 python -m pip install -r requirements.txt
+```
+
+## 4.3 BFF起動（ターミナル1）
+
+```bash
 python -m uvicorn bff.main:app --reload --port 8000
 ```
 
 - API base: `http://localhost:8000/api`
-- Health check: `http://localhost:8000/health`
+- Health: `http://localhost:8000/health`
 
-### 2) Frontend
+## 4.4 Frontend起動（ターミナル2）
 
 ```bash
 cd frontend
@@ -41,71 +96,169 @@ npm run dev
 ```
 
 - UI: `http://localhost:5173`
-- Vite proxy: `/api` -> `http://localhost:8000`
+- Vite proxyで `/api` を `http://localhost:8000` に転送
 
-### 3) Verification
+---
+
+## 5. 開発時の基本コマンド
+
+## 5.1 Pythonテスト
 
 ```bash
 python -m pytest tests/ -q
-cd frontend && npm run build
 ```
 
-## Frontend Concept (Depot-Centric)
+## 5.2 Frontendビルド確認
 
-- タブ構成は `Planning` と `Simulation` の2軸
-- `Depot` が親概念、`Vehicle` は必ず1つの `depotId` に所属
-- `Route` は独立、許可は2層で管理
-  - `DepotRoutePermission`
-  - `VehicleRoutePermission`
-- 重い処理はジョブ化
-  - `POST` で `job_id` を返す
-  - `GET /api/jobs/{job_id}` で進捗ポーリング
+```bash
+cd frontend
+npm run build
+```
 
-## BFF Scope
+## 5.3 BFF import確認
 
-実装済み（`bff/`）:
+```bash
+python -c "from bff.main import app; print(len(app.routes))"
+```
+
+---
+
+## 6. APIの責務（BFF）
+
+`bff/` は「UIに必要な粒度」でAPIを提供し、研究コア層との間を吸収します。
 
 - Scenario CRUD
 - Depot / Vehicle / Route CRUD
-- Depot-Route / Vehicle-Route permission API
-- Timetable API
-- Dispatch pipeline API (`build-trips`, `build-graph`, `generate-duties`, `validate`)
-- Job polling API
+- Depot-Route / Vehicle-Route Permission
+- Timetable入出力
+- Dispatch処理
+  - `build-trips`
+  - `build-graph`
+  - `generate-duties`
+  - `duties/validate`
+- ジョブ管理
+  - `GET /api/jobs/{job_id}`
 
-現時点で簡易実装（stub）:
+現時点で暫定（stub）:
 
 - `run-simulation`
 - `run-optimization`
 
-## Directory Structure
+---
+
+## 7. Dispatchコアの不変条件（重要）
+
+`src/dispatch/` は **Timetable first, dispatch second** を厳守します。
+
+- 時刻表が唯一の真実
+- 配車は時刻表から導出する
+- 物理的に不可能な接続を許可しない
+
+接続可否のハード制約:
+
+1. 位置連続性（deadhead ruleが必要）
+2. 時刻連続性（turnaround + deadheadを加味して出発時刻以下）
+3. 車種制約（allowed vehicle types）
+
+---
+
+## 8. ディレクトリ構成（mainの実態）
 
 ```text
 master-course/
-|- frontend/                  # React 19 + TypeScript + Vite 7
+|- AGENTS.md
+|- README.md
+|- requirements.txt
+|
+|- frontend/                     # React 19 + TS + Vite 7
 |  |- src/
-|  |  |- api/                 # /api client
-|  |  |- hooks/               # TanStack Query hooks
-|  |  |- features/            # UI components
-|  |  |- pages/               # route pages
-|  |  |- stores/              # Zustand stores
-|  |  `- types/               # domain/api types
+|  |  |- api/
+|  |  |- app/
+|  |  |- features/
+|  |  |- hooks/
+|  |  |- pages/
+|  |  |- stores/
+|  |  `- types/
 |  `- README.md
-|- bff/                       # FastAPI BFF
-|  |- main.py                 # app entry
-|  |- routers/                # scenarios/master-data/graph/simulation/optimization/jobs
-|  |- store/                  # scenario_store(JSON), job_store(in-memory)
-|  `- mappers/                # Python dataclass <-> API DTO mapping
-|- app/                       # Legacy Streamlit UI (frozen)
-|- src/
-|  |- dispatch/               # timetable-driven dispatch core
-|  `- pipeline/               # build_inputs / solve / simulate / report
-|- data/                      # route_master, operations, etc.
-|- outputs/                   # generated artifacts, scenario JSON storage
-|- tests/                     # python tests
-`- AGENTS.md                  # dispatch implementation rules
+|
+|- bff/                          # FastAPI BFF
+|  |- main.py
+|  |- routers/
+|  |- store/
+|  `- mappers/
+|
+|- src/                          # 研究コア（配車/最適化/シミュレーション）
+|  |- dispatch/
+|  |- pipeline/
+|  |- constraints/
+|  |- preprocess/
+|  `- schemas/
+|
+|- tests/                        # Python test suite
+|- data/                         # 入力データ
+|- config/                       # 実験設定
+|- docs/                         # 補助ドキュメント
+|- scripts/
+`- schema/
 ```
 
-## Legacy Streamlit
+---
 
-- 旧UI (`app/`) は `old` ブランチで凍結運用します。
-- `main` では frontend + bff を中心に更新します。
+## 9. 追跡しないもの（Gitポリシー）
+
+以下は生成物のため `main` では追跡しません。
+
+- `outputs/`
+- `derived/`
+- `results/`
+- `__pycache__/`, `*.pyc`
+- `frontend/node_modules/`, `frontend/dist/`
+
+必要な成果物がある場合は、リリースノートや別アーティファクト保管先を使って管理してください。
+
+---
+
+## 10. 旧Streamlit資産について
+
+- `main` からは削除済み（設計混在を防ぐため）
+- 参照が必要な場合は `old` ブランチをチェックアウト
+
+```bash
+git checkout old
+```
+
+---
+
+## 11. よくあるハマりどころ
+
+### Q1. FrontendでAPIエラーになる
+
+- BFFが起動しているか確認
+- `http://localhost:8000/health` が `{"status":"ok"}` を返すか確認
+
+### Q2. ジョブが終わらない
+
+- `GET /api/jobs/{job_id}` の `status` / `error` を確認
+- まず `build-trips` -> `build-graph` -> `generate-duties` の順に実行
+
+### Q3. Gurobiを使う最適化を実行したい
+
+- `gurobipy` は別途導入とライセンス設定が必要
+- 未導入時は solver関連の一部機能が利用不可
+
+---
+
+## 12. 今後の優先実装
+
+1. BFFの `run-simulation` を `src/pipeline/simulate.py` と本結合
+2. BFFの `run-optimization` を solver実装と本結合
+3. FrontendのSimulation設定画面を実データ保存に接続
+4. フォームバリデーション（Zod）と編集UX改善
+
+---
+
+## 13. Maintainerメモ
+
+- 研究ロジックは `src/` に集約し、UI層に埋め込まない
+- BFFは「薄いオーケストレーション + DTO整形」に限定する
+- `constant/` は読み取り専用
