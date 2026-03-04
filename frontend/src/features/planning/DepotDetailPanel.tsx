@@ -1,10 +1,5 @@
 import { useState } from "react";
-import {
-  useDepot,
-  useUpdateDepot,
-  useVehicles,
-  useDepotRoutePermissions,
-} from "@/hooks";
+import { useDepot } from "@/hooks";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { VehicleTable } from "./VehicleTable";
 import { DepotRouteMatrix } from "./DepotRouteMatrix";
@@ -22,7 +17,6 @@ export function DepotDetailPanel({
 }: DepotDetailPanelProps) {
   const [activeSection, setActiveSection] = useState<DetailSection>("vehicles");
   const { data: depot, isLoading, error } = useDepot(scenarioId, depotId);
-  const updateDepot = useUpdateDepot(scenarioId, depotId);
 
   if (isLoading) return <LoadingBlock message="Loading depot details..." />;
   if (error) return <ErrorBlock message={error.message} />;
@@ -66,8 +60,6 @@ export function DepotDetailPanel({
         {activeSection === "info" && (
           <DepotInfoSection
             depot={depot}
-            onSave={(updates) => updateDepot.mutate(updates)}
-            saving={updateDepot.isPending}
           />
         )}
         {activeSection === "vehicles" && (
@@ -85,12 +77,8 @@ export function DepotDetailPanel({
 
 function DepotInfoSection({
   depot,
-  onSave,
-  saving,
 }: {
   depot: NonNullable<ReturnType<typeof useDepot>["data"]>;
-  onSave: (updates: Record<string, unknown>) => void;
-  saving: boolean;
 }) {
   const fields: { label: string; key: string; value: string | number | boolean }[] = [
     { label: "Name", key: "name", value: depot.name },

@@ -4,7 +4,7 @@ import {
   useVehicleRoutePermissions,
   useUpdateVehicleRoutePermissions,
 } from "@/hooks";
-import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { LoadingBlock, EmptyState } from "@/features/common";
 import type { Vehicle, Route, VehicleRoutePermission } from "@/types";
 
 interface VehicleRouteMatrixProps {

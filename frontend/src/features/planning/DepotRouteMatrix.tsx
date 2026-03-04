@@ -4,7 +4,7 @@ import {
   useDepotRoutePermissions,
   useUpdateDepotRoutePermissions,
 } from "@/hooks";
-import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { LoadingBlock, EmptyState } from "@/features/common";
 import type { Depot, Route, DepotRoutePermission } from "@/types";
 
 interface DepotRouteMatrixProps {
