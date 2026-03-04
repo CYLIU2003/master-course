@@ -1,4 +1,5 @@
 depot_id,depot_name,city,address,lat,lon,parking_capacity,grid_connection_kw,overnight_charging,has_workshop,notes
-depot_main,中央営業所,サンプル市,中央区1-1-1,35.6895,139.6917,20,300.0,True,True,本社併設・急速＋普通充電器完備
-depot_east,東営業所,サンプル市,東区5-2-3,35.705,139.73,12,200.0,True,False,分散型営業所
-depot_west,西営業所,サンプル市,西区3-8-1,35.68,139.66,8,150.0,True,False,小規模拠点
+depot_main,弦巻営業所,東京都世田谷区,東京都世田谷区弦巻4-29-23,35.638393,139.6406537,20,300.0,True,True,本社併設・急速＋普通充電器完備
+depot_east,淡島営業所,東京都世田谷区,東京都世田谷区三宿2-39-1,35.6536273,139.6702829,20,200.0,True,False,分散型営業所
+depot_west,目黒営業所,東京都目黒区,東京都目黒区目黒本町1-15-24,35.6281482,139.6944176,20,150.0,True,False,小規模拠点
+depot_seta,瀬田営業所,東京都世田谷区,東京都世田谷区上野毛4-37-7,35.6177364,139.6332295,20,150.0,True,False,

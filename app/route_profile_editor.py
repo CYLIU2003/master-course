@@ -799,6 +799,28 @@ _EDITOR_JS = """(function () {
         };
       }
     });
+
+    function attachDragHandlers() {
+      map.eachLayer(function (layer) {
+        if (!layer || !layer.options || !layer.options.draggable) return;
+        if (layer.__ebDragBound) return;
+        var title = String(layer.options.title || '');
+        if (title.indexOf('__stop__') !== 0) return;
+        layer.__ebDragBound = true;
+        layer.on('dragend', function (evt) {
+          var ll = evt && evt.target && evt.target.getLatLng ? evt.target.getLatLng() : null;
+          if (!ll || !window.__GLOBAL_DATA__) return;
+          window.__GLOBAL_DATA__.lat_lng_clicked = {
+            lat: ll.lat,
+            lng: ll.lng,
+            _action: 'move_stop',
+            stop_id: title.slice('__stop__'.length)
+          };
+        });
+      });
+    }
+
+    attachDragHandlers();
   }
 
   inject();
@@ -858,26 +880,29 @@ def _build_map(
             f"{'始終点 ' if is_term else ''}{'車庫 ' if is_depot else ''}"
             f"{'往路のみ ' if ob_only else ''}"
         )
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=radius,
-            color=color,
-            fill=True,
-            fill_opacity=0.85,
-            popup=folium.Popup(popup_html, max_width=250),
-            tooltip=f"{seq}. {name}",
-        ).add_to(m)
-
         folium.Marker(
             location=[lat, lon],
+            draggable=True,
+            title=f"__stop__{row.get('stop_id', '')}",
             icon=folium.DivIcon(
-                icon_size=(20, 20),
-                icon_anchor=(10, 10),
+                icon_size=(24, 24),
+                icon_anchor=(12, 12),
                 html=(
-                    f'<div style="font-size:10px;font-weight:bold;color:#333;'
-                    f'text-align:center;line-height:20px;">{seq}</div>'
+                    '<div style="'
+                    f"width:{radius * 2}px;height:{radius * 2}px;"
+                    "border-radius:50%;"
+                    f"background:{color};"
+                    "color:#fff;"
+                    "font-size:10px;font-weight:700;"
+                    "display:flex;align-items:center;justify-content:center;"
+                    "border:2px solid #ffffffcc;"
+                    'box-shadow:0 0 2px rgba(0,0,0,.35);">'
+                    f"{seq}"
+                    "</div>"
                 ),
             ),
+            popup=folium.Popup(popup_html, max_width=250),
+            tooltip=f"{seq}. {name}",
         ).add_to(m)
 
     if len(ob_coords) >= 2:
@@ -982,9 +1007,12 @@ def _render_map_editor(
     ss_stops = _sk(f"map_stops_{route_id}")
     ss_last = _sk(f"last_click_{route_id}")  # 前回処理済みクリック座標
     ss_mode = _sk(f"map_mode_{route_id}")
+    ss_pending = _sk(f"pending_stop_moves_{route_id}")
 
     if ss_mode not in st.session_state:
         st.session_state[ss_mode] = "add"
+    if ss_pending not in st.session_state:
+        st.session_state[ss_pending] = {}
 
     # 初回: CSVデータをセッションにコピー
     if ss_stops not in st.session_state:
@@ -1008,14 +1036,29 @@ def _render_map_editor(
     )
     n_ob = len(outbound)
 
+    pending_moves: dict[str, dict] = st.session_state.get(ss_pending, {}) or {}
+    outbound_preview = outbound.copy()
+    if (
+        pending_moves
+        and len(outbound_preview) > 0
+        and "stop_id" in outbound_preview.columns
+    ):
+        for sid, move in pending_moves.items():
+            m = outbound_preview["stop_id"] == sid
+            if m.any():
+                outbound_preview.loc[m, "lat"] = float(move["lat"])
+                outbound_preview.loc[m, "lon"] = float(move["lon"])
+        outbound_preview = _compute_distances(outbound_preview)
+    inbound_preview = _generate_inbound_stops(outbound_preview, route_id)
+
     # --- 操作ガイド ---
     st.caption(
         "地図下のメニューで編集モードを選択してからクリックしてください。"
-        "（メニューが表示されない環境向けに、下に常設メニューも表示しています）"
+        "（停留所マーカーはドラッグで一時移動できます。下の適用ボタンで確定）"
     )
 
     # --- 地図描画 ---
-    m = _build_map(outbound, inbound, charger_sites_df=charger_sites_df)
+    m = _build_map(outbound_preview, inbound_preview, charger_sites_df=charger_sites_df)
 
     # --- 地図表示 + クリックイベント取得 ---
     map_result = st_folium(
@@ -1042,6 +1085,41 @@ def _render_map_editor(
         format_func=lambda x: mode_labels.get(x, x),
     )
 
+    if pending_moves:
+        st.info(f"ドラッグ移動の未適用変更: {len(pending_moves)} 件")
+        ac1, ac2 = st.columns(2)
+        with ac1:
+            if st.button(
+                "✅ ドラッグ移動を適用", key=_sk(f"apply_stop_moves_{route_id}")
+            ):
+                latest_sub = st.session_state[ss_stops].copy()
+                latest_ob = (
+                    latest_sub[latest_sub["direction"] == "outbound"]
+                    .sort_values("sequence")
+                    .reset_index(drop=True)
+                )
+                for sid, move in pending_moves.items():
+                    if "stop_id" in latest_ob.columns:
+                        mm = latest_ob["stop_id"] == sid
+                        if mm.any():
+                            latest_ob.loc[mm, "lat"] = float(move["lat"])
+                            latest_ob.loc[mm, "lon"] = float(move["lon"])
+                latest_ob = _compute_distances(latest_ob)
+                latest_ib = _generate_inbound_stops(latest_ob, route_id)
+                st.session_state[ss_stops] = pd.concat(
+                    [latest_ob, latest_ib], ignore_index=True
+                )
+                st.session_state[ss_pending] = {}
+                st.toast("ドラッグ移動を適用しました", icon="✅")
+                st.rerun()
+        with ac2:
+            if st.button(
+                "🗑️ ドラッグ移動を破棄", key=_sk(f"discard_stop_moves_{route_id}")
+            ):
+                st.session_state[ss_pending] = {}
+                st.toast("未適用のドラッグ移動を破棄しました", icon="🧹")
+                st.rerun()
+
     # --- クリックイベント処理 ---
     lc = None
     if map_result and isinstance(map_result, dict):
@@ -1053,23 +1131,46 @@ def _render_map_editor(
         raw_action = lc.get("_action", "none")
         action = (
             raw_action
-            if raw_action in ("add", "delete", "outbound", "terminal", "none")
+            if raw_action
+            in ("add", "delete", "outbound", "terminal", "move_stop", "none")
             else "none"
         )
         if action == "none":
             action = st.session_state.get(ss_mode, "add")
 
         # 'none' モード (ツールバーで未選択) は無視
-        if action not in ("add", "delete", "outbound", "terminal"):
+        if action not in ("add", "delete", "outbound", "terminal", "move_stop"):
             pass
         else:
             # 同一クリックを二重処理しないようキャッシュと比較
-            click_sig = (round(c_lat or 0, 7), round(c_lng or 0, 7), action)
+            click_sig = (
+                round(c_lat or 0, 7),
+                round(c_lng or 0, 7),
+                action,
+                str(lc.get("stop_id", "")),
+            )
             if click_sig != st.session_state.get(ss_last):
                 st.session_state[ss_last] = click_sig
 
                 if c_lat is not None and c_lng is not None:
-                    if action == "delete" and n_ob > 0:
+                    if action == "move_stop" and n_ob > 0:
+                        sid = str(lc.get("stop_id", "") or "")
+                        if sid and "stop_id" in outbound.columns:
+                            matches = outbound[outbound["stop_id"] == sid]
+                            if len(matches) > 0:
+                                stop_name = str(matches.iloc[0].get("stop_name", sid))
+                                pending = dict(
+                                    st.session_state.get(ss_pending, {}) or {}
+                                )
+                                pending[sid] = {
+                                    "lat": float(c_lat),
+                                    "lon": float(c_lng),
+                                    "stop_name": stop_name,
+                                }
+                                st.session_state[ss_pending] = pending
+                                st.toast(f"一時移動: {stop_name} (未適用)", icon="📍")
+                                st.rerun()
+                    elif action == "delete" and n_ob > 0:
                         # --- 削除モード: 最寄り停留所を削除 ---
                         nearest_idx = _nearest_stop_index(
                             outbound, float(c_lat), float(c_lng)
@@ -2067,3 +2168,4 @@ def render_route_profile_editor(data_dir: str = "data") -> None:
             for k in list(st.session_state.keys()):
                 if k.startswith(_PREFIX) and ("map_stops" in k or "click_" in k):
                     del st.session_state[k]
+            st.rerun()

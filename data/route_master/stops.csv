@@ -1,5 +1,5 @@
 stop_id,stop_name,route_id,direction,sequence,lat,lon,is_terminal,terminal_id,is_depot,is_revenue_stop,distance_from_prev_km,outbound_only,inbound_only
-stop_route_101_001,停留所1,route_101,outbound,1,35.609379909803025,139.6462726593018,True,,False,True,0.0,False,False
+stop_route_101_001,等々力操車場,route_101,outbound,1,35.609379909803025,139.6462726593018,True,,False,True,0.0,False,False
 stop_route_101_002,停留所2,route_101,outbound,2,35.611673921289494,139.65399742126468,False,,False,True,0.743,False,False
 stop_route_101_003,停留所3,route_101,outbound,3,35.61502323436593,139.67021942138675,False,,False,True,1.513,False,False
 stop_route_101_004,停留所4,route_101,outbound,4,35.61886081651975,139.67794418334964,False,,False,True,0.818,False,False
@@ -34,4 +34,4 @@ stop_route_101_005_in,停留所5,route_101,inbound,14,35.62346567204096,139.6861
 stop_route_101_004_in,停留所4,route_101,inbound,15,35.61886081651975,139.67794418334964,False,,False,True,0.904,False,False
 stop_route_101_003_in,停留所3,route_101,inbound,16,35.61502323436593,139.67021942138675,False,,False,True,0.818,False,False
 stop_route_101_002_in,停留所2,route_101,inbound,17,35.611673921289494,139.65399742126468,False,,False,True,1.513,False,False
-stop_route_101_001_in,停留所1,route_101,inbound,18,35.609379909803025,139.6462726593018,True,,False,True,0.743,False,False
+stop_route_101_001_in,等々力操車場,route_101,inbound,18,35.609379909803025,139.6462726593018,True,,False,True,0.743,False,False
