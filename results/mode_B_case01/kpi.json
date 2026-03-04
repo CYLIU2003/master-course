@@ -2,7 +2,7 @@
   "case_name": "mode_B_case01",
   "run_mode": "mode_B_resource_assignment",
   "status": "OPTIMAL",
-  "timestamp": "2026-03-02T18:02:07",
+  "timestamp": "2026-03-04T15:05:19",
   "objective_value": 9594.052631578947,
   "total_energy_cost": 2796.05,
   "total_demand_charge": 0.0,
@@ -12,5 +12,5 @@
   "soc_min_margin_kwh": 37.25,
   "charger_utilization": 0.0625,
   "peak_grid_power_kw": 35.0,
-  "solve_time_sec": 0.093
+  "solve_time_sec": 0.124
 }

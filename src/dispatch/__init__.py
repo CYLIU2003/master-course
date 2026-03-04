@@ -21,6 +21,11 @@ from .graph_builder import ConnectionGraphBuilder
 from .dispatcher import DispatchGenerator
 from .validator import DutyValidator
 from .pipeline import TimetableDispatchPipeline, PipelineResult
+from .context_builder import load_dispatch_context_from_csv
+from .problemdata_adapter import (
+    DispatchTravelBuildReport,
+    build_travel_connections_via_dispatch,
+)
 
 __all__ = [
     # models
@@ -39,6 +44,9 @@ __all__ = [
     "ConnectionGraphBuilder",
     "DispatchGenerator",
     "DutyValidator",
+    "load_dispatch_context_from_csv",
+    "DispatchTravelBuildReport",
+    "build_travel_connections_via_dispatch",
     # pipeline
     "TimetableDispatchPipeline",
     "PipelineResult",

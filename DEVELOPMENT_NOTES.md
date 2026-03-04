@@ -39,6 +39,91 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-04] 設定タブ再設計 + Dispatch前処理統合
+
+- **目的**:
+  - GUIの設定導線を「時刻表ファースト」に再編し、設定ロジックの分散を解消する。
+  - backend 側で `ProblemData` から `dispatch` の接続グラフを生成し、`travel_connections` を再構築できるようにする。
+
+- **実装（UI）**:
+  - `app/main.py` の巨大な設定タブ実装を分離し、`render_settings_tab()` 呼び出しに集約。
+  - `app/settings_page.py` 新設:
+    - サブタブ順をワークフロー順へ変更
+      (`🗺️ 路線・時刻表` → `🚌 車両フリート` → `🏢 営業所・配車` → `⚙️ システム設定・適用`)
+  - `app/system_config_editor.py` 新設:
+    - 計画軸、便データソース、フォールバック車両、電力設定を集約
+    - 「時刻表→接続グラフ」プレビューを追加
+    - `build_problem_config_from_session_state()` を使って `ProblemConfig` を構築
+  - `app/config_builder.py` 新設:
+    - 手動設定の便生成を timetable ベースへ切り替え
+    - `timetable.csv` / `segments.csv` / `routes.csv` を使って `TripSpec` を構築
+  - `app/depot_profile_editor.py`:
+    - `show_energy_settings` フラグを追加し、電力設定の重複表示を抑制可能に。
+
+- **実装（dispatch / pipeline）**:
+  - `src/dispatch/context_builder.py` 新設:
+    - CSV (`route_master` / `operations`) から `DispatchContext` を構築。
+  - `src/dispatch/dispatcher.py`:
+    - greedy配車が precomputed graph を直接利用する API を追加。
+  - `src/dispatch/pipeline.py`:
+    - `uncovered_trip_ids` / `duplicate_trip_ids` を追加。
+    - `all_valid` は duty妥当性 + カバレッジ妥当性を反映。
+  - `src/dispatch/problemdata_adapter.py` 新設:
+    - `ProblemData.tasks` を dispatch graph へ変換し、
+      `TravelConnection` 全ペア行列を生成。
+  - `src/data_loader.py`:
+    - `dispatch_preprocess` 設定を追加。
+    - `travel_connection_csv` がない場合、dispatch graph 由来で
+      `travel_connections` を再構築可能に。
+  - `src/pipeline/solve.py`:
+    - dispatch 前処理レポートをログ出力し、戻り値にも含める。
+
+- **テスト追加**:
+  - `tests/test_dispatch_pipeline.py`
+  - `tests/test_dispatch_context_builder.py`
+  - `tests/test_dispatch_problemdata_adapter.py`
+  - `tests/test_data_loader_dispatch_preprocess.py`
+
+- **検証結果**:
+  - `python -m pytest -q` → **178 passed**
+
+- **追補 (同日)**:
+  - `config/cases/mode_B_case01.json` と
+    `config/cases/toy_mode_A_case01.json` に
+    `dispatch_preprocess` ブロックを追加し、case 単位で前処理挙動を明示化。
+  - `src/data_loader.py` の `build_inputs` 経路レポートを
+    `edge_count` / `generated_connections` 形式に揃え、
+    `src/pipeline/solve.py` で dict / dataclass の双方を安全にログ表示できるよう改善。
+  - `docs/dispatch_preprocess_config.md` を追加し、
+    `dispatch_preprocess` キーの意味・推奨プリセット・ログ形式を明文化。
+  - `tests/test_pipeline_solve_dispatch_report.py` を追加し、
+    `connection_source=build_inputs` 相当の dict レポートが
+    `solve.py` で正しく表示・返却されることを確認。
+  - `config/cases/mode_B_case01_build_inputs.json` を新設し、
+    `dispatch_preprocess.connection_source=build_inputs` を case 単位で実配線。
+  - `src/preprocess/energy_model.py` の HVAC 合算式を修正
+    (`None` を含む場合に `TypeError` が出る優先順位バグを解消)。
+  - `tests/test_energy_model.py` を追加し、
+    Level 1 電費推定で `hvac_power_kw_heating=None` のときも
+    例外なく推定できることを回帰テスト化。
+  - **E2E 比較 (dispatch_graph vs build_inputs)**:
+    - Baseline: `python run_case.py --case config/cases/mode_B_case01.json`
+      - status=OPTIMAL, objective=9,594.05, unmet=0
+    - build_inputs case:
+      `python run_case.py --case config/cases/mode_B_case01_build_inputs.json`
+      - status=OPTIMAL, objective=7,411.22, unmet=0
+      - dispatch report: `source=build_inputs, trips=29, edges=812, connections=812`
+    - 同一 task 集合上での接続差分（build_inputs case を再評価）:
+      - build_inputs: feasible 812 / 812
+      - dispatch_graph: feasible 0 / 812
+      - 差分: `build_inputs-only true = 812`（全ペアで不一致）
+    - 参考: baseline 8-task ケースでも
+      `travel_connection.csv` と dispatch_graph は完全一致せず
+      (`true`: 9 vs 10, csv-only 4, dispatch-only 5)。
+  - 回帰確認: `python -m pytest -q` → **180 passed**
+
+---
+
 ### [EXP-001] mode_A_case01 — 先行研究再現ベースライン
 
 - **日付**: 2026年初頭

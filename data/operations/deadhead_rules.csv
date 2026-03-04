@@ -1,0 +1,5 @@
+from_stop,to_stop,travel_time_min,notes
+stop_route_101_018,stop_route_101_018_in,1,Terminal B ob->ib cross-direction turnaround
+stop_route_101_018_in,stop_route_101_018,1,Terminal B ib->ob cross-direction turnaround
+stop_route_101_001,stop_route_101_001_in,1,Terminal A ob->ib cross-direction turnaround
+stop_route_101_001_in,stop_route_101_001,1,Terminal A ib->ob cross-direction turnaround
