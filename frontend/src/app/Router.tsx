@@ -1,4 +1,9 @@
-import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Navigate,
+  redirect,
+} from "react-router-dom";
 import { AppLayout } from "@/features/layout/AppLayout";
 
 // ── Page imports ──────────────────────────────────────────────
@@ -30,9 +35,28 @@ import { CostResultsPage } from "@/pages/results/CostResultsPage";
 // Compare
 import { ComparePage } from "@/pages/compare/ComparePage";
 
+async function startupLoader() {
+  try {
+    const res = await fetch("/api/scenarios/default");
+    if (!res.ok) {
+      return redirect("/scenarios");
+    }
+
+    const scenario = (await res.json()) as { id?: string };
+    if (!scenario.id) {
+      return redirect("/scenarios");
+    }
+
+    return redirect(`/scenarios/${scenario.id}/planning`);
+  } catch {
+    return redirect("/scenarios");
+  }
+}
+
 const router = createBrowserRouter([
   {
     path: "/",
+    loader: startupLoader,
     element: <Navigate to="/scenarios" replace />,
   },
   {

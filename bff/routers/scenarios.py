@@ -5,6 +5,7 @@ Scenario CRUD + timetable + deadhead/turnaround rules endpoints.
 
 Routes:
   GET    /scenarios                    → list
+  GET    /scenarios/default            → get latest scenario, or auto-create default
   POST   /scenarios                    → create
   GET    /scenarios/{id}               → get
   PUT    /scenarios/{id}               → update
@@ -19,6 +20,7 @@ Routes:
 
 from __future__ import annotations
 
+from threading import Lock
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -28,6 +30,7 @@ from pydantic import BaseModel
 from bff.store import scenario_store as store
 
 router = APIRouter(tags=["scenarios"])
+_default_scenario_lock = Lock()
 
 
 # ── Pydantic models ────────────────────────────────────────────
@@ -68,6 +71,20 @@ def _not_found(scenario_id: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
 
 
+def _pick_latest_scenario(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not items:
+        return None
+    return sorted(
+        items,
+        key=lambda x: (
+            str(x.get("updatedAt", "")),
+            str(x.get("createdAt", "")),
+            str(x.get("id", "")),
+        ),
+        reverse=True,
+    )[0]
+
+
 # ── Scenario CRUD ──────────────────────────────────────────────
 
 
@@ -75,6 +92,25 @@ def _not_found(scenario_id: str) -> HTTPException:
 def list_scenarios() -> Dict[str, Any]:
     items = store.list_scenarios()
     return {"items": items, "total": len(items)}
+
+
+@router.get("/scenarios/default")
+def get_or_create_default_scenario() -> Dict[str, Any]:
+    """
+    Returns the latest scenario for immediate startup routing.
+    If no scenario exists, creates a default one once.
+    """
+    with _default_scenario_lock:
+        items = store.list_scenarios()
+        latest = _pick_latest_scenario(items)
+        if latest is not None:
+            return latest
+
+        return store.create_scenario(
+            name="Default Scenario",
+            description="Auto-created on first launch.",
+            mode="mode_B_resource_assignment",
+        )
 
 
 @router.post("/scenarios", status_code=201)
