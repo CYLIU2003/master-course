@@ -66,19 +66,21 @@ FastAPI BFF (bff/)
 
 ## 4. クイックスタート
 
-## 4.1 前提
+### 4.1 前提
 
 - Python 3.11+ 推奨
 - Node.js 18+ 推奨
 - npm 9+ 推奨
 
-## 4.2 Python依存をインストール
+### 4.2 初回セットアップ（1回だけ）
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-## 4.3 BFF起動（ターミナル1）
+### 4.3 起動（毎回）
+
+#### ターミナル1: BFF
 
 ```bash
 python -m uvicorn bff.main:app --reload --port 8000
@@ -87,7 +89,7 @@ python -m uvicorn bff.main:app --reload --port 8000
 - API base: `http://localhost:8000/api`
 - Health: `http://localhost:8000/health`
 
-## 4.4 Frontend起動（ターミナル2）
+#### ターミナル2: Frontend
 
 ```bash
 cd frontend
@@ -95,8 +97,16 @@ npm install
 npm run dev
 ```
 
-- UI: `http://localhost:5173`
-- Vite proxyで `/api` を `http://localhost:8000` に転送
+`npm run dev` は `vite --open` なのでブラウザが自動で開きます。
+
+### 4.4 起動後に何が起きるか
+
+- `http://localhost:5173/` にアクセスすると、アプリは `GET /api/scenarios/default` を呼びます
+- シナリオが1件以上ある場合: 最新シナリオへ自動遷移
+- シナリオが0件の場合: `Default Scenario` を自動作成して自動遷移
+- 遷移先は常に操作開始画面: `/scenarios/{scenarioId}/planning`
+
+つまり、**起動したらそのまま操作画面に入れる**運用です。
 
 ---
 
