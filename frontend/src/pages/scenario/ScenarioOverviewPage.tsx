@@ -1,8 +1,10 @@
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useScenario } from "@/hooks";
 import { PageSection, LoadingBlock, ErrorBlock } from "@/features/common";
 
 export function ScenarioOverviewPage() {
+  const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const { data: scenario, isLoading, error } = useScenario(scenarioId!);
 
@@ -14,16 +16,19 @@ export function ScenarioOverviewPage() {
     <div>
       <PageSection title={scenario.name} description={scenario.description}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <InfoCard label="Mode" value={scenario.mode} />
-          <InfoCard label="Status" value={scenario.status} />
-          <InfoCard label="Created" value={scenario.createdAt} />
-          <InfoCard label="Updated" value={scenario.updatedAt} />
+          <InfoCard label={t("scenarios.mode")} value={scenario.mode} />
+          <InfoCard label={t("scenarios.status")} value={scenario.status} />
+          <InfoCard label={t("scenarios.created")} value={scenario.createdAt} />
+          <InfoCard label={t("scenarios.updated")} value={scenario.updatedAt} />
         </div>
       </PageSection>
 
-      <PageSection title="Pipeline Progress" description="Step through the workflow from left to right">
+      <PageSection
+        title={t("scenarios.pipeline_progress")}
+        description={t("scenarios.pipeline_description")}
+      >
         <div className="rounded-lg border border-border bg-surface-sunken p-4 text-center text-sm text-slate-400">
-          Pipeline stepper placeholder
+          {t("scenarios.pipeline_placeholder")}
         </div>
       </PageSection>
     </div>

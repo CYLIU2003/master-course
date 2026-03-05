@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useDepot } from "@/hooks";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { VehicleTable } from "./VehicleTable";
@@ -15,17 +16,18 @@ export function DepotDetailPanel({
   scenarioId,
   depotId,
 }: DepotDetailPanelProps) {
+  const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<DetailSection>("vehicles");
   const { data: depot, isLoading, error } = useDepot(scenarioId, depotId);
 
-  if (isLoading) return <LoadingBlock message="Loading depot details..." />;
+  if (isLoading) return <LoadingBlock message={t("depots.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;
-  if (!depot) return <EmptyState title="Depot not found" />;
+  if (!depot) return <EmptyState title={t("depots.not_found")} />;
 
   const tabs: { key: DetailSection; label: string }[] = [
-    { key: "info", label: "Info" },
-    { key: "vehicles", label: "Vehicles" },
-    { key: "routes", label: "Routes" },
+    { key: "info", label: t("depots.tab_info") },
+    { key: "vehicles", label: t("depots.tab_vehicles") },
+    { key: "routes", label: t("depots.tab_routes") },
   ];
 
   return (
@@ -34,7 +36,7 @@ export function DepotDetailPanel({
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-base font-semibold text-slate-800">{depot.name}</h2>
         <p className="text-xs text-slate-400">
-          {depot.location || "No location set"}
+          {depot.location || t("depots.no_location_set")}
         </p>
       </div>
 
@@ -80,34 +82,36 @@ function DepotInfoSection({
 }: {
   depot: NonNullable<ReturnType<typeof useDepot>["data"]>;
 }) {
+  const { t } = useTranslation();
+
   const fields: { label: string; key: string; value: string | number | boolean }[] = [
-    { label: "Name", key: "name", value: depot.name },
-    { label: "Location", key: "location", value: depot.location },
-    { label: "Latitude", key: "lat", value: depot.lat },
-    { label: "Longitude", key: "lon", value: depot.lon },
+    { label: t("depots.field_name"), key: "name", value: depot.name },
+    { label: t("depots.field_location"), key: "location", value: depot.location },
+    { label: t("depots.field_lat"), key: "lat", value: depot.lat },
+    { label: t("depots.field_lon"), key: "lon", value: depot.lon },
     {
-      label: "Normal Chargers",
+      label: t("depots.field_normal_chargers"),
       key: "normalChargerCount",
       value: depot.normalChargerCount,
     },
     {
-      label: "Normal Charger Power (kW)",
+      label: t("depots.field_normal_charger_power"),
       key: "normalChargerPowerKw",
       value: depot.normalChargerPowerKw,
     },
     {
-      label: "Fast Chargers",
+      label: t("depots.field_fast_chargers"),
       key: "fastChargerCount",
       value: depot.fastChargerCount,
     },
     {
-      label: "Fast Charger Power (kW)",
+      label: t("depots.field_fast_charger_power"),
       key: "fastChargerPowerKw",
       value: depot.fastChargerPowerKw,
     },
-    { label: "Parking Capacity", key: "parkingCapacity", value: depot.parkingCapacity },
-    { label: "Has Fuel Facility", key: "hasFuelFacility", value: depot.hasFuelFacility ? "Yes" : "No" },
-    { label: "Overnight Charging", key: "overnightCharging", value: depot.overnightCharging ? "Yes" : "No" },
+    { label: t("depots.field_parking"), key: "parkingCapacity", value: depot.parkingCapacity },
+    { label: t("depots.field_fuel_facility"), key: "hasFuelFacility", value: depot.hasFuelFacility ? t("common.yes") : t("common.no") },
+    { label: t("depots.field_overnight"), key: "overnightCharging", value: depot.overnightCharging ? t("common.yes") : t("common.no") },
   ];
 
   return (

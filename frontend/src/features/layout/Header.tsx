@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useUIStore } from "@/stores/ui-store";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 
 export function Header() {
+  const { t } = useTranslation();
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const scenarioId = useUIStore((s) => s.activeScenarioId);
 
@@ -18,7 +21,7 @@ export function Header() {
           </svg>
         </button>
         <Link to="/scenarios" className="text-sm font-semibold text-slate-800 hover:text-primary-600">
-          EV Bus Scheduling
+          {t("app.name")}
         </Link>
         {scenarioId && (
           <span className="text-xs text-slate-400">/</span>
@@ -29,12 +32,13 @@ export function Header() {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <LanguageSwitcher />
         <Link
           to="/compare"
           className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
         >
-          Compare
+          {t("nav.compare")}
         </Link>
       </div>
     </header>

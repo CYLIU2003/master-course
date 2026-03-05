@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   useVehicles,
   useRoutes,
@@ -17,6 +18,7 @@ export function VehicleRouteMatrix({
   scenarioId,
   depotId,
 }: VehicleRouteMatrixProps) {
+  const { t } = useTranslation();
   const { data: vehiclesData, isLoading: loadingVehicles } = useVehicles(
     scenarioId,
     depotId,
@@ -27,7 +29,7 @@ export function VehicleRouteMatrix({
   const updatePerms = useUpdateVehicleRoutePermissions(scenarioId);
 
   if (loadingVehicles || loadingRoutes || loadingPerms) {
-    return <LoadingBlock message="Loading permission matrix..." />;
+    return <LoadingBlock message={t("matrix.loading")} />;
   }
 
   const vehicles: Vehicle[] = vehiclesData?.items ?? [];
@@ -37,8 +39,8 @@ export function VehicleRouteMatrix({
   if (vehicles.length === 0 || routes.length === 0) {
     return (
       <EmptyState
-        title="No data for permission matrix"
-        description="Create vehicles and routes first"
+        title={t("matrix.no_data")}
+        description={t("matrix.vehicle_create_first")}
       />
     );
   }
@@ -79,7 +81,7 @@ export function VehicleRouteMatrix({
         <thead>
           <tr className="border-b border-border bg-slate-50">
             <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">
-              Vehicle \ Route
+              {t("matrix.vehicle_route_header")}
             </th>
             {routes.map((r) => (
               <th

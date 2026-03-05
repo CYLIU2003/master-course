@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useUIStore } from "@/stores/ui-store";
 
 interface SidebarProps {
@@ -7,38 +8,9 @@ interface SidebarProps {
 }
 
 interface NavItem {
-  label: string;
+  labelKey: string;
   to: string;
 }
-
-// ── Tab 1 sub-nav: planning-related pages ─────────────────────
-const planningNav: NavItem[] = [
-  { label: "Depots / Vehicles / Routes", to: "planning" },
-  { label: "Timetable", to: "timetable" },
-  { label: "Deadhead Rules", to: "deadhead" },
-  { label: "Turnaround Rules", to: "rules" },
-];
-
-// ── Tab 2 sub-nav: simulation-related pages ───────────────────
-const simulationNav: NavItem[] = [
-  { label: "Environment Config", to: "simulation-env" },
-];
-
-// ── Dispatch pipeline sub-nav (available from both tabs) ──────
-const dispatchNav: NavItem[] = [
-  { label: "Trips", to: "trips" },
-  { label: "Graph", to: "graph" },
-  { label: "Duties", to: "duties" },
-  { label: "Precheck", to: "precheck" },
-  { label: "Simulation Run", to: "simulation" },
-  { label: "Optimization", to: "optimization" },
-];
-
-const resultsNav: NavItem[] = [
-  { label: "Dispatch Results", to: "results/dispatch" },
-  { label: "Energy Results", to: "results/energy" },
-  { label: "Cost Results", to: "results/cost" },
-];
 
 // ── Tab button component ──────────────────────────────────────
 
@@ -73,7 +45,7 @@ function NavSection({
   scenarioId,
 }: {
   title: string;
-  items: NavItem[];
+  items: { label: string; to: string }[];
   scenarioId: string;
 }) {
   return (
@@ -106,8 +78,39 @@ function NavSection({
 // ── Main sidebar ──────────────────────────────────────────────
 
 export function Sidebar({ open, scenarioId }: SidebarProps) {
+  const { t } = useTranslation();
   const activeTab = useUIStore((s) => s.activeTab);
   const setActiveTab = useUIStore((s) => s.setActiveTab);
+
+  // Nav arrays defined inside component to pick up live translations
+  const planningNavItems: NavItem[] = [
+    { labelKey: "sidebar.depots_vehicles_routes", to: "planning" },
+    { labelKey: "sidebar.timetable", to: "timetable" },
+    { labelKey: "sidebar.deadhead_rules", to: "deadhead" },
+    { labelKey: "sidebar.turnaround_rules", to: "rules" },
+  ];
+
+  const simulationNavItems: NavItem[] = [
+    { labelKey: "sidebar.environment_config", to: "simulation-env" },
+  ];
+
+  const dispatchNavItems: NavItem[] = [
+    { labelKey: "sidebar.trips", to: "trips" },
+    { labelKey: "sidebar.graph", to: "graph" },
+    { labelKey: "sidebar.duties", to: "duties" },
+    { labelKey: "sidebar.precheck", to: "precheck" },
+    { labelKey: "sidebar.simulation_run", to: "simulation" },
+    { labelKey: "sidebar.optimization", to: "optimization" },
+  ];
+
+  const resultsNavItems: NavItem[] = [
+    { labelKey: "sidebar.dispatch_results", to: "results/dispatch" },
+    { labelKey: "sidebar.energy_results", to: "results/energy" },
+    { labelKey: "sidebar.cost_results", to: "results/cost" },
+  ];
+
+  const resolve = (items: NavItem[]) =>
+    items.map((item) => ({ label: t(item.labelKey), to: item.to }));
 
   if (!open) return null;
 
@@ -126,19 +129,19 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
             }`
           }
         >
-          Overview
+          {t("nav.overview")}
         </NavLink>
       </div>
 
       {/* Tab switcher */}
       <div className="flex border-b border-border px-2">
         <TabButton
-          label="Planning"
+          label={t("nav.planning_tab")}
           active={activeTab === "planning"}
           onClick={() => setActiveTab("planning")}
         />
         <TabButton
-          label="Simulation"
+          label={t("nav.simulation_tab")}
           active={activeTab === "simulation"}
           onClick={() => setActiveTab("simulation")}
         />
@@ -148,29 +151,29 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
       <div className="flex-1 overflow-y-auto py-3">
         {activeTab === "planning" && (
           <NavSection
-            title="Master Data"
-            items={planningNav}
+            title={t("nav.master_data")}
+            items={resolve(planningNavItems)}
             scenarioId={scenarioId}
           />
         )}
 
         {activeTab === "simulation" && (
           <NavSection
-            title="Configuration"
-            items={simulationNav}
+            title={t("nav.configuration")}
+            items={resolve(simulationNavItems)}
             scenarioId={scenarioId}
           />
         )}
 
         {/* Dispatch & Results always visible */}
         <NavSection
-          title="Dispatch"
-          items={dispatchNav}
+          title={t("nav.dispatch")}
+          items={resolve(dispatchNavItems)}
           scenarioId={scenarioId}
         />
         <NavSection
-          title="Results"
-          items={resultsNav}
+          title={t("nav.results")}
+          items={resolve(resultsNavItems)}
           scenarioId={scenarioId}
         />
       </div>
