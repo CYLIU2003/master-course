@@ -1,14 +1,16 @@
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useScenarios, useCreateScenario, useDeleteScenario } from "@/hooks";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { formatDate } from "@/utils/format";
 
 export function ScenarioListPage() {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useScenarios();
   const createMutation = useCreateScenario();
   const deleteMutation = useDeleteScenario();
 
-  if (isLoading) return <LoadingBlock message="Loading scenarios..." />;
+  if (isLoading) return <LoadingBlock message={t("scenarios.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;
 
   const scenarios = data?.items ?? [];
@@ -16,7 +18,7 @@ export function ScenarioListPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Scenarios</h1>
+        <h1 className="text-2xl font-bold text-slate-800">{t("scenarios.title")}</h1>
         <button
           onClick={() =>
             createMutation.mutate({
@@ -28,14 +30,14 @@ export function ScenarioListPage() {
           disabled={createMutation.isPending}
           className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
         >
-          {createMutation.isPending ? "Creating..." : "New Scenario"}
+          {createMutation.isPending ? t("scenarios.creating") : t("scenarios.new_scenario")}
         </button>
       </div>
 
       {scenarios.length === 0 ? (
         <EmptyState
-          title="No scenarios yet"
-          description="Create your first scenario to get started"
+          title={t("scenarios.no_scenarios")}
+          description={t("scenarios.create_first")}
         />
       ) : (
         <ul className="space-y-2">
@@ -56,11 +58,12 @@ export function ScenarioListPage() {
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  if (confirm(`Delete "${s.name}"?`)) deleteMutation.mutate(s.id);
+                  if (confirm(t("scenarios.delete_confirm", { name: s.name })))
+                    deleteMutation.mutate(s.id);
                 }}
                 className="ml-3 text-xs text-red-400 hover:text-red-600"
               >
-                Delete
+                {t("common.delete")}
               </button>
             </li>
           ))}

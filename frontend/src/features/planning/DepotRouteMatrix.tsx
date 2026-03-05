@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   useDepots,
   useRoutes,
@@ -17,6 +18,7 @@ export function DepotRouteMatrix({
   scenarioId,
   depotId,
 }: DepotRouteMatrixProps) {
+  const { t } = useTranslation();
   const { data: depotsData, isLoading: loadingDepots } = useDepots(scenarioId);
   const { data: routesData, isLoading: loadingRoutes } = useRoutes(scenarioId);
   const { data: permsData, isLoading: loadingPerms } =
@@ -24,7 +26,7 @@ export function DepotRouteMatrix({
   const updatePerms = useUpdateDepotRoutePermissions(scenarioId);
 
   if (loadingDepots || loadingRoutes || loadingPerms) {
-    return <LoadingBlock message="Loading permission matrix..." />;
+    return <LoadingBlock message={t("matrix.loading")} />;
   }
 
   const depots: Depot[] = depotsData?.items ?? [];
@@ -39,8 +41,8 @@ export function DepotRouteMatrix({
   if (displayDepots.length === 0 || routes.length === 0) {
     return (
       <EmptyState
-        title="No data for permission matrix"
-        description="Create depots and routes first"
+        title={t("matrix.no_data")}
+        description={t("matrix.depot_create_first")}
       />
     );
   }
@@ -85,7 +87,7 @@ export function DepotRouteMatrix({
         <thead>
           <tr className="border-b border-border bg-slate-50">
             <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">
-              Depot \ Route
+              {t("matrix.depot_route_header")}
             </th>
             {routes.map((r) => (
               <th

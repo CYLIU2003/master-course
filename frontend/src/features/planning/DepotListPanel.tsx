@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useUIStore } from "@/stores/ui-store";
 import { useDepots, useCreateDepot, useDeleteDepot } from "@/hooks";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
@@ -8,13 +9,14 @@ interface DepotListPanelProps {
 }
 
 export function DepotListPanel({ scenarioId }: DepotListPanelProps) {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useDepots(scenarioId);
   const selectedDepotId = useUIStore((s) => s.selectedDepotId);
   const setSelectedDepotId = useUIStore((s) => s.setSelectedDepotId);
   const createDepot = useCreateDepot(scenarioId);
   const deleteDepot = useDeleteDepot(scenarioId);
 
-  if (isLoading) return <LoadingBlock message="Loading depots..." />;
+  if (isLoading) return <LoadingBlock message={t("depots.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;
 
   const depots: Depot[] = data?.items ?? [];
@@ -35,7 +37,7 @@ export function DepotListPanel({ scenarioId }: DepotListPanelProps) {
 
   const handleDelete = (e: React.MouseEvent, depotId: string) => {
     e.stopPropagation();
-    if (!confirm("Delete this depot and all its vehicles?")) return;
+    if (!confirm(t("depots.delete_confirm"))) return;
     deleteDepot.mutate(depotId, {
       onSuccess: () => {
         if (selectedDepotId === depotId) setSelectedDepotId(null);
@@ -48,14 +50,14 @@ export function DepotListPanel({ scenarioId }: DepotListPanelProps) {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Depots
+          {t("depots.title")}
         </h3>
         <button
           onClick={handleAddDepot}
           disabled={createDepot.isPending}
           className="rounded px-2 py-0.5 text-xs font-medium text-primary-600 hover:bg-primary-50 disabled:opacity-50"
         >
-          + Add
+          {t("depots.add")}
         </button>
       </div>
 
@@ -64,8 +66,8 @@ export function DepotListPanel({ scenarioId }: DepotListPanelProps) {
         {depots.length === 0 ? (
           <div className="p-4">
             <EmptyState
-              title="No depots yet"
-              description="Create a depot to get started"
+              title={t("depots.no_depots")}
+              description={t("depots.no_depots_description")}
             />
           </div>
         ) : (
@@ -85,7 +87,7 @@ export function DepotListPanel({ scenarioId }: DepotListPanelProps) {
                       {depot.name}
                     </p>
                     <p className="truncate text-xs text-slate-400">
-                      {depot.location || "No location"}
+                      {depot.location || t("depots.no_location")}
                     </p>
                   </div>
                   <button

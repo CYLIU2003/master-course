@@ -1,7 +1,9 @@
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { PageSection, EmptyState } from "@/features/common";
 
 export function SimulationEnvironmentPage() {
+  const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
 
   if (!scenarioId) return null;
@@ -11,55 +13,55 @@ export function SimulationEnvironmentPage() {
       {/* Page title */}
       <div>
         <h1 className="text-lg font-semibold text-slate-800">
-          Simulation Environment
+          {t("simulation_env.title")}
         </h1>
         <p className="text-sm text-slate-500">
-          Configure simulation parameters and pricing
+          {t("simulation_env.description")}
         </p>
       </div>
 
       {/* Period & dates */}
-      <PageSection title="Simulation Period" description="Date range and service dates">
+      <PageSection title={t("simulation_env.period_title")} description={t("simulation_env.period_description")}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <FieldCard label="Start Date" value="(not configured)" />
-          <FieldCard label="End Date" value="(not configured)" />
-          <FieldCard label="Service Date" value="(not configured)" />
+          <FieldCard label={t("simulation_env.start_date")} value={t("common.not_configured")} />
+          <FieldCard label={t("simulation_env.end_date")} value={t("common.not_configured")} />
+          <FieldCard label={t("simulation_env.service_date")} value={t("common.not_configured")} />
         </div>
       </PageSection>
 
       {/* Electricity pricing */}
-      <PageSection title="Electricity Pricing" description="Flat rate and TOU schedule">
+      <PageSection title={t("simulation_env.pricing_title")} description={t("simulation_env.pricing_description")}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <FieldCard label="Flat Price (JPY/kWh)" value="(not configured)" />
-          <FieldCard label="Contract Demand (kW)" value="(not configured)" />
-          <FieldCard label="Demand Penalty Mode" value="(not configured)" />
-          <FieldCard label="Demand Charge (JPY/kW)" value="(not configured)" />
+          <FieldCard label={t("simulation_env.flat_price")} value={t("common.not_configured")} />
+          <FieldCard label={t("simulation_env.contract_demand")} value={t("common.not_configured")} />
+          <FieldCard label={t("simulation_env.demand_penalty_mode")} value={t("common.not_configured")} />
+          <FieldCard label={t("simulation_env.demand_charge")} value={t("common.not_configured")} />
         </div>
         <div className="mt-4">
           <EmptyState
-            title="No TOU pricing slots"
-            description="Add time-of-use pricing to override flat rate"
+            title={t("simulation_env.no_tou")}
+            description={t("simulation_env.no_tou_description")}
           />
         </div>
       </PageSection>
 
       {/* Energy sources */}
-      <PageSection title="Energy Sources" description="PV and diesel configuration">
+      <PageSection title={t("simulation_env.energy_sources_title")} description={t("simulation_env.energy_sources_description")}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <FieldCard label="PV Enabled" value="No" />
-          <FieldCard label="PV Scale Factor" value="1.0" />
-          <FieldCard label="Diesel Price (JPY/L)" value="(not configured)" />
+          <FieldCard label={t("simulation_env.pv_enabled")} value={t("common.no")} />
+          <FieldCard label={t("simulation_env.pv_scale")} value="1.0" />
+          <FieldCard label={t("simulation_env.diesel_price")} value={t("common.not_configured")} />
         </div>
       </PageSection>
 
       {/* Solver settings */}
-      <PageSection title="Solver Settings" description="Optimization parameters">
+      <PageSection title={t("simulation_env.solver_title")} description={t("simulation_env.solver_description")}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <FieldCard label="Initial SOC" value="1.0" />
-          <FieldCard label="Random Seed" value="None" />
-          <FieldCard label="Optimization Mode" value="(not configured)" />
-          <FieldCard label="Time Limit (s)" value="300" />
-          <FieldCard label="MIP Gap" value="0.01" />
+          <FieldCard label={t("simulation_env.initial_soc")} value="1.0" />
+          <FieldCard label={t("simulation_env.random_seed")} value="None" />
+          <FieldCard label={t("simulation_env.opt_mode")} value={t("common.not_configured")} />
+          <FieldCard label={t("simulation_env.time_limit")} value="300" />
+          <FieldCard label={t("simulation_env.mip_gap")} value="0.01" />
         </div>
       </PageSection>
     </div>

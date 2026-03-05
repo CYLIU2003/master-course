@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   useVehicles,
   useCreateVehicle,
@@ -12,11 +13,12 @@ interface VehicleTableProps {
 }
 
 export function VehicleTable({ scenarioId, depotId }: VehicleTableProps) {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useVehicles(scenarioId, depotId);
   const createVehicle = useCreateVehicle(scenarioId);
   const deleteVehicle = useDeleteVehicle(scenarioId);
 
-  if (isLoading) return <LoadingBlock message="Loading vehicles..." />;
+  if (isLoading) return <LoadingBlock message={t("vehicles.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;
 
   const vehicles: Vehicle[] = data?.items ?? [];
@@ -33,46 +35,47 @@ export function VehicleTable({ scenarioId, depotId }: VehicleTableProps) {
   };
 
   const handleDelete = (vehicleId: string) => {
-    if (!confirm("Delete this vehicle?")) return;
+    if (!confirm(t("vehicles.delete_confirm"))) return;
     deleteVehicle.mutate(vehicleId);
   };
+
+  const countLabel = depotId
+    ? t("vehicles.count_in_depot", { count: vehicles.length })
+    : t("vehicles.count_total", { count: vehicles.length });
 
   return (
     <div>
       {/* Header */}
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs text-slate-500">
-          {vehicles.length} vehicle{vehicles.length !== 1 ? "s" : ""}
-          {depotId ? " in this depot" : " total"}
-        </p>
+        <p className="text-xs text-slate-500">{countLabel}</p>
         {depotId && (
           <button
             onClick={handleAdd}
             disabled={createVehicle.isPending}
             className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
-            + Add Vehicle
+            {t("vehicles.add")}
           </button>
         )}
       </div>
 
       {vehicles.length === 0 ? (
         <EmptyState
-          title="No vehicles"
-          description={depotId ? "Add a vehicle to this depot" : "No vehicles in any depot"}
+          title={t("vehicles.no_vehicles")}
+          description={depotId ? t("vehicles.no_vehicles_depot") : t("vehicles.no_vehicles_all")}
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-slate-50">
-                <th className="px-3 py-2 text-xs font-medium text-slate-500">Model</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500">Type</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">Capacity</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">Battery (kWh)</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">Consumption</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">Charge (kW)</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500">Status</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500">{t("vehicles.col_model")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500">{t("vehicles.col_type")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">{t("vehicles.col_capacity")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">{t("vehicles.col_battery")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">{t("vehicles.col_consumption")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">{t("vehicles.col_charge")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500">{t("vehicles.col_status")}</th>
                 <th className="px-3 py-2 text-xs font-medium text-slate-500 w-10"></th>
               </tr>
             </thead>

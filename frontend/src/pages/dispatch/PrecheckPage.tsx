@@ -1,10 +1,12 @@
+import { useTranslation } from "react-i18next";
 import { PageSection } from "@/features/common";
 
 export function PrecheckPage() {
+  const { t } = useTranslation();
   return (
-    <PageSection title="Pre-check" description="Validate all inputs before running simulation or optimization">
+    <PageSection title={t("precheck.title")} description={t("precheck.description")}>
       <div className="rounded-lg border border-border bg-surface-sunken p-8 text-center text-sm text-slate-400">
-        Pre-check validation results placeholder
+        {t("precheck.placeholder")}
       </div>
     </PageSection>
   );

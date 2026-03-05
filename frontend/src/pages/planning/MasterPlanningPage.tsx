@@ -1,9 +1,11 @@
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useUIStore } from "@/stores/ui-store";
 import { PageSection } from "@/features/common";
 import { DepotListPanel, DepotDetailPanel, RouteTable, VehicleRouteMatrix } from "@/features/planning";
 
 export function MasterPlanningPage() {
+  const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const selectedDepotId = useUIStore((s) => s.selectedDepotId);
 
@@ -14,10 +16,10 @@ export function MasterPlanningPage() {
       {/* Page title */}
       <div>
         <h1 className="text-lg font-semibold text-slate-800">
-          Master Planning
+          {t("planning.title")}
         </h1>
         <p className="text-sm text-slate-500">
-          Manage depots, vehicles, and routes
+          {t("planning.description")}
         </p>
       </div>
 
@@ -37,7 +39,7 @@ export function MasterPlanningPage() {
             />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-slate-400">
-              Select a depot to view details
+              {t("planning.select_depot")}
             </div>
           )}
         </div>
@@ -45,8 +47,8 @@ export function MasterPlanningPage() {
 
       {/* Routes section (not depot-scoped) */}
       <PageSection
-        title="Routes"
-        description="All routes in the bus network"
+        title={t("planning.routes_title")}
+        description={t("planning.routes_description")}
       >
         <RouteTable scenarioId={scenarioId} />
       </PageSection>
@@ -54,8 +56,8 @@ export function MasterPlanningPage() {
       {/* Vehicle-Route permission matrix */}
       {selectedDepotId && (
         <PageSection
-          title="Vehicle-Route Permissions"
-          description="Which vehicles can operate on which routes"
+          title={t("planning.permissions_title")}
+          description={t("planning.permissions_description")}
         >
           <VehicleRouteMatrix
             scenarioId={scenarioId}

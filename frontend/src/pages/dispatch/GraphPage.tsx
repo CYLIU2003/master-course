@@ -1,40 +1,42 @@
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useGraph, useBuildGraph } from "@/hooks";
 import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 
 export function GraphPage() {
+  const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const { data: graph, isLoading, error } = useGraph(scenarioId!);
   const buildMutation = useBuildGraph(scenarioId!);
 
-  if (isLoading) return <LoadingBlock message="Loading graph..." />;
+  if (isLoading) return <LoadingBlock message={t("graph.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;
 
   return (
     <PageSection
-      title="Connection Graph"
-      description="Feasible trip-to-trip connections"
+      title={t("graph.title")}
+      description={t("graph.description")}
       actions={
         <button
           onClick={() => buildMutation.mutate(undefined)}
           disabled={buildMutation.isPending}
           className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
         >
-          {buildMutation.isPending ? "Building..." : "Build Graph"}
+          {buildMutation.isPending ? t("graph.building") : t("graph.build")}
         </button>
       }
     >
       {!graph ? (
-        <EmptyState title="No graph built yet" description="Click 'Build Graph' to evaluate feasibility" />
+        <EmptyState title={t("graph.no_graph")} description={t("graph.no_graph_description")} />
       ) : (
         <>
           <div className="mb-4 grid grid-cols-3 gap-4">
-            <StatCard label="Total Arcs" value={graph.total_arcs} />
-            <StatCard label="Feasible" value={graph.feasible_arcs} color="green" />
-            <StatCard label="Infeasible" value={graph.infeasible_arcs} color="red" />
+            <StatCard label={t("graph.total_arcs")} value={graph.total_arcs} />
+            <StatCard label={t("graph.feasible")} value={graph.feasible_arcs} color="green" />
+            <StatCard label={t("graph.infeasible")} value={graph.infeasible_arcs} color="red" />
           </div>
           <div className="rounded-lg border border-border bg-surface-sunken p-8 text-center text-sm text-slate-400">
-            Graph visualization placeholder (React Flow / Cytoscape)
+            {t("graph.viz_placeholder")}
           </div>
         </>
       )}

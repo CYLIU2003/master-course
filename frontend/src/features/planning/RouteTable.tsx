@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useRoutes, useCreateRoute, useDeleteRoute } from "@/hooks";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import type { Route } from "@/types";
@@ -7,11 +8,12 @@ interface RouteTableProps {
 }
 
 export function RouteTable({ scenarioId }: RouteTableProps) {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useRoutes(scenarioId);
   const createRoute = useCreateRoute(scenarioId);
   const deleteRoute = useDeleteRoute(scenarioId);
 
-  if (isLoading) return <LoadingBlock message="Loading routes..." />;
+  if (isLoading) return <LoadingBlock message={t("routes.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;
 
   const routes: Route[] = data?.items ?? [];
@@ -27,7 +29,7 @@ export function RouteTable({ scenarioId }: RouteTableProps) {
   };
 
   const handleDelete = (routeId: string) => {
-    if (!confirm("Delete this route?")) return;
+    if (!confirm(t("routes.delete_confirm"))) return;
     deleteRoute.mutate(routeId);
   };
 
@@ -36,30 +38,30 @@ export function RouteTable({ scenarioId }: RouteTableProps) {
       {/* Header */}
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs text-slate-500">
-          {routes.length} route{routes.length !== 1 ? "s" : ""}
+          {t("routes.count", { count: routes.length })}
         </p>
         <button
           onClick={handleAdd}
           disabled={createRoute.isPending}
           className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
         >
-          + Add Route
+          {t("routes.add")}
         </button>
       </div>
 
       {routes.length === 0 ? (
-        <EmptyState title="No routes defined" description="Create routes for your bus network" />
+        <EmptyState title={t("routes.no_routes")} description={t("routes.no_routes_description")} />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-slate-50">
-                <th className="px-3 py-2 text-xs font-medium text-slate-500">Name</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500">Start</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500">End</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">Distance (km)</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">Duration (min)</th>
-                <th className="px-3 py-2 text-xs font-medium text-slate-500">Status</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500">{t("routes.col_name")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500">{t("routes.col_start")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500">{t("routes.col_end")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">{t("routes.col_distance")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">{t("routes.col_duration")}</th>
+                <th className="px-3 py-2 text-xs font-medium text-slate-500">{t("routes.col_status")}</th>
                 <th className="px-3 py-2 text-xs font-medium text-slate-500 w-10"></th>
               </tr>
             </thead>
