@@ -13,6 +13,11 @@ This repository is a master's research project for **EV bus dispatch, charging p
 - `main`: 現行開発ブランチ（frontend-first + API-driven）
 - `old`: 旧 Streamlit 資産の退避ブランチ（原則更新しない）
 
+Related docs:
+
+- `DATA_GOVERNANCE_AND_BRANCH_STRATEGY.md`: operator-oriented data governance and branch role guidance
+- `constant/README.md`: index for overlapping research/spec markdown files under `constant/`
+
 EN: Develop new features on `main`. `old` is archival for legacy Streamlit references.
 
 中文：新功能请在 `main` 开发；`old` 仅用于保留旧版 Streamlit 参考。
