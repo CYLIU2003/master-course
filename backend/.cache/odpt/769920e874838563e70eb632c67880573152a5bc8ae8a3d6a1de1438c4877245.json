@@ -1,0 +1,839 @@
+{
+  "createdAt": "2026-03-06T08:58:01.676Z",
+  "expiresAt": "2026-03-06T09:58:01.676Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Matsukazedai.00241164.b\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Matsukazedai.00241164.b&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Matsukazedai.00241164.b\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003984499",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:29:39+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "青１１８.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜こどもの国経由＞ 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t\tこどもの国経由 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t:松風台:土曜",
+        "odpt:note": "道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 青葉台営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Ao118.Matsukazedai.00241164.b.0004603197.5.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Ao118"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Matsukazedai.00241164.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Narakitadanchiorikaeshijou"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003984498",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:29:39+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "青１１８.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜こどもの国経由＞ 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t\tこどもの国経由 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t:松風台:平日",
+        "odpt:note": "道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 青葉台営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Ao118.Matsukazedai.00241164.b.0004603197.5.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Ao118"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Matsukazedai.00241164.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Narakitadanchiorikaeshijou"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000398449A",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:29:39+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "青１１８.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜こどもの国経由＞ 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t\tこどもの国経由 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t:松風台:日曜",
+        "odpt:note": "道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 青葉台営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Ao118.Matsukazedai.00241164.b.0004603197.5.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Ao118"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Matsukazedai.00241164.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Narakitadanchiorikaeshijou"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ao118.0004603197",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,412 @@
+{
+  "createdAt": "2026-03-06T08:56:08.135Z",
+  "expiresAt": "2026-03-06T09:56:08.135Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Ichigaochuugakkou.00241212.b\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Ichigaochuugakkou.00241212.b&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Ichigaochuugakkou.00241212.b\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387848B",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:47:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "市６２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 【外回り循環】市が尾駅ゆき\n\t\t\t\t\t\t\t\t\t\t 【外回り循環】市が尾駅ゆき\n\t\t\t\t\t\t\t\t\t:市が尾中学校:平日",
+        "odpt:note": "道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 青葉台営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Shi62.Ichigaochuugakkou.00241212.b.0004600012.9.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Shi62"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaochuugakkou.00241212.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Ichigaoeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387848C",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:47:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "市６２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 【外回り循環】市が尾駅ゆき\n\t\t\t\t\t\t\t\t\t\t 【外回り循環】市が尾駅ゆき\n\t\t\t\t\t\t\t\t\t:市が尾中学校:土曜",
+        "odpt:note": "道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 青葉台営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Shi62.Ichigaochuugakkou.00241212.b.0004600012.9.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Shi62"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaochuugakkou.00241212.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Ichigaoeki"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387848D",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:47:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "市６２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 【外回り循環】市が尾駅ゆき\n\t\t\t\t\t\t\t\t\t\t 【外回り循環】市が尾駅ゆき\n\t\t\t\t\t\t\t\t\t:市が尾中学校:日曜",
+        "odpt:note": "道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 青葉台営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Shi62.Ichigaochuugakkou.00241212.b.0004600012.9.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Shi62"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaochuugakkou.00241212.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Ichigaoeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi62.0004600012",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -21,6 +21,7 @@ interface MasterDataUiState {
   isCreateMode: boolean;
   /** Vehicle sub-type when creating (for VehicleCreateMenu) */
   createVehicleType: "ev_bus" | "engine_bus" | null;
+  createVehicleTemplateId: Id | null;
 
   // Dirty tracking
   isDirty: boolean;
@@ -35,7 +36,11 @@ interface MasterDataUiActions {
   selectRoute: (id: Id | null) => void;
   selectStop: (id: Id | null) => void;
 
-  openDrawer: (opts?: { isCreate?: boolean; vehicleType?: "ev_bus" | "engine_bus" }) => void;
+  openDrawer: (opts?: {
+    isCreate?: boolean;
+    vehicleType?: "ev_bus" | "engine_bus";
+    vehicleTemplateId?: Id | null;
+  }) => void;
   closeDrawer: () => void;
 
   setDirty: (dirty: boolean) => void;
@@ -52,6 +57,7 @@ const initialState: MasterDataUiState = {
   isEditorDrawerOpen: false,
   isCreateMode: false,
   createVehicleType: null,
+  createVehicleTemplateId: null,
   isDirty: false,
 };
 
@@ -68,6 +74,7 @@ export const useMasterUiStore = create<MasterDataUiState & MasterDataUiActions>(
         selectedRouteId: null,
         selectedStopId: null,
         isDirty: false,
+        createVehicleTemplateId: null,
       }),
 
     setViewMode: (mode) => set({ viewMode: mode }),
@@ -82,6 +89,7 @@ export const useMasterUiStore = create<MasterDataUiState & MasterDataUiActions>(
         isEditorDrawerOpen: false,
         isCreateMode: false,
         isDirty: false,
+        createVehicleTemplateId: null,
       }),
 
     selectVehicle: (id) =>
@@ -92,6 +100,7 @@ export const useMasterUiStore = create<MasterDataUiState & MasterDataUiActions>(
         isEditorDrawerOpen: id !== null,
         isCreateMode: false,
         isDirty: false,
+        createVehicleTemplateId: null,
       }),
 
     selectRoute: (id) =>
@@ -102,6 +111,7 @@ export const useMasterUiStore = create<MasterDataUiState & MasterDataUiActions>(
         isEditorDrawerOpen: id !== null,
         isCreateMode: false,
         isDirty: false,
+        createVehicleTemplateId: null,
       }),
 
     selectStop: (id) =>
@@ -112,6 +122,7 @@ export const useMasterUiStore = create<MasterDataUiState & MasterDataUiActions>(
         isEditorDrawerOpen: id !== null,
         isCreateMode: false,
         isDirty: false,
+        createVehicleTemplateId: null,
       }),
 
     openDrawer: (opts) =>
@@ -119,6 +130,7 @@ export const useMasterUiStore = create<MasterDataUiState & MasterDataUiActions>(
         isEditorDrawerOpen: true,
         isCreateMode: opts?.isCreate ?? false,
         createVehicleType: opts?.vehicleType ?? null,
+        createVehicleTemplateId: opts?.vehicleTemplateId ?? null,
       }),
 
     closeDrawer: () =>
@@ -126,6 +138,7 @@ export const useMasterUiStore = create<MasterDataUiState & MasterDataUiActions>(
         isEditorDrawerOpen: false,
         isCreateMode: false,
         createVehicleType: null,
+        createVehicleTemplateId: null,
         isDirty: false,
       }),
 

@@ -16,6 +16,9 @@ export function MasterEditorDrawerHost({ scenarioId }: Props) {
   const isOpen = useMasterUiStore((s) => s.isEditorDrawerOpen);
   const isCreate = useMasterUiStore((s) => s.isCreateMode);
   const createVehicleType = useMasterUiStore((s) => s.createVehicleType);
+  const createVehicleTemplateId = useMasterUiStore(
+    (s) => s.createVehicleTemplateId,
+  );
 
   const selectedDepotId = useMasterUiStore((s) => s.selectedDepotId);
   const selectedVehicleId = useMasterUiStore((s) => s.selectedVehicleId);
@@ -25,7 +28,7 @@ export function MasterEditorDrawerHost({ scenarioId }: Props) {
 
   // Vehicle tab: show create menu first if creating without a type selected
   if (activeTab === "vehicles" && isCreate && !createVehicleType) {
-    return <VehicleCreateMenu />;
+    return <VehicleCreateMenu scenarioId={scenarioId} />;
   }
 
   switch (activeTab) {
@@ -44,6 +47,7 @@ export function MasterEditorDrawerHost({ scenarioId }: Props) {
           vehicleId={isCreate ? null : selectedVehicleId}
           isCreate={isCreate}
           vehicleType={createVehicleType}
+          templateId={createVehicleTemplateId}
           depotId={selectedDepotId}
         />
       );

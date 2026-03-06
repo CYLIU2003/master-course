@@ -7,11 +7,19 @@ import type {
   VehiclesResponse,
   VehicleDetailResponse,
   CreateVehicleRequest,
+  CreateVehicleBatchRequest,
+  DuplicateVehicleBatchRequest,
   UpdateVehicleRequest,
+  VehicleTemplatesResponse,
+  VehicleTemplateDetailResponse,
+  CreateVehicleTemplateRequest,
+  UpdateVehicleTemplateRequest,
   RoutesResponse,
   RouteDetailResponse,
   CreateRouteRequest,
   UpdateRouteRequest,
+  ImportOdptRoutesRequest,
+  ImportOdptRoutesResponse,
   DepotRoutePermissionsResponse,
   UpdateDepotRoutePermissionsRequest,
   VehicleRoutePermissionsResponse,
@@ -51,11 +59,59 @@ export const vehicleApi = {
   create: (scenarioId: string, data: CreateVehicleRequest) =>
     api.post<VehicleDetailResponse>(`/scenarios/${scenarioId}/vehicles`, data),
 
+  createBatch: (scenarioId: string, data: CreateVehicleBatchRequest) =>
+    api.post<VehiclesResponse>(`/scenarios/${scenarioId}/vehicles/bulk`, data),
+
   update: (scenarioId: string, vehicleId: string, data: UpdateVehicleRequest) =>
     api.put<VehicleDetailResponse>(`/scenarios/${scenarioId}/vehicles/${vehicleId}`, data),
 
+  duplicate: (scenarioId: string, vehicleId: string) =>
+    api.post<VehicleDetailResponse>(
+      `/scenarios/${scenarioId}/vehicles/${vehicleId}/duplicate`,
+      {},
+    ),
+
+  duplicateBatch: (
+    scenarioId: string,
+    vehicleId: string,
+    data: DuplicateVehicleBatchRequest,
+  ) =>
+    api.post<VehiclesResponse>(
+      `/scenarios/${scenarioId}/vehicles/${vehicleId}/duplicate-bulk`,
+      data,
+    ),
+
   delete: (scenarioId: string, vehicleId: string) =>
     api.delete<void>(`/scenarios/${scenarioId}/vehicles/${vehicleId}`),
+};
+
+export const vehicleTemplateApi = {
+  list: (scenarioId: string) =>
+    api.get<VehicleTemplatesResponse>(`/scenarios/${scenarioId}/vehicle-templates`),
+
+  get: (scenarioId: string, templateId: string) =>
+    api.get<VehicleTemplateDetailResponse>(
+      `/scenarios/${scenarioId}/vehicle-templates/${templateId}`,
+    ),
+
+  create: (scenarioId: string, data: CreateVehicleTemplateRequest) =>
+    api.post<VehicleTemplateDetailResponse>(
+      `/scenarios/${scenarioId}/vehicle-templates`,
+      data,
+    ),
+
+  update: (
+    scenarioId: string,
+    templateId: string,
+    data: UpdateVehicleTemplateRequest,
+  ) =>
+    api.put<VehicleTemplateDetailResponse>(
+      `/scenarios/${scenarioId}/vehicle-templates/${templateId}`,
+      data,
+    ),
+
+  delete: (scenarioId: string, templateId: string) =>
+    api.delete<void>(`/scenarios/${scenarioId}/vehicle-templates/${templateId}`),
 };
 
 // ── Routes ────────────────────────────────────────────────────
@@ -72,6 +128,12 @@ export const routeApi = {
 
   update: (scenarioId: string, routeId: string, data: UpdateRouteRequest) =>
     api.put<RouteDetailResponse>(`/scenarios/${scenarioId}/routes/${routeId}`, data),
+
+  importOdpt: (scenarioId: string, data?: ImportOdptRoutesRequest) =>
+    api.post<ImportOdptRoutesResponse>(
+      `/scenarios/${scenarioId}/routes/import-odpt`,
+      data,
+    ),
 
   delete: (scenarioId: string, routeId: string) =>
     api.delete<void>(`/scenarios/${scenarioId}/routes/${routeId}`),

@@ -1,0 +1,558 @@
+{
+  "createdAt": "2026-03-06T08:58:02.270Z",
+  "expiresAt": "2026-03-06T09:58:02.270Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Hiratsukanichoume.00240469.b\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Hiratsukanichoume.00240469.b&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Hiratsukanichoume.00240469.b\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003984246",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "反１１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜武蔵小山駅・学芸大学駅・上馬経由＞ 世田谷区民会館ゆき\n\t\t\t\t\t\t\t\t\t\t武蔵小山駅・学芸大学駅・上馬経由 世田谷区民会館ゆき\n\t\t\t\t\t\t\t\t\t、反１１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜武蔵小山駅・学芸大学駅・上馬経由＞ 弦巻営業所ゆき\n\t\t\t\t\t\t\t\t\t\t武蔵小山駅・学芸大学駅・上馬経由 弦巻営業所ゆき\n\t\t\t\t\t\t\t\t\t、反１２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜武蔵小山駅・学芸大学駅経由＞ 東京医療センターゆき\n\t\t\t\t\t\t\t\t\t\t武蔵小山駅・学芸大学駅経由 東京医療センターゆき\n\t\t\t\t\t\t\t\t\t:平塚二丁目:平日",
+        "odpt:note": "ノンステッフ゜（スロープ板付）バスでの運行となります。道路状況等により予定時刻通りに運行できない場合がありますので予めご了承ください。お問合せ先:東急バス 弦巻営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Han11.Han12.Hiratsukanichoume.00240469.b.0004603215.4.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Han12",
+          "odpt.Busroute:TokyuBus.Han11"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiratsukanichoume.00240469.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Toukyouiryousenta-",
+          "odpt.BusDirection:TokyuBus.Setagayakuminkaikan",
+          "odpt.BusDirection:TokyuBus.Tsurumakieigyousho"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "■.駒留経由弦巻営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603216",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tsurumakieigyousho.00240195."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003984247",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "反１１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜武蔵小山駅・学芸大学駅・上馬経由＞ 世田谷区民会館ゆき\n\t\t\t\t\t\t\t\t\t\t武蔵小山駅・学芸大学駅・上馬経由 世田谷区民会館ゆき\n\t\t\t\t\t\t\t\t\t、反１１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜武蔵小山駅・学芸大学駅・上馬経由＞ 弦巻営業所ゆき\n\t\t\t\t\t\t\t\t\t\t武蔵小山駅・学芸大学駅・上馬経由 弦巻営業所ゆき\n\t\t\t\t\t\t\t\t\t、反１２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜武蔵小山駅・学芸大学駅経由＞ 東京医療センターゆき\n\t\t\t\t\t\t\t\t\t\t武蔵小山駅・学芸大学駅経由 東京医療センターゆき\n\t\t\t\t\t\t\t\t\t:平塚二丁目:土曜",
+        "odpt:note": "ノンステッフ゜（スロープ板付）バスでの運行となります。道路状況等により予定時刻通りに運行できない場合がありますので予めご了承ください。お問合せ先:東急バス 弦巻営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Han11.Han12.Hiratsukanichoume.00240469.b.0004603215.4.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Han12",
+          "odpt.Busroute:TokyuBus.Han11"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiratsukanichoume.00240469.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Toukyouiryousenta-",
+          "odpt.BusDirection:TokyuBus.Setagayakuminkaikan",
+          "odpt.BusDirection:TokyuBus.Tsurumakieigyousho"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "■.駒留経由弦巻営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603216",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tsurumakieigyousho.00240195."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003984248",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "反１１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜武蔵小山駅・学芸大学駅・上馬経由＞ 世田谷区民会館ゆき\n\t\t\t\t\t\t\t\t\t\t武蔵小山駅・学芸大学駅・上馬経由 世田谷区民会館ゆき\n\t\t\t\t\t\t\t\t\t、反１１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜武蔵小山駅・学芸大学駅・上馬経由＞ 弦巻営業所ゆき\n\t\t\t\t\t\t\t\t\t\t武蔵小山駅・学芸大学駅・上馬経由 弦巻営業所ゆき\n\t\t\t\t\t\t\t\t\t、反１２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜武蔵小山駅・学芸大学駅経由＞ 東京医療センターゆき\n\t\t\t\t\t\t\t\t\t\t武蔵小山駅・学芸大学駅経由 東京医療センターゆき\n\t\t\t\t\t\t\t\t\t:平塚二丁目:日曜",
+        "odpt:note": "ノンステッフ゜（スロープ板付）バスでの運行となります。道路状況等により予定時刻通りに運行できない場合がありますので予めご了承ください。お問合せ先:東急バス 弦巻営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Han11.Han12.Hiratsukanichoume.00240469.b.0004603215.4.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Han12",
+          "odpt.Busroute:TokyuBus.Han11"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiratsukanichoume.00240469.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Toukyouiryousenta-",
+          "odpt.BusDirection:TokyuBus.Setagayakuminkaikan",
+          "odpt.BusDirection:TokyuBus.Tsurumakieigyousho"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "東.東京医療センター行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004603063",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603215",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Setagayakuminkaikan.00240190."
+          },
+          {
+            "odpt:note": "■.駒留経由弦巻営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han11.0004603216",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tsurumakieigyousho.00240195."
+          }
+        ]
+      }
+    ]
+  }
+}

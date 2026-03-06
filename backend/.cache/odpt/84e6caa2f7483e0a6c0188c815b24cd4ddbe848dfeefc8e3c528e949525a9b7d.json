@@ -1,0 +1,773 @@
+{
+  "createdAt": "2026-03-06T08:58:16.355Z",
+  "expiresAt": "2026-03-06T09:58:16.355Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Kiridooshiue.00240754.b\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Kiridooshiue.00240754.b&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Kiridooshiue.00240754.b\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877CA3",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:05:22+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "向０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 向ヶ丘遊園駅南口ゆき\n\t\t\t\t\t\t\t\t\t\t 向ヶ丘遊園駅南口ゆき\n\t\t\t\t\t\t\t\t\t:切通し上:平日",
+        "odpt:note": "各種割引乗車証でご利用の場合は乗務員に提示の上、差額運賃（現金・ＩＣカード）をお支払いください。道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願いますお問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Kou01.Kiridooshiue.00240754.b.0004600232.11.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Kou01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kiridooshiue.00240754.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.MukougaokayuuenEkiminamiguchi"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877CA4",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:05:22+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "向０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 向ヶ丘遊園駅南口ゆき\n\t\t\t\t\t\t\t\t\t\t 向ヶ丘遊園駅南口ゆき\n\t\t\t\t\t\t\t\t\t:切通し上:土曜",
+        "odpt:note": "各種割引乗車証でご利用の場合は乗務員に提示の上、差額運賃（現金・ＩＣカード）をお支払いください。道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願いますお問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Kou01.Kiridooshiue.00240754.b.0004600232.11.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Kou01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kiridooshiue.00240754.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.MukougaokayuuenEkiminamiguchi"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877CA5",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:05:22+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "向０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 向ヶ丘遊園駅南口ゆき\n\t\t\t\t\t\t\t\t\t\t 向ヶ丘遊園駅南口ゆき\n\t\t\t\t\t\t\t\t\t:切通し上:日曜",
+        "odpt:note": "各種割引乗車証でご利用の場合は乗務員に提示の上、差額運賃（現金・ＩＣカード）をお支払いください。道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願いますお問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Kou01.Kiridooshiue.00240754.b.0004600232.11.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Kou01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kiridooshiue.00240754.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.MukougaokayuuenEkiminamiguchi"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou01.0004600232",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.MukougaokayuuenEkiminamiguchi.00240650."
+          }
+        ]
+      }
+    ]
+  }
+}

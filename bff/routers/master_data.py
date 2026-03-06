@@ -19,8 +19,14 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from bff.services.odpt_routes import (
+    DEFAULT_OPERATOR,
+    build_routes_from_operational,
+    fetch_operational_dataset,
+    summarize_routes_import,
+)
 from bff.store import scenario_store as store
 
 router = APIRouter(tags=["master-data"])
@@ -139,8 +145,46 @@ class CreateVehicleBody(BaseModel):
     enabled: bool = True
 
 
+class CreateVehicleBatchBody(CreateVehicleBody):
+    quantity: int = Field(default=1, ge=1)
+
+
+class DuplicateVehicleBatchBody(BaseModel):
+    quantity: int = Field(default=1, ge=1)
+
+
 class UpdateVehicleBody(BaseModel):
     depotId: Optional[str] = None
+    type: Optional[str] = None
+    modelName: Optional[str] = None
+    capacityPassengers: Optional[int] = None
+    batteryKwh: Optional[float] = None
+    fuelTankL: Optional[float] = None
+    energyConsumption: Optional[float] = None
+    chargePowerKw: Optional[float] = None
+    minSoc: Optional[float] = None
+    maxSoc: Optional[float] = None
+    acquisitionCost: Optional[float] = None
+    enabled: Optional[bool] = None
+
+
+class CreateVehicleTemplateBody(BaseModel):
+    name: str
+    type: str = "BEV"
+    modelName: str = ""
+    capacityPassengers: int = 0
+    batteryKwh: Optional[float] = None
+    fuelTankL: Optional[float] = None
+    energyConsumption: float = 0.0
+    chargePowerKw: Optional[float] = None
+    minSoc: Optional[float] = None
+    maxSoc: Optional[float] = None
+    acquisitionCost: float = 0.0
+    enabled: bool = True
+
+
+class UpdateVehicleTemplateBody(BaseModel):
+    name: Optional[str] = None
     type: Optional[str] = None
     modelName: Optional[str] = None
     capacityPassengers: Optional[int] = None
@@ -173,6 +217,17 @@ def create_vehicle(scenario_id: str, body: CreateVehicleBody) -> Dict[str, Any]:
     return store.create_vehicle(scenario_id, body.model_dump())
 
 
+@router.post("/scenarios/{scenario_id}/vehicles/bulk", status_code=201)
+def create_vehicle_batch(
+    scenario_id: str, body: CreateVehicleBatchBody
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    payload = body.model_dump()
+    quantity = payload.pop("quantity", 1)
+    items = store.create_vehicle_batch(scenario_id, payload, quantity)
+    return {"items": items, "total": len(items)}
+
+
 @router.get("/scenarios/{scenario_id}/vehicles/{vehicle_id}")
 def get_vehicle(scenario_id: str, vehicle_id: str) -> Dict[str, Any]:
     _check_scenario(scenario_id)
@@ -194,6 +249,31 @@ def update_vehicle(
         raise _not_found("Vehicle", vehicle_id)
 
 
+@router.post(
+    "/scenarios/{scenario_id}/vehicles/{vehicle_id}/duplicate", status_code=201
+)
+def duplicate_vehicle(scenario_id: str, vehicle_id: str) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    try:
+        return store.duplicate_vehicle(scenario_id, vehicle_id)
+    except KeyError:
+        raise _not_found("Vehicle", vehicle_id)
+
+
+@router.post(
+    "/scenarios/{scenario_id}/vehicles/{vehicle_id}/duplicate-bulk", status_code=201
+)
+def duplicate_vehicle_batch(
+    scenario_id: str, vehicle_id: str, body: DuplicateVehicleBatchBody
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    try:
+        items = store.duplicate_vehicle_batch(scenario_id, vehicle_id, body.quantity)
+        return {"items": items, "total": len(items)}
+    except KeyError:
+        raise _not_found("Vehicle", vehicle_id)
+
+
 @router.delete("/scenarios/{scenario_id}/vehicles/{vehicle_id}", status_code=204)
 def delete_vehicle(scenario_id: str, vehicle_id: str) -> Response:
     _check_scenario(scenario_id)
@@ -201,6 +281,54 @@ def delete_vehicle(scenario_id: str, vehicle_id: str) -> Response:
         store.delete_vehicle(scenario_id, vehicle_id)
     except KeyError:
         raise _not_found("Vehicle", vehicle_id)
+    return Response(status_code=204)
+
+
+@router.get("/scenarios/{scenario_id}/vehicle-templates")
+def list_vehicle_templates(scenario_id: str) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    items = store.list_vehicle_templates(scenario_id)
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/scenarios/{scenario_id}/vehicle-templates", status_code=201)
+def create_vehicle_template(
+    scenario_id: str, body: CreateVehicleTemplateBody
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    return store.create_vehicle_template(scenario_id, body.model_dump())
+
+
+@router.get("/scenarios/{scenario_id}/vehicle-templates/{template_id}")
+def get_vehicle_template(scenario_id: str, template_id: str) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    try:
+        return store.get_vehicle_template(scenario_id, template_id)
+    except KeyError:
+        raise _not_found("Vehicle template", template_id)
+
+
+@router.put("/scenarios/{scenario_id}/vehicle-templates/{template_id}")
+def update_vehicle_template(
+    scenario_id: str, template_id: str, body: UpdateVehicleTemplateBody
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    try:
+        patch = {k: v for k, v in body.model_dump().items() if v is not None}
+        return store.update_vehicle_template(scenario_id, template_id, patch)
+    except KeyError:
+        raise _not_found("Vehicle template", template_id)
+
+
+@router.delete(
+    "/scenarios/{scenario_id}/vehicle-templates/{template_id}", status_code=204
+)
+def delete_vehicle_template(scenario_id: str, template_id: str) -> Response:
+    _check_scenario(scenario_id)
+    try:
+        store.delete_vehicle_template(scenario_id, template_id)
+    except KeyError:
+        raise _not_found("Vehicle template", template_id)
     return Response(status_code=204)
 
 
@@ -227,6 +355,13 @@ class UpdateRouteBody(BaseModel):
     enabled: Optional[bool] = None
 
 
+class ImportOdptRoutesBody(BaseModel):
+    operator: str = DEFAULT_OPERATOR
+    dump: bool = False
+    forceRefresh: bool = False
+    ttlSec: int = 3600
+
+
 # ── Route endpoints ────────────────────────────────────────────
 
 
@@ -234,7 +369,13 @@ class UpdateRouteBody(BaseModel):
 def list_routes(scenario_id: str) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     items = store.list_routes(scenario_id)
-    return {"items": items, "total": len(items)}
+    return {
+        "items": items,
+        "total": len(items),
+        "meta": {
+            "imports": store.get_route_import_meta(scenario_id),
+        },
+    }
 
 
 @router.post("/scenarios/{scenario_id}/routes", status_code=201)
@@ -272,6 +413,41 @@ def delete_route(scenario_id: str, route_id: str) -> Response:
     except KeyError:
         raise _not_found("Route", route_id)
     return Response(status_code=204)
+
+
+@router.post("/scenarios/{scenario_id}/routes/import-odpt")
+def import_odpt_routes(scenario_id: str, body: ImportOdptRoutesBody) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    try:
+        dataset = fetch_operational_dataset(
+            operator=body.operator,
+            dump=body.dump,
+            force_refresh=body.forceRefresh,
+            ttl_sec=body.ttlSec,
+        )
+        imported_routes = build_routes_from_operational(dataset)
+        quality = summarize_routes_import(imported_routes, dataset)
+        import_meta = {
+            "operator": body.operator,
+            "dump": body.dump,
+            "source": "odpt",
+            "generatedAt": dataset.get("meta", {}).get("generatedAt"),
+            "warnings": dataset.get("meta", {}).get("warnings", []),
+            "cache": dataset.get("meta", {}).get("cache", {}),
+            "quality": quality,
+        }
+        all_routes = store.replace_routes_from_source(
+            scenario_id, "odpt", imported_routes, import_meta=import_meta
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return {
+        "items": imported_routes,
+        "total": len(imported_routes),
+        "allRoutesTotal": len(all_routes),
+        "meta": import_meta,
+    }
 
 
 # ── Permission Pydantic models ─────────────────────────────────

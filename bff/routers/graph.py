@@ -50,15 +50,18 @@ router = APIRouter(tags=["graph"])
 
 class BuildTripsBody(BaseModel):
     force: bool = False
+    service_id: Optional[str] = None  # filter timetable rows by service_id
 
 
 class BuildGraphBody(BaseModel):
     force: bool = False
+    service_id: Optional[str] = None  # filter timetable rows by service_id
 
 
 class GenerateDutiesBody(BaseModel):
     vehicle_type: Optional[str] = None
     strategy: str = "greedy"
+    service_id: Optional[str] = None  # filter timetable rows by service_id
 
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -75,13 +78,22 @@ def _require_scenario(scenario_id: str) -> None:
         raise _not_found(scenario_id)
 
 
-def _build_dispatch_context(scenario_id: str) -> DispatchContext:
+def _build_dispatch_context(
+    scenario_id: str, service_id: Optional[str] = None
+) -> DispatchContext:
     """
     Build a DispatchContext from the scenario's timetable and stored trips.
     Uses timetable_rows if no trips have been built yet.
+    If service_id is provided, only rows matching that service_id are used.
     """
     raw_trips = store.get_field(scenario_id, "trips") or []
     timetable_rows = store.get_field(scenario_id, "timetable_rows") or []
+
+    # Filter by service_id when requested
+    if service_id:
+        timetable_rows = [
+            r for r in timetable_rows if r.get("service_id", "WEEKDAY") == service_id
+        ]
 
     # Convert raw trips to Trip objects
     trips: List[Trip] = []
@@ -146,7 +158,9 @@ def _build_dispatch_context(scenario_id: str) -> DispatchContext:
 # ── Background task implementations ───────────────────────────
 
 
-def _run_build_trips(scenario_id: str, job_id: str) -> None:
+def _run_build_trips(
+    scenario_id: str, job_id: str, service_id: Optional[str] = None
+) -> None:
     try:
         job_store.update_job(
             job_id,
@@ -154,7 +168,7 @@ def _run_build_trips(scenario_id: str, job_id: str) -> None:
             progress=10,
             message="Building trips from timetable...",
         )
-        context = _build_dispatch_context(scenario_id)
+        context = _build_dispatch_context(scenario_id, service_id)
         trips_json = [trip_to_dict(t) for t in context.trips]
         store.set_field(scenario_id, "trips", trips_json)
         store.update_scenario(scenario_id, status="trips_built")
@@ -174,7 +188,9 @@ def _run_build_trips(scenario_id: str, job_id: str) -> None:
         )
 
 
-def _run_build_graph(scenario_id: str, job_id: str) -> None:
+def _run_build_graph(
+    scenario_id: str, job_id: str, service_id: Optional[str] = None
+) -> None:
     try:
         job_store.update_job(
             job_id,
@@ -182,7 +198,7 @@ def _run_build_graph(scenario_id: str, job_id: str) -> None:
             progress=10,
             message="Building feasibility graph...",
         )
-        context = _build_dispatch_context(scenario_id)
+        context = _build_dispatch_context(scenario_id, service_id)
         builder = ConnectionGraphBuilder()
 
         all_types = list(context.vehicle_profiles.keys())
@@ -220,13 +236,17 @@ def _run_build_graph(scenario_id: str, job_id: str) -> None:
 
 
 def _run_generate_duties(
-    scenario_id: str, job_id: str, vehicle_type: Optional[str], strategy: str
+    scenario_id: str,
+    job_id: str,
+    vehicle_type: Optional[str],
+    strategy: str,
+    service_id: Optional[str] = None,
 ) -> None:
     try:
         job_store.update_job(
             job_id, status="running", progress=10, message="Generating duties..."
         )
-        context = _build_dispatch_context(scenario_id)
+        context = _build_dispatch_context(scenario_id, service_id)
         pipeline = TimetableDispatchPipeline()
 
         vehicle_types = (
@@ -274,8 +294,9 @@ def build_trips(
     body: Optional[BuildTripsBody] = None,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    sid = body.service_id if body else None
     job = job_store.create_job()
-    background_tasks.add_task(_run_build_trips, scenario_id, job.job_id)
+    background_tasks.add_task(_run_build_trips, scenario_id, job.job_id, sid)
     return job_store.job_to_dict(job)
 
 
@@ -301,8 +322,9 @@ def build_graph(
     body: Optional[BuildGraphBody] = None,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    sid = body.service_id if body else None
     job = job_store.create_job()
-    background_tasks.add_task(_run_build_graph, scenario_id, job.job_id)
+    background_tasks.add_task(_run_build_graph, scenario_id, job.job_id, sid)
     return job_store.job_to_dict(job)
 
 
@@ -325,9 +347,10 @@ def generate_duties(
     _require_scenario(scenario_id)
     vt = body.vehicle_type if body else None
     strategy = body.strategy if body else "greedy"
+    sid = body.service_id if body else None
     job = job_store.create_job()
     background_tasks.add_task(
-        _run_generate_duties, scenario_id, job.job_id, vt, strategy
+        _run_generate_duties, scenario_id, job.job_id, vt, strategy, sid
     )
     return job_store.job_to_dict(job)
 

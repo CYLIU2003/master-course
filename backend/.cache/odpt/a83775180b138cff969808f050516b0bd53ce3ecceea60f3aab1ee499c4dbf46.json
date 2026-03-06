@@ -1,0 +1,496 @@
+{
+  "createdAt": "2026-03-06T08:56:06.628Z",
+  "expiresAt": "2026-03-06T09:56:06.628Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Todoroki.00240420.3\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Todoroki.00240420.3&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Todoroki.00240420.3\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C000000000000010000032F2030",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:08:54+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "等０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜(タマリバーバス)経由＞ 玉堤循環 等々力ゆき\n\t\t\t\t\t\t\t\t\t\t(タマリバーバス)経由 玉堤循環 等々力ゆき\n\t\t\t\t\t\t\t\t\t:等々力:平日",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nado01.Todoroki.00240420.3.0004602426.1.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nado01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420.3",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Todoroki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602426",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602426",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602426",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000032F2031",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:08:54+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "等０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜(タマリバーバス)経由＞ 玉堤循環 等々力ゆき\n\t\t\t\t\t\t\t\t\t\t(タマリバーバス)経由 玉堤循環 等々力ゆき\n\t\t\t\t\t\t\t\t\t:等々力:土曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nado01.Todoroki.00240420.3.0004602426.1.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nado01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420.3",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Todoroki"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000032F202E",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:08:54+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "等０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜(タマリバーバス)経由＞ 玉堤循環 等々力ゆき\n\t\t\t\t\t\t\t\t\t\t(タマリバーバス)経由 玉堤循環 等々力ゆき\n\t\t\t\t\t\t\t\t\t:等々力:日曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nado01.Todoroki.00240420.3.0004602426.1.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nado01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420.3",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Todoroki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602424",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nado01.0004602426",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Todoroki.00240420."
+          }
+        ]
+      }
+    ]
+  }
+}

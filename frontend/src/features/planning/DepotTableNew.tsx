@@ -17,7 +17,6 @@ export function DepotTableNew({ scenarioId }: Props) {
   const { data, isLoading, error } = useDepots(scenarioId);
   const selectedDepotId = useMasterUiStore((s) => s.selectedDepotId);
   const selectDepot = useMasterUiStore((s) => s.selectDepot);
-  const openDrawer = useMasterUiStore((s) => s.openDrawer);
 
   if (isLoading) return <LoadingBlock message={t("depots.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;

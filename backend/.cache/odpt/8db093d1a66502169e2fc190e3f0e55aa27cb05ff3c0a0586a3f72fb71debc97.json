@@ -1,0 +1,544 @@
+{
+  "createdAt": "2026-03-06T08:58:14.901Z",
+  "expiresAt": "2026-03-06T09:58:14.901Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 12,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C3A",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "多摩０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜都立大学駅前、雪が谷経由＞ 多摩川駅ゆき\n\t\t\t\t\t\t\t\t\t\t都立大学駅前、雪が谷経由 多摩川駅ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:平日",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Tama01.Toukyouiryousenta-.00240204.a.0004603015.1.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Tama01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Tamagawaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C3B",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "多摩０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜都立大学駅前、雪が谷経由＞ 多摩川駅ゆき\n\t\t\t\t\t\t\t\t\t\t都立大学駅前、雪が谷経由 多摩川駅ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:土曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Tama01.Toukyouiryousenta-.00240204.a.0004603015.1.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Tama01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Tamagawaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C31",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:55+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "反１２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜学芸大学駅・武蔵小山駅経由＞ 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t\t学芸大学駅・武蔵小山駅経由 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:平日",
+        "odpt:note": "お問合せ先:東急バス 弦巻営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Han12.Toukyouiryousenta-.00240204.a.0004602631.1.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Han12"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Gotandaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C38",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:55+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "反１２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜学芸大学駅・武蔵小山駅経由＞ 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t\t学芸大学駅・武蔵小山駅経由 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:土曜",
+        "odpt:note": "お問合せ先:東急バス 弦巻営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Han12.Toukyouiryousenta-.00240204.a.0004602631.1.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Han12"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Gotandaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C39",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:55+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "反１２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜学芸大学駅・武蔵小山駅経由＞ 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t\t学芸大学駅・武蔵小山駅経由 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:日曜",
+        "odpt:note": "お問合せ先:東急バス 弦巻営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Han12.Toukyouiryousenta-.00240204.a.0004602631.1.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Han12"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Gotandaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han12.0004602631",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C3C",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "多摩０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜都立大学駅前、雪が谷経由＞ 多摩川駅ゆき\n\t\t\t\t\t\t\t\t\t\t都立大学駅前、雪が谷経由 多摩川駅ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:日曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Tama01.Toukyouiryousenta-.00240204.a.0004603015.1.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Tama01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Tamagawaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama01.0004603015",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamagawaeki.00240297."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C3D",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "玉２１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜駒沢公園・上野毛駅経由＞ 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t\t駒沢公園・上野毛駅経由 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:平日",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Tama21.Toukyouiryousenta-.00240204.a.0004602913.1.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Tama21"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Futakotamagawaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C3E",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "玉２１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜駒沢公園・上野毛駅経由＞ 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t\t駒沢公園・上野毛駅経由 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:土曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Tama21.Toukyouiryousenta-.00240204.a.0004602913.1.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Tama21"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Futakotamagawaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C3F",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "玉２１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜駒沢公園・上野毛駅経由＞ 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t\t駒沢公園・上野毛駅経由 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:日曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Tama21.Toukyouiryousenta-.00240204.a.0004602913.1.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Tama21"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Futakotamagawaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Tama21.0004602913",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C40",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "都立３４.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜都立大学駅北口・野沢龍雲寺方面経由＞ 【循環】東京医療センターゆき\n\t\t\t\t\t\t\t\t\t\t都立大学駅北口・野沢龍雲寺方面経由 【循環】東京医療センターゆき\n\t\t\t\t\t\t\t\t\t、都立３５.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜都立大学駅北口経由＞ 三宿ゆき\n\t\t\t\t\t\t\t\t\t\t都立大学駅北口経由 三宿ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:平日",
+        "odpt:note": "☆印の三宿行き（都立３５系統）は、野沢三丁目、学芸大学付属高校、下馬営業所経由となります。野沢龍雲寺、中丸小学校、世田谷観音、西澄寺には行きませんのでご注意ください。道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 淡島営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Toritsu34.Toritsu35.Toukyouiryousenta-.00240204.a.0004602686.1.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Toritsu34",
+          "odpt.Busroute:TokyuBus.Toritsu35"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Toukyouiryousenta-",
+          "odpt.BusDirection:TokyuBus.Mishuku"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu34.0004602686",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu34.0004602686",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu34.0004602686",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu34.0004602686",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:note": "☆.野沢三丁目経由三宿行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu35.0004602692",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Mishuku.00240055."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C41",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "都立３４.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜都立大学駅北口・野沢龍雲寺方面経由＞ 【循環】東京医療センターゆき\n\t\t\t\t\t\t\t\t\t\t都立大学駅北口・野沢龍雲寺方面経由 【循環】東京医療センターゆき\n\t\t\t\t\t\t\t\t\t、都立３５.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜都立大学駅北口経由＞ 三宿ゆき\n\t\t\t\t\t\t\t\t\t\t都立大学駅北口経由 三宿ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:土曜",
+        "odpt:note": "☆印の三宿行き（都立３５系統）は、野沢三丁目、学芸大学付属高校、下馬営業所経由となります。野沢龍雲寺、中丸小学校、世田谷観音、西澄寺には行きませんのでご注意ください。道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 淡島営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Toritsu34.Toritsu35.Toukyouiryousenta-.00240204.a.0004602686.1.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Toritsu34",
+          "odpt.Busroute:TokyuBus.Toritsu35"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Toukyouiryousenta-",
+          "odpt.BusDirection:TokyuBus.Mishuku"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877C42",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:04:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "都立３４.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜都立大学駅北口・野沢龍雲寺方面経由＞ 【循環】東京医療センターゆき\n\t\t\t\t\t\t\t\t\t\t都立大学駅北口・野沢龍雲寺方面経由 【循環】東京医療センターゆき\n\t\t\t\t\t\t\t\t\t、都立３５.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜都立大学駅北口経由＞ 三宿ゆき\n\t\t\t\t\t\t\t\t\t\t都立大学駅北口経由 三宿ゆき\n\t\t\t\t\t\t\t\t\t:東京医療センター:日曜",
+        "odpt:note": "☆印の三宿行き（都立３５系統）は、野沢三丁目、学芸大学付属高校、下馬営業所経由となります。野沢龍雲寺、中丸小学校、世田谷観音、西澄寺には行きませんのでご注意ください。道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 淡島営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Toritsu34.Toritsu35.Toukyouiryousenta-.00240204.a.0004602686.1.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Toritsu34",
+          "odpt.Busroute:TokyuBus.Toritsu35"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Toukyouiryousenta-",
+          "odpt.BusDirection:TokyuBus.Mishuku"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu34.0004602686",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu34.0004602686",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu34.0004602686",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu34.0004602686",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204."
+          },
+          {
+            "odpt:note": "☆.野沢三丁目経由三宿行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Toritsu35.0004602692",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Mishuku.00240055."
+          }
+        ]
+      }
+    ]
+  }
+}

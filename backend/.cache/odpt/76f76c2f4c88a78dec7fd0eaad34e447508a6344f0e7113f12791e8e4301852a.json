@@ -1,0 +1,99 @@
+{
+  "createdAt": "2026-03-06T08:55:33.438Z",
+  "expiresAt": "2026-03-06T09:55:33.438Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Todorokiari-namae.00240847.a\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Todorokiari-namae.00240847.a&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Todorokiari-namae.00240847.a\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003878194",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:39:30+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "川３３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜東横線小杉駅・東芝前経由＞ 川崎駅ラゾーナ広場ゆき\n\t\t\t\t\t\t\t\t\t\t東横線小杉駅・東芝前経由 川崎駅ラゾーナ広場ゆき\n\t\t\t\t\t\t\t\t\t:とどろきアリーナ前:平日",
+        "odpt:note": "道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願いますお問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Kawa33.Todorokiari-namae.00240847.a.0004600384.3.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Kawa33"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokiari-namae.00240847.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Kawasakiekirazo-nahiroba"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387801F",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:39:30+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "川３３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜東横線小杉駅・東芝前経由＞ 川崎駅ラゾーナ広場ゆき\n\t\t\t\t\t\t\t\t\t\t東横線小杉駅・東芝前経由 川崎駅ラゾーナ広場ゆき\n\t\t\t\t\t\t\t\t\t:とどろきアリーナ前:土曜",
+        "odpt:note": "道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願いますお問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Kawa33.Todorokiari-namae.00240847.a.0004600384.3.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Kawa33"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokiari-namae.00240847.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Kawasakiekirazo-nahiroba"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003878195",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:39:30+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "川３３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜東横線小杉駅・東芝前経由＞ 川崎駅ラゾーナ広場ゆき\n\t\t\t\t\t\t\t\t\t\t東横線小杉駅・東芝前経由 川崎駅ラゾーナ広場ゆき\n\t\t\t\t\t\t\t\t\t:とどろきアリーナ前:日曜",
+        "odpt:note": "道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願いますお問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Kawa33.Todorokiari-namae.00240847.a.0004600384.3.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Kawa33"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokiari-namae.00240847.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Kawasakiekirazo-nahiroba"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kawa33.0004600384",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Kawasakiekirazo-nahiroba.00240532."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kawa33.0004600384",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Kawasakiekirazo-nahiroba.00240532."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kawa33.0004600384",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Kawasakiekirazo-nahiroba.00240532."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kawa33.0004600384",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Kawasakiekirazo-nahiroba.00240532."
+          }
+        ]
+      }
+    ]
+  }
+}

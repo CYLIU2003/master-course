@@ -1,0 +1,93 @@
+{
+  "createdAt": "2026-03-06T08:56:01.330Z",
+  "expiresAt": "2026-03-06T09:56:01.330Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Takatsu.00240778.c\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Takatsu.00240778.c&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Takatsu.00240778.c\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038780CE",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:39:04+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "溝０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜高津駅前経由＞ 小杉駅前行き【平日・朝のみ運行】ゆき\n\t\t\t\t\t\t\t\t\t\t高津駅前経由 小杉駅前行き【平日・朝のみ運行】ゆき\n\t\t\t\t\t\t\t\t\t:高津:日曜",
+        "odpt:note": "お問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Mizo02.Takatsu.00240778.c.0004602090.3.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Mizo02"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Takatsu.00240778.c",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Kosugiekimae"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038780CC",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:39:04+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "溝０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜高津駅前経由＞ 小杉駅前行き【平日・朝のみ運行】ゆき\n\t\t\t\t\t\t\t\t\t\t高津駅前経由 小杉駅前行き【平日・朝のみ運行】ゆき\n\t\t\t\t\t\t\t\t\t:高津:平日",
+        "odpt:note": "お問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Mizo02.Takatsu.00240778.c.0004602090.3.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Mizo02"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Takatsu.00240778.c",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Kosugiekimae"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mizo02.0004602090",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekimae.00240819."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mizo02.0004602090",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekimae.00240819."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mizo02.0004602090",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekimae.00240819."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038780CD",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:39:04+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "溝０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜高津駅前経由＞ 小杉駅前行き【平日・朝のみ運行】ゆき\n\t\t\t\t\t\t\t\t\t\t高津駅前経由 小杉駅前行き【平日・朝のみ運行】ゆき\n\t\t\t\t\t\t\t\t\t:高津:土曜",
+        "odpt:note": "お問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Mizo02.Takatsu.00240778.c.0004602090.3.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Mizo02"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Takatsu.00240778.c",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Kosugiekimae"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      }
+    ]
+  }
+}

@@ -12,7 +12,13 @@ Each file stores the complete scenario document:
     "routes":  [ Route ... ],
     "depot_route_permissions":   [ {depotId, routeId, allowed} ... ],
     "vehicle_route_permissions": [ {vehicleId, routeId, allowed} ... ],
-    "timetable_rows": [ TimetableRow ... ],
+    "route_import_meta": { "odpt": { ... } },
+    "timetable_import_meta": { "odpt": { ... } },
+    "stop_timetable_import_meta": { "odpt": { ... } },
+    "timetable_rows": [ TimetableRow ... ],   # service_id field included
+    "stop_timetables": [ StopTimetable ... ],
+    "calendar": [ ServiceCalendar ... ],      # WEEKDAY/SAT/SUN_HOL definitions
+    "calendar_dates": [ CalendarDate ... ],   # exception overrides
     "simulation_config": { ... } | null,
     "trips":   [ Trip ... ] | null,
     "graph":   { ... } | null,
@@ -45,7 +51,14 @@ def _load(scenario_id: str) -> Dict[str, Any]:
     p = _path(scenario_id)
     if not p.exists():
         raise KeyError(scenario_id)
-    return json.loads(p.read_text(encoding="utf-8"))
+    doc = json.loads(p.read_text(encoding="utf-8"))
+    doc.setdefault("vehicle_templates", [])
+    doc.setdefault("route_import_meta", {})
+    doc.setdefault("timetable_import_meta", {})
+    doc.setdefault("stop_timetable_import_meta", {})
+    doc.setdefault("timetable_rows", [])
+    doc.setdefault("stop_timetables", [])
+    return doc
 
 
 def _save(doc: Dict[str, Any]) -> None:
@@ -65,6 +78,51 @@ def _now_iso() -> str:
 
 def _new_id() -> str:
     return str(uuid.uuid4())
+
+
+def _default_calendar() -> List[Dict[str, Any]]:
+    """Seed three standard service types for every new scenario."""
+    return [
+        {
+            "service_id": "WEEKDAY",
+            "name": "平日",
+            "mon": 1,
+            "tue": 1,
+            "wed": 1,
+            "thu": 1,
+            "fri": 1,
+            "sat": 0,
+            "sun": 0,
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+        },
+        {
+            "service_id": "SAT",
+            "name": "土曜",
+            "mon": 0,
+            "tue": 0,
+            "wed": 0,
+            "thu": 0,
+            "fri": 0,
+            "sat": 1,
+            "sun": 0,
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+        },
+        {
+            "service_id": "SUN_HOL",
+            "name": "日曜・休日",
+            "mon": 0,
+            "tue": 0,
+            "wed": 0,
+            "thu": 0,
+            "fri": 0,
+            "sat": 0,
+            "sun": 1,
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+        },
+    ]
 
 
 # ── Scenario CRUD ──────────────────────────────────────────────
@@ -98,10 +156,17 @@ def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
         "meta": meta,
         "depots": [],
         "vehicles": [],
+        "vehicle_templates": [],
         "routes": [],
         "depot_route_permissions": [],
         "vehicle_route_permissions": [],
+        "route_import_meta": {},
+        "timetable_import_meta": {},
         "timetable_rows": [],
+        "stop_timetable_import_meta": {},
+        "stop_timetables": [],
+        "calendar": _default_calendar(),
+        "calendar_dates": [],
         "simulation_config": None,
         "trips": None,
         "graph": None,
@@ -253,6 +318,90 @@ def create_vehicle(scenario_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return _create_item(scenario_id, "vehicles", data)
 
 
+def _next_vehicle_copy_name(existing_names: set[str], base_name: str) -> str:
+    candidate = f"{base_name} (copy)"
+    if candidate not in existing_names:
+        existing_names.add(candidate)
+        return candidate
+
+    idx = 2
+    while True:
+        candidate = f"{base_name} (copy {idx})"
+        if candidate not in existing_names:
+            existing_names.add(candidate)
+            return candidate
+        idx += 1
+
+
+def create_vehicle_batch(
+    scenario_id: str, data: Dict[str, Any], quantity: int
+) -> List[Dict[str, Any]]:
+    if quantity < 1:
+        raise ValueError("quantity must be >= 1")
+
+    if quantity == 1:
+        return [create_vehicle(scenario_id, data)]
+
+    doc = _load(scenario_id)
+    base_name = (data.get("modelName") or "New vehicle").strip() or "New vehicle"
+    created: List[Dict[str, Any]] = []
+
+    for idx in range(quantity):
+        item = dict(data)
+        item["id"] = _new_id()
+        item["modelName"] = f"{base_name} #{idx + 1}"
+        doc["vehicles"].append(item)
+        created.append(item)
+
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return created
+
+
+def duplicate_vehicle_batch(
+    scenario_id: str, vehicle_id: str, quantity: int
+) -> List[Dict[str, Any]]:
+    if quantity < 1:
+        raise ValueError("quantity must be >= 1")
+
+    doc = _load(scenario_id)
+    source = next((v for v in doc["vehicles"] if v.get("id") == vehicle_id), None)
+    if source is None:
+        raise KeyError(vehicle_id)
+
+    existing_names = {
+        (item.get("modelName") or "").strip()
+        for item in doc["vehicles"]
+        if isinstance(item.get("modelName"), str)
+    }
+    base_name = (source.get("modelName") or "Vehicle").strip() or "Vehicle"
+    source_permissions = [
+        perm
+        for perm in doc.get("vehicle_route_permissions", [])
+        if perm.get("vehicleId") == vehicle_id
+    ]
+    created_items: List[Dict[str, Any]] = []
+
+    for _ in range(quantity):
+        created = {k: v for k, v in source.items() if k != "id"}
+        created["id"] = _new_id()
+        created["modelName"] = _next_vehicle_copy_name(existing_names, base_name)
+        doc["vehicles"].append(created)
+        created_items.append(created)
+
+        for perm in source_permissions:
+            doc["vehicle_route_permissions"].append(
+                {
+                    **perm,
+                    "vehicleId": created["id"],
+                }
+            )
+
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return created_items
+
+
 def update_vehicle(
     scenario_id: str, vehicle_id: str, patch: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -260,7 +409,68 @@ def update_vehicle(
 
 
 def delete_vehicle(scenario_id: str, vehicle_id: str) -> None:
-    _delete_item(scenario_id, "vehicles", "id", vehicle_id)
+    doc = _load(scenario_id)
+    before = len(doc["vehicles"])
+    doc["vehicles"] = [v for v in doc["vehicles"] if v.get("id") != vehicle_id]
+    if len(doc["vehicles"]) == before:
+        raise KeyError(vehicle_id)
+    doc["vehicle_route_permissions"] = [
+        p for p in doc["vehicle_route_permissions"] if p.get("vehicleId") != vehicle_id
+    ]
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+
+
+def duplicate_vehicle(scenario_id: str, vehicle_id: str) -> Dict[str, Any]:
+    return duplicate_vehicle_batch(scenario_id, vehicle_id, quantity=1)[0]
+
+
+def list_vehicle_templates(scenario_id: str) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    return list(doc.get("vehicle_templates") or [])
+
+
+def get_vehicle_template(scenario_id: str, template_id: str) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    for item in doc.get("vehicle_templates") or []:
+        if item.get("id") == template_id:
+            return item
+    raise KeyError(template_id)
+
+
+def create_vehicle_template(scenario_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    item = dict(data)
+    item["id"] = _new_id()
+    doc.setdefault("vehicle_templates", []).append(item)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return item
+
+
+def update_vehicle_template(
+    scenario_id: str, template_id: str, patch: Dict[str, Any]
+) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    templates = doc.setdefault("vehicle_templates", [])
+    for item in templates:
+        if item.get("id") == template_id:
+            item.update({k: v for k, v in patch.items() if v is not None})
+            doc["meta"]["updatedAt"] = _now_iso()
+            _save(doc)
+            return item
+    raise KeyError(template_id)
+
+
+def delete_vehicle_template(scenario_id: str, template_id: str) -> None:
+    doc = _load(scenario_id)
+    templates = doc.setdefault("vehicle_templates", [])
+    before = len(templates)
+    doc["vehicle_templates"] = [i for i in templates if i.get("id") != template_id]
+    if len(doc["vehicle_templates"]) == before:
+        raise KeyError(template_id)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
 
 
 # ── Route helpers ──────────────────────────────────────────────
@@ -288,6 +498,176 @@ def delete_route(scenario_id: str, route_id: str) -> None:
     _delete_item(scenario_id, "routes", "id", route_id)
 
 
+def replace_routes_from_source(
+    scenario_id: str,
+    source: str,
+    routes: List[Dict[str, Any]],
+    import_meta: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    route_import_meta = doc.setdefault("route_import_meta", {})
+    existing_source_route_ids = {
+        r.get("id") for r in doc["routes"] if r.get("source") == source and r.get("id")
+    }
+    incoming_route_ids = {r.get("id") for r in routes if r.get("id")}
+    removed_route_ids = existing_source_route_ids - incoming_route_ids
+    preserved = [r for r in doc["routes"] if r.get("source") != source]
+    doc["routes"] = preserved + routes
+    if removed_route_ids:
+        doc["depot_route_permissions"] = [
+            p
+            for p in doc["depot_route_permissions"]
+            if p.get("routeId") not in removed_route_ids
+        ]
+        doc["vehicle_route_permissions"] = [
+            p
+            for p in doc["vehicle_route_permissions"]
+            if p.get("routeId") not in removed_route_ids
+        ]
+    if import_meta is not None:
+        route_import_meta[source] = import_meta
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return list(doc["routes"])
+
+
+def get_route_import_meta(
+    scenario_id: str, source: Optional[str] = None
+) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    route_import_meta = doc.get("route_import_meta") or {}
+    if source is None:
+        return dict(route_import_meta)
+    value = route_import_meta.get(source)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def set_timetable_import_meta(
+    scenario_id: str, source: str, import_meta: Dict[str, Any]
+) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    timetable_import_meta = doc.setdefault("timetable_import_meta", {})
+    timetable_import_meta[source] = import_meta
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return dict(import_meta)
+
+
+def get_timetable_import_meta(
+    scenario_id: str, source: Optional[str] = None
+) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    timetable_import_meta = doc.get("timetable_import_meta") or {}
+    if source is None:
+        return dict(timetable_import_meta)
+    value = timetable_import_meta.get(source)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def upsert_timetable_rows_from_source(
+    scenario_id: str,
+    source: str,
+    rows: List[Dict[str, Any]],
+    *,
+    replace_existing_source: bool = False,
+) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    existing_rows = list(doc.get("timetable_rows") or [])
+
+    preserved_rows = [row for row in existing_rows if row.get("source") != source]
+    source_rows = (
+        []
+        if replace_existing_source
+        else [row for row in existing_rows if row.get("source") == source]
+    )
+
+    def _row_key(row: Dict[str, Any]) -> str:
+        trip_id = row.get("trip_id")
+        if trip_id:
+            return f"trip:{trip_id}"
+        return json.dumps(
+            {
+                "route_id": row.get("route_id"),
+                "service_id": row.get("service_id"),
+                "direction": row.get("direction"),
+                "origin": row.get("origin"),
+                "destination": row.get("destination"),
+                "departure": row.get("departure"),
+                "arrival": row.get("arrival"),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+
+    merged: Dict[str, Dict[str, Any]] = {}
+    for row in source_rows:
+        merged[_row_key(row)] = dict(row)
+    for row in rows:
+        candidate = dict(row)
+        candidate["source"] = source
+        merged[_row_key(candidate)] = candidate
+
+    doc["timetable_rows"] = preserved_rows + list(merged.values())
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return list(doc["timetable_rows"])
+
+
+def set_stop_timetable_import_meta(
+    scenario_id: str, source: str, import_meta: Dict[str, Any]
+) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    stop_timetable_import_meta = doc.setdefault("stop_timetable_import_meta", {})
+    stop_timetable_import_meta[source] = import_meta
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return dict(import_meta)
+
+
+def get_stop_timetable_import_meta(
+    scenario_id: str, source: Optional[str] = None
+) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    stop_timetable_import_meta = doc.get("stop_timetable_import_meta") or {}
+    if source is None:
+        return dict(stop_timetable_import_meta)
+    value = stop_timetable_import_meta.get(source)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def upsert_stop_timetables_from_source(
+    scenario_id: str,
+    source: str,
+    items: List[Dict[str, Any]],
+    *,
+    replace_existing_source: bool = False,
+) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    existing_items = list(doc.get("stop_timetables") or [])
+    preserved_items = [item for item in existing_items if item.get("source") != source]
+    source_items = (
+        []
+        if replace_existing_source
+        else [item for item in existing_items if item.get("source") == source]
+    )
+
+    merged: Dict[str, Dict[str, Any]] = {
+        str(item.get("id") or item.get("stopId") or uuid.uuid4()): dict(item)
+        for item in source_items
+    }
+    for item in items:
+        candidate = dict(item)
+        candidate["source"] = source
+        merged[str(candidate.get("id") or candidate.get("stopId") or uuid.uuid4())] = (
+            candidate
+        )
+
+    doc["stop_timetables"] = preserved_items + list(merged.values())
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return list(doc["stop_timetables"])
+
+
 # ── Permission helpers ─────────────────────────────────────────
 
 
@@ -311,3 +691,105 @@ def set_vehicle_route_permissions(
 ) -> List[Dict[str, Any]]:
     set_field(scenario_id, "vehicle_route_permissions", permissions)
     return permissions
+
+
+# ── Calendar helpers ───────────────────────────────────────────
+
+
+def get_calendar(scenario_id: str) -> List[Dict[str, Any]]:
+    """Return the list of service_id definitions for this scenario."""
+    doc = _load(scenario_id)
+    return doc.get("calendar") or _default_calendar()
+
+
+def set_calendar(
+    scenario_id: str, entries: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Replace the entire calendar (list of service_id definitions)."""
+    doc = _load(scenario_id)
+    doc["calendar"] = entries
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return entries
+
+
+def upsert_calendar_entry(scenario_id: str, entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Insert or update a single service_id entry (keyed by service_id)."""
+    doc = _load(scenario_id)
+    calendar: List[Dict[str, Any]] = doc.get("calendar") or _default_calendar()
+    sid = entry["service_id"]
+    replaced = False
+    for i, e in enumerate(calendar):
+        if e.get("service_id") == sid:
+            calendar[i] = entry
+            replaced = True
+            break
+    if not replaced:
+        calendar.append(entry)
+    doc["calendar"] = calendar
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return entry
+
+
+def delete_calendar_entry(scenario_id: str, service_id: str) -> None:
+    """Delete a service_id definition. Raises KeyError if not found."""
+    doc = _load(scenario_id)
+    calendar: List[Dict[str, Any]] = doc.get("calendar") or []
+    before = len(calendar)
+    doc["calendar"] = [e for e in calendar if e.get("service_id") != service_id]
+    if len(doc["calendar"]) == before:
+        raise KeyError(service_id)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+
+
+# ── Calendar dates helpers ─────────────────────────────────────
+
+
+def get_calendar_dates(scenario_id: str) -> List[Dict[str, Any]]:
+    """Return exception date overrides for this scenario."""
+    doc = _load(scenario_id)
+    return doc.get("calendar_dates") or []
+
+
+def set_calendar_dates(
+    scenario_id: str, entries: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Replace the entire calendar_dates list."""
+    doc = _load(scenario_id)
+    doc["calendar_dates"] = entries
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return entries
+
+
+def upsert_calendar_date(scenario_id: str, entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Insert or update a single date exception (keyed by date)."""
+    doc = _load(scenario_id)
+    dates: List[Dict[str, Any]] = doc.get("calendar_dates") or []
+    date_key = entry["date"]
+    replaced = False
+    for i, e in enumerate(dates):
+        if e.get("date") == date_key:
+            dates[i] = entry
+            replaced = True
+            break
+    if not replaced:
+        dates.append(entry)
+    doc["calendar_dates"] = dates
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return entry
+
+
+def delete_calendar_date(scenario_id: str, date: str) -> None:
+    """Delete a date exception. Raises KeyError if not found."""
+    doc = _load(scenario_id)
+    dates: List[Dict[str, Any]] = doc.get("calendar_dates") or []
+    before = len(dates)
+    doc["calendar_dates"] = [e for e in dates if e.get("date") != date]
+    if len(doc["calendar_dates"]) == before:
+        raise KeyError(date)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)

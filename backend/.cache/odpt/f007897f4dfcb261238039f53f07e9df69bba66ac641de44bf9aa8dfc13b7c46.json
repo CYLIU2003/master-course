@@ -1,0 +1,1481 @@
+{
+  "createdAt": "2026-03-06T08:55:39.933Z",
+  "expiresAt": "2026-03-06T09:55:39.933Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Shindenbori.00240926.b\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Shindenbori.00240926.b&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Shindenbori.00240926.b\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000393044E",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:07:01+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "日９２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 新綱島駅ゆき\n\t\t\t\t\t\t\t\t\t\t 新綱島駅ゆき\n\t\t\t\t\t\t\t\t\t:新田堀:平日",
+        "odpt:note": "道路混雑等により時刻通り運行出来ない事がございますので予めご了承の上ご利用願いますお問合せ先:東急バス 新羽営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nichi92.Shindenbori.00240926.b.0004603171.12.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nichi92"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shindenbori.00240926.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Shintsunashimaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "23:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000393044F",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:07:01+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "日９２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 新綱島駅ゆき\n\t\t\t\t\t\t\t\t\t\t 新綱島駅ゆき\n\t\t\t\t\t\t\t\t\t:新田堀:土曜",
+        "odpt:note": "道路混雑等により時刻通り運行出来ない事がございますので予めご了承の上ご利用願いますお問合せ先:東急バス 新羽営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nichi92.Shindenbori.00240926.b.0004603171.12.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nichi92"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shindenbori.00240926.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Shintsunashimaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "23:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003930450",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:07:01+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "日９２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 新綱島駅ゆき\n\t\t\t\t\t\t\t\t\t\t 新綱島駅ゆき\n\t\t\t\t\t\t\t\t\t:新田堀:日曜",
+        "odpt:note": "道路混雑等により時刻通り運行出来ない事がございますので予めご了承の上ご利用願いますお問合せ先:東急バス 新羽営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nichi92.Shindenbori.00240926.b.0004603171.12.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nichi92"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shindenbori.00240926.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Shintsunashimaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi92.0004603171",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shintsunashimaeki.00241512."
+          }
+        ]
+      }
+    ]
+  }
+}

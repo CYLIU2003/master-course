@@ -20,6 +20,7 @@ frontend/dist/
 outputs/
 derived/
 results/
+backend/.env
 
 # OS/editor noise
 .DS_Store
