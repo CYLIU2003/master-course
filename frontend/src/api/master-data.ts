@@ -65,10 +65,14 @@ export const vehicleApi = {
   update: (scenarioId: string, vehicleId: string, data: UpdateVehicleRequest) =>
     api.put<VehicleDetailResponse>(`/scenarios/${scenarioId}/vehicles/${vehicleId}`, data),
 
-  duplicate: (scenarioId: string, vehicleId: string) =>
+  duplicate: (
+    scenarioId: string,
+    vehicleId: string,
+    data?: Pick<DuplicateVehicleBatchRequest, "targetDepotId">,
+  ) =>
     api.post<VehicleDetailResponse>(
       `/scenarios/${scenarioId}/vehicles/${vehicleId}/duplicate`,
-      {},
+      data ?? {},
     ),
 
   duplicateBatch: (

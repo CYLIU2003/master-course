@@ -13,6 +13,7 @@ import {
 import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { TimetableGeneratorDrawer } from "@/features/planning/TimetableGeneratorDrawer";
 import type { TimetableRow } from "@/types";
+import type { ImportProgress } from "@/types/api";
 
 // ── Service-ID filter tabs ─────────────────────────────────────
 
@@ -24,6 +25,12 @@ const SERVICE_TABS = [
 ] as const;
 
 type ServiceFilter = (typeof SERVICE_TABS)[number]["key"];
+
+type ImportRunState = {
+  active: boolean;
+  progress: ImportProgress | null;
+  rounds: number;
+};
 
 // ── Empty new row factory ──────────────────────────────────────
 
@@ -75,6 +82,30 @@ export function TimetablePage() {
 
   // Generator drawer state
   const [showGenerator, setShowGenerator] = useState(false);
+  const [busImportState, setBusImportState] = useState<ImportRunState>({
+    active: false,
+    progress: null,
+    rounds: 0,
+  });
+  const [stopImportState, setStopImportState] = useState<ImportRunState>({
+    active: false,
+    progress: null,
+    rounds: 0,
+  });
+
+  function describeProgress(progress?: ImportProgress | null) {
+    if (!progress) {
+      return t("timetable.import_progress_preparing", "準備中...");
+    }
+    return t(
+      "timetable.import_progress_chunks",
+      "chunk {{current}} / {{total}}",
+      {
+        current: Math.min(progress.nextCursor, progress.totalChunks),
+        total: progress.totalChunks,
+      },
+    );
+  }
 
   // ── Import CSV ────────────────────────────────────────────
 
@@ -131,6 +162,7 @@ export function TimetablePage() {
       let cursor = 0;
       let rounds = 0;
       let lastResult: Awaited<ReturnType<typeof importOdptMutation.mutateAsync>> | null = null;
+      setBusImportState({ active: true, progress: null, rounds: 0 });
 
       while (rounds < 100) {
         lastResult = await importOdptMutation.mutateAsync({
@@ -142,6 +174,7 @@ export function TimetablePage() {
           reset: cursor === 0,
         });
         const progress = lastResult.meta.progress;
+        setBusImportState({ active: true, progress: progress ?? null, rounds: rounds + 1 });
         if (!progress || progress.complete || progress.nextCursor <= cursor) {
           break;
         }
@@ -150,6 +183,7 @@ export function TimetablePage() {
       }
 
       if (!lastResult) {
+        setBusImportState({ active: false, progress: null, rounds: 0 });
         return;
       }
 
@@ -164,8 +198,14 @@ export function TimetablePage() {
       if (lastResult.meta.warnings.length > 0) {
         details.push("", lastResult.meta.warnings.join("\n"));
       }
+      setBusImportState({
+        active: false,
+        progress: lastResult.meta.progress ?? null,
+        rounds: rounds + 1,
+      });
       alert(details.join("\n"));
     } catch (err) {
+      setBusImportState({ active: false, progress: null, rounds: 0 });
       alert(String(err));
     }
   }
@@ -188,6 +228,7 @@ export function TimetablePage() {
       let lastResult: Awaited<
         ReturnType<typeof importOdptStopTimetablesMutation.mutateAsync>
       > | null = null;
+      setStopImportState({ active: true, progress: null, rounds: 0 });
 
       while (rounds < 100) {
         lastResult = await importOdptStopTimetablesMutation.mutateAsync({
@@ -198,6 +239,7 @@ export function TimetablePage() {
           reset: cursor === 0,
         });
         const progress = lastResult.meta.progress;
+        setStopImportState({ active: true, progress: progress ?? null, rounds: rounds + 1 });
         if (!progress || progress.complete || progress.nextCursor <= cursor) {
           break;
         }
@@ -206,6 +248,7 @@ export function TimetablePage() {
       }
 
       if (!lastResult) {
+        setStopImportState({ active: false, progress: null, rounds: 0 });
         return;
       }
 
@@ -222,8 +265,14 @@ export function TimetablePage() {
       if (lastResult.meta.warnings.length > 0) {
         details.push("", lastResult.meta.warnings.join("\n"));
       }
+      setStopImportState({
+        active: false,
+        progress: lastResult.meta.progress ?? null,
+        rounds: rounds + 1,
+      });
       alert(details.join("\n"));
     } catch (err) {
+      setStopImportState({ active: false, progress: null, rounds: 0 });
       alert(String(err));
     }
   }
@@ -337,12 +386,17 @@ export function TimetablePage() {
           <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-900">
             {t(
               "timetable.import_odpt_status",
-              "ODPT最終取込: {{generatedAt}} / {{count}} 行 / バス停時刻表 {{stopCount}} 件",
+              "BusTimetable 最終取込: {{generatedAt}} / {{count}} 行 / 対象路線 {{routeCount}} 件",
               {
                 generatedAt: odptImportMeta.generatedAt ?? "-",
                 count: odptImportMeta.quality.rowCount,
-                stopCount: odptImportMeta.quality.stopTimetableCount,
+                routeCount: odptImportMeta.quality.routeCount,
               },
+            )}
+            {odptImportMeta.progress && (
+              <span className="ml-2 text-emerald-700">
+                {describeProgress(odptImportMeta.progress)}
+              </span>
             )}
             {odptImportMeta.warnings.length > 0 && (
               <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
@@ -357,12 +411,17 @@ export function TimetablePage() {
           <div className="mb-3 rounded-lg border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-900">
             {t(
               "timetable.import_odpt_stop_timetable_status",
-              "ODPTバス停時刻表: {{generatedAt}} / {{count}} 件 / エントリ {{entryCount}} 件",
+              "BusstopPoleTimetable 最終取込: {{generatedAt}} / {{count}} 件 / エントリ {{entryCount}} 件",
               {
                 generatedAt: odptStopTimetableImportMeta.generatedAt ?? "-",
                 count: odptStopTimetableImportMeta.quality.stopTimetableCount,
                 entryCount: odptStopTimetableImportMeta.quality.entryCount,
               },
+            )}
+            {odptStopTimetableImportMeta.progress && (
+              <span className="ml-2 text-cyan-700">
+                {describeProgress(odptStopTimetableImportMeta.progress)}
+              </span>
             )}
             {odptStopTimetableImportMeta.warnings.length > 0 && (
               <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
@@ -370,6 +429,36 @@ export function TimetablePage() {
                   count: odptStopTimetableImportMeta.warnings.length,
                 })}
               </span>
+            )}
+          </div>
+        )}
+        {(busImportState.active || stopImportState.active) && (
+          <div className="mb-3 grid gap-2 md:grid-cols-2">
+            {busImportState.active && (
+              <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs text-slate-700">
+                <p className="font-semibold text-emerald-800">
+                  {t("timetable.import_odpt", "ODPTから取込")}
+                </p>
+                <p>{describeProgress(busImportState.progress)}</p>
+                <p className="text-slate-500">
+                  {t("timetable.import_rounds", "リクエスト回数: {{count}}", {
+                    count: busImportState.rounds,
+                  })}
+                </p>
+              </div>
+            )}
+            {stopImportState.active && (
+              <div className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">
+                <p className="font-semibold text-cyan-800">
+                  {t("timetable.import_odpt_stop_timetables", "バス停時刻表を取込")}
+                </p>
+                <p>{describeProgress(stopImportState.progress)}</p>
+                <p className="text-slate-500">
+                  {t("timetable.import_rounds", "リクエスト回数: {{count}}", {
+                    count: stopImportState.rounds,
+                  })}
+                </p>
+              </div>
             )}
           </div>
         )}

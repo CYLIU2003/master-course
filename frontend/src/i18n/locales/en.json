@@ -23,6 +23,7 @@
   },
   "sidebar": {
     "depots_vehicles_routes": "Depots / Vehicles / Routes",
+    "vehicle_templates": "Vehicle Templates",
     "timetable": "Timetable",
     "deadhead_rules": "Deadhead Rules",
     "turnaround_rules": "Turnaround Rules",

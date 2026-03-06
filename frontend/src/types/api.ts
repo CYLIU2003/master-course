@@ -103,6 +103,7 @@ export interface CreateVehicleBatchRequest extends CreateVehicleRequest {
 
 export interface DuplicateVehicleBatchRequest {
   quantity: number;
+  targetDepotId?: string;
 }
 
 export interface CreateVehicleTemplateRequest {
@@ -203,6 +204,7 @@ export interface TimetableImportMeta {
   operator: string;
   dump: boolean;
   source: "odpt";
+  resourceType?: "BusTimetable" | "BusstopPoleTimetable";
   generatedAt?: string;
   warnings: string[];
   cache: {
@@ -271,6 +273,7 @@ export interface StopTimetableImportMeta {
   operator: string;
   dump: boolean;
   source: "odpt";
+  resourceType?: "BusstopPoleTimetable";
   generatedAt?: string;
   warnings: string[];
   cache: {
