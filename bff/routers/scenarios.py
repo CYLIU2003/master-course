@@ -145,6 +145,30 @@ def _pick_latest_scenario(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any
     )[0]
 
 
+def _build_odpt_import_meta(
+    *,
+    dataset: Dict[str, Any],
+    operator: str,
+    dump: bool,
+    quality: Dict[str, Any],
+    progress_key: str,
+    resource_type: str,
+) -> Dict[str, Any]:
+    meta = dataset.get("meta", {}) if isinstance(dataset, dict) else {}
+    progress = (meta.get("progress") or {}).get(progress_key)
+    return {
+        "operator": operator,
+        "dump": dump,
+        "source": "odpt",
+        "resourceType": resource_type,
+        "generatedAt": meta.get("generatedAt"),
+        "warnings": meta.get("warnings", []),
+        "cache": meta.get("cache", {}),
+        "progress": progress,
+        "quality": quality,
+    }
+
+
 # ── Scenario CRUD ──────────────────────────────────────────────
 
 
@@ -343,17 +367,14 @@ def import_timetable_odpt(
         store.set_field(scenario_id, "timetable_rows", normalized_rows)
         odpt_rows = [row for row in normalized_rows if row.get("source") == "odpt"]
         quality = summarize_timetable_import(odpt_rows, dataset)
-        progress = (dataset.get("meta", {}).get("progress") or {}).get("busTimetables")
-        import_meta = {
-            "operator": body.operator,
-            "dump": body.dump,
-            "source": "odpt",
-            "generatedAt": dataset.get("meta", {}).get("generatedAt"),
-            "warnings": dataset.get("meta", {}).get("warnings", []),
-            "cache": dataset.get("meta", {}).get("cache", {}),
-            "progress": progress,
-            "quality": quality,
-        }
+        import_meta = _build_odpt_import_meta(
+            dataset=dataset,
+            operator=body.operator,
+            dump=body.dump,
+            quality=quality,
+            progress_key="busTimetables",
+            resource_type="BusTimetable",
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
@@ -415,17 +436,14 @@ def import_stop_timetables_odpt(
         )
         odpt_items = [item for item in merged_items if item.get("source") == "odpt"]
         quality = summarize_stop_timetable_import(odpt_items, dataset)
-        progress = (dataset.get("meta", {}).get("progress") or {}).get("stopTimetables")
-        import_meta = {
-            "operator": body.operator,
-            "dump": body.dump,
-            "source": "odpt",
-            "generatedAt": dataset.get("meta", {}).get("generatedAt"),
-            "warnings": dataset.get("meta", {}).get("warnings", []),
-            "cache": dataset.get("meta", {}).get("cache", {}),
-            "progress": progress,
-            "quality": quality,
-        }
+        import_meta = _build_odpt_import_meta(
+            dataset=dataset,
+            operator=body.operator,
+            dump=body.dump,
+            quality=quality,
+            progress_key="stopTimetables",
+            resource_type="BusstopPoleTimetable",
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

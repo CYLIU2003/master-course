@@ -151,6 +151,11 @@ class CreateVehicleBatchBody(CreateVehicleBody):
 
 class DuplicateVehicleBatchBody(BaseModel):
     quantity: int = Field(default=1, ge=1)
+    targetDepotId: Optional[str] = None
+
+
+class DuplicateVehicleBody(BaseModel):
+    targetDepotId: Optional[str] = None
 
 
 class UpdateVehicleBody(BaseModel):
@@ -252,10 +257,18 @@ def update_vehicle(
 @router.post(
     "/scenarios/{scenario_id}/vehicles/{vehicle_id}/duplicate", status_code=201
 )
-def duplicate_vehicle(scenario_id: str, vehicle_id: str) -> Dict[str, Any]:
+def duplicate_vehicle(
+    scenario_id: str,
+    vehicle_id: str,
+    body: Optional[DuplicateVehicleBody] = None,
+) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        return store.duplicate_vehicle(scenario_id, vehicle_id)
+        return store.duplicate_vehicle_to_depot(
+            scenario_id,
+            vehicle_id,
+            target_depot_id=body.targetDepotId if body else None,
+        )
     except KeyError:
         raise _not_found("Vehicle", vehicle_id)
 
@@ -268,7 +281,12 @@ def duplicate_vehicle_batch(
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        items = store.duplicate_vehicle_batch(scenario_id, vehicle_id, body.quantity)
+        items = store.duplicate_vehicle_batch(
+            scenario_id,
+            vehicle_id,
+            body.quantity,
+            target_depot_id=body.targetDepotId,
+        )
         return {"items": items, "total": len(items)}
     except KeyError:
         raise _not_found("Vehicle", vehicle_id)

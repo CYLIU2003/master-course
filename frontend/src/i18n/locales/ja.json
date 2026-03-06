@@ -23,6 +23,7 @@
   },
   "sidebar": {
     "depots_vehicles_routes": "車庫・車両・路線",
+    "vehicle_templates": "車両テンプレート",
     "timetable": "時刻表",
     "deadhead_rules": "回送ルール",
     "turnaround_rules": "折返し規則",

@@ -4,6 +4,7 @@
 // actual form opens.
 
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { useVehicleTemplates } from "@/hooks";
 import { useMasterUiStore } from "@/stores/master-ui-store";
 
@@ -74,9 +75,17 @@ export function VehicleCreateMenu({ scenarioId }: Props) {
             <p className="text-xs font-semibold text-slate-700">
               {t("vehicles.templates_section", "保存済みテンプレート")}
             </p>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
-              {templates.length}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                {templates.length}
+              </span>
+              <Link
+                to={`/scenarios/${scenarioId}/vehicle-templates`}
+                className="text-[11px] font-medium text-primary-700 hover:text-primary-800"
+              >
+                {t("vehicles.template_manage_link", "管理")}
+              </Link>
+            </div>
           </div>
 
           {templates.length === 0 ? (

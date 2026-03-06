@@ -10,6 +10,7 @@ interface SidebarProps {
 interface NavItem {
   labelKey: string;
   to: string;
+  fallbackLabel?: string;
 }
 
 // ── Tab button component ──────────────────────────────────────
@@ -85,6 +86,11 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
   // Nav arrays defined inside component to pick up live translations
   const planningNavItems: NavItem[] = [
     { labelKey: "sidebar.depots_vehicles_routes", to: "planning" },
+    {
+      labelKey: "sidebar.vehicle_templates",
+      to: "vehicle-templates",
+      fallbackLabel: "車両テンプレート",
+    },
     { labelKey: "sidebar.timetable", to: "timetable" },
     { labelKey: "sidebar.deadhead_rules", to: "deadhead" },
     { labelKey: "sidebar.turnaround_rules", to: "rules" },
@@ -110,7 +116,10 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
   ];
 
   const resolve = (items: NavItem[]) =>
-    items.map((item) => ({ label: t(item.labelKey), to: item.to }));
+    items.map((item) => ({
+      label: item.fallbackLabel ? t(item.labelKey, item.fallbackLabel) : t(item.labelKey),
+      to: item.to,
+    }));
 
   if (!open) return null;
 

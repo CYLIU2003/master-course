@@ -169,6 +169,82 @@ def test_create_vehicle_batch_duplicate_and_template_flow(temp_store_dir: Path):
     assert scenario_store.list_vehicle_templates(scenario_id) == []
 
 
+def test_duplicate_vehicle_batch_to_target_depot_filters_route_permissions(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Cross depot duplicate", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    source_depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Source depot", "location": "A"},
+    )
+    target_depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Target depot", "location": "B"},
+    )
+
+    vehicle = scenario_store.create_vehicle(
+        scenario_id,
+        {
+            "depotId": source_depot["id"],
+            "type": "BEV",
+            "modelName": "Cross Depot Bus",
+            "capacityPassengers": 70,
+            "batteryKwh": 300.0,
+            "fuelTankL": None,
+            "energyConsumption": 1.2,
+            "chargePowerKw": 150.0,
+            "minSoc": 0.2,
+            "maxSoc": 0.9,
+            "acquisitionCost": 30_000_000.0,
+            "enabled": True,
+        },
+    )
+
+    scenario_store.set_depot_route_permissions(
+        scenario_id,
+        [
+            {"depotId": source_depot["id"], "routeId": "R1", "allowed": True},
+            {"depotId": source_depot["id"], "routeId": "R2", "allowed": True},
+            {"depotId": target_depot["id"], "routeId": "R1", "allowed": True},
+            {"depotId": target_depot["id"], "routeId": "R2", "allowed": False},
+        ],
+    )
+    scenario_store.set_vehicle_route_permissions(
+        scenario_id,
+        [
+            {"vehicleId": vehicle["id"], "routeId": "R1", "allowed": True},
+            {"vehicleId": vehicle["id"], "routeId": "R2", "allowed": True},
+        ],
+    )
+
+    duplicated = scenario_store.duplicate_vehicle_batch(
+        scenario_id,
+        vehicle["id"],
+        quantity=2,
+        target_depot_id=target_depot["id"],
+    )
+
+    assert [item["modelName"] for item in duplicated] == [
+        "Cross Depot Bus (copy)",
+        "Cross Depot Bus (copy 2)",
+    ]
+    assert all(item["depotId"] == target_depot["id"] for item in duplicated)
+
+    permissions = scenario_store.get_vehicle_route_permissions(scenario_id)
+    duplicated_ids = {item["id"] for item in duplicated}
+    duplicated_permissions = [
+        permission
+        for permission in permissions
+        if permission["vehicleId"] in duplicated_ids
+    ]
+    assert duplicated_permissions == [
+        {"vehicleId": duplicated[0]["id"], "routeId": "R1", "allowed": True},
+        {"vehicleId": duplicated[1]["id"], "routeId": "R1", "allowed": True},
+    ]
+
+
 def test_upsert_timetable_rows_from_source_preserves_manual_rows(temp_store_dir: Path):
     meta = scenario_store.create_scenario("Timetable import", "", "thesis_mode")
     scenario_id = meta["id"]
@@ -248,3 +324,46 @@ def test_upsert_stop_timetables_from_source_tracks_meta(temp_store_dir: Path):
         "source": "odpt",
         "quality": {"stopTimetableCount": 1},
     }
+
+
+def test_import_meta_helpers_preserve_progress_and_resource_type(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Import meta", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    timetable_meta = {
+        "source": "odpt",
+        "resourceType": "BusTimetable",
+        "progress": {
+            "cursor": 25,
+            "nextCursor": 50,
+            "totalChunks": 80,
+            "complete": False,
+        },
+        "warnings": ["BusTimetable skipped 1 chunk(s)"],
+        "quality": {"rowCount": 120},
+    }
+    stop_timetable_meta = {
+        "source": "odpt",
+        "resourceType": "BusstopPoleTimetable",
+        "progress": {
+            "cursor": 50,
+            "nextCursor": 80,
+            "totalChunks": 80,
+            "complete": True,
+        },
+        "warnings": [],
+        "quality": {"stopTimetableCount": 12},
+    }
+
+    scenario_store.set_timetable_import_meta(scenario_id, "odpt", timetable_meta)
+    scenario_store.set_stop_timetable_import_meta(
+        scenario_id, "odpt", stop_timetable_meta
+    )
+
+    assert (
+        scenario_store.get_timetable_import_meta(scenario_id, "odpt") == timetable_meta
+    )
+    assert (
+        scenario_store.get_stop_timetable_import_meta(scenario_id, "odpt")
+        == stop_timetable_meta
+    )

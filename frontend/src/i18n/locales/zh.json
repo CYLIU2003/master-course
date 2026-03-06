@@ -23,6 +23,7 @@
   },
   "sidebar": {
     "depots_vehicles_routes": "车场 / 车辆 / 路线",
+    "vehicle_templates": "车辆模板",
     "timetable": "时刻表",
     "deadhead_rules": "空驶规则",
     "turnaround_rules": "折返规则",

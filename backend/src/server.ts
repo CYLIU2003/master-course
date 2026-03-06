@@ -306,6 +306,105 @@ async function fetchSingleProxyDataset(
   };
 }
 
+async function fetchChunkedProxyDataset({
+  resource,
+  queries,
+  cursor,
+  batchSize,
+  delayMs,
+  options,
+  fallbackQuery,
+  cacheHitMode,
+}: {
+  resource: string;
+  queries: string[];
+  cursor: number;
+  batchSize: number;
+  delayMs: number;
+  options: NormalizedRequestOptions;
+  fallbackQuery?: string;
+  cacheHitMode: "all" | "any";
+}): Promise<{ data: unknown[]; meta: ProxyAggregateMeta }> {
+  const { selected, progress } = sliceQueries(queries, cursor, batchSize);
+  const results = [];
+  let failedChunkCount = 0;
+
+  for (const query of selected) {
+    try {
+      const result = await odptProxy({
+        resource,
+        query,
+        dump: false,
+        token: token!,
+        forceRefresh: options.forceRefresh,
+        ttlSec: options.ttlSec,
+      });
+      results.push(result);
+    } catch {
+      failedChunkCount += 1;
+    }
+    await sleep(delayMs);
+  }
+
+  if (results.length === 0 && selected.length > 0 && fallbackQuery) {
+    const fallback = await fetchSingleProxyDataset(resource, fallbackQuery, {
+      ...options,
+      dump: false,
+    });
+    return {
+      data: fallback.data,
+      meta: {
+        ...fallback.meta,
+        fallbackUsed: true,
+        failedChunkCount,
+        progress,
+      },
+    };
+  }
+
+  const seenIds = new Set<string>();
+  const merged: unknown[] = [];
+  let truncatedChunkCount = 0;
+
+  for (const result of results) {
+    if (result.meta.maybeTruncated) {
+      truncatedChunkCount += 1;
+    }
+    for (const record of result.data) {
+      const recordId = getRawRecordId(record);
+      if (!recordId) {
+        merged.push(record);
+        continue;
+      }
+      if (seenIds.has(recordId)) {
+        continue;
+      }
+      seenIds.add(recordId);
+      merged.push(record);
+    }
+  }
+
+  const cacheHit =
+    results.length === 0
+      ? false
+      : cacheHitMode === "all"
+        ? results.every((result) => result.meta.cacheHit)
+        : results.some((result) => result.meta.cacheHit);
+
+  return {
+    data: merged,
+    meta: {
+      cacheHit,
+      maybeTruncated: truncatedChunkCount > 0,
+      chunkCount: selected.length,
+      truncatedChunkCount,
+      fallbackUsed: false,
+      failedChunkCount,
+      progress,
+    },
+  };
+}
+
 async function fetchTimetablesDataset(
   baseQuery: string,
   patternsRaw: unknown[],
@@ -324,81 +423,16 @@ async function fetchTimetablesDataset(
   }
 
   const queries = buildTimetableQueries(baseQuery, patternsRaw);
-  const { selected, progress } = sliceQueries(
+  return fetchChunkedProxyDataset({
+    resource: "odpt:BusTimetable",
     queries,
-    options.busTimetableCursor,
-    options.busTimetableBatchSize,
-  );
-  const results = [];
-  let failedChunkCount = 0;
-  for (const query of selected) {
-    try {
-      const result = await odptProxy({
-        resource: "odpt:BusTimetable",
-        query,
-        dump: false,
-        token: token!,
-        forceRefresh: options.forceRefresh,
-        ttlSec: options.ttlSec,
-      });
-      results.push(result);
-    } catch {
-      failedChunkCount += 1;
-    }
-    await sleep(150);
-  }
-
-  if (results.length === 0 && selected.length > 0) {
-    const fallback = await fetchSingleProxyDataset(
-      "odpt:BusTimetable",
-      baseQuery,
-      { ...options, dump: false },
-    );
-    return {
-      data: fallback.data,
-      meta: {
-        ...fallback.meta,
-        fallbackUsed: true,
-        failedChunkCount,
-        progress,
-      },
-    };
-  }
-
-  const seenTripIds = new Set<string>();
-  const merged: unknown[] = [];
-  let truncatedChunkCount = 0;
-
-  for (const result of results) {
-    if (result.meta.maybeTruncated) {
-      truncatedChunkCount += 1;
-    }
-    for (const record of result.data) {
-      const recordId = getRawRecordId(record);
-      if (!recordId) {
-        merged.push(record);
-        continue;
-      }
-      if (seenTripIds.has(recordId)) {
-        continue;
-      }
-      seenTripIds.add(recordId);
-      merged.push(record);
-    }
-  }
-
-  return {
-    data: merged,
-    meta: {
-      cacheHit: results.every((result) => result.meta.cacheHit),
-      maybeTruncated: truncatedChunkCount > 0,
-      chunkCount: selected.length,
-      truncatedChunkCount,
-      fallbackUsed: false,
-      failedChunkCount,
-      progress,
-    },
-  };
+    cursor: options.busTimetableCursor,
+    batchSize: options.busTimetableBatchSize,
+    delayMs: 150,
+    options,
+    fallbackQuery: baseQuery,
+    cacheHitMode: "all",
+  });
 }
 
 async function fetchStopTimetablesDataset(
@@ -419,65 +453,29 @@ async function fetchStopTimetablesDataset(
   }
 
   const queries = buildStopTimetableQueries(baseQuery, stopsRaw);
-  const { selected, progress } = sliceQueries(
-    queries,
-    options.stopTimetableCursor,
-    options.stopTimetableBatchSize,
-  );
-  const results = [];
-  let failedChunkCount = 0;
   try {
-    for (const query of selected) {
-      try {
-        const result = await odptProxy({
-          resource: "odpt:BusstopPoleTimetable",
-          query,
-          dump: false,
-          token: token!,
-          forceRefresh: options.forceRefresh,
-          ttlSec: options.ttlSec,
-        });
-        results.push(result);
-      } catch {
-        failedChunkCount += 1;
-      }
-      await sleep(100);
-    }
-
-    const seenIds = new Set<string>();
-    const merged: unknown[] = [];
-    let truncatedChunkCount = 0;
-    for (const result of results) {
-      if (result.meta.maybeTruncated) {
-        truncatedChunkCount += 1;
-      }
-      for (const record of result.data) {
-        const recordId = getRawRecordId(record);
-        if (!recordId) {
-          merged.push(record);
-          continue;
-        }
-        if (seenIds.has(recordId)) {
-          continue;
-        }
-        seenIds.add(recordId);
-        merged.push(record);
-      }
-    }
-
+    const result = await fetchChunkedProxyDataset({
+      resource: "odpt:BusstopPoleTimetable",
+      queries,
+      cursor: options.stopTimetableCursor,
+      batchSize: options.stopTimetableBatchSize,
+      delayMs: 100,
+      options,
+      cacheHitMode: "any",
+    });
     return {
-      data: merged,
+      data: result.data,
       meta: {
-        cacheHit: results.length > 0 && results.every((result) => result.meta.cacheHit),
-        maybeTruncated: truncatedChunkCount > 0,
-        chunkCount: selected.length,
-        truncatedChunkCount,
+        ...result.meta,
         fallbackUsed: true,
-        failedChunkCount,
-        progress,
       },
     };
   } catch {
+    const { selected, progress } = sliceQueries(
+      queries,
+      options.stopTimetableCursor,
+      options.stopTimetableBatchSize,
+    );
     return {
       data: [],
       meta: {

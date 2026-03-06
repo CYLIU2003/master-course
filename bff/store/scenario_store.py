@@ -358,8 +358,28 @@ def create_vehicle_batch(
     return created
 
 
+def _allowed_route_ids_for_depot(
+    doc: Dict[str, Any], depot_id: str
+) -> Optional[set[str]]:
+    matching_permissions = [
+        permission
+        for permission in doc.get("depot_route_permissions", [])
+        if permission.get("depotId") == depot_id
+    ]
+    if not matching_permissions:
+        return None
+    return {
+        str(permission.get("routeId"))
+        for permission in matching_permissions
+        if permission.get("allowed") is True
+    }
+
+
 def duplicate_vehicle_batch(
-    scenario_id: str, vehicle_id: str, quantity: int
+    scenario_id: str,
+    vehicle_id: str,
+    quantity: int,
+    target_depot_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     if quantity < 1:
         raise ValueError("quantity must be >= 1")
@@ -368,6 +388,7 @@ def duplicate_vehicle_batch(
     source = next((v for v in doc["vehicles"] if v.get("id") == vehicle_id), None)
     if source is None:
         raise KeyError(vehicle_id)
+    effective_target_depot_id = target_depot_id or source.get("depotId")
 
     existing_names = {
         (item.get("modelName") or "").strip()
@@ -380,16 +401,26 @@ def duplicate_vehicle_batch(
         for perm in doc.get("vehicle_route_permissions", [])
         if perm.get("vehicleId") == vehicle_id
     ]
+    allowed_route_ids = (
+        _allowed_route_ids_for_depot(doc, str(effective_target_depot_id))
+        if effective_target_depot_id
+        else set()
+    )
     created_items: List[Dict[str, Any]] = []
 
     for _ in range(quantity):
         created = {k: v for k, v in source.items() if k != "id"}
         created["id"] = _new_id()
+        if effective_target_depot_id:
+            created["depotId"] = effective_target_depot_id
         created["modelName"] = _next_vehicle_copy_name(existing_names, base_name)
         doc["vehicles"].append(created)
         created_items.append(created)
 
         for perm in source_permissions:
+            route_id = perm.get("routeId")
+            if allowed_route_ids is not None and route_id not in allowed_route_ids:
+                continue
             doc["vehicle_route_permissions"].append(
                 {
                     **perm,
@@ -423,6 +454,20 @@ def delete_vehicle(scenario_id: str, vehicle_id: str) -> None:
 
 def duplicate_vehicle(scenario_id: str, vehicle_id: str) -> Dict[str, Any]:
     return duplicate_vehicle_batch(scenario_id, vehicle_id, quantity=1)[0]
+
+
+def duplicate_vehicle_to_depot(
+    scenario_id: str,
+    vehicle_id: str,
+    *,
+    target_depot_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return duplicate_vehicle_batch(
+        scenario_id,
+        vehicle_id,
+        quantity=1,
+        target_depot_id=target_depot_id,
+    )[0]
 
 
 def list_vehicle_templates(scenario_id: str) -> List[Dict[str, Any]]:

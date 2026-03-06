@@ -170,7 +170,13 @@ export function useDeleteVehicle(scenarioId: string) {
 export function useDuplicateVehicle(scenarioId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vehicleId: string) => vehicleApi.duplicate(scenarioId, vehicleId),
+    mutationFn: ({
+      vehicleId,
+      targetDepotId,
+    }: {
+      vehicleId: string;
+      targetDepotId?: string;
+    }) => vehicleApi.duplicate(scenarioId, vehicleId, { targetDepotId }),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) }),
   });
