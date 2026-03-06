@@ -85,6 +85,25 @@ export function VehicleTemplatesPage() {
   const [form, setForm] = useState<TemplateFormState>(EMPTY_FORM);
   const [targetDepotId, setTargetDepotId] = useState("");
   const [quantity, setQuantity] = useState("1");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "BEV" | "ICE">("all");
+
+  const filteredTemplates = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return templates.filter((template) => {
+      const matchesType = typeFilter === "all" || template.type === typeFilter;
+      if (!matchesType) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return [template.name, template.modelName]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [searchQuery, templates, typeFilter]);
 
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedTemplateId) ?? null,
@@ -222,8 +241,25 @@ export function VehicleTemplatesPage() {
               {t("vehicles.templates_section", "保存済みテンプレート")}
             </p>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
-              {templates.length}
+              {filteredTemplates.length} / {templates.length}
             </span>
+          </div>
+          <div className="grid gap-2 border-b border-border px-4 py-3 sm:grid-cols-[minmax(0,1fr)_110px]">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("vehicles.template_search_placeholder", "テンプレート名・モデル名で検索")}
+              className="field-input"
+            />
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as "all" | "BEV" | "ICE")}
+              className="field-input"
+            >
+              <option value="all">{t("vehicles.filter_all_types", "全タイプ")}</option>
+              <option value="BEV">BEV</option>
+              <option value="ICE">ICE</option>
+            </select>
           </div>
           {templates.length === 0 ? (
             <div className="p-4">
@@ -235,9 +271,19 @@ export function VehicleTemplatesPage() {
                 )}
               />
             </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="p-4">
+              <EmptyState
+                title={t("vehicles.templates_filter_empty_title", "条件に一致するテンプレートがありません")}
+                description={t(
+                  "vehicles.templates_filter_empty_description",
+                  "検索条件または type filter を変更してください。",
+                )}
+              />
+            </div>
           ) : (
             <div className="divide-y divide-border">
-              {templates.map((template) => {
+              {filteredTemplates.map((template) => {
                 const active = template.id === selectedTemplateId;
                 return (
                   <button

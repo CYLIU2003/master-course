@@ -3,7 +3,7 @@
 // Handles both BEV (ev_bus) and ICE (engine_bus) forms via
 // discriminated sections.
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { EditorDrawer } from "@/features/common/EditorDrawer";
@@ -13,11 +13,14 @@ import {
   useVehicle,
   useCreateVehicle,
   useCreateVehicleBatch,
+  useDepotRoutePermissions,
   useDepots,
   useUpdateVehicle,
   useDeleteVehicle,
   useDuplicateVehicleBatch,
+  useRoutes,
   useVehicleTemplates,
+  useVehicleRoutePermissions,
 } from "@/hooks";
 import type { Vehicle, VehicleTemplate } from "@/types";
 import type {
@@ -130,6 +133,9 @@ export function VehicleEditorDrawer({
 
   const { data: vehicle } = useVehicle(scenarioId, vehicleId ?? "");
   const { data: depotsData } = useDepots(scenarioId);
+  const { data: routesData } = useRoutes(scenarioId);
+  const { data: depotRoutePermissionsData } = useDepotRoutePermissions(scenarioId);
+  const { data: vehicleRoutePermissionsData } = useVehicleRoutePermissions(scenarioId);
   const { data: templatesData } = useVehicleTemplates(scenarioId);
   const createVehicle = useCreateVehicle(scenarioId);
   const createVehicleBatch = useCreateVehicleBatch(scenarioId);
@@ -148,6 +154,9 @@ export function VehicleEditorDrawer({
 
   const templates = templatesData?.items ?? [];
   const depots = depotsData?.items ?? [];
+  const routes = routesData?.items ?? [];
+  const depotRoutePermissions = depotRoutePermissionsData?.items ?? [];
+  const vehicleRoutePermissions = vehicleRoutePermissionsData?.items ?? [];
 
   const apiType = resolveApiType(vehicleType, vehicle ?? undefined);
   const isEv = apiType === "BEV";
@@ -155,6 +164,46 @@ export function VehicleEditorDrawer({
   const initialTemplate = templates.find((item) => item.id === templateId) ?? null;
   const selectedTemplate =
     applicableTemplates.find((item) => item.id === selectedTemplateId) ?? null;
+  const sourceVehicleRouteIds = useMemo(
+    () =>
+      vehicleId
+        ? vehicleRoutePermissions
+            .filter((item) => item.vehicleId === vehicleId && item.allowed)
+            .map((item) => item.routeId)
+        : [],
+    [vehicleId, vehicleRoutePermissions],
+  );
+  const targetDepotPermissions = useMemo(
+    () =>
+      depotRoutePermissions.filter((item) => item.depotId === duplicateTargetDepotId),
+    [depotRoutePermissions, duplicateTargetDepotId],
+  );
+  const targetDepotHasRouteRules = targetDepotPermissions.length > 0;
+  const targetDepotAllowedRouteIds = useMemo(
+    () => new Set(targetDepotPermissions.filter((item) => item.allowed).map((item) => item.routeId)),
+    [targetDepotPermissions],
+  );
+  const routeNameById = useMemo(
+    () =>
+      new Map(
+        routes.map((route) => [route.id, route.name || route.id] as const),
+      ),
+    [routes],
+  );
+  const duplicateRoutePreview = useMemo(() => {
+    const kept = sourceVehicleRouteIds.filter(
+      (routeId) => !targetDepotHasRouteRules || targetDepotAllowedRouteIds.has(routeId),
+    );
+    const dropped = targetDepotHasRouteRules
+      ? sourceVehicleRouteIds.filter((routeId) => !targetDepotAllowedRouteIds.has(routeId))
+      : [];
+    return {
+      kept,
+      dropped,
+      keptNames: kept.map((routeId) => routeNameById.get(routeId) ?? routeId),
+      droppedNames: dropped.map((routeId) => routeNameById.get(routeId) ?? routeId),
+    };
+  }, [routeNameById, sourceVehicleRouteIds, targetDepotAllowedRouteIds, targetDepotHasRouteRules]);
 
   useEffect(() => {
     setSelectedTemplateId(templateId ?? "");
@@ -453,6 +502,51 @@ export function VehicleEditorDrawer({
                     ? t("vehicles.duplicate_many_running", "複製中...")
                     : t("vehicles.duplicate_many_button", "複数台複製")}
                 </button>
+              </div>
+              <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                <p className="font-medium text-slate-700">
+                  {t("vehicles.duplicate_route_preview", "路線権限プレビュー")}
+                </p>
+                {!sourceVehicleRouteIds.length ? (
+                  <p className="mt-1 text-slate-500">
+                    {t(
+                      "vehicles.duplicate_route_preview_empty",
+                      "元車両に個別の route 権限がないため、追加の引き継ぎはありません。",
+                    )}
+                  </p>
+                ) : !targetDepotHasRouteRules ? (
+                  <p className="mt-1 text-slate-500">
+                    {t(
+                      "vehicles.duplicate_route_preview_unrestricted",
+                      "複製先営業所に route 制限が未設定のため、現在の route 権限をそのまま引き継ぎます。",
+                    )}
+                  </p>
+                ) : (
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <div className="rounded border border-emerald-100 bg-emerald-50/60 px-2 py-2">
+                      <p className="font-medium text-emerald-800">
+                        {t("vehicles.duplicate_route_preview_kept", "引き継ぐ route")}
+                        {" "}
+                        ({duplicateRoutePreview.kept.length})
+                      </p>
+                      <p className="mt-1 text-emerald-700">
+                        {duplicateRoutePreview.keptNames.join(", ") ||
+                          t("vehicles.duplicate_route_preview_none", "なし")}
+                      </p>
+                    </div>
+                    <div className="rounded border border-amber-100 bg-amber-50/60 px-2 py-2">
+                      <p className="font-medium text-amber-800">
+                        {t("vehicles.duplicate_route_preview_dropped", "落ちる route")}
+                        {" "}
+                        ({duplicateRoutePreview.dropped.length})
+                      </p>
+                      <p className="mt-1 text-amber-700">
+                        {duplicateRoutePreview.droppedNames.join(", ") ||
+                          t("vehicles.duplicate_route_preview_none", "なし")}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
