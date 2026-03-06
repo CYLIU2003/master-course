@@ -32,6 +32,14 @@ type ImportRunState = {
   rounds: number;
 };
 
+type ImportHistoryEntry = {
+  id: string;
+  resource: "BusTimetable" | "BusstopPoleTimetable";
+  generatedAt?: string;
+  summary: string;
+  warnings: string[];
+};
+
 // ── Empty new row factory ──────────────────────────────────────
 
 function emptyRow(serviceId: string): TimetableRow {
@@ -92,6 +100,7 @@ export function TimetablePage() {
     progress: null,
     rounds: 0,
   });
+  const [importHistory, setImportHistory] = useState<ImportHistoryEntry[]>([]);
 
   function describeProgress(progress?: ImportProgress | null) {
     if (!progress) {
@@ -105,6 +114,16 @@ export function TimetablePage() {
         total: progress.totalChunks,
       },
     );
+  }
+
+  function appendImportHistory(entry: Omit<ImportHistoryEntry, "id">) {
+    setImportHistory((prev) => [
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ...entry,
+      },
+      ...prev,
+    ].slice(0, 8));
   }
 
   // ── Import CSV ────────────────────────────────────────────
@@ -198,6 +217,19 @@ export function TimetablePage() {
       if (lastResult.meta.warnings.length > 0) {
         details.push("", lastResult.meta.warnings.join("\n"));
       }
+      appendImportHistory({
+        resource: "BusTimetable",
+        generatedAt: lastResult.meta.generatedAt,
+        summary: t(
+          "timetable.import_history_bus_summary",
+          "{{count}} 行 / 対象路線 {{routeCount}} 件",
+          {
+            count: lastResult.total,
+            routeCount: lastResult.meta.quality.routeCount,
+          },
+        ),
+        warnings: lastResult.meta.warnings,
+      });
       setBusImportState({
         active: false,
         progress: lastResult.meta.progress ?? null,
@@ -265,6 +297,19 @@ export function TimetablePage() {
       if (lastResult.meta.warnings.length > 0) {
         details.push("", lastResult.meta.warnings.join("\n"));
       }
+      appendImportHistory({
+        resource: "BusstopPoleTimetable",
+        generatedAt: lastResult.meta.generatedAt,
+        summary: t(
+          "timetable.import_history_stop_summary",
+          "{{count}} 件 / エントリ {{entryCount}} 件",
+          {
+            count: lastResult.meta.quality.stopTimetableCount,
+            entryCount: lastResult.meta.quality.entryCount,
+          },
+        ),
+        warnings: lastResult.meta.warnings,
+      });
       setStopImportState({
         active: false,
         progress: lastResult.meta.progress ?? null,
@@ -460,6 +505,49 @@ export function TimetablePage() {
                 </p>
               </div>
             )}
+          </div>
+        )}
+        {importHistory.length > 0 && (
+          <div className="mb-3 rounded-lg border border-slate-200 bg-white">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+              <p className="text-xs font-semibold text-slate-700">
+                {t("timetable.import_history_title", "Import 履歴 / warning")}
+              </p>
+              <span className="text-[11px] text-slate-400">{importHistory.length}</span>
+            </div>
+            <div className="divide-y divide-border">
+              {importHistory.map((entry) => (
+                <div key={entry.id} className="px-3 py-2 text-xs text-slate-700">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-700">
+                      {entry.resource}
+                    </span>
+                    <span>{entry.summary}</span>
+                    <span className="text-slate-400">{entry.generatedAt ?? "-"}</span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 ${
+                        entry.warnings.length > 0
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {entry.warnings.length > 0
+                        ? t("timetable.import_odpt_warning_badge", "warning {{count}}", {
+                            count: entry.warnings.length,
+                          })
+                        : t("timetable.import_history_no_warning", "warning 0")}
+                    </span>
+                  </div>
+                  {entry.warnings.length > 0 && (
+                    <div className="mt-2 space-y-1 text-amber-700">
+                      {entry.warnings.map((warning, index) => (
+                        <p key={`${entry.id}-${index}`}>{warning}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
         {/* Service-ID filter tabs */}
