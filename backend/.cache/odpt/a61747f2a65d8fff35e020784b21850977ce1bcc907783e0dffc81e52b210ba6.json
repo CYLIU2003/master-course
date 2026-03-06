@@ -1,0 +1,1957 @@
+{
+  "createdAt": "2026-03-06T08:59:09.670Z",
+  "expiresAt": "2026-03-06T09:59:09.670Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Ikegamibashi.00240519.b\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Ikegamibashi.00240519.b&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 6,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Ikegamibashi.00240519.b\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877A58",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T14:54:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "反０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜西馬込駅前経由＞ 荏原営業所ゆき\n\t\t\t\t\t\t\t\t\t\t西馬込駅前経由 荏原営業所ゆき\n\t\t\t\t\t\t\t\t\t、反０１・反０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜西馬込駅前・荏原営業所経由＞ 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t\t西馬込駅前・荏原営業所経由 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t:池上橋:平日",
+        "odpt:note": "全便ノンステップ（スロープ付）バスで運行いたします。道路混雑等の為、予定時刻通りに運行できないことがありますので、ご了承下さい。お問合せ先:東急バス 荏原営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Han01.Han02.Ikegamibashi.00240519.b.0004600223.15.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Han01",
+          "odpt.Busroute:TokyuBus.Han02"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamibashi.00240519.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Gotandaeki",
+          "odpt.BusDirection:TokyuBus.Ebaraeigyousho"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han02.0004600851",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han02.0004600851",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han02.0004600851",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "23:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "23:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877A5A",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T14:54:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "反０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜西馬込駅前経由＞ 荏原営業所ゆき\n\t\t\t\t\t\t\t\t\t\t西馬込駅前経由 荏原営業所ゆき\n\t\t\t\t\t\t\t\t\t、反０１・反０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜西馬込駅前・荏原営業所経由＞ 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t\t西馬込駅前・荏原営業所経由 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t:池上橋:土曜",
+        "odpt:note": "全便ノンステップ（スロープ付）バスで運行いたします。道路混雑等の為、予定時刻通りに運行できないことがありますので、ご了承下さい。お問合せ先:東急バス 荏原営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Han01.Han02.Ikegamibashi.00240519.b.0004600223.15.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Han01",
+          "odpt.Busroute:TokyuBus.Han02"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamibashi.00240519.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Gotandaeki",
+          "odpt.BusDirection:TokyuBus.Ebaraeigyousho"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han02.0004600851",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "23:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877A5B",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T14:54:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "反０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜西馬込駅前経由＞ 荏原営業所ゆき\n\t\t\t\t\t\t\t\t\t\t西馬込駅前経由 荏原営業所ゆき\n\t\t\t\t\t\t\t\t\t、反０１・反０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜西馬込駅前・荏原営業所経由＞ 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t\t西馬込駅前・荏原営業所経由 五反田駅ゆき\n\t\t\t\t\t\t\t\t\t:池上橋:日曜",
+        "odpt:note": "全便ノンステップ（スロープ付）バスで運行いたします。道路混雑等の為、予定時刻通りに運行できないことがありますので、ご了承下さい。お問合せ先:東急バス 荏原営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Han01.Han02.Ikegamibashi.00240519.b.0004600223.15.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Han01",
+          "odpt.Busroute:TokyuBus.Han02"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamibashi.00240519.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Gotandaeki",
+          "odpt.BusDirection:TokyuBus.Ebaraeigyousho"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han02.0004600851",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han02.0004600851",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han02.0004600851",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004600223",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Gotandaeki.00240507."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          },
+          {
+            "odpt:note": "営.荏原営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "23:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Han01.0004602221",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ebaraeigyousho.00240512."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877A5C",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T14:54:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "森０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜西馬込駅前経由＞ 大森操車所ゆき\n\t\t\t\t\t\t\t\t\t\t西馬込駅前経由 大森操車所ゆき\n\t\t\t\t\t\t\t\t\t:池上橋:平日",
+        "odpt:note": "お問合せ先:東急バス 荏原営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Mori01.Ikegamibashi.00240519.b.0004602612.2.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Mori01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamibashi.00240519.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Oomorisoushajo"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori01.0004602612",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori01.0004602612",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori01.0004602612",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori01.0004602612",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877A5D",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T14:54:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "森０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜西馬込駅前経由＞ 大森操車所ゆき\n\t\t\t\t\t\t\t\t\t\t西馬込駅前経由 大森操車所ゆき\n\t\t\t\t\t\t\t\t\t:池上橋:土曜",
+        "odpt:note": "お問合せ先:東急バス 荏原営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Mori01.Ikegamibashi.00240519.b.0004602612.2.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Mori01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamibashi.00240519.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Oomorisoushajo"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003877A5E",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T14:54:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "森０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜西馬込駅前経由＞ 大森操車所ゆき\n\t\t\t\t\t\t\t\t\t\t西馬込駅前経由 大森操車所ゆき\n\t\t\t\t\t\t\t\t\t:池上橋:日曜",
+        "odpt:note": "お問合せ先:東急バス 荏原営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Mori01.Ikegamibashi.00240519.b.0004602612.2.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Mori01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamibashi.00240519.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Oomorisoushajo"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      }
+    ]
+  }
+}

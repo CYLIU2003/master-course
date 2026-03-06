@@ -1,0 +1,719 @@
+{
+  "createdAt": "2026-03-06T08:56:15.556Z",
+  "expiresAt": "2026-03-06T09:56:15.556Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Jissoujimae.00240251.b\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Jissoujimae.00240251.b&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Jissoujimae.00240251.b\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003C06DC4",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:09:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "園０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 千歳船橋ゆき\n\t\t\t\t\t\t\t\t\t\t 千歳船橋ゆき\n\t\t\t\t\t\t\t\t\t:実相寺前:平日",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Sono01.Jissoujimae.00240251.b.0004602021.9.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Sono01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jissoujimae.00240251.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Chitosefunabashi"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004602021",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004602021",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003C06DC5",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:09:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "園０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 千歳船橋ゆき\n\t\t\t\t\t\t\t\t\t\t 千歳船橋ゆき\n\t\t\t\t\t\t\t\t\t:実相寺前:土曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Sono01.Jissoujimae.00240251.b.0004602021.9.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Sono01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jissoujimae.00240251.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Chitosefunabashi"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004602021",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004602021",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003C06DC6",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:09:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "園０１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 千歳船橋ゆき\n\t\t\t\t\t\t\t\t\t\t 千歳船橋ゆき\n\t\t\t\t\t\t\t\t\t:実相寺前:日曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Sono01.Jissoujimae.00240251.b.0004602021.9.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Sono01"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jissoujimae.00240251.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Chitosefunabashi"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004602021",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004602021",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sono01.0004600400",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Chitosefunabashi.00240321."
+          }
+        ]
+      }
+    ]
+  }
+}

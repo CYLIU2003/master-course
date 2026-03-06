@@ -92,6 +92,22 @@ export interface Vehicle {
   enabled: boolean;
 }
 
+export interface VehicleTemplate {
+  id: string;
+  name: string;
+  type: VehiclePowerType;
+  modelName: string;
+  capacityPassengers: number;
+  batteryKwh: number | null;
+  fuelTankL: number | null;
+  energyConsumption: number;
+  chargePowerKw: number | null;
+  minSoc: number | null;
+  maxSoc: number | null;
+  acquisitionCost: number;
+  enabled: boolean;
+}
+
 // ── Master Data: Route ────────────────────────────────────────
 
 export interface Route {
@@ -104,6 +120,14 @@ export interface Route {
   /** Display color for charts/maps */
   color: string;
   enabled: boolean;
+  source?: string;
+  odptPatternId?: string;
+  odptBusrouteId?: string;
+  distanceCoverageRatio?: number;
+  stopSequence?: string[];
+  tripCount?: number;
+  durationSource?: string;
+  distanceSource?: string;
 }
 
 // ── Master Data: Trip (belongs to Route) ──────────────────────
@@ -123,7 +147,9 @@ export interface Trip {
 }
 
 export interface TimetableRow {
+  trip_id?: string;
   route_id: string;
+  service_id: string;  // e.g. "WEEKDAY" | "SAT" | "SUN_HOL"
   direction: "outbound" | "inbound";
   trip_index: number;
   origin: string;
@@ -132,6 +158,31 @@ export interface TimetableRow {
   arrival: HHMMTime;
   distance_km: number;
   allowed_vehicle_types: string[];
+  source?: string;
+}
+
+// ── Service Calendar ──────────────────────────────────────────
+
+/** One service_id definition (analogous to GTFS calendar.txt) */
+export interface ServiceCalendar {
+  service_id: string;
+  name: string;
+  mon: 0 | 1;
+  tue: 0 | 1;
+  wed: 0 | 1;
+  thu: 0 | 1;
+  fri: 0 | 1;
+  sat: 0 | 1;
+  sun: 0 | 1;
+  start_date: string;  // YYYY-MM-DD
+  end_date: string;    // YYYY-MM-DD
+}
+
+/** Single date exception override (analogous to GTFS calendar_dates.txt) */
+export interface CalendarDate {
+  date: string;        // YYYY-MM-DD
+  service_id: string;
+  exception_type: "ADD" | "REMOVE";
 }
 
 // ── Permission Tables ─────────────────────────────────────────

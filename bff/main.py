@@ -18,7 +18,15 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from bff.routers import graph, jobs, master_data, optimization, scenarios, simulation
+from bff.routers import (
+    graph,
+    jobs,
+    master_data,
+    optimization,
+    scenarios,
+    simulation,
+    timetable,
+)
 
 app = FastAPI(
     title="EV Bus Scheduling BFF",
@@ -47,6 +55,7 @@ app.add_middleware(
 PREFIX = "/api"
 
 app.include_router(scenarios.router, prefix=PREFIX)
+app.include_router(timetable.router, prefix=PREFIX)
 app.include_router(master_data.router, prefix=PREFIX)
 app.include_router(graph.router, prefix=PREFIX)
 app.include_router(simulation.router, prefix=PREFIX)

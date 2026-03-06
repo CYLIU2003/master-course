@@ -1,0 +1,233 @@
+{
+  "createdAt": "2026-03-06T08:56:11.736Z",
+  "expiresAt": "2026-03-06T09:56:11.736Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Kamoshida.00241079.a\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Kamoshida.00241079.a&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Kamoshida.00241079.a\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387833A",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:42:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 中山駅北口ゆき\n\t\t\t\t\t\t\t\t\t\t 中山駅北口ゆき\n\t\t\t\t\t\t\t\t\t、市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 寺家町【循環】ゆき\n\t\t\t\t\t\t\t\t\t\t 寺家町【循環】ゆき\n\t\t\t\t\t\t\t\t\t、市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 寺家町ゆき\n\t\t\t\t\t\t\t\t\t\t 寺家町ゆき\n\t\t\t\t\t\t\t\t\t、市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜鴨志田団地経由＞ 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t\t鴨志田団地経由 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t:鴨志田:平日",
+        "odpt:note": "道路混雑等のため予定時刻通りに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 虹が丘営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Shi43.Kamoshida.00241079.a.0004602083.1.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Shi43"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kamoshida.00241079.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Nakayamaekikitaguchi",
+          "odpt.BusDirection:TokyuBus.Ichigaoeki",
+          "odpt.BusDirection:TokyuBus.Narakitadanchiorikaeshijou",
+          "odpt.BusDirection:TokyuBus.Jikechou"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:note": "▲.寺家町循環中山駅北口行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602083",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Nakayamaekikitaguchi.00241088."
+          },
+          {
+            "odpt:note": "ナ.奈良北団地折返場行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004603145",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:note": "ナ.奈良北団地折返場行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004603145",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:note": "ナ.奈良北団地折返場行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004603145",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:note": "ナ.奈良北団地折返場行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004603145",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:note": "ナ.奈良北団地折返場行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004603145",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Narakitadanchiorikaeshijou.00241185."
+          },
+          {
+            "odpt:note": "寺.寺家町止まり",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004603350",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Jikechou.00241153."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387833B",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:42:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 中山駅北口ゆき\n\t\t\t\t\t\t\t\t\t\t 中山駅北口ゆき\n\t\t\t\t\t\t\t\t\t、市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 寺家町【循環】ゆき\n\t\t\t\t\t\t\t\t\t\t 寺家町【循環】ゆき\n\t\t\t\t\t\t\t\t\t、市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 寺家町ゆき\n\t\t\t\t\t\t\t\t\t\t 寺家町ゆき\n\t\t\t\t\t\t\t\t\t、市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜鴨志田団地経由＞ 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t\t鴨志田団地経由 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t:鴨志田:土曜",
+        "odpt:note": "道路混雑等のため予定時刻通りに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 虹が丘営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Shi43.Kamoshida.00241079.a.0004602083.1.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Shi43"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kamoshida.00241079.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Nakayamaekikitaguchi",
+          "odpt.BusDirection:TokyuBus.Ichigaoeki",
+          "odpt.BusDirection:TokyuBus.Narakitadanchiorikaeshijou",
+          "odpt.BusDirection:TokyuBus.Jikechou"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:note": "▲.寺家町循環中山駅北口行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602083",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Nakayamaekikitaguchi.00241088."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387833C",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:42:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 中山駅北口ゆき\n\t\t\t\t\t\t\t\t\t\t 中山駅北口ゆき\n\t\t\t\t\t\t\t\t\t、市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 寺家町【循環】ゆき\n\t\t\t\t\t\t\t\t\t\t 寺家町【循環】ゆき\n\t\t\t\t\t\t\t\t\t、市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 寺家町ゆき\n\t\t\t\t\t\t\t\t\t\t 寺家町ゆき\n\t\t\t\t\t\t\t\t\t、市４３.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜鴨志田団地経由＞ 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t\t鴨志田団地経由 奈良北団地折返場ゆき\n\t\t\t\t\t\t\t\t\t:鴨志田:日曜",
+        "odpt:note": "道路混雑等のため予定時刻通りに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 虹が丘営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Shi43.Kamoshida.00241079.a.0004602083.1.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Shi43"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kamoshida.00241079.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Nakayamaekikitaguchi",
+          "odpt.BusDirection:TokyuBus.Ichigaoeki",
+          "odpt.BusDirection:TokyuBus.Narakitadanchiorikaeshijou",
+          "odpt.BusDirection:TokyuBus.Jikechou"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:note": "▲.寺家町循環中山駅北口行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602083",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Nakayamaekikitaguchi.00241088."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          },
+          {
+            "odpt:note": "★.寺家町循環市が尾駅行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shi43.0004602730",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      }
+    ]
+  }
+}

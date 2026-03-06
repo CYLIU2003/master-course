@@ -1,0 +1,292 @@
+{
+  "createdAt": "2026-03-06T08:56:07.310Z",
+  "expiresAt": "2026-03-06T09:56:07.310Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Mizonokuchieki.00240776.1\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Mizonokuchieki.00240776.1&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Mizonokuchieki.00240776.1\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C000000000000010000032053B2",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:35:49+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "直行.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜第三京浜経由＞ 【直行】新横浜駅ゆき\n\t\t\t\t\t\t\t\t\t\t第三京浜経由 【直行】新横浜駅ゆき\n\t\t\t\t\t\t\t\t\t:溝の口駅:平日",
+        "odpt:note": "道路混雑等により時刻通り運行出来ない事がございますので予めご了承の上ご利用願いますお問合せ先:東急バス 新羽営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Chokkou.Mizonokuchieki.00240776.1.0004602387.1.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Chokkou"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Mizonokuchieki.00240776.1",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Shinyokohamaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000032053B3",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:35:49+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "直行.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜第三京浜経由＞ 【直行】新横浜駅ゆき\n\t\t\t\t\t\t\t\t\t\t第三京浜経由 【直行】新横浜駅ゆき\n\t\t\t\t\t\t\t\t\t:溝の口駅:土曜",
+        "odpt:note": "道路混雑等により時刻通り運行出来ない事がございますので予めご了承の上ご利用願いますお問合せ先:東急バス 新羽営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Chokkou.Mizonokuchieki.00240776.1.0004602387.1.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Chokkou"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Mizonokuchieki.00240776.1",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Shinyokohamaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000032053B4",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:35:49+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "直行.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜第三京浜経由＞ 【直行】新横浜駅ゆき\n\t\t\t\t\t\t\t\t\t\t第三京浜経由 【直行】新横浜駅ゆき\n\t\t\t\t\t\t\t\t\t:溝の口駅:日曜",
+        "odpt:note": "道路混雑等により時刻通り運行出来ない事がございますので予めご了承の上ご利用願いますお問合せ先:東急バス 新羽営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Chokkou.Mizonokuchieki.00240776.1.0004602387.1.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Chokkou"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Mizonokuchieki.00240776.1",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Shinyokohamaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004602387",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          }
+        ]
+      }
+    ]
+  }
+}

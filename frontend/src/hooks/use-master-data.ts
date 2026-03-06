@@ -1,12 +1,23 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { depotApi, vehicleApi, routeApi, permissionApi } from "@/api";
+import {
+  depotApi,
+  vehicleApi,
+  vehicleTemplateApi,
+  routeApi,
+  permissionApi,
+} from "@/api";
 import type {
   CreateDepotRequest,
   UpdateDepotRequest,
   CreateVehicleRequest,
+  CreateVehicleBatchRequest,
+  DuplicateVehicleBatchRequest,
   UpdateVehicleRequest,
+  CreateVehicleTemplateRequest,
+  UpdateVehicleTemplateRequest,
   CreateRouteRequest,
   UpdateRouteRequest,
+  ImportOdptRoutesRequest,
   UpdateDepotRoutePermissionsRequest,
   UpdateVehicleRoutePermissionsRequest,
 } from "@/types";
@@ -25,6 +36,9 @@ export const vehicleKeys = {
     ["vehicles", scenarioId, { depotId }] as const,
   detail: (scenarioId: string, vehicleId: string) =>
     ["vehicles", scenarioId, vehicleId] as const,
+  templates: (scenarioId: string) => ["vehicle-templates", scenarioId] as const,
+  templateDetail: (scenarioId: string, templateId: string) =>
+    ["vehicle-templates", scenarioId, templateId] as const,
 };
 
 export const routeKeys = {
@@ -119,6 +133,16 @@ export function useCreateVehicle(scenarioId: string) {
   });
 }
 
+export function useCreateVehicleBatch(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateVehicleBatchRequest) =>
+      vehicleApi.createBatch(scenarioId, data),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) }),
+  });
+}
+
 export function useUpdateVehicle(scenarioId: string, vehicleId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -140,6 +164,80 @@ export function useDeleteVehicle(scenarioId: string) {
       vehicleApi.delete(scenarioId, vehicleId),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) }),
+  });
+}
+
+export function useDuplicateVehicle(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vehicleId: string) => vehicleApi.duplicate(scenarioId, vehicleId),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) }),
+  });
+}
+
+export function useDuplicateVehicleBatch(scenarioId: string, vehicleId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: DuplicateVehicleBatchRequest) =>
+      vehicleApi.duplicateBatch(scenarioId, vehicleId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: vehicleKeys.detail(scenarioId, vehicleId) });
+      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
+    },
+  });
+}
+
+export function useVehicleTemplates(scenarioId: string) {
+  return useQuery({
+    queryKey: vehicleKeys.templates(scenarioId),
+    queryFn: () => vehicleTemplateApi.list(scenarioId),
+    enabled: !!scenarioId,
+  });
+}
+
+export function useVehicleTemplate(scenarioId: string, templateId: string) {
+  return useQuery({
+    queryKey: vehicleKeys.templateDetail(scenarioId, templateId),
+    queryFn: () => vehicleTemplateApi.get(scenarioId, templateId),
+    enabled: !!scenarioId && !!templateId,
+  });
+}
+
+export function useCreateVehicleTemplate(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateVehicleTemplateRequest) =>
+      vehicleTemplateApi.create(scenarioId, data),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: vehicleKeys.templates(scenarioId) }),
+  });
+}
+
+export function useUpdateVehicleTemplate(
+  scenarioId: string,
+  templateId: string,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateVehicleTemplateRequest) =>
+      vehicleTemplateApi.update(scenarioId, templateId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: vehicleKeys.templateDetail(scenarioId, templateId),
+      });
+      qc.invalidateQueries({ queryKey: vehicleKeys.templates(scenarioId) });
+    },
+  });
+}
+
+export function useDeleteVehicleTemplate(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (templateId: string) =>
+      vehicleTemplateApi.delete(scenarioId, templateId),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: vehicleKeys.templates(scenarioId) }),
   });
 }
 
@@ -189,6 +287,16 @@ export function useDeleteRoute(scenarioId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (routeId: string) => routeApi.delete(scenarioId, routeId),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) }),
+  });
+}
+
+export function useImportOdptRoutes(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data?: ImportOdptRoutesRequest) =>
+      routeApi.importOdpt(scenarioId, data),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) }),
   });

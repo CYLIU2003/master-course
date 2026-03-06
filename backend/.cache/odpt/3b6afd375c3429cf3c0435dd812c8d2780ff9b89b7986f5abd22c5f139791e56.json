@@ -1,0 +1,3309 @@
+{
+  "createdAt": "2026-03-06T08:58:14.555Z",
+  "expiresAt": "2026-03-06T09:58:14.555Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Nijigaokadanchi.00241230.b\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Nijigaokadanchi.00241230.b&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Nijigaokadanchi.00241230.b\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039303B8",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T12:28:47+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "あ２７・あ２８.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t あざみ野駅ゆき\n\t\t\t\t\t\t\t\t\t\t あざみ野駅ゆき\n\t\t\t\t\t\t\t\t\t、た２６.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜新石川二丁目経由＞ たまプラーザ駅ゆき\n\t\t\t\t\t\t\t\t\t\t新石川二丁目経由 たまプラーザ駅ゆき\n\t\t\t\t\t\t\t\t\t:虹が丘団地:平日",
+        "odpt:note": "無印：あざみ野駅行き道路混雑等のため予定時刻通りに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 虹が丘営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.A27.A28.Ta26.Nijigaokadanchi.00241230.b.0004603177.2.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.A28",
+          "odpt.Busroute:TokyuBus.A27",
+          "odpt.Busroute:TokyuBus.Ta26"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nijigaokadanchi.00241230.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Azaminoeki",
+          "odpt.BusDirection:TokyuBus.Tamapura-zaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "04:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "05:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "05:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "05:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "05:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "05:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:note": "た.たまプラーザ駅南口行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta26.0004603178",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039303B9",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T12:28:47+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "あ２７・あ２８.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t あざみ野駅ゆき\n\t\t\t\t\t\t\t\t\t\t あざみ野駅ゆき\n\t\t\t\t\t\t\t\t\t、た２６.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜新石川二丁目経由＞ たまプラーザ駅ゆき\n\t\t\t\t\t\t\t\t\t\t新石川二丁目経由 たまプラーザ駅ゆき\n\t\t\t\t\t\t\t\t\t:虹が丘団地:土曜",
+        "odpt:note": "無印：あざみ野駅行き道路混雑等のため予定時刻通りに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 虹が丘営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.A27.A28.Ta26.Nijigaokadanchi.00241230.b.0004603177.2.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.A28",
+          "odpt.Busroute:TokyuBus.A27",
+          "odpt.Busroute:TokyuBus.Ta26"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nijigaokadanchi.00241230.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Azaminoeki",
+          "odpt.BusDirection:TokyuBus.Tamapura-zaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "04:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "05:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "05:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039303BA",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T12:28:47+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "あ２７・あ２８.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t あざみ野駅ゆき\n\t\t\t\t\t\t\t\t\t\t あざみ野駅ゆき\n\t\t\t\t\t\t\t\t\t、た２６.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜新石川二丁目経由＞ たまプラーザ駅ゆき\n\t\t\t\t\t\t\t\t\t\t新石川二丁目経由 たまプラーザ駅ゆき\n\t\t\t\t\t\t\t\t\t:虹が丘団地:日曜",
+        "odpt:note": "無印：あざみ野駅行き道路混雑等のため予定時刻通りに運行できないことがありますので、ご了承願います。お問合せ先:東急バス 虹が丘営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.A27.A28.Ta26.Nijigaokadanchi.00241230.b.0004603177.2.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.A28",
+          "odpt.Busroute:TokyuBus.A27",
+          "odpt.Busroute:TokyuBus.Ta26"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nijigaokadanchi.00241230.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Azaminoeki",
+          "odpt.BusDirection:TokyuBus.Tamapura-zaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "04:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "05:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "05:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A28.0004602339",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A27.0004603177",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221."
+          }
+        ]
+      }
+    ]
+  }
+}

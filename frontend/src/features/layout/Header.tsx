@@ -35,6 +35,12 @@ export function Header() {
       <div className="flex items-center gap-3">
         <LanguageSwitcher />
         <Link
+          to="/odpt-explorer"
+          className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+        >
+          {t("nav.odpt_explorer")}
+        </Link>
+        <Link
           to="/compare"
           className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
         >

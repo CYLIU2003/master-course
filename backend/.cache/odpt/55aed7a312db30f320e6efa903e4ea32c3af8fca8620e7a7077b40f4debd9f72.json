@@ -1,0 +1,2519 @@
+{
+  "createdAt": "2026-03-06T08:56:13.473Z",
+  "expiresAt": "2026-03-06T09:56:13.473Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Koudannishiguchi.00240886.a\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Koudannishiguchi.00240886.a&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Koudannishiguchi.00240886.a\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387878A",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:03:14+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "日２２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t サンヴァリエ日吉ゆき\n\t\t\t\t\t\t\t\t\t\t サンヴァリエ日吉ゆき\n\t\t\t\t\t\t\t\t\t:公団西口:平日",
+        "odpt:note": "道路混雑等により予定時刻どおり運行できないことがございますので、ご了承願います。お問合せ先:東急バス 東山田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nichi22.Koudannishiguchi.00240886.a.0004600257.12.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nichi22"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koudannishiguchi.00240886.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Sanvariehiyoshi"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:33",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:59",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:01",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:25",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "23:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387878B",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:03:14+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "日２２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t サンヴァリエ日吉ゆき\n\t\t\t\t\t\t\t\t\t\t サンヴァリエ日吉ゆき\n\t\t\t\t\t\t\t\t\t:公団西口:土曜",
+        "odpt:note": "道路混雑等により予定時刻どおり運行できないことがございますので、ご了承願います。お問合せ先:東急バス 東山田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nichi22.Koudannishiguchi.00240886.a.0004600257.12.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nichi22"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koudannishiguchi.00240886.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Sanvariehiyoshi"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:31",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:53",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:21",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:27",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:41",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:03",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:51",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:35",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000387878C",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T16:03:14+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "日２２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t サンヴァリエ日吉ゆき\n\t\t\t\t\t\t\t\t\t\t サンヴァリエ日吉ゆき\n\t\t\t\t\t\t\t\t\t:公団西口:日曜",
+        "odpt:note": "道路混雑等により予定時刻どおり運行できないことがございますので、ご了承願います。お問合せ先:東急バス 東山田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nichi22.Koudannishiguchi.00240886.a.0004600257.12.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nichi22"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koudannishiguchi.00240886.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Sanvariehiyoshi"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:23",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:10",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:57",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:11",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:18",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:42",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:22",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:38",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:46",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:26",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:28",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:52",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:08",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:32",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:40",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:55",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:05",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi22.0004600257",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Sanvariehiyoshi.00240887."
+          }
+        ]
+      }
+    ]
+  }
+}

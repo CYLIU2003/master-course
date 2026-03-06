@@ -1,0 +1,256 @@
+{
+  "createdAt": "2026-03-06T08:57:01.593Z",
+  "expiresAt": "2026-03-06T09:57:01.593Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Bijutsukan.00240305.1\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Bijutsukan.00240305.1&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Bijutsukan.00240305.1\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000345D6DD",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T13:58:47+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "用２２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜関東中央病院経由＞ 用賀駅ゆき\n\t\t\t\t\t\t\t\t\t\t関東中央病院経由 用賀駅ゆき\n\t\t\t\t\t\t\t\t\t:美術館:日曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.You22.Bijutsukan.00240305.1.0004600200.1.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.You22"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Bijutsukan.00240305.1",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Yougaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000345D692",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T13:58:47+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "用２２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜関東中央病院経由＞ 用賀駅ゆき\n\t\t\t\t\t\t\t\t\t\t関東中央病院経由 用賀駅ゆき\n\t\t\t\t\t\t\t\t\t:美術館:平日",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.You22.Bijutsukan.00240305.1.0004600200.1.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.You22"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Bijutsukan.00240305.1",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Yougaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:04",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:49",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.You22.0004600200",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Yougaeki.00240311."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000345D693",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T13:58:47+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "用２２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜関東中央病院経由＞ 用賀駅ゆき\n\t\t\t\t\t\t\t\t\t\t関東中央病院経由 用賀駅ゆき\n\t\t\t\t\t\t\t\t\t:美術館:土曜",
+        "odpt:note": "道路混雑等により、時刻表通りの運行ができないことがございますので、ご了承下さい。お問合せ先:東急バス 瀬田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.You22.Bijutsukan.00240305.1.0004600200.1.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.You22"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Bijutsukan.00240305.1",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Yougaeki"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      }
+    ]
+  }
+}

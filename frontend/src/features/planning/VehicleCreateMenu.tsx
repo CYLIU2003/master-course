@@ -4,15 +4,30 @@
 // actual form opens.
 
 import { useTranslation } from "react-i18next";
+import { useVehicleTemplates } from "@/hooks";
 import { useMasterUiStore } from "@/stores/master-ui-store";
 
-export function VehicleCreateMenu() {
+interface Props {
+  scenarioId: string;
+}
+
+export function VehicleCreateMenu({ scenarioId }: Props) {
   const { t } = useTranslation();
+  const { data } = useVehicleTemplates(scenarioId);
   const openDrawer = useMasterUiStore((s) => s.openDrawer);
   const closeDrawer = useMasterUiStore((s) => s.closeDrawer);
+  const templates = data?.items ?? [];
 
   const handleSelect = (vehicleType: "ev_bus" | "engine_bus") => {
     openDrawer({ isCreate: true, vehicleType });
+  };
+
+  const handleTemplateSelect = (templateId: string, type: "BEV" | "ICE") => {
+    openDrawer({
+      isCreate: true,
+      vehicleType: type === "BEV" ? "ev_bus" : "engine_bus",
+      vehicleTemplateId: templateId,
+    });
   };
 
   return (
@@ -53,6 +68,56 @@ export function VehicleCreateMenu() {
           badgeColor="bg-amber-50 text-amber-700 border-amber-200"
           onClick={() => handleSelect("engine_bus")}
         />
+
+        <div className="pt-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold text-slate-700">
+              {t("vehicles.templates_section", "保存済みテンプレート")}
+            </p>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+              {templates.length}
+            </span>
+          </div>
+
+          {templates.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500">
+              {t(
+                "vehicles.templates_empty",
+                "車両編集画面からテンプレートを保存すると、ここからすぐ適用できます。",
+              )}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {templates.map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => handleTemplateSelect(template.id, template.type)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left transition-colors hover:border-primary-300 hover:bg-primary-50/30"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">
+                        {template.name}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {template.modelName || t("vehicles.field_model", "車両名/モデル名")}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded border px-2 py-0.5 text-[11px] font-medium ${
+                        template.type === "BEV"
+                          ? "border-green-200 bg-green-50 text-green-700"
+                          : "border-amber-200 bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {template.type}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,526 @@
+{
+  "createdAt": "2026-03-06T08:57:18.361Z",
+  "expiresAt": "2026-03-06T09:57:18.361Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Hisasuedanchi.00240939.b\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Hisasuedanchi.00240939.b&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Hisasuedanchi.00240939.b\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003878727",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:50:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "日２１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 高田町ゆき\n\t\t\t\t\t\t\t\t\t\t 高田町ゆき\n\t\t\t\t\t\t\t\t\t:久末団地:平日",
+        "odpt:note": "お問合せ先:東急バス 東山田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nichi21.Hisasuedanchi.00240939.b.0004600741.16.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nichi21"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hisasuedanchi.00240939.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Takatachou"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:36",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:00",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:29",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:39",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:56",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:09",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:24",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:12",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:34",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:54",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:17",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "23:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003878728",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:50:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "日２１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 高田町ゆき\n\t\t\t\t\t\t\t\t\t\t 高田町ゆき\n\t\t\t\t\t\t\t\t\t:久末団地:土曜",
+        "odpt:note": "お問合せ先:東急バス 東山田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nichi21.Hisasuedanchi.00240939.b.0004600741.16.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nichi21"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hisasuedanchi.00240939.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Takatachou"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003878729",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:50:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "日２１.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t 高田町ゆき\n\t\t\t\t\t\t\t\t\t\t 高田町ゆき\n\t\t\t\t\t\t\t\t\t:久末団地:日曜",
+        "odpt:note": "お問合せ先:東急バス 東山田営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Nichi21.Hisasuedanchi.00240939.b.0004600741.16.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Nichi21"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hisasuedanchi.00240939.b",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Takatachou"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "06:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "07:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "08:43",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "09:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "11:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "21:14",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:13",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "23:07",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi21.0004600741",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatachou.00240941."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -5,8 +5,6 @@
 // 3-pane layout: left filter | center content | right drawer
 
 import { useParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { useMasterUiStore } from "@/stores/master-ui-store";
 import { ThreePaneLayout } from "@/features/common/ThreePaneLayout";
 import { MasterDataHeader } from "./MasterDataHeader";
 import { MasterDataTabs } from "./MasterDataTabs";
@@ -16,7 +14,6 @@ import { MasterEditorDrawerHost } from "./MasterEditorDrawerHost";
 
 export function MasterDataPage() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
-  const { t } = useTranslation();
 
   if (!scenarioId) return null;
 

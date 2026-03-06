@@ -11,8 +11,10 @@ Routes:
   PUT    /scenarios/{id}               → update
   DELETE /scenarios/{id}               → delete
 
-  GET    /scenarios/{id}/timetable     → get timetable rows
-  PUT    /scenarios/{id}/timetable     → replace timetable rows
+  GET    /scenarios/{id}/timetable               → get timetable rows (optional ?service_id=)
+  PUT    /scenarios/{id}/timetable               → replace timetable rows
+  POST   /scenarios/{id}/timetable/import-csv    → import rows from CSV text body
+  GET    /scenarios/{id}/timetable/export-csv    → export rows as CSV text body
 
   GET    /scenarios/{id}/deadhead-rules    → list
   GET    /scenarios/{id}/turnaround-rules  → list
@@ -20,17 +22,49 @@ Routes:
 
 from __future__ import annotations
 
+import csv
+import io
 from threading import Lock
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from bff.services.odpt_routes import (
+    DEFAULT_OPERATOR,
+    fetch_operational_dataset,
+    fetch_operational_stage_dataset,
+    fetch_stop_timetable_stage_dataset,
+)
+from bff.services.odpt_stop_timetables import (
+    build_stop_timetables_from_normalized,
+    summarize_stop_timetable_import,
+)
+from bff.services.odpt_timetable import (
+    build_timetable_rows_from_operational,
+    normalize_timetable_row_indexes,
+    summarize_timetable_import,
+)
 from bff.store import scenario_store as store
 
 router = APIRouter(tags=["scenarios"])
 _default_scenario_lock = Lock()
+
+# ── CSV column spec ────────────────────────────────────────────
+# Canonical column order for import/export
+_CSV_COLUMNS = [
+    "trip_id",
+    "route_id",
+    "service_id",
+    "direction",
+    "origin",
+    "destination",
+    "departure",
+    "arrival",
+    "distance_km",
+    "allowed_vehicle_types",
+]
 
 
 # ── Pydantic models ────────────────────────────────────────────
@@ -50,11 +84,12 @@ class UpdateScenarioBody(BaseModel):
 
 class TimetableRowBody(BaseModel):
     route_id: str
+    service_id: str = "WEEKDAY"
     direction: str = "outbound"
     trip_index: int = 0
     origin: str
     destination: str
-    departure: str  # HH:MM
+    departure: str  # HH:MM (24h, may exceed 24 for overnight)
     arrival: str  # HH:MM
     distance_km: float = 0.0
     allowed_vehicle_types: List[str] = ["BEV", "ICE"]
@@ -62,6 +97,31 @@ class TimetableRowBody(BaseModel):
 
 class UpdateTimetableBody(BaseModel):
     rows: List[TimetableRowBody]
+
+
+class ImportCsvBody(BaseModel):
+    content: str  # raw CSV text (UTF-8)
+
+
+class ImportOdptTimetableBody(BaseModel):
+    operator: str = DEFAULT_OPERATOR
+    dump: bool = False
+    forceRefresh: bool = False
+    ttlSec: int = 3600
+    chunkBusTimetables: bool = False
+    busTimetableCursor: int = 0
+    busTimetableBatchSize: int = 25
+    reset: bool = True
+
+
+class ImportOdptStopTimetableBody(BaseModel):
+    operator: str = DEFAULT_OPERATOR
+    dump: bool = False
+    forceRefresh: bool = False
+    ttlSec: int = 3600
+    stopTimetableCursor: int = 0
+    stopTimetableBatchSize: int = 50
+    reset: bool = True
 
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -156,12 +216,24 @@ def delete_scenario(scenario_id: str) -> Response:
 
 
 @router.get("/scenarios/{scenario_id}/timetable")
-def get_timetable(scenario_id: str) -> Dict[str, Any]:
+def get_timetable(
+    scenario_id: str,
+    service_id: Optional[str] = Query(
+        default=None, description="Filter by service_id (WEEKDAY / SAT / SUN_HOL)"
+    ),
+) -> Dict[str, Any]:
     try:
         rows = store.get_field(scenario_id, "timetable_rows")
     except KeyError:
         raise _not_found(scenario_id)
-    return {"items": rows or [], "total": len(rows or [])}
+    rows = rows or []
+    if service_id:
+        rows = [r for r in rows if r.get("service_id", "WEEKDAY") == service_id]
+    return {
+        "items": rows,
+        "total": len(rows),
+        "meta": {"imports": store.get_timetable_import_meta(scenario_id)},
+    }
 
 
 @router.put("/scenarios/{scenario_id}/timetable")
@@ -172,6 +244,238 @@ def update_timetable(scenario_id: str, body: UpdateTimetableBody) -> Dict[str, A
         return {"items": rows, "total": len(rows)}
     except KeyError:
         raise _not_found(scenario_id)
+
+
+@router.post("/scenarios/{scenario_id}/timetable/import-csv")
+def import_timetable_csv(scenario_id: str, body: ImportCsvBody) -> Dict[str, Any]:
+    """
+    Parse CSV text and replace the scenario's timetable rows.
+    Expected columns (in any order):
+      trip_id (optional), route_id, service_id, direction, origin, destination,
+      departure, arrival, distance_km, allowed_vehicle_types
+    allowed_vehicle_types may be semicolon-separated: BEV;ICE
+    """
+    try:
+        store.get_scenario(scenario_id)  # verify exists
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    reader = csv.DictReader(io.StringIO(body.content.strip()))
+    rows: List[Dict[str, Any]] = []
+    errors: List[str] = []
+
+    for i, raw in enumerate(reader, start=2):  # 2 = first data row
+        try:
+            avt_raw = raw.get("allowed_vehicle_types", "BEV;ICE").strip()
+            avt = [v.strip() for v in avt_raw.replace(",", ";").split(";") if v.strip()]
+            row: Dict[str, Any] = {
+                "route_id": raw.get("route_id", "").strip(),
+                "service_id": raw.get("service_id", "WEEKDAY").strip() or "WEEKDAY",
+                "direction": raw.get("direction", "outbound").strip() or "outbound",
+                "trip_index": i - 2,
+                "origin": raw.get("origin", raw.get("from_stop_id", "")).strip(),
+                "destination": raw.get(
+                    "destination", raw.get("to_stop_id", "")
+                ).strip(),
+                "departure": raw.get("departure", raw.get("dep_time", "")).strip(),
+                "arrival": raw.get("arrival", raw.get("arr_time", "")).strip(),
+                "distance_km": float(
+                    raw.get("distance_km", raw.get("dist_km", 0)) or 0
+                ),
+                "allowed_vehicle_types": avt if avt else ["BEV", "ICE"],
+            }
+            if not row["route_id"]:
+                errors.append(f"Row {i}: route_id is required")
+                continue
+            if not row["departure"] or not row["arrival"]:
+                errors.append(f"Row {i}: departure and arrival are required")
+                continue
+            rows.append(row)
+        except Exception as exc:
+            errors.append(f"Row {i}: {exc}")
+
+    if errors:
+        raise HTTPException(
+            status_code=422, detail={"errors": errors, "parsed": len(rows)}
+        )
+
+    store.set_field(scenario_id, "timetable_rows", rows)
+    return {"items": rows, "total": len(rows)}
+
+
+@router.post("/scenarios/{scenario_id}/timetable/import-odpt")
+def import_timetable_odpt(
+    scenario_id: str, body: ImportOdptTimetableBody
+) -> Dict[str, Any]:
+    try:
+        store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    try:
+        if body.chunkBusTimetables:
+            dataset = fetch_operational_stage_dataset(
+                operator=body.operator,
+                dump=body.dump,
+                force_refresh=body.forceRefresh,
+                ttl_sec=body.ttlSec,
+                bus_timetable_cursor=body.busTimetableCursor,
+                bus_timetable_batch_size=body.busTimetableBatchSize,
+            )
+        else:
+            dataset = fetch_operational_dataset(
+                operator=body.operator,
+                dump=body.dump,
+                force_refresh=body.forceRefresh,
+                ttl_sec=body.ttlSec,
+                include_bus_timetables=True,
+                include_stop_timetables=False,
+                chunk_bus_timetables=False,
+            )
+        rows = build_timetable_rows_from_operational(dataset)
+        merged_rows = store.upsert_timetable_rows_from_source(
+            scenario_id,
+            "odpt",
+            rows,
+            replace_existing_source=body.reset,
+        )
+        normalized_rows = normalize_timetable_row_indexes(merged_rows)
+        store.set_field(scenario_id, "timetable_rows", normalized_rows)
+        odpt_rows = [row for row in normalized_rows if row.get("source") == "odpt"]
+        quality = summarize_timetable_import(odpt_rows, dataset)
+        progress = (dataset.get("meta", {}).get("progress") or {}).get("busTimetables")
+        import_meta = {
+            "operator": body.operator,
+            "dump": body.dump,
+            "source": "odpt",
+            "generatedAt": dataset.get("meta", {}).get("generatedAt"),
+            "warnings": dataset.get("meta", {}).get("warnings", []),
+            "cache": dataset.get("meta", {}).get("cache", {}),
+            "progress": progress,
+            "quality": quality,
+        }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    store.set_timetable_import_meta(scenario_id, "odpt", import_meta)
+    return {
+        "items": odpt_rows,
+        "total": len(odpt_rows),
+        "meta": import_meta,
+    }
+
+
+@router.get("/scenarios/{scenario_id}/stop-timetables")
+def get_stop_timetables(
+    scenario_id: str,
+    stop_id: Optional[str] = Query(default=None),
+    service_id: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    try:
+        items = store.get_field(scenario_id, "stop_timetables") or []
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    if stop_id:
+        items = [item for item in items if item.get("stopId") == stop_id]
+    if service_id:
+        items = [item for item in items if item.get("service_id") == service_id]
+
+    return {
+        "items": items,
+        "total": len(items),
+        "meta": {"imports": store.get_stop_timetable_import_meta(scenario_id)},
+    }
+
+
+@router.post("/scenarios/{scenario_id}/stop-timetables/import-odpt")
+def import_stop_timetables_odpt(
+    scenario_id: str, body: ImportOdptStopTimetableBody
+) -> Dict[str, Any]:
+    try:
+        store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    try:
+        dataset = fetch_stop_timetable_stage_dataset(
+            operator=body.operator,
+            dump=body.dump,
+            force_refresh=body.forceRefresh,
+            ttl_sec=body.ttlSec,
+            stop_timetable_cursor=body.stopTimetableCursor,
+            stop_timetable_batch_size=body.stopTimetableBatchSize,
+        )
+        items = build_stop_timetables_from_normalized(dataset)
+        merged_items = store.upsert_stop_timetables_from_source(
+            scenario_id,
+            "odpt",
+            items,
+            replace_existing_source=body.reset,
+        )
+        odpt_items = [item for item in merged_items if item.get("source") == "odpt"]
+        quality = summarize_stop_timetable_import(odpt_items, dataset)
+        progress = (dataset.get("meta", {}).get("progress") or {}).get("stopTimetables")
+        import_meta = {
+            "operator": body.operator,
+            "dump": body.dump,
+            "source": "odpt",
+            "generatedAt": dataset.get("meta", {}).get("generatedAt"),
+            "warnings": dataset.get("meta", {}).get("warnings", []),
+            "cache": dataset.get("meta", {}).get("cache", {}),
+            "progress": progress,
+            "quality": quality,
+        }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    store.set_stop_timetable_import_meta(scenario_id, "odpt", import_meta)
+    return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
+
+
+@router.get("/scenarios/{scenario_id}/timetable/export-csv")
+def export_timetable_csv(
+    scenario_id: str,
+    service_id: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    """
+    Export timetable rows as CSV text (JSON envelope so the client can name the file).
+    """
+    try:
+        rows = store.get_field(scenario_id, "timetable_rows")
+    except KeyError:
+        raise _not_found(scenario_id)
+    rows = rows or []
+    if service_id:
+        rows = [r for r in rows if r.get("service_id", "WEEKDAY") == service_id]
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(
+        buf, fieldnames=_CSV_COLUMNS, extrasaction="ignore", lineterminator="\n"
+    )
+    writer.writeheader()
+    for i, row in enumerate(rows):
+        writer.writerow(
+            {
+                "trip_id": row.get("trip_id", f"trip_{i:04d}"),
+                "route_id": row.get("route_id", ""),
+                "service_id": row.get("service_id", "WEEKDAY"),
+                "direction": row.get("direction", "outbound"),
+                "origin": row.get("origin", ""),
+                "destination": row.get("destination", ""),
+                "departure": row.get("departure", ""),
+                "arrival": row.get("arrival", ""),
+                "distance_km": row.get("distance_km", 0),
+                "allowed_vehicle_types": ";".join(row.get("allowed_vehicle_types", [])),
+            }
+        )
+
+    tag = f"_{service_id}" if service_id else ""
+    return {
+        "content": buf.getvalue(),
+        "filename": f"timetable{tag}.csv",
+        "rows": len(rows),
+    }
 
 
 # ── Rules (read-only from static data for now) ─────────────────

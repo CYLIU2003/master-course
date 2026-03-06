@@ -1,0 +1,185 @@
+{
+  "createdAt": "2026-03-06T08:58:36.522Z",
+  "expiresAt": "2026-03-06T09:58:36.522Z",
+  "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Nagao.00240656.a\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Nagao.00240656.a&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 3,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Nagao.00240656.a\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000398428E",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:09:07+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "向０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜久地駅前経由＞ 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t\t久地駅前経由 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t、向０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜久地駅前経由＞ 高津営業所ゆき\n\t\t\t\t\t\t\t\t\t\t久地駅前経由 高津営業所ゆき\n\t\t\t\t\t\t\t\t\t:長尾:平日",
+        "odpt:note": "スロープ板付バスで運行致します。尚整備等により一般車両で運行する場合がありますのでご了承ください。道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願いますお問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Kou02.Nagao.00240656.a.0004603188.7.Weekday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Kou02"
+        ],
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nagao.00240656.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Futakotamagawaeki",
+          "odpt.BusDirection:TokyuBus.Takatsueigyousho"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:58",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:15",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "14:45",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:06",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "17:30",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:02",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:note": "夕.高津営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "20:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603189",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatsueigyousho.00240665."
+          },
+          {
+            "odpt:note": "夕.高津営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603189",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatsueigyousho.00240665."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000398428F",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:09:07+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "向０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜久地駅前経由＞ 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t\t久地駅前経由 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t、向０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜久地駅前経由＞ 高津営業所ゆき\n\t\t\t\t\t\t\t\t\t\t久地駅前経由 高津営業所ゆき\n\t\t\t\t\t\t\t\t\t:長尾:土曜",
+        "odpt:note": "スロープ板付バスで運行致します。尚整備等により一般車両で運行する場合がありますのでご了承ください。道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願いますお問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Kou02.Nagao.00240656.a.0004603188.7.Saturday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Kou02"
+        ],
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nagao.00240656.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Futakotamagawaeki",
+          "odpt.BusDirection:TokyuBus.Takatsueigyousho"
+        ],
+        "odpt:busstopPoleTimetableObject": []
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003984290",
+        "@type": "odpt:BusstopPoleTimetable",
+        "dc:date": "2026-02-02T15:09:07+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusstopPoleTimetable.jsonld",
+        "dc:title": "向０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜久地駅前経由＞ 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t\t久地駅前経由 二子玉川駅ゆき\n\t\t\t\t\t\t\t\t\t、向０２.\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t＜久地駅前経由＞ 高津営業所ゆき\n\t\t\t\t\t\t\t\t\t\t久地駅前経由 高津営業所ゆき\n\t\t\t\t\t\t\t\t\t:長尾:日曜",
+        "odpt:note": "スロープ板付バスで運行致します。尚整備等により一般車両で運行する場合がありますのでご了承ください。道路混雑等のため予定時刻どおりに運行できないことがありますので、ご了承願いますお問合せ先:東急バス 高津営業所",
+        "owl:sameAs": "odpt.BusstopPoleTimetable:TokyuBus.Kou02.Nagao.00240656.a.0004603188.7.Sunday",
+        "odpt:busroute": [
+          "odpt.Busroute:TokyuBus.Kou02"
+        ],
+        "odpt:calendar": "odpt.Calendar:Sunday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nagao.00240656.a",
+        "odpt:busDirection": [
+          "odpt.BusDirection:TokyuBus.Futakotamagawaeki",
+          "odpt.BusDirection:TokyuBus.Takatsueigyousho"
+        ],
+        "odpt:busstopPoleTimetableObject": [
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "10:50",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "12:20",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "13:48",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "15:16",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "16:47",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "18:19",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603188",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          },
+          {
+            "odpt:note": "夕.高津営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "19:44",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603189",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatsueigyousho.00240665."
+          },
+          {
+            "odpt:note": "夕.高津営業所行き",
+            "odpt:isMidnight": false,
+            "odpt:departureTime": "22:37",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004603189",
+            "odpt:destinationBusstopPole": "odpt.BusstopPole:TokyuBus.Takatsueigyousho.00240665."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -4,6 +4,7 @@ import {
   Navigate,
   redirect,
 } from "react-router-dom";
+import { fetchMaybeJson } from "@/api/client";
 import { AppLayout } from "@/features/layout/AppLayout";
 
 // ── Page imports ──────────────────────────────────────────────
@@ -36,15 +37,15 @@ import { CostResultsPage } from "@/pages/results/CostResultsPage";
 // Compare
 import { ComparePage } from "@/pages/compare/ComparePage";
 
+// ODPT Explorer
+import { OdptExplorerPage } from "@/pages/odpt/OdptExplorerPage";
+
 async function startupLoader() {
   try {
-    const res = await fetch("/api/scenarios/default");
-    if (!res.ok) {
-      return redirect("/scenarios");
-    }
-
-    const scenario = (await res.json()) as { id?: string };
-    if (!scenario.id) {
+    const scenario = await fetchMaybeJson<{ id?: string }>(
+      "/api/scenarios/default",
+    );
+    if (!scenario?.id) {
       return redirect("/scenarios");
     }
 
@@ -97,6 +98,10 @@ const router = createBrowserRouter([
   {
     path: "/compare",
     element: <ComparePage />,
+  },
+  {
+    path: "/odpt-explorer",
+    element: <OdptExplorerPage />,
   },
 ]);
 

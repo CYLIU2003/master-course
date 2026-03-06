@@ -14,3 +14,7 @@ export { VehicleEditorDrawer } from "./VehicleEditorDrawer";
 export { RouteTableNew } from "./RouteTableNew";
 export { RouteEditorDrawer } from "./RouteEditorDrawer";
 export { RouteNodeGraphPanel } from "./RouteNodeGraphPanel";
+export { RouteMapPanel } from "./RouteMapPanel";
+
+// ── Timetable components ───────────────────────────────────
+export { TimetableGeneratorDrawer } from "./TimetableGeneratorDrawer";
