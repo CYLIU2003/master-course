@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:57:18.545Z",
-  "expiresAt": "2026-03-06T09:57:18.545Z",
+  "createdAt": "2026-03-07T12:45:14.828Z",
+  "expiresAt": "2026-03-07T13:45:14.828Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Nagao.00240656.b\",\"dump\":false}",
   "payload": {
     "meta": {

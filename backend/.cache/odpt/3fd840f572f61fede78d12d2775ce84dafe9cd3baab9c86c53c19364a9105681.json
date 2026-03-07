@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:55:46.332Z",
-  "expiresAt": "2026-03-06T09:55:46.332Z",
+  "createdAt": "2026-03-07T12:44:21.354Z",
+  "expiresAt": "2026-03-07T13:44:21.354Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Edaeki.00240971.\",\"dump\":false}",
   "payload": {
     "meta": {

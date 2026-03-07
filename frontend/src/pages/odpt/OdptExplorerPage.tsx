@@ -82,21 +82,68 @@ type RouteTimetableService = {
   last_arrival?: string;
 };
 
-type RouteTimetableGroup = {
-  busroute_id: string;
+type CatalogSnapshot = {
+  snapshotKey: string;
+  source: string;
+  datasetRef: string;
+  generatedAt?: string;
+  refreshedAt?: string;
+  meta?: {
+    warnings?: string[];
+    counts?: Record<string, number>;
+    [key: string]: unknown;
+  };
+};
+
+type CatalogRouteSummary = {
+  route_id: string;
   route_code: string;
   route_label: string;
   trip_count: number;
   first_departure?: string;
   last_arrival?: string;
-  patterns: RouteTimetablePattern[];
   services: RouteTimetableService[];
+};
+
+type CatalogRouteTimetable = CatalogRouteSummary & {
+  patterns: RouteTimetablePattern[];
   trips: RouteTimetableTrip[];
+  source?: string;
+};
+
+type CatalogSnapshotsResponse = {
+  items: CatalogSnapshot[];
+  total: number;
+};
+
+type CatalogRoutesResponse = {
+  items: CatalogRouteSummary[];
+  total: number;
+  meta?: {
+    snapshot?: CatalogSnapshot;
+  };
+};
+
+type CatalogRouteResponse = {
+  item: CatalogRouteTimetable;
+  meta?: {
+    snapshot?: CatalogSnapshot;
+  };
 };
 
 type OperationalExportResponse = {
   meta?: unknown;
-  routeTimetables?: RouteTimetableGroup[];
+  routeTimetables?: Array<{
+    busroute_id: string;
+    route_code: string;
+    route_label: string;
+    trip_count: number;
+    first_departure?: string;
+    last_arrival?: string;
+    patterns: RouteTimetablePattern[];
+    services: RouteTimetableService[];
+    trips: RouteTimetableTrip[];
+  }>;
   [key: string]: unknown;
 };
 
@@ -122,15 +169,23 @@ const SERVICE_LABELS: Record<string, string> = {
   saturday: "土曜",
   holiday: "日祝",
   unknown: "不明",
+  WEEKDAY: "平日",
+  SAT: "土曜",
+  SUN_HOL: "日祝",
 };
 
 function serviceLabel(serviceId: string): string {
   return SERVICE_LABELS[serviceId] ?? serviceId;
 }
 
-function routeOptionLabel(route: RouteTimetableGroup): string {
+function routeOptionLabel(route: CatalogRouteSummary): string {
   const base = route.route_code ? `${route.route_code} · ${route.route_label}` : route.route_label;
   return `${base} (${route.trip_count} trips)`;
+}
+
+function snapshotLabel(snapshot: CatalogSnapshot): string {
+  const source = snapshot.source.toUpperCase();
+  return `${source} · ${snapshot.datasetRef}`;
 }
 
 function patternSummary(pattern: RouteTimetablePattern): string {
@@ -166,10 +221,17 @@ export function OdptExplorerPage() {
   const [introspecting, setIntrospecting] = useState(false);
   const [introRes, setIntroRes] = useState<IntrospectResponse | null>(null);
 
-  const [exporting, setExporting] = useState(false);
-  const [exportRes, setExportRes] = useState<OperationalExportResponse | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogRefreshing, setCatalogRefreshing] = useState<"" | "odpt" | "gtfs">("");
+  const [catalogSnapshots, setCatalogSnapshots] = useState<CatalogSnapshot[]>([]);
+  const [catalogRoutes, setCatalogRoutes] = useState<CatalogRouteSummary[]>([]);
+  const [catalogRoute, setCatalogRoute] = useState<CatalogRouteTimetable | null>(null);
+  const [selectedSnapshotKey, setSelectedSnapshotKey] = useState("");
   const [selectedRouteId, setSelectedRouteId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("all");
+
+  const [exporting, setExporting] = useState(false);
+  const [exportRes, setExportRes] = useState<OperationalExportResponse | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saveRes, setSaveRes] = useState<{
@@ -189,23 +251,33 @@ export function OdptExplorerPage() {
     setError(null);
   }, [resource, dump, query, forceRefresh, ttlSec, includeStopTimetables]);
 
-  const routeTimetables = useMemo(
+  const exportRouteTimetables = useMemo(
     () => exportRes?.routeTimetables ?? [],
     [exportRes],
   );
 
   useEffect(() => {
-    if (!routeTimetables.length) {
+    if (!catalogSnapshots.length) {
+      setSelectedSnapshotKey("");
+      setCatalogRoutes([]);
+      setCatalogRoute(null);
       setSelectedRouteId("");
       setSelectedServiceId("all");
       return;
     }
-    setSelectedRouteId((current) =>
-      routeTimetables.some((route) => route.busroute_id === current)
+    setSelectedSnapshotKey((current) =>
+      catalogSnapshots.some((snapshot) => snapshot.snapshotKey === current)
         ? current
-        : routeTimetables[0].busroute_id,
+        : catalogSnapshots[0].snapshotKey,
     );
-  }, [routeTimetables]);
+  }, [catalogSnapshots]);
+
+  useEffect(() => {
+    setCatalogRoute(null);
+    setCatalogRoutes([]);
+    setSelectedRouteId("");
+    setSelectedServiceId("all");
+  }, [selectedSnapshotKey]);
 
   useEffect(() => {
     setSelectedServiceId("all");
@@ -221,6 +293,103 @@ export function OdptExplorerPage() {
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
+
+  async function loadCatalogSnapshots() {
+    setCatalogLoading(true);
+    try {
+      const body = await fetchJson<CatalogSnapshotsResponse>("/api/catalog/snapshots");
+      setCatalogSnapshots(body.items ?? []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
+
+  async function loadCatalogRoutes(snapshotKey: string) {
+    if (!snapshotKey) {
+      setCatalogRoutes([]);
+      return;
+    }
+    setCatalogLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("snapshotKey", snapshotKey);
+      const body = await fetchJson<CatalogRoutesResponse>(
+        `/api/catalog/routes?${params.toString()}`,
+      );
+      setCatalogRoutes(body.items ?? []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
+
+  async function loadCatalogRoute(snapshotKey: string, routeId: string) {
+    if (!snapshotKey || !routeId) {
+      setCatalogRoute(null);
+      return;
+    }
+    setCatalogLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("snapshotKey", snapshotKey);
+      const body = await fetchJson<CatalogRouteResponse>(
+        `/api/catalog/routes/${encodeURIComponent(routeId)}?${params.toString()}`,
+      );
+      setCatalogRoute(body.item ?? null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
+
+  async function refreshCatalog(source: "odpt" | "gtfs") {
+    setCatalogRefreshing(source);
+    setError(null);
+    try {
+      if (source === "odpt") {
+        const body = await fetchJson<{ item?: CatalogSnapshot }>(
+          "/api/catalog/refresh/odpt",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              operator: "odpt.Operator:TokyuBus",
+              dump: true,
+              forceRefresh: true,
+              ttlSec,
+            }),
+          },
+        );
+        await loadCatalogSnapshots();
+        if (body.item?.snapshotKey) {
+          setSelectedSnapshotKey(body.item.snapshotKey);
+        }
+      } else {
+        const body = await fetchJson<{ item?: CatalogSnapshot }>(
+          "/api/catalog/refresh/gtfs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              feedPath: "GTFS/ToeiBus-GTFS",
+            }),
+          },
+        );
+        await loadCatalogSnapshots();
+        if (body.item?.snapshotKey) {
+          setSelectedSnapshotKey(body.item.snapshotKey);
+        }
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCatalogRefreshing("");
+    }
+  }
 
   async function runProxy() {
     setLoading(true);
@@ -323,31 +492,56 @@ export function OdptExplorerPage() {
     return prettyJson(proxyRes.data.slice(0, 20));
   }, [proxyRes]);
 
-  const selectedRoute = useMemo(
-    () =>
-      routeTimetables.find((route) => route.busroute_id === selectedRouteId) ?? null,
-    [routeTimetables, selectedRouteId],
-  );
+  useEffect(() => {
+    loadCatalogSnapshots();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSnapshotKey) {
+      return;
+    }
+    loadCatalogRoutes(selectedSnapshotKey);
+  }, [selectedSnapshotKey]);
+
+  useEffect(() => {
+    if (!catalogRoutes.length) {
+      setSelectedRouteId("");
+      return;
+    }
+    setSelectedRouteId((current) =>
+      catalogRoutes.some((route) => route.route_id === current)
+        ? current
+        : catalogRoutes[0].route_id,
+    );
+  }, [catalogRoutes]);
+
+  useEffect(() => {
+    if (!selectedSnapshotKey || !selectedRouteId) {
+      setCatalogRoute(null);
+      return;
+    }
+    loadCatalogRoute(selectedSnapshotKey, selectedRouteId);
+  }, [selectedSnapshotKey, selectedRouteId]);
 
   const filteredTrips = useMemo(() => {
-    if (!selectedRoute) {
+    if (!catalogRoute) {
       return [];
     }
     if (selectedServiceId === "all") {
-      return selectedRoute.trips;
+      return catalogRoute.trips;
     }
-    return selectedRoute.trips.filter((trip) => trip.service_id === selectedServiceId);
-  }, [selectedRoute, selectedServiceId]);
+    return catalogRoute.trips.filter((trip) => trip.service_id === selectedServiceId);
+  }, [catalogRoute, selectedServiceId]);
 
   const exportPreview = useMemo(() => {
     if (!exportRes) {
       return "";
     }
-    if (!routeTimetables.length) {
+    if (!exportRouteTimetables.length) {
       return prettyJson(exportRes);
     }
 
-    const routePreview = routeTimetables.slice(0, 2).map((route) => ({
+    const routePreview = exportRouteTimetables.slice(0, 2).map((route) => ({
       busroute_id: route.busroute_id,
       route_code: route.route_code,
       route_label: route.route_label,
@@ -367,11 +561,11 @@ export function OdptExplorerPage() {
     return prettyJson({
       ...rest,
       routeTimetables: {
-        total: routeTimetables.length,
+        total: exportRouteTimetables.length,
         sample: routePreview,
       },
     });
-  }, [exportRes, routeTimetables]);
+  }, [exportRes, exportRouteTimetables]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -691,7 +885,111 @@ export function OdptExplorerPage() {
         )}
       </div>
 
-      {routeTimetables.length > 0 && selectedRoute && (
+      <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-700">
+              Transit Catalog
+            </h2>
+            <p className="text-sm text-slate-500">
+              ODPT と GTFS を共通 SQLite カタログに保持し、route-wise API で便と停留所時刻を読む。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => refreshCatalog("odpt")}
+              disabled={catalogRefreshing !== ""}
+              className="rounded-lg border border-primary-300 bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-40"
+            >
+              {catalogRefreshing === "odpt" ? "Refreshing ODPT…" : "Refresh Tokyu ODPT"}
+            </button>
+            <button
+              onClick={() => refreshCatalog("gtfs")}
+              disabled={catalogRefreshing !== ""}
+              className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
+            >
+              {catalogRefreshing === "gtfs" ? "Refreshing GTFS…" : "Refresh Toei GTFS"}
+            </button>
+          </div>
+        </div>
+
+        {!catalogSnapshots.length ? (
+          <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
+            {catalogLoading
+              ? "カタログを読み込み中..."
+              : "まだ snapshot がありません。上の refresh ボタンか、scenario import を実行してください。"}
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {catalogSnapshots.map((snapshot) => (
+                <button
+                  key={snapshot.snapshotKey}
+                  onClick={() => setSelectedSnapshotKey(snapshot.snapshotKey)}
+                  className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+                    snapshot.snapshotKey === selectedSnapshotKey
+                      ? "border-primary-400 bg-primary-50"
+                      : "border-border bg-surface hover:bg-slate-50"
+                  }`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {snapshot.source}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {snapshotLabel(snapshot)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    generated: {snapshot.generatedAt ?? "-"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    refreshed: {snapshot.refreshedAt ?? "-"}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            {selectedSnapshotKey && (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Snapshot Route
+                  </span>
+                  <select
+                    value={selectedRouteId}
+                    onChange={(e) => setSelectedRouteId(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    {catalogRoutes.map((route) => (
+                      <option key={route.route_id} value={route.route_id}>
+                        {routeOptionLabel(route)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Service
+                  </span>
+                  <select
+                    value={selectedServiceId}
+                    onChange={(e) => setSelectedServiceId(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="all">All services</option>
+                    {(catalogRoute?.services ?? []).map((service) => (
+                      <option key={service.service_id} value={service.service_id}>
+                        {serviceLabel(service.service_id)} ({service.trip_count})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {catalogRoute && (
         <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -712,8 +1010,8 @@ export function OdptExplorerPage() {
                   onChange={(e) => setSelectedRouteId(e.target.value)}
                   className="min-w-[320px] rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  {routeTimetables.map((route) => (
-                    <option key={route.busroute_id} value={route.busroute_id}>
+                  {catalogRoutes.map((route) => (
+                    <option key={route.route_id} value={route.route_id}>
                       {routeOptionLabel(route)}
                     </option>
                   ))}
@@ -729,7 +1027,7 @@ export function OdptExplorerPage() {
                   className="rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="all">All services</option>
-                  {selectedRoute.services.map((service) => (
+                  {catalogRoute.services.map((service) => (
                     <option key={service.service_id} value={service.service_id}>
                       {serviceLabel(service.service_id)} ({service.trip_count})
                     </option>
@@ -745,10 +1043,10 @@ export function OdptExplorerPage() {
                 Route
               </p>
               <p className="mt-1 text-base font-semibold text-slate-800">
-                {selectedRoute.route_code} · {selectedRoute.route_label}
+                {catalogRoute.route_code} · {catalogRoute.route_label}
               </p>
               <p className="mt-1 text-xs text-slate-500 break-all">
-                {selectedRoute.busroute_id}
+                {catalogRoute.route_id}
               </p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-4">
@@ -756,7 +1054,7 @@ export function OdptExplorerPage() {
                 Trips
               </p>
               <p className="mt-1 text-base font-semibold text-slate-800">
-                {selectedRoute.trip_count}
+                {catalogRoute.trip_count}
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 表示中: {filteredTrips.length}
@@ -767,7 +1065,7 @@ export function OdptExplorerPage() {
                 Patterns
               </p>
               <p className="mt-1 text-base font-semibold text-slate-800">
-                {selectedRoute.patterns.length}
+                {catalogRoute.patterns.length}
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 停留所系統ごとに内訳を保持
@@ -778,9 +1076,9 @@ export function OdptExplorerPage() {
                 Span
               </p>
               <p className="mt-1 text-base font-semibold text-slate-800">
-                {(selectedRoute.first_departure ?? "--:--") +
+                {(catalogRoute.first_departure ?? "--:--") +
                   " -> " +
-                  (selectedRoute.last_arrival ?? "--:--")}
+                  (catalogRoute.last_arrival ?? "--:--")}
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 始発から最終到着まで
@@ -789,7 +1087,7 @@ export function OdptExplorerPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {selectedRoute.patterns.map((pattern) => (
+            {catalogRoute.patterns.map((pattern) => (
               <span
                 key={pattern.pattern_id}
                 className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"

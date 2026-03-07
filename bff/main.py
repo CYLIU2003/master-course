@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from bff.routers import (
+    catalog,
     graph,
     jobs,
     master_data,
@@ -57,6 +58,7 @@ PREFIX = "/api"
 app.include_router(scenarios.router, prefix=PREFIX)
 app.include_router(timetable.router, prefix=PREFIX)
 app.include_router(master_data.router, prefix=PREFIX)
+app.include_router(catalog.router, prefix=PREFIX)
 app.include_router(graph.router, prefix=PREFIX)
 app.include_router(simulation.router, prefix=PREFIX)
 app.include_router(optimization.router, prefix=PREFIX)

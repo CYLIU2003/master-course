@@ -111,56 +111,25 @@ export function MasterDataHeader({ scenarioId }: Props) {
     try {
       const routeResult = await importOdptRoutes.mutateAsync({
         operator: ODPT_OPERATOR,
-        dump: false,
+        dump: true,
       });
 
       const stopResult = await importOdptStops.mutateAsync({
         operator: ODPT_OPERATOR,
-        dump: false,
+        dump: true,
       });
 
-      let busCursor = 0;
-      let busRounds = 0;
-      let timetableResult: Awaited<
-        ReturnType<typeof importOdptTimetable.mutateAsync>
-      > | null = null;
-      while (busRounds < 100) {
-        timetableResult = await importOdptTimetable.mutateAsync({
-          operator: ODPT_OPERATOR,
-          dump: false,
-          chunkBusTimetables: true,
-          busTimetableCursor: busCursor,
-          busTimetableBatchSize: 25,
-          reset: busCursor === 0,
-        });
-        const progress = timetableResult.meta.progress;
-        if (!progress || progress.complete || progress.nextCursor <= busCursor) {
-          break;
-        }
-        busCursor = progress.nextCursor;
-        busRounds += 1;
-      }
+      const timetableResult = await importOdptTimetable.mutateAsync({
+        operator: ODPT_OPERATOR,
+        dump: true,
+        reset: true,
+      });
 
-      let stopCursor = 0;
-      let stopRounds = 0;
-      let stopTimetableResult: Awaited<
-        ReturnType<typeof importOdptStopTimetables.mutateAsync>
-      > | null = null;
-      while (stopRounds < 100) {
-        stopTimetableResult = await importOdptStopTimetables.mutateAsync({
-          operator: ODPT_OPERATOR,
-          dump: false,
-          stopTimetableCursor: stopCursor,
-          stopTimetableBatchSize: 50,
-          reset: stopCursor === 0,
-        });
-        const progress = stopTimetableResult.meta.progress;
-        if (!progress || progress.complete || progress.nextCursor <= stopCursor) {
-          break;
-        }
-        stopCursor = progress.nextCursor;
-        stopRounds += 1;
-      }
+      const stopTimetableResult = await importOdptStopTimetables.mutateAsync({
+        operator: ODPT_OPERATOR,
+        dump: true,
+        reset: true,
+      });
 
       alert(
         [
@@ -172,13 +141,13 @@ export function MasterDataHeader({ scenarioId }: Props) {
             count: stopResult.total,
           }),
           t("master.import_full_timetable", "バス時刻表: {{count}} 行", {
-            count: timetableResult?.total ?? 0,
+            count: timetableResult.total,
           }),
           t(
             "master.import_full_stop_timetables",
             "バス停時刻表: {{count}} 件",
             {
-              count: stopTimetableResult?.meta.quality.stopTimetableCount ?? 0,
+              count: stopTimetableResult.meta.quality.stopTimetableCount,
             },
           ),
         ].join("\n"),

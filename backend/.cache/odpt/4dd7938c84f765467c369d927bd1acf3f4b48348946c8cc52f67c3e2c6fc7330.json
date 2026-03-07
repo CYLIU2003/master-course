@@ -1,0 +1,281 @@
+{
+  "createdAt": "2026-03-07T12:41:37.213Z",
+  "expiresAt": "2026-03-07T13:41:37.213Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004602824\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004602824&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 6,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004602824\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB990",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:24:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:羽田空港（第３ターミナル）:平日:18:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602824.Hanedakuukoudaisanta-minaru.00241385.8.Weekday.1815",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602824",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385.8",
+            "odpt:departureTime": "18:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "18:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368.12"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "18:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365.11"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "19:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "19:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-minamieki.00241058."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "19:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-kitaeki.00241325."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB992",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:24:39+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:羽田空港（第３ターミナル）:日祝:18:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602824.Hanedakuukoudaisanta-minaru.00241385.8.Holiday.1815",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602824",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385.8",
+            "odpt:departureTime": "18:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "18:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368.12"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "18:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365.11"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "19:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "19:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-minamieki.00241058."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "19:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-kitaeki.00241325."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB997",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:24:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:羽田空港（第３ターミナル）:平日:20:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602824.Hanedakuukoudaisanta-minaru.00241385.8.Weekday.2015",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602824",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385.8",
+            "odpt:departureTime": "20:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "20:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368.12"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "20:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365.11"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "21:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "21:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-minamieki.00241058."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "21:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-kitaeki.00241325."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB999",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:24:43+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:羽田空港（第３ターミナル）:日祝:20:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602824.Hanedakuukoudaisanta-minaru.00241385.8.Holiday.2015",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602824",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385.8",
+            "odpt:departureTime": "20:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "20:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368.12"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "20:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365.11"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "21:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "21:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-minamieki.00241058."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "21:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-kitaeki.00241325."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB99B",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:24:44+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:羽田空港（第３ターミナル）:平日:21:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602824.Hanedakuukoudaisanta-minaru.00241385.8.Weekday.2115",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602824",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385.8",
+            "odpt:departureTime": "21:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "21:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368.12"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "21:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365.11"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "22:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "22:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-minamieki.00241058."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "22:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-kitaeki.00241325."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB99D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:24:44+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:羽田空港（第３ターミナル）:日祝:21:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602824.Hanedakuukoudaisanta-minaru.00241385.8.Holiday.2115",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602824",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385.8",
+            "odpt:departureTime": "21:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "21:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368.12"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "21:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365.11"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "22:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "22:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-minamieki.00241058."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "22:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Senta-kitaeki.00241325."
+          }
+        ]
+      }
+    ]
+  }
+}

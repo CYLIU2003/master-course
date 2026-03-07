@@ -1,0 +1,665 @@
+{
+  "createdAt": "2026-03-07T12:41:38.650Z",
+  "expiresAt": "2026-03-07T13:41:38.650Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004602271\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004602271&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 12,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004602271\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D260",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:平日:07:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Weekday.0720",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "07:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D261",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:日祝:07:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Holiday.0720",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "07:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D267",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:57+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:平日:11:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Weekday.1100",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "11:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "11:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "11:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "11:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "11:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "12:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "12:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D268",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:57+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:日祝:11:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Holiday.1100",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "11:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "11:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "11:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "11:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "11:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "12:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "12:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D26F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:58+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:平日:14:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Weekday.1430",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "14:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "14:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "14:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "15:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "15:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "15:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D270",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:58+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:日祝:14:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Holiday.1430",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "14:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "14:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "14:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "15:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "15:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "15:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D271",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:58+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:平日:16:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Weekday.1620",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "16:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "16:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "17:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "17:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "17:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D272",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:58+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:日祝:16:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Holiday.1620",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "16:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "16:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "17:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "17:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "17:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D276",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:59+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:平日:18:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Weekday.1840",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "18:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "18:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "18:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "18:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "19:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "19:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "19:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "19:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000361D277",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:59+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:日祝:18:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Holiday.1840",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "18:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "18:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "18:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "18:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "19:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "19:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "19:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "19:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000031E3363",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:59+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:平日:19:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Weekday.1940",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "19:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "19:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "19:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "19:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "20:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "20:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "20:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "20:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000031E3367",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:49:59+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:横須賀線小杉駅:日祝:19:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004602271.Yokosukasenkosugieki.00240815.2.Holiday.1940",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004602271",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokosukasenkosugieki.00240815.2",
+            "odpt:departureTime": "19:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "19:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kosugiekihigashiguchi.00240816.3"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "19:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.DenEnchoufuhonchou.00240048.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "19:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kugaharaekiiriguchi.00240638.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "20:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Musashinittaeki.00240637.B"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "20:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "20:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "20:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          }
+        ]
+      }
+    ]
+  }
+}

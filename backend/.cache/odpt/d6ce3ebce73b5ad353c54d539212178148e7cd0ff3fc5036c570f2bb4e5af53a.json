@@ -1,0 +1,105 @@
+{
+  "createdAt": "2026-03-07T12:42:49.026Z",
+  "expiresAt": "2026-03-07T13:42:49.026Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kousoku.0004603028\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kousoku.0004603028&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 2,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kousoku.0004603028\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399E564",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:29:58+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:横浜駅西口:平日:07:50",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603028.Yokohamaekinishiguchi.00241505.22.Weekday.0750",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603028",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamaekinishiguchi.00241505.22",
+            "odpt:departureTime": "07:50"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Karuizawaeki.00241419."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "11:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyuuha-besutokurabu.00241420."
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "12:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitakaruizawa.00241421."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "12:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kusatsuonsenbasuta-minaru.00241422."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "13:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kusatsuonsenhoterusakurai.00241430."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399E565",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:29:58+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:横浜駅西口:日祝:07:50",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603028.Yokohamaekinishiguchi.00241505.22.Holiday.0750",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603028",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamaekinishiguchi.00241505.22",
+            "odpt:departureTime": "07:50"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Karuizawaeki.00241419."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "11:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyuuha-besutokurabu.00241420."
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "12:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitakaruizawa.00241421."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "12:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kusatsuonsenbasuta-minaru.00241422."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "13:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kusatsuonsenhoterusakurai.00241430."
+          }
+        ]
+      }
+    ]
+  }
+}

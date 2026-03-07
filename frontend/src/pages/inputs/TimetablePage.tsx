@@ -195,63 +195,42 @@ export function TimetablePage() {
     }
 
     try {
-      let cursor = 0;
-      let rounds = 0;
-      let lastResult: Awaited<ReturnType<typeof importOdptMutation.mutateAsync>> | null = null;
       setBusImportState({ active: true, progress: null, rounds: 0 });
-
-      while (rounds < 100) {
-        lastResult = await importOdptMutation.mutateAsync({
-          operator: "odpt.Operator:TokyuBus",
-          dump: false,
-          chunkBusTimetables: true,
-          busTimetableCursor: cursor,
-          busTimetableBatchSize: 25,
-          reset: cursor === 0,
-        });
-        const progress = lastResult.meta.progress;
-        setBusImportState({ active: true, progress: progress ?? null, rounds: rounds + 1 });
-        if (!progress || progress.complete || progress.nextCursor <= cursor) {
-          break;
-        }
-        cursor = progress.nextCursor;
-        rounds += 1;
-      }
-
-      if (!lastResult) {
-        setBusImportState({ active: false, progress: null, rounds: 0 });
-        return;
-      }
+      const result = await importOdptMutation.mutateAsync({
+        operator: "odpt.Operator:TokyuBus",
+        dump: true,
+        reset: true,
+      });
 
       const details = [
         t("timetable.import_odpt_success", "{{count}} 件の時刻表行を取り込みました。", {
-          count: lastResult.total,
+          count: result.total,
         }),
         t("timetable.import_odpt_routes", "対象路線: {{count}} 件", {
-          count: lastResult.meta.quality.routeCount,
+          count: result.meta.quality.routeCount,
         }),
       ];
-      if (lastResult.meta.warnings.length > 0) {
-        details.push("", lastResult.meta.warnings.join("\n"));
+      if (result.meta.warnings.length > 0) {
+        details.push("", result.meta.warnings.join("\n"));
       }
       appendImportHistory({
         resource: t("timetable.resource_bus_timetable", "バス時刻表"),
         source: "odpt",
-        generatedAt: lastResult.meta.generatedAt,
+        generatedAt: result.meta.generatedAt,
         summary: t(
           "timetable.import_history_bus_summary",
           "{{count}} 行 / 対象路線 {{routeCount}} 件",
           {
-            count: lastResult.total,
-            routeCount: lastResult.meta.quality.routeCount,
+            count: result.total,
+            routeCount: result.meta.quality.routeCount,
           },
         ),
-        warnings: lastResult.meta.warnings,
+        warnings: result.meta.warnings,
       });
       setBusImportState({
         active: false,
-        progress: lastResult.meta.progress ?? null,
-        rounds: rounds + 1,
+        progress: result.meta.progress ?? null,
+        rounds: 1,
       });
       alert(details.join("\n"));
     } catch (err) {
@@ -313,7 +292,7 @@ export function TimetablePage() {
       !confirm(
         t(
           "timetable.import_odpt_stop_timetable_confirm",
-          "ODPT のバス停時刻表を段階取得し、シナリオに保存します。続行しますか？",
+          "ODPT のバス停時刻表を取り込み、シナリオに保存します。続行しますか？",
         ),
       )
     ) {
@@ -321,66 +300,44 @@ export function TimetablePage() {
     }
 
     try {
-      let cursor = 0;
-      let rounds = 0;
-      let lastResult: Awaited<
-        ReturnType<typeof importOdptStopTimetablesMutation.mutateAsync>
-      > | null = null;
       setStopImportState({ active: true, progress: null, rounds: 0 });
-
-      while (rounds < 100) {
-        lastResult = await importOdptStopTimetablesMutation.mutateAsync({
-          operator: "odpt.Operator:TokyuBus",
-          dump: false,
-          stopTimetableCursor: cursor,
-          stopTimetableBatchSize: 50,
-          reset: cursor === 0,
-        });
-        const progress = lastResult.meta.progress;
-        setStopImportState({ active: true, progress: progress ?? null, rounds: rounds + 1 });
-        if (!progress || progress.complete || progress.nextCursor <= cursor) {
-          break;
-        }
-        cursor = progress.nextCursor;
-        rounds += 1;
-      }
-
-      if (!lastResult) {
-        setStopImportState({ active: false, progress: null, rounds: 0 });
-        return;
-      }
+      const result = await importOdptStopTimetablesMutation.mutateAsync({
+        operator: "odpt.Operator:TokyuBus",
+        dump: true,
+        reset: true,
+      });
 
       const details = [
         t(
           "timetable.import_odpt_stop_timetable_success",
           "{{count}} 件のバス停時刻表を保存しました。",
-          { count: lastResult.meta.quality.stopTimetableCount },
+          { count: result.meta.quality.stopTimetableCount },
         ),
         t("timetable.import_odpt_stop_timetable_entries", "時刻表エントリ: {{count}} 件", {
-          count: lastResult.meta.quality.entryCount,
+          count: result.meta.quality.entryCount,
         }),
       ];
-      if (lastResult.meta.warnings.length > 0) {
-        details.push("", lastResult.meta.warnings.join("\n"));
+      if (result.meta.warnings.length > 0) {
+        details.push("", result.meta.warnings.join("\n"));
       }
       appendImportHistory({
         resource: t("timetable.resource_stop_timetable", "バス停時刻表"),
         source: "odpt",
-        generatedAt: lastResult.meta.generatedAt,
+        generatedAt: result.meta.generatedAt,
         summary: t(
           "timetable.import_history_stop_summary",
           "{{count}} 件 / エントリ {{entryCount}} 件",
           {
-            count: lastResult.meta.quality.stopTimetableCount,
-            entryCount: lastResult.meta.quality.entryCount,
+            count: result.meta.quality.stopTimetableCount,
+            entryCount: result.meta.quality.entryCount,
           },
         ),
-        warnings: lastResult.meta.warnings,
+        warnings: result.meta.warnings,
       });
       setStopImportState({
         active: false,
-        progress: lastResult.meta.progress ?? null,
-        rounds: rounds + 1,
+        progress: result.meta.progress ?? null,
+        rounds: 1,
       });
       alert(details.join("\n"));
     } catch (err) {

@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-07T09:19:03.907Z",
-  "expiresAt": "2026-03-07T10:19:03.907Z",
+  "createdAt": "2026-03-07T12:37:13.242Z",
+  "expiresAt": "2026-03-07T13:37:13.242Z",
   "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ta51.0004600682\",\"dump\":false}",
   "payload": {
     "meta": {

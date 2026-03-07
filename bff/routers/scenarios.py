@@ -34,26 +34,18 @@ from pydantic import BaseModel
 
 from bff.services.gtfs_import import (
     DEFAULT_GTFS_FEED_PATH,
-    build_gtfs_stop_timetables,
-    load_gtfs_core_bundle,
     summarize_gtfs_stop_timetable_import,
     summarize_gtfs_timetable_import,
 )
-from bff.services.odpt_routes import (
-    DEFAULT_OPERATOR,
-    fetch_operational_dataset,
-    fetch_operational_stage_dataset,
-    fetch_stop_timetable_stage_dataset,
-)
+from bff.services.odpt_routes import DEFAULT_OPERATOR
 from bff.services.odpt_stop_timetables import (
-    build_stop_timetables_from_normalized,
     summarize_stop_timetable_import,
 )
 from bff.services.odpt_timetable import (
-    build_timetable_rows_from_operational,
     normalize_timetable_row_indexes,
     summarize_timetable_import,
 )
+from bff.services import transit_catalog
 from bff.store import scenario_store as store
 
 router = APIRouter(tags=["scenarios"])
@@ -118,7 +110,7 @@ class ImportCsvBody(BaseModel):
 
 class ImportOdptTimetableBody(BaseModel):
     operator: str = DEFAULT_OPERATOR
-    dump: bool = False
+    dump: bool = True
     forceRefresh: bool = False
     ttlSec: int = 3600
     chunkBusTimetables: bool = False
@@ -134,7 +126,7 @@ class ImportGtfsTimetableBody(BaseModel):
 
 class ImportOdptStopTimetableBody(BaseModel):
     operator: str = DEFAULT_OPERATOR
-    dump: bool = False
+    dump: bool = True
     forceRefresh: bool = False
     ttlSec: int = 3600
     stopTimetableCursor: int = 0
@@ -181,13 +173,16 @@ def _build_odpt_import_meta(
     progress = (meta.get("progress") or {}).get(progress_key)
     return {
         "operator": operator,
-        "dump": dump,
+        "dump": meta.get("effectiveDump", meta.get("dump", dump)),
+        "requestedDump": dump,
         "source": "odpt",
         "resourceType": resource_type,
         "generatedAt": meta.get("generatedAt"),
         "warnings": meta.get("warnings", []),
         "cache": meta.get("cache", {}),
         "progress": progress,
+        "snapshotKey": (dataset.get("snapshot") or {}).get("snapshotKey"),
+        "snapshotMode": meta.get("snapshotMode"),
         "quality": quality,
     }
 
@@ -206,6 +201,8 @@ def _build_gtfs_import_meta(
         "resourceType": resource_type,
         "generatedAt": meta.get("generatedAt"),
         "warnings": meta.get("warnings", []),
+        "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
+        "snapshotMode": meta.get("snapshotMode"),
         "quality": quality,
     }
 
@@ -396,26 +393,13 @@ def import_timetable_odpt(
         raise _not_found(scenario_id)
 
     try:
-        if body.chunkBusTimetables:
-            dataset = fetch_operational_stage_dataset(
-                operator=body.operator,
-                dump=body.dump,
-                force_refresh=body.forceRefresh,
-                ttl_sec=body.ttlSec,
-                bus_timetable_cursor=body.busTimetableCursor,
-                bus_timetable_batch_size=body.busTimetableBatchSize,
-            )
-        else:
-            dataset = fetch_operational_dataset(
-                operator=body.operator,
-                dump=body.dump,
-                force_refresh=body.forceRefresh,
-                ttl_sec=body.ttlSec,
-                include_bus_timetables=True,
-                include_stop_timetables=False,
-                chunk_bus_timetables=False,
-            )
-        rows = build_timetable_rows_from_operational(dataset)
+        bundle = transit_catalog.get_or_refresh_odpt_snapshot(
+            operator=body.operator,
+            dump=body.dump,
+            force_refresh=body.forceRefresh,
+            ttl_sec=body.ttlSec,
+        )
+        rows = list(bundle.get("timetable_rows") or [])
         merged_rows = store.upsert_timetable_rows_from_source(
             scenario_id,
             "odpt",
@@ -430,9 +414,15 @@ def import_timetable_odpt(
             invalidate_dispatch=True,
         )
         odpt_rows = [row for row in normalized_rows if row.get("source") == "odpt"]
-        quality = summarize_timetable_import(odpt_rows, dataset)
+        quality = summarize_timetable_import(
+            odpt_rows,
+            {
+                "meta": bundle.get("meta") or {},
+                "stopTimetables": list(bundle.get("stop_timetables") or []),
+            },
+        )
         import_meta = _build_odpt_import_meta(
-            dataset=dataset,
+            dataset=bundle,
             operator=body.operator,
             dump=body.dump,
             quality=quality,
@@ -460,7 +450,7 @@ def import_timetable_gtfs(
         raise _not_found(scenario_id)
 
     try:
-        bundle = load_gtfs_core_bundle(body.feedPath)
+        bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=body.feedPath)
         rows = list(bundle.get("timetable_rows") or [])
         merged_rows = store.upsert_timetable_rows_from_source(
             scenario_id,
@@ -476,7 +466,13 @@ def import_timetable_gtfs(
             invalidate_dispatch=True,
         )
         gtfs_rows = [row for row in normalized_rows if row.get("source") == "gtfs"]
-        quality = summarize_gtfs_timetable_import(gtfs_rows, bundle)
+        quality = summarize_gtfs_timetable_import(
+            gtfs_rows,
+            {
+                "meta": bundle.get("meta") or {},
+                "stop_timetable_count": len(list(bundle.get("stop_timetables") or [])),
+            },
+        )
 
         # Sync calendar data from GTFS feed into scenario store
         calendar_entries = list(bundle.get("calendar_entries") or [])
@@ -537,15 +533,13 @@ def import_stop_timetables_odpt(
         raise _not_found(scenario_id)
 
     try:
-        dataset = fetch_stop_timetable_stage_dataset(
+        bundle = transit_catalog.get_or_refresh_odpt_snapshot(
             operator=body.operator,
             dump=body.dump,
             force_refresh=body.forceRefresh,
             ttl_sec=body.ttlSec,
-            stop_timetable_cursor=body.stopTimetableCursor,
-            stop_timetable_batch_size=body.stopTimetableBatchSize,
         )
-        items = build_stop_timetables_from_normalized(dataset)
+        items = list(bundle.get("stop_timetables") or [])
         merged_items = store.upsert_stop_timetables_from_source(
             scenario_id,
             "odpt",
@@ -553,9 +547,12 @@ def import_stop_timetables_odpt(
             replace_existing_source=body.reset,
         )
         odpt_items = [item for item in merged_items if item.get("source") == "odpt"]
-        quality = summarize_stop_timetable_import(odpt_items, dataset)
+        quality = summarize_stop_timetable_import(
+            odpt_items,
+            {"meta": bundle.get("meta") or {}},
+        )
         import_meta = _build_odpt_import_meta(
-            dataset=dataset,
+            dataset=bundle,
             operator=body.operator,
             dump=body.dump,
             quality=quality,
@@ -579,7 +576,7 @@ def import_stop_timetables_gtfs(
         raise _not_found(scenario_id)
 
     try:
-        bundle = build_gtfs_stop_timetables(body.feedPath)
+        bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=body.feedPath)
         items = list(bundle.get("stop_timetables") or [])
         merged_items = store.upsert_stop_timetables_from_source(
             scenario_id,

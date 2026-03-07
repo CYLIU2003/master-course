@@ -1,0 +1,977 @@
+{
+  "createdAt": "2026-03-07T12:41:19.535Z",
+  "expiresAt": "2026-03-07T13:41:19.535Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 15,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB87E",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:33+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:土曜:08:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Saturday.0830",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "08:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "08:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "08:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB877",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:土曜:07:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Saturday.0720",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "07:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "07:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "07:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB878",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:土曜:07:42",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Saturday.0742",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "07:42"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "07:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "07:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB879",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:30+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:日祝:07:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Holiday.0715",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "07:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "07:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "07:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB87A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:31+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:日祝:07:39",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Holiday.0739",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "07:39"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "07:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "07:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB874",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:平日:07:29",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Weekday.0729",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "07:29"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "07:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB87D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:32+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:土曜:08:06",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Saturday.0806",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "08:06"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "08:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "08:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB875",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:平日:07:49",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Weekday.0749",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "07:49"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "08:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "08:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB876",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:土曜:07:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Saturday.0700",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "07:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "07:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "07:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB872",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:28+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:平日:06:48",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Weekday.0648",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "06:48"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "06:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "06:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "06:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "06:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "07:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB873",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:平日:07:08",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Weekday.0708",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "07:08"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "07:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "07:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB87B",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:32+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:平日:08:12",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Weekday.0812",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "08:12"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "08:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "08:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB87C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:32+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:平日:08:32",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Weekday.0832",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "08:32"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "08:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "08:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB87F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:33+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:日祝:08:03",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Holiday.0803",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "08:03"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "08:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "08:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB880",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:34+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "砧０６",
+        "odpt:note": "砧０６:砧本村:日祝:08:25",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kinuta06.0004603070.Kinutahonmura.00240082.a.Holiday.0825",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kinuta06.0004603070",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082.a",
+            "odpt:departureTime": "08:25"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tenjinmoribashi.00240085.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unaneitchoume.00240086.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanehankachikouen.00240087.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Unanechikukaikan.00240088.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Koutsuuanzenkyouikusenta-iriguchi.00240089.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitamishougakkou.00240090.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toumeikousokushita.00241509.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "08:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Eianjimae.00240282.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "08:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kinutahonmura.00240082."
+          }
+        ]
+      }
+    ]
+  }
+}

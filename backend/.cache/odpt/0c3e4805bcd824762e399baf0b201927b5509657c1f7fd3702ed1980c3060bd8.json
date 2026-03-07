@@ -1,0 +1,173 @@
+{
+  "createdAt": "2026-03-07T12:42:46.036Z",
+  "expiresAt": "2026-03-07T13:42:46.036Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kousoku.0004603305\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kousoku.0004603305&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 4,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kousoku.0004603305\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003A62718",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:29:52+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:河口湖駅:平日:10:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603305.Kawaguchikoeki.00241392.2.Weekday.1020",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603305",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kawaguchikoeki.00241392.2",
+            "odpt:departureTime": "10:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fujikyuuhairando.00241391.b"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "10:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fujigakkoumae.00241409.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "11:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gotenbashiritsutoshokanmae.00241396.2"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "12:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003A62719",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:29:53+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:河口湖駅:日祝:10:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603305.Kawaguchikoeki.00241392.2.Holiday.1020",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603305",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kawaguchikoeki.00241392.2",
+            "odpt:departureTime": "10:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fujikyuuhairando.00241391.b"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "10:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fujigakkoumae.00241409.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "11:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gotenbashiritsutoshokanmae.00241396.2"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "12:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003A6271C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:29:53+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:河口湖駅:平日:12:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603305.Kawaguchikoeki.00241392.2.Weekday.1220",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603305",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kawaguchikoeki.00241392.2",
+            "odpt:departureTime": "12:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fujikyuuhairando.00241391.b"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "12:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fujigakkoumae.00241409.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gotenbashiritsutoshokanmae.00241396.2"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003A6271D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:29:53+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:河口湖駅:日祝:12:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603305.Kawaguchikoeki.00241392.2.Holiday.1220",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603305",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kawaguchikoeki.00241392.2",
+            "odpt:departureTime": "12:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fujikyuuhairando.00241391.b"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "12:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fujigakkoumae.00241409.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gotenbashiritsutoshokanmae.00241396.2"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "createdAt": "2026-03-07T12:43:13.442Z",
+  "expiresAt": "2026-03-07T13:43:13.442Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Sagi11.0004603120\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Sagi11.0004603120&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 1,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Sagi11.0004603120\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399DD63",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:35:18+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "鷺１１",
+        "odpt:note": "鷺１１:鷺沼駅:平日:20:42",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Sagi11.0004603120.Saginumaeki.00240698.2.Weekday.2042",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Sagi11.0004603120",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Saginumaeki.00240698.2",
+            "odpt:departureTime": "20:42"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "20:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tsuchihashiminamikouen.00240758.b"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "20:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tsuchihashiyonchoume.00240759.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "20:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tsuchihashi.00240724.c"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "20:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Guri-nhaitsunishi.00240760.b"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "20:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Guri-nhaitsuchuuou.00240761."
+          }
+        ]
+      }
+    ]
+  }
+}

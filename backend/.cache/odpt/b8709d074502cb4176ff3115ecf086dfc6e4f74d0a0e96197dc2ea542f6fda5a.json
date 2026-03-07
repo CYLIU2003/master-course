@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:57:15.085Z",
-  "expiresAt": "2026-03-06T09:57:15.085Z",
+  "createdAt": "2026-03-07T12:45:05.857Z",
+  "expiresAt": "2026-03-07T13:45:05.857Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.4\",\"dump\":false}",
   "payload": {
     "meta": {

@@ -1,0 +1,569 @@
+{
+  "createdAt": "2026-03-07T12:41:10.472Z",
+  "expiresAt": "2026-03-07T13:41:10.472Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Chokkou.0004600003\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Chokkou.0004600003&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 23,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Chokkou.0004600003\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BE072D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:13:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1300",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "13:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7C6",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:13:05",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1305",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "13:05"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7C7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:39+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:13:10",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1310",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "13:10"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE79C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:39+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:13:21",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1321",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "13:21"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE79D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:39+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:13:29",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1329",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "13:29"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BE0708",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:13:34",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1334",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "13:34"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE79E",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:13:39",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1339",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "13:39"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE79F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:13:44",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1344",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "13:44"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BE072C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:12:51",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1251",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "12:51"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A0",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:13:54",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1354",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "13:54"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A1",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:14:03",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1403",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "14:03"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A2",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:14:08",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1408",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "14:08"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A3",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:14:19",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1419",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "14:19"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BE070D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:平日:15:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Weekday.1520",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "15:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:平日:15:27",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Weekday.1527",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "15:27"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:平日:15:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Weekday.1540",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "15:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A6",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:平日:15:52",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Weekday.1552",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "15:52"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:42+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:平日:16:06",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Weekday.1606",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "16:06"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:42+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:平日:16:16",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Weekday.1616",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "16:16"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7A9",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:42+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:平日:16:26",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Weekday.1626",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "16:26"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7AA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:42+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:平日:16:42",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Weekday.1642",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "16:42"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7AB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:43+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:平日:16:56",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Weekday.1656",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "16:56"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE7C5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:44:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "直行",
+        "odpt:note": "直行:桐蔭学園前:土曜:12:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Chokkou.0004600003.Touingakuenmae.00241048.a.Saturday.1245",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Chokkou.0004600003",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Touingakuenmae.00241048.a",
+            "odpt:departureTime": "12:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ichigaoeki.00241009."
+          }
+        ]
+      }
+    ]
+  }
+}

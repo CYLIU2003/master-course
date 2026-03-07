@@ -27,18 +27,15 @@ from pydantic import BaseModel, Field
 
 from bff.services.gtfs_import import (
     DEFAULT_GTFS_FEED_PATH,
-    load_gtfs_core_bundle,
     summarize_gtfs_routes_import,
     summarize_gtfs_stop_import,
 )
 from bff.services.odpt_routes import (
     DEFAULT_OPERATOR,
-    build_routes_from_operational,
-    fetch_normalized_dataset,
-    fetch_operational_dataset,
     summarize_routes_import,
 )
-from bff.services.odpt_stops import build_stops_from_normalized, summarize_stop_import
+from bff.services.odpt_stops import summarize_stop_import
+from bff.services import transit_catalog
 from bff.store import scenario_store as store
 
 router = APIRouter(tags=["master-data"])
@@ -220,7 +217,7 @@ class UpdateVehicleTemplateBody(BaseModel):
 
 class ImportOdptStopsBody(BaseModel):
     operator: str = DEFAULT_OPERATOR
-    dump: bool = False
+    dump: bool = True
     forceRefresh: bool = False
     ttlSec: int = 3600
 
@@ -401,7 +398,7 @@ class UpdateRouteBody(BaseModel):
 
 class ImportOdptRoutesBody(BaseModel):
     operator: str = DEFAULT_OPERATOR
-    dump: bool = False
+    dump: bool = True
     forceRefresh: bool = False
     ttlSec: int = 3600
 
@@ -430,24 +427,26 @@ def list_stops(scenario_id: str) -> Dict[str, Any]:
 def import_odpt_stops(scenario_id: str, body: ImportOdptStopsBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        dataset = fetch_normalized_dataset(
+        bundle = transit_catalog.get_or_refresh_odpt_snapshot(
             operator=body.operator,
             dump=body.dump,
             force_refresh=body.forceRefresh,
             ttl_sec=body.ttlSec,
-            include_bus_timetables=False,
-            include_stop_timetables=False,
         )
-        imported_stops = build_stops_from_normalized(dataset)
-        quality = summarize_stop_import(imported_stops, dataset)
+        imported_stops = list(bundle.get("stops") or [])
+        meta = bundle.get("meta") or {}
+        quality = summarize_stop_import(imported_stops, {"meta": meta})
         import_meta = {
             "operator": body.operator,
-            "dump": body.dump,
+            "dump": meta.get("effectiveDump", meta.get("dump", body.dump)),
+            "requestedDump": body.dump,
             "source": "odpt",
             "resourceType": "BusstopPole",
-            "generatedAt": dataset.get("meta", {}).get("generatedAt"),
-            "warnings": dataset.get("meta", {}).get("warnings", []),
-            "cache": dataset.get("meta", {}).get("cache", {}),
+            "generatedAt": meta.get("generatedAt"),
+            "warnings": meta.get("warnings", []),
+            "cache": meta.get("cache", {}),
+            "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
+            "snapshotMode": meta.get("snapshotMode"),
             "quality": quality,
         }
         all_stops = store.replace_stops_from_source(
@@ -468,10 +467,10 @@ def import_odpt_stops(scenario_id: str, body: ImportOdptStopsBody) -> Dict[str, 
 def import_gtfs_stops(scenario_id: str, body: ImportGtfsStopsBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        bundle = load_gtfs_core_bundle(body.feedPath)
+        bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=body.feedPath)
         imported_stops = list(bundle.get("stops") or [])
-        quality = summarize_gtfs_stop_import(imported_stops, bundle)
         meta = bundle.get("meta") or {}
+        quality = summarize_gtfs_stop_import(imported_stops, {"meta": meta})
         import_meta = {
             "source": "gtfs",
             "feedPath": meta.get("feedPath") or body.feedPath,
@@ -479,6 +478,8 @@ def import_gtfs_stops(scenario_id: str, body: ImportGtfsStopsBody) -> Dict[str, 
             "resourceType": "GTFSStop",
             "generatedAt": meta.get("generatedAt"),
             "warnings": meta.get("warnings", []),
+            "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
+            "snapshotMode": meta.get("snapshotMode"),
             "quality": quality,
         }
         all_stops = store.replace_stops_from_source(
@@ -552,21 +553,25 @@ def delete_route(scenario_id: str, route_id: str) -> Response:
 def import_odpt_routes(scenario_id: str, body: ImportOdptRoutesBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        dataset = fetch_operational_dataset(
+        bundle = transit_catalog.get_or_refresh_odpt_snapshot(
             operator=body.operator,
             dump=body.dump,
             force_refresh=body.forceRefresh,
             ttl_sec=body.ttlSec,
         )
-        imported_routes = build_routes_from_operational(dataset)
-        quality = summarize_routes_import(imported_routes, dataset)
+        imported_routes = list(bundle.get("routes") or [])
+        meta = bundle.get("meta") or {}
+        quality = summarize_routes_import(imported_routes, {"meta": meta})
         import_meta = {
             "operator": body.operator,
-            "dump": body.dump,
+            "dump": meta.get("effectiveDump", meta.get("dump", body.dump)),
+            "requestedDump": body.dump,
             "source": "odpt",
-            "generatedAt": dataset.get("meta", {}).get("generatedAt"),
-            "warnings": dataset.get("meta", {}).get("warnings", []),
-            "cache": dataset.get("meta", {}).get("cache", {}),
+            "generatedAt": meta.get("generatedAt"),
+            "warnings": meta.get("warnings", []),
+            "cache": meta.get("cache", {}),
+            "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
+            "snapshotMode": meta.get("snapshotMode"),
             "quality": quality,
         }
         all_routes = store.replace_routes_from_source(
@@ -587,10 +592,10 @@ def import_odpt_routes(scenario_id: str, body: ImportOdptRoutesBody) -> Dict[str
 def import_gtfs_routes(scenario_id: str, body: ImportGtfsRoutesBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        bundle = load_gtfs_core_bundle(body.feedPath)
+        bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=body.feedPath)
         imported_routes = list(bundle.get("routes") or [])
-        quality = summarize_gtfs_routes_import(imported_routes, bundle)
         meta = bundle.get("meta") or {}
+        quality = summarize_gtfs_routes_import(imported_routes, {"meta": meta})
         import_meta = {
             "source": "gtfs",
             "feedPath": meta.get("feedPath") or body.feedPath,
@@ -598,6 +603,8 @@ def import_gtfs_routes(scenario_id: str, body: ImportGtfsRoutesBody) -> Dict[str
             "resourceType": "GTFSRoutePattern",
             "generatedAt": meta.get("generatedAt"),
             "warnings": meta.get("warnings", []),
+            "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
+            "snapshotMode": meta.get("snapshotMode"),
             "quality": quality,
         }
         all_routes = store.replace_routes_from_source(
