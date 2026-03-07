@@ -11,6 +11,8 @@ import {
   useImportOdptStopTimetables,
   useExportTimetableCsv,
   useUpdateTimetable,
+  useCalendar,
+  useCalendarDates,
 } from "@/hooks";
 import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { TimetableGeneratorDrawer } from "@/features/planning/TimetableGeneratorDrawer";
@@ -37,6 +39,7 @@ type ImportRunState = {
 type ImportHistoryEntry = {
   id: string;
   resource: string;
+  source: "odpt" | "gtfs" | "csv";
   generatedAt?: string;
   summary: string;
   warnings: string[];
@@ -73,6 +76,8 @@ export function TimetablePage() {
   // Data
   const { data, isLoading, error } = useTimetable(scenarioId!, activeFilter ?? undefined);
   const { data: stopTimetablesData } = useStopTimetables(scenarioId!);
+  const { data: calendarData } = useCalendar(scenarioId!);
+  const { data: calendarDatesData } = useCalendarDates(scenarioId!);
 
   // Mutations
   const importCsvMutation = useImportTimetableCsv(scenarioId!);
@@ -86,6 +91,10 @@ export function TimetablePage() {
   const gtfsImportMeta = data?.meta?.imports?.gtfs;
   const odptStopTimetableImportMeta = stopTimetablesData?.meta?.imports?.odpt;
   const gtfsStopTimetableImportMeta = stopTimetablesData?.meta?.imports?.gtfs;
+
+  // Calendar sync counts
+  const calendarCount = calendarData?.total ?? 0;
+  const calendarDatesCount = calendarDatesData?.total ?? 0;
 
   // File input ref for import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -226,7 +235,8 @@ export function TimetablePage() {
         details.push("", lastResult.meta.warnings.join("\n"));
       }
       appendImportHistory({
-        resource: "BusTimetable",
+        resource: t("timetable.resource_bus_timetable", "バス時刻表"),
+        source: "odpt",
         generatedAt: lastResult.meta.generatedAt,
         summary: t(
           "timetable.import_history_bus_summary",
@@ -279,7 +289,8 @@ export function TimetablePage() {
         details.push("", result.meta.warnings.join("\n"));
       }
       appendImportHistory({
-        resource: "GTFS Timetable",
+        resource: t("timetable.resource_bus_timetable", "バス時刻表"),
+        source: "gtfs",
         generatedAt: result.meta.generatedAt,
         summary: t(
           "timetable.import_history_gtfs_bus_summary",
@@ -353,7 +364,8 @@ export function TimetablePage() {
         details.push("", lastResult.meta.warnings.join("\n"));
       }
       appendImportHistory({
-        resource: "BusstopPoleTimetable",
+        resource: t("timetable.resource_stop_timetable", "バス停時刻表"),
+        source: "odpt",
         generatedAt: lastResult.meta.generatedAt,
         summary: t(
           "timetable.import_history_stop_summary",
@@ -408,7 +420,8 @@ export function TimetablePage() {
         details.push("", result.meta.warnings.join("\n"));
       }
       appendImportHistory({
-        resource: "GTFS Stop Timetable",
+        resource: t("timetable.resource_stop_timetable", "バス停時刻表"),
+        source: "gtfs",
         generatedAt: result.meta.generatedAt,
         summary: t(
           "timetable.import_history_gtfs_stop_summary",
@@ -448,6 +461,11 @@ export function TimetablePage() {
     );
   }
 
+  // ── Import history helpers ────────────────────────────────
+
+  const odptHistory = importHistory.filter((e) => e.source === "odpt");
+  const gtfsHistory = importHistory.filter((e) => e.source === "gtfs");
+
   // ── Render ────────────────────────────────────────────────
 
   if (isLoading) return <LoadingBlock message={t("timetable.loading")} />;
@@ -481,42 +499,6 @@ export function TimetablePage() {
         actions={
           <div className="flex gap-2">
             <button
-              className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-              onClick={handleImportOdpt}
-              disabled={importOdptMutation.isPending}
-            >
-              {importOdptMutation.isPending
-                ? t("timetable.importing_odpt", "ODPT取込中…")
-                : t("timetable.import_odpt", "ODPTから取込")}
-            </button>
-            <button
-              className="rounded border border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 disabled:opacity-50"
-              onClick={handleImportGtfs}
-              disabled={importGtfsMutation.isPending}
-            >
-              {importGtfsMutation.isPending
-                ? t("timetable.importing_gtfs", "GTFS取込中…")
-                : t("timetable.import_gtfs", "GTFSから取込")}
-            </button>
-            <button
-              className="rounded border border-cyan-300 bg-cyan-50 px-2 py-1 text-xs text-cyan-700 hover:bg-cyan-100 disabled:opacity-50"
-              onClick={handleImportOdptStopTimetables}
-              disabled={importOdptStopTimetablesMutation.isPending}
-            >
-              {importOdptStopTimetablesMutation.isPending
-                ? t("timetable.importing_odpt_stop_timetables", "バス停時刻表取込中…")
-                : t("timetable.import_odpt_stop_timetables", "バス停時刻表を取込")}
-            </button>
-            <button
-              className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-              onClick={handleImportGtfsStopTimetables}
-              disabled={importGtfsStopTimetablesMutation.isPending}
-            >
-              {importGtfsStopTimetablesMutation.isPending
-                ? t("timetable.importing_gtfs_stop_timetables", "GTFSバス停時刻表取込中…")
-                : t("timetable.import_gtfs_stop_timetables", "GTFSバス停時刻表を取込")}
-            </button>
-            <button
               className="rounded border border-border px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
               onClick={handleImportClick}
               disabled={importCsvMutation.isPending}
@@ -549,169 +531,225 @@ export function TimetablePage() {
           </div>
         }
       >
-        {odptImportMeta && (
-          <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-900">
-            {t(
-              "timetable.import_odpt_status",
-              "BusTimetable 最終取込: {{generatedAt}} / {{count}} 行 / 対象路線 {{routeCount}} 件",
-              {
-                generatedAt: odptImportMeta.generatedAt ?? "-",
-                count: odptImportMeta.quality.rowCount,
-                routeCount: odptImportMeta.quality.routeCount,
-              },
+        {/* ── Operator import sections ───────────────────── */}
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          {/* ── 東急バス（ODPT）取込 ──────────── */}
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-emerald-800">
+                {t("timetable.section_odpt", "東急バス ODPT取込")}
+              </h3>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                className="rounded border border-emerald-300 bg-white px-2 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                onClick={handleImportOdpt}
+                disabled={importOdptMutation.isPending}
+              >
+                {importOdptMutation.isPending
+                  ? t("timetable.importing_odpt", "時刻表取込中…")
+                  : t("timetable.import_odpt_bus_timetable", "バス時刻表を取込")}
+              </button>
+              <button
+                className="rounded border border-emerald-300 bg-white px-2 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                onClick={handleImportOdptStopTimetables}
+                disabled={importOdptStopTimetablesMutation.isPending}
+              >
+                {importOdptStopTimetablesMutation.isPending
+                  ? t("timetable.importing_odpt_stop_timetables", "バス停時刻表取込中…")
+                  : t("timetable.import_odpt_stop_timetable_btn", "バス停時刻表を取込")}
+              </button>
+            </div>
+            {/* ODPT status banners */}
+            {odptImportMeta && (
+              <div className="mt-2 rounded border border-emerald-100 bg-white px-2.5 py-1.5 text-[11px] text-emerald-900">
+                {t(
+                  "timetable.import_odpt_status",
+                  "BusTimetable 最終取込: {{generatedAt}} / {{count}} 行 / 対象路線 {{routeCount}} 件",
+                  {
+                    generatedAt: odptImportMeta.generatedAt ?? "-",
+                    count: odptImportMeta.quality.rowCount,
+                    routeCount: odptImportMeta.quality.routeCount,
+                  },
+                )}
+                {odptImportMeta.progress && (
+                  <span className="ml-1.5 text-emerald-700">
+                    {describeProgress(odptImportMeta.progress)}
+                  </span>
+                )}
+                {odptImportMeta.warnings.length > 0 && (
+                  <span className="ml-1.5 rounded bg-amber-50 px-1 py-0.5 text-amber-700">
+                    warning {odptImportMeta.warnings.length}
+                  </span>
+                )}
+              </div>
             )}
-            {odptImportMeta.progress && (
-              <span className="ml-2 text-emerald-700">
-                {describeProgress(odptImportMeta.progress)}
-              </span>
+            {odptStopTimetableImportMeta && (
+              <div className="mt-1.5 rounded border border-emerald-100 bg-white px-2.5 py-1.5 text-[11px] text-emerald-900">
+                {t(
+                  "timetable.import_odpt_stop_timetable_status",
+                  "BusstopPoleTimetable 最終取込: {{generatedAt}} / {{count}} 件 / エントリ {{entryCount}} 件",
+                  {
+                    generatedAt: odptStopTimetableImportMeta.generatedAt ?? "-",
+                    count: odptStopTimetableImportMeta.quality.stopTimetableCount,
+                    entryCount: odptStopTimetableImportMeta.quality.entryCount,
+                  },
+                )}
+                {odptStopTimetableImportMeta.progress && (
+                  <span className="ml-1.5 text-emerald-700">
+                    {describeProgress(odptStopTimetableImportMeta.progress)}
+                  </span>
+                )}
+                {odptStopTimetableImportMeta.warnings.length > 0 && (
+                  <span className="ml-1.5 rounded bg-amber-50 px-1 py-0.5 text-amber-700">
+                    warning {odptStopTimetableImportMeta.warnings.length}
+                  </span>
+                )}
+              </div>
             )}
-            {odptImportMeta.warnings.length > 0 && (
-              <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
-                {t("timetable.import_odpt_warning_badge", "warning {{count}}", {
-                  count: odptImportMeta.warnings.length,
-                })}
-              </span>
-            )}
-          </div>
-        )}
-        {gtfsImportMeta && (
-          <div className="mb-3 rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-xs text-sky-900">
-            {t(
-              "timetable.import_gtfs_status",
-              "GTFS 最終取込: {{generatedAt}} / {{count}} 行 / 対象路線 {{routeCount}} 件",
-              {
-                generatedAt: gtfsImportMeta.generatedAt ?? "-",
-                count: gtfsImportMeta.quality.rowCount,
-                routeCount: gtfsImportMeta.quality.routeCount,
-              },
-            )}
-            {gtfsImportMeta.warnings.length > 0 && (
-              <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
-                {t("timetable.import_odpt_warning_badge", "warning {{count}}", {
-                  count: gtfsImportMeta.warnings.length,
-                })}
-              </span>
-            )}
-          </div>
-        )}
-        {odptStopTimetableImportMeta && (
-          <div className="mb-3 rounded-lg border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-900">
-            {t(
-              "timetable.import_odpt_stop_timetable_status",
-              "BusstopPoleTimetable 最終取込: {{generatedAt}} / {{count}} 件 / エントリ {{entryCount}} 件",
-              {
-                generatedAt: odptStopTimetableImportMeta.generatedAt ?? "-",
-                count: odptStopTimetableImportMeta.quality.stopTimetableCount,
-                entryCount: odptStopTimetableImportMeta.quality.entryCount,
-              },
-            )}
-            {odptStopTimetableImportMeta.progress && (
-              <span className="ml-2 text-cyan-700">
-                {describeProgress(odptStopTimetableImportMeta.progress)}
-              </span>
-            )}
-            {odptStopTimetableImportMeta.warnings.length > 0 && (
-              <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
-                {t("timetable.import_odpt_warning_badge", "warning {{count}}", {
-                  count: odptStopTimetableImportMeta.warnings.length,
-                })}
-              </span>
-            )}
-          </div>
-        )}
-        {gtfsStopTimetableImportMeta && (
-          <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-blue-900">
-            {t(
-              "timetable.import_gtfs_stop_timetable_status",
-              "GTFS バス停時刻表 最終取込: {{generatedAt}} / {{count}} 件 / エントリ {{entryCount}} 件",
-              {
-                generatedAt: gtfsStopTimetableImportMeta.generatedAt ?? "-",
-                count: gtfsStopTimetableImportMeta.quality.stopTimetableCount,
-                entryCount: gtfsStopTimetableImportMeta.quality.entryCount,
-              },
-            )}
-            {gtfsStopTimetableImportMeta.warnings.length > 0 && (
-              <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
-                {t("timetable.import_odpt_warning_badge", "warning {{count}}", {
-                  count: gtfsStopTimetableImportMeta.warnings.length,
-                })}
-              </span>
-            )}
-          </div>
-        )}
-        {(busImportState.active || stopImportState.active) && (
-          <div className="mb-3 grid gap-2 md:grid-cols-2">
+            {/* ODPT active progress */}
             {busImportState.active && (
-              <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs text-slate-700">
-                <p className="font-semibold text-emerald-800">
-                  {t("timetable.import_odpt", "ODPTから取込")}
-                </p>
-                <p>{describeProgress(busImportState.progress)}</p>
-                <p className="text-slate-500">
-                  {t("timetable.import_rounds", "リクエスト回数: {{count}}", {
-                    count: busImportState.rounds,
-                  })}
-                </p>
+              <div className="mt-1.5 rounded border border-emerald-200 bg-white px-2.5 py-1.5 text-[11px] text-slate-700">
+                <span className="font-semibold text-emerald-800">
+                  {t("timetable.importing_odpt", "時刻表取込中…")}
+                </span>
+                {" "}{describeProgress(busImportState.progress)}
+                <span className="ml-1 text-slate-400">
+                  ({t("timetable.import_rounds", "リクエスト回数: {{count}}", { count: busImportState.rounds })})
+                </span>
               </div>
             )}
             {stopImportState.active && (
-              <div className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">
-                <p className="font-semibold text-cyan-800">
-                  {t("timetable.import_odpt_stop_timetables", "バス停時刻表を取込")}
-                </p>
-                <p>{describeProgress(stopImportState.progress)}</p>
-                <p className="text-slate-500">
-                  {t("timetable.import_rounds", "リクエスト回数: {{count}}", {
-                    count: stopImportState.rounds,
-                  })}
-                </p>
+              <div className="mt-1.5 rounded border border-emerald-200 bg-white px-2.5 py-1.5 text-[11px] text-slate-700">
+                <span className="font-semibold text-emerald-800">
+                  {t("timetable.importing_odpt_stop_timetables", "バス停時刻表取込中…")}
+                </span>
+                {" "}{describeProgress(stopImportState.progress)}
+                <span className="ml-1 text-slate-400">
+                  ({t("timetable.import_rounds", "リクエスト回数: {{count}}", { count: stopImportState.rounds })})
+                </span>
               </div>
             )}
-          </div>
-        )}
-        {importHistory.length > 0 && (
-          <div className="mb-3 rounded-lg border border-slate-200 bg-white">
-            <div className="flex items-center justify-between border-b border-border px-3 py-2">
-              <p className="text-xs font-semibold text-slate-700">
-                {t("timetable.import_history_title", "Import 履歴 / warning")}
-              </p>
-              <span className="text-[11px] text-slate-400">{importHistory.length}</span>
-            </div>
-            <div className="divide-y divide-border">
-              {importHistory.map((entry) => (
-                <div key={entry.id} className="px-3 py-2 text-xs text-slate-700">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-700">
+            {/* ODPT history */}
+            {odptHistory.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {odptHistory.map((entry) => (
+                  <div key={entry.id} className="flex flex-wrap items-center gap-1.5 text-[11px] text-emerald-800">
+                    <span className="rounded bg-emerald-100 px-1 py-0.5 font-medium">
                       {entry.resource}
                     </span>
                     <span>{entry.summary}</span>
                     <span className="text-slate-400">{entry.generatedAt ?? "-"}</span>
-                    <span
-                      className={`rounded px-1.5 py-0.5 ${
-                        entry.warnings.length > 0
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-emerald-50 text-emerald-700"
-                      }`}
-                    >
-                      {entry.warnings.length > 0
-                        ? t("timetable.import_odpt_warning_badge", "warning {{count}}", {
-                            count: entry.warnings.length,
-                          })
-                        : t("timetable.import_history_no_warning", "warning 0")}
-                    </span>
+                    {entry.warnings.length > 0 && (
+                      <span className="rounded bg-amber-50 px-1 py-0.5 text-amber-700">
+                        warning {entry.warnings.length}
+                      </span>
+                    )}
                   </div>
-                  {entry.warnings.length > 0 && (
-                    <div className="mt-2 space-y-1 text-amber-700">
-                      {entry.warnings.map((warning, index) => (
-                        <p key={`${entry.id}-${index}`}>{warning}</p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+
+          {/* ── 都営バス（GTFS）取込 ──────────── */}
+          <div className="rounded-lg border border-sky-200 bg-sky-50/40 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-sky-800">
+                {t("timetable.section_gtfs", "都営バス GTFS取込")}
+              </h3>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                className="rounded border border-sky-300 bg-white px-2 py-1 text-[11px] font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+                onClick={handleImportGtfs}
+                disabled={importGtfsMutation.isPending}
+              >
+                {importGtfsMutation.isPending
+                  ? t("timetable.importing_gtfs", "時刻表取込中…")
+                  : t("timetable.import_gtfs_bus_timetable", "バス時刻表を取込")}
+              </button>
+              <button
+                className="rounded border border-sky-300 bg-white px-2 py-1 text-[11px] font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+                onClick={handleImportGtfsStopTimetables}
+                disabled={importGtfsStopTimetablesMutation.isPending}
+              >
+                {importGtfsStopTimetablesMutation.isPending
+                  ? t("timetable.importing_gtfs_stop_timetables", "バス停時刻表取込中…")
+                  : t("timetable.import_gtfs_stop_timetable_btn", "バス停時刻表を取込")}
+              </button>
+            </div>
+            {/* GTFS status banners */}
+            {gtfsImportMeta && (
+              <div className="mt-2 rounded border border-sky-100 bg-white px-2.5 py-1.5 text-[11px] text-sky-900">
+                {t(
+                  "timetable.import_gtfs_status",
+                  "GTFS 最終取込: {{generatedAt}} / {{count}} 行 / 対象路線 {{routeCount}} 件",
+                  {
+                    generatedAt: gtfsImportMeta.generatedAt ?? "-",
+                    count: gtfsImportMeta.quality.rowCount,
+                    routeCount: gtfsImportMeta.quality.routeCount,
+                  },
+                )}
+                {gtfsImportMeta.warnings.length > 0 && (
+                  <span className="ml-1.5 rounded bg-amber-50 px-1 py-0.5 text-amber-700">
+                    warning {gtfsImportMeta.warnings.length}
+                  </span>
+                )}
+              </div>
+            )}
+            {gtfsStopTimetableImportMeta && (
+              <div className="mt-1.5 rounded border border-sky-100 bg-white px-2.5 py-1.5 text-[11px] text-sky-900">
+                {t(
+                  "timetable.import_gtfs_stop_timetable_status",
+                  "GTFS バス停時刻表 最終取込: {{generatedAt}} / {{count}} 件 / エントリ {{entryCount}} 件",
+                  {
+                    generatedAt: gtfsStopTimetableImportMeta.generatedAt ?? "-",
+                    count: gtfsStopTimetableImportMeta.quality.stopTimetableCount,
+                    entryCount: gtfsStopTimetableImportMeta.quality.entryCount,
+                  },
+                )}
+                {gtfsStopTimetableImportMeta.warnings.length > 0 && (
+                  <span className="ml-1.5 rounded bg-amber-50 px-1 py-0.5 text-amber-700">
+                    warning {gtfsStopTimetableImportMeta.warnings.length}
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Calendar sync status */}
+            {(calendarCount > 0 || calendarDatesCount > 0) && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="rounded-full border border-sky-200 bg-sky-100/60 px-2 py-0.5 text-[11px] text-sky-700">
+                  {t("timetable.calendar_sync", "運行日定義")}: {calendarCount}
+                </span>
+                {calendarDatesCount > 0 && (
+                  <span className="rounded-full border border-sky-200 bg-sky-100/60 px-2 py-0.5 text-[11px] text-sky-700">
+                    {t("timetable.calendar_dates_sync", "日付例外")}: {calendarDatesCount}
+                  </span>
+                )}
+              </div>
+            )}
+            {/* GTFS history */}
+            {gtfsHistory.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {gtfsHistory.map((entry) => (
+                  <div key={entry.id} className="flex flex-wrap items-center gap-1.5 text-[11px] text-sky-800">
+                    <span className="rounded bg-sky-100 px-1 py-0.5 font-medium">
+                      {entry.resource}
+                    </span>
+                    <span>{entry.summary}</span>
+                    <span className="text-slate-400">{entry.generatedAt ?? "-"}</span>
+                    {entry.warnings.length > 0 && (
+                      <span className="rounded bg-amber-50 px-1 py-0.5 text-amber-700">
+                        warning {entry.warnings.length}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Service-ID filter tabs */}
         <div className="mb-3 flex gap-1 border-b border-border">
           {SERVICE_TABS.map((tab) => (

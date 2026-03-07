@@ -13,6 +13,8 @@ import {
   useStopTimetables,
   useStops,
   useTimetable,
+  useCalendar,
+  useCalendarDates,
 } from "@/hooks";
 import { useMasterUiStore } from "@/stores/master-ui-store";
 import type { ViewMode, MasterTabKey } from "@/types/master";
@@ -63,6 +65,8 @@ export function MasterDataHeader({ scenarioId }: Props) {
   const { data: stopsData } = useStops(scenarioId);
   const { data: timetableData } = useTimetable(scenarioId);
   const { data: stopTimetablesData } = useStopTimetables(scenarioId);
+  const { data: calendarData } = useCalendar(scenarioId);
+  const { data: calendarDatesData } = useCalendarDates(scenarioId);
 
   const routeImports = routesData?.meta?.imports ?? {};
   const stopImports = stopsData?.meta?.imports ?? {};
@@ -243,138 +247,217 @@ export function MasterDataHeader({ scenarioId }: Props) {
     }
   };
 
-  const sourceLabel = (source: string) =>
-    source === "odpt"
-      ? t("master.import_source_odpt", "ODPT")
-      : source === "gtfs"
-        ? t("master.import_source_gtfs", "GTFS")
-        : source.toUpperCase();
+  // ── Badge helpers ──────────────────────────────────────────
 
-  const importBadges = [
-    ...Object.entries(routeImports).flatMap(([source, meta]) =>
-      !meta
-        ? []
-        : [{
-            key: `routes-${source}`,
-            label: `${sourceLabel(source)} ${t("master.import_badge_routes", "路線")}`,
-            value: `${meta.quality.routeCount}`,
-            warningCount: meta.warnings.length,
-            generatedAt: meta.generatedAt,
-          }],
-    ),
-    ...Object.entries(stopImports).flatMap(([source, meta]) =>
-      !meta
-        ? []
-        : [{
-            key: `stops-${source}`,
-            label: `${sourceLabel(source)} ${t("master.import_badge_stops", "停留所")}`,
-            value: `${meta.quality.stopCount}`,
-            warningCount: meta.warnings.length,
-            generatedAt: meta.generatedAt,
-          }],
-    ),
-    ...Object.entries(timetableImports).flatMap(([source, meta]) =>
-      !meta
-        ? []
-        : [{
-            key: `timetable-${source}`,
-            label: `${sourceLabel(source)} ${t("master.import_badge_timetable", "バス時刻表")}`,
-            value: `${meta.quality.rowCount}`,
-            warningCount: meta.warnings.length,
-            generatedAt: meta.generatedAt,
-          }],
-    ),
-    ...Object.entries(stopTimetableImports).flatMap(([source, meta]) =>
-      !meta
-        ? []
-        : [{
-            key: `stop-timetables-${source}`,
-            label: `${sourceLabel(source)} ${t("master.import_badge_stop_timetable", "バス停時刻表")}`,
-            value: `${meta.quality.stopTimetableCount}`,
-            warningCount: meta.warnings.length,
-            generatedAt: meta.generatedAt,
-          }],
-    ),
-  ] as Array<{
+  type Badge = {
     key: string;
     label: string;
     value: string;
     warningCount: number;
     generatedAt?: string;
-  }>;
+  };
+
+  function badgesForSource(source: "odpt" | "gtfs"): Badge[] {
+    const label = source === "odpt" ? "ODPT" : "GTFS";
+    const badges: Badge[] = [];
+
+    const routeMeta = routeImports[source];
+    if (routeMeta) {
+      badges.push({
+        key: `routes-${source}`,
+        label: `${label} ${t("master.import_badge_routes", "路線")}`,
+        value: `${routeMeta.quality.routeCount}`,
+        warningCount: routeMeta.warnings.length,
+        generatedAt: routeMeta.generatedAt,
+      });
+    }
+
+    const stopMeta = stopImports[source];
+    if (stopMeta) {
+      badges.push({
+        key: `stops-${source}`,
+        label: `${label} ${t("master.import_badge_stops", "停留所")}`,
+        value: `${stopMeta.quality.stopCount}`,
+        warningCount: stopMeta.warnings.length,
+        generatedAt: stopMeta.generatedAt,
+      });
+    }
+
+    const ttMeta = timetableImports[source];
+    if (ttMeta) {
+      badges.push({
+        key: `timetable-${source}`,
+        label: `${label} ${t("master.import_badge_timetable", "バス時刻表")}`,
+        value: `${ttMeta.quality.rowCount}`,
+        warningCount: ttMeta.warnings.length,
+        generatedAt: ttMeta.generatedAt,
+      });
+    }
+
+    const stMeta = stopTimetableImports[source];
+    if (stMeta) {
+      badges.push({
+        key: `stop-timetables-${source}`,
+        label: `${label} ${t("master.import_badge_stop_timetable", "バス停時刻表")}`,
+        value: `${stMeta.quality.stopTimetableCount}`,
+        warningCount: stMeta.warnings.length,
+        generatedAt: stMeta.generatedAt,
+      });
+    }
+
+    return badges;
+  }
+
+  const odptBadges = badgesForSource("odpt");
+  const gtfsBadges = badgesForSource("gtfs");
+
+  // Calendar sync counts (populated by GTFS timetable import)
+  const calendarCount = calendarData?.total ?? 0;
+  const calendarDatesCount = calendarDatesData?.total ?? 0;
+
+  const hasOdptData = odptBadges.length > 0;
+  const hasGtfsData = gtfsBadges.length > 0;
+
+  // ── Render ─────────────────────────────────────────────────
 
   return (
-    <div className="flex items-center justify-between border-b border-border px-4 py-3">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-800">
-          {t("master.title", "営業所・車両・路線・停留所")}
-        </h1>
-        <p className="text-xs text-slate-500">
-          {t(
-            "master.description",
-            "ODPT / GTFS 由来の運行データを含めてマスタデータを一元管理します",
-          )}
-        </p>
-        {importBadges.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-            {importBadges.map((badge) => (
-              <span
-                key={badge.key}
-                className="rounded-full border border-border bg-surface-sunken px-2.5 py-1"
-              >
-                {badge.label}: {badge.value}
-                {badge.generatedAt ? ` / ${badge.generatedAt}` : ""}
-                {badge.warningCount > 0 ? ` / warning ${badge.warningCount}` : ""}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleImportOdptAll}
-          disabled={isImportingAll}
-          className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-        >
-          {isImportingAll
-            ? t("master.importing_odpt_all", "ODPT一式取込中…")
-            : t("master.import_odpt_all", "ODPTデータ一式を取込")}
-        </button>
-        <button
-          onClick={handleImportGtfsAll}
-          disabled={isImportingGtfsAll}
-          className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-50"
-        >
-          {isImportingGtfsAll
-            ? t("master.importing_gtfs_all", "GTFS一式取込中…")
-            : t("master.import_gtfs_all", "GTFSデータ一式を取込")}
-        </button>
-
-        <div className="flex rounded-lg border border-border">
-          {modes.map((mode) => (
-            <button
-              key={mode.key}
-              onClick={() => setViewMode(mode.key)}
-              className={`px-3 py-1 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg ${
-                viewMode === mode.key
-                  ? "bg-primary-600 text-white"
-                  : "text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {mode.label}
-            </button>
-          ))}
+    <div className="border-b border-border px-4 py-3">
+      {/* Top row: title + view mode + add button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-800">
+            {t("master.title", "営業所・車両・路線・停留所")}
+          </h1>
+          <p className="text-xs text-slate-500">
+            {t(
+              "master.description",
+              "ODPT / GTFS 由来の運行データを含めてマスタデータを一元管理します",
+            )}
+          </p>
         </div>
 
-        {canAdd && (
-          <button
-            onClick={handleAdd}
-            className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700"
-          >
-            {addLabel[activeTab]}
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg border border-border">
+            {modes.map((mode) => (
+              <button
+                key={mode.key}
+                onClick={() => setViewMode(mode.key)}
+                className={`px-3 py-1 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg ${
+                  viewMode === mode.key
+                    ? "bg-primary-600 text-white"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+
+          {canAdd && (
+            <button
+              onClick={handleAdd}
+              className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700"
+            >
+              {addLabel[activeTab]}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Operator import cards */}
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        {/* ── 東急バス（ODPT）──────────────────── */}
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-emerald-800">
+              {t("master.operator_odpt", "東急バス（ODPT）")}
+            </h2>
+            <button
+              onClick={handleImportOdptAll}
+              disabled={isImportingAll}
+              className="rounded border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              {isImportingAll
+                ? t("master.importing_odpt_all", "一式取込中…")
+                : t("master.import_odpt_all", "一式取込")}
+            </button>
+          </div>
+          {hasOdptData ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {odptBadges.map((badge) => (
+                <span
+                  key={badge.key}
+                  className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[11px] text-emerald-800"
+                >
+                  {badge.label}: {badge.value}
+                  {badge.generatedAt ? ` / ${badge.generatedAt}` : ""}
+                  {badge.warningCount > 0 && (
+                    <span className="ml-1 text-amber-600">
+                      (warning {badge.warningCount})
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-emerald-600/70">
+              {t("master.no_odpt_data", "未取込")}
+            </p>
+          )}
+        </div>
+
+        {/* ── 都営バス（GTFS）──────────────────── */}
+        <div className="rounded-lg border border-sky-200 bg-sky-50/50 px-3 py-2.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-sky-800">
+              {t("master.operator_gtfs", "都営バス（GTFS）")}
+            </h2>
+            <button
+              onClick={handleImportGtfsAll}
+              disabled={isImportingGtfsAll}
+              className="rounded border border-sky-300 bg-white px-2.5 py-1 text-[11px] font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+            >
+              {isImportingGtfsAll
+                ? t("master.importing_gtfs_all", "一式取込中…")
+                : t("master.import_gtfs_all", "一式取込")}
+            </button>
+          </div>
+          {hasGtfsData ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {gtfsBadges.map((badge) => (
+                <span
+                  key={badge.key}
+                  className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[11px] text-sky-800"
+                >
+                  {badge.label}: {badge.value}
+                  {badge.generatedAt ? ` / ${badge.generatedAt}` : ""}
+                  {badge.warningCount > 0 && (
+                    <span className="ml-1 text-amber-600">
+                      (warning {badge.warningCount})
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-sky-600/70">
+              {t("master.no_gtfs_data", "未取込")}
+            </p>
+          )}
+          {/* Calendar sync status */}
+          {(calendarCount > 0 || calendarDatesCount > 0) && (
+            <div className="mt-1.5 flex gap-1.5">
+              <span className="rounded-full border border-sky-200 bg-sky-100/60 px-2 py-0.5 text-[11px] text-sky-700">
+                {t("master.calendar_sync", "運行日定義")}: {calendarCount}
+              </span>
+              {calendarDatesCount > 0 && (
+                <span className="rounded-full border border-sky-200 bg-sky-100/60 px-2 py-0.5 text-[11px] text-sky-700">
+                  {t("master.calendar_dates_sync", "日付例外")}: {calendarDatesCount}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
