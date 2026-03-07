@@ -7,6 +7,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { odptProxy } from "./odpt/proxy";
 import { introspectRecords } from "./odpt/introspect";
 import { enrichOperationalData } from "./odpt/enrich";
+import { buildRouteTimetables } from "./odpt/routeTimetables";
 import { normalizeAll } from "./odpt/normalize/index";
 import type { NormalizedDataset } from "./odpt/normalize/index";
 
@@ -494,7 +495,8 @@ async function fetchStopTimetablesDataset(
 async function fetchOperationalDataset(options: NormalizedRequestOptions) {
   const { meta, normalized } = await fetchNormalizedDataset(options);
   const operational = enrichOperationalData(normalized);
-  return { meta, normalized, operational };
+  const routeTimetables = buildRouteTimetables(operational);
+  return { meta, normalized, operational, routeTimetables };
 }
 
 function filterNormalizedForOperationalStage(
@@ -650,18 +652,19 @@ app.post(
  * POST /api/odpt/export/operational
  *
  * Fetches and normalizes ODPT data, then enriches it with route totals,
- * trip distance estimates, and service/pattern indexes.
+ * trip distance estimates, service/pattern indexes, and route timetable groups.
  */
 app.post(
   "/api/odpt/export/operational",
   async (req: Request, res: Response) => {
     try {
-      const { meta, operational } = await fetchOperationalDataset(
+      const { meta, operational, routeTimetables } = await fetchOperationalDataset(
         parseNormalizedRequest(req)
       );
       res.json({
         meta,
         ...operational,
+        routeTimetables,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -683,9 +686,11 @@ app.post(
       });
       const filtered = filterNormalizedForOperationalStage(normalized);
       const operational = enrichOperationalData(filtered);
+      const routeTimetables = buildRouteTimetables(operational);
       res.json({
         meta,
         ...operational,
+        routeTimetables,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -720,27 +725,36 @@ app.post(
 /**
  * POST /api/odpt/export/save
  *
- * Fetches, normalizes, enriches, and writes both normalized and operational
- * datasets to data/odpt/tokyu relative to the project root.
+ * Fetches, normalizes, enriches, and writes normalized / operational /
+ * route_timetables datasets to data/odpt/tokyu relative to the project root.
  */
 app.post(
   "/api/odpt/export/save",
   async (req: Request, res: Response) => {
     try {
-      const { meta, normalized, operational } = await fetchOperationalDataset(
+      const { meta, normalized, operational, routeTimetables } = await fetchOperationalDataset(
         parseNormalizedRequest(req)
       );
 
       const normalizedDataset = { meta, ...normalized };
-      const operationalDataset = { meta, ...operational };
+      const operationalDataset = { meta, ...operational, routeTimetables };
+      const routeTimetableDataset = {
+        meta,
+        total: routeTimetables.length,
+        items: routeTimetables,
+      };
 
-      // Write to <project-root>/data/odpt/tokyu/{normalized,operational}_dataset.json
+      // Write route exports under <project-root>/data/odpt/tokyu/.
       // cwd when running via `npm run dev` from backend/ is backend/,
       // so we go up one level to reach the project root.
       const outDir = path.resolve(process.cwd(), "..", "data", "odpt", "tokyu");
       await mkdir(outDir, { recursive: true });
       const normalizedOutPath = path.join(outDir, "normalized_dataset.json");
       const operationalOutPath = path.join(outDir, "operational_dataset.json");
+      const routeTimetablesOutPath = path.join(
+        outDir,
+        "route_timetables_dataset.json"
+      );
 
       await Promise.all([
         writeFile(
@@ -753,11 +767,17 @@ app.post(
           JSON.stringify(operationalDataset, null, 2),
           "utf-8"
         ),
+        writeFile(
+          routeTimetablesOutPath,
+          JSON.stringify(routeTimetableDataset, null, 2),
+          "utf-8"
+        ),
       ]);
 
       res.json({
         savedTo: operationalOutPath,
         normalizedSavedTo: normalizedOutPath,
+        routeTimetablesSavedTo: routeTimetablesOutPath,
         meta,
       });
     } catch (e: unknown) {

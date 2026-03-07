@@ -41,6 +41,65 @@ type IntrospectResponse = {
   fields: FieldStat[];
 };
 
+type RouteTimetablePattern = {
+  pattern_id: string;
+  title?: string;
+  note?: string;
+  direction: "outbound" | "inbound" | "loop";
+  stop_sequence: Array<{
+    stop_id: string;
+    stop_name: string;
+  }>;
+};
+
+type RouteTimetableStopTime = {
+  index: number;
+  stop_id: string;
+  stop_name: string;
+  arrival?: string;
+  departure?: string;
+  time?: string;
+};
+
+type RouteTimetableTrip = {
+  trip_id: string;
+  pattern_id: string;
+  service_id: string;
+  direction: "outbound" | "inbound" | "loop";
+  origin_stop_name?: string;
+  destination_stop_name?: string;
+  departure?: string;
+  arrival?: string;
+  estimated_distance_km?: number;
+  is_partial: boolean;
+  stop_times: RouteTimetableStopTime[];
+};
+
+type RouteTimetableService = {
+  service_id: string;
+  trip_count: number;
+  first_departure?: string;
+  last_arrival?: string;
+};
+
+type RouteTimetableGroup = {
+  busroute_id: string;
+  route_code: string;
+  route_label: string;
+  trip_count: number;
+  first_departure?: string;
+  last_arrival?: string;
+  patterns: RouteTimetablePattern[];
+  services: RouteTimetableService[];
+  trips: RouteTimetableTrip[];
+};
+
+type OperationalExportResponse = {
+  meta?: unknown;
+  routeTimetables?: RouteTimetableGroup[];
+  [key: string]: unknown;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function prettyJson(x: unknown): string {
@@ -56,6 +115,32 @@ function typesSummary(types: Record<string, number>): string {
     .sort((a, b) => b[1] - a[1])
     .map(([t, n]) => `${t}:${n}`)
     .join(", ");
+}
+
+const SERVICE_LABELS: Record<string, string> = {
+  weekday: "平日",
+  saturday: "土曜",
+  holiday: "日祝",
+  unknown: "不明",
+};
+
+function serviceLabel(serviceId: string): string {
+  return SERVICE_LABELS[serviceId] ?? serviceId;
+}
+
+function routeOptionLabel(route: RouteTimetableGroup): string {
+  const base = route.route_code ? `${route.route_code} · ${route.route_label}` : route.route_label;
+  return `${base} (${route.trip_count} trips)`;
+}
+
+function patternSummary(pattern: RouteTimetablePattern): string {
+  const firstStop = pattern.stop_sequence[0]?.stop_name ?? "";
+  const lastStop = pattern.stop_sequence[pattern.stop_sequence.length - 1]?.stop_name ?? "";
+  const title = pattern.title?.trim();
+  if (title) {
+    return `${title} · ${pattern.direction}`;
+  }
+  return `${firstStop} -> ${lastStop} · ${pattern.direction}`;
 }
 
 const RESOURCE_OPTIONS = [
@@ -82,12 +167,15 @@ export function OdptExplorerPage() {
   const [introRes, setIntroRes] = useState<IntrospectResponse | null>(null);
 
   const [exporting, setExporting] = useState(false);
-  const [exportRes, setExportRes] = useState<unknown | null>(null);
+  const [exportRes, setExportRes] = useState<OperationalExportResponse | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState("all");
 
   const [saving, setSaving] = useState(false);
   const [saveRes, setSaveRes] = useState<{
     savedTo: string;
     normalizedSavedTo?: string;
+    routeTimetablesSavedTo?: string;
     meta: unknown;
   } | null>(null);
 
@@ -100,6 +188,28 @@ export function OdptExplorerPage() {
     setSaveRes(null);
     setError(null);
   }, [resource, dump, query, forceRefresh, ttlSec, includeStopTimetables]);
+
+  const routeTimetables = useMemo(
+    () => exportRes?.routeTimetables ?? [],
+    [exportRes],
+  );
+
+  useEffect(() => {
+    if (!routeTimetables.length) {
+      setSelectedRouteId("");
+      setSelectedServiceId("all");
+      return;
+    }
+    setSelectedRouteId((current) =>
+      routeTimetables.some((route) => route.busroute_id === current)
+        ? current
+        : routeTimetables[0].busroute_id,
+    );
+  }, [routeTimetables]);
+
+  useEffect(() => {
+    setSelectedServiceId("all");
+  }, [selectedRouteId]);
 
   function buildExportPayload() {
     return {
@@ -162,11 +272,14 @@ export function OdptExplorerPage() {
     setError(null);
     setExportRes(null);
     try {
-      const body = await fetchJson<unknown>("/api/odpt/export/operational", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildExportPayload()),
-      });
+      const body = await fetchJson<OperationalExportResponse>(
+        "/api/odpt/export/operational",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildExportPayload()),
+        },
+      );
       setExportRes(body);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -183,6 +296,7 @@ export function OdptExplorerPage() {
       const body = await fetchJson<{
         savedTo?: string;
         normalizedSavedTo?: string;
+        routeTimetablesSavedTo?: string;
         meta?: unknown;
       }>("/api/odpt/export/save", {
         method: "POST",
@@ -192,6 +306,7 @@ export function OdptExplorerPage() {
       setSaveRes({
         savedTo: body.savedTo ?? "",
         normalizedSavedTo: body.normalizedSavedTo,
+        routeTimetablesSavedTo: body.routeTimetablesSavedTo,
         meta: body.meta,
       });
     } catch (e: unknown) {
@@ -207,6 +322,56 @@ export function OdptExplorerPage() {
     if (!proxyRes?.data) return "";
     return prettyJson(proxyRes.data.slice(0, 20));
   }, [proxyRes]);
+
+  const selectedRoute = useMemo(
+    () =>
+      routeTimetables.find((route) => route.busroute_id === selectedRouteId) ?? null,
+    [routeTimetables, selectedRouteId],
+  );
+
+  const filteredTrips = useMemo(() => {
+    if (!selectedRoute) {
+      return [];
+    }
+    if (selectedServiceId === "all") {
+      return selectedRoute.trips;
+    }
+    return selectedRoute.trips.filter((trip) => trip.service_id === selectedServiceId);
+  }, [selectedRoute, selectedServiceId]);
+
+  const exportPreview = useMemo(() => {
+    if (!exportRes) {
+      return "";
+    }
+    if (!routeTimetables.length) {
+      return prettyJson(exportRes);
+    }
+
+    const routePreview = routeTimetables.slice(0, 2).map((route) => ({
+      busroute_id: route.busroute_id,
+      route_code: route.route_code,
+      route_label: route.route_label,
+      trip_count: route.trip_count,
+      first_departure: route.first_departure,
+      last_arrival: route.last_arrival,
+      patterns: route.patterns.map((pattern) => ({
+        pattern_id: pattern.pattern_id,
+        direction: pattern.direction,
+        stop_count: pattern.stop_sequence.length,
+      })),
+      services: route.services,
+      sample_trip: route.trips[0],
+    }));
+
+    const { routeTimetables: _omitted, ...rest } = exportRes;
+    return prettyJson({
+      ...rest,
+      routeTimetables: {
+        total: routeTimetables.length,
+        sample: routePreview,
+      },
+    });
+  }, [exportRes, routeTimetables]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -356,9 +521,9 @@ export function OdptExplorerPage() {
               {saving ? "Saving…" : "Save to Disk"}
             </button>
             <p className="text-xs text-slate-400">
-              Stop / Pattern / Trip / Index を operational dataset として返す
+              Stop / Pattern / Trip / Index に加えて、路線別の全便時刻も返す
               <br />
-              Save to Disk は normalized / operational の両方を書き込む
+              Save to Disk は normalized / operational / route_timetables を書き込む
             </p>
           </div>
         </div>
@@ -513,7 +678,7 @@ export function OdptExplorerPage() {
       {/* Export operational */}
       <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-3">
         <h2 className="text-sm font-semibold text-slate-700">
-          Export Operational（Stop / RoutePattern / Trip / Index）
+          Export Operational（Stop / RoutePattern / Trip / Index / RouteTimetables）
         </h2>
         {!exportRes ? (
           <p className="text-sm text-slate-400">
@@ -521,10 +686,214 @@ export function OdptExplorerPage() {
           </p>
         ) : (
           <pre className="overflow-auto rounded-lg border border-border bg-slate-50 p-3 text-xs leading-relaxed max-h-[520px]">
-            {prettyJson(exportRes)}
+            {exportPreview}
           </pre>
         )}
       </div>
+
+      {routeTimetables.length > 0 && selectedRoute && (
+        <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-700">
+                Route Timetables
+              </h2>
+              <p className="text-sm text-slate-500">
+                東98のような路線単位で、全便と各停留所の通過時刻を確認できます。
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Route
+                </span>
+                <select
+                  value={selectedRouteId}
+                  onChange={(e) => setSelectedRouteId(e.target.value)}
+                  className="min-w-[320px] rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {routeTimetables.map((route) => (
+                    <option key={route.busroute_id} value={route.busroute_id}>
+                      {routeOptionLabel(route)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1.5">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Service
+                </span>
+                <select
+                  value={selectedServiceId}
+                  onChange={(e) => setSelectedServiceId(e.target.value)}
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="all">All services</option>
+                  {selectedRoute.services.map((service) => (
+                    <option key={service.service_id} value={service.service_id}>
+                      {serviceLabel(service.service_id)} ({service.trip_count})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Route
+              </p>
+              <p className="mt-1 text-base font-semibold text-slate-800">
+                {selectedRoute.route_code} · {selectedRoute.route_label}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 break-all">
+                {selectedRoute.busroute_id}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Trips
+              </p>
+              <p className="mt-1 text-base font-semibold text-slate-800">
+                {selectedRoute.trip_count}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                表示中: {filteredTrips.length}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Patterns
+              </p>
+              <p className="mt-1 text-base font-semibold text-slate-800">
+                {selectedRoute.patterns.length}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                停留所系統ごとに内訳を保持
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Span
+              </p>
+              <p className="mt-1 text-base font-semibold text-slate-800">
+                {(selectedRoute.first_departure ?? "--:--") +
+                  " -> " +
+                  (selectedRoute.last_arrival ?? "--:--")}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                始発から最終到着まで
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {selectedRoute.patterns.map((pattern) => (
+              <span
+                key={pattern.pattern_id}
+                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+                title={pattern.pattern_id}
+              >
+                {patternSummary(pattern)}
+              </span>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            {filteredTrips.map((trip) => (
+              <details
+                key={trip.trip_id}
+                className="overflow-hidden rounded-lg border border-border bg-surface"
+              >
+                <summary className="cursor-pointer list-none px-4 py-3">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {(trip.departure ?? "--:--") +
+                          " -> " +
+                          (trip.arrival ?? "--:--") +
+                          " · " +
+                          (trip.origin_stop_name ?? "Unknown") +
+                          " -> " +
+                          (trip.destination_stop_name ?? "Unknown")}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {serviceLabel(trip.service_id)} / {trip.direction} / {trip.pattern_id}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                      <span>{trip.stop_times.length} stops</span>
+                      {typeof trip.estimated_distance_km === "number" && (
+                        <span>{trip.estimated_distance_km.toFixed(2)} km</span>
+                      )}
+                      {trip.is_partial && (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">
+                          partial
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </summary>
+                <div className="border-t border-border bg-white px-4 py-3">
+                  <div className="overflow-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-left text-slate-600">
+                          <th className="border-b border-border px-3 py-2 font-semibold">
+                            #
+                          </th>
+                          <th className="border-b border-border px-3 py-2 font-semibold">
+                            Stop
+                          </th>
+                          <th className="border-b border-border px-3 py-2 font-semibold">
+                            Arrival
+                          </th>
+                          <th className="border-b border-border px-3 py-2 font-semibold">
+                            Departure
+                          </th>
+                          <th className="border-b border-border px-3 py-2 font-semibold">
+                            Pass time
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {trip.stop_times.map((stopTime) => (
+                          <tr
+                            key={`${trip.trip_id}-${stopTime.index}-${stopTime.stop_id}`}
+                            className="border-b border-slate-100"
+                          >
+                            <td className="px-3 py-2 text-slate-500">
+                              {stopTime.index}
+                            </td>
+                            <td className="px-3 py-2 text-slate-700">
+                              {stopTime.stop_name}
+                            </td>
+                            <td className="px-3 py-2 text-slate-600">
+                              {stopTime.arrival ?? ""}
+                            </td>
+                            <td className="px-3 py-2 text-slate-600">
+                              {stopTime.departure ?? ""}
+                            </td>
+                            <td className="px-3 py-2 font-mono text-slate-700">
+                              {stopTime.time ?? ""}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+            ))}
+            {!filteredTrips.length && (
+              <p className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
+                この条件に一致する便はありません。
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Save to disk result */}
       {saveRes && (
@@ -541,6 +910,14 @@ export function OdptExplorerPage() {
               <p className="text-xs text-emerald-700">normalized_dataset.json</p>
               <p className="text-xs font-mono text-emerald-700 break-all">
                 {saveRes.normalizedSavedTo}
+              </p>
+            </>
+          )}
+          {saveRes.routeTimetablesSavedTo && (
+            <>
+              <p className="text-xs text-emerald-700">route_timetables_dataset.json</p>
+              <p className="text-xs font-mono text-emerald-700 break-all">
+                {saveRes.routeTimetablesSavedTo}
               </p>
             </>
           )}

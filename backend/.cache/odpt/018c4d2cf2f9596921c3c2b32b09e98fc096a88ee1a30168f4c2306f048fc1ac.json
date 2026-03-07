@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T09:01:52.457Z",
-  "expiresAt": "2026-03-06T10:01:52.457Z",
+  "createdAt": "2026-03-07T09:18:16.292Z",
+  "expiresAt": "2026-03-07T10:18:16.292Z",
   "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Azaminoga-denzuNijigaokaeigyousho.0004603206\",\"dump\":false}",
   "payload": {
     "meta": {
