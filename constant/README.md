@@ -1,128 +1,113 @@
-# constant/ Document Index
+# constant/ 文書インデックス
 
-This directory contains research notes, simulation specifications, agent
-instructions, mathematical formulations, and working thesis artifacts.
+## ステータス
+- 分類: 現行インデックス
+- 用途: `constant/` 配下の markdown 文書の位置づけを日本語中心で整理する
+- 備考: 本ファイルは削除や統合を行わず、まず読む順番と正本候補を示す
 
-Several files overlap in scope. This index is a non-destructive guide to help
-contributors understand which documents are likely canonical, which are useful
-reference material, and which look like older or overlapping candidates for
-future consolidation.
+このディレクトリには、修論関連の仕様書、研究メモ、エージェント指示書、数理定式化、
+試作段階の補助資料が混在しています。
 
-## How To Read This Index
+内容が重複している文書も多いため、まずはこのファイルで次の 3 区分に整理します。
 
-- `Canonical`: preferred starting points for current understanding
-- `Reference`: useful supporting documents with narrower or specialized scope
-- `Archive Candidate`: likely older, overlapping, or superseded documents that
-  should be read with caution
+- `正本候補`: 現時点で最初に参照すべき文書
+- `参考資料`: 補助的に参照価値が高い文書
+- `アーカイブ候補`: 古い版、重複が強い版、もしくは位置づけ再確認が必要な文書
 
-This file does not delete or rewrite historical documents. It only clarifies the
-current recommended reading order.
+このファイルは非破壊の索引です。既存ファイルを削除・改名せず、現時点でのおすすめ読書順だけを明示します。
 
-## Canonical
+## 正本候補
 
 ### `masters_thesis_simulation_spec_v2.md`
 
-Recommended baseline thesis simulation and optimization specification.
+修論用シミュレーション・最適化仕様の基準線として扱う候補です。
 
-Use this when you need the main architecture and behavior reference for the
- thesis system.
+研究全体の対象範囲、入力、評価、拡張方針を確認したいときはまずこれを参照します。
 
 ### `agent.md`
 
-Recommended implementation-oriented guidance aligned to the thesis simulator
-direction.
+`masters_thesis_simulation_spec_v2.md` を実装指示へ落とした中核文書です。
 
-Use this when working on code structure or execution guidance derived from the
-core thesis specification.
+コード構造や実装時の判断基準を確認したいときの中心文書です。
 
 ### `AGENTS_ev_route_cost.md`
 
-Recommended route-cost and mixed EV/engine bus operation instruction document.
+路線プロフィールに基づく EV / エンジンバス混成運行、充電、コスト計算の指示書です。
 
-Use this when working on route profile logic, charging, and route-level cost
-modeling.
+路線別の消費・燃費・充電・コスト整合を扱う作業では優先して参照します。
 
 ### `masters_research_brief_alignment.md`
 
-High-level research framing document.
+研究テーマ、目的、貢献、評価計画を共有するための上位整理文書です。
 
-Use this when aligning implementation decisions with thesis purpose, scope, and
-research claims.
+実装判断が研究目的に沿っているかを確認するときに有効です。
 
-## Reference
+## 参考資料
 
 ### `AGENTS_engine_bus_integration.md`
 
-Specialized reference for engine bus data extraction and integration from JH25
-inputs.
+JH25 Excel を用いたエンジンバス性能指標の取り込み・統合に特化した補助文書です。
 
 ### `formulation.md`
 
-Mathematical formulation reference for the mixed-fleet and PV-aware model.
+混成フリート + PV を含む MILP 定式化の数理モデル資料です。
 
-Use this when checking optimization notation or model structure rather than UI
-or workflow behavior.
+UI やワークフローではなく、定式化や変数・制約構造を確認したいときに参照します。
 
 ### `thesis_master_todo.md`
 
-Execution checklist and planning notes.
+開発計画と実行順序の整理資料です。
 
-Useful for historical planning context, but not ideal as a source of technical
-truth.
+技術的な正本というより、履歴・計画文書として読むのが適切です。
 
-## Archive Candidates
+## アーカイブ候補
 
-These documents appear older, narrower, or overlapping with the canonical set.
-They should not be treated as the first source of truth without cross-checking.
+以下は価値がないという意味ではなく、現時点での第一参照先にはしないほうがよい文書群です。
 
 ### `AGENTS.md`
 
-Appears to overlap strongly with `AGENTS_ev_route_cost.md`.
+`AGENTS_ev_route_cost.md` と重複が非常に強く、独立した正本としては扱いにくい状態です。
 
 ### `masters_thesis_simulation_spec.md`
 
-Older broad simulation specification that appears superseded by later versions.
+旧版の広域仕様書であり、後続の v2 系列と比較して参照優先度は下がります。
 
 ### `masters_thesis_simulation_spec_v3.md`
 
-Looks like an extension of the v2 line with route-editable concepts. Useful, but
-not yet treated as the sole canonical spec in the current repository state.
+路線編集可能化などの拡張を含む重要文書ですが、現リポジトリではまだ単独正本として固定しない方が安全です。
 
 ### `agent_route_editable.md`
 
-Overlaps with `agent.md` while adding route-editable behavior.
+`agent.md` の route editable 拡張版で、内容の重複が多い文書です。
 
 ### `thesis_agent_instruction_max.md`
 
-Expanded maximal instruction set with strong overlap against `agent.md` and the
-main thesis spec chain.
+最大拡張版の実装指示であり、詳細度は高いものの `agent.md` と仕様書系列との重複が強いです。
 
 ### `ebus_prototype_model_gurobi.md`
 
-Prototype-era model document. Useful for history, but not ideal as the current
-primary reference.
+試作段階の Gurobi 実装寄り文書で、歴史的価値は高い一方、現在の主参照先にはしにくい位置づけです。
 
 ### `ebus_constraints_table.md`
 
-Constraint cheat sheet associated with the prototype model.
+試作モデルの制約一覧表であり、上記 prototype 文書と合わせて参考扱いが妥当です。
 
-## Recommended Reading Order
+## 推奨読書順
 
-If you are new to this directory, read in this order:
+このディレクトリを初めて読む場合は、次の順をおすすめします。
 
 1. `masters_research_brief_alignment.md`
 2. `masters_thesis_simulation_spec_v2.md`
 3. `agent.md`
 4. `AGENTS_ev_route_cost.md`
-5. specialized reference documents as needed
+5. 必要に応じて個別の参考資料
 
-## Recommended Next Cleanup Step
+## 今後の整理方針
 
-Future cleanup can happen safely in stages:
+安全に整理するなら次の順がよいです。
 
-1. keep this index updated
-2. add explicit metadata headers to overlapping docs if needed
-3. merge overlapping specs only after confirming current code usage and thesis
-   intent
+1. この索引を維持する
+2. 各 markdown に `ステータス` ヘッダを付ける
+3. 実コードとの対応を確認したうえで重複文書を統合する
 
-Until then, prefer indexing over deletion.
+それまでは、削除よりも索引化を優先します。
