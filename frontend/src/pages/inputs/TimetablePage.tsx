@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  useImportGtfsStopTimetables,
+  useImportGtfsTimetable,
   useTimetable,
   useStopTimetables,
   useImportTimetableCsv,
@@ -34,11 +36,13 @@ type ImportRunState = {
 
 type ImportHistoryEntry = {
   id: string;
-  resource: "BusTimetable" | "BusstopPoleTimetable";
+  resource: string;
   generatedAt?: string;
   summary: string;
   warnings: string[];
 };
+
+const GTFS_FEED_PATH = "GTFS/ToeiBus-GTFS";
 
 // ── Empty new row factory ──────────────────────────────────────
 
@@ -73,11 +77,15 @@ export function TimetablePage() {
   // Mutations
   const importCsvMutation = useImportTimetableCsv(scenarioId!);
   const importOdptMutation = useImportOdptTimetable(scenarioId!);
+  const importGtfsMutation = useImportGtfsTimetable(scenarioId!);
   const importOdptStopTimetablesMutation = useImportOdptStopTimetables(scenarioId!);
+  const importGtfsStopTimetablesMutation = useImportGtfsStopTimetables(scenarioId!);
   const exportCsvMutation = useExportTimetableCsv(scenarioId!);
   const updateTimetable = useUpdateTimetable(scenarioId!);
   const odptImportMeta = data?.meta?.imports?.odpt;
+  const gtfsImportMeta = data?.meta?.imports?.gtfs;
   const odptStopTimetableImportMeta = stopTimetablesData?.meta?.imports?.odpt;
+  const gtfsStopTimetableImportMeta = stopTimetablesData?.meta?.imports?.gtfs;
 
   // File input ref for import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -242,6 +250,53 @@ export function TimetablePage() {
     }
   }
 
+  async function handleImportGtfs() {
+    if (
+      !confirm(
+        t(
+          "timetable.import_gtfs_confirm",
+          "GTFS から都営バス向け時刻表を取り込み、現在の GTFS 由来時刻表を更新します。続行しますか？",
+        ),
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const result = await importGtfsMutation.mutateAsync({
+        feedPath: GTFS_FEED_PATH,
+        reset: true,
+      });
+      const details = [
+        t("timetable.import_gtfs_success", "{{count}} 件の GTFS 時刻表行を取り込みました。", {
+          count: result.total,
+        }),
+        t("timetable.import_gtfs_routes", "対象路線: {{count}} 件", {
+          count: result.meta.quality.routeCount,
+        }),
+      ];
+      if (result.meta.warnings.length > 0) {
+        details.push("", result.meta.warnings.join("\n"));
+      }
+      appendImportHistory({
+        resource: "GTFS Timetable",
+        generatedAt: result.meta.generatedAt,
+        summary: t(
+          "timetable.import_history_gtfs_bus_summary",
+          "{{count}} 行 / 対象路線 {{routeCount}} 件",
+          {
+            count: result.total,
+            routeCount: result.meta.quality.routeCount,
+          },
+        ),
+        warnings: result.meta.warnings,
+      });
+      alert(details.join("\n"));
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
   async function handleImportOdptStopTimetables() {
     if (
       !confirm(
@@ -322,6 +377,55 @@ export function TimetablePage() {
     }
   }
 
+  async function handleImportGtfsStopTimetables() {
+    if (
+      !confirm(
+        t(
+          "timetable.import_gtfs_stop_timetable_confirm",
+          "GTFS のバス停時刻表を取り込み、シナリオに保存します。続行しますか？",
+        ),
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const result = await importGtfsStopTimetablesMutation.mutateAsync({
+        feedPath: GTFS_FEED_PATH,
+        reset: true,
+      });
+      const details = [
+        t(
+          "timetable.import_gtfs_stop_timetable_success",
+          "{{count}} 件の GTFS バス停時刻表を保存しました。",
+          { count: result.meta.quality.stopTimetableCount },
+        ),
+        t("timetable.import_gtfs_stop_timetable_entries", "時刻表エントリ: {{count}} 件", {
+          count: result.meta.quality.entryCount,
+        }),
+      ];
+      if (result.meta.warnings.length > 0) {
+        details.push("", result.meta.warnings.join("\n"));
+      }
+      appendImportHistory({
+        resource: "GTFS Stop Timetable",
+        generatedAt: result.meta.generatedAt,
+        summary: t(
+          "timetable.import_history_gtfs_stop_summary",
+          "{{count}} 件 / エントリ {{entryCount}} 件",
+          {
+            count: result.meta.quality.stopTimetableCount,
+            entryCount: result.meta.quality.entryCount,
+          },
+        ),
+        warnings: result.meta.warnings,
+      });
+      alert(details.join("\n"));
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
   // ── Add Row ───────────────────────────────────────────────
 
   function handleAddRowOpen() {
@@ -386,6 +490,15 @@ export function TimetablePage() {
                 : t("timetable.import_odpt", "ODPTから取込")}
             </button>
             <button
+              className="rounded border border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+              onClick={handleImportGtfs}
+              disabled={importGtfsMutation.isPending}
+            >
+              {importGtfsMutation.isPending
+                ? t("timetable.importing_gtfs", "GTFS取込中…")
+                : t("timetable.import_gtfs", "GTFSから取込")}
+            </button>
+            <button
               className="rounded border border-cyan-300 bg-cyan-50 px-2 py-1 text-xs text-cyan-700 hover:bg-cyan-100 disabled:opacity-50"
               onClick={handleImportOdptStopTimetables}
               disabled={importOdptStopTimetablesMutation.isPending}
@@ -393,6 +506,15 @@ export function TimetablePage() {
               {importOdptStopTimetablesMutation.isPending
                 ? t("timetable.importing_odpt_stop_timetables", "バス停時刻表取込中…")
                 : t("timetable.import_odpt_stop_timetables", "バス停時刻表を取込")}
+            </button>
+            <button
+              className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+              onClick={handleImportGtfsStopTimetables}
+              disabled={importGtfsStopTimetablesMutation.isPending}
+            >
+              {importGtfsStopTimetablesMutation.isPending
+                ? t("timetable.importing_gtfs_stop_timetables", "GTFSバス停時刻表取込中…")
+                : t("timetable.import_gtfs_stop_timetables", "GTFSバス停時刻表を取込")}
             </button>
             <button
               className="rounded border border-border px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
@@ -452,6 +574,26 @@ export function TimetablePage() {
             )}
           </div>
         )}
+        {gtfsImportMeta && (
+          <div className="mb-3 rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-xs text-sky-900">
+            {t(
+              "timetable.import_gtfs_status",
+              "GTFS 最終取込: {{generatedAt}} / {{count}} 行 / 対象路線 {{routeCount}} 件",
+              {
+                generatedAt: gtfsImportMeta.generatedAt ?? "-",
+                count: gtfsImportMeta.quality.rowCount,
+                routeCount: gtfsImportMeta.quality.routeCount,
+              },
+            )}
+            {gtfsImportMeta.warnings.length > 0 && (
+              <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                {t("timetable.import_odpt_warning_badge", "warning {{count}}", {
+                  count: gtfsImportMeta.warnings.length,
+                })}
+              </span>
+            )}
+          </div>
+        )}
         {odptStopTimetableImportMeta && (
           <div className="mb-3 rounded-lg border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-900">
             {t(
@@ -472,6 +614,26 @@ export function TimetablePage() {
               <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
                 {t("timetable.import_odpt_warning_badge", "warning {{count}}", {
                   count: odptStopTimetableImportMeta.warnings.length,
+                })}
+              </span>
+            )}
+          </div>
+        )}
+        {gtfsStopTimetableImportMeta && (
+          <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-blue-900">
+            {t(
+              "timetable.import_gtfs_stop_timetable_status",
+              "GTFS バス停時刻表 最終取込: {{generatedAt}} / {{count}} 件 / エントリ {{entryCount}} 件",
+              {
+                generatedAt: gtfsStopTimetableImportMeta.generatedAt ?? "-",
+                count: gtfsStopTimetableImportMeta.quality.stopTimetableCount,
+                entryCount: gtfsStopTimetableImportMeta.quality.entryCount,
+              },
+            )}
+            {gtfsStopTimetableImportMeta.warnings.length > 0 && (
+              <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                {t("timetable.import_odpt_warning_badge", "warning {{count}}", {
+                  count: gtfsStopTimetableImportMeta.warnings.length,
                 })}
               </span>
             )}

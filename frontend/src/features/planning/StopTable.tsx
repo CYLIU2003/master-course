@@ -20,7 +20,10 @@ export function StopTable({ scenarioId }: Props) {
     return (
       <EmptyState
         title={t("stops.no_stops", "停留所がありません")}
-        description={t("stops.no_stops_description", "ODPT からデータ一式を取り込んでください")}
+        description={t(
+          "stops.no_stops_description",
+          "ODPT または GTFS からデータ一式を取り込んでください",
+        )}
       />
     );
   }

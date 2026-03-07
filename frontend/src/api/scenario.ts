@@ -8,8 +8,12 @@ import type {
   UpdateTimetableRequest,
   ImportOdptTimetableRequest,
   ImportOdptTimetableResponse,
+  ImportGtfsTimetableRequest,
+  ImportGtfsTimetableResponse,
   ImportOdptStopTimetableRequest,
   ImportOdptStopTimetableResponse,
+  ImportGtfsStopTimetableRequest,
+  ImportGtfsStopTimetableResponse,
   StopTimetablesResponse,
   ImportCsvRequest,
   ExportCsvResponse,
@@ -65,6 +69,12 @@ export const scenarioApi = {
       data,
     ),
 
+  importGtfsTimetable: (id: string, data?: ImportGtfsTimetableRequest) =>
+    api.post<ImportGtfsTimetableResponse>(
+      `/scenarios/${id}/timetable/import-gtfs`,
+      data,
+    ),
+
   getStopTimetables: (id: string, stopId?: string, serviceId?: string) => {
     const params = new URLSearchParams();
     if (stopId) params.set("stop_id", stopId);
@@ -80,6 +90,14 @@ export const scenarioApi = {
     data?: ImportOdptStopTimetableRequest,
   ) => api.post<ImportOdptStopTimetableResponse>(
     `/scenarios/${id}/stop-timetables/import-odpt`,
+    data,
+  ),
+
+  importGtfsStopTimetables: (
+    id: string,
+    data?: ImportGtfsStopTimetableRequest,
+  ) => api.post<ImportGtfsStopTimetableResponse>(
+    `/scenarios/${id}/stop-timetables/import-gtfs`,
     data,
   ),
 

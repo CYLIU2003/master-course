@@ -5,7 +5,9 @@ import type {
   UpdateScenarioRequest,
   UpdateTimetableRequest,
   ImportOdptTimetableRequest,
+  ImportGtfsTimetableRequest,
   ImportOdptStopTimetableRequest,
+  ImportGtfsStopTimetableRequest,
   ImportCsvRequest,
   UpdateCalendarRequest,
   UpsertCalendarEntryRequest,
@@ -206,11 +208,43 @@ export function useImportOdptTimetable(scenarioId: string) {
   });
 }
 
+export function useImportGtfsTimetable(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data?: ImportGtfsTimetableRequest) =>
+      scenarioApi.importGtfsTimetable(scenarioId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["scenarios", scenarioId, "timetable"],
+        exact: false,
+      });
+      invalidateDispatchOutputs(qc, scenarioId);
+      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+    },
+  });
+}
+
 export function useImportOdptStopTimetables(scenarioId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data?: ImportOdptStopTimetableRequest) =>
       scenarioApi.importOdptStopTimetables(scenarioId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["scenarios", scenarioId, "stop-timetables"],
+        exact: false,
+      });
+      invalidateDispatchOutputs(qc, scenarioId);
+      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+    },
+  });
+}
+
+export function useImportGtfsStopTimetables(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data?: ImportGtfsStopTimetableRequest) =>
+      scenarioApi.importGtfsStopTimetables(scenarioId, data),
     onSuccess: () => {
       qc.invalidateQueries({
         queryKey: ["scenarios", scenarioId, "stop-timetables"],

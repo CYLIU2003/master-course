@@ -20,9 +20,13 @@ import type {
   UpdateRouteRequest,
   ImportOdptRoutesRequest,
   ImportOdptRoutesResponse,
+  ImportGtfsRoutesRequest,
+  ImportGtfsRoutesResponse,
   StopsResponse,
   ImportOdptStopsRequest,
   ImportOdptStopsResponse,
+  ImportGtfsStopsRequest,
+  ImportGtfsStopsResponse,
   DepotRoutePermissionsResponse,
   UpdateDepotRoutePermissionsRequest,
   VehicleRoutePermissionsResponse,
@@ -142,6 +146,12 @@ export const routeApi = {
       data,
     ),
 
+  importGtfs: (scenarioId: string, data?: ImportGtfsRoutesRequest) =>
+    api.post<ImportGtfsRoutesResponse>(
+      `/scenarios/${scenarioId}/routes/import-gtfs`,
+      data,
+    ),
+
   delete: (scenarioId: string, routeId: string) =>
     api.delete<void>(`/scenarios/${scenarioId}/routes/${routeId}`),
 };
@@ -153,6 +163,12 @@ export const stopApi = {
   importOdpt: (scenarioId: string, data?: ImportOdptStopsRequest) =>
     api.post<ImportOdptStopsResponse>(
       `/scenarios/${scenarioId}/stops/import-odpt`,
+      data,
+    ),
+
+  importGtfs: (scenarioId: string, data?: ImportGtfsStopsRequest) =>
+    api.post<ImportGtfsStopsResponse>(
+      `/scenarios/${scenarioId}/stops/import-gtfs`,
       data,
     ),
 };
