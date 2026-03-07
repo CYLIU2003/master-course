@@ -1,0 +1,111 @@
+{
+  "createdAt": "2026-03-07T09:19:03.045Z",
+  "expiresAt": "2026-03-07T10:19:03.045Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ta26.0004603178\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ta26.0004603178&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 1,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ta26.0004603178\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003983407",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:11:23+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た２６",
+        "odpt:note": "た２６:すすき野団地:平日:16:59",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta26.0004603178.Susukinodanchi.00241242.b.Weekday.1659",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta26.0004603178",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Susukinodanchi.00241242.b",
+            "odpt:departureTime": "16:59"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nijigaokadanchi.00241230.b"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "17:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nijigaokashougakkou.00241229.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "17:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Susukinonichoume.00241228.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "17:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Mominokidai.00241227.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "17:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Susukinoitchoume.00241226.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "17:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Azaminoga-denzu.00241225.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "17:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oobachou.00241224.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "17:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Azaminodanchi.00241223.a"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "17:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Azaminonichoume.00241222.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "17:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Azaminoeki.00241221.4"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "17:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yamauchishougakkou.00241220.b"
+          },
+          {
+            "odpt:index": 13,
+            "odpt:arrivalTime": "17:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawaitchoume.00241219.a"
+          },
+          {
+            "odpt:index": 14,
+            "odpt:arrivalTime": "17:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.b"
+          },
+          {
+            "odpt:index": 15,
+            "odpt:arrivalTime": "17:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.b"
+          },
+          {
+            "odpt:index": 16,
+            "odpt:arrivalTime": "17:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216."
+          }
+        ]
+      }
+    ]
+  }
+}
