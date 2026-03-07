@@ -48,7 +48,6 @@ export function MasterCenterPanel({ scenarioId }: Props) {
             />
           )}
           {activeTab === "routes" && <RouteTableNew scenarioId={scenarioId} />}
-          {activeTab === "stops" && <StopTable scenarioId={scenarioId} />}
         </div>
         <div className="flex-1">
           <RouteMapPanel scenarioId={scenarioId} />
