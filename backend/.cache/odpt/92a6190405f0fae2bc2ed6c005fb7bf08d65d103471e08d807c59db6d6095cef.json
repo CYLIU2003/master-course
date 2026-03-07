@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:55:06.582Z",
-  "expiresAt": "2026-03-06T09:55:06.582Z",
+  "createdAt": "2026-03-07T12:44:00.863Z",
+  "expiresAt": "2026-03-07T13:44:00.863Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Myoujinsakaue.00240243.b\",\"dump\":false}",
   "payload": {
     "meta": {

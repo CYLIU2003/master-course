@@ -1,0 +1,66 @@
+{
+  "createdAt": "2026-03-07T12:38:08.282Z",
+  "expiresAt": "2026-03-07T13:38:08.282Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kou02.0004600144\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kou02.0004600144&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 1,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kou02.0004600144\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003997AD7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:09:01+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "向０２",
+        "odpt:note": "向０２:新平瀬橋:平日:06:47",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kou02.0004600144.Shinhirasebashi.00240662.a.Weekday.0647",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kou02.0004600144",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shinhirasebashi.00240662.a",
+            "odpt:departureTime": "06:47"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Bairin.00240663.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nishitakatsuchuugakkouiriguchi.00240664.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Takatsueigyousho.00240665.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shinfutakobashi.00240666.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "06:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Futagojinjamae.00240667.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "06:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Futakotamagawaeki.00240072."
+          }
+        ]
+      }
+    ]
+  }
+}

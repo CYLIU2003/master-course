@@ -1,0 +1,3098 @@
+{
+  "createdAt": "2026-03-07T12:38:31.857Z",
+  "expiresAt": "2026-03-07T13:38:31.857Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Nichi23.0004600847\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Nichi23.0004600847&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 79,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Nichi23.0004600847\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4C7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:12",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0612",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:12"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4D3",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:16",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0616",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:16"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4D4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0620",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4D5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:24",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0624",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:24"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4D6",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:16+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:28",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0628",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:28"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4D7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:16+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:32",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0632",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:32"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4D8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:16+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:36",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0636",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:36"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4D9",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:18+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0640",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4DA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:18+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:44",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0644",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:44"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4DB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:18+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:47",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0647",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:47"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4DC",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:19+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:50",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0650",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:50"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4DD",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:53",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0653",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:53"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4DE",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:56",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0656",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:56"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4DF",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:06:59",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0659",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:59"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E0",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:06:24",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0624",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:24"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E1",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:06:34",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0634",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:34"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E2",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:06:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0645",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E3",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:06:55",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0655",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:55"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:06:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0640",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "06:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:02",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0702",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:02"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E6",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:05",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0705",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:05"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:22+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:08",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0708",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:08"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:22+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:11",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0711",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:11"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4E9",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:23+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:14",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0714",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:14"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4EA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:17",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0717",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:17"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4EB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0720",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4EC",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:23",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0723",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:23"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4ED",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:26",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0726",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:26"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4EE",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:29",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0729",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:29"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4EF",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:26+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:32",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0732",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:32"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F0",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:27+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:35",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0735",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:35"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F1",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:27+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:38",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0738",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:38"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F2",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:28+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:41",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0741",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:41"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F3",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:44",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0744",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:44"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:47",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0747",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:47"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:50",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0750",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:50"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F6",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:30+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:53",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0753",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:53"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:30+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:56",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0756",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:56"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:31+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:07:59",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0759",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:59"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4F9",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:32+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:07:04",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0704",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:04"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4FA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:32+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:07:13",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0713",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:13"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4FB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:32+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:07:22",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0722",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:22"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4FC",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:32+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:07:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0730",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4FD",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:33+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:07:38",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0738",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:38"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4FE",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:33+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:07:46",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0746",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:46"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB4FF",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:33+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:07:54",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0754",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:54"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB500",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:34+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:07:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0700",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB501",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:35+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:07:16",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0716",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:16"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB502",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:36+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:07:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0730",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB503",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:37+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:07:42",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0742",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:42"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB504",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:37+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:07:53",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0753",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "07:53"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB505",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:37+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:02",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0802",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:02"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB506",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:37+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:05",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0805",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:05"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB507",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:37+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:08",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0808",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:08"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB508",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:37+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:11",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0811",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:11"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB509",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:37+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:14",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0814",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:14"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB50A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:17",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0817",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:17"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB50B",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0820",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB50C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:24",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0824",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:24"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB50D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:28",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0828",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:28"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB50E",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:32",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0832",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:32"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB50F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:36",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0836",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:36"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB510",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0840",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB511",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:39+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:44",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0844",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:44"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB512",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:48",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0848",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:48"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB513",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:52",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0852",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:52"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "09:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB514",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:平日:08:56",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Weekday.0856",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:56"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "09:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "09:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB515",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:42+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:08:03",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0803",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:03"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB516",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:43+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:08:12",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0812",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:12"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB517",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:44+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:08:21",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0821",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:21"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB518",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:44+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:08:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0830",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB519",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:44+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:08:39",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0839",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:39"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB51A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:44+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:08:48",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0848",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:48"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB51B",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:45+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:土曜:08:57",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Saturday.0857",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:57"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "09:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "09:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB51C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:46+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:08:04",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0804",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:04"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB51D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:46+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:08:16",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0816",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:16"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB51E",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:46+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:08:28",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0828",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:28"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB51F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:47+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:08:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0840",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000038DB520",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:03:47+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "日２３",
+        "odpt:note": "日２３:さくらが丘:日祝:08:52",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Nichi23.0004600847.Sakuragaoka.00241374.a.Holiday.0852",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Nichi23.0004600847",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaoka.00241374.a",
+            "odpt:departureTime": "08:52"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sakuragaokairiguchi.00241373.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Idabyouinseimonmae.00241372.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshiidazaka.00241371.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "09:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hiyoshieki.00240852."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:55:12.336Z",
-  "expiresAt": "2026-03-06T09:55:12.336Z",
+  "createdAt": "2026-03-07T12:44:15.620Z",
+  "expiresAt": "2026-03-07T13:44:15.620Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Suenaga.00240672.b\",\"dump\":false}",
   "payload": {
     "meta": {

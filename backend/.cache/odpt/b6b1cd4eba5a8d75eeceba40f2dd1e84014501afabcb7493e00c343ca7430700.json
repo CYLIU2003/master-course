@@ -1,0 +1,1097 @@
+{
+  "createdAt": "2026-03-07T12:37:41.475Z",
+  "expiresAt": "2026-03-07T13:37:41.475Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ta94.0004600392\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ta94.0004600392&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 20,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ta94.0004600392\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C000000000000010000034CE636",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:12+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:06:50",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.0650",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "06:50"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "06:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "06:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "06:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "06:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000036E44F8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:12+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:06:57",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.0657",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "06:57"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "06:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "06:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039834FB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:07:10",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.0710",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "07:10"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000034CE63B",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:07:26",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.0726",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "07:26"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000034CE63D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:16+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:07:38",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.0738",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "07:38"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000031E3810",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:16+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:07:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.0745",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "07:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "07:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "07:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000034CE63E",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:18+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:07:58",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.0758",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "07:58"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000036E4501",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:08:14",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.0814",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "08:14"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039834FD",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:08:33",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.0833",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "08:33"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "08:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "08:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "08:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "08:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003983503",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:30+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:10:16",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.1016",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "10:16"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "10:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "10:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "10:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "10:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "10:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "10:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000398351B",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:19:13",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.1913",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "19:13"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "19:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "19:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "19:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "19:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "19:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "19:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "19:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000398351D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:19:38",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.1938",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "19:38"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "19:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "19:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "19:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "19:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "19:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "19:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "19:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000398351F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:57+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:20:01",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.2001",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "20:01"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "20:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "20:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "20:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "20:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "20:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "20:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "20:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000349F45D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:57+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:20:24",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.2024",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "20:24"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "20:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "20:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "20:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "20:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "20:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "20:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "20:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000349F45F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:54:59+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:20:48",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.2048",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "20:48"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "20:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "20:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "20:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "20:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "20:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "20:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "21:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000349F465",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:55:01+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:21:12",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.2112",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "21:12"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "21:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "21:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "21:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "21:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "21:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "21:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "21:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000349F471",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:55:03+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:22:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.2230",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "22:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "22:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "22:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "22:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "22:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "22:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "22:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "22:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000031E38AD",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:55:03+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:平日:22:52",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Weekday.2252",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "22:52"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "22:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "22:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "22:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "22:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "23:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "23:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "23:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000036E4569",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:55:03+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:土曜:22:25",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Saturday.2225",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "22:25"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "22:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "22:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "22:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "22:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "22:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "22:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "22:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000036E456A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T12:55:03+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "た９４",
+        "odpt:note": "た９４:たまプラーザ駅:日祝:22:25",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ta94.0004600392.Tamapura-zaeki.00241216.12.Holiday.2225",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ta94.0004600392",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tamapura-zaeki.00241216.12",
+            "odpt:departureTime": "22:25"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "22:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawasanchoume.00241217.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "22:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.ShinIshikawanichoume.00241218.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "22:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Edashindou.00241290.a"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "22:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Santou-runakagawa.00241291.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "22:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kenkyuujomae.00241333.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "22:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaokaminami.00241334.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "22:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sumiregaoka.00240757."
+          }
+        ]
+      }
+    ]
+  }
+}

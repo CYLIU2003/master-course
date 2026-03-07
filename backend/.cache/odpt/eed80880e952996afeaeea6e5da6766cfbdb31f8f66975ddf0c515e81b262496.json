@@ -1,0 +1,307 @@
+{
+  "createdAt": "2026-03-07T12:42:57.417Z",
+  "expiresAt": "2026-03-07T13:42:57.417Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kousoku.0004603240\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kousoku.0004603240&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 10,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kousoku.0004603240\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD251F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:34+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:日祝:07:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Holiday.0720",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "07:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD2533",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:34+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:平日:09:55",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Weekday.0955",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "09:55"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "11:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD2537",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:35+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:日祝:09:55",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Holiday.0955",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "09:55"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "11:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD253A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:34+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:平日:07:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Weekday.0720",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "07:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD253D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:35+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:平日:15:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Weekday.1540",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "15:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "17:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD253E",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:36+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:日祝:15:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Holiday.1540",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "15:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "17:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD2543",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:平日:19:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Weekday.1900",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "19:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "19:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "20:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD2544",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:日祝:19:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Holiday.1900",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "19:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "19:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "20:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD2545",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:平日:20:10",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Weekday.2010",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "20:10"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "21:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "21:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BD2546",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:25:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "高速",
+        "odpt:note": "高速:渋谷駅（マークシティ）:日祝:20:10",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kousoku.0004603240.Shibuyaeki.00240143.92.Holiday.2010",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kousoku.0004603240",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "20:10"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "21:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sodegaurabasuta-minaru.00241432."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "21:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kisarazuekinishiguchi.00241433."
+          }
+        ]
+      }
+    ]
+  }
+}

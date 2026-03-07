@@ -284,6 +284,17 @@ def load_gtfs_core_bundle(feed_path: str | Path = DEFAULT_GTFS_FEED_PATH) -> Dic
     return _load_gtfs_core_bundle_cached(str(feed_root), _feed_signature(feed_root))
 
 
+def resolve_gtfs_feed_path(feed_path: str | Path = DEFAULT_GTFS_FEED_PATH) -> Path:
+    return _resolve_feed_path(feed_path)
+
+
+def gtfs_feed_signature(
+    feed_path: str | Path = DEFAULT_GTFS_FEED_PATH,
+) -> Tuple[Tuple[str, int, int], ...]:
+    feed_root = _resolve_feed_path(feed_path)
+    return _feed_signature(feed_root)
+
+
 @lru_cache(maxsize=4)
 def _load_gtfs_core_bundle_cached(
     feed_root_str: str, signature: Tuple[Tuple[str, int, int], ...]
@@ -635,6 +646,19 @@ def _load_gtfs_core_bundle_cached(
         route_items.append(
             {
                 "id": route_id,
+                "routeCode": str(
+                    raw_route.get("route_short_name")
+                    or raw_route.get("route_long_name")
+                    or raw_route_id
+                    or route_id
+                ).strip()
+                or route_id,
+                "routeLabel": _route_name(
+                    raw_route,
+                    str(representative.get("origin_name") or ""),
+                    str(representative.get("destination_name") or ""),
+                    raw_route_id or route_id,
+                ),
                 "name": _route_name(
                     raw_route,
                     str(representative.get("origin_name") or ""),
@@ -787,6 +811,170 @@ def build_gtfs_stop_timetables(
     return {
         "meta": dict(core.get("meta") or {}),
         "stop_timetables": items,
+    }
+
+
+def build_gtfs_route_timetables(
+    feed_path: str | Path = DEFAULT_GTFS_FEED_PATH,
+) -> Dict[str, Any]:
+    core = load_gtfs_core_bundle(feed_path)
+    feed_root = _resolve_feed_path(feed_path)
+    route_by_id = {
+        str(route.get("id") or ""): route for route in list(core.get("routes") or [])
+    }
+    trip_by_id = {
+        str(row.get("trip_id") or ""): row
+        for row in list(core.get("timetable_rows") or [])
+        if row.get("trip_id")
+    }
+    stop_name_by_id = dict(core.get("stop_name_by_id") or {})
+    route_trips: DefaultDict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+    current_trip_id: Optional[str] = None
+    current_stop_times: List[Dict[str, Any]] = []
+
+    def _finalize_trip(trip_id: Optional[str], stop_times: List[Dict[str, Any]]) -> None:
+        if not trip_id or not stop_times:
+            return
+        trip = trip_by_id.get(trip_id)
+        if not trip:
+            return
+        route_id = str(trip.get("route_id") or "")
+        if not route_id:
+            return
+        route_trips[route_id].append(
+            {
+                "trip_id": trip_id,
+                "pattern_id": route_id,
+                "service_id": str(trip.get("service_id") or "WEEKDAY"),
+                "direction": str(trip.get("direction") or "outbound"),
+                "origin_stop_id": stop_times[0]["stop_id"],
+                "origin_stop_name": stop_times[0]["stop_name"],
+                "destination_stop_id": stop_times[-1]["stop_id"],
+                "destination_stop_name": stop_times[-1]["stop_name"],
+                "departure": str(trip.get("departure") or ""),
+                "arrival": str(trip.get("arrival") or ""),
+                "estimated_distance_km": float(trip.get("distance_km") or 0.0),
+                "is_partial": len(stop_times)
+                < len((route_by_id.get(route_id) or {}).get("stopSequence") or []),
+                "stop_times": stop_times,
+            }
+        )
+
+    for row in _stream_rows(feed_root / "stop_times.txt"):
+        trip_id = str(row.get("trip_id") or "").strip()
+        if not trip_id:
+            continue
+
+        if trip_id != current_trip_id:
+            _finalize_trip(current_trip_id, current_stop_times)
+            current_trip_id = trip_id
+            current_stop_times = []
+
+        if trip_id not in trip_by_id:
+            continue
+
+        stop_id = str(row.get("stop_id") or "").strip()
+        if not stop_id:
+            continue
+
+        arrival = _normalize_time(row.get("arrival_time"))
+        departure = _normalize_time(row.get("departure_time"))
+        current_stop_times.append(
+            {
+                "index": len(current_stop_times),
+                "stop_id": stop_id,
+                "stop_name": str(stop_name_by_id.get(stop_id) or stop_id),
+                "arrival": arrival,
+                "departure": departure,
+                "time": departure or arrival,
+            }
+        )
+
+    _finalize_trip(current_trip_id, current_stop_times)
+
+    route_timetables: List[Dict[str, Any]] = []
+    for route_id, route in sorted(route_by_id.items()):
+        trips = sorted(
+            route_trips.get(route_id) or [],
+            key=lambda item: (
+                str(item.get("departure") or ""),
+                str(item.get("arrival") or ""),
+                str(item.get("trip_id") or ""),
+            ),
+        )
+        if not trips:
+            continue
+
+        service_summaries: DefaultDict[str, Dict[str, Any]] = defaultdict(
+            lambda: {
+                "service_id": "",
+                "trip_count": 0,
+                "first_departure": None,
+                "last_arrival": None,
+            }
+        )
+        first_departure: Optional[str] = None
+        last_arrival: Optional[str] = None
+
+        for trip in trips:
+            departure = str(trip.get("departure") or "") or None
+            arrival = str(trip.get("arrival") or "") or None
+            if departure and (first_departure is None or departure < first_departure):
+                first_departure = departure
+            if arrival and (last_arrival is None or arrival > last_arrival):
+                last_arrival = arrival
+
+            service_id = str(trip.get("service_id") or "WEEKDAY")
+            summary = service_summaries[service_id]
+            summary["service_id"] = service_id
+            summary["trip_count"] += 1
+            if departure and (
+                summary["first_departure"] is None
+                or departure < summary["first_departure"]
+            ):
+                summary["first_departure"] = departure
+            if arrival and (
+                summary["last_arrival"] is None or arrival > summary["last_arrival"]
+            ):
+                summary["last_arrival"] = arrival
+
+        route_timetables.append(
+            {
+                "route_id": route_id,
+                "route_code": str(route.get("routeCode") or route_id),
+                "route_label": str(route.get("routeLabel") or route.get("name") or route_id),
+                "trip_count": len(trips),
+                "first_departure": first_departure,
+                "last_arrival": last_arrival,
+                "patterns": [
+                    {
+                        "pattern_id": route_id,
+                        "title": str(route.get("name") or route_id),
+                        "direction": str(
+                            trips[0].get("direction")
+                            or ("inbound" if str(route.get("gtfsDirectionId") or "0") == "1" else "outbound")
+                        ),
+                        "stop_sequence": [
+                            {
+                                "stop_id": str(stop_id),
+                                "stop_name": str(stop_name_by_id.get(str(stop_id)) or stop_id),
+                            }
+                            for stop_id in list(route.get("stopSequence") or [])
+                        ],
+                    }
+                ],
+                "services": sorted(
+                    service_summaries.values(),
+                    key=lambda item: str(item.get("service_id") or ""),
+                ),
+                "trips": trips,
+            }
+        )
+
+    return {
+        "meta": dict(core.get("meta") or {}),
+        "route_timetables": route_timetables,
     }
 
 

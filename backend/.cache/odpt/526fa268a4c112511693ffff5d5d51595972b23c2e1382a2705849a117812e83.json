@@ -1,0 +1,369 @@
+{
+  "createdAt": "2026-03-07T12:41:38.240Z",
+  "expiresAt": "2026-03-07T13:41:38.240Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004603268\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004603268&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 8,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004603268\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399799D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:14:33+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:渋谷駅（マークシティ）:平日:06:55",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603268.Shibuyaeki.00240143.92.Weekday.0655",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603268",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "06:55"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.9"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Seruriantawa-toukyuuhoteru.00240011.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399799E",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:14:33+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:渋谷駅（マークシティ）:日祝:06:55",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603268.Shibuyaeki.00240143.92.Holiday.0655",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603268",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "06:55"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.9"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "07:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Seruriantawa-toukyuuhoteru.00240011.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "07:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "07:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039979A1",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:14:35+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:渋谷駅（マークシティ）:平日:09:35",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603268.Shibuyaeki.00240143.92.Weekday.0935",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603268",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "09:35"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.9"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "09:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Seruriantawa-toukyuuhoteru.00240011.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "10:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "10:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "10:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039979A2",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:14:35+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:渋谷駅（マークシティ）:日祝:09:35",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603268.Shibuyaeki.00240143.92.Holiday.0935",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603268",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "09:35"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.9"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "09:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Seruriantawa-toukyuuhoteru.00240011.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "10:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "10:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "10:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039979A9",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:14:40+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:渋谷駅（マークシティ）:平日:12:55",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603268.Shibuyaeki.00240143.92.Weekday.1255",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603268",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "12:55"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.9"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "13:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Seruriantawa-toukyuuhoteru.00240011.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "13:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "14:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039979AB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:14:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:渋谷駅（マークシティ）:日祝:12:55",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603268.Shibuyaeki.00240143.92.Holiday.1255",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603268",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "12:55"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.9"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "13:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Seruriantawa-toukyuuhoteru.00240011.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "13:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "14:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039979AD",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:14:43+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:渋谷駅（マークシティ）:平日:15:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603268.Shibuyaeki.00240143.92.Weekday.1520",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603268",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "15:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.9"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Seruriantawa-toukyuuhoteru.00240011.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "16:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000039979AE",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:14:43+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:渋谷駅（マークシティ）:日祝:15:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603268.Shibuyaeki.00240143.92.Holiday.1520",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603268",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240143.92",
+            "odpt:departureTime": "15:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.9"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Seruriantawa-toukyuuhoteru.00240011.a"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudainiryokakuta-minaru.00241368."
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaiichita-minaru.00241365."
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "16:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Hanedakuukoudaisanta-minaru.00241385."
+          }
+        ]
+      }
+    ]
+  }
+}

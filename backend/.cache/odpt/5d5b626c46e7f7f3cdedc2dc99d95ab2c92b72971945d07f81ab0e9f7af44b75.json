@@ -1,0 +1,1649 @@
+{
+  "createdAt": "2026-03-07T12:37:48.185Z",
+  "expiresAt": "2026-03-07T13:37:48.185Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Juu91.0004600568\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Juu91.0004600568&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 68,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Juu91.0004600568\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E571",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:10+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:08:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0800",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "08:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362D033",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:10+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:08:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0815",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "08:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362D643",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:10+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:08:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0830",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "08:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362D96C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:11+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:08:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0845",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "08:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362D9EA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:11+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:08:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0800",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "08:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362D9F2",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:11+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:08:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0815",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "08:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362D9FA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:11+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:08:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0830",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "08:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362DA02",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:11+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:08:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0845",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "08:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362DA0A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:11+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:09:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0900",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "09:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362DA12",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:12+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:09:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0915",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "09:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362DBC1",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:12+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:09:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0930",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "09:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362DBF7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:13+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:09:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0945",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "09:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E022",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:13+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:09:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0900",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "09:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C000000000000010000036B39B8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:13+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:09:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0915",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "09:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E0A9",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:14+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:09:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0930",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "09:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E0BF",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:09:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0945",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "09:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E0C5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:10:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1000",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "10:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E0CB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:10:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1015",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "10:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E0D1",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:16+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:10:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1030",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "10:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFD5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:17+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:10:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1045",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "10:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFD6",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:17+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:10:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1000",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "10:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E0E3",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:17+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:10:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1015",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "10:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E0E9",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:17+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:10:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1030",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "10:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E0EF",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:17+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:10:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1045",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "10:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "10:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFD7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:17+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:11:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1100",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "11:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFD8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:17+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:11:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1115",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "11:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E101",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:18+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:11:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1130",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "11:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFD9",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:19+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:11:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1145",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "11:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFDA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:11:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1100",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "11:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFDB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:11:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1115",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "11:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E119",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:11:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1130",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "11:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFDC",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:11:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1145",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "11:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "11:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E678",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:21+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:12:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1200",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "12:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E679",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:22+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:12:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1215",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "12:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E67A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:23+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:12:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1230",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "12:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFDD",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:23+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:12:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1245",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "12:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E67C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:12:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1200",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "12:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E67D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:12:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1215",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "12:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFD3",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:12:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1230",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "12:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFD4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:12:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1245",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "12:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF4A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:13:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1300",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "13:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF4B",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:13:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1320",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "13:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF4C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:24+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:13:36",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1336",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "13:36"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E683",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:13:51",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1351",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "13:51"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E684",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:13:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1300",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "13:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFDE",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:13:20",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1320",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "13:20"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E686",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:13:36",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1336",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "13:36"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFDF",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:13:51",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.1351",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "13:51"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFE0",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:14:06",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1406",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "14:06"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFE1",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:14:21",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1421",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "14:21"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFE2",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:14:36",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1436",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "14:36"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF4D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:26+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:14:51",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1451",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "14:51"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF4E",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:27+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:15:06",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1506",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "15:06"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF4F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:27+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:15:21",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1521",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "15:21"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF50",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:27+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:15:36",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1536",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "15:36"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF51",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:27+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:15:51",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1551",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "15:51"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF52",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:27+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:16:06",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1606",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "16:06"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FF53",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:27+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:16:21",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1621",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "16:21"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E692",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:16:36",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1636",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "16:36"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFE3",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:16:51",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1651",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "16:51"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFE4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:17:06",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1706",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "17:06"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E695",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:17:21",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1721",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "17:21"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFE5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:17:36",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1736",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "17:36"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000392FFE6",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:29+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:17:51",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.1751",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "17:51"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E677",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:10+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:07:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0745",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "07:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E557",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:10+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:07:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0730",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "07:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E56C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:10+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:土曜:07:45",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Saturday.0745",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "07:45"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000362E676",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:52:10+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "十９１",
+        "odpt:note": "十９１:十日市場駅:平日:07:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Juu91.0004600568.Tookaichibaeki.00241135.5.Weekday.0730",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Juu91.0004600568",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Tookaichibaeki.00241135.5",
+            "odpt:departureTime": "07:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "07:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yokohamashinmidorisougoubyouin.00241145."
+          }
+        ]
+      }
+    ]
+  }
+}

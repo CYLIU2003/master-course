@@ -142,12 +142,15 @@ export interface RouteImportQuality {
 export interface RouteImportMeta {
   operator?: string;
   dump?: boolean;
+  requestedDump?: boolean;
   feedPath?: string;
   agencyName?: string;
   source: ImportSource;
   resourceType?: string;
   generatedAt?: string;
   warnings: string[];
+  snapshotKey?: string;
+  snapshotMode?: string;
   cache?: {
     stops?: boolean;
     patterns?: boolean;
@@ -210,12 +213,15 @@ export interface StopImportQuality {
 export interface StopImportMeta {
   operator?: string;
   dump?: boolean;
+  requestedDump?: boolean;
   feedPath?: string;
   agencyName?: string;
   source: ImportSource;
   resourceType?: string;
   generatedAt?: string;
   warnings: string[];
+  snapshotKey?: string;
+  snapshotMode?: string;
   cache?: {
     stops?: boolean;
     patterns?: boolean;
@@ -275,12 +281,15 @@ export interface ImportProgress {
 export interface TimetableImportMeta {
   operator?: string;
   dump?: boolean;
+  requestedDump?: boolean;
   feedPath?: string;
   agencyName?: string;
   source: ImportSource;
   resourceType?: string;
   generatedAt?: string;
   warnings: string[];
+  snapshotKey?: string;
+  snapshotMode?: string;
   cache?: {
     stops?: boolean;
     patterns?: boolean;
@@ -355,12 +364,15 @@ export interface StopTimetableImportQuality {
 export interface StopTimetableImportMeta {
   operator?: string;
   dump?: boolean;
+  requestedDump?: boolean;
   feedPath?: string;
   agencyName?: string;
   source: ImportSource;
   resourceType?: string;
   generatedAt?: string;
   warnings: string[];
+  snapshotKey?: string;
+  snapshotMode?: string;
   cache?: {
     stops?: boolean;
     patterns?: boolean;

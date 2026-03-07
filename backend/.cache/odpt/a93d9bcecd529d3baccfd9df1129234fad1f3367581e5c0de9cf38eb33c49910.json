@@ -1,0 +1,360 @@
+{
+  "createdAt": "2026-03-07T12:39:13.242Z",
+  "expiresAt": "2026-03-07T13:39:13.242Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Mori04.0004602079\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Mori04.0004602079&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 7,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Mori04.0004602079\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003C06ACF",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:14:02+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "森０４",
+        "odpt:note": "森０４:大森操車所:平日:09:52",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Mori04.0004602079.Oomorisoushajo.00240575.b.Weekday.0952",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori04.0004602079",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575.b",
+            "odpt:departureTime": "09:52"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorieki.00240573.1"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "09:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sannousanchoume.00240577.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "09:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomoriyuubinkyoku.00240578.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "10:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ootabunkanomori.00240579.c"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "10:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Iriaraidaiyonshougakkou.00240580.b"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "10:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamieigyousho.00240581."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003C06AE2",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:14:11+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "森０４",
+        "odpt:note": "森０４:大森操車所:土曜:21:31",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Mori04.0004602079.Oomorisoushajo.00240575.b.Saturday.2131",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori04.0004602079",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575.b",
+            "odpt:departureTime": "21:31"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "21:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorieki.00240573.1"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "21:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sannousanchoume.00240577.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "21:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomoriyuubinkyoku.00240578.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "21:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ootabunkanomori.00240579.c"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "21:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Iriaraidaiyonshougakkou.00240580.b"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "21:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamieigyousho.00240581."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003C06AE4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:14:13+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "森０４",
+        "odpt:note": "森０４:大森操車所:日祝:21:31",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Mori04.0004602079.Oomorisoushajo.00240575.b.Holiday.2131",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori04.0004602079",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575.b",
+            "odpt:departureTime": "21:31"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "21:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorieki.00240573.1"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "21:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sannousanchoume.00240577.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "21:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomoriyuubinkyoku.00240578.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "21:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ootabunkanomori.00240579.c"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "21:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Iriaraidaiyonshougakkou.00240580.b"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "21:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamieigyousho.00240581."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003C06AE5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:14:14+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "森０４",
+        "odpt:note": "森０４:大森操車所:平日:21:51",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Mori04.0004602079.Oomorisoushajo.00240575.b.Weekday.2151",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori04.0004602079",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575.b",
+            "odpt:departureTime": "21:51"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "21:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorieki.00240573.1"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "21:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sannousanchoume.00240577.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "21:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomoriyuubinkyoku.00240578.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "21:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ootabunkanomori.00240579.c"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "22:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Iriaraidaiyonshougakkou.00240580.b"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "22:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamieigyousho.00240581."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003983B2A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:14:17+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "森０４",
+        "odpt:note": "森０４:大森操車所:日祝:22:43",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Mori04.0004602079.Oomorisoushajo.00240575.b.Holiday.2243",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori04.0004602079",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575.b",
+            "odpt:departureTime": "22:43"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "22:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorieki.00240573.1"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "22:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sannousanchoume.00240577.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "22:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomoriyuubinkyoku.00240578.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "22:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ootabunkanomori.00240579.c"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "22:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Iriaraidaiyonshougakkou.00240580.b"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "22:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamieigyousho.00240581."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003875727",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:14:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "森０４",
+        "odpt:note": "森０４:大森操車所:平日:22:58",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Mori04.0004602079.Oomorisoushajo.00240575.b.Weekday.2258",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori04.0004602079",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575.b",
+            "odpt:departureTime": "22:58"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "23:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorieki.00240573.1"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "23:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sannousanchoume.00240577.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "23:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomoriyuubinkyoku.00240578.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "23:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ootabunkanomori.00240579.c"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "23:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Iriaraidaiyonshougakkou.00240580.b"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "23:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamieigyousho.00240581."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003983B2B",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T14:14:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "森０４",
+        "odpt:note": "森０４:大森操車所:土曜:22:54",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Mori04.0004602079.Oomorisoushajo.00240575.b.Saturday.2254",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Mori04.0004602079",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorisoushajo.00240575.b",
+            "odpt:departureTime": "22:54"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "22:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomorieki.00240573.1"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "22:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Sannousanchoume.00240577.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "22:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Oomoriyuubinkyoku.00240578.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "23:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ootabunkanomori.00240579.c"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "23:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Iriaraidaiyonshougakkou.00240580.b"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "23:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Ikegamieigyousho.00240581."
+          }
+        ]
+      }
+    ]
+  }
+}

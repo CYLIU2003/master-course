@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:57:18.082Z",
-  "expiresAt": "2026-03-06T09:57:18.082Z",
+  "createdAt": "2026-03-07T12:45:14.432Z",
+  "expiresAt": "2026-03-07T13:45:14.432Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.TamagawabyouinIriguchi.00240247.b\",\"dump\":false}",
   "payload": {
     "meta": {

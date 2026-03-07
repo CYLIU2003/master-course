@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-07T09:18:08.114Z",
-  "expiresAt": "2026-03-07T10:18:08.114Z",
+  "createdAt": "2026-03-07T12:36:57.398Z",
+  "expiresAt": "2026-03-07T13:36:57.398Z",
   "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Chokkou.0004601785\",\"dump\":false}",
   "payload": {
     "meta": {

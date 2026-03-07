@@ -1,0 +1,51 @@
+{
+  "createdAt": "2026-03-07T12:38:40.906Z",
+  "expiresAt": "2026-03-07T13:38:40.906Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Shinyoko81.0004600583\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Shinyoko81.0004600583&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 1,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Shinyoko81.0004600583\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399DD97",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T15:39:47+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "新横８１",
+        "odpt:note": "新横８１:新横浜駅:平日:09:12",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Shinyoko81.0004600583.Shinyokohamaeki.00241035.9.Weekday.0912",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shinyoko81.0004600583",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Shinyokohamaeki.00241035.9",
+            "odpt:departureTime": "09:12"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "09:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toriyamaoohashi.00241034.a"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "09:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Kitashinyokohamaeki.00241036.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "09:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nippaeki.00241033."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:54:58.234Z",
-  "expiresAt": "2026-03-06T09:54:58.234Z",
+  "createdAt": "2026-03-07T12:43:44.983Z",
+  "expiresAt": "2026-03-07T13:43:44.983Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Nakaondabashi.00241068.\",\"dump\":false}",
   "payload": {
     "meta": {

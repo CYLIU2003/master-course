@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:55:09.840Z",
-  "expiresAt": "2026-03-06T09:55:09.840Z",
+  "createdAt": "2026-03-07T12:44:02.361Z",
+  "expiresAt": "2026-03-07T13:44:02.361Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Sangenjayaeki.00240439.\",\"dump\":false}",
   "payload": {
     "meta": {

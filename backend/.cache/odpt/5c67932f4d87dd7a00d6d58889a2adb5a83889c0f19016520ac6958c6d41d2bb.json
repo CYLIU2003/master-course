@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:55:10.845Z",
-  "expiresAt": "2026-03-06T09:55:10.845Z",
+  "createdAt": "2026-03-07T12:44:14.968Z",
+  "expiresAt": "2026-03-07T13:44:14.968Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Azaminoga-denzu.00241225.c\",\"dump\":false}",
   "payload": {
     "meta": {

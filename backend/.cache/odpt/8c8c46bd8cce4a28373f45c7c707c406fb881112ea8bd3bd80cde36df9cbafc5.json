@@ -1,0 +1,2681 @@
+{
+  "createdAt": "2026-03-07T12:42:22.976Z",
+  "expiresAt": "2026-03-07T13:42:22.976Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ji11.0004602123\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ji11.0004602123&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 36,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Ji11.0004602123\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCC5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:06+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:13:13",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1313",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "13:13"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "13:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "13:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "13:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "13:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "13:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "13:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "13:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "13:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "13:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE392",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:35:49+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:12:38",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1238",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "12:38"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "12:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "12:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "12:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "12:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "12:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "12:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "12:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "12:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "12:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "12:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CC3B",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:35:55+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:12:28",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1228",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "12:28"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "12:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "12:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "12:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "12:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "12:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "12:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "12:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "12:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "12:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "12:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCBA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:35:57+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:12:48",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1248",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "12:48"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "12:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "12:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "12:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "12:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "12:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "12:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "12:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "13:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "13:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "13:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE227",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:05+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:12:56",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1256",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "12:56"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "12:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "12:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "12:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "13:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "13:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "13:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "13:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "13:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "13:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "13:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "13:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCC8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:08+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:13:31",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1331",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "13:31"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "13:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "13:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "13:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "13:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "13:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "13:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "13:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "13:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "13:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE3A9",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:09+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:13:48",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1348",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "13:48"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "13:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "13:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "13:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "13:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "13:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "13:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "14:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "14:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "14:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCCE",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:12+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:13:07",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1307",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "13:07"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "13:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "13:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "13:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "13:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "13:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "13:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "13:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "13:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "13:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCD1",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:15+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:13:27",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1327",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "13:27"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "13:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "13:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "13:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "13:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "13:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "13:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "13:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "13:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "13:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCD4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:16+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:13:47",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1347",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "13:47"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "13:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "13:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "13:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "13:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "13:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "13:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "13:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "13:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "13:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "14:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "14:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE3B8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:14:05",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1405",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "14:05"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "14:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "14:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "14:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "14:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "14:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "14:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "14:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "14:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "14:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE3BB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:14:24",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1424",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "14:24"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "14:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "14:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "14:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "14:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "14:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "14:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "14:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "14:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "14:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCE4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:23+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:14:40",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1440",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "14:40"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "14:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "14:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "14:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "14:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "14:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "14:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "14:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "14:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "14:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCE8",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:25+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:14:07",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1407",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "14:07"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "14:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "14:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "14:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "14:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "14:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "14:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "14:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "14:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "14:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCEB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:27+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:14:27",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1427",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "14:27"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "14:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "14:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "14:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "14:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "14:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "14:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "14:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "14:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "14:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCEE",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:28+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:14:47",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1447",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "14:47"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "14:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "14:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "14:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "14:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "14:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "14:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "14:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "14:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "14:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "15:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "15:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE3CC",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:36+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:14:59",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1459",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "14:59"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "15:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "15:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "15:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "15:07",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "15:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "15:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "15:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "15:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "15:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCFB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:15:17",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1517",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "15:17"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "15:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "15:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "15:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "15:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "15:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "15:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "15:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "15:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "15:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CCFE",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:38+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:15:35",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1535",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "15:35"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "15:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "15:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "15:42",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "15:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "15:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "15:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "15:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "15:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "15:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD03",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:41+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:15:07",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1507",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "15:07"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "15:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "15:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "15:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "15:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "15:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "15:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "15:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "15:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "15:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD06",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:42+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:15:27",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1527",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "15:27"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "15:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "15:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "15:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "15:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "15:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "15:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "15:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "15:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "15:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD09",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:44+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:15:47",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1547",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "15:47"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "15:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "15:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "15:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "15:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "15:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "15:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "15:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "16:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "16:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD12",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:48+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:15:53",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1553",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "15:53"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "15:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "15:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "16:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "16:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "16:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "16:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "16:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "16:06",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "16:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE3E2",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:49+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:16:15",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1615",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "16:15"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "16:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "16:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "16:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "16:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "16:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "16:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "16:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "16:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD18",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:51+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:16:31",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1631",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "16:31"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "16:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "16:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "16:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "16:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "16:41",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "16:43",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "16:44",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "16:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD1F",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:56+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:16:21",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1621",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "16:21"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "16:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "16:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "16:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "16:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "16:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "16:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "16:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "16:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE3E7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:52+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:16:47",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1647",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "16:47"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "16:49",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "16:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "16:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "16:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "16:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "16:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "17:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "17:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD1D",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:36:54+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:16:08",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1608",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "16:08"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "16:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "16:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "16:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "16:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "16:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "16:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "16:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "16:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE3F7",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:37:07+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:17:11",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1711",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "17:11"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:12",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "17:13",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "17:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "17:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "17:18",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "17:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "17:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "17:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "17:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "17:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "17:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE3FA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:37:09+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:17:27",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1727",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "17:27"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "17:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "17:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "17:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "17:34",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "17:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "17:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "17:37",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "17:39",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "17:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "17:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003BFE3FD",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:37:10+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:17:44",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1744",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "17:44"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:45",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "17:46",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "17:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "17:48",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "17:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "17:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "17:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "17:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "17:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "17:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "18:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD34",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:37:11+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:16:51",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1651",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "16:51"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "16:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "16:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "16:54",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "16:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "16:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "16:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "17:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "17:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "17:03",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "17:04",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "17:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD38",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:37:14+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:17:19",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1719",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "17:19"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "17:21",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "17:22",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "17:23",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "17:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "17:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "17:28",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "17:29",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "17:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "17:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "17:38",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD3C",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:37:16+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:土曜:17:49",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Saturday.1749",
+        "odpt:calendar": "odpt.Calendar:Saturday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "17:49"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "17:51",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "17:52",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "17:53",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "17:56",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "17:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "17:58",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "17:59",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "18:01",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "18:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "18:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD47",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:37:20+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:18:07",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1807",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "18:07"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "18:08",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "18:09",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "18:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "18:11",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "18:14",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "18:15",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "18:16",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "18:17",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "18:19",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "18:20",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "18:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C0000000000000100000399CD4A",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T13:37:22+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "自１１",
+        "odpt:note": "自１１:東京医療センター:平日:18:23",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Ji11.0004602123.Toukyouiryousenta-.00240204.b.Weekday.1823",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Ji11.0004602123",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-.00240204.b",
+            "odpt:departureTime": "18:23"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "18:24",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyouiryousenta-mae.00240267.d"
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "18:25",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Komazawakouen.00240268.b"
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "18:26",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Gakugeifuzokuchuugakkou.00240269.b"
+          },
+          {
+            "odpt:index": 5,
+            "odpt:arrivalTime": "18:27",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fuzokusetagayachuugakkoumae.00240276.a"
+          },
+          {
+            "odpt:index": 6,
+            "odpt:arrivalTime": "18:30",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukasawaitchoume.00240200.a"
+          },
+          {
+            "odpt:index": 7,
+            "odpt:arrivalTime": "18:31",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Nomigawaryokudou.00240382.a"
+          },
+          {
+            "odpt:index": 8,
+            "odpt:arrivalTime": "18:32",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Fukaichikaishoutengai.00240377.a"
+          },
+          {
+            "odpt:index": 9,
+            "odpt:arrivalTime": "18:33",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Todorokinanachoume.00240495.c"
+          },
+          {
+            "odpt:index": 10,
+            "odpt:arrivalTime": "18:35",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yahatachuugakkou.00240183.a"
+          },
+          {
+            "odpt:index": 11,
+            "odpt:arrivalTime": "18:36",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Yatchuumaeshoutenkai.00240374.a"
+          },
+          {
+            "odpt:index": 12,
+            "odpt:arrivalTime": "18:40",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Jiyuugaokaeki.00240373."
+          }
+        ]
+      }
+    ]
+  }
+}

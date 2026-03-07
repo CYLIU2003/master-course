@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-03-06T08:55:33.438Z",
-  "expiresAt": "2026-03-06T09:55:33.438Z",
+  "createdAt": "2026-03-07T12:44:20.694Z",
+  "expiresAt": "2026-03-07T13:44:20.694Z",
   "key": "{\"resource\":\"odpt:BusstopPoleTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busstopPole=odpt.BusstopPole:TokyuBus.Todorokiari-namae.00240847.a\",\"dump\":false}",
   "payload": {
     "meta": {

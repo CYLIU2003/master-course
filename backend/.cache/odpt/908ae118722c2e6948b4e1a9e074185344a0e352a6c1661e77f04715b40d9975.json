@@ -1,0 +1,221 @@
+{
+  "createdAt": "2026-03-07T12:41:30.350Z",
+  "expiresAt": "2026-03-07T13:41:30.350Z",
+  "key": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004603258\",\"dump\":false}",
+  "payload": {
+    "meta": {
+      "url": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004603258&acl:consumerKey=841qfdgzgywu5oktxrzqst5mosl5apeis3r5bz98aorxk8175pr1e7zd2k4pywqh",
+      "count": 6,
+      "maybeTruncated": false,
+      "dump": false,
+      "cacheHit": false,
+      "cacheKey": "{\"resource\":\"odpt:BusTimetable\",\"query\":\"odpt:operator=odpt.Operator:TokyuBus&odpt:busroutePattern=odpt.BusroutePattern:TokyuBus.Kuukou.0004603258\",\"dump\":false}"
+    },
+    "data": [
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003997AEA",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:52+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:東急歌舞伎町タワー:平日:06:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603258.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー.Weekday.0630",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603258",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー",
+            "odpt:departureTime": "06:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritadaisanta-minaru.00241399."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudainiryokakuta-minaru.00241367."
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudaiichiryokakuta-minaru.00241366."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003997AEB",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:52+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:東急歌舞伎町タワー:日祝:06:30",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603258.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー.Holiday.0630",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603258",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー",
+            "odpt:departureTime": "06:30"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "08:02",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritadaisanta-minaru.00241399."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "08:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudainiryokakuta-minaru.00241367."
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "08:10",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudaiichiryokakuta-minaru.00241366."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003997AF2",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:54+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:東急歌舞伎町タワー:平日:14:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603258.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー.Weekday.1400",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603258",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー",
+            "odpt:departureTime": "14:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritadaisanta-minaru.00241399."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudainiryokakuta-minaru.00241367."
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "15:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudaiichiryokakuta-minaru.00241366."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003997AF3",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:54+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:東急歌舞伎町タワー:日祝:14:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603258.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー.Holiday.1400",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603258",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー",
+            "odpt:departureTime": "14:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "15:47",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritadaisanta-minaru.00241399."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "15:50",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudainiryokakuta-minaru.00241367."
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "15:55",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudaiichiryokakuta-minaru.00241366."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003997AF4",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:54+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:東急歌舞伎町タワー:平日:16:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603258.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー.Weekday.1600",
+        "odpt:calendar": "odpt.Calendar:Weekday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603258",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー",
+            "odpt:departureTime": "16:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritadaisanta-minaru.00241399."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "18:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudainiryokakuta-minaru.00241367."
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "18:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudaiichiryokakuta-minaru.00241366."
+          }
+        ]
+      },
+      {
+        "@id": "urn:ucode:_00001C00000000000001000003997AF5",
+        "@type": "odpt:BusTimetable",
+        "dc:date": "2026-02-02T16:22:54+09:00",
+        "@context": "http://vocab.odpt.org/context_odpt_BusTimetable.jsonld",
+        "dc:title": "空港",
+        "odpt:note": "空港:東急歌舞伎町タワー:日祝:16:00",
+        "owl:sameAs": "odpt.BusTimetable:TokyuBus.Kuukou.0004603258.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー.Holiday.1600",
+        "odpt:calendar": "odpt.Calendar:Holiday",
+        "odpt:operator": "odpt.Operator:TokyuBus",
+        "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Kuukou.0004603258",
+        "odpt:busTimetableObject": [
+          {
+            "odpt:index": 1,
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Toukyuukabukichoutawa-.00241511.東急歌舞伎町タワー",
+            "odpt:departureTime": "16:00"
+          },
+          {
+            "odpt:index": 2,
+            "odpt:arrivalTime": "17:57",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritadaisanta-minaru.00241399."
+          },
+          {
+            "odpt:index": 3,
+            "odpt:arrivalTime": "18:00",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudainiryokakuta-minaru.00241367."
+          },
+          {
+            "odpt:index": 4,
+            "odpt:arrivalTime": "18:05",
+            "odpt:busstopPole": "odpt.BusstopPole:TokyuBus.Naritakuukoudaiichiryokakuta-minaru.00241366."
+          }
+        ]
+      }
+    ]
+  }
+}
