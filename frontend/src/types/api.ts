@@ -5,6 +5,7 @@ import type {
   Vehicle,
   VehicleTemplate,
   Route,
+  Stop,
   Trip,
   TimetableRow,
   ServiceCalendar,
@@ -16,6 +17,7 @@ import type {
   ConnectionGraph,
   VehicleDuty,
   DutyValidationResult,
+  DispatchScope,
   SimulationResult,
   SimulationConfig,
   OptimizationResult,
@@ -183,6 +185,51 @@ export interface ImportOdptRoutesResponse extends ApiListResponse<Route> {
   meta: RouteImportMeta;
 }
 
+export interface StopImportQuality {
+  stopCount: number;
+  namedCount: number;
+  geoCount: number;
+  poleNumberCount: number;
+  warningCount: number;
+}
+
+export interface StopImportMeta {
+  operator: string;
+  dump: boolean;
+  source: "odpt";
+  resourceType?: "BusstopPole";
+  generatedAt?: string;
+  warnings: string[];
+  cache: {
+    stops?: boolean;
+    patterns?: boolean;
+    stopTimetables?: boolean;
+    timetables?: boolean;
+    timetableChunks?: number;
+  };
+  quality: StopImportQuality;
+}
+
+export interface StopsResponse extends ApiListResponse<Stop> {
+  meta?: {
+    imports?: Partial<Record<string, StopImportMeta>>;
+  };
+}
+
+export type StopDetailResponse = Stop;
+
+export interface ImportOdptStopsRequest {
+  operator?: string;
+  dump?: boolean;
+  forceRefresh?: boolean;
+  ttlSec?: number;
+}
+
+export interface ImportOdptStopsResponse extends ApiListResponse<Stop> {
+  allStopsTotal: number;
+  meta: StopImportMeta;
+}
+
 // ── Timetable / Trips ────────────────────────────────────────
 
 export interface TimetableImportQuality {
@@ -325,6 +372,7 @@ export type TripsResponse = ApiListResponse<Trip>;
 export interface BuildTripsRequest {
   force?: boolean;
   service_id?: string;
+  depot_id?: string;
 }
 
 // ── Calendar ──────────────────────────────────────────────────
@@ -385,6 +433,7 @@ export type GraphResponse = ConnectionGraph;
 export interface BuildGraphRequest {
   force?: boolean;
   service_id?: string;
+  depot_id?: string;
 }
 
 // ── Duties ────────────────────────────────────────────────────
@@ -396,15 +445,24 @@ export interface GenerateDutiesRequest {
   vehicle_type?: string;
   strategy?: "greedy" | "milp";
   service_id?: string;
+  depot_id?: string;
 }
 
 // ── Simulation ────────────────────────────────────────────────
 
 export type SimulationResultResponse = SimulationResult;
 export type SimulationConfigResponse = SimulationConfig;
+export type DispatchScopeResponse = DispatchScope;
+
+export interface UpdateDispatchScopeRequest {
+  depotId?: string | null;
+  serviceId?: string;
+}
 
 export interface RunSimulationRequest {
   force?: boolean;
+  service_id?: string;
+  depot_id?: string;
 }
 
 // ── Optimization ──────────────────────────────────────────────

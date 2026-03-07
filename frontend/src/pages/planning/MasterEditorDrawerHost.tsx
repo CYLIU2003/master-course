@@ -59,6 +59,9 @@ export function MasterEditorDrawerHost({ scenarioId }: Props) {
           isCreate={isCreate}
         />
       );
+    case "stops":
+      // Stops are read-only (imported from ODPT); no editor drawer needed
+      return null;
     default:
       return null;
   }

@@ -10,15 +10,18 @@ Each file stores the complete scenario document:
     "depots":  [ Depot ... ],
     "vehicles": [ Vehicle ... ],
     "routes":  [ Route ... ],
+    "stops":   [ Stop ... ],
     "depot_route_permissions":   [ {depotId, routeId, allowed} ... ],
     "vehicle_route_permissions": [ {vehicleId, routeId, allowed} ... ],
     "route_import_meta": { "odpt": { ... } },
+    "stop_import_meta": { "odpt": { ... } },
     "timetable_import_meta": { "odpt": { ... } },
     "stop_timetable_import_meta": { "odpt": { ... } },
     "timetable_rows": [ TimetableRow ... ],   # service_id field included
     "stop_timetables": [ StopTimetable ... ],
     "calendar": [ ServiceCalendar ... ],      # WEEKDAY/SAT/SUN_HOL definitions
     "calendar_dates": [ CalendarDate ... ],   # exception overrides
+    "dispatch_scope": { "depotId": str | null, "serviceId": str },
     "simulation_config": { ... } | null,
     "trips":   [ Trip ... ] | null,
     "graph":   { ... } | null,
@@ -54,10 +57,13 @@ def _load(scenario_id: str) -> Dict[str, Any]:
     doc = json.loads(p.read_text(encoding="utf-8"))
     doc.setdefault("vehicle_templates", [])
     doc.setdefault("route_import_meta", {})
+    doc.setdefault("stop_import_meta", {})
     doc.setdefault("timetable_import_meta", {})
     doc.setdefault("stop_timetable_import_meta", {})
+    doc.setdefault("stops", [])
     doc.setdefault("timetable_rows", [])
     doc.setdefault("stop_timetables", [])
+    doc.setdefault("dispatch_scope", {"depotId": None, "serviceId": "WEEKDAY"})
     return doc
 
 
@@ -78,6 +84,128 @@ def _now_iso() -> str:
 
 def _new_id() -> str:
     return str(uuid.uuid4())
+
+
+def _invalidate_dispatch_artifacts(doc: Dict[str, Any]) -> None:
+    doc["trips"] = None
+    doc["graph"] = None
+    doc["duties"] = None
+    doc["simulation_result"] = None
+    doc["optimization_result"] = None
+    doc["meta"]["status"] = "draft"
+
+
+def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
+    scope = doc.setdefault("dispatch_scope", {})
+    scope["serviceId"] = str(scope.get("serviceId") or "WEEKDAY")
+    depot_ids = {
+        str(depot.get("id"))
+        for depot in doc.get("depots") or []
+        if depot.get("id") is not None
+    }
+    depot_id = scope.get("depotId")
+    if depot_id is None:
+        scope["depotId"] = None
+    else:
+        depot_id = str(depot_id)
+        scope["depotId"] = depot_id if depot_id in depot_ids else None
+    return dict(scope)
+
+
+def _sync_depot_route_permissions(
+    doc: Dict[str, Any],
+    permissions: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    depots = [
+        str(depot.get("id"))
+        for depot in doc.get("depots") or []
+        if depot.get("id") is not None
+    ]
+    routes = [
+        str(route.get("id"))
+        for route in doc.get("routes") or []
+        if route.get("id") is not None
+    ]
+    existing = {
+        (str(item.get("depotId")), str(item.get("routeId"))): bool(item.get("allowed"))
+        for item in doc.get("depot_route_permissions") or []
+        if item.get("depotId") is not None and item.get("routeId") is not None
+    }
+    incoming = {
+        (str(item.get("depotId")), str(item.get("routeId"))): bool(item.get("allowed"))
+        for item in permissions or []
+        if item.get("depotId") is not None and item.get("routeId") is not None
+    }
+
+    normalized: List[Dict[str, Any]] = []
+    for depot_id in depots:
+        for route_id in routes:
+            key = (depot_id, route_id)
+            allowed = incoming.get(key)
+            if allowed is None:
+                allowed = existing.get(key)
+            if allowed is None:
+                allowed = True
+            normalized.append(
+                {
+                    "depotId": depot_id,
+                    "routeId": route_id,
+                    "allowed": bool(allowed),
+                }
+            )
+
+    doc["depot_route_permissions"] = normalized
+    return list(normalized)
+
+
+def _sync_vehicle_route_permissions(
+    doc: Dict[str, Any],
+    permissions: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    valid_vehicle_ids = {
+        str(vehicle.get("id"))
+        for vehicle in doc.get("vehicles") or []
+        if vehicle.get("id") is not None
+    }
+    valid_route_ids = {
+        str(route.get("id"))
+        for route in doc.get("routes") or []
+        if route.get("id") is not None
+    }
+
+    merged: Dict[tuple[str, str], Dict[str, Any]] = {}
+    for item in doc.get("vehicle_route_permissions") or []:
+        vehicle_id = item.get("vehicleId")
+        route_id = item.get("routeId")
+        if vehicle_id is None or route_id is None:
+            continue
+        vehicle_id = str(vehicle_id)
+        route_id = str(route_id)
+        if vehicle_id not in valid_vehicle_ids or route_id not in valid_route_ids:
+            continue
+        merged[(vehicle_id, route_id)] = {
+            "vehicleId": vehicle_id,
+            "routeId": route_id,
+            "allowed": bool(item.get("allowed")),
+        }
+
+    for item in permissions or []:
+        vehicle_id = item.get("vehicleId")
+        route_id = item.get("routeId")
+        if vehicle_id is None or route_id is None:
+            continue
+        vehicle_id = str(vehicle_id)
+        route_id = str(route_id)
+        if vehicle_id not in valid_vehicle_ids or route_id not in valid_route_ids:
+            continue
+        merged[(vehicle_id, route_id)] = {
+            "vehicleId": vehicle_id,
+            "routeId": route_id,
+            "allowed": bool(item.get("allowed")),
+        }
+
+    doc["vehicle_route_permissions"] = list(merged.values())
+    return list(doc["vehicle_route_permissions"])
 
 
 def _default_calendar() -> List[Dict[str, Any]]:
@@ -158,15 +286,18 @@ def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
         "vehicles": [],
         "vehicle_templates": [],
         "routes": [],
+        "stops": [],
         "depot_route_permissions": [],
         "vehicle_route_permissions": [],
         "route_import_meta": {},
+        "stop_import_meta": {},
         "timetable_import_meta": {},
         "timetable_rows": [],
         "stop_timetable_import_meta": {},
         "stop_timetables": [],
         "calendar": _default_calendar(),
         "calendar_dates": [],
+        "dispatch_scope": {"depotId": None, "serviceId": "WEEKDAY"},
         "simulation_config": None,
         "trips": None,
         "graph": None,
@@ -217,9 +348,13 @@ def get_field(scenario_id: str, field: str) -> Any:
     return _load(scenario_id)[field]
 
 
-def set_field(scenario_id: str, field: str, value: Any) -> None:
+def set_field(
+    scenario_id: str, field: str, value: Any, *, invalidate_dispatch: bool = False
+) -> None:
     doc = _load(scenario_id)
     doc[field] = value
+    if invalidate_dispatch:
+        _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
 
@@ -243,11 +378,19 @@ def _get_item(
 
 def _create_item(scenario_id: str, field: str, data: Dict[str, Any]) -> Dict[str, Any]:
     doc = _load(scenario_id)
-    data["id"] = _new_id()
-    doc[field].append(data)
+    item = dict(data)
+    item["id"] = _new_id()
+    doc[field].append(item)
+    if field in {"depots", "vehicles", "routes"}:
+        _invalidate_dispatch_artifacts(doc)
+    if field in {"depots", "routes"}:
+        _sync_depot_route_permissions(doc)
+        _normalize_dispatch_scope(doc)
+    if field in {"vehicles", "routes"}:
+        _sync_vehicle_route_permissions(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
-    return data
+    return item
 
 
 def _update_item(
@@ -257,6 +400,13 @@ def _update_item(
     for item in doc[field]:
         if item.get(item_id_key) == item_id:
             item.update({k: v for k, v in patch.items() if v is not None})
+            if field in {"depots", "vehicles", "routes"}:
+                _invalidate_dispatch_artifacts(doc)
+            if field in {"depots", "routes"}:
+                _sync_depot_route_permissions(doc)
+                _normalize_dispatch_scope(doc)
+            if field in {"vehicles", "routes"}:
+                _sync_vehicle_route_permissions(doc)
             doc["meta"]["updatedAt"] = _now_iso()
             _save(doc)
             return item
@@ -269,6 +419,13 @@ def _delete_item(scenario_id: str, field: str, item_id_key: str, item_id: str) -
     doc[field] = [i for i in doc[field] if i.get(item_id_key) != item_id]
     if len(doc[field]) == before:
         raise KeyError(item_id)
+    if field in {"depots", "vehicles", "routes"}:
+        _invalidate_dispatch_artifacts(doc)
+    if field in {"depots", "routes"}:
+        _sync_depot_route_permissions(doc)
+        _normalize_dispatch_scope(doc)
+    if field in {"vehicles", "routes"}:
+        _sync_vehicle_route_permissions(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
 
@@ -551,26 +708,28 @@ def replace_routes_from_source(
 ) -> List[Dict[str, Any]]:
     doc = _load(scenario_id)
     route_import_meta = doc.setdefault("route_import_meta", {})
-    existing_source_route_ids = {
-        r.get("id") for r in doc["routes"] if r.get("source") == source and r.get("id")
-    }
-    incoming_route_ids = {r.get("id") for r in routes if r.get("id")}
-    removed_route_ids = existing_source_route_ids - incoming_route_ids
     preserved = [r for r in doc["routes"] if r.get("source") != source]
     doc["routes"] = preserved + routes
-    if removed_route_ids:
-        doc["depot_route_permissions"] = [
-            p
-            for p in doc["depot_route_permissions"]
-            if p.get("routeId") not in removed_route_ids
-        ]
-        doc["vehicle_route_permissions"] = [
-            p
-            for p in doc["vehicle_route_permissions"]
-            if p.get("routeId") not in removed_route_ids
-        ]
     if import_meta is not None:
         route_import_meta[source] = import_meta
+
+    # Prune permissions referencing route IDs that no longer exist.
+    surviving_route_ids = {
+        str(r.get("id")) for r in doc["routes"] if r.get("id") is not None
+    }
+    doc["depot_route_permissions"] = [
+        perm
+        for perm in doc.get("depot_route_permissions") or []
+        if str(perm.get("routeId", "")) in surviving_route_ids
+    ]
+    doc["vehicle_route_permissions"] = [
+        perm
+        for perm in doc.get("vehicle_route_permissions") or []
+        if str(perm.get("routeId", "")) in surviving_route_ids
+    ]
+
+    _invalidate_dispatch_artifacts(doc)
+    _normalize_dispatch_scope(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
     return list(doc["routes"])
@@ -585,6 +744,58 @@ def get_route_import_meta(
         return dict(route_import_meta)
     value = route_import_meta.get(source)
     return dict(value) if isinstance(value, dict) else {}
+
+
+def list_stops(scenario_id: str) -> List[Dict[str, Any]]:
+    return _list_items(scenario_id, "stops")
+
+
+def replace_stops_from_source(
+    scenario_id: str,
+    source: str,
+    stops: List[Dict[str, Any]],
+    import_meta: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    stop_import_meta = doc.setdefault("stop_import_meta", {})
+    preserved = [stop for stop in doc.get("stops", []) if stop.get("source") != source]
+    normalized_stops = []
+    seen_ids = set()
+    for stop in stops:
+        stop_id = stop.get("id")
+        if not stop_id or stop_id in seen_ids:
+            continue
+        seen_ids.add(stop_id)
+        normalized_stops.append(dict(stop))
+    doc["stops"] = preserved + normalized_stops
+    if import_meta is not None:
+        stop_import_meta[source] = import_meta
+    _invalidate_dispatch_artifacts(doc)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return list(doc["stops"])
+
+
+def get_stop_import_meta(
+    scenario_id: str, source: Optional[str] = None
+) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    stop_import_meta = doc.get("stop_import_meta") or {}
+    if source is None:
+        return dict(stop_import_meta)
+    value = stop_import_meta.get(source)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def set_stop_import_meta(
+    scenario_id: str, source: str, import_meta: Dict[str, Any]
+) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    stop_import_meta = doc.setdefault("stop_import_meta", {})
+    stop_import_meta[source] = import_meta
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return dict(import_meta)
 
 
 def set_timetable_import_meta(
@@ -653,6 +864,7 @@ def upsert_timetable_rows_from_source(
         merged[_row_key(candidate)] = candidate
 
     doc["timetable_rows"] = preserved_rows + list(merged.values())
+    _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
     return list(doc["timetable_rows"])
@@ -708,6 +920,7 @@ def upsert_stop_timetables_from_source(
         )
 
     doc["stop_timetables"] = preserved_items + list(merged.values())
+    _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
     return list(doc["stop_timetables"])
@@ -717,25 +930,83 @@ def upsert_stop_timetables_from_source(
 
 
 def get_depot_route_permissions(scenario_id: str) -> List[Dict[str, Any]]:
-    return _list_items(scenario_id, "depot_route_permissions")
+    doc = _load(scenario_id)
+    return list(doc.get("depot_route_permissions") or [])
 
 
 def set_depot_route_permissions(
     scenario_id: str, permissions: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    set_field(scenario_id, "depot_route_permissions", permissions)
-    return permissions
+    doc = _load(scenario_id)
+    # Store permissions as given by the caller (may reference entities
+    # not yet created, e.g. during cross-scenario setup). The _sync
+    # helpers are called on entity lifecycle events to prune stale entries.
+    sanitized = [
+        {
+            "depotId": str(item.get("depotId")),
+            "routeId": str(item.get("routeId")),
+            "allowed": bool(item.get("allowed")),
+        }
+        for item in permissions
+        if item.get("depotId") is not None and item.get("routeId") is not None
+    ]
+    doc["depot_route_permissions"] = sanitized
+    _invalidate_dispatch_artifacts(doc)
+    _normalize_dispatch_scope(doc)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return list(sanitized)
 
 
 def get_vehicle_route_permissions(scenario_id: str) -> List[Dict[str, Any]]:
-    return _list_items(scenario_id, "vehicle_route_permissions")
+    doc = _load(scenario_id)
+    return list(doc.get("vehicle_route_permissions") or [])
 
 
 def set_vehicle_route_permissions(
     scenario_id: str, permissions: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    set_field(scenario_id, "vehicle_route_permissions", permissions)
-    return permissions
+    doc = _load(scenario_id)
+    # Store permissions as given by the caller (may reference entities
+    # not yet created). The _sync helpers are called on entity lifecycle
+    # events to prune stale entries.
+    sanitized = [
+        {
+            "vehicleId": str(item.get("vehicleId")),
+            "routeId": str(item.get("routeId")),
+            "allowed": bool(item.get("allowed")),
+        }
+        for item in permissions
+        if item.get("vehicleId") is not None and item.get("routeId") is not None
+    ]
+    doc["vehicle_route_permissions"] = sanitized
+    _invalidate_dispatch_artifacts(doc)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return list(sanitized)
+
+
+def get_dispatch_scope(scenario_id: str) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    return _normalize_dispatch_scope(doc)
+
+
+def set_dispatch_scope(scenario_id: str, scope: Dict[str, Any]) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    current = _normalize_dispatch_scope(doc)
+    next_scope = {
+        "depotId": scope.get("depotId"),
+        "serviceId": str(
+            scope.get("serviceId") or current.get("serviceId") or "WEEKDAY"
+        ),
+    }
+    doc["dispatch_scope"] = next_scope
+    normalized = _normalize_dispatch_scope(doc)
+    if normalized != current:
+        _invalidate_dispatch_artifacts(doc)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return normalized
 
 
 # ── Calendar helpers ───────────────────────────────────────────
@@ -753,6 +1024,7 @@ def set_calendar(
     """Replace the entire calendar (list of service_id definitions)."""
     doc = _load(scenario_id)
     doc["calendar"] = entries
+    _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
     return entries
@@ -772,6 +1044,7 @@ def upsert_calendar_entry(scenario_id: str, entry: Dict[str, Any]) -> Dict[str, 
     if not replaced:
         calendar.append(entry)
     doc["calendar"] = calendar
+    _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
     return entry
@@ -785,6 +1058,7 @@ def delete_calendar_entry(scenario_id: str, service_id: str) -> None:
     doc["calendar"] = [e for e in calendar if e.get("service_id") != service_id]
     if len(doc["calendar"]) == before:
         raise KeyError(service_id)
+    _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
 
@@ -804,6 +1078,7 @@ def set_calendar_dates(
     """Replace the entire calendar_dates list."""
     doc = _load(scenario_id)
     doc["calendar_dates"] = entries
+    _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
     return entries
@@ -823,6 +1098,7 @@ def upsert_calendar_date(scenario_id: str, entry: Dict[str, Any]) -> Dict[str, A
     if not replaced:
         dates.append(entry)
     doc["calendar_dates"] = dates
+    _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
     return entry
@@ -836,5 +1112,6 @@ def delete_calendar_date(scenario_id: str, date: str) -> None:
     doc["calendar_dates"] = [e for e in dates if e.get("date") != date]
     if len(doc["calendar_dates"]) == before:
         raise KeyError(date)
+    _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)

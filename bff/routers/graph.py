@@ -51,17 +51,20 @@ router = APIRouter(tags=["graph"])
 class BuildTripsBody(BaseModel):
     force: bool = False
     service_id: Optional[str] = None  # filter timetable rows by service_id
+    depot_id: Optional[str] = None
 
 
 class BuildGraphBody(BaseModel):
     force: bool = False
     service_id: Optional[str] = None  # filter timetable rows by service_id
+    depot_id: Optional[str] = None
 
 
 class GenerateDutiesBody(BaseModel):
     vehicle_type: Optional[str] = None
     strategy: str = "greedy"
     service_id: Optional[str] = None  # filter timetable rows by service_id
+    depot_id: Optional[str] = None
 
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -78,22 +81,75 @@ def _require_scenario(scenario_id: str) -> None:
         raise _not_found(scenario_id)
 
 
+def _allowed_route_ids_for_depot(scenario_id: str, depot_id: str) -> Optional[set[str]]:
+    permissions = store.get_depot_route_permissions(scenario_id)
+    matching_permissions = [
+        permission
+        for permission in permissions
+        if permission.get("depotId") == depot_id
+    ]
+    if not matching_permissions:
+        return None
+    return {
+        str(permission.get("routeId"))
+        for permission in matching_permissions
+        if permission.get("allowed") is True and permission.get("routeId") is not None
+    }
+
+
+def _resolve_dispatch_scope(
+    scenario_id: str,
+    *,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+    persist: bool = False,
+) -> Dict[str, Any]:
+    current = store.get_dispatch_scope(scenario_id)
+    scope = {
+        "serviceId": service_id or current.get("serviceId") or "WEEKDAY",
+        "depotId": depot_id if depot_id is not None else current.get("depotId"),
+    }
+    if persist:
+        return store.set_dispatch_scope(scenario_id, scope)
+    return scope
+
+
 def _build_dispatch_context(
-    scenario_id: str, service_id: Optional[str] = None
+    scenario_id: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
 ) -> DispatchContext:
     """
     Build a DispatchContext from the scenario's timetable and stored trips.
     Uses timetable_rows if no trips have been built yet.
     If service_id is provided, only rows matching that service_id are used.
     """
+    if not depot_id:
+        raise ValueError("No depot selected. Configure dispatch scope first.")
+
     raw_trips = store.get_field(scenario_id, "trips") or []
     timetable_rows = store.get_field(scenario_id, "timetable_rows") or []
+    allowed_route_ids = _allowed_route_ids_for_depot(scenario_id, depot_id)
 
     # Filter by service_id when requested
     if service_id:
         timetable_rows = [
             r for r in timetable_rows if r.get("service_id", "WEEKDAY") == service_id
         ]
+
+    if allowed_route_ids is not None:
+        timetable_rows = [
+            row for row in timetable_rows if row.get("route_id") in allowed_route_ids
+        ]
+        raw_trips = [
+            trip for trip in raw_trips if trip.get("route_id") in allowed_route_ids
+        ]
+
+    if not raw_trips and not timetable_rows:
+        raise ValueError(
+            "No timetable rows found for the selected depot and service. "
+            "Import ODPT timetable data or adjust the depot route selection."
+        )
 
     # Convert raw trips to Trip objects
     trips: List[Trip] = []
@@ -104,7 +160,10 @@ def _build_dispatch_context(
     else:
         # Build trips from timetable rows
         for i, row in enumerate(timetable_rows):
-            trip_id = f"trip_{row['route_id']}_{row.get('direction', 'out')}_{i:03d}"
+            trip_id = str(
+                row.get("trip_id")
+                or f"trip_{row['route_id']}_{row.get('direction', 'out')}_{i:03d}"
+            )
             trips.append(
                 Trip(
                     trip_id=trip_id,
@@ -125,7 +184,7 @@ def _build_dispatch_context(
     deadhead_rules: Dict = {}
 
     # Build vehicle profiles from scenario vehicles
-    vehicles = store.list_vehicles(scenario_id)
+    vehicles = store.list_vehicles(scenario_id, depot_id=depot_id)
     vehicle_profiles: Dict[str, VehicleProfile] = {}
     seen_types = set()
     for v in vehicles:
@@ -159,7 +218,10 @@ def _build_dispatch_context(
 
 
 def _run_build_trips(
-    scenario_id: str, job_id: str, service_id: Optional[str] = None
+    scenario_id: str,
+    job_id: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
 ) -> None:
     try:
         job_store.update_job(
@@ -168,7 +230,7 @@ def _run_build_trips(
             progress=10,
             message="Building trips from timetable...",
         )
-        context = _build_dispatch_context(scenario_id, service_id)
+        context = _build_dispatch_context(scenario_id, service_id, depot_id)
         trips_json = [trip_to_dict(t) for t in context.trips]
         store.set_field(scenario_id, "trips", trips_json)
         store.update_scenario(scenario_id, status="trips_built")
@@ -189,7 +251,10 @@ def _run_build_trips(
 
 
 def _run_build_graph(
-    scenario_id: str, job_id: str, service_id: Optional[str] = None
+    scenario_id: str,
+    job_id: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
 ) -> None:
     try:
         job_store.update_job(
@@ -198,7 +263,7 @@ def _run_build_graph(
             progress=10,
             message="Building feasibility graph...",
         )
-        context = _build_dispatch_context(scenario_id, service_id)
+        context = _build_dispatch_context(scenario_id, service_id, depot_id)
         builder = ConnectionGraphBuilder()
 
         all_types = list(context.vehicle_profiles.keys())
@@ -241,12 +306,13 @@ def _run_generate_duties(
     vehicle_type: Optional[str],
     strategy: str,
     service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
 ) -> None:
     try:
         job_store.update_job(
             job_id, status="running", progress=10, message="Generating duties..."
         )
-        context = _build_dispatch_context(scenario_id, service_id)
+        context = _build_dispatch_context(scenario_id, service_id, depot_id)
         pipeline = TimetableDispatchPipeline()
 
         vehicle_types = (
@@ -294,9 +360,20 @@ def build_trips(
     body: Optional[BuildTripsBody] = None,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    sid = body.service_id if body else None
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=body.service_id if body else None,
+        depot_id=body.depot_id if body else None,
+        persist=True,
+    )
     job = job_store.create_job()
-    background_tasks.add_task(_run_build_trips, scenario_id, job.job_id, sid)
+    background_tasks.add_task(
+        _run_build_trips,
+        scenario_id,
+        job.job_id,
+        scope.get("serviceId"),
+        scope.get("depotId"),
+    )
     return job_store.job_to_dict(job)
 
 
@@ -322,9 +399,20 @@ def build_graph(
     body: Optional[BuildGraphBody] = None,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    sid = body.service_id if body else None
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=body.service_id if body else None,
+        depot_id=body.depot_id if body else None,
+        persist=True,
+    )
     job = job_store.create_job()
-    background_tasks.add_task(_run_build_graph, scenario_id, job.job_id, sid)
+    background_tasks.add_task(
+        _run_build_graph,
+        scenario_id,
+        job.job_id,
+        scope.get("serviceId"),
+        scope.get("depotId"),
+    )
     return job_store.job_to_dict(job)
 
 
@@ -347,10 +435,21 @@ def generate_duties(
     _require_scenario(scenario_id)
     vt = body.vehicle_type if body else None
     strategy = body.strategy if body else "greedy"
-    sid = body.service_id if body else None
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=body.service_id if body else None,
+        depot_id=body.depot_id if body else None,
+        persist=True,
+    )
     job = job_store.create_job()
     background_tasks.add_task(
-        _run_generate_duties, scenario_id, job.job_id, vt, strategy, sid
+        _run_generate_duties,
+        scenario_id,
+        job.job_id,
+        vt,
+        strategy,
+        scope.get("serviceId"),
+        scope.get("depotId"),
     )
     return job_store.job_to_dict(job)
 
@@ -363,7 +462,15 @@ def validate_duties(scenario_id: str) -> Dict[str, Any]:
     from src.dispatch.models import DutyLeg as PyDutyLeg, VehicleDuty as PyVehicleDuty
 
     duties_raw = store.get_field(scenario_id, "duties") or []
-    context = _build_dispatch_context(scenario_id)
+    if not duties_raw:
+        return {"items": [], "total": 0}
+
+    scope = _resolve_dispatch_scope(scenario_id)
+    context = _build_dispatch_context(
+        scenario_id,
+        scope.get("serviceId"),
+        scope.get("depotId"),
+    )
     validator = DutyValidator()
 
     results = []

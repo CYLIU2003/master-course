@@ -130,6 +130,16 @@ export interface Route {
   distanceSource?: string;
 }
 
+export interface Stop {
+  id: string;
+  code: string;
+  name: string;
+  lat: number | null;
+  lon: number | null;
+  poleNumber?: string | null;
+  source?: string;
+}
+
 // ── Master Data: Trip (belongs to Route) ──────────────────────
 
 export interface Trip {
@@ -266,6 +276,11 @@ export interface DutyValidationResult {
   errors: string[];
 }
 
+export interface DispatchScope {
+  depotId: string | null;
+  serviceId: string;
+}
+
 // ── Simulation Config ─────────────────────────────────────────
 
 export interface SimulationConfig {
@@ -313,6 +328,7 @@ export interface TouPriceSlot {
 
 export interface SimulationResult {
   scenario_id: string;
+  scope?: DispatchScope;
   duties: VehicleDuty[];
   energy_consumption: EnergyRecord[];
   soc_trace: SocTracePoint[];

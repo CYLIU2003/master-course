@@ -11,6 +11,7 @@ export type {
   VehicleTemplate,
   VehiclePowerType,
   Route,
+  Stop,
   Trip,
   TimetableRow,
   DepotRoutePermission,
@@ -26,6 +27,7 @@ export type {
   DutyLeg,
   VehicleDuty,
   DutyValidationResult,
+  DispatchScope,
   // Simulation config
   SimulationConfig,
   TouPriceSlot,
@@ -76,6 +78,10 @@ export type {
   UpdateRouteRequest,
   ImportOdptRoutesRequest,
   ImportOdptRoutesResponse,
+  StopsResponse,
+  StopDetailResponse,
+  ImportOdptStopsRequest,
+  ImportOdptStopsResponse,
   // Timetable / Trips
   TimetableResponse,
   UpdateTimetableRequest,
@@ -113,6 +119,8 @@ export type {
   // Simulation
   SimulationResultResponse,
   SimulationConfigResponse,
+  DispatchScopeResponse,
+  UpdateDispatchScopeRequest,
   RunSimulationRequest,
   // Optimization
   OptimizationResultResponse,

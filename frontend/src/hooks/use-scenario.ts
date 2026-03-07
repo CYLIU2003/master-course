@@ -11,6 +11,7 @@ import type {
   UpsertCalendarEntryRequest,
   UpdateCalendarDatesRequest,
   UpsertCalendarDateRequest,
+  UpdateDispatchScopeRequest,
 } from "@/types";
 
 // ── Query keys ────────────────────────────────────────────────
@@ -18,6 +19,7 @@ import type {
 export const scenarioKeys = {
   all: ["scenarios"] as const,
   detail: (id: string) => ["scenarios", id] as const,
+  dispatchScope: (id: string) => ["scenarios", id, "dispatch-scope"] as const,
   timetable: (id: string, serviceId?: string) =>
     ["scenarios", id, "timetable", serviceId ?? "all"] as const,
   calendar: (id: string) => ["scenarios", id, "calendar"] as const,
@@ -27,6 +29,14 @@ export const scenarioKeys = {
   deadheadRules: (id: string) => ["scenarios", id, "deadhead-rules"] as const,
   turnaroundRules: (id: string) => ["scenarios", id, "turnaround-rules"] as const,
 };
+
+function invalidateDispatchOutputs(qc: ReturnType<typeof useQueryClient>, scenarioId: string) {
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "trips"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "graph"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "duties"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "simulation"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "optimization"], exact: false });
+}
 
 // ── Queries ───────────────────────────────────────────────────
 
@@ -42,6 +52,14 @@ export function useScenario(id: string) {
     queryKey: scenarioKeys.detail(id),
     queryFn: () => scenarioApi.get(id),
     enabled: !!id,
+  });
+}
+
+export function useDispatchScope(scenarioId: string) {
+  return useQuery({
+    queryKey: scenarioKeys.dispatchScope(scenarioId),
+    queryFn: () => scenarioApi.getDispatchScope(scenarioId),
+    enabled: !!scenarioId,
   });
 }
 
@@ -118,6 +136,19 @@ export function useUpdateScenario(id: string) {
   });
 }
 
+export function useUpdateDispatchScope(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateDispatchScopeRequest) =>
+      scenarioApi.updateDispatchScope(scenarioId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: scenarioKeys.dispatchScope(scenarioId) });
+      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
+  });
+}
+
 export function useDeleteScenario() {
   const qc = useQueryClient();
   return useMutation({
@@ -137,6 +168,8 @@ export function useUpdateTimetable(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
+      invalidateDispatchOutputs(qc, scenarioId);
+      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });
 }
@@ -151,6 +184,8 @@ export function useImportTimetableCsv(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
+      invalidateDispatchOutputs(qc, scenarioId);
+      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });
 }
@@ -165,6 +200,8 @@ export function useImportOdptTimetable(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
+      invalidateDispatchOutputs(qc, scenarioId);
+      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });
 }
@@ -179,6 +216,8 @@ export function useImportOdptStopTimetables(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "stop-timetables"],
         exact: false,
       });
+      invalidateDispatchOutputs(qc, scenarioId);
+      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });
 }
@@ -199,6 +238,7 @@ export function useUpdateCalendar(scenarioId: string) {
       scenarioApi.updateCalendar(scenarioId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scenarioKeys.calendar(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }
@@ -215,6 +255,7 @@ export function useUpsertCalendarEntry(scenarioId: string) {
     }) => scenarioApi.upsertCalendarEntry(scenarioId, serviceId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scenarioKeys.calendar(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }
@@ -226,6 +267,7 @@ export function useDeleteCalendarEntry(scenarioId: string) {
       scenarioApi.deleteCalendarEntry(scenarioId, serviceId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scenarioKeys.calendar(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }
@@ -237,6 +279,7 @@ export function useUpdateCalendarDates(scenarioId: string) {
       scenarioApi.updateCalendarDates(scenarioId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }
@@ -253,6 +296,7 @@ export function useUpsertCalendarDate(scenarioId: string) {
     }) => scenarioApi.upsertCalendarDate(scenarioId, date, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }
@@ -264,6 +308,7 @@ export function useDeleteCalendarDate(scenarioId: string) {
       scenarioApi.deleteCalendarDate(scenarioId, date),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }

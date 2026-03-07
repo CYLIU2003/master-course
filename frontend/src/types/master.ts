@@ -11,7 +11,7 @@ export type RecordStatus = "draft" | "active" | "archived";
 
 export type ViewMode = "table" | "map" | "node" | "split";
 
-export type MasterTabKey = "depots" | "vehicles" | "routes";
+export type MasterTabKey = "depots" | "vehicles" | "routes" | "stops";
 
 // ── Geo ───────────────────────────────────────────────────────
 

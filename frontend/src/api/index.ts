@@ -5,6 +5,7 @@ export {
   vehicleApi,
   vehicleTemplateApi,
   routeApi,
+  stopApi,
   permissionApi,
 } from "./master-data";
 export { graphApi } from "./graph";
