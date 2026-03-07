@@ -9,6 +9,7 @@ const TABS: { key: MasterTabKey; i18nKey: string; fallback: string }[] = [
   { key: "depots", i18nKey: "master.tab_depots", fallback: "営業所" },
   { key: "vehicles", i18nKey: "master.tab_vehicles", fallback: "車両" },
   { key: "routes", i18nKey: "master.tab_routes", fallback: "路線" },
+  { key: "stops", i18nKey: "master.tab_stops", fallback: "停留所" },
 ];
 
 export function MasterDataTabs() {

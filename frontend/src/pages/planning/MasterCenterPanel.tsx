@@ -5,6 +5,7 @@ import { useMasterUiStore } from "@/stores/master-ui-store";
 import { DepotTableNew } from "@/features/planning/DepotTableNew";
 import { VehicleTableNew } from "@/features/planning/VehicleTableNew";
 import { RouteTableNew } from "@/features/planning/RouteTableNew";
+import { StopTable } from "@/features/planning/StopTable";
 import { RouteNodeGraphPanel } from "@/features/planning/RouteNodeGraphPanel";
 import { RouteMapPanel } from "@/features/planning/RouteMapPanel";
 
@@ -23,12 +24,19 @@ export function MasterCenterPanel({ scenarioId }: Props) {
   }
 
   // Map mode — all tabs
-  if (viewMode === "map") {
+  if (viewMode === "map" && activeTab !== "stops") {
     return <RouteMapPanel scenarioId={scenarioId} />;
   }
 
   // Split mode — table + map side by side
   if (viewMode === "split") {
+    if (activeTab === "stops") {
+      return (
+        <div className="p-4">
+          <StopTable scenarioId={scenarioId} />
+        </div>
+      );
+    }
     return (
       <div className="flex h-full">
         <div className="flex-1 overflow-y-auto border-r border-border p-4">
@@ -40,6 +48,7 @@ export function MasterCenterPanel({ scenarioId }: Props) {
             />
           )}
           {activeTab === "routes" && <RouteTableNew scenarioId={scenarioId} />}
+          {activeTab === "stops" && <StopTable scenarioId={scenarioId} />}
         </div>
         <div className="flex-1">
           <RouteMapPanel scenarioId={scenarioId} />
@@ -69,6 +78,12 @@ export function MasterCenterPanel({ scenarioId }: Props) {
       return (
         <div className="p-4">
           <RouteTableNew scenarioId={scenarioId} />
+        </div>
+      );
+    case "stops":
+      return (
+        <div className="p-4">
+          <StopTable scenarioId={scenarioId} />
         </div>
       );
   }

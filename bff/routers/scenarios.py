@@ -82,6 +82,11 @@ class UpdateScenarioBody(BaseModel):
     mode: Optional[str] = None
 
 
+class UpdateDispatchScopeBody(BaseModel):
+    depotId: Optional[str] = None
+    serviceId: Optional[str] = None
+
+
 class TimetableRowBody(BaseModel):
     route_id: str
     service_id: str = "WEEKDAY"
@@ -227,6 +232,24 @@ def update_scenario(scenario_id: str, body: UpdateScenarioBody) -> Dict[str, Any
         raise _not_found(scenario_id)
 
 
+@router.get("/scenarios/{scenario_id}/dispatch-scope")
+def get_dispatch_scope(scenario_id: str) -> Dict[str, Any]:
+    try:
+        return store.get_dispatch_scope(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+
+
+@router.put("/scenarios/{scenario_id}/dispatch-scope")
+def update_dispatch_scope(
+    scenario_id: str, body: UpdateDispatchScopeBody
+) -> Dict[str, Any]:
+    try:
+        return store.set_dispatch_scope(scenario_id, body.model_dump())
+    except KeyError:
+        raise _not_found(scenario_id)
+
+
 @router.delete("/scenarios/{scenario_id}", status_code=204)
 def delete_scenario(scenario_id: str) -> Response:
     try:
@@ -264,7 +287,7 @@ def get_timetable(
 def update_timetable(scenario_id: str, body: UpdateTimetableBody) -> Dict[str, Any]:
     try:
         rows = [r.model_dump() for r in body.rows]
-        store.set_field(scenario_id, "timetable_rows", rows)
+        store.set_field(scenario_id, "timetable_rows", rows, invalidate_dispatch=True)
         return {"items": rows, "total": len(rows)}
     except KeyError:
         raise _not_found(scenario_id)
@@ -323,7 +346,7 @@ def import_timetable_csv(scenario_id: str, body: ImportCsvBody) -> Dict[str, Any
             status_code=422, detail={"errors": errors, "parsed": len(rows)}
         )
 
-    store.set_field(scenario_id, "timetable_rows", rows)
+    store.set_field(scenario_id, "timetable_rows", rows, invalidate_dispatch=True)
     return {"items": rows, "total": len(rows)}
 
 
@@ -364,7 +387,12 @@ def import_timetable_odpt(
             replace_existing_source=body.reset,
         )
         normalized_rows = normalize_timetable_row_indexes(merged_rows)
-        store.set_field(scenario_id, "timetable_rows", normalized_rows)
+        store.set_field(
+            scenario_id,
+            "timetable_rows",
+            normalized_rows,
+            invalidate_dispatch=True,
+        )
         odpt_rows = [row for row in normalized_rows if row.get("source") == "odpt"]
         quality = summarize_timetable_import(odpt_rows, dataset)
         import_meta = _build_odpt_import_meta(

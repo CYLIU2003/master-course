@@ -1,13 +1,15 @@
 """
 bff/routers/master_data.py
 
-Depots, Vehicles, Routes, and Permission tables endpoints.
+Depots, Vehicles, Stops, Routes, and Permission tables endpoints.
 
 Routes:
   GET/POST        /scenarios/{id}/depots
   GET/PUT/DELETE  /scenarios/{id}/depots/{depot_id}
   GET/POST        /scenarios/{id}/vehicles          (optional ?depotId=)
   GET/PUT/DELETE  /scenarios/{id}/vehicles/{vehicle_id}
+  GET             /scenarios/{id}/stops
+  POST            /scenarios/{id}/stops/import-odpt
   GET/POST        /scenarios/{id}/routes
   GET/PUT/DELETE  /scenarios/{id}/routes/{route_id}
   GET/PUT         /scenarios/{id}/depot-route-permissions
@@ -24,9 +26,11 @@ from pydantic import BaseModel, Field
 from bff.services.odpt_routes import (
     DEFAULT_OPERATOR,
     build_routes_from_operational,
+    fetch_normalized_dataset,
     fetch_operational_dataset,
     summarize_routes_import,
 )
+from bff.services.odpt_stops import build_stops_from_normalized, summarize_stop_import
 from bff.store import scenario_store as store
 
 router = APIRouter(tags=["master-data"])
@@ -201,6 +205,16 @@ class UpdateVehicleTemplateBody(BaseModel):
     maxSoc: Optional[float] = None
     acquisitionCost: Optional[float] = None
     enabled: Optional[bool] = None
+
+
+# ── Stop Pydantic models ────────────────────────────────────────
+
+
+class ImportOdptStopsBody(BaseModel):
+    operator: str = DEFAULT_OPERATOR
+    dump: bool = False
+    forceRefresh: bool = False
+    ttlSec: int = 3600
 
 
 # ── Vehicle endpoints ──────────────────────────────────────────
@@ -378,6 +392,60 @@ class ImportOdptRoutesBody(BaseModel):
     dump: bool = False
     forceRefresh: bool = False
     ttlSec: int = 3600
+
+
+# ── Stop endpoints ──────────────────────────────────────────────
+
+
+@router.get("/scenarios/{scenario_id}/stops")
+def list_stops(scenario_id: str) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    items = store.list_stops(scenario_id)
+    return {
+        "items": items,
+        "total": len(items),
+        "meta": {
+            "imports": store.get_stop_import_meta(scenario_id),
+        },
+    }
+
+
+@router.post("/scenarios/{scenario_id}/stops/import-odpt")
+def import_odpt_stops(scenario_id: str, body: ImportOdptStopsBody) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    try:
+        dataset = fetch_normalized_dataset(
+            operator=body.operator,
+            dump=body.dump,
+            force_refresh=body.forceRefresh,
+            ttl_sec=body.ttlSec,
+            include_bus_timetables=False,
+            include_stop_timetables=False,
+        )
+        imported_stops = build_stops_from_normalized(dataset)
+        quality = summarize_stop_import(imported_stops, dataset)
+        import_meta = {
+            "operator": body.operator,
+            "dump": body.dump,
+            "source": "odpt",
+            "resourceType": "BusstopPole",
+            "generatedAt": dataset.get("meta", {}).get("generatedAt"),
+            "warnings": dataset.get("meta", {}).get("warnings", []),
+            "cache": dataset.get("meta", {}).get("cache", {}),
+            "quality": quality,
+        }
+        all_stops = store.replace_stops_from_source(
+            scenario_id, "odpt", imported_stops, import_meta=import_meta
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return {
+        "items": imported_stops,
+        "total": len(imported_stops),
+        "allStopsTotal": len(all_stops),
+        "meta": import_meta,
+    }
 
 
 # ── Route endpoints ────────────────────────────────────────────

@@ -4,6 +4,7 @@ import {
   vehicleApi,
   vehicleTemplateApi,
   routeApi,
+  stopApi,
   permissionApi,
 } from "@/api";
 import type {
@@ -18,9 +19,11 @@ import type {
   CreateRouteRequest,
   UpdateRouteRequest,
   ImportOdptRoutesRequest,
+  ImportOdptStopsRequest,
   UpdateDepotRoutePermissionsRequest,
   UpdateVehicleRoutePermissionsRequest,
 } from "@/types";
+import { scenarioKeys } from "./use-scenario";
 
 // ── Query keys ────────────────────────────────────────────────
 
@@ -47,12 +50,25 @@ export const routeKeys = {
     ["routes", scenarioId, routeId] as const,
 };
 
+export const stopKeys = {
+  all: (scenarioId: string) => ["stops", scenarioId] as const,
+};
+
 export const permissionKeys = {
   depotRoute: (scenarioId: string) =>
     ["permissions", scenarioId, "depot-route"] as const,
   vehicleRoute: (scenarioId: string) =>
     ["permissions", scenarioId, "vehicle-route"] as const,
 };
+
+function invalidateDispatchOutputs(qc: ReturnType<typeof useQueryClient>, scenarioId: string) {
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "trips"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "graph"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "duties"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "simulation"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "optimization"], exact: false });
+  qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+}
 
 // ── Depot queries ─────────────────────────────────────────────
 
@@ -77,8 +93,11 @@ export function useCreateDepot(scenarioId: string) {
   return useMutation({
     mutationFn: (data: CreateDepotRequest) =>
       depotApi.create(scenarioId, data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: depotKeys.all(scenarioId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: depotKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -90,6 +109,7 @@ export function useUpdateDepot(scenarioId: string, depotId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: depotKeys.detail(scenarioId, depotId) });
       qc.invalidateQueries({ queryKey: depotKeys.all(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }
@@ -98,8 +118,11 @@ export function useDeleteDepot(scenarioId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (depotId: string) => depotApi.delete(scenarioId, depotId),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: depotKeys.all(scenarioId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: depotKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -128,8 +151,11 @@ export function useCreateVehicle(scenarioId: string) {
   return useMutation({
     mutationFn: (data: CreateVehicleRequest) =>
       vehicleApi.create(scenarioId, data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -138,8 +164,11 @@ export function useCreateVehicleBatch(scenarioId: string) {
   return useMutation({
     mutationFn: (data: CreateVehicleBatchRequest) =>
       vehicleApi.createBatch(scenarioId, data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -153,6 +182,7 @@ export function useUpdateVehicle(scenarioId: string, vehicleId: string) {
         queryKey: vehicleKeys.detail(scenarioId, vehicleId),
       });
       qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }
@@ -162,8 +192,11 @@ export function useDeleteVehicle(scenarioId: string) {
   return useMutation({
     mutationFn: (vehicleId: string) =>
       vehicleApi.delete(scenarioId, vehicleId),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -177,8 +210,11 @@ export function useDuplicateVehicle(scenarioId: string) {
       vehicleId: string;
       targetDepotId?: string;
     }) => vehicleApi.duplicate(scenarioId, vehicleId, { targetDepotId }),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -190,6 +226,8 @@ export function useDuplicateVehicleBatch(scenarioId: string, vehicleId: string) 
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: vehicleKeys.detail(scenarioId, vehicleId) });
       qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }
@@ -270,8 +308,12 @@ export function useCreateRoute(scenarioId: string) {
   return useMutation({
     mutationFn: (data: CreateRouteRequest) =>
       routeApi.create(scenarioId, data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -285,6 +327,7 @@ export function useUpdateRoute(scenarioId: string, routeId: string) {
         queryKey: routeKeys.detail(scenarioId, routeId),
       });
       qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
     },
   });
 }
@@ -293,8 +336,12 @@ export function useDeleteRoute(scenarioId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (routeId: string) => routeApi.delete(scenarioId, routeId),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -303,8 +350,32 @@ export function useImportOdptRoutes(scenarioId: string) {
   return useMutation({
     mutationFn: (data?: ImportOdptRoutesRequest) =>
       routeApi.importOdpt(scenarioId, data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
+  });
+}
+
+export function useStops(scenarioId: string) {
+  return useQuery({
+    queryKey: stopKeys.all(scenarioId),
+    queryFn: () => stopApi.list(scenarioId),
+    enabled: !!scenarioId,
+  });
+}
+
+export function useImportOdptStops(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data?: ImportOdptStopsRequest) =>
+      stopApi.importOdpt(scenarioId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: stopKeys.all(scenarioId) });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -323,10 +394,12 @@ export function useUpdateDepotRoutePermissions(scenarioId: string) {
   return useMutation({
     mutationFn: (data: UpdateDepotRoutePermissionsRequest) =>
       permissionApi.updateDepotRoutePermissions(scenarioId, data),
-    onSuccess: () =>
+    onSuccess: () => {
       qc.invalidateQueries({
         queryKey: permissionKeys.depotRoute(scenarioId),
-      }),
+      });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }
 
@@ -343,9 +416,11 @@ export function useUpdateVehicleRoutePermissions(scenarioId: string) {
   return useMutation({
     mutationFn: (data: UpdateVehicleRoutePermissionsRequest) =>
       permissionApi.updateVehicleRoutePermissions(scenarioId, data),
-    onSuccess: () =>
+    onSuccess: () => {
       qc.invalidateQueries({
         queryKey: permissionKeys.vehicleRoute(scenarioId),
-      }),
+      });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
   });
 }

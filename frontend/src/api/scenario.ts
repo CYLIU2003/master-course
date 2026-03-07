@@ -21,6 +21,8 @@ import type {
   UpsertCalendarDateRequest,
   DeadheadRulesResponse,
   TurnaroundRulesResponse,
+  DispatchScopeResponse,
+  UpdateDispatchScopeRequest,
 } from "@/types";
 
 // ── Scenarios ─────────────────────────────────────────────────
@@ -35,6 +37,12 @@ export const scenarioApi = {
 
   update: (id: string, data: UpdateScenarioRequest) =>
     api.put<ScenarioDetailResponse>(`/scenarios/${id}`, data),
+
+  getDispatchScope: (id: string) =>
+    api.get<DispatchScopeResponse>(`/scenarios/${id}/dispatch-scope`),
+
+  updateDispatchScope: (id: string, data: UpdateDispatchScopeRequest) =>
+    api.put<DispatchScopeResponse>(`/scenarios/${id}/dispatch-scope`, data),
 
   delete: (id: string) => api.delete<void>(`/scenarios/${id}`),
 

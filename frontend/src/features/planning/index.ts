@@ -18,3 +18,9 @@ export { RouteMapPanel } from "./RouteMapPanel";
 
 // ── Timetable components ───────────────────────────────────
 export { TimetableGeneratorDrawer } from "./TimetableGeneratorDrawer";
+
+// ── Stop components ───────────────────────────────────────
+export { StopTable } from "./StopTable";
+
+// ── Dispatch scope components ─────────────────────────────
+export { DispatchScopePanel } from "./DispatchScopePanel";

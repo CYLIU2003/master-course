@@ -20,6 +20,9 @@ import type {
   UpdateRouteRequest,
   ImportOdptRoutesRequest,
   ImportOdptRoutesResponse,
+  StopsResponse,
+  ImportOdptStopsRequest,
+  ImportOdptStopsResponse,
   DepotRoutePermissionsResponse,
   UpdateDepotRoutePermissionsRequest,
   VehicleRoutePermissionsResponse,
@@ -141,6 +144,17 @@ export const routeApi = {
 
   delete: (scenarioId: string, routeId: string) =>
     api.delete<void>(`/scenarios/${scenarioId}/routes/${routeId}`),
+};
+
+export const stopApi = {
+  list: (scenarioId: string) =>
+    api.get<StopsResponse>(`/scenarios/${scenarioId}/stops`),
+
+  importOdpt: (scenarioId: string, data?: ImportOdptStopsRequest) =>
+    api.post<ImportOdptStopsResponse>(
+      `/scenarios/${scenarioId}/stops/import-odpt`,
+      data,
+    ),
 };
 
 // ── Permissions ───────────────────────────────────────────────
