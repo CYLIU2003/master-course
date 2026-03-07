@@ -1,6 +1,11 @@
 # 混成フリート電気バス充電・運行スケジューリング統合最適化  
 ## 数理モデル定式化（MILP）
 
+## ステータス
+- 分類: 参考資料
+- 用途: 混成フリート + PV を含む MILP 数理定式化を確認する
+- 備考: UI や業務フローではなく定式化確認向け
+
 **論文タイトル案：** Integrated Optimization of Charging and Vehicle Scheduling for a Mixed Bus Fleet with Operator-Owned PV  
 **作成日：** 2026年3月  
 **対象：** 日次（day-ahead）計画モデル / BEV・ICE混成フリート + 自前PV

@@ -1,5 +1,10 @@
 # 修士論文研究書（共有・すり合わせ用）
 
+## ステータス
+- 分類: 正本候補
+- 用途: 研究目的、評価観点、全体方針を共有する
+- 備考: 上位方針確認の起点として読む
+
 ## 研究題目
 **PV出力を考慮した混成フリートの電気バス充電・運行スケジューリング最適化**  
 *Integrated Optimization of Charging and Vehicle Scheduling for a Mixed Bus Fleet with Operator-Owned PV*
