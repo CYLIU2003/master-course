@@ -5,7 +5,22 @@
 import { create } from "zustand";
 import type { Id, MasterTabKey, ViewMode } from "@/types/master";
 
+// ── Operator options (per-operator SQLite DBs) ───────────────
+export type OperatorKey = "tokyu" | "toei";
+
+export const OPERATOR_OPTIONS: {
+  key: OperatorKey;
+  label_ja: string;
+  label_en: string;
+}[] = [
+  { key: "tokyu", label_ja: "東急バス", label_en: "Tokyu Bus" },
+  { key: "toei", label_ja: "都営バス", label_en: "Toei Bus" },
+];
+
 interface MasterDataUiState {
+  // Operator selection
+  selectedOperator: OperatorKey;
+
   // Tab & mode
   activeTab: MasterTabKey;
   viewMode: ViewMode;
@@ -28,6 +43,7 @@ interface MasterDataUiState {
 }
 
 interface MasterDataUiActions {
+  setSelectedOperator: (op: OperatorKey) => void;
   setActiveTab: (tab: MasterTabKey) => void;
   setViewMode: (mode: ViewMode) => void;
 
@@ -48,6 +64,7 @@ interface MasterDataUiActions {
 }
 
 const initialState: MasterDataUiState = {
+  selectedOperator: "tokyu",
   activeTab: "depots",
   viewMode: "table",
   selectedDepotId: null,
@@ -64,6 +81,19 @@ const initialState: MasterDataUiState = {
 export const useMasterUiStore = create<MasterDataUiState & MasterDataUiActions>(
   (set) => ({
     ...initialState,
+
+    setSelectedOperator: (op) =>
+      set({
+        selectedOperator: op,
+        // Reset sub-selections when changing operator
+        selectedDepotId: null,
+        selectedVehicleId: null,
+        selectedRouteId: null,
+        selectedStopId: null,
+        isEditorDrawerOpen: false,
+        isCreateMode: false,
+        isDirty: false,
+      }),
 
     setActiveTab: (tab) =>
       set({

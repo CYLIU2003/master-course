@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchJson } from "@/api/client";
 
@@ -205,9 +205,342 @@ const RESOURCE_OPTIONS = [
   "odpt:BusstopPoleTimetable",
 ] as const;
 
+// ── DB Visualization Types ────────────────────────────────────────────────────
+
+type OperatorInfo = {
+  operator_id: string;
+  operator_name: string;
+  source: string;
+  db_path?: string;
+  exists: boolean;
+  tables?: Record<string, number>;
+  metadata?: Record<string, string>;
+};
+
+type DbRoute = {
+  route_id: string;
+  route_code: string;
+  route_name: string;
+  direction?: string;
+  stop_count: number;
+  trip_count: number;
+  distance_km?: number;
+  first_departure?: string;
+  last_arrival?: string;
+};
+
+type DbTimetableRow = {
+  trip_id: string;
+  route_id: string;
+  service_id: string;
+  direction?: string;
+  origin: string;
+  destination: string;
+  departure: string;
+  arrival: string;
+  distance_km: number;
+  allowed_vehicle_types: string[];
+};
+
+type TimetableSummary = {
+  by_service: Array<{
+    service_id: string;
+    trip_count: number;
+    route_count: number;
+    earliest_departure?: string;
+    latest_arrival?: string;
+  }>;
+  total: number;
+};
+
+// ── DB Visualization Panel ───────────────────────────────────────────────────
+
+function DbVisualizationPanel() {
+  const [operators, setOperators] = useState<OperatorInfo[]>([]);
+  const [selectedOp, setSelectedOp] = useState("");
+  const [routes, setRoutes] = useState<DbRoute[]>([]);
+  const [ttSummary, setTtSummary] = useState<TimetableSummary | null>(null);
+  const [ttRows, setTtRows] = useState<DbTimetableRow[]>([]);
+  const [ttFilter, setTtFilter] = useState({ serviceId: "", routeId: "" });
+  const [ttTotal, setTtTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadOperators = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const body = await fetchJson<{ items: OperatorInfo[] }>("/api/catalog/operators");
+      setOperators(body.items ?? []);
+      if (body.items?.length && !selectedOp) {
+        setSelectedOp(body.items[0].operator_id);
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedOp]);
+
+  useEffect(() => { loadOperators(); }, []);
+
+  useEffect(() => {
+    if (!selectedOp) return;
+    setRoutes([]);
+    setTtSummary(null);
+    setTtRows([]);
+    setTtTotal(0);
+    setTtFilter({ serviceId: "", routeId: "" });
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [routesRes, summaryRes] = await Promise.all([
+          fetchJson<{ items: DbRoute[] }>(`/api/catalog/operators/${selectedOp}/routes`),
+          fetchJson<{ item: TimetableSummary }>(`/api/catalog/operators/${selectedOp}/timetable/summary`),
+        ]);
+        setRoutes(routesRes.items ?? []);
+        setTtSummary(summaryRes.item ?? null);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [selectedOp]);
+
+  async function loadTimetableRows() {
+    if (!selectedOp) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (ttFilter.serviceId) params.set("serviceId", ttFilter.serviceId);
+      if (ttFilter.routeId) params.set("routeId", ttFilter.routeId);
+      params.set("limit", "200");
+      const body = await fetchJson<{ items: DbTimetableRow[]; total: number }>(
+        `/api/catalog/operators/${selectedOp}/timetable?${params.toString()}`
+      );
+      setTtRows(body.items ?? []);
+      setTtTotal(body.total ?? 0);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const selectedOpInfo = operators.find((o) => o.operator_id === selectedOp);
+
+  return (
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* Operator selector */}
+      <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-4">
+        <div className="flex items-center gap-4">
+          <h2 className="text-sm font-semibold text-slate-700">Operator</h2>
+          <div className="flex gap-2">
+            {operators.map((op) => (
+              <button
+                key={op.operator_id}
+                onClick={() => setSelectedOp(op.operator_id)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium border transition-colors ${
+                  selectedOp === op.operator_id
+                    ? "border-primary-500 bg-primary-50 text-primary-700"
+                    : "border-border bg-surface text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {op.operator_name}
+                {op.exists ? (
+                  <span className="ml-1.5 text-xs text-emerald-600">DB</span>
+                ) : (
+                  <span className="ml-1.5 text-xs text-slate-400">No DB</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={loadOperators}
+            disabled={loading}
+            className="ml-auto rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
+
+        {selectedOpInfo && selectedOpInfo.exists && (
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
+            {Object.entries(selectedOpInfo.tables ?? {}).map(([table, count]) => (
+              <div key={table} className="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                <div className="text-lg font-bold text-slate-800">{count.toLocaleString()}</div>
+                <div className="text-xs text-slate-500">{table}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {selectedOpInfo && !selectedOpInfo.exists && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+            DB file not found. Import data via the Master Data tab first.
+          </div>
+        )}
+      </div>
+
+      {/* Timetable Summary */}
+      {ttSummary && ttSummary.by_service.length > 0 && (
+        <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-3">
+          <h2 className="text-sm font-semibold text-slate-700">
+            Timetable Summary ({ttSummary.total.toLocaleString()} total trips)
+          </h2>
+          <div className="overflow-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="py-2 pr-4 text-left font-semibold text-slate-500">service_id</th>
+                  <th className="py-2 pr-4 text-right font-semibold text-slate-500">trips</th>
+                  <th className="py-2 pr-4 text-right font-semibold text-slate-500">routes</th>
+                  <th className="py-2 pr-4 text-left font-semibold text-slate-500">earliest</th>
+                  <th className="py-2 text-left font-semibold text-slate-500">latest</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ttSummary.by_service.map((s) => (
+                  <tr key={s.service_id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-1.5 pr-4 font-mono">{s.service_id}</td>
+                    <td className="py-1.5 pr-4 text-right">{s.trip_count.toLocaleString()}</td>
+                    <td className="py-1.5 pr-4 text-right">{s.route_count}</td>
+                    <td className="py-1.5 pr-4 font-mono">{s.earliest_departure ?? "-"}</td>
+                    <td className="py-1.5 font-mono">{s.latest_arrival ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Routes table */}
+      {routes.length > 0 && (
+        <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-3">
+          <h2 className="text-sm font-semibold text-slate-700">
+            Routes ({routes.length})
+          </h2>
+          <div className="overflow-auto max-h-[400px]">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-surface-raised">
+                <tr className="border-b border-slate-200">
+                  <th className="py-2 pr-3 text-left font-semibold text-slate-500">route_id</th>
+                  <th className="py-2 pr-3 text-left font-semibold text-slate-500">name</th>
+                  <th className="py-2 pr-3 text-left font-semibold text-slate-500">dir</th>
+                  <th className="py-2 pr-3 text-right font-semibold text-slate-500">stops</th>
+                  <th className="py-2 pr-3 text-right font-semibold text-slate-500">trips</th>
+                  <th className="py-2 pr-3 text-left font-semibold text-slate-500">first</th>
+                  <th className="py-2 text-left font-semibold text-slate-500">last</th>
+                </tr>
+              </thead>
+              <tbody>
+                {routes.map((r) => (
+                  <tr key={r.route_id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-1.5 pr-3 font-mono truncate max-w-[200px]" title={r.route_id}>{r.route_code || r.route_id}</td>
+                    <td className="py-1.5 pr-3 truncate max-w-[200px]" title={r.route_name}>{r.route_name}</td>
+                    <td className="py-1.5 pr-3">{r.direction ?? "-"}</td>
+                    <td className="py-1.5 pr-3 text-right">{r.stop_count}</td>
+                    <td className="py-1.5 pr-3 text-right">{r.trip_count}</td>
+                    <td className="py-1.5 pr-3 font-mono">{r.first_departure ?? "-"}</td>
+                    <td className="py-1.5 font-mono">{r.last_arrival ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Timetable rows query */}
+      <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-slate-700">Timetable Rows (Dispatch-Ready Trips)</h2>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-500">service_id</label>
+            <input
+              type="text"
+              value={ttFilter.serviceId}
+              onChange={(e) => setTtFilter((f) => ({ ...f, serviceId: e.target.value }))}
+              placeholder="e.g. WEEKDAY"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm w-40"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-500">route_id</label>
+            <input
+              type="text"
+              value={ttFilter.routeId}
+              onChange={(e) => setTtFilter((f) => ({ ...f, routeId: e.target.value }))}
+              placeholder="filter by route"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm w-48"
+            />
+          </div>
+          <button
+            onClick={loadTimetableRows}
+            disabled={loading || !selectedOp}
+            className="rounded-lg bg-primary-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+          >
+            {loading ? "Loading..." : "Query"}
+          </button>
+          {ttTotal > 0 && (
+            <span className="text-xs text-slate-500">
+              Showing {ttRows.length} of {ttTotal.toLocaleString()} rows
+            </span>
+          )}
+        </div>
+        {ttRows.length > 0 && (
+          <div className="overflow-auto max-h-[500px]">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-surface-raised">
+                <tr className="border-b border-slate-200">
+                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">trip_id</th>
+                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">route_id</th>
+                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">service</th>
+                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">origin</th>
+                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">dest</th>
+                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">dep</th>
+                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">arr</th>
+                  <th className="py-2 pr-2 text-right font-semibold text-slate-500">km</th>
+                  <th className="py-2 text-left font-semibold text-slate-500">types</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ttRows.map((r, i) => (
+                  <tr key={`${r.trip_id}-${i}`} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-1 pr-2 font-mono truncate max-w-[140px]" title={r.trip_id}>{r.trip_id}</td>
+                    <td className="py-1 pr-2 font-mono truncate max-w-[120px]" title={r.route_id}>{r.route_id}</td>
+                    <td className="py-1 pr-2">{r.service_id}</td>
+                    <td className="py-1 pr-2 truncate max-w-[100px]" title={r.origin}>{r.origin}</td>
+                    <td className="py-1 pr-2 truncate max-w-[100px]" title={r.destination}>{r.destination}</td>
+                    <td className="py-1 pr-2 font-mono">{r.departure}</td>
+                    <td className="py-1 pr-2 font-mono">{r.arrival}</td>
+                    <td className="py-1 pr-2 text-right">{r.distance_km?.toFixed(1) ?? "-"}</td>
+                    <td className="py-1 font-mono text-xs">{Array.isArray(r.allowed_vehicle_types) ? r.allowed_vehicle_types.join(",") : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function OdptExplorerPage() {
+  const [tabMode, setTabMode] = useState<"db" | "api">("db");
   const [resource, setResource] = useState<string>(RESOURCE_OPTIONS[0]);
   const [dump, setDump] = useState(false);
   const [query, setQuery] = useState("odpt:operator=odpt.Operator:TokyuBus");
@@ -575,20 +908,50 @@ export function OdptExplorerPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-800">
-            ODPT Explorer
+            Transit Data Explorer
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Resource と Query を試しながら JSON 構造（必須 / 任意フィールド、参照 ID、配列構造）を把握する開発ツール。
+            Per-operator DB visualization and API debug tools.
           </p>
         </div>
         <Link
           to="/scenarios"
           className="text-sm text-primary-600 hover:underline"
         >
-          ← シナリオ一覧へ
+          &larr; Back to Scenarios
         </Link>
       </div>
 
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b border-border">
+        <button
+          onClick={() => setTabMode("db")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tabMode === "db"
+              ? "border-primary-600 text-primary-700"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          DB Visualization
+        </button>
+        <button
+          onClick={() => setTabMode("api")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tabMode === "api"
+              ? "border-primary-600 text-primary-700"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          API Debug
+        </button>
+      </div>
+
+      {/* DB Visualization tab */}
+      {tabMode === "db" && <DbVisualizationPanel />}
+
+      {/* API Debug tab (original explorer content) */}
+      {tabMode === "api" && (
+      <>
       {/* Controls card */}
       <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -1223,6 +1586,8 @@ export function OdptExplorerPage() {
             {prettyJson(saveRes.meta)}
           </pre>
         </div>
+      )}
+      </>
       )}
     </div>
   );

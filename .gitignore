@@ -22,6 +22,9 @@ derived/
 results/
 backend/.env
 
+# Per-operator SQLite databases (generated on import)
+data/*.db
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
