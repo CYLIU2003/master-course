@@ -186,11 +186,14 @@ def _route_pattern_key(
     first_stop_id: str,
     last_stop_id: str,
 ) -> str:
+    # NOTE: shape_id is intentionally excluded from the key to avoid
+    # creating duplicate route patterns for the same logical route.
+    # Different GTFS shape_ids often represent minor path variations
+    # (e.g. slightly different GPS traces) for the same OD pair.
     return "|".join(
         [
             raw_route_id,
             direction_id or "0",
-            shape_id or "no-shape",
             first_stop_id,
             last_stop_id,
         ]

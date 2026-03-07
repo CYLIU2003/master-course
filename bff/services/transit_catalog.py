@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+import logging as _logging
+
 from bff.services.gtfs_import import (
     DEFAULT_GTFS_FEED_PATH,
     build_gtfs_route_timetables,
@@ -26,6 +28,9 @@ from bff.services.odpt_timetable import (
     build_timetable_rows_from_operational,
     normalize_timetable_row_indexes,
 )
+from bff.services import transit_db as _tdb
+
+_log = _logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CATALOG_DB_PATH_DEFAULT = _REPO_ROOT / "outputs" / "transit_catalog.sqlite"
@@ -640,7 +645,7 @@ def _store_odpt_snapshot(
     }
     meta.update(merged_meta)
 
-    return _replace_snapshot(
+    result = _replace_snapshot(
         snapshot_key=_odpt_snapshot_key(operator),
         source="odpt",
         dataset_ref=operator,
@@ -656,6 +661,25 @@ def _store_odpt_snapshot(
         },
         route_payloads=canonical_route_payloads,
     )
+
+    # --- Populate per-operator SQLite DB ---
+    try:
+        _tdb.replace_all(
+            "tokyu",
+            routes=routes,
+            stops=stops,
+            timetable_rows=timetable_rows,
+            stop_timetables=stop_timetables,
+            calendar_entries=[],
+            calendar_date_entries=[],
+            meta={"catalog_snapshot_key": _odpt_snapshot_key(operator)},
+        )
+        _log.info("transit_db: tokyu DB populated (%d routes, %d stops, %d tt_rows)",
+                   len(routes), len(stops), len(timetable_rows))
+    except Exception:
+        _log.exception("transit_db: failed to populate tokyu DB")
+
+    return result
 
 
 def bootstrap_odpt_snapshot_from_saved(
@@ -783,22 +807,48 @@ def refresh_gtfs_snapshot(
             "routePayloads": len(list(route_bundle.get("route_timetables") or [])),
         },
     }
-    return _replace_snapshot(
+    _stops = list(core.get("stops") or [])
+    _routes = list(core.get("routes") or [])
+    _tt_rows = list(core.get("timetable_rows") or [])
+    _st = list(stop_bundle.get("stop_timetables") or [])
+    _cal = list(core.get("calendar_entries") or [])
+    _cal_dates = list(core.get("calendar_date_entries") or [])
+
+    result = _replace_snapshot(
         snapshot_key=_gtfs_snapshot_key(feed_path),
         source="gtfs",
         dataset_ref=dataset_ref,
         signature=signature,
         meta=meta,
         entities={
-            "stops": list(core.get("stops") or []),
-            "routes": list(core.get("routes") or []),
-            "timetable_rows": list(core.get("timetable_rows") or []),
-            "stop_timetables": list(stop_bundle.get("stop_timetables") or []),
-            "calendar_entries": list(core.get("calendar_entries") or []),
-            "calendar_date_entries": list(core.get("calendar_date_entries") or []),
+            "stops": _stops,
+            "routes": _routes,
+            "timetable_rows": _tt_rows,
+            "stop_timetables": _st,
+            "calendar_entries": _cal,
+            "calendar_date_entries": _cal_dates,
         },
         route_payloads=list(route_bundle.get("route_timetables") or []),
     )
+
+    # --- Populate per-operator SQLite DB ---
+    try:
+        _tdb.replace_all(
+            "toei",
+            routes=_routes,
+            stops=_stops,
+            timetable_rows=_tt_rows,
+            stop_timetables=_st,
+            calendar_entries=_cal,
+            calendar_date_entries=_cal_dates,
+            meta={"catalog_snapshot_key": _gtfs_snapshot_key(feed_path)},
+        )
+        _log.info("transit_db: toei DB populated (%d routes, %d stops, %d tt_rows)",
+                   len(_routes), len(_stops), len(_tt_rows))
+    except Exception:
+        _log.exception("transit_db: failed to populate toei DB")
+
+    return result
 
 
 def get_or_refresh_gtfs_snapshot(
