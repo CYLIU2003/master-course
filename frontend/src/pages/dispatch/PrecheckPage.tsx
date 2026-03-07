@@ -81,7 +81,7 @@ export function PrecheckPage() {
       status: stops.length > 0 ? "pass" : "warn",
       detail: stops.length > 0
         ? t("precheck.stops_ok", "{{count}}件の停留所", { count: stops.length })
-        : t("precheck.stops_missing", "停留所がありません（ODPTインポートしてください）"),
+        : t("precheck.stops_missing", "停留所がありません（ODPT / GTFS を取り込んでください）"),
     });
 
     // 4. Vehicles exist

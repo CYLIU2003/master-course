@@ -10,7 +10,9 @@ Routes:
   GET/PUT/DELETE  /scenarios/{id}/vehicles/{vehicle_id}
   GET             /scenarios/{id}/stops
   POST            /scenarios/{id}/stops/import-odpt
+  POST            /scenarios/{id}/stops/import-gtfs
   GET/POST        /scenarios/{id}/routes
+  POST            /scenarios/{id}/routes/import-gtfs
   GET/PUT/DELETE  /scenarios/{id}/routes/{route_id}
   GET/PUT         /scenarios/{id}/depot-route-permissions
   GET/PUT         /scenarios/{id}/vehicle-route-permissions
@@ -23,6 +25,12 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
+from bff.services.gtfs_import import (
+    DEFAULT_GTFS_FEED_PATH,
+    load_gtfs_core_bundle,
+    summarize_gtfs_routes_import,
+    summarize_gtfs_stop_import,
+)
 from bff.services.odpt_routes import (
     DEFAULT_OPERATOR,
     build_routes_from_operational,
@@ -217,6 +225,10 @@ class ImportOdptStopsBody(BaseModel):
     ttlSec: int = 3600
 
 
+class ImportGtfsStopsBody(BaseModel):
+    feedPath: str = DEFAULT_GTFS_FEED_PATH
+
+
 # ── Vehicle endpoints ──────────────────────────────────────────
 
 
@@ -394,6 +406,10 @@ class ImportOdptRoutesBody(BaseModel):
     ttlSec: int = 3600
 
 
+class ImportGtfsRoutesBody(BaseModel):
+    feedPath: str = DEFAULT_GTFS_FEED_PATH
+
+
 # ── Stop endpoints ──────────────────────────────────────────────
 
 
@@ -439,6 +455,37 @@ def import_odpt_stops(scenario_id: str, body: ImportOdptStopsBody) -> Dict[str, 
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+    return {
+        "items": imported_stops,
+        "total": len(imported_stops),
+        "allStopsTotal": len(all_stops),
+        "meta": import_meta,
+    }
+
+
+@router.post("/scenarios/{scenario_id}/stops/import-gtfs")
+def import_gtfs_stops(scenario_id: str, body: ImportGtfsStopsBody) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    try:
+        bundle = load_gtfs_core_bundle(body.feedPath)
+        imported_stops = list(bundle.get("stops") or [])
+        quality = summarize_gtfs_stop_import(imported_stops, bundle)
+        meta = bundle.get("meta") or {}
+        import_meta = {
+            "source": "gtfs",
+            "feedPath": meta.get("feedPath") or body.feedPath,
+            "agencyName": meta.get("agencyName"),
+            "resourceType": "GTFSStop",
+            "generatedAt": meta.get("generatedAt"),
+            "warnings": meta.get("warnings", []),
+            "quality": quality,
+        }
+        all_stops = store.replace_stops_from_source(
+            scenario_id, "gtfs", imported_stops, import_meta=import_meta
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     return {
         "items": imported_stops,
@@ -527,6 +574,37 @@ def import_odpt_routes(scenario_id: str, body: ImportOdptRoutesBody) -> Dict[str
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+    return {
+        "items": imported_routes,
+        "total": len(imported_routes),
+        "allRoutesTotal": len(all_routes),
+        "meta": import_meta,
+    }
+
+
+@router.post("/scenarios/{scenario_id}/routes/import-gtfs")
+def import_gtfs_routes(scenario_id: str, body: ImportGtfsRoutesBody) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    try:
+        bundle = load_gtfs_core_bundle(body.feedPath)
+        imported_routes = list(bundle.get("routes") or [])
+        quality = summarize_gtfs_routes_import(imported_routes, bundle)
+        meta = bundle.get("meta") or {}
+        import_meta = {
+            "source": "gtfs",
+            "feedPath": meta.get("feedPath") or body.feedPath,
+            "agencyName": meta.get("agencyName"),
+            "resourceType": "GTFSRoutePattern",
+            "generatedAt": meta.get("generatedAt"),
+            "warnings": meta.get("warnings", []),
+            "quality": quality,
+        }
+        all_routes = store.replace_routes_from_source(
+            scenario_id, "gtfs", imported_routes, import_meta=import_meta
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     return {
         "items": imported_routes,

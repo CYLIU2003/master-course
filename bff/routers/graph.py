@@ -148,7 +148,7 @@ def _build_dispatch_context(
     if not raw_trips and not timetable_rows:
         raise ValueError(
             "No timetable rows found for the selected depot and service. "
-            "Import ODPT timetable data or adjust the depot route selection."
+            "Import ODPT or GTFS timetable data, or adjust the depot route selection."
         )
 
     # Convert raw trips to Trip objects

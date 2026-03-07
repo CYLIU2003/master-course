@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  useImportGtfsRoutes,
+  useImportGtfsStops,
+  useImportGtfsStopTimetables,
+  useImportGtfsTimetable,
   useImportOdptRoutes,
   useImportOdptStops,
   useImportOdptStopTimetables,
@@ -20,6 +24,7 @@ interface Props {
 type ModeSpec = { key: ViewMode; label: string };
 
 const ODPT_OPERATOR = "odpt.Operator:TokyuBus";
+const GTFS_FEED_PATH = "GTFS/ToeiBus-GTFS";
 
 const MODES_DEPOTS_VEHICLES: ModeSpec[] = [
   { key: "table", label: "表" },
@@ -39,6 +44,7 @@ const MODES_STOPS: ModeSpec[] = [{ key: "table", label: "表" }];
 export function MasterDataHeader({ scenarioId }: Props) {
   const { t } = useTranslation();
   const [isImportingAll, setIsImportingAll] = useState(false);
+  const [isImportingGtfsAll, setIsImportingGtfsAll] = useState(false);
   const activeTab = useMasterUiStore((s) => s.activeTab);
   const viewMode = useMasterUiStore((s) => s.viewMode);
   const setViewMode = useMasterUiStore((s) => s.setViewMode);
@@ -48,16 +54,20 @@ export function MasterDataHeader({ scenarioId }: Props) {
   const importOdptStops = useImportOdptStops(scenarioId);
   const importOdptTimetable = useImportOdptTimetable(scenarioId);
   const importOdptStopTimetables = useImportOdptStopTimetables(scenarioId);
+  const importGtfsRoutes = useImportGtfsRoutes(scenarioId);
+  const importGtfsStops = useImportGtfsStops(scenarioId);
+  const importGtfsTimetable = useImportGtfsTimetable(scenarioId);
+  const importGtfsStopTimetables = useImportGtfsStopTimetables(scenarioId);
 
   const { data: routesData } = useRoutes(scenarioId);
   const { data: stopsData } = useStops(scenarioId);
   const { data: timetableData } = useTimetable(scenarioId);
   const { data: stopTimetablesData } = useStopTimetables(scenarioId);
 
-  const routeImportMeta = routesData?.meta?.imports?.odpt;
-  const stopImportMeta = stopsData?.meta?.imports?.odpt;
-  const timetableImportMeta = timetableData?.meta?.imports?.odpt;
-  const stopTimetableImportMeta = stopTimetablesData?.meta?.imports?.odpt;
+  const routeImports = routesData?.meta?.imports ?? {};
+  const stopImports = stopsData?.meta?.imports ?? {};
+  const timetableImports = timetableData?.meta?.imports ?? {};
+  const stopTimetableImports = stopTimetablesData?.meta?.imports ?? {};
 
   const addLabel: Partial<Record<MasterTabKey, string>> = {
     depots: t("master.add_depot", "+ 営業所追加"),
@@ -176,36 +186,116 @@ export function MasterDataHeader({ scenarioId }: Props) {
     }
   };
 
+  const handleImportGtfsAll = async () => {
+    if (
+      !confirm(
+        t(
+          "master.import_gtfs_full_confirm",
+          "GTFS から路線・停留所・時刻表・バス停時刻表を順番に取り込みます。既存の GTFS 取込データは更新されます。続行しますか？",
+        ),
+      )
+    ) {
+      return;
+    }
+
+    setIsImportingGtfsAll(true);
+    try {
+      const routeResult = await importGtfsRoutes.mutateAsync({
+        feedPath: GTFS_FEED_PATH,
+      });
+      const stopResult = await importGtfsStops.mutateAsync({
+        feedPath: GTFS_FEED_PATH,
+      });
+      const timetableResult = await importGtfsTimetable.mutateAsync({
+        feedPath: GTFS_FEED_PATH,
+        reset: true,
+      });
+      const stopTimetableResult = await importGtfsStopTimetables.mutateAsync({
+        feedPath: GTFS_FEED_PATH,
+        reset: true,
+      });
+
+      alert(
+        [
+          t("master.import_gtfs_full_success", "GTFS データ一式の取込が完了しました。"),
+          t("master.import_full_routes", "路線: {{count}} 件", {
+            count: routeResult.total,
+          }),
+          t("master.import_full_stops", "停留所: {{count}} 件", {
+            count: stopResult.total,
+          }),
+          t("master.import_full_timetable", "バス時刻表: {{count}} 行", {
+            count: timetableResult.total,
+          }),
+          t(
+            "master.import_full_stop_timetables",
+            "バス停時刻表: {{count}} 件",
+            {
+              count: stopTimetableResult.meta.quality.stopTimetableCount,
+            },
+          ),
+        ].join("\n"),
+      );
+    } catch (error) {
+      alert(String(error));
+    } finally {
+      setIsImportingGtfsAll(false);
+    }
+  };
+
+  const sourceLabel = (source: string) =>
+    source === "odpt"
+      ? t("master.import_source_odpt", "ODPT")
+      : source === "gtfs"
+        ? t("master.import_source_gtfs", "GTFS")
+        : source.toUpperCase();
+
   const importBadges = [
-    routeImportMeta && {
-      key: "routes",
-      label: t("master.import_badge_routes", "路線"),
-      value: `${routeImportMeta.quality.routeCount}`,
-      warningCount: routeImportMeta.warnings.length,
-      generatedAt: routeImportMeta.generatedAt,
-    },
-    stopImportMeta && {
-      key: "stops",
-      label: t("master.import_badge_stops", "停留所"),
-      value: `${stopImportMeta.quality.stopCount}`,
-      warningCount: stopImportMeta.warnings.length,
-      generatedAt: stopImportMeta.generatedAt,
-    },
-    timetableImportMeta && {
-      key: "timetable",
-      label: t("master.import_badge_timetable", "バス時刻表"),
-      value: `${timetableImportMeta.quality.rowCount}`,
-      warningCount: timetableImportMeta.warnings.length,
-      generatedAt: timetableImportMeta.generatedAt,
-    },
-    stopTimetableImportMeta && {
-      key: "stop-timetables",
-      label: t("master.import_badge_stop_timetable", "バス停時刻表"),
-      value: `${stopTimetableImportMeta.quality.stopTimetableCount}`,
-      warningCount: stopTimetableImportMeta.warnings.length,
-      generatedAt: stopTimetableImportMeta.generatedAt,
-    },
-  ].filter(Boolean) as Array<{
+    ...Object.entries(routeImports).flatMap(([source, meta]) =>
+      !meta
+        ? []
+        : [{
+            key: `routes-${source}`,
+            label: `${sourceLabel(source)} ${t("master.import_badge_routes", "路線")}`,
+            value: `${meta.quality.routeCount}`,
+            warningCount: meta.warnings.length,
+            generatedAt: meta.generatedAt,
+          }],
+    ),
+    ...Object.entries(stopImports).flatMap(([source, meta]) =>
+      !meta
+        ? []
+        : [{
+            key: `stops-${source}`,
+            label: `${sourceLabel(source)} ${t("master.import_badge_stops", "停留所")}`,
+            value: `${meta.quality.stopCount}`,
+            warningCount: meta.warnings.length,
+            generatedAt: meta.generatedAt,
+          }],
+    ),
+    ...Object.entries(timetableImports).flatMap(([source, meta]) =>
+      !meta
+        ? []
+        : [{
+            key: `timetable-${source}`,
+            label: `${sourceLabel(source)} ${t("master.import_badge_timetable", "バス時刻表")}`,
+            value: `${meta.quality.rowCount}`,
+            warningCount: meta.warnings.length,
+            generatedAt: meta.generatedAt,
+          }],
+    ),
+    ...Object.entries(stopTimetableImports).flatMap(([source, meta]) =>
+      !meta
+        ? []
+        : [{
+            key: `stop-timetables-${source}`,
+            label: `${sourceLabel(source)} ${t("master.import_badge_stop_timetable", "バス停時刻表")}`,
+            value: `${meta.quality.stopTimetableCount}`,
+            warningCount: meta.warnings.length,
+            generatedAt: meta.generatedAt,
+          }],
+    ),
+  ] as Array<{
     key: string;
     label: string;
     value: string;
@@ -222,7 +312,7 @@ export function MasterDataHeader({ scenarioId }: Props) {
         <p className="text-xs text-slate-500">
           {t(
             "master.description",
-            "ODPT 由来の運行データを含めてマスタデータを一元管理します",
+            "ODPT / GTFS 由来の運行データを含めてマスタデータを一元管理します",
           )}
         </p>
         {importBadges.length > 0 && (
@@ -250,6 +340,15 @@ export function MasterDataHeader({ scenarioId }: Props) {
           {isImportingAll
             ? t("master.importing_odpt_all", "ODPT一式取込中…")
             : t("master.import_odpt_all", "ODPTデータ一式を取込")}
+        </button>
+        <button
+          onClick={handleImportGtfsAll}
+          disabled={isImportingGtfsAll}
+          className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+        >
+          {isImportingGtfsAll
+            ? t("master.importing_gtfs_all", "GTFS一式取込中…")
+            : t("master.import_gtfs_all", "GTFSデータ一式を取込")}
         </button>
 
         <div className="flex rounded-lg border border-border">

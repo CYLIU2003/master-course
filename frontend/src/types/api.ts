@@ -127,6 +127,8 @@ export type UpdateVehicleTemplateRequest = Partial<CreateVehicleTemplateRequest>
 
 // ── Routes ────────────────────────────────────────────────────
 
+export type ImportSource = "odpt" | "gtfs" | string;
+
 export interface RouteImportQuality {
   routeCount: number;
   warningCount: number;
@@ -138,12 +140,15 @@ export interface RouteImportQuality {
 }
 
 export interface RouteImportMeta {
-  operator: string;
-  dump: boolean;
-  source: "odpt";
+  operator?: string;
+  dump?: boolean;
+  feedPath?: string;
+  agencyName?: string;
+  source: ImportSource;
+  resourceType?: string;
   generatedAt?: string;
   warnings: string[];
-  cache: {
+  cache?: {
     stops?: boolean;
     patterns?: boolean;
     stopTimetables?: boolean;
@@ -185,6 +190,15 @@ export interface ImportOdptRoutesResponse extends ApiListResponse<Route> {
   meta: RouteImportMeta;
 }
 
+export interface ImportGtfsRoutesRequest {
+  feedPath?: string;
+}
+
+export interface ImportGtfsRoutesResponse extends ApiListResponse<Route> {
+  allRoutesTotal: number;
+  meta: RouteImportMeta;
+}
+
 export interface StopImportQuality {
   stopCount: number;
   namedCount: number;
@@ -194,13 +208,15 @@ export interface StopImportQuality {
 }
 
 export interface StopImportMeta {
-  operator: string;
-  dump: boolean;
-  source: "odpt";
-  resourceType?: "BusstopPole";
+  operator?: string;
+  dump?: boolean;
+  feedPath?: string;
+  agencyName?: string;
+  source: ImportSource;
+  resourceType?: string;
   generatedAt?: string;
   warnings: string[];
-  cache: {
+  cache?: {
     stops?: boolean;
     patterns?: boolean;
     stopTimetables?: boolean;
@@ -230,6 +246,15 @@ export interface ImportOdptStopsResponse extends ApiListResponse<Stop> {
   meta: StopImportMeta;
 }
 
+export interface ImportGtfsStopsRequest {
+  feedPath?: string;
+}
+
+export interface ImportGtfsStopsResponse extends ApiListResponse<Stop> {
+  allStopsTotal: number;
+  meta: StopImportMeta;
+}
+
 // ── Timetable / Trips ────────────────────────────────────────
 
 export interface TimetableImportQuality {
@@ -248,13 +273,15 @@ export interface ImportProgress {
 }
 
 export interface TimetableImportMeta {
-  operator: string;
-  dump: boolean;
-  source: "odpt";
-  resourceType?: "BusTimetable" | "BusstopPoleTimetable";
+  operator?: string;
+  dump?: boolean;
+  feedPath?: string;
+  agencyName?: string;
+  source: ImportSource;
+  resourceType?: string;
   generatedAt?: string;
   warnings: string[];
-  cache: {
+  cache?: {
     stops?: boolean;
     patterns?: boolean;
     stopTimetables?: boolean;
@@ -290,6 +317,15 @@ export interface ImportOdptTimetableResponse extends ApiListResponse<TimetableRo
   meta: TimetableImportMeta;
 }
 
+export interface ImportGtfsTimetableRequest {
+  feedPath?: string;
+  reset?: boolean;
+}
+
+export interface ImportGtfsTimetableResponse extends ApiListResponse<TimetableRow> {
+  meta: TimetableImportMeta;
+}
+
 export interface StopTimetableItem {
   index: number;
   arrival?: string;
@@ -317,13 +353,15 @@ export interface StopTimetableImportQuality {
 }
 
 export interface StopTimetableImportMeta {
-  operator: string;
-  dump: boolean;
-  source: "odpt";
-  resourceType?: "BusstopPoleTimetable";
+  operator?: string;
+  dump?: boolean;
+  feedPath?: string;
+  agencyName?: string;
+  source: ImportSource;
+  resourceType?: string;
   generatedAt?: string;
   warnings: string[];
-  cache: {
+  cache?: {
     stops?: boolean;
     patterns?: boolean;
     stopTimetables?: boolean;
@@ -351,6 +389,16 @@ export interface ImportOdptStopTimetableRequest {
 }
 
 export interface ImportOdptStopTimetableResponse
+  extends ApiListResponse<StopTimetable> {
+  meta: StopTimetableImportMeta;
+}
+
+export interface ImportGtfsStopTimetableRequest {
+  feedPath?: string;
+  reset?: boolean;
+}
+
+export interface ImportGtfsStopTimetableResponse
   extends ApiListResponse<StopTimetable> {
   meta: StopTimetableImportMeta;
 }

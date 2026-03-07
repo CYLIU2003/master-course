@@ -14,6 +14,7 @@ Routes:
   GET    /scenarios/{id}/timetable               → get timetable rows (optional ?service_id=)
   PUT    /scenarios/{id}/timetable               → replace timetable rows
   POST   /scenarios/{id}/timetable/import-csv    → import rows from CSV text body
+  POST   /scenarios/{id}/timetable/import-gtfs   → import rows from local GTFS feed
   GET    /scenarios/{id}/timetable/export-csv    → export rows as CSV text body
 
   GET    /scenarios/{id}/deadhead-rules    → list
@@ -31,6 +32,13 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from bff.services.gtfs_import import (
+    DEFAULT_GTFS_FEED_PATH,
+    build_gtfs_stop_timetables,
+    load_gtfs_core_bundle,
+    summarize_gtfs_stop_timetable_import,
+    summarize_gtfs_timetable_import,
+)
 from bff.services.odpt_routes import (
     DEFAULT_OPERATOR,
     fetch_operational_dataset,
@@ -119,6 +127,11 @@ class ImportOdptTimetableBody(BaseModel):
     reset: bool = True
 
 
+class ImportGtfsTimetableBody(BaseModel):
+    feedPath: str = DEFAULT_GTFS_FEED_PATH
+    reset: bool = True
+
+
 class ImportOdptStopTimetableBody(BaseModel):
     operator: str = DEFAULT_OPERATOR
     dump: bool = False
@@ -126,6 +139,11 @@ class ImportOdptStopTimetableBody(BaseModel):
     ttlSec: int = 3600
     stopTimetableCursor: int = 0
     stopTimetableBatchSize: int = 50
+    reset: bool = True
+
+
+class ImportGtfsStopTimetableBody(BaseModel):
+    feedPath: str = DEFAULT_GTFS_FEED_PATH
     reset: bool = True
 
 
@@ -170,6 +188,24 @@ def _build_odpt_import_meta(
         "warnings": meta.get("warnings", []),
         "cache": meta.get("cache", {}),
         "progress": progress,
+        "quality": quality,
+    }
+
+
+def _build_gtfs_import_meta(
+    *,
+    bundle: Dict[str, Any],
+    quality: Dict[str, Any],
+    resource_type: str,
+) -> Dict[str, Any]:
+    meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
+    return {
+        "feedPath": meta.get("feedPath"),
+        "agencyName": meta.get("agencyName"),
+        "source": "gtfs",
+        "resourceType": resource_type,
+        "generatedAt": meta.get("generatedAt"),
+        "warnings": meta.get("warnings", []),
         "quality": quality,
     }
 
@@ -414,6 +450,49 @@ def import_timetable_odpt(
     }
 
 
+@router.post("/scenarios/{scenario_id}/timetable/import-gtfs")
+def import_timetable_gtfs(
+    scenario_id: str, body: ImportGtfsTimetableBody
+) -> Dict[str, Any]:
+    try:
+        store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    try:
+        bundle = load_gtfs_core_bundle(body.feedPath)
+        rows = list(bundle.get("timetable_rows") or [])
+        merged_rows = store.upsert_timetable_rows_from_source(
+            scenario_id,
+            "gtfs",
+            rows,
+            replace_existing_source=body.reset,
+        )
+        normalized_rows = normalize_timetable_row_indexes(merged_rows)
+        store.set_field(
+            scenario_id,
+            "timetable_rows",
+            normalized_rows,
+            invalidate_dispatch=True,
+        )
+        gtfs_rows = [row for row in normalized_rows if row.get("source") == "gtfs"]
+        quality = summarize_gtfs_timetable_import(gtfs_rows, bundle)
+        import_meta = _build_gtfs_import_meta(
+            bundle=bundle,
+            quality=quality,
+            resource_type="GTFSTrip",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    store.set_timetable_import_meta(scenario_id, "gtfs", import_meta)
+    return {
+        "items": gtfs_rows,
+        "total": len(gtfs_rows),
+        "meta": import_meta,
+    }
+
+
 @router.get("/scenarios/{scenario_id}/stop-timetables")
 def get_stop_timetables(
     scenario_id: str,
@@ -476,6 +555,38 @@ def import_stop_timetables_odpt(
         raise HTTPException(status_code=502, detail=str(exc))
 
     store.set_stop_timetable_import_meta(scenario_id, "odpt", import_meta)
+    return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
+
+
+@router.post("/scenarios/{scenario_id}/stop-timetables/import-gtfs")
+def import_stop_timetables_gtfs(
+    scenario_id: str, body: ImportGtfsStopTimetableBody
+) -> Dict[str, Any]:
+    try:
+        store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    try:
+        bundle = build_gtfs_stop_timetables(body.feedPath)
+        items = list(bundle.get("stop_timetables") or [])
+        merged_items = store.upsert_stop_timetables_from_source(
+            scenario_id,
+            "gtfs",
+            items,
+            replace_existing_source=body.reset,
+        )
+        gtfs_items = [item for item in merged_items if item.get("source") == "gtfs"]
+        quality = summarize_gtfs_stop_timetable_import(gtfs_items, bundle)
+        import_meta = _build_gtfs_import_meta(
+            bundle=bundle,
+            quality=quality,
+            resource_type="GTFSStopTimetable",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    store.set_stop_timetable_import_meta(scenario_id, "gtfs", import_meta)
     return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
 
 
