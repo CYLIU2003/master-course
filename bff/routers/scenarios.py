@@ -477,6 +477,17 @@ def import_timetable_gtfs(
         )
         gtfs_rows = [row for row in normalized_rows if row.get("source") == "gtfs"]
         quality = summarize_gtfs_timetable_import(gtfs_rows, bundle)
+
+        # Sync calendar data from GTFS feed into scenario store
+        calendar_entries = list(bundle.get("calendar_entries") or [])
+        calendar_date_entries = list(bundle.get("calendar_date_entries") or [])
+        for entry in calendar_entries:
+            store.upsert_calendar_entry(scenario_id, entry)
+        for entry in calendar_date_entries:
+            store.upsert_calendar_date(scenario_id, entry)
+        quality["calendarEntriesSynced"] = len(calendar_entries)
+        quality["calendarDateEntriesSynced"] = len(calendar_date_entries)
+
         import_meta = _build_gtfs_import_meta(
             bundle=bundle,
             quality=quality,

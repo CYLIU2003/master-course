@@ -218,6 +218,9 @@ export function useImportGtfsTimetable(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
+      // GTFS timetable import also syncs calendar data
+      qc.invalidateQueries({ queryKey: scenarioKeys.calendar(scenarioId) });
+      qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
       qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },

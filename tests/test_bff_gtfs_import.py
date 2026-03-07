@@ -176,3 +176,87 @@ def test_gtfs_import_summaries_report_expected_counts(tmp_path: Path):
         "serviceCounts": {"SAT": 3, "WEEKDAY": 3},
         "warningCount": 0,
     }
+
+
+def test_load_gtfs_core_bundle_includes_calendar_entries(tmp_path: Path):
+    feed_dir = _create_feed(tmp_path)
+
+    bundle = load_gtfs_core_bundle(feed_dir)
+
+    entries = bundle["calendar_entries"]
+    assert len(entries) == 2
+
+    by_sid = {e["service_id"]: e for e in entries}
+    assert "WEEKDAY" in by_sid
+    assert "SAT" in by_sid
+
+    wd = by_sid["WEEKDAY"]
+    assert wd["name"] == "平日"
+    assert wd["mon"] == 1 and wd["fri"] == 1 and wd["sat"] == 0 and wd["sun"] == 0
+    assert wd["start_date"] == "2026-01-01"
+    assert wd["end_date"] == "2026-12-31"
+
+    sa = by_sid["SAT"]
+    assert sa["name"] == "土曜"
+    assert sa["sat"] == 1 and sa["mon"] == 0
+
+    # No calendar_dates.txt in this fixture -> empty
+    assert bundle["calendar_date_entries"] == []
+
+
+def _create_feed_with_calendar_dates(tmp_path: Path) -> Path:
+    """Variant of _create_feed that adds calendar_dates.txt with extra service_ids."""
+    feed_dir = _create_feed(tmp_path)
+
+    _write_feed_file(
+        feed_dir,
+        "calendar_dates.txt",
+        """
+        service_id,date,exception_type
+        WD,20260105,2
+        SA,20260103,1
+        SH,20260104,1
+        SH,20260111,1
+        """,
+    )
+
+    # Clear LRU cache so the new file is picked up
+    from bff.services.gtfs_import import _load_gtfs_core_bundle_cached
+    _load_gtfs_core_bundle_cached.cache_clear()
+
+    return feed_dir
+
+
+def test_calendar_dates_sync_includes_dates_and_inferred_entries(tmp_path: Path):
+    feed_dir = _create_feed_with_calendar_dates(tmp_path)
+
+    bundle = load_gtfs_core_bundle(feed_dir)
+
+    entries = bundle["calendar_entries"]
+    by_sid = {e["service_id"]: e for e in entries}
+
+    # WD -> WEEKDAY, SA -> SAT already exist from calendar.txt
+    # SH -> appears only in calendar_dates.txt on Sundays -> mapped to SUN_HOL
+    assert "WEEKDAY" in by_sid
+    assert "SAT" in by_sid
+    assert "SUN_HOL" in by_sid
+    assert len(entries) == 3
+
+    sun_hol = by_sid["SUN_HOL"]
+    assert sun_hol["name"] == "日曜・休日"
+    assert sun_hol["sun"] == 1 and sun_hol["mon"] == 0
+    # SUN_HOL only from calendar_dates -> default date range
+    assert sun_hol["start_date"] == "2026-01-01"
+    assert sun_hol["end_date"] == "2026-12-31"
+
+    # Calendar date entries
+    date_entries = bundle["calendar_date_entries"]
+    assert len(date_entries) == 4
+
+    wd_remove = [d for d in date_entries if d["service_id"] == "WEEKDAY" and d["exception_type"] == "REMOVE"]
+    assert len(wd_remove) == 1
+    assert wd_remove[0]["date"] == "2026-01-05"
+
+    sun_adds = [d for d in date_entries if d["service_id"] == "SUN_HOL" and d["exception_type"] == "ADD"]
+    assert len(sun_adds) == 2
+    assert {d["date"] for d in sun_adds} == {"2026-01-04", "2026-01-11"}

@@ -258,6 +258,27 @@ def _stream_rows(path: Path) -> Iterable[Dict[str, str]]:
 _WEEKDAY_KEYS = ("monday", "tuesday", "wednesday", "thursday", "friday")
 
 
+def _format_gtfs_date(date_str: str) -> str:
+    """Convert GTFS date ``YYYYMMDD`` to scenario format ``YYYY-MM-DD``."""
+    s = str(date_str).strip()
+    if len(s) == 8 and s.isdigit():
+        return f"{s[:4]}-{s[4:6]}-{s[6:8]}"
+    return s
+
+
+_CANONICAL_CAL_NAMES: Dict[str, str] = {
+    "WEEKDAY": "平日",
+    "SAT": "土曜",
+    "SUN_HOL": "日曜・休日",
+}
+
+_CANONICAL_CAL_FLAGS: Dict[str, Dict[str, int]] = {
+    "WEEKDAY": {"mon": 1, "tue": 1, "wed": 1, "thu": 1, "fri": 1, "sat": 0, "sun": 0},
+    "SAT": {"mon": 0, "tue": 0, "wed": 0, "thu": 0, "fri": 0, "sat": 1, "sun": 0},
+    "SUN_HOL": {"mon": 0, "tue": 0, "wed": 0, "thu": 0, "fri": 0, "sat": 0, "sun": 1},
+}
+
+
 def load_gtfs_core_bundle(feed_path: str | Path = DEFAULT_GTFS_FEED_PATH) -> Dict[str, Any]:
     feed_root = _resolve_feed_path(feed_path)
     return _load_gtfs_core_bundle_cached(str(feed_root), _feed_signature(feed_root))
@@ -318,20 +339,30 @@ def _load_gtfs_core_bundle_cached(
         )
 
     service_id_map: Dict[str, str] = {}
+    _cal_date_ranges: DefaultDict[str, List[Tuple[str, str]]] = defaultdict(list)
     for row in _stream_rows(feed_root / "calendar.txt"):
         raw_service_id = str(row.get("service_id") or "").strip()
         if not raw_service_id:
             continue
-        service_id_map[raw_service_id] = _service_id_from_calendar(row, warnings)
+        canonical = _service_id_from_calendar(row, warnings)
+        service_id_map[raw_service_id] = canonical
+        start_d = str(row.get("start_date") or "").strip()
+        end_d = str(row.get("end_date") or "").strip()
+        if start_d and end_d:
+            _cal_date_ranges[canonical].append((start_d, end_d))
 
     calendar_dates_path = feed_root / "calendar_dates.txt"
+    _raw_cal_dates: List[Tuple[str, str, str]] = []
     if calendar_dates_path.exists():
         service_dates: DefaultDict[str, set[int]] = defaultdict(set)
         for row in _stream_rows(calendar_dates_path):
             raw_service_id = str(row.get("service_id") or "").strip()
             date_str = str(row.get("date") or "").strip()
             exception_type = str(row.get("exception_type") or "").strip()
-            if not raw_service_id or not date_str or exception_type != "1":
+            if not raw_service_id or not date_str:
+                continue
+            _raw_cal_dates.append((raw_service_id, date_str, exception_type))
+            if exception_type != "1":
                 continue
             try:
                 weekday_index = datetime.strptime(date_str, "%Y%m%d").weekday()
@@ -347,6 +378,38 @@ def _load_gtfs_core_bundle_cached(
                 weekday_indexes,
                 warnings,
             )
+
+    # ── Build calendar sync entries ────────────────────────────
+    _canonical_calendar: Dict[str, Dict[str, Any]] = {}
+    for canonical_sid in sorted(set(service_id_map.values())):
+        flags = _CANONICAL_CAL_FLAGS.get(canonical_sid, _CANONICAL_CAL_FLAGS["WEEKDAY"])
+        date_ranges = _cal_date_ranges.get(canonical_sid, [])
+        if date_ranges:
+            start = _format_gtfs_date(min(r[0] for r in date_ranges))
+            end = _format_gtfs_date(max(r[1] for r in date_ranges))
+        else:
+            start = "2026-01-01"
+            end = "2026-12-31"
+        _canonical_calendar[canonical_sid] = {
+            "service_id": canonical_sid,
+            "name": _CANONICAL_CAL_NAMES.get(canonical_sid, canonical_sid),
+            **flags,
+            "start_date": start,
+            "end_date": end,
+        }
+    calendar_entries: List[Dict[str, Any]] = sorted(
+        _canonical_calendar.values(), key=lambda e: str(e["service_id"])
+    )
+    calendar_date_entries: List[Dict[str, Any]] = []
+    for raw_sid, date_str, exc_type in _raw_cal_dates:
+        canonical_sid = service_id_map.get(raw_sid)
+        if not canonical_sid:
+            continue
+        calendar_date_entries.append({
+            "date": _format_gtfs_date(date_str),
+            "service_id": canonical_sid,
+            "exception_type": "ADD" if exc_type == "1" else "REMOVE",
+        })
 
     trips_basic: Dict[str, Dict[str, str]] = {}
     for row in _stream_rows(feed_root / "trips.txt"):
@@ -652,6 +715,8 @@ def _load_gtfs_core_bundle_cached(
         "service_id_by_trip": service_id_by_trip,
         "headsign_by_trip": headsign_by_trip,
         "stop_name_by_id": stop_name_by_id,
+        "calendar_entries": calendar_entries,
+        "calendar_date_entries": calendar_date_entries,
     }
 
 
