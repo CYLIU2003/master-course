@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { simulationApi } from "@/api";
-import { optimizationApi } from "@/api";
+import { simulationApi } from "@/api/simulation";
+import { optimizationApi } from "@/api/optimization";
 import type { RunSimulationRequest, RunOptimizationRequest } from "@/types";
 import { scenarioKeys } from "./use-scenario";
 

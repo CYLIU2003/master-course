@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useMeasuredMemo } from "@/utils/perf/useMeasuredMemo";
 
 interface Props<T> {
   items: T[];
@@ -8,6 +9,7 @@ interface Props<T> {
   renderItem: (item: T, index: number) => React.ReactNode;
   getKey?: (item: T, index: number) => string;
   className?: string;
+  perfLabel?: string;
 }
 
 export function VirtualizedList<T>({
@@ -18,10 +20,13 @@ export function VirtualizedList<T>({
   renderItem,
   getKey,
   className,
+  perfLabel,
 }: Props<T>) {
   const [scrollTop, setScrollTop] = useState(0);
 
-  const { startIndex, visibleItems } = useMemo(() => {
+  const { startIndex, visibleItems } = useMeasuredMemo(
+    perfLabel ? `selector:${perfLabel}` : "selector:virtualized-list",
+    () => {
     const start = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
     const visibleCount = Math.ceil(height / itemHeight) + overscan * 2;
     const end = Math.min(items.length, start + visibleCount);
@@ -29,7 +34,9 @@ export function VirtualizedList<T>({
       startIndex: start,
       visibleItems: items.slice(start, end),
     };
-  }, [height, itemHeight, items, overscan, scrollTop]);
+    },
+    [height, itemHeight, items, overscan, perfLabel, scrollTop],
+  );
 
   return (
     <div

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EditorDrawer } from "@/features/common/EditorDrawer";
 import { useUpdateTimetable } from "@/hooks";
+import { scenarioApi } from "@/api/scenario";
 import type { TimetableRow } from "@/types";
 
 // ── helpers ───────────────────────────────────────────────────
@@ -88,7 +89,7 @@ interface Props {
   open: boolean;
   scenarioId: string;
   defaultServiceId: string;
-  existingRows: TimetableRow[];
+  existingRowCount: number;
   onClose: () => void;
 }
 
@@ -98,7 +99,7 @@ export function TimetableGeneratorDrawer({
   open,
   scenarioId,
   defaultServiceId,
-  existingRows,
+  existingRowCount,
   onClose,
 }: Props) {
   const { t } = useTranslation();
@@ -113,14 +114,12 @@ export function TimetableGeneratorDrawer({
     setForm((f) => ({ ...f, [key]: val }));
   }
 
-  const preview = generateRows(form, existingRows.length);
+  const preview = generateRows(form, existingRowCount);
 
-  function handleSave() {
-    const updated = [...existingRows, ...preview];
-    updateTimetable.mutate(
-      { rows: updated },
-      { onSuccess: onClose },
-    );
+  async function handleSave() {
+    const current = await scenarioApi.getTimetable(scenarioId);
+    const updated = [...(current.items ?? []), ...preview];
+    updateTimetable.mutate({ rows: updated }, { onSuccess: onClose });
   }
 
   const isDirty =

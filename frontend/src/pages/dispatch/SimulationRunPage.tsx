@@ -1,32 +1,38 @@
 import { useParams } from "react-router-dom";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  useJob,
   useRunSimulation,
   useSimulationResult,
   useSimulationCapabilities,
   useDispatchScope,
 } from "@/hooks";
-import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { BackendJobPanel, PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { DispatchScopePanel } from "@/features/planning";
 
 export function SimulationRunPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const { data: scope } = useDispatchScope(scenarioId!);
   const { data: result, isLoading, error } = useSimulationResult(scenarioId!);
   const { data: capabilities } = useSimulationCapabilities(scenarioId!);
   const runMutation = useRunSimulation(scenarioId!);
+  const { data: activeJob } = useJob(activeJobId);
 
-  const handleRun = () => {
-    runMutation.mutate({
+  const handleRun = async () => {
+    const job = await runMutation.mutateAsync({
       depot_id: scope?.depotId ?? undefined,
       service_id: scope?.serviceId ?? undefined,
     });
+    setActiveJobId(job.job_id);
   };
 
   return (
     <div className="space-y-6">
       <DispatchScopePanel scenarioId={scenarioId!} />
+      <BackendJobPanel job={activeJob} />
 
       <PageSection
         title={t("simulation.title")}

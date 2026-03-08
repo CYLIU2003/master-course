@@ -17,6 +17,23 @@ const tripSchema = z.object({
 const tripsResponseSchema = z.object({
   items: z.array(tripSchema),
   total: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative().nullable().optional(),
+  offset: z.number().int().nonnegative().optional(),
+});
+
+export const tripsSummaryResponseSchema = z.object({
+  item: z.object({
+    totalTrips: z.number().int().nonnegative(),
+    routeCount: z.number().int().nonnegative(),
+    firstDeparture: z.string().nullable().optional(),
+    lastArrival: z.string().nullable().optional(),
+    byRoute: z.array(
+      z.object({
+        route_id: z.string(),
+        trip_count: z.number().int().nonnegative(),
+      }),
+    ),
+  }),
 });
 
 const feasibilityReasonSchema = z.enum([
@@ -52,6 +69,23 @@ export const graphResponseSchema = z.object({
   ),
 });
 
+export const graphSummaryResponseSchema = z.object({
+  item: z.object({
+    totalTrips: z.number().int().nonnegative(),
+    totalArcs: z.number().int().nonnegative(),
+    feasibleArcs: z.number().int().nonnegative(),
+    infeasibleArcs: z.number().int().nonnegative(),
+    reasonCounts: z.record(z.string(), z.number().int().nonnegative()),
+  }),
+});
+
+export const graphArcsResponseSchema = z.object({
+  items: z.array(connectionArcSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative().nullable().optional(),
+  offset: z.number().int().nonnegative().optional(),
+});
+
 const dutyLegSchema = z.object({
   trip: tripSchema,
   deadhead_time_min: z.number().int(),
@@ -78,11 +112,25 @@ const vehicleBlockSchema = z.object({
 export const dutiesResponseSchema = z.object({
   items: z.array(vehicleDutySchema),
   total: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative().nullable().optional(),
+  offset: z.number().int().nonnegative().optional(),
+});
+
+export const dutiesSummaryResponseSchema = z.object({
+  item: z.object({
+    totalDuties: z.number().int().nonnegative(),
+    totalLegs: z.number().int().nonnegative(),
+    averageLegsPerDuty: z.number().nonnegative(),
+    totalDistanceKm: z.number().nonnegative(),
+    vehicleTypeCounts: z.record(z.string(), z.number().int().nonnegative()),
+  }),
 });
 
 export const blocksResponseSchema = z.object({
   items: z.array(vehicleBlockSchema),
   total: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative().nullable().optional(),
+  offset: z.number().int().nonnegative().optional(),
 });
 
 export const dispatchPlanResponseSchema = z.object({

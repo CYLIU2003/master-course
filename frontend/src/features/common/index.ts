@@ -5,3 +5,5 @@ export { EmptyState } from "./EmptyState";
 export { ErrorBoundary } from "./ErrorBoundary";
 export { RouteErrorPage } from "./RouteErrorPage";
 export { VirtualizedList } from "./VirtualizedList";
+export { TabWarmBoundary } from "./TabWarmBoundary";
+export { BackendJobPanel } from "./BackendJobPanel";

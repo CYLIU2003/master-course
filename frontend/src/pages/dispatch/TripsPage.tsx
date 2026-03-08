@@ -1,42 +1,53 @@
-import { useEffect } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useTrips, useBuildTrips, useDispatchScope } from "@/hooks";
-import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
-import { DispatchScopePanel } from "@/features/planning";
+import { useTrips, useTripsSummary, useBuildTrips, useDispatchScope, useJob } from "@/hooks";
 import {
-  selectVisibleTrips,
-  usePlanningDatasetStore,
-} from "@/stores/planning-dataset-store";
+  BackendJobPanel,
+  PageSection,
+  LoadingBlock,
+  ErrorBlock,
+  EmptyState,
+  TabWarmBoundary,
+  VirtualizedList,
+} from "@/features/common";
+import { DispatchScopePanel } from "@/features/planning";
+import { useRenderTrace } from "@/utils/perf/useRenderTrace";
+
+const PAGE_SIZE = 120;
 
 export function TripsPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
+  useRenderTrace("TripsPage");
+  const [pageOffset, setPageOffset] = useState(0);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const { data: scope } = useDispatchScope(scenarioId!);
-  const { data, isLoading, error } = useTrips(scenarioId!);
+  const { data, isLoading, error } = useTrips(scenarioId!, {
+    limit: PAGE_SIZE,
+    offset: pageOffset,
+  });
+  const { data: summary } = useTripsSummary(scenarioId!);
   const buildMutation = useBuildTrips(scenarioId!);
-  const syncTrips = usePlanningDatasetStore((s) => s.syncTrips);
-  const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
-  const trips = usePlanningDatasetStore(selectVisibleTrips);
+  const { data: activeJob } = useJob(activeJobId);
+  const trips = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const pageStart = total === 0 ? 0 : pageOffset + 1;
+  const pageEnd = Math.min(pageOffset + trips.length, total);
 
-  useEffect(() => {
-    syncTrips(data?.items ?? []);
-  }, [data?.items, syncTrips]);
-
-  useEffect(() => {
-    setActiveDepotId(scope?.depotId ?? null);
-  }, [scope?.depotId, setActiveDepotId]);
-
-  const handleBuild = () => {
-    buildMutation.mutate({
+  const handleBuild = async () => {
+    const job = await buildMutation.mutateAsync({
       depot_id: scope?.depotId ?? undefined,
       service_id: scope?.serviceId ?? undefined,
     });
+    setActiveJobId(job.job_id);
   };
 
   return (
+    <TabWarmBoundary tab="dispatch" title="Dispatch tab を準備しています">
     <div className="space-y-6">
       <DispatchScopePanel scenarioId={scenarioId!} />
+      <BackendJobPanel job={activeJob} />
 
       <PageSection
         title={t("trips.title")}
@@ -58,36 +69,83 @@ export function TripsPage() {
         ) : trips.length === 0 ? (
           <EmptyState title={t("trips.no_trips")} description={t("trips.no_trips_description")} />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-border bg-surface-sunken text-xs font-semibold uppercase text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">{t("trips.col_trip_id")}</th>
-                  <th className="px-3 py-2">{t("trips.col_route")}</th>
-                  <th className="px-3 py-2">{t("trips.col_origin")}</th>
-                  <th className="px-3 py-2">{t("trips.col_dest")}</th>
-                  <th className="px-3 py-2">{t("trips.col_depart")}</th>
-                  <th className="px-3 py-2">{t("trips.col_arrive")}</th>
-                  <th className="px-3 py-2">{t("trips.col_dist")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {trips.map((t_) => (
-                  <tr key={t_.trip_id} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 font-mono text-xs">{t_.trip_id}</td>
-                    <td className="px-3 py-2 text-xs">{t_.route_id}</td>
-                    <td className="px-3 py-2 text-xs">{t_.origin}</td>
-                    <td className="px-3 py-2 text-xs">{t_.destination}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{t_.departure}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{t_.arrival}</td>
-                    <td className="px-3 py-2 text-xs">{t_.distance_km}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SummaryCard label="Trips" value={summary?.item.totalTrips ?? total} />
+              <SummaryCard label="Routes" value={summary?.item.routeCount ?? 0} />
+              <SummaryCard
+                label="Service span"
+                value={`${summary?.item.firstDeparture ?? "--:--"} - ${summary?.item.lastArrival ?? "--:--"}`}
+              />
+            </div>
+
+            <div className="rounded-lg border border-border">
+              <div className="grid grid-cols-[1.2fr_0.7fr_1fr_1fr_0.7fr_0.7fr_0.5fr] gap-3 border-b border-border bg-surface-sunken px-3 py-2 text-[11px] font-semibold uppercase text-slate-500">
+                <span>{t("trips.col_trip_id")}</span>
+                <span>{t("trips.col_route")}</span>
+                <span>{t("trips.col_origin")}</span>
+                <span>{t("trips.col_dest")}</span>
+                <span>{t("trips.col_depart")}</span>
+                <span>{t("trips.col_arrive")}</span>
+                <span>{t("trips.col_dist")}</span>
+              </div>
+              <VirtualizedList
+                items={trips}
+                height={520}
+                itemHeight={38}
+                className="bg-white"
+                perfLabel="trips-table"
+                getKey={(trip) => trip.trip_id}
+                renderItem={(trip) => (
+                  <div className="grid h-full grid-cols-[1.2fr_0.7fr_1fr_1fr_0.7fr_0.7fr_0.5fr] gap-3 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
+                    <div className="truncate font-mono" title={trip.trip_id}>{trip.trip_id}</div>
+                    <div className="truncate">{trip.route_id}</div>
+                    <div className="truncate">{trip.origin}</div>
+                    <div className="truncate">{trip.destination}</div>
+                    <div className="font-mono">{trip.departure}</div>
+                    <div className="font-mono">{trip.arrival}</div>
+                    <div>{trip.distance_km}</div>
+                  </div>
+                )}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>
+                {pageStart}-{pageEnd} / {total}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}
+                  disabled={pageOffset === 0}
+                  className="rounded border border-border px-3 py-1 disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPageOffset((current) => current + PAGE_SIZE)}
+                  disabled={pageOffset + PAGE_SIZE >= total}
+                  className="rounded border border-border px-3 py-1 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </PageSection>
+    </div>
+    </TabWarmBoundary>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-lg border border-border bg-surface-raised p-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-slate-800">{value}</div>
     </div>
   );
 }

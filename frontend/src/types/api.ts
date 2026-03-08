@@ -15,6 +15,7 @@ import type {
   DeadheadRule,
   TurnaroundRule,
   ConnectionGraph,
+  ConnectionArc,
   VehicleBlock,
   VehicleDuty,
   DutyValidationResult,
@@ -32,6 +33,8 @@ import type {
 export interface ApiListResponse<T> {
   items: T[];
   total: number;
+  limit?: number | null;
+  offset?: number;
 }
 
 export interface ApiError {
@@ -285,6 +288,36 @@ export interface ImportProgress {
   complete: boolean;
 }
 
+export interface TimetableServiceSummary {
+  serviceId: string;
+  rowCount: number;
+  routeCount: number;
+  firstDeparture?: string | null;
+  lastArrival?: string | null;
+}
+
+export interface TimetableRouteSummary {
+  routeId: string;
+  rowCount: number;
+  serviceCount: number;
+  firstDeparture?: string | null;
+  lastArrival?: string | null;
+  sampleTripIds: string[];
+}
+
+export interface TimetableSummaryItem {
+  totalRows: number;
+  serviceCount: number;
+  routeCount: number;
+  stopCount: number;
+  updatedAt?: string | null;
+  byService: TimetableServiceSummary[];
+  byRoute: TimetableRouteSummary[];
+  routeServiceCounts: Record<string, Record<string, number>>;
+  previewTripIds: string[];
+  imports?: Partial<Record<string, TimetableImportMeta>>;
+}
+
 export interface TimetableImportMeta {
   operator?: string;
   dump?: boolean;
@@ -312,6 +345,10 @@ export interface TimetableResponse extends ApiListResponse<TimetableRow> {
   meta?: {
     imports?: Partial<Record<string, TimetableImportMeta>>;
   };
+}
+
+export interface TimetableSummaryResponse {
+  item: TimetableSummaryItem;
 }
 
 export interface UpdateTimetableRequest {
@@ -368,6 +405,32 @@ export interface StopTimetableImportQuality {
   warningCount: number;
 }
 
+export interface StopTimetableServiceSummary {
+  serviceId: string;
+  timetableCount: number;
+  entryCount: number;
+  stopCount: number;
+}
+
+export interface StopTimetableStopSummary {
+  stopId: string;
+  stopName: string;
+  timetableCount: number;
+  entryCount: number;
+  serviceCount: number;
+}
+
+export interface StopTimetableSummaryItem {
+  totalTimetables: number;
+  totalEntries: number;
+  serviceCount: number;
+  stopCount: number;
+  updatedAt?: string | null;
+  byService: StopTimetableServiceSummary[];
+  byStop: StopTimetableStopSummary[];
+  imports?: Partial<Record<string, StopTimetableImportMeta>>;
+}
+
 export interface StopTimetableImportMeta {
   operator?: string;
   dump?: boolean;
@@ -395,6 +458,10 @@ export interface StopTimetablesResponse extends ApiListResponse<StopTimetable> {
   meta?: {
     imports?: Partial<Record<string, StopTimetableImportMeta>>;
   };
+}
+
+export interface StopTimetableSummaryResponse {
+  item: StopTimetableSummaryItem;
 }
 
 export interface ImportOdptStopTimetableRequest {
@@ -495,7 +562,33 @@ export type TurnaroundRulesResponse = ApiListResponse<TurnaroundRule>;
 
 // ── Graph ─────────────────────────────────────────────────────
 
+export interface TripsSummaryByRoute {
+  route_id: string;
+  trip_count: number;
+}
+
+export interface TripsSummaryResponse {
+  item: {
+    totalTrips: number;
+    routeCount: number;
+    firstDeparture?: string | null;
+    lastArrival?: string | null;
+    byRoute: TripsSummaryByRoute[];
+  };
+}
+
+export interface GraphSummaryResponse {
+  item: {
+    totalTrips: number;
+    totalArcs: number;
+    feasibleArcs: number;
+    infeasibleArcs: number;
+    reasonCounts: Record<string, number>;
+  };
+}
+
 export type GraphResponse = ConnectionGraph;
+export type GraphArcsResponse = ApiListResponse<ConnectionArc>;
 
 export interface BuildGraphRequest {
   force?: boolean;
@@ -509,6 +602,15 @@ export type BlocksResponse = ApiListResponse<VehicleBlock>;
 export type DutiesResponse = ApiListResponse<VehicleDuty>;
 export type DutyValidationResponse = ApiListResponse<DutyValidationResult>;
 export type DispatchPlanArtifactResponse = DispatchPlanResponse;
+export interface DutiesSummaryResponse {
+  item: {
+    totalDuties: number;
+    totalLegs: number;
+    averageLegsPerDuty: number;
+    totalDistanceKm: number;
+    vehicleTypeCounts: Record<string, number>;
+  };
+}
 
 export interface BuildBlocksRequest {
   vehicle_type?: string;

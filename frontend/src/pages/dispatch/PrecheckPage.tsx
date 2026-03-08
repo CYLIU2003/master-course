@@ -1,10 +1,9 @@
-import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   useRoutes,
   useStops,
-  useTimetable,
+  useTimetableSummary,
   useDepots,
   useDispatchScope,
   useDepotRoutePermissions,
@@ -12,8 +11,10 @@ import {
   useTurnaroundRules,
   useVehicles,
 } from "@/hooks";
-import { PageSection, LoadingBlock } from "@/features/common";
+import { PageSection, LoadingBlock, TabWarmBoundary } from "@/features/common";
 import { DispatchScopePanel } from "@/features/planning";
+import { useMeasuredMemo } from "@/utils/perf/useMeasuredMemo";
+import { useRenderTrace } from "@/utils/perf/useRenderTrace";
 
 interface CheckItem {
   key: string;
@@ -25,10 +26,11 @@ interface CheckItem {
 export function PrecheckPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
+  useRenderTrace("PrecheckPage");
 
   const { data: routesData, isLoading: lr } = useRoutes(scenarioId!);
   const { data: stopsData, isLoading: ls } = useStops(scenarioId!);
-  const { data: timetableData, isLoading: lt } = useTimetable(scenarioId!);
+  const { data: timetableSummary, isLoading: lt } = useTimetableSummary(scenarioId!);
   const { data: depotsData, isLoading: ld } = useDepots(scenarioId!);
   const { data: vehiclesData, isLoading: lv } = useVehicles(scenarioId!);
   const { data: scope, isLoading: lsc } = useDispatchScope(scenarioId!);
@@ -38,12 +40,13 @@ export function PrecheckPage() {
 
   const isLoading = lr || ls || lt || ld || lv || lsc || lp || ldh || lta;
 
-  const checks: CheckItem[] = useMemo(() => {
+  const checks: CheckItem[] = useMeasuredMemo("selector:precheck-checks", () => {
     if (isLoading) return [];
 
     const routes = routesData?.items ?? [];
     const stops = stopsData?.items ?? [];
-    const timetable = timetableData?.items ?? [];
+    const timetableTotal = timetableSummary?.item.totalRows ?? 0;
+    const routeServiceCounts = timetableSummary?.item.routeServiceCounts ?? {};
     const depots = depotsData?.items ?? [];
     const vehicles = vehiclesData?.items ?? [];
     const permissions = permissionsData?.items ?? [];
@@ -98,9 +101,9 @@ export function PrecheckPage() {
     items.push({
       key: "timetable",
       label: t("precheck.check_timetable", "時刻表"),
-      status: timetable.length > 0 ? "pass" : "fail",
-      detail: timetable.length > 0
-        ? t("precheck.timetable_ok", "{{count}}行", { count: timetable.length })
+      status: timetableTotal > 0 ? "pass" : "fail",
+      detail: timetableTotal > 0
+        ? t("precheck.timetable_ok", "{{count}}行", { count: timetableTotal })
         : t("precheck.timetable_missing", "時刻表が空です"),
     });
 
@@ -135,17 +138,17 @@ export function PrecheckPage() {
         ? allowedRoutes.map((p) => p.routeId)
         : routes.map((r) => r.id),
     );
-    const filteredTimetable = timetable.filter(
-      (row) =>
-        row.service_id === selectedServiceId &&
-        allowedRouteIds.has(row.route_id),
+    const serviceRouteCounts = routeServiceCounts[selectedServiceId] ?? {};
+    const filteredTimetableCount = Array.from(allowedRouteIds).reduce(
+      (sum, routeId) => sum + (serviceRouteCounts[routeId] ?? 0),
+      0,
     );
     items.push({
       key: "filtered_timetable",
       label: t("precheck.check_filtered_timetable", "対象時刻表行"),
-      status: filteredTimetable.length > 0 ? "pass" : timetable.length > 0 ? "fail" : "warn",
-      detail: filteredTimetable.length > 0
-        ? t("precheck.filtered_timetable_ok", "{{count}}行が対象", { count: filteredTimetable.length })
+      status: filteredTimetableCount > 0 ? "pass" : timetableTotal > 0 ? "fail" : "warn",
+      detail: filteredTimetableCount > 0
+        ? t("precheck.filtered_timetable_ok", "{{count}}行が対象", { count: filteredTimetableCount })
         : t("precheck.filtered_timetable_missing", "選択条件に一致する時刻表行がありません"),
     });
 
@@ -184,7 +187,7 @@ export function PrecheckPage() {
 
     return items;
   }, [
-    isLoading, routesData, stopsData, timetableData, depotsData, vehiclesData,
+    isLoading, routesData, stopsData, timetableSummary, depotsData, vehiclesData,
     scope, permissionsData, deadheadData, turnaroundData, t,
   ]);
 
@@ -193,6 +196,7 @@ export function PrecheckPage() {
   const allPass = failCount === 0;
 
   return (
+    <TabWarmBoundary tab="dispatch" title="Dispatch tab を準備しています">
     <div className="space-y-6">
       <DispatchScopePanel scenarioId={scenarioId!} editableRoutes />
 
@@ -253,5 +257,6 @@ export function PrecheckPage() {
         )}
       </PageSection>
     </div>
+    </TabWarmBoundary>
   );
 }

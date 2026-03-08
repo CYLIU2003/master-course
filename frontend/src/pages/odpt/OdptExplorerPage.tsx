@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchJson } from "@/api/client";
-import { VirtualizedList } from "@/features/common/VirtualizedList";
-import { compareRouteCodeLike, normalizeRouteCode } from "@/lib/route-code";
+import { ImportLogPanel } from "@/features/explorer/ImportLogPanel";
+import { ImportProgressPanel } from "@/features/explorer/ImportProgressPanel";
+import { TabWarmBoundary, VirtualizedList } from "@/features/common";
+import { usePreparedPublicDiffItems } from "@/hooks/usePreparedPublicDiffItems";
+import { useSortedAssignments } from "@/hooks/useSortedAssignments";
+import { normalizeRouteCode } from "@/lib/route-code";
 import { useMasterUiStore } from "@/stores/master-ui-store";
+import { useImportJobStore } from "@/stores/import-job-store";
 import { useUIStore } from "@/stores/ui-store";
+import { measureAsyncStep } from "@/utils/perf/measureAsyncStep";
+import { useMeasuredMemo } from "@/utils/perf/useMeasuredMemo";
+import { useRenderTrace } from "@/utils/perf/useRenderTrace";
+import { useTabSwitchTrace } from "@/utils/perf/useTabSwitchTrace";
 
 /**
  * ODPT Explorer Page
@@ -323,6 +332,7 @@ type TimetableSummary = {
 // ── DB Visualization Panel ───────────────────────────────────────────────────
 
 function DbVisualizationPanel() {
+  useRenderTrace("OdptExplorerPage.DbVisualizationPanel");
   const pageSize = 200;
   const [operators, setOperators] = useState<OperatorInfo[]>([]);
   const [selectedOp, setSelectedOp] = useState("");
@@ -347,15 +357,13 @@ function DbVisualizationPanel() {
     try {
       const body = await fetchJson<{ items: OperatorInfo[] }>("/api/catalog/operators");
       setOperators(body.items ?? []);
-      if (body.items?.length && !selectedOp) {
-        setSelectedOp(body.items[0].operator_id);
-      }
+      setSelectedOp((current) => current || body.items?.[0]?.operator_id || "");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [selectedOp]);
+  }, []);
 
   useEffect(() => {
     void loadOperators();
@@ -804,16 +812,24 @@ function DbVisualizationPanel() {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function OdptExplorerPage() {
+  useRenderTrace("OdptExplorerPage");
   const { scenarioId: routeScenarioId } = useParams<{ scenarioId: string }>();
   const [tabMode, setTabMode] = useState<"db" | "api">("db");
+  useTabSwitchTrace("explorer-tab", tabMode);
   const storeScenarioId = useUIStore((s) => s.activeScenarioId);
   const setSelectedDepotId = useUIStore((s) => s.setSelectedDepotId);
   const selectMasterDepot = useMasterUiStore((s) => s.selectDepot);
+  const startJob = useImportJobStore((state) => state.startJob);
+  const updateStage = useImportJobStore((state) => state.updateStage);
+  const appendLog = useImportJobStore((state) => state.appendLog);
+  const completeJob = useImportJobStore((state) => state.completeJob);
+  const failJob = useImportJobStore((state) => state.failJob);
   const activeScenarioId = routeScenarioId ?? storeScenarioId;
   const [selectedScenarioOperator, setSelectedScenarioOperator] = useState<"tokyu" | "toei">("tokyu");
   const [latestDiffSessionId, setLatestDiffSessionId] = useState("");
   const [latestDiffSummary, setLatestDiffSummary] = useState<PublicDiffSummary | null>(null);
   const [latestDiffItems, setLatestDiffItems] = useState<PublicDiffItem[]>([]);
+  const preparedDiffItems = usePreparedPublicDiffItems(latestDiffItems);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [depots, setDepots] = useState<Depot[]>([]);
   const [explorerOverview, setExplorerOverview] = useState<ExplorerOverview | null>(null);
@@ -854,35 +870,7 @@ export function OdptExplorerPage() {
     meta: unknown;
   } | null>(null);
   const [odptBackendHealthy, setOdptBackendHealthy] = useState<boolean | null>(null);
-  const sortedAssignmentRows = useMemo(
-    () =>
-      [...assignmentRows].sort((left, right) => {
-        const familyCmp = compareRouteCodeLike(
-          left.routeFamilyCode || left.routeCode || left.routeName,
-          right.routeFamilyCode || right.routeCode || right.routeName,
-        );
-        if (familyCmp !== 0) {
-          return familyCmp;
-        }
-        const familyOrderCmp =
-          Number(left.familySortOrder ?? 999) - Number(right.familySortOrder ?? 999);
-        if (familyOrderCmp !== 0) {
-          return familyOrderCmp;
-        }
-        const codeCmp = compareRouteCodeLike(
-          left.routeCode || left.routeName,
-          right.routeCode || right.routeName,
-        );
-        if (codeCmp !== 0) {
-          return codeCmp;
-        }
-        return `${left.routeName}|${left.startStop ?? ""}|${left.endStop ?? ""}`.localeCompare(
-          `${right.routeName}|${right.startStop ?? ""}|${right.endStop ?? ""}`,
-          "ja",
-        );
-      }),
-    [assignmentRows],
-  );
+  const sortedAssignmentRows = useSortedAssignments(assignmentRows);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -1038,13 +1026,23 @@ export function OdptExplorerPage() {
   }
 
   async function refreshCatalog(source: "odpt" | "gtfs") {
+    const jobId = `catalog-refresh-${source}`;
+    startJob({
+      jobId,
+      source,
+      label: `Catalog refresh (${source.toUpperCase()})`,
+      stages: [
+        { id: "snapshot", label: "Build snapshot", weight: 80 },
+        { id: "ui", label: "Refresh explorer cache", weight: 20 },
+      ],
+    });
     setCatalogRefreshing(source);
     setError(null);
     try {
+      updateStage(jobId, "snapshot", { status: "running", progress: 20 });
       if (source === "odpt") {
-        const body = await fetchJson<{ item?: CatalogSnapshot }>(
-          "/api/catalog/refresh/odpt",
-          {
+        const body = await measureAsyncStep("explorer:refresh-catalog-odpt", () =>
+          fetchJson<{ item?: CatalogSnapshot }>("/api/catalog/refresh/odpt", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1053,29 +1051,32 @@ export function OdptExplorerPage() {
               forceRefresh: true,
               ttlSec,
             }),
-          },
+          }),
         );
         await loadCatalogSnapshots();
         if (body.item?.snapshotKey) {
           setSelectedSnapshotKey(body.item.snapshotKey);
         }
       } else {
-        const body = await fetchJson<{ item?: CatalogSnapshot }>(
-          "/api/catalog/refresh/gtfs",
-          {
+        const body = await measureAsyncStep("explorer:refresh-catalog-gtfs", () =>
+          fetchJson<{ item?: CatalogSnapshot }>("/api/catalog/refresh/gtfs", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               feedPath: "GTFS/ToeiBus-GTFS",
             }),
-          },
+          }),
         );
         await loadCatalogSnapshots();
         if (body.item?.snapshotKey) {
           setSelectedSnapshotKey(body.item.snapshotKey);
         }
       }
+      updateStage(jobId, "snapshot", { status: "success", progress: 100 });
+      updateStage(jobId, "ui", { status: "success", progress: 100 });
+      completeJob(jobId, "Catalog refresh completed");
     } catch (e: unknown) {
+      failJob(jobId, e instanceof Error ? e.message : String(e));
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setCatalogRefreshing("");
@@ -1087,58 +1088,93 @@ export function OdptExplorerPage() {
       setError("先に scenario を選択してください。");
       return;
     }
+    const jobId = `scenario-sync-${source}`;
+    startJob({
+      jobId,
+      source,
+      label: `Public data sync (${source.toUpperCase()})`,
+      stages: [
+        { id: "fetch", label: "Fetch public snapshot", weight: 35 },
+        { id: "normalize", label: "Normalize snapshot", weight: 20 },
+        { id: "diff", label: "Build diff session", weight: 30 },
+        { id: "refresh", label: "Refresh explorer state", weight: 15 },
+      ],
+    });
     setAssignmentSavingRouteId(`import:${source}`);
     setError(null);
     setSyncMessage(null);
     try {
-      const fetchRes = await fetchJson<{
-        id: string;
-        snapshot_id?: string;
-      }>(`/api/scenarios/${activeScenarioId}/public-data/fetch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source_type: source,
-          operator_id:
-            source === "odpt" ? "odpt.Operator:TokyuBus" : "GTFS/ToeiBus-GTFS",
-          fetch_mode: "incremental",
-          resource_targets:
-            source === "odpt"
-              ? ["odpt:BusroutePattern", "odpt:BusstopPole", "odpt:BusTimetable"]
-              : ["routes", "stops", "trips"],
-        }),
-      });
-      const rawSnapshotId = fetchRes.snapshot_id ?? fetchRes.id;
-      const normalizeRes = await fetchJson<{ normalized_snapshot_id: string }>(
-        `/api/scenarios/${activeScenarioId}/public-data/normalize`,
-        {
+      updateStage(jobId, "fetch", { status: "running", progress: 10 });
+      appendLog(jobId, { level: "info", message: `Fetching ${source} public data snapshot` });
+      const fetchRes = await measureAsyncStep(`explorer:public-fetch-${source}`, () =>
+        fetchJson<{
+          id: string;
+          snapshot_id?: string;
+        }>(`/api/scenarios/${activeScenarioId}/public-data/fetch`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ raw_snapshot_id: rawSnapshotId }),
-        },
-      );
-      const diffRes = await fetchJson<{
-        diff_session_id: string;
-        summary: PublicDiffSummary;
-      }>(`/api/scenarios/${activeScenarioId}/public-data/diff`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          normalized_snapshot_id: normalizeRes.normalized_snapshot_id,
-          compare_mode: "new_and_update",
-          compare_targets: ["routes", "stops", "trips", "stop_times", "service_calendars"],
+          body: JSON.stringify({
+            source_type: source,
+            operator_id:
+              source === "odpt" ? "odpt.Operator:TokyuBus" : "GTFS/ToeiBus-GTFS",
+            fetch_mode: "incremental",
+            resource_targets:
+              source === "odpt"
+                ? ["odpt:BusroutePattern", "odpt:BusstopPole", "odpt:BusTimetable"]
+                : ["routes", "stops", "trips"],
+          }),
         }),
-      });
+      );
+      updateStage(jobId, "fetch", { status: "success", progress: 100 });
+      const rawSnapshotId = fetchRes.snapshot_id ?? fetchRes.id;
+      updateStage(jobId, "normalize", { status: "running", progress: 20 });
+      appendLog(jobId, { level: "info", message: `Normalizing snapshot ${rawSnapshotId}` });
+      const normalizeRes = await measureAsyncStep(`explorer:public-normalize-${source}`, () =>
+        fetchJson<{ normalized_snapshot_id: string }>(
+          `/api/scenarios/${activeScenarioId}/public-data/normalize`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ raw_snapshot_id: rawSnapshotId }),
+          },
+        ),
+      );
+      updateStage(jobId, "normalize", { status: "success", progress: 100 });
+      updateStage(jobId, "diff", { status: "running", progress: 20 });
+      const diffRes = await measureAsyncStep(`explorer:public-diff-${source}`, () =>
+        fetchJson<{
+          diff_session_id: string;
+          summary: PublicDiffSummary;
+        }>(`/api/scenarios/${activeScenarioId}/public-data/diff`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            normalized_snapshot_id: normalizeRes.normalized_snapshot_id,
+            compare_mode: "new_and_update",
+            compare_targets: ["routes", "stops", "trips", "stop_times", "service_calendars"],
+          }),
+        }),
+      );
       const diffItemsRes = await fetchJson<{ items: PublicDiffItem[] }>(
         `/api/scenarios/${activeScenarioId}/public-data/diff/${diffRes.diff_session_id}/items?limit=50`,
       );
+      updateStage(jobId, "diff", {
+        status: "success",
+        progress: 100,
+        currentCount: diffItemsRes.items?.length ?? 0,
+        totalCount: diffRes.summary.changed_count + diffRes.summary.new_count,
+      });
       setLatestDiffSessionId(diffRes.diff_session_id);
       setLatestDiffSummary(diffRes.summary);
       setLatestDiffItems(diffItemsRes.items ?? []);
       setSyncMessage("差分を取得しました。内容を確認してから反映できます。");
+      updateStage(jobId, "refresh", { status: "running", progress: 20 });
       await loadScenarioExplorerData();
       await loadCatalogSnapshots();
+      updateStage(jobId, "refresh", { status: "success", progress: 100 });
+      completeJob(jobId, "差分取得が完了しました。");
     } catch (e: unknown) {
+      failJob(jobId, e instanceof Error ? e.message : String(e));
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setAssignmentSavingRouteId("");
@@ -1149,28 +1185,55 @@ export function OdptExplorerPage() {
     if (!activeScenarioId || !latestDiffSessionId) {
       return;
     }
+    const jobId = "scenario-sync-apply";
+    startJob({
+      jobId,
+      source: "system",
+      label: "Apply diff session",
+      stages: [
+        { id: "sync", label: "Sync scenario", weight: 75 },
+        { id: "refresh", label: "Refresh explorer view", weight: 25 },
+      ],
+    });
     setAssignmentSavingRouteId("sync:apply");
     setError(null);
     setSyncMessage(null);
     try {
-      const syncRes = await fetchJson<{
-        inserted_count: number;
-        updated_count: number;
-        skipped_count: number;
-        conflict_count: number;
-      }>(`/api/scenarios/${activeScenarioId}/public-data/sync`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          diff_session_id: latestDiffSessionId,
-          sync_mode: "insert_and_update",
+      updateStage(jobId, "sync", { status: "running", progress: 20 });
+      const syncRes = await measureAsyncStep("explorer:apply-diff", () =>
+        fetchJson<{
+          inserted_count: number;
+          updated_count: number;
+          skipped_count: number;
+          conflict_count: number;
+        }>(`/api/scenarios/${activeScenarioId}/public-data/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            diff_session_id: latestDiffSessionId,
+            sync_mode: "insert_and_update",
+          }),
         }),
+      );
+      updateStage(jobId, "sync", {
+        status: "success",
+        progress: 100,
+        currentCount: syncRes.inserted_count + syncRes.updated_count,
+        totalCount:
+          syncRes.inserted_count +
+          syncRes.updated_count +
+          syncRes.skipped_count +
+          syncRes.conflict_count,
       });
       setSyncMessage(
         `反映完了: +${syncRes.inserted_count} / 更新 ${syncRes.updated_count} / スキップ ${syncRes.skipped_count} / conflict ${syncRes.conflict_count}`,
       );
+      updateStage(jobId, "refresh", { status: "running", progress: 20 });
       await loadScenarioExplorerData();
+      updateStage(jobId, "refresh", { status: "success", progress: 100 });
+      completeJob(jobId, "差分反映が完了しました。");
     } catch (e: unknown) {
+      failJob(jobId, e instanceof Error ? e.message : String(e));
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setAssignmentSavingRouteId("");
@@ -1347,7 +1410,7 @@ export function OdptExplorerPage() {
     loadCatalogRoute(selectedSnapshotKey, selectedRouteId);
   }, [selectedSnapshotKey, selectedRouteId]);
 
-  const filteredTrips = useMemo(() => {
+  const filteredTrips = useMeasuredMemo("selector:catalog-filtered-trips", () => {
     if (!catalogRoute) {
       return [];
     }
@@ -1374,7 +1437,7 @@ export function OdptExplorerPage() {
     [filteredTrips, selectedCatalogTripId],
   );
 
-  const exportPreview = useMemo(() => {
+  const exportPreview = useMeasuredMemo("selector:export-preview", () => {
     if (!exportRes) {
       return "";
     }
@@ -1412,6 +1475,7 @@ export function OdptExplorerPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
+    <TabWarmBoundary tab="explorer" title="Public Data Explorer を準備しています">
     <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
       {/* Page header */}
       <div className="flex items-center justify-between">
@@ -1552,22 +1616,26 @@ export function OdptExplorerPage() {
                     <th className="px-3 py-2 font-medium text-slate-500">Name</th>
                     <th className="px-3 py-2 font-medium text-slate-500">Type</th>
                     <th className="px-3 py-2 font-medium text-slate-500">Action</th>
+                    <th className="px-3 py-2 font-medium text-slate-500">Changed fields</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {latestDiffItems.length === 0 ? (
+                  {preparedDiffItems.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-3 text-slate-500">
+                      <td colSpan={5} className="px-3 py-3 text-slate-500">
                         差分はありません。
                       </td>
                     </tr>
                   ) : (
-                    latestDiffItems.map((item) => (
+                    preparedDiffItems.map((item) => (
                       <tr key={item.id} className="border-t border-slate-100">
                         <td className="px-3 py-2 text-slate-600">{item.entity_type}</td>
                         <td className="px-3 py-2 text-slate-700">{item.display_name}</td>
                         <td className="px-3 py-2 text-slate-600">{item.change_type}</td>
                         <td className="px-3 py-2 text-slate-600">{item.suggested_action}</td>
+                        <td className="px-3 py-2 text-slate-500">
+                          {item.changedFieldCount > 0 ? item.changedFieldPreview : "-"}
+                        </td>
                       </tr>
                     ))
                   )}
@@ -1683,11 +1751,18 @@ export function OdptExplorerPage() {
         </button>
       </div>
 
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <ImportProgressPanel />
+        <ImportLogPanel />
+      </div>
+
       {/* DB Visualization tab */}
-      {tabMode === "db" && <DbVisualizationPanel />}
+      <section className={tabMode === "db" ? "block" : "hidden"}>
+        <DbVisualizationPanel />
+      </section>
 
       {/* API Debug tab (original explorer content) */}
-      {tabMode === "api" && (
+      <section className={tabMode === "api" ? "block" : "hidden"}>
       <>
       {/* Controls card */}
       <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-4">
@@ -2335,7 +2410,8 @@ export function OdptExplorerPage() {
         </div>
       )}
       </>
-      )}
+      </section>
     </div>
+    </TabWarmBoundary>
   );
 }

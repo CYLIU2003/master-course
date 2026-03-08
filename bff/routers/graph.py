@@ -25,7 +25,7 @@ from __future__ import annotations
 import traceback
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
 
 from bff.mappers.dispatch_mappers import (
@@ -47,6 +47,7 @@ from src.dispatch.models import (
 from src.dispatch.pipeline import TimetableDispatchPipeline
 
 router = APIRouter(tags=["graph"])
+_MAX_PAGE_LIMIT = 500
 
 
 # ── Pydantic models ────────────────────────────────────────────
@@ -474,6 +475,95 @@ def _build_dispatch_plan_payload(
     }
 
 
+def _job_metadata(
+    *,
+    scenario_id: str,
+    service_id: Optional[str],
+    depot_id: Optional[str],
+    stage: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return {
+        "scenario_id": scenario_id,
+        "service_id": service_id,
+        "depot_id": depot_id,
+        "stage": stage,
+        **(extra or {}),
+    }
+
+
+def _paginate_items(
+    items: List[Dict[str, Any]],
+    limit: Optional[int],
+    offset: int,
+) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+    if limit is None:
+        return items, None
+    return items[offset : offset + limit], limit
+
+
+def _build_trips_summary(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    route_counts: Dict[str, int] = {}
+    earliest_departure: Optional[str] = None
+    latest_arrival: Optional[str] = None
+    for item in items:
+        route_id = str(item.get("route_id") or "")
+        if route_id:
+            route_counts[route_id] = route_counts.get(route_id, 0) + 1
+        departure = item.get("departure")
+        arrival = item.get("arrival")
+        if isinstance(departure, str) and departure:
+            earliest_departure = (
+                departure
+                if earliest_departure is None or departure < earliest_departure
+                else earliest_departure
+            )
+        if isinstance(arrival, str) and arrival:
+            latest_arrival = (
+                arrival if latest_arrival is None or arrival > latest_arrival else latest_arrival
+            )
+
+    by_route = [
+        {"route_id": route_id, "trip_count": count}
+        for route_id, count in sorted(route_counts.items(), key=lambda pair: (-pair[1], pair[0]))
+    ]
+    return {
+        "totalTrips": len(items),
+        "routeCount": len(route_counts),
+        "firstDeparture": earliest_departure,
+        "lastArrival": latest_arrival,
+        "byRoute": by_route[:50],
+    }
+
+
+def _build_graph_summary(graph: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "totalTrips": len(graph.get("trips") or []),
+        "totalArcs": int(graph.get("total_arcs") or 0),
+        "feasibleArcs": int(graph.get("feasible_arcs") or 0),
+        "infeasibleArcs": int(graph.get("infeasible_arcs") or 0),
+        "reasonCounts": dict(graph.get("reason_counts") or {}),
+    }
+
+
+def _build_duties_summary(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    vehicle_type_counts: Dict[str, int] = {}
+    total_legs = 0
+    total_distance_km = 0.0
+    for item in items:
+        vehicle_type = str(item.get("vehicle_type") or "unknown")
+        vehicle_type_counts[vehicle_type] = vehicle_type_counts.get(vehicle_type, 0) + 1
+        total_legs += len(item.get("legs") or [])
+        total_distance_km += float(item.get("total_distance_km") or 0.0)
+    return {
+        "totalDuties": len(items),
+        "totalLegs": total_legs,
+        "averageLegsPerDuty": round(total_legs / len(items), 2) if items else 0.0,
+        "totalDistanceKm": round(total_distance_km, 3),
+        "vehicleTypeCounts": vehicle_type_counts,
+    }
+
+
 # ── Background task implementations ───────────────────────────
 
 
@@ -489,6 +579,12 @@ def _run_build_trips(
             status="running",
             progress=10,
             message="Building trips from timetable...",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="build_trips",
+            ),
         )
         trips_json = _build_trips_payload(scenario_id, service_id, depot_id)
         store.set_field(scenario_id, "trips", trips_json)
@@ -499,6 +595,13 @@ def _run_build_trips(
             progress=100,
             message=f"Built {len(trips_json)} trips.",
             result_key="trips",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="completed",
+                extra={"trip_count": len(trips_json)},
+            ),
         )
     except Exception as e:
         job_store.update_job(
@@ -521,6 +624,12 @@ def _run_build_graph(
             status="running",
             progress=10,
             message="Building feasibility graph...",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="build_graph",
+            ),
         )
         combined_graph = _build_graph_payload(scenario_id, service_id, depot_id)
         store.set_field(scenario_id, "graph", combined_graph)
@@ -531,6 +640,16 @@ def _run_build_graph(
             progress=100,
             message=f"Graph built: {combined_graph['feasible_arcs']} feasible arcs.",
             result_key="graph",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="completed",
+                extra={
+                    "total_arcs": combined_graph["total_arcs"],
+                    "feasible_arcs": combined_graph["feasible_arcs"],
+                },
+            ),
         )
     except Exception as e:
         job_store.update_job(
@@ -551,7 +670,16 @@ def _run_generate_duties(
 ) -> None:
     try:
         job_store.update_job(
-            job_id, status="running", progress=10, message="Generating duties..."
+            job_id,
+            status="running",
+            progress=10,
+            message="Generating duties...",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="generate_duties",
+            ),
         )
         all_duties_json = _build_duties_payload(
             scenario_id,
@@ -568,6 +696,13 @@ def _run_generate_duties(
             progress=100,
             message=f"Generated {len(all_duties_json)} duties.",
             result_key="duties",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="completed",
+                extra={"duty_count": len(all_duties_json)},
+            ),
         )
     except Exception as e:
         job_store.update_job(
@@ -588,7 +723,16 @@ def _run_build_blocks(
 ) -> None:
     try:
         job_store.update_job(
-            job_id, status="running", progress=10, message="Building vehicle blocks..."
+            job_id,
+            status="running",
+            progress=10,
+            message="Building vehicle blocks...",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="build_blocks",
+            ),
         )
         blocks_json = _build_blocks_payload(
             scenario_id,
@@ -604,6 +748,13 @@ def _run_build_blocks(
             progress=100,
             message=f"Built {len(blocks_json)} blocks.",
             result_key="blocks",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="completed",
+                extra={"block_count": len(blocks_json)},
+            ),
         )
     except Exception:
         job_store.update_job(
@@ -628,6 +779,12 @@ def _run_build_dispatch_plan(
             status="running",
             progress=10,
             message="Building dispatch plan...",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="build_dispatch_plan",
+            ),
         )
         plan_json = _build_dispatch_plan_payload(
             scenario_id,
@@ -665,6 +822,16 @@ def _run_build_dispatch_plan(
                 f"{plan_json['total_duties']} duties."
             ),
             result_key="dispatch_plan",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="completed",
+                extra={
+                    "total_blocks": plan_json["total_blocks"],
+                    "total_duties": plan_json["total_duties"],
+                },
+            ),
         )
     except Exception:
         job_store.update_job(
@@ -679,10 +846,27 @@ def _run_build_dispatch_plan(
 
 
 @router.get("/scenarios/{scenario_id}/trips")
-def get_trips(scenario_id: str) -> Dict[str, Any]:
+def get_trips(
+    scenario_id: str,
+    limit: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=_MAX_PAGE_LIMIT,
+        description="Optional page size. Omit to return all trips.",
+    ),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     items = store.get_field(scenario_id, "trips") or []
-    return {"items": items, "total": len(items)}
+    paged_items, page_limit = _paginate_items(items, limit, offset)
+    return {"items": paged_items, "total": len(items), "limit": page_limit, "offset": offset}
+
+
+@router.get("/scenarios/{scenario_id}/trips/summary")
+def get_trips_summary(scenario_id: str) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    items = store.get_field(scenario_id, "trips") or []
+    return {"item": _build_trips_summary(items)}
 
 
 @router.post("/scenarios/{scenario_id}/build-trips")
@@ -724,6 +908,44 @@ def get_graph(scenario_id: str) -> Dict[str, Any]:
     return graph
 
 
+@router.get("/scenarios/{scenario_id}/graph/summary")
+def get_graph_summary(scenario_id: str) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    graph = store.get_field(scenario_id, "graph")
+    if graph is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Graph has not been built yet. POST to /build-graph first.",
+        )
+    return {"item": _build_graph_summary(graph)}
+
+
+@router.get("/scenarios/{scenario_id}/graph/arcs")
+def get_graph_arcs(
+    scenario_id: str,
+    reason_code: Optional[str] = Query(default=None),
+    limit: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=_MAX_PAGE_LIMIT,
+        description="Optional page size. Omit to return all arcs.",
+    ),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    graph = store.get_field(scenario_id, "graph")
+    if graph is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Graph has not been built yet. POST to /build-graph first.",
+        )
+    arcs = list(graph.get("arcs") or [])
+    if reason_code:
+        arcs = [item for item in arcs if item.get("reason_code") == reason_code]
+    paged_items, page_limit = _paginate_items(arcs, limit, offset)
+    return {"items": paged_items, "total": len(arcs), "limit": page_limit, "offset": offset}
+
+
 @router.post("/scenarios/{scenario_id}/build-graph")
 def build_graph(
     scenario_id: str,
@@ -752,17 +974,44 @@ def build_graph(
 
 
 @router.get("/scenarios/{scenario_id}/duties")
-def get_duties(scenario_id: str) -> Dict[str, Any]:
+def get_duties(
+    scenario_id: str,
+    limit: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=_MAX_PAGE_LIMIT,
+        description="Optional page size. Omit to return all duties.",
+    ),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     items = store.get_field(scenario_id, "duties") or []
-    return {"items": items, "total": len(items)}
+    paged_items, page_limit = _paginate_items(items, limit, offset)
+    return {"items": paged_items, "total": len(items), "limit": page_limit, "offset": offset}
+
+
+@router.get("/scenarios/{scenario_id}/duties/summary")
+def get_duties_summary(scenario_id: str) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    items = store.get_field(scenario_id, "duties") or []
+    return {"item": _build_duties_summary(items)}
 
 
 @router.get("/scenarios/{scenario_id}/blocks")
-def get_blocks(scenario_id: str) -> Dict[str, Any]:
+def get_blocks(
+    scenario_id: str,
+    limit: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=_MAX_PAGE_LIMIT,
+        description="Optional page size. Omit to return all blocks.",
+    ),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     items = store.get_field(scenario_id, "blocks") or []
-    return {"items": items, "total": len(items)}
+    paged_items, page_limit = _paginate_items(items, limit, offset)
+    return {"items": paged_items, "total": len(items), "limit": page_limit, "offset": offset}
 
 
 @router.get("/scenarios/{scenario_id}/dispatch-plan")

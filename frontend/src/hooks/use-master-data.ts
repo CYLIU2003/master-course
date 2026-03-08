@@ -6,7 +6,7 @@ import {
   routeApi,
   stopApi,
   permissionApi,
-} from "@/api";
+} from "@/api/master-data";
 import type {
   CreateDepotRequest,
   UpdateDepotRequest,

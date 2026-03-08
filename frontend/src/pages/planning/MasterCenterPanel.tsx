@@ -7,6 +7,7 @@ import { DepotTableNew } from "@/features/planning/DepotTableNew";
 import { VehicleTableNew } from "@/features/planning/VehicleTableNew";
 import { RouteTableNew } from "@/features/planning/RouteTableNew";
 import { StopTable } from "@/features/planning/StopTable";
+import { useTabSwitchTrace } from "@/utils/perf/useTabSwitchTrace";
 
 const RouteNodeGraphPanel = lazy(() =>
   import("@/features/planning/RouteNodeGraphPanel").then((module) => ({
@@ -27,6 +28,7 @@ export function MasterCenterPanel({ scenarioId }: Props) {
   const activeTab = useMasterUiStore((s) => s.activeTab);
   const viewMode = useMasterUiStore((s) => s.viewMode);
   const selectedDepotId = useMasterUiStore((s) => s.selectedDepotId);
+  useTabSwitchTrace("master-center", `${activeTab}:${viewMode}`);
 
   // Node graph mode — routes tab only
   if (viewMode === "node" && activeTab === "routes") {

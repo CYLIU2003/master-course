@@ -4,42 +4,102 @@ import {
   Navigate,
   redirect,
 } from "react-router-dom";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { fetchMaybeJson } from "@/api/client";
 import { AppLayout } from "@/features/layout/AppLayout";
 import { ErrorBoundary, RouteErrorPage } from "@/features/common";
 
-// ── Page imports ──────────────────────────────────────────────
-import { ScenarioListPage } from "@/pages/scenario/ScenarioListPage";
-import { ScenarioOverviewPage } from "@/pages/scenario/ScenarioOverviewPage";
-
-// Tab 1: Planning
-import { MasterDataPage } from "@/pages/planning/MasterDataPage";
-import { VehicleTemplatesPage } from "@/pages/planning/VehicleTemplatesPage";
-import { TimetablePage } from "@/pages/inputs/TimetablePage";
-import { DeadheadPage } from "@/pages/inputs/DeadheadPage";
-import { RulesPage } from "@/pages/inputs/RulesPage";
-
-// Tab 2: Simulation environment
-import { SimulationEnvironmentPage } from "@/pages/planning/SimulationEnvironmentPage";
-
-// Dispatch pipeline
-import { TripsPage } from "@/pages/dispatch/TripsPage";
-import { GraphPage } from "@/pages/dispatch/GraphPage";
-import { DutiesPage } from "@/pages/dispatch/DutiesPage";
-import { PrecheckPage } from "@/pages/dispatch/PrecheckPage";
-import { SimulationRunPage } from "@/pages/dispatch/SimulationRunPage";
-import { OptimizationRunPage } from "@/pages/dispatch/OptimizationRunPage";
-
-// Results
-import { DispatchResultsPage } from "@/pages/results/DispatchResultsPage";
-import { EnergyResultsPage } from "@/pages/results/EnergyResultsPage";
-import { CostResultsPage } from "@/pages/results/CostResultsPage";
-
-// Compare
-import { ComparePage } from "@/pages/compare/ComparePage";
-
 // ODPT Explorer
+const ScenarioListPage = lazy(() =>
+  import("@/pages/scenario/ScenarioListPage").then((module) => ({
+    default: module.ScenarioListPage,
+  })),
+);
+const ScenarioOverviewPage = lazy(() =>
+  import("@/pages/scenario/ScenarioOverviewPage").then((module) => ({
+    default: module.ScenarioOverviewPage,
+  })),
+);
+const MasterDataPage = lazy(() =>
+  import("@/pages/planning/MasterDataPage").then((module) => ({
+    default: module.MasterDataPage,
+  })),
+);
+const VehicleTemplatesPage = lazy(() =>
+  import("@/pages/planning/VehicleTemplatesPage").then((module) => ({
+    default: module.VehicleTemplatesPage,
+  })),
+);
+const TimetablePage = lazy(() =>
+  import("@/pages/inputs/TimetablePage").then((module) => ({
+    default: module.TimetablePage,
+  })),
+);
+const DeadheadPage = lazy(() =>
+  import("@/pages/inputs/DeadheadPage").then((module) => ({
+    default: module.DeadheadPage,
+  })),
+);
+const RulesPage = lazy(() =>
+  import("@/pages/inputs/RulesPage").then((module) => ({
+    default: module.RulesPage,
+  })),
+);
+const SimulationEnvironmentPage = lazy(() =>
+  import("@/pages/planning/SimulationEnvironmentPage").then((module) => ({
+    default: module.SimulationEnvironmentPage,
+  })),
+);
+const TripsPage = lazy(() =>
+  import("@/pages/dispatch/TripsPage").then((module) => ({
+    default: module.TripsPage,
+  })),
+);
+const GraphPage = lazy(() =>
+  import("@/pages/dispatch/GraphPage").then((module) => ({
+    default: module.GraphPage,
+  })),
+);
+const DutiesPage = lazy(() =>
+  import("@/pages/dispatch/DutiesPage").then((module) => ({
+    default: module.DutiesPage,
+  })),
+);
+const PrecheckPage = lazy(() =>
+  import("@/pages/dispatch/PrecheckPage").then((module) => ({
+    default: module.PrecheckPage,
+  })),
+);
+const SimulationRunPage = lazy(() =>
+  import("@/pages/dispatch/SimulationRunPage").then((module) => ({
+    default: module.SimulationRunPage,
+  })),
+);
+const OptimizationRunPage = lazy(() =>
+  import("@/pages/dispatch/OptimizationRunPage").then((module) => ({
+    default: module.OptimizationRunPage,
+  })),
+);
+const DispatchResultsPage = lazy(() =>
+  import("@/pages/results/DispatchResultsPage").then((module) => ({
+    default: module.DispatchResultsPage,
+  })),
+);
+const EnergyResultsPage = lazy(() =>
+  import("@/pages/results/EnergyResultsPage").then((module) => ({
+    default: module.EnergyResultsPage,
+  })),
+);
+const CostResultsPage = lazy(() =>
+  import("@/pages/results/CostResultsPage").then((module) => ({
+    default: module.CostResultsPage,
+  })),
+);
+const ComparePage = lazy(() =>
+  import("@/pages/compare/ComparePage").then((module) => ({
+    default: module.ComparePage,
+  })),
+);
 const OdptExplorerPage = lazy(() =>
   import("@/pages/odpt/OdptExplorerPage").then((module) => ({
     default: module.OdptExplorerPage,
@@ -86,7 +146,7 @@ const router = createBrowserRouter([
   },
   {
     path: "/scenarios",
-    element: <ScenarioListPage />,
+    element: <LazyPage><ScenarioListPage /></LazyPage>,
   },
   {
     path: "/scenarios/:scenarioId",
@@ -97,44 +157,40 @@ const router = createBrowserRouter([
     ),
     errorElement: <RouteErrorPage />,
     children: [
-      { index: true, element: <ScenarioOverviewPage /> },
+      { index: true, element: <LazyPage><ScenarioOverviewPage /></LazyPage> },
 
       // ── Tab 1: Planning (master data) ─────────────────────
-      { path: "planning", element: <MasterDataPage /> },
+      { path: "planning", element: <LazyPage><MasterDataPage /></LazyPage> },
       { path: "planning-legacy", element: <Navigate to="../planning" replace /> },
       {
         path: "public-data",
-        element: (
-          <Suspense fallback={<div className="p-6 text-sm text-slate-400">Loading explorer...</div>}>
-            <OdptExplorerPage />
-          </Suspense>
-        ),
+        element: <LazyPage><OdptExplorerPage /></LazyPage>,
       },
-      { path: "vehicle-templates", element: <VehicleTemplatesPage /> },
-      { path: "timetable", element: <TimetablePage /> },
-      { path: "deadhead", element: <DeadheadPage /> },
-      { path: "rules", element: <RulesPage /> },
+      { path: "vehicle-templates", element: <LazyPage><VehicleTemplatesPage /></LazyPage> },
+      { path: "timetable", element: <LazyPage><TimetablePage /></LazyPage> },
+      { path: "deadhead", element: <LazyPage><DeadheadPage /></LazyPage> },
+      { path: "rules", element: <LazyPage><RulesPage /></LazyPage> },
 
       // ── Tab 2: Simulation environment ─────────────────────
-      { path: "simulation-env", element: <SimulationEnvironmentPage /> },
+      { path: "simulation-env", element: <LazyPage><SimulationEnvironmentPage /></LazyPage> },
 
       // ── Dispatch pipeline ─────────────────────────────────
-      { path: "trips", element: <TripsPage /> },
-      { path: "graph", element: <GraphPage /> },
-      { path: "duties", element: <DutiesPage /> },
-      { path: "precheck", element: <PrecheckPage /> },
-      { path: "simulation", element: <SimulationRunPage /> },
-      { path: "optimization", element: <OptimizationRunPage /> },
+      { path: "trips", element: <LazyPage><TripsPage /></LazyPage> },
+      { path: "graph", element: <LazyPage><GraphPage /></LazyPage> },
+      { path: "duties", element: <LazyPage><DutiesPage /></LazyPage> },
+      { path: "precheck", element: <LazyPage><PrecheckPage /></LazyPage> },
+      { path: "simulation", element: <LazyPage><SimulationRunPage /></LazyPage> },
+      { path: "optimization", element: <LazyPage><OptimizationRunPage /></LazyPage> },
 
       // ── Results ───────────────────────────────────────────
-      { path: "results/dispatch", element: <DispatchResultsPage /> },
-      { path: "results/energy", element: <EnergyResultsPage /> },
-      { path: "results/cost", element: <CostResultsPage /> },
+      { path: "results/dispatch", element: <LazyPage><DispatchResultsPage /></LazyPage> },
+      { path: "results/energy", element: <LazyPage><EnergyResultsPage /></LazyPage> },
+      { path: "results/cost", element: <LazyPage><CostResultsPage /></LazyPage> },
     ],
   },
   {
     path: "/compare",
-    element: <ComparePage />,
+    element: <LazyPage><ComparePage /></LazyPage>,
   },
   {
     path: "/odpt-explorer",
@@ -145,4 +201,12 @@ const router = createBrowserRouter([
 
 export function AppRouter() {
   return <RouterProvider router={router} />;
+}
+
+function LazyPage({ children }: { children: ReactNode }) {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-400">Loading...</div>}>
+      {children}
+    </Suspense>
+  );
 }

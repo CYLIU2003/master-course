@@ -39,6 +39,99 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-08] Frontend boot pipeline + timetable summary/page + perf instrumentation
+
+- **目的**:
+  - `Maximum update depth exceeded` の温床になっていた大型ページの state/effect 連鎖を減らす。
+  - 数万件規模の ODPT / GTFS timetable を summary-first + page access で扱う。
+  - 起動時・tab 切替時・import 中の状態を可視化し、固まって見える時間を減らす。
+
+- **実装（BFF）**:
+  - `bff/routers/scenarios.py`
+    - `GET /scenarios/{id}/timetable` と `GET /scenarios/{id}/stop-timetables` に `limit/offset` を追加。
+    - `GET /scenarios/{id}/timetable/summary`
+    - `GET /scenarios/{id}/stop-timetables/summary`
+    - service / route / stop 単位の lightweight summary を返す helper を追加。
+  - `tests/test_bff_scenario_timetable_summary.py`
+    - summary 集計 helper の回帰テストを追加。
+
+- **実装（Frontend 基盤）**:
+  - `frontend/src/app/AppBootstrapManager.tsx`
+    - app context / scenario / dispatch scope / master data / timetable summary / explorer overview を段階 prefetch。
+  - `frontend/src/app/BootSplashOverlay.tsx`
+    - boot 進捗オーバーレイ + 完了時フェードアウトを実装。
+  - `frontend/src/stores/boot-store.ts`
+    - boot step registry と weighted progress を Zustand 化。
+  - `frontend/src/stores/tab-warm-store.ts`
+    - planning / timetable / explorer / dispatch の warm state を管理。
+  - `frontend/src/stores/import-job-store.ts`
+    - import job の stage progress / logs を共通管理。
+
+- **実装（Frontend 表示最適化）**:
+  - `frontend/src/pages/inputs/TimetablePage.tsx`
+    - 全件取得をやめ、summary + page 読みへ移行。
+    - import progress / logs を panel で表示。
+  - `frontend/src/pages/planning/MasterDataHeader.tsx`
+    - header summary を full timetable query から summary query へ切替。
+  - `frontend/src/pages/dispatch/PrecheckPage.tsx`
+    - timetable 全件 filter ではなく `routeServiceCounts` ベース集計へ変更。
+  - `frontend/src/pages/odpt/OdptExplorerPage.tsx`
+    - DB/API tab を hidden 切替にして unmount 再初期化を回避。
+    - public-data sync / catalog refresh に import job progress を接続。
+  - `frontend/src/pages/dispatch/TripsPage.tsx`
+  - `frontend/src/pages/dispatch/DutiesPage.tsx`
+    - VirtualizedList 化。
+  - `frontend/src/features/common/TabWarmBoundary.tsx`
+    - warm 中 placeholder を共通化。
+
+- **実装（Perf / Worker）**:
+  - `frontend/src/utils/perf/`
+    - `useRenderTrace`, `useMeasuredMemo`, `measureAsyncStep`, `useTabSwitchTrace`, `DebugPerfOverlay`
+  - `frontend/src/features/common/VirtualizedList.tsx`
+    - visible slice 計算の selector timing を記録。
+  - `frontend/src/workers/assignment-sort.worker.ts`
+  - `frontend/src/hooks/useSortedAssignments.ts`
+    - explorer の depot assignment sort を worker 化。
+  - `frontend/src/workers/route-family-group.worker.ts`
+  - `frontend/src/hooks/useGroupedRouteFamilies.ts`
+    - routes tab の route family grouping / variant sort を worker 化。
+  - `frontend/src/workers/public-diff-preview.worker.ts`
+  - `frontend/src/hooks/usePreparedPublicDiffItems.ts`
+    - public-data diff preview の field diff 要約と sort を worker 化。
+
+- **実装（追加の code split / dispatch summary-first / backend job UI）**:
+  - `bff/routers/graph.py`
+    - `GET /scenarios/{id}/trips` / `duties` / `blocks` に `limit/offset` を追加。
+    - `GET /scenarios/{id}/trips/summary`
+    - `GET /scenarios/{id}/graph/summary`
+    - `GET /scenarios/{id}/graph/arcs`
+    - `GET /scenarios/{id}/duties/summary`
+    - graph build 系 job metadata に stage / count を付与。
+  - `frontend/src/pages/dispatch/TripsPage.tsx`
+  - `frontend/src/pages/dispatch/GraphPage.tsx`
+  - `frontend/src/pages/dispatch/DutiesPage.tsx`
+    - dispatch 一覧を summary-first + page access に移行。
+    - backend job panel を表示。
+  - `frontend/src/pages/results/DispatchResultsPage.tsx`
+  - `frontend/src/pages/results/EnergyResultsPage.tsx`
+  - `frontend/src/pages/results/CostResultsPage.tsx`
+    - placeholder をやめ、既存 result summary を表示。
+  - `frontend/src/api/jobs.ts`
+  - `frontend/src/hooks/use-job.ts`
+  - `frontend/src/features/common/BackendJobPanel.tsx`
+    - `/jobs/{job_id}` poll で backend async job progress を表示。
+  - `frontend/src/app/Router.tsx`
+    - route-level lazy loading を適用。
+  - `frontend/vite.config.ts`
+    - manual chunk 設定を追加し、main chunk の肥大化を抑制。
+
+- **確認結果**:
+  - `cd frontend && npm run build` → **pass**
+
+- **未確認 / 制約**:
+  - この実行環境には `pytest` と `fastapi` が入っていないため、Python 側の新規テストは未実行。
+  - main chunk warning は解消したが、`MapLibre GL` 由来の大きい地図 chunk warning は継続。地図依存をさらに細かく split するなら map provider 周辺の import 境界を再整理する必要がある。
+
 ### [DEV-2026-03-04] 設定タブ再設計 + Dispatch前処理統合
 
 - **目的**:

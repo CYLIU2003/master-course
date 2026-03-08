@@ -5,6 +5,7 @@ import type {
   CreateScenarioRequest,
   UpdateScenarioRequest,
   TimetableResponse,
+  TimetableSummaryResponse,
   UpdateTimetableRequest,
   ImportOdptTimetableRequest,
   ImportOdptTimetableResponse,
@@ -15,6 +16,7 @@ import type {
   ImportGtfsStopTimetableRequest,
   ImportGtfsStopTimetableResponse,
   StopTimetablesResponse,
+  StopTimetableSummaryResponse,
   ImportCsvRequest,
   ExportCsvResponse,
   CalendarResponse,
@@ -52,10 +54,29 @@ export const scenarioApi = {
 
   // ── Timetable ───────────────────────────────────────────────
 
-  getTimetable: (id: string, serviceId?: string) => {
-    const qs = serviceId ? `?service_id=${encodeURIComponent(serviceId)}` : "";
-    return api.get<TimetableResponse>(`/scenarios/${id}/timetable${qs}`);
+  getTimetable: (
+    id: string,
+    serviceId?: string,
+    options?: { limit?: number; offset?: number },
+  ) => {
+    const params = new URLSearchParams();
+    if (serviceId) {
+      params.set("service_id", serviceId);
+    }
+    if (typeof options?.limit === "number") {
+      params.set("limit", String(options.limit));
+    }
+    if (typeof options?.offset === "number") {
+      params.set("offset", String(options.offset));
+    }
+    const qs = params.toString();
+    return api.get<TimetableResponse>(
+      `/scenarios/${id}/timetable${qs ? `?${qs}` : ""}`,
+    );
   },
+
+  getTimetableSummary: (id: string) =>
+    api.get<TimetableSummaryResponse>(`/scenarios/${id}/timetable/summary`),
 
   updateTimetable: (id: string, data: UpdateTimetableRequest) =>
     api.put<TimetableResponse>(`/scenarios/${id}/timetable`, data),
@@ -75,15 +96,25 @@ export const scenarioApi = {
       data,
     ),
 
-  getStopTimetables: (id: string, stopId?: string, serviceId?: string) => {
+  getStopTimetables: (
+    id: string,
+    stopId?: string,
+    serviceId?: string,
+    options?: { limit?: number; offset?: number },
+  ) => {
     const params = new URLSearchParams();
     if (stopId) params.set("stop_id", stopId);
     if (serviceId) params.set("service_id", serviceId);
+    if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+    if (typeof options?.offset === "number") params.set("offset", String(options.offset));
     const qs = params.toString();
     return api.get<StopTimetablesResponse>(
       `/scenarios/${id}/stop-timetables${qs ? `?${qs}` : ""}`,
     );
   },
+
+  getStopTimetablesSummary: (id: string) =>
+    api.get<StopTimetableSummaryResponse>(`/scenarios/${id}/stop-timetables/summary`),
 
   importOdptStopTimetables: (
     id: string,
