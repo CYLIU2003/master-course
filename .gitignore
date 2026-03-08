@@ -25,6 +25,9 @@ backend/.env
 # Per-operator SQLite databases (generated on import)
 data/*.db
 
+# ODPT raw/normalized cache (large downloaded files)
+data/cache/
+
 # OS/editor noise
 .DS_Store
 Thumbs.db

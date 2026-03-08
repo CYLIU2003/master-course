@@ -21,7 +21,16 @@ from bff.services.gtfs_import import (
 from bff.services.odpt_routes import (
     DEFAULT_OPERATOR,
     build_routes_from_operational,
-    fetch_operational_dataset,
+    fetch_operational_stage_dataset,
+)
+from bff.services.odpt_fetch import (
+    fetch_tokyu_odpt_bundle,
+    load_manifest as load_raw_manifest,
+    list_snapshots as list_raw_snapshots,
+)
+from bff.services.odpt_normalize import (
+    normalize_odpt_snapshot,
+    load_normalized_bundle,
 )
 from bff.services.odpt_stop_timetables import build_stop_timetables_from_normalized
 from bff.services.odpt_stops import build_stops_from_normalized
@@ -715,38 +724,120 @@ def refresh_odpt_snapshot(
     force_refresh: bool = False,
     ttl_sec: int = 3600,
 ) -> Dict[str, Any]:
-    effective_dump = True
-    dataset = fetch_operational_dataset(
-        operator=operator,
-        dump=effective_dump,
-        force_refresh=force_refresh,
-        ttl_sec=ttl_sec,
-        include_bus_timetables=True,
-        include_stop_timetables=True,
+    """Refresh ODPT snapshot using streaming file-based pipeline.
+
+    1. Stream-download raw ODPT resources to server-side files
+    2. Normalize from files (never loads full payload into API response)
+    3. Store normalized entities into catalog DB
+    4. Return only metadata/counts (never raw payloads)
+    """
+    _log.info("refresh_odpt_snapshot: starting streaming file-based pipeline")
+
+    # -- Step 1: Fetch raw resources via streaming download --
+    manifest = fetch_tokyu_odpt_bundle(operator_id=operator)
+    snapshot_dir = Path(manifest["snapshot_dir"])
+    snapshot_id = manifest["snapshot_id"]
+    fetch_warnings = list(manifest.get("warnings") or [])
+
+    _log.info(
+        "refresh_odpt_snapshot: raw fetch complete, snapshot_id=%s, dir=%s",
+        snapshot_id,
+        snapshot_dir,
     )
+
+    # -- Step 2: Normalize from files --
+    normalize_summary = normalize_odpt_snapshot(snapshot_dir)
+    normalized_dir = Path(normalize_summary["normalized_dir"])
+    normalize_warnings = list(normalize_summary.get("warnings") or [])
+
+    _log.info(
+        "refresh_odpt_snapshot: normalization complete, dir=%s",
+        normalized_dir,
+    )
+
+    # -- Step 3: Load normalized entities and store in catalog DB --
+    bundle = load_normalized_bundle(normalized_dir)
+    routes = bundle.get("routes", [])
+    stops = bundle.get("stops", [])
+    trips = bundle.get("trips", [])
+    stop_timetables = bundle.get("stop_timetables", [])
+
+    all_warnings = list(dict.fromkeys(fetch_warnings + normalize_warnings))
+    all_warnings.insert(
+        0,
+        "ODPT refresh uses streaming file-based pipeline (no large in-memory payloads).",
+    )
+
     signature = _serialize(
         {
             "operator": operator,
-            "generatedAt": (dataset.get("meta") or {}).get("generatedAt"),
-            "effectiveDump": effective_dump,
+            "snapshotId": snapshot_id,
+            "snapshotStrategy": "streaming-file",
         }
     )
-    warnings: List[str] = []
-    if not dump:
-        warnings.append(
-            "Catalog refresh always uses dump=1 to keep a complete ODPT snapshot."
-        )
 
-    return _store_odpt_snapshot(
-        operator=operator,
-        dataset=dataset,
-        route_payloads=dataset.get("routeTimetables") or [],
+    meta = {
+        "source": "odpt",
+        "datasetRef": operator,
+        "operator": operator,
+        "dump": False,
+        "requestedDump": dump,
+        "effectiveDump": False,
+        "generatedAt": manifest.get("started_at"),
+        "refreshedAt": _now_iso(),
+        "warnings": all_warnings,
+        "snapshotSource": "streaming-file",
+        "snapshotId": snapshot_id,
+        "snapshotDir": str(snapshot_dir),
+        "normalizedDir": str(normalized_dir),
+        "counts": {
+            "stops": len(stops),
+            "routes": len(routes),
+            "timetableRows": len(trips),
+            "stopTimetables": len(stop_timetables),
+            "routePayloads": 0,
+        },
+    }
+
+    result = _replace_snapshot(
+        snapshot_key=_odpt_snapshot_key(operator),
+        source="odpt",
+        dataset_ref=operator,
         signature=signature,
-        requested_dump=dump,
-        effective_dump=effective_dump,
-        snapshot_source="remote",
-        extra_meta={"warnings": warnings},
+        meta=meta,
+        entities={
+            "stops": stops,
+            "routes": routes,
+            "timetable_rows": trips,
+            "stop_timetables": stop_timetables,
+            "calendar_entries": bundle.get("service_calendars", []),
+            "calendar_date_entries": [],
+        },
+        route_payloads=[],
     )
+
+    # Populate per-operator SQLite DB
+    try:
+        _tdb.replace_all(
+            "tokyu",
+            routes=routes,
+            stops=stops,
+            timetable_rows=trips,
+            stop_timetables=stop_timetables,
+            calendar_entries=bundle.get("service_calendars", []),
+            calendar_date_entries=[],
+            meta={"catalog_snapshot_key": _odpt_snapshot_key(operator)},
+        )
+        _log.info(
+            "transit_db: tokyu DB populated (%d routes, %d stops, %d trips)",
+            len(routes),
+            len(stops),
+            len(trips),
+        )
+    except Exception:
+        _log.exception("transit_db: failed to populate tokyu DB")
+
+    return result
 
 
 def get_or_refresh_odpt_snapshot(

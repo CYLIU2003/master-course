@@ -15,6 +15,47 @@ Or use the helper script:
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Load environment variables from .env files (before any other import that
+# might read os.environ).  We check multiple candidate locations.
+# ---------------------------------------------------------------------------
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+_ENV_CANDIDATES = [
+    _REPO_ROOT / ".env",            # project-root .env
+    _REPO_ROOT / "bff" / ".env",    # bff-specific .env
+    _REPO_ROOT / "backend" / ".env",  # legacy backend .env
+]
+
+
+def _load_dotenv() -> None:
+    """Minimal .env loader — no external dependency required."""
+    for env_path in _ENV_CANDIDATES:
+        if not env_path.exists():
+            continue
+        with env_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip("'\"")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+
+
+_load_dotenv()
+
+# Map legacy ODPT_TOKEN → ODPT_CONSUMER_KEY if needed
+if "ODPT_CONSUMER_KEY" not in os.environ and "ODPT_TOKEN" in os.environ:
+    os.environ["ODPT_CONSUMER_KEY"] = os.environ["ODPT_TOKEN"]
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
