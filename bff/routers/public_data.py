@@ -200,18 +200,27 @@ class SyncRequest(BaseModel):
 def fetch_public_data(scenario_id: str, body: PublicDataFetchRequest) -> Dict[str, Any]:
     _ensure_scenario(scenario_id)
     force_refresh = bool(body.force_refresh or body.forceRefresh)
-    if body.source_type == "odpt":
-        operator = body.operator_id or body.operatorScope or DEFAULT_OPERATOR
-        bundle = transit_catalog.get_or_refresh_odpt_snapshot(
-            operator=operator,
-            dump=True,
-            force_refresh=force_refresh,
-            ttl_sec=3600,
-        )
-        dataset_ref = operator
-    else:
-        dataset_ref = body.operator_id or body.operatorScope or DEFAULT_GTFS_FEED_PATH
-        bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=dataset_ref)
+    try:
+        if body.source_type == "odpt":
+            operator = body.operator_id or body.operatorScope or DEFAULT_OPERATOR
+            dataset_ref = operator
+            bundle = transit_catalog.get_or_refresh_odpt_snapshot(
+                operator=operator,
+                dump=True,
+                force_refresh=force_refresh,
+                ttl_sec=3600,
+            )
+        else:
+            dataset_ref = body.operator_id or body.operatorScope or DEFAULT_GTFS_FEED_PATH
+            bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=dataset_ref)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"Public data fetch failed for {body.source_type}: {exc}. "
+                "Retry later or use a saved/catalog snapshot."
+            ),
+        ) from exc
 
     snapshot = bundle.get("snapshot") or {}
     meta = dict(bundle.get("meta") or {})
@@ -225,6 +234,16 @@ def fetch_public_data(scenario_id: str, body: PublicDataFetchRequest) -> Dict[st
     }
 
     public_state = store.get_public_data_state(scenario_id)
+    # Build a lightweight meta summary — never include raw payload data
+    meta_summary = {
+        "source": meta.get("source"),
+        "operator": meta.get("operator"),
+        "snapshotSource": meta.get("snapshotSource"),
+        "snapshotMode": meta.get("snapshotMode"),
+        "generatedAt": meta.get("generatedAt"),
+        "refreshedAt": meta.get("refreshedAt"),
+        "counts": dict(meta.get("counts") or {}),
+    }
     record = {
         "id": _new_id("raw"),
         "source_type": body.source_type,
@@ -237,7 +256,7 @@ def fetch_public_data(scenario_id: str, body: PublicDataFetchRequest) -> Dict[st
         "warnings": list(meta.get("warnings") or []),
         "started_at": meta.get("generatedAt") or _now_iso(),
         "completed_at": _now_iso(),
-        "meta": meta,
+        "meta": meta_summary,
     }
     public_state["raw_snapshots"] = [
         item
