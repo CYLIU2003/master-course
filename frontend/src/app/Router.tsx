@@ -6,6 +6,7 @@ import {
 } from "react-router-dom";
 import { fetchMaybeJson } from "@/api/client";
 import { AppLayout } from "@/features/layout/AppLayout";
+import { ErrorBoundary, RouteErrorPage } from "@/features/common";
 
 // ── Page imports ──────────────────────────────────────────────
 import { ScenarioListPage } from "@/pages/scenario/ScenarioListPage";
@@ -84,7 +85,12 @@ const router = createBrowserRouter([
   },
   {
     path: "/scenarios/:scenarioId",
-    element: <AppLayout />,
+    element: (
+      <ErrorBoundary>
+        <AppLayout />
+      </ErrorBoundary>
+    ),
+    errorElement: <RouteErrorPage />,
     children: [
       { index: true, element: <ScenarioOverviewPage /> },
 

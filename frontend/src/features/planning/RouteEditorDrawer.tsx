@@ -1,6 +1,6 @@
 // ── RouteEditorDrawer ─────────────────────────────────────────
 // Editor drawer for creating / editing a route.
-// Supports tabbed sections: basic info, stops/edges.
+// Tabs: basic info, stops/edges, timetable, link status.
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +14,7 @@ import {
   useUpdateRoute,
   useDeleteRoute,
 } from "@/hooks";
-import type { Route } from "@/types";
+import type { Route, RouteResolvedStop } from "@/types";
 import type { CreateRouteRequest, UpdateRouteRequest } from "@/types/api";
 
 interface Props {
@@ -57,7 +57,9 @@ function routeToForm(r: Route): FormData {
 
 const TABS = [
   { key: "basic", label: "基本情報" },
-  { key: "stops", label: "停留所" },
+  { key: "stops", label: "停留所・エッジ" },
+  { key: "timetable", label: "時刻表" },
+  { key: "link", label: "リンク状態" },
 ];
 
 export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
@@ -146,25 +148,7 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
       {activeTab === "basic" && (
         <div className="space-y-4">
           {!isCreate && route && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full bg-white px-2 py-0.5">
-                  {route.source?.toUpperCase() ?? "MANUAL"}
-                </span>
-                <span className="rounded-full bg-white px-2 py-0.5">
-                  {route.stopSequence?.length ?? 0} stops
-                </span>
-                <span className="rounded-full bg-white px-2 py-0.5">
-                  {route.tripCount ?? 0} trips
-                </span>
-                <span className="rounded-full bg-white px-2 py-0.5">
-                  {route.depotId ? `depot ${route.depotId}` : "depot unassigned"}
-                </span>
-              </div>
-              <p className="mt-2">
-                所属営業所の編集は Public Data Collection Explorer で行います。
-              </p>
-            </div>
+            <RouteMetaBadges route={route} />
           )}
           <Field label={t("routes.field_name", "路線名")}>
             <input
@@ -245,27 +229,85 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
         <StopsEdgeEditor
           routeId={routeId}
           importedStops={route?.stopSequence ?? []}
+          resolvedStops={route?.resolvedStops ?? []}
         />
+      )}
+
+      {activeTab === "timetable" && (
+        <TimetableTab route={route ?? null} />
+      )}
+
+      {activeTab === "link" && (
+        <LinkStatusTab route={route ?? null} />
       )}
     </EditorDrawer>
   );
 }
 
+// ── RouteMetaBadges ──────────────────────────────────────────
+// Shows metadata badges at the top of the basic info tab.
+
+function RouteMetaBadges({ route }: { route: Route }) {
+  const linkStateColors: Record<string, string> = {
+    linked: "bg-green-100 text-green-700 border-green-200",
+    partial: "bg-amber-50 text-amber-700 border-amber-200",
+    unlinked: "bg-slate-100 text-slate-500 border-slate-200",
+    error: "bg-red-50 text-red-600 border-red-200",
+  };
+  const linkStateLabels: Record<string, string> = {
+    linked: "全リンク済",
+    partial: "一部未リンク",
+    unlinked: "未リンク",
+    error: "エラー",
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+      <div className="flex flex-wrap gap-2">
+        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+          {route.source?.toUpperCase() ?? "MANUAL"}
+        </span>
+        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+          {route.stopSequence?.length ?? 0} 停留所
+        </span>
+        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+          {route.tripCount ?? 0} 便
+        </span>
+        {route.linkState && (
+          <span
+            className={`rounded-full border px-2 py-0.5 ${linkStateColors[route.linkState] ?? linkStateColors.unlinked
+              }`}
+          >
+            {linkStateLabels[route.linkState] ?? route.linkState}
+          </span>
+        )}
+        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+          {route.depotId ? `営業所: 所属済` : "営業所: 未所属"}
+        </span>
+      </div>
+      <p className="mt-2 text-slate-500">
+        所属営業所の編集は Public Data Collection Explorer で行います。
+      </p>
+    </div>
+  );
+}
+
 // ── StopsEdgeEditor ──────────────────────────────────────────
-// Shows the node list and edge table from the route-graph store,
-// allowing inline edits without switching to the node graph canvas.
+// Shows resolved stops, the node/edge graph, and generates
+// nodes and edges from the imported stop sequence.
 
 interface StopsEdgeEditorProps {
   routeId: string | null;
   importedStops: string[];
+  resolvedStops: RouteResolvedStop[];
 }
 
-function StopsEdgeEditor({ routeId, importedStops }: StopsEdgeEditorProps) {
+function StopsEdgeEditor({ routeId, importedStops, resolvedStops }: StopsEdgeEditorProps) {
   const { t } = useTranslation();
-  const { nodes, edges, updateNode, updateEdge, removeNode, removeEdge, addNode, addEdge } =
+  const { nodes, edges, updateNode, updateEdge, removeNode, removeEdge, addNode, addEdge, clearGraph } =
     useRouteGraphStore();
 
-  const [nodeSubTab, setNodeSubTab] = useState<"nodes" | "edges">("nodes");
+  const [nodeSubTab, setNodeSubTab] = useState<"resolved" | "nodes" | "edges">("resolved");
 
   if (!routeId) {
     return (
@@ -276,57 +318,172 @@ function StopsEdgeEditor({ routeId, importedStops }: StopsEdgeEditorProps) {
     );
   }
 
+  // ── Generate nodes from resolved stops ────────────────────
+  const handleGenerateNodes = () => {
+    if (resolvedStops.length === 0 && importedStops.length === 0) return;
+    // Clear existing graph first
+    clearGraph();
+
+    const stopsToUse = resolvedStops.length > 0 ? resolvedStops : null;
+    if (stopsToUse) {
+      stopsToUse.forEach((stop, i) => {
+        const node = addNode(stop.name, 80, 60 + i * 80);
+        // Update lat/lng from resolved stop data
+        if (stop.lat != null && stop.lon != null) {
+          updateNode(node.id, { lat: stop.lat, lng: stop.lon });
+        }
+      });
+    } else {
+      // Fallback: use raw IDs as names
+      importedStops.forEach((stopId, i) => {
+        addNode(stopId, 80, 60 + i * 80);
+      });
+    }
+  };
+
+  // ── Generate edges from sequential node pairs ─────────────
+  const handleGenerateEdges = () => {
+    if (nodes.length < 2) return;
+    for (let i = 0; i < nodes.length - 1; i++) {
+      addEdge(nodes[i].id, nodes[i + 1].id);
+    }
+  };
+
   return (
     <div className="space-y-3">
-      {importedStops.length > 0 && (
+      {/* Resolved stops summary */}
+      {resolvedStops.length > 0 ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-          <p className="text-xs font-medium text-emerald-800">
-            Imported stop sequence ({importedStops.length})
-          </p>
-          <div className="mt-2 flex max-h-32 flex-wrap gap-1 overflow-y-auto">
-            {importedStops.map((stopId) => (
-              <span
-                key={stopId}
-                className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[11px] text-emerald-700"
-              >
-                {stopId}
-              </span>
-            ))}
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-emerald-800">
+              解決済 停留所シーケンス ({resolvedStops.length} 件)
+            </p>
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+              ✓ カタログ照合済み
+            </span>
           </div>
         </div>
-      )}
-      {/* Sub-tab */}
+      ) : importedStops.length > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-medium text-amber-800">
+            インポート済 停留所 ID ({importedStops.length} 件) — 未解決
+          </p>
+          <p className="mt-1 text-[11px] text-amber-600">
+            停留所カタログとの照合が完了していません。停留所インポートを先に実行してください。
+          </p>
+        </div>
+      ) : null}
+
+      {/* Sub-tabs */}
       <div className="flex rounded-lg border border-border">
-        {(["nodes", "edges"] as const).map((k) => (
+        {(["resolved", "nodes", "edges"] as const).map((k) => (
           <button
             key={k}
             onClick={() => setNodeSubTab(k)}
-            className={`flex-1 py-1 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg ${
-              nodeSubTab === k
-                ? "bg-primary-600 text-white"
-                : "text-slate-600 hover:bg-slate-50"
-            }`}
+            className={`flex-1 py-1.5 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg ${nodeSubTab === k
+              ? "bg-primary-600 text-white"
+              : "text-slate-600 hover:bg-slate-50"
+              }`}
           >
-            {k === "nodes"
-              ? t("node_graph.stops_tab_nodes", "停留所") + ` (${nodes.length})`
-              : t("node_graph.stops_tab_edges", "エッジ") + ` (${edges.length})`}
+            {k === "resolved"
+              ? `解決済 (${resolvedStops.length})`
+              : k === "nodes"
+                ? `ノード (${nodes.length})`
+                : `エッジ (${edges.length})`}
           </button>
         ))}
       </div>
 
+      {/* ── Resolved Stops List ──────────────────────────────── */}
+      {nodeSubTab === "resolved" && (
+        <div className="space-y-2">
+          {resolvedStops.length === 0 ? (
+            <div className="py-6 text-center">
+              <p className="text-xs text-slate-400">
+                解決済み停留所がありません
+              </p>
+              {importedStops.length > 0 && (
+                <p className="mt-1 text-[11px] text-slate-400">
+                  停留所カタログをインポートすると、ここに停留所が表示されます
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="max-h-80 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+              {resolvedStops.map((stop) => (
+                <div key={`${stop.id}-${stop.sequence}`} className="flex items-center gap-2 px-3 py-1.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[10px] font-bold text-primary-700">
+                    {stop.sequence}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-slate-700">
+                      {stop.name}
+                    </p>
+                    {(stop.lat != null && stop.lon != null) && (
+                      <p className="text-[10px] text-slate-400">
+                        {stop.lat.toFixed(5)}, {stop.lon.toFixed(5)}
+                        {stop.platformCode && ` (${stop.platformCode})`}
+                      </p>
+                    )}
+                  </div>
+                  {stop.lat != null ? (
+                    <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] text-green-700">
+                      📍
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] text-slate-500">
+                      —
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Generate buttons */}
+          {(resolvedStops.length > 0 || importedStops.length > 0) && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleGenerateNodes}
+                className="flex-1 rounded-lg border border-primary-300 bg-primary-50 py-2 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100"
+              >
+                🔄 ノード自動生成
+              </button>
+              {nodes.length >= 2 && (
+                <button
+                  onClick={handleGenerateEdges}
+                  className="flex-1 rounded-lg border border-indigo-300 bg-indigo-50 py-2 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                >
+                  🔗 エッジ自動生成
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Nodes View ──────────────────────────────────────── */}
       {nodeSubTab === "nodes" && (
         <div className="space-y-2">
           {nodes.length === 0 ? (
-            <p className="py-4 text-center text-xs text-slate-400">
-              {t("node_graph.empty_hint", "停留所がありません")}
-            </p>
+            <div className="py-6 text-center">
+              <p className="text-xs text-slate-400">
+                {t("node_graph.empty_hint", "ノードがありません")}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                「解決済」タブの ノード自動生成 ボタンで停留所から自動作成できます
+              </p>
+            </div>
           ) : (
             <div className="space-y-1">
-              {nodes.map((n) => (
+              {nodes.map((n, i) => (
                 <div
                   key={n.id}
                   className="flex items-center gap-2 rounded border border-border bg-white px-2 py-1.5"
                 >
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-600">
+                    {i + 1}
+                  </span>
                   <input
                     type="text"
                     value={n.name}
@@ -375,12 +532,23 @@ function StopsEdgeEditor({ routeId, importedStops }: StopsEdgeEditorProps) {
         </div>
       )}
 
+      {/* ── Edges View ──────────────────────────────────────── */}
       {nodeSubTab === "edges" && (
         <div className="space-y-2">
           {edges.length === 0 ? (
-            <p className="py-4 text-center text-xs text-slate-400">
-              {t("node_graph.empty_hint", "エッジがありません")}
-            </p>
+            <div className="py-6 text-center">
+              <p className="text-xs text-slate-400">
+                {t("node_graph.empty_hint", "エッジがありません")}
+              </p>
+              {nodes.length >= 2 && (
+                <button
+                  onClick={handleGenerateEdges}
+                  className="mt-2 rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                >
+                  🔗 順序でエッジ自動生成
+                </button>
+              )}
+            </div>
           ) : (
             <table className="w-full text-xs">
               <thead>
@@ -466,6 +634,219 @@ function StopsEdgeEditor({ routeId, importedStops }: StopsEdgeEditorProps) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── TimetableTab ─────────────────────────────────────────────
+// Shows timetable overview for the route.
+
+function TimetableTab({ route }: { route: Route | null }) {
+  if (!route) {
+    return (
+      <p className="py-6 text-center text-xs text-slate-400">
+        路線データを読み込んでいます…
+      </p>
+    );
+  }
+
+  const tripCount = route.tripCount ?? 0;
+  const serviceSummary = route.serviceSummary ?? [];
+
+  return (
+    <div className="space-y-4">
+      {/* Overview card */}
+      <div className="rounded-lg border border-border bg-white p-4">
+        <div className="flex items-baseline justify-between">
+          <span className="text-xs font-medium text-slate-500">総便数</span>
+          <span className="text-2xl font-bold text-slate-800">
+            {tripCount}
+          </span>
+        </div>
+        {tripCount === 0 && (
+          <p className="mt-2 text-[11px] text-slate-400">
+            時刻表データがまだインポートされていません。
+            「入力データ」→「時刻表」でインポートできます。
+          </p>
+        )}
+      </div>
+
+      {/* Service breakdown */}
+      {serviceSummary.length > 0 && (
+        <div className="rounded-lg border border-border">
+          <div className="border-b border-border px-3 py-2">
+            <p className="text-xs font-medium text-slate-600">
+              サービス別 便数
+            </p>
+          </div>
+          <div className="divide-y divide-border">
+            {serviceSummary.map((svc) => (
+              <div
+                key={svc.serviceId}
+                className="flex items-center justify-between px-3 py-2"
+              >
+                <div>
+                  <span className="text-xs font-medium text-slate-700">
+                    {svc.serviceId}
+                  </span>
+                  {svc.firstDeparture && svc.lastDeparture && (
+                    <span className="ml-2 text-[10px] text-slate-400">
+                      {svc.firstDeparture} — {svc.lastDeparture}
+                    </span>
+                  )}
+                </div>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  {svc.tripCount} 便
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Data source info */}
+      {route.durationSource && (
+        <div className="text-[10px] text-slate-400">
+          所要時間ソース: {route.durationSource}
+          {route.distanceSource && ` / 距離ソース: ${route.distanceSource}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── LinkStatusTab ────────────────────────────────────────────
+// Shows the data link resolution status for the route.
+
+function LinkStatusTab({ route }: { route: Route | null }) {
+  if (!route) {
+    return (
+      <p className="py-6 text-center text-xs text-slate-400">
+        路線データを読み込んでいます…
+      </p>
+    );
+  }
+
+  const linkStatus = route.linkStatus;
+  const linkState = route.linkState ?? "unlinked";
+
+  const stateConfig: Record<string, { color: string; bg: string; icon: string; label: string }> = {
+    linked: { color: "text-green-700", bg: "bg-green-50 border-green-200", icon: "✅", label: "全リンク完了" },
+    partial: { color: "text-amber-700", bg: "bg-amber-50 border-amber-200", icon: "⚠️", label: "一部リンク" },
+    unlinked: { color: "text-slate-500", bg: "bg-slate-50 border-slate-200", icon: "❌", label: "未リンク" },
+    error: { color: "text-red-600", bg: "bg-red-50 border-red-200", icon: "🚫", label: "エラー" },
+  };
+  const cfg = stateConfig[linkState] ?? stateConfig.unlinked;
+
+  return (
+    <div className="space-y-4">
+      {/* State banner */}
+      <div className={`rounded-lg border p-4 ${cfg.bg}`}>
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{cfg.icon}</span>
+          <span className={`text-sm font-semibold ${cfg.color}`}>
+            {cfg.label}
+          </span>
+        </div>
+      </div>
+
+      {/* Detail stats */}
+      {linkStatus && (
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard label="停留所 解決済" value={linkStatus.stopsResolved} color="emerald" />
+          <StatCard label="停留所 未解決" value={linkStatus.stopsMissing} color={linkStatus.stopsMissing > 0 ? "amber" : "slate"} />
+          <StatCard label="便 リンク済" value={linkStatus.tripsLinked} color="blue" />
+          <StatCard label="停留所時刻表" value={linkStatus.stopTimetableEntriesLinked} color="blue" />
+        </div>
+      )}
+
+      {/* Missing stops */}
+      {linkStatus && (linkStatus.missingStopIds?.length ?? 0) > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-medium text-amber-800">
+            未解決 停留所 ID ({linkStatus.missingStopIds!.length} 件)
+          </p>
+          <div className="mt-2 flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+            {linkStatus.missingStopIds!.map((id) => (
+              <span
+                key={id}
+                className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[10px] text-amber-700"
+              >
+                {id}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Warnings */}
+      {linkStatus && linkStatus.warnings.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-xs font-medium text-red-800">
+            警告 ({linkStatus.warnings.length} 件)
+          </p>
+          <ul className="mt-1 list-inside list-disc">
+            {linkStatus.warnings.slice(0, 10).map((w, i) => (
+              <li key={i} className="text-[11px] text-red-600">
+                {w}
+              </li>
+            ))}
+            {linkStatus.warnings.length > 10 && (
+              <li className="text-[11px] text-red-500">
+                …他 {linkStatus.warnings.length - 10} 件
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      {/* Import metadata */}
+      {route.importMeta && (
+        <div className="rounded-lg border border-border bg-white p-3">
+          <p className="text-xs font-medium text-slate-500 mb-2">
+            インポート情報
+          </p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+            {route.importMeta.source && (
+              <>
+                <span className="text-slate-400">ソース</span>
+                <span className="text-slate-700">{route.importMeta.source.toUpperCase()}</span>
+              </>
+            )}
+            {route.importMeta.generatedAt && (
+              <>
+                <span className="text-slate-400">生成日時</span>
+                <span className="text-slate-700">{route.importMeta.generatedAt}</span>
+              </>
+            )}
+            {route.importMeta.snapshotKey && (
+              <>
+                <span className="text-slate-400">スナップショット</span>
+                <span className="truncate text-slate-700">{route.importMeta.snapshotKey}</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── StatCard ─────────────────────────────────────────────────
+
+function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+  const colorMap: Record<string, string> = {
+    emerald: "text-emerald-700 bg-emerald-50",
+    amber: "text-amber-700 bg-amber-50",
+    blue: "text-blue-700 bg-blue-50",
+    red: "text-red-700 bg-red-50",
+    slate: "text-slate-500 bg-slate-50",
+  };
+
+  return (
+    <div className={`rounded-lg border border-border p-3 ${colorMap[color] ?? colorMap.slate}`}>
+      <p className="text-[10px] font-medium opacity-70">{label}</p>
+      <p className="mt-0.5 text-lg font-bold">{value}</p>
     </div>
   );
 }

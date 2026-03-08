@@ -110,6 +110,42 @@ export interface VehicleTemplate {
 
 // ── Master Data: Route ────────────────────────────────────────
 
+/** A stop that has been resolved against the stop catalog */
+export type RouteResolvedStop = {
+  id: string;
+  name: string;
+  kana?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+  platformCode?: string | null;
+  sequence: number;
+  timetableSummary?: {
+    tripCount?: number;
+    firstDeparture?: string | null;
+    lastDeparture?: string | null;
+  };
+};
+
+/** Describes how many cross-references have been resolved */
+export type RouteLinkStatus = {
+  stopsResolved: number;
+  stopsMissing: number;
+  missingStopIds?: string[];
+  tripsLinked: number;
+  stopTimetableEntriesLinked: number;
+  warnings: string[];
+};
+
+/** Trip count / first-last departure aggregated by service */
+export type RouteServiceSummary = {
+  serviceId: string;
+  tripCount: number;
+  firstDeparture?: string | null;
+  lastDeparture?: string | null;
+};
+
+export type RouteLinkState = "unlinked" | "partial" | "linked" | "error";
+
 export interface Route {
   id: string;
   name: string;
@@ -134,6 +170,21 @@ export interface Route {
   tripCount?: number;
   durationSource?: string;
   distanceSource?: string;
+  /** Link state: how completely this route is linked to stops/trips */
+  linkState?: RouteLinkState;
+  /** Resolved stop objects (populated by route detail API) */
+  resolvedStops?: RouteResolvedStop[];
+  /** Link status summary (populated by route detail API) */
+  linkStatus?: RouteLinkStatus;
+  /** Service-level trip summary (populated by route detail API) */
+  serviceSummary?: RouteServiceSummary[];
+  /** Import provenance metadata */
+  importMeta?: {
+    source?: string;
+    snapshotKey?: string;
+    generatedAt?: string;
+    warnings?: string[];
+  };
 }
 
 export interface Stop {
