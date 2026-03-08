@@ -9,8 +9,12 @@ import { scenarioKeys } from "./use-scenario";
 export const runKeys = {
   simulation: (scenarioId: string) =>
     ["scenarios", scenarioId, "simulation"] as const,
+  simulationCapabilities: (scenarioId: string) =>
+    ["scenarios", scenarioId, "simulation", "capabilities"] as const,
   optimization: (scenarioId: string) =>
     ["scenarios", scenarioId, "optimization"] as const,
+  optimizationCapabilities: (scenarioId: string) =>
+    ["scenarios", scenarioId, "optimization", "capabilities"] as const,
 };
 
 // ── Queries ───────────────────────────────────────────────────
@@ -23,10 +27,26 @@ export function useSimulationResult(scenarioId: string) {
   });
 }
 
+export function useSimulationCapabilities(scenarioId: string) {
+  return useQuery({
+    queryKey: runKeys.simulationCapabilities(scenarioId),
+    queryFn: () => simulationApi.getCapabilities(scenarioId),
+    enabled: !!scenarioId,
+  });
+}
+
 export function useOptimizationResult(scenarioId: string) {
   return useQuery({
     queryKey: runKeys.optimization(scenarioId),
     queryFn: () => optimizationApi.getResult(scenarioId),
+    enabled: !!scenarioId,
+  });
+}
+
+export function useOptimizationCapabilities(scenarioId: string) {
+  return useQuery({
+    queryKey: runKeys.optimizationCapabilities(scenarioId),
+    queryFn: () => optimizationApi.getCapabilities(scenarioId),
     enabled: !!scenarioId,
   });
 }

@@ -29,3 +29,24 @@ data/*.db
 .DS_Store
 Thumbs.db
 NUL
+
+# IDEs
+.vscode/
+.idea/
+
+# Env files
+.env
+.env.*
+*.env
+
+# Compiled python (explicit)
+*.pyc
+
+# Databases and caches
+*.sqlite3
+*.db
+
+# Misc
+*.log
+*.zip
+*.tar.gz

@@ -1,0 +1,29 @@
+{
+  "$id": "https://master-course/schemas/energy.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Energy",
+  "type": "object",
+  "definitions": {
+    "EnergyPriceSlot": {
+      "type": "object",
+      "required": ["slot_index", "grid_buy_yen_per_kwh"],
+      "properties": {
+        "slot_index": { "type": "integer", "minimum": 0 },
+        "grid_buy_yen_per_kwh": { "type": "number" },
+        "grid_sell_yen_per_kwh": { "type": "number", "default": 0 },
+        "demand_charge_weight": { "type": "number", "default": 0 },
+        "co2_factor": { "type": "number", "default": 0 }
+      },
+      "additionalProperties": false
+    },
+    "PVSlot": {
+      "type": "object",
+      "required": ["slot_index", "pv_available_kw"],
+      "properties": {
+        "slot_index": { "type": "integer", "minimum": 0 },
+        "pv_available_kw": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,6 +1,10 @@
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useRunOptimization, useOptimizationResult } from "@/hooks";
+import {
+  useRunOptimization,
+  useOptimizationResult,
+  useOptimizationCapabilities,
+} from "@/hooks";
 import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { formatCurrency } from "@/utils/format";
 
@@ -8,6 +12,7 @@ export function OptimizationRunPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const { data: result, isLoading, error } = useOptimizationResult(scenarioId!);
+  const { data: capabilities } = useOptimizationCapabilities(scenarioId!);
   const runMutation = useRunOptimization(scenarioId!);
 
   if (isLoading) return <LoadingBlock message={t("optimization.loading")} />;
@@ -32,6 +37,13 @@ export function OptimizationRunPage() {
         </button>
       }
     >
+      {capabilities && (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          <p className="font-semibold">Operational boundary</p>
+          <p className="mt-1">{capabilities.job_persistence.warning}</p>
+          <p className="mt-1">Modes: {(capabilities.supported_modes ?? []).join(", ")}</p>
+        </div>
+      )}
       {!result ? (
         <EmptyState title={t("optimization.no_results")} description={t("optimization.no_results_description")} />
       ) : (

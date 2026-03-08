@@ -1,0 +1,15 @@
+{
+  "$id": "https://master-course/schemas/charger.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Charger",
+  "type": "object",
+  "required": ["charger_id", "depot_id", "power_kw"],
+  "properties": {
+    "charger_id": { "type": "string" },
+    "depot_id": { "type": "string" },
+    "power_kw": { "type": "number" },
+    "bidirectional": { "type": "boolean", "default": false },
+    "simultaneous_ports": { "type": "integer", "minimum": 1, "default": 1 }
+  },
+  "additionalProperties": false
+}

@@ -41,6 +41,7 @@ export type {
   // Jobs
   Job,
   JobStatus,
+  RunCapabilities,
   // Derived
   DepotSummary,
   RouteSummary,
@@ -127,11 +128,14 @@ export type {
   // Simulation
   SimulationResultResponse,
   SimulationConfigResponse,
+  SimulationCapabilitiesResponse,
   DispatchScopeResponse,
   UpdateDispatchScopeRequest,
   RunSimulationRequest,
   // Optimization
   OptimizationResultResponse,
+  OptimizationCapabilitiesResponse,
+  ReoptimizeRequest,
   RunOptimizationRequest,
   // Jobs
   JobResponse,

@@ -84,9 +84,26 @@ class ConnectionResult:
     """Result of a feasibility check between two trips."""
 
     feasible: bool
+    reason_code: str
     reason: str  # human-readable explanation
     deadhead_time_min: int = 0  # 0 when origin == destination
+    turnaround_time_min: int = 0
     slack_min: int = 0  # how many spare minutes remain
+
+
+@dataclass(frozen=True)
+class ConnectionArc:
+    """One analyzed candidate edge between two trips for a vehicle type."""
+
+    from_trip_id: str
+    to_trip_id: str
+    vehicle_type: str
+    deadhead_time_min: int
+    turnaround_time_min: int
+    slack_min: int
+    feasible: bool
+    reason_code: str
+    reason: str
 
 
 @dataclass(frozen=True)
