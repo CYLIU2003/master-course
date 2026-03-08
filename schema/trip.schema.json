@@ -6,15 +6,130 @@
   "definitions": {
     "Route": {
       "type": "object",
-      "required": ["route_id"],
+      "required": [
+        "route_id"
+      ],
       "properties": {
-        "route_id": { "type": "string" },
+        "route_id": {
+          "type": "string"
+        },
         "trip_ids": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": []
         },
-        "route_name": { "type": ["string", "null"] }
+        "route_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "route_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "route_label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "route_family_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Derived stable identifier for grouping raw route/pattern records belonging to the same operational line family"
+        },
+        "route_family_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Normalized public-facing line code such as 園01"
+        },
+        "route_family_label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Display label for grouped family row in frontend/operator UI"
+        },
+        "route_variant_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Derived identifier for a distinguishable variant inside one route family"
+        },
+        "route_variant_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "main",
+            "main_outbound",
+            "main_inbound",
+            "short_turn",
+            "branch",
+            "depot_out",
+            "depot_in",
+            "unknown",
+            null
+          ]
+        },
+        "canonical_direction": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "outbound",
+            "inbound",
+            "circular",
+            "unknown",
+            null
+          ]
+        },
+        "direction_group": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional direction bucket for UI/reporting; not a substitute for trip origin/destination"
+        },
+        "raw_source_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "odpt",
+            "gtfs",
+            "manual",
+            "unknown",
+            null
+          ]
+        },
+        "raw_pattern_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Original external pattern identifier such as odpt route/pattern id"
+        },
+        "raw_busroute_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Original external bus route id if available"
+        }
       },
       "additionalProperties": false
     },
@@ -31,17 +146,98 @@
         "allowed_vehicle_types"
       ],
       "properties": {
-        "trip_id": { "type": "string" },
-        "route_id": { "type": "string" },
-        "origin": { "type": "string" },
-        "destination": { "type": "string" },
-        "departure_min": { "type": "integer", "minimum": 0 },
-        "arrival_min": { "type": "integer", "minimum": 0 },
-        "distance_km": { "type": "number" },
-        "energy_kwh": { "type": "number", "default": 0 },
+        "trip_id": {
+          "type": "string"
+        },
+        "route_id": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "destination": {
+          "type": "string"
+        },
+        "departure_min": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "arrival_min": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "distance_km": {
+          "type": "number"
+        },
+        "energy_kwh": {
+          "type": "number",
+          "default": 0
+        },
         "allowed_vehicle_types": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
+        },
+        "route_family_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "route_family_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "route_variant_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "route_variant_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "main",
+            "main_outbound",
+            "main_inbound",
+            "short_turn",
+            "branch",
+            "depot_out",
+            "depot_in",
+            "unknown",
+            null
+          ]
+        },
+        "canonical_direction": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "outbound",
+            "inbound",
+            "circular",
+            "unknown",
+            null
+          ]
+        },
+        "service_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw_timetable_row_id": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

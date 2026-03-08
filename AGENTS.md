@@ -263,3 +263,127 @@ Every optimization run must save:
 - operator statistics
 - runtime
 - incumbent history
+
+---
+
+## Route Family / Variant Handling Rules
+
+### Purpose
+
+ODPT and GTFS may provide multiple raw route/pattern records that operationally
+belong to the same line family. Examples:
+
+- outbound / inbound pair of the same line code
+- short-turn services
+- depot-in / depot-out services
+- branch variants
+
+The system must preserve raw imported records, while also exposing a derived
+"route family" layer for UI grouping and timetable-to-trip generation support.
+
+### Core Policy
+
+1. **Raw route/pattern records are immutable source facts**
+   Imported ODPT / GTFS route or pattern records must not be merged
+   destructively in storage. `odptPatternId`, `odptBusrouteId`, GTFS
+   `route_id`, and any imported pattern identifiers remain preserved.
+
+2. **Route family is a derived layer**
+   A `routeFamilyCode` must be derived primarily from `routeCode` when available.
+   If `routeCode` is missing, derive from normalized line label / route name.
+   Full-width digits and symbols should be normalized via NFKC.
+   Example: `園０１ (田園調布駅 -> 瀬田営業所)` → `routeFamilyCode = "園01"`
+
+3. **Outbound / inbound are same family, not same record**
+   Reverse-direction services with the same line code must be grouped under the
+   same route family. However, outbound and inbound remain separate raw variants
+   and separate generated trips.
+
+4. **Short-turn / depot / branch services**
+   Services that share the same line code but differ by terminal pair or coverage
+   must still belong to the same route family in the UI. They must remain
+   distinguishable by `routeVariantType` in downstream processing.
+
+5. **Dispatch remains trip-based**
+   Dispatch / optimization must operate on trips, not on route families directly.
+   Route family is for grouping, filtering, reporting, and operator interpretation.
+   Physical feasibility must always be evaluated on trip-level
+   origin/destination/time continuity.
+
+### Required Derived Fields
+
+Every route-like entity exposed by BFF to frontend should support these optional
+derived fields:
+
+- `routeFamilyId`
+- `routeFamilyCode`
+- `routeFamilyLabel`
+- `routeVariantId`
+- `routeVariantType`
+- `canonicalDirection`
+- `isPrimaryVariant`
+- `familySortOrder`
+- `classificationConfidence`
+- `classificationReasons`
+
+Recommended `routeVariantType` values:
+`main`, `main_outbound`, `main_inbound`, `short_turn`, `branch`,
+`depot_out`, `depot_in`, `unknown`
+
+Recommended `canonicalDirection` values:
+`outbound`, `inbound`, `circular`, `unknown`
+
+### Classification Rules
+
+1. **Main pair detection first** — the route with the highest (tripCount, stopCount,
+   distance) is the primary candidate. If a reverse terminal pair exists, it becomes
+   the main inbound.
+
+2. **depot_out / depot_in is a SCORED heuristic, NOT keyword-only**
+   - `営業所/車庫` keywords alone do NOT classify a route as depot.
+   - A route is classified as depot only when:
+     - It is NOT already classified as main/reverse/short-turn/branch
+     - AND its depot signal score >= threshold (composite of keyword + low trip count
+       + shorter-than-main + subset of main stop sequence)
+   - Routes where the main service naturally terminates at a depot-like stop
+     remain classified as main_outbound/main_inbound.
+
+3. **Confidence and reasons** — every classification carries
+   `classificationConfidence` (0-1) and `classificationReasons` (list of strings).
+   Low-confidence classifications should be shown as `unknown` in UI.
+
+### Layer Responsibility
+
+- **Backend raw store** — preserves imported route/pattern/timetable facts
+- **BFF** — computes route family / variant DTO fields
+- **Frontend** — displays grouped family list and expandable raw variants
+- **Core dispatch / optimization** — consumes trips generated from raw timetable facts;
+  may reference family metadata but must not replace trip-level feasibility with
+  family-level assumptions
+
+### Non-Negotiable Rules
+
+1. Do not overwrite raw ODPT/GTFS identifiers with family IDs.
+2. Do not merge opposite directions into one trip definition.
+3. Do not treat all same-code services as identical operations.
+4. UI grouping must not erase short-turn / depot / branch distinctions.
+5. Timetable linkage counts must be computed against raw routes/variants first,
+   then aggregated to family view.
+
+### Timetable Linking Requirement
+
+Route family grouping is **not** a substitute for timetable linking.
+
+The following must be handled explicitly:
+
+- raw timetable rows
+- stop timetable rows
+- trip generation from timetable rows
+- route-to-trip linking
+- stop-to-stop-timetable linking
+- family-level aggregation of link status
+
+If `timetable_rows = 0`, `stop_timetables = 0`, or `Timetable linked = 0`,
+the implementation must first verify ingestion / storage / linker paths before
+assuming a UI-only issue.
+

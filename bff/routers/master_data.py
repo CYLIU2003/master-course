@@ -36,6 +36,12 @@ from bff.services.odpt_routes import (
 )
 from bff.services.odpt_stops import summarize_stop_import
 from bff.services import transit_catalog
+from bff.services.route_family import (
+    enrich_routes_with_family,
+    build_route_family_summary,
+    build_route_family_detail,
+    derive_route_family_metadata,
+)
 from bff.store import scenario_store as store
 
 router = APIRouter(tags=["master-data"])
@@ -544,14 +550,30 @@ def list_routes(
     scenario_id: str,
     depot_id: Optional[str] = Query(None, alias="depotId"),
     operator: Optional[str] = Query(None),
+    group_by_family: bool = Query(False, alias="groupByFamily"),
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     items = store.list_routes(scenario_id, depot_id=depot_id, operator=operator)
+
+    # Always enrich with family metadata
+    items = enrich_routes_with_family(items)
+    if group_by_family:
+        items = sorted(
+            items,
+            key=lambda route: (
+                str(route.get("routeFamilyCode") or route.get("routeCode") or route.get("name") or ""),
+                int(route.get("familySortOrder") or 999),
+                str(route.get("routeLabel") or route.get("name") or ""),
+                str(route.get("id") or ""),
+            ),
+        )
+
     return {
         "items": items,
         "total": len(items),
         "meta": {
             "imports": store.get_route_import_meta(scenario_id),
+            "groupedByFamily": group_by_family,
         },
     }
 
@@ -625,7 +647,46 @@ def get_route(scenario_id: str, route_id: str) -> Dict[str, Any]:
         }
         route["linkState"] = "unlinked"
 
+    # ── Enrich with family/variant metadata ──────────────────
+    all_routes = store.list_routes(scenario_id)
+    family_meta = derive_route_family_metadata(all_routes)
+    route_meta = family_meta.get(route.get("id", ""))
+    if route_meta:
+        route.update(route_meta.to_dict())
+
     return route
+
+
+# ── Route Family endpoints ─────────────────────────────────────
+
+
+@router.get("/scenarios/{scenario_id}/route-families")
+def list_route_families(
+    scenario_id: str,
+    operator: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    items = store.list_routes(scenario_id, operator=operator)
+    items = enrich_routes_with_family(items)
+    families = build_route_family_summary(items)
+    return {
+        "items": families,
+        "total": len(families),
+    }
+
+
+@router.get("/scenarios/{scenario_id}/route-families/{route_family_id}")
+def get_route_family(
+    scenario_id: str,
+    route_family_id: str,
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    items = store.list_routes(scenario_id)
+    items = enrich_routes_with_family(items)
+    detail = build_route_family_detail(route_family_id, items)
+    if not detail:
+        raise _not_found("RouteFamily", route_family_id)
+    return {"item": detail}
 
 
 @router.put("/scenarios/{scenario_id}/routes/{route_id}")

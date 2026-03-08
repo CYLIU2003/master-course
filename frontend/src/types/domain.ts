@@ -146,6 +146,22 @@ export type RouteServiceSummary = {
 
 export type RouteLinkState = "unlinked" | "partial" | "linked" | "error";
 
+export type RouteVariantType =
+  | "main"
+  | "main_outbound"
+  | "main_inbound"
+  | "short_turn"
+  | "branch"
+  | "depot_out"
+  | "depot_in"
+  | "unknown";
+
+export type RouteCanonicalDirection =
+  | "outbound"
+  | "inbound"
+  | "circular"
+  | "unknown";
+
 export interface Route {
   id: string;
   name: string;
@@ -185,6 +201,28 @@ export interface Route {
     generatedAt?: string;
     warnings?: string[];
   };
+
+  // ── Route family / variant (derived by BFF) ───────────────
+  /** Derived stable family identifier */
+  routeFamilyId?: string;
+  /** Normalized public-facing line code (e.g. "園01") */
+  routeFamilyCode?: string;
+  /** Display label for grouped family row */
+  routeFamilyLabel?: string;
+  /** Derived variant identifier within the family */
+  routeVariantId?: string;
+  /** Variant classification */
+  routeVariantType?: RouteVariantType;
+  /** Canonical direction grouping */
+  canonicalDirection?: RouteCanonicalDirection;
+  /** Whether this is the primary variant in the family */
+  isPrimaryVariant?: boolean;
+  /** Sort order within the family display */
+  familySortOrder?: number;
+  /** Classification confidence [0-1] */
+  classificationConfidence?: number;
+  /** Explanation of classification decision */
+  classificationReasons?: string[];
 }
 
 export interface Stop {
@@ -195,6 +233,55 @@ export interface Stop {
   lon: number | null;
   poleNumber?: string | null;
   source?: string;
+}
+
+// ── Route Family Summary (derived by BFF) ─────────────────────
+
+export interface RouteFamilySummary {
+  routeFamilyId: string;
+  routeFamilyCode: string;
+  routeFamilyLabel: string;
+  primaryColor?: string;
+  variantCount: number;
+  mainVariantCount: number;
+  hasShortTurn: boolean;
+  hasBranch: boolean;
+  hasDepotVariant: boolean;
+  startStopCandidates: string[];
+  endStopCandidates: string[];
+  aggregatedLinkState: RouteLinkState;
+  aggregatedLinkStatus: {
+    stopsResolved: number;
+    stopsMissing: number;
+    tripsLinked: number;
+    stopTimetableEntriesLinked: number;
+    warnings: string[];
+  };
+  serviceSummary?: RouteServiceSummary[];
+}
+
+export interface RouteFamilyDetail {
+  routeFamilyId: string;
+  routeFamilyCode: string;
+  routeFamilyLabel: string;
+  summary: RouteFamilySummary;
+  variants: Route[];
+  canonicalMainPair?: {
+    outboundRouteId?: string | null;
+    inboundRouteId?: string | null;
+    outboundStartStop?: string | null;
+    outboundEndStop?: string | null;
+    inboundStartStop?: string | null;
+    inboundEndStop?: string | null;
+  };
+  timetableDiagnostics?: {
+    rawRouteCount: number;
+    rawRoutesWithTrips: number;
+    rawRoutesWithStopTimetables: number;
+    totalTripsLinked: number;
+    totalStopTimetableEntriesLinked: number;
+    warnings: string[];
+  };
 }
 
 // ── Master Data: Trip (belongs to Route) ──────────────────────
