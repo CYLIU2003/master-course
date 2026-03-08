@@ -113,6 +113,8 @@ export interface VehicleTemplate {
 export interface Route {
   id: string;
   name: string;
+  routeCode?: string;
+  routeLabel?: string;
   startStop: string;
   endStop: string;
   distanceKm: number;
@@ -121,6 +123,10 @@ export interface Route {
   color: string;
   enabled: boolean;
   source?: string;
+  depotId?: string | null;
+  assignmentType?: string | null;
+  assignmentConfidence?: number | null;
+  assignmentReason?: string | null;
   odptPatternId?: string;
   odptBusrouteId?: string;
   distanceCoverageRatio?: number;

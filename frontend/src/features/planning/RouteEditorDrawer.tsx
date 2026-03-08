@@ -145,6 +145,27 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
 
       {activeTab === "basic" && (
         <div className="space-y-4">
+          {!isCreate && route && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full bg-white px-2 py-0.5">
+                  {route.source?.toUpperCase() ?? "MANUAL"}
+                </span>
+                <span className="rounded-full bg-white px-2 py-0.5">
+                  {route.stopSequence?.length ?? 0} stops
+                </span>
+                <span className="rounded-full bg-white px-2 py-0.5">
+                  {route.tripCount ?? 0} trips
+                </span>
+                <span className="rounded-full bg-white px-2 py-0.5">
+                  {route.depotId ? `depot ${route.depotId}` : "depot unassigned"}
+                </span>
+              </div>
+              <p className="mt-2">
+                所属営業所の編集は Public Data Collection Explorer で行います。
+              </p>
+            </div>
+          )}
           <Field label={t("routes.field_name", "路線名")}>
             <input
               type="text"
@@ -221,7 +242,10 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
       )}
 
       {activeTab === "stops" && (
-        <StopsEdgeEditor routeId={routeId} />
+        <StopsEdgeEditor
+          routeId={routeId}
+          importedStops={route?.stopSequence ?? []}
+        />
       )}
     </EditorDrawer>
   );
@@ -233,9 +257,10 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
 
 interface StopsEdgeEditorProps {
   routeId: string | null;
+  importedStops: string[];
 }
 
-function StopsEdgeEditor({ routeId }: StopsEdgeEditorProps) {
+function StopsEdgeEditor({ routeId, importedStops }: StopsEdgeEditorProps) {
   const { t } = useTranslation();
   const { nodes, edges, updateNode, updateEdge, removeNode, removeEdge, addNode, addEdge } =
     useRouteGraphStore();
@@ -253,6 +278,23 @@ function StopsEdgeEditor({ routeId }: StopsEdgeEditorProps) {
 
   return (
     <div className="space-y-3">
+      {importedStops.length > 0 && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+          <p className="text-xs font-medium text-emerald-800">
+            Imported stop sequence ({importedStops.length})
+          </p>
+          <div className="mt-2 flex max-h-32 flex-wrap gap-1 overflow-y-auto">
+            {importedStops.map((stopId) => (
+              <span
+                key={stopId}
+                className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[11px] text-emerald-700"
+              >
+                {stopId}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Sub-tab */}
       <div className="flex rounded-lg border border-border">
         {(["nodes", "edges"] as const).map((k) => (

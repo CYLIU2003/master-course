@@ -75,6 +75,7 @@ def _load(scenario_id: str) -> Dict[str, Any]:
         raise KeyError(scenario_id)
     doc = json.loads(p.read_text(encoding="utf-8"))
     doc.setdefault("vehicle_templates", [])
+    doc.setdefault("route_depot_assignments", [])
     doc.setdefault("route_import_meta", {})
     doc.setdefault("stop_import_meta", {})
     doc.setdefault("timetable_import_meta", {})
@@ -319,6 +320,7 @@ def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
         "vehicle_templates": [],
         "routes": [],
         "stops": [],
+        "route_depot_assignments": [],
         "depot_route_permissions": [],
         "vehicle_route_permissions": [],
         "route_import_meta": {},
@@ -486,6 +488,14 @@ def update_depot(
 
 def delete_depot(scenario_id: str, depot_id: str) -> None:
     _delete_item(scenario_id, "depots", "id", depot_id)
+    doc = _load(scenario_id)
+    doc["route_depot_assignments"] = [
+        item
+        for item in doc.get("route_depot_assignments") or []
+        if str(item.get("depotId")) != depot_id
+    ]
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
 
 
 # ── Vehicle helpers ────────────────────────────────────────────
@@ -711,12 +721,91 @@ def delete_vehicle_template(scenario_id: str, template_id: str) -> None:
 # ── Route helpers ──────────────────────────────────────────────
 
 
-def list_routes(scenario_id: str) -> List[Dict[str, Any]]:
-    return _list_items(scenario_id, "routes")
+def _operator_matches_route(route: Dict[str, Any], operator: Optional[str]) -> bool:
+    if not operator:
+        return True
+    source = str(route.get("source") or "").lower()
+    if operator == "tokyu":
+        return source in {"", "manual", "odpt"}
+    if operator == "toei":
+        return source in {"", "manual", "gtfs"}
+    return source == operator.lower()
+
+
+def _route_assignment_map(doc: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    valid_route_ids = {
+        str(route.get("id"))
+        for route in doc.get("routes") or []
+        if route.get("id") is not None
+    }
+    valid_depot_ids = {
+        str(depot.get("id"))
+        for depot in doc.get("depots") or []
+        if depot.get("id") is not None
+    }
+    assignments: Dict[str, Dict[str, Any]] = {}
+    for item in doc.get("route_depot_assignments") or []:
+        route_id = item.get("routeId")
+        depot_id = item.get("depotId")
+        if route_id is None or depot_id is None:
+            continue
+        route_id = str(route_id)
+        depot_id = str(depot_id)
+        if route_id not in valid_route_ids or depot_id not in valid_depot_ids:
+            continue
+        assignments[route_id] = {
+            "routeId": route_id,
+            "depotId": depot_id,
+            "assignmentType": str(item.get("assignmentType") or "manual_override"),
+            "confidence": float(item.get("confidence") or 0.0),
+            "reason": str(item.get("reason") or ""),
+            "sourceRefs": list(item.get("sourceRefs") or []),
+            "updatedAt": str(item.get("updatedAt") or _now_iso()),
+        }
+    return assignments
+
+
+def list_routes(
+    scenario_id: str,
+    depot_id: Optional[str] = None,
+    operator: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    assignments = _route_assignment_map(doc)
+    items: List[Dict[str, Any]] = []
+    for route in doc.get("routes") or []:
+        if not _operator_matches_route(route, operator):
+            continue
+        route_id = route.get("id")
+        assignment = assignments.get(str(route_id)) if route_id is not None else None
+        effective_depot_id = assignment.get("depotId") if assignment else route.get("depotId")
+        if depot_id and effective_depot_id != depot_id:
+            continue
+        items.append(
+            {
+                **route,
+                "depotId": effective_depot_id,
+                "assignmentType": assignment.get("assignmentType") if assignment else None,
+                "assignmentConfidence": assignment.get("confidence") if assignment else None,
+                "assignmentReason": assignment.get("reason") if assignment else None,
+            }
+        )
+    return items
 
 
 def get_route(scenario_id: str, route_id: str) -> Dict[str, Any]:
-    return _get_item(scenario_id, "routes", "id", route_id)
+    doc = _load(scenario_id)
+    route = _get_item(scenario_id, "routes", "id", route_id)
+    assignment = _route_assignment_map(doc).get(route_id)
+    if assignment is None:
+        return route
+    return {
+        **route,
+        "depotId": assignment.get("depotId"),
+        "assignmentType": assignment.get("assignmentType"),
+        "assignmentConfidence": assignment.get("confidence"),
+        "assignmentReason": assignment.get("reason"),
+    }
 
 
 def create_route(scenario_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -731,6 +820,14 @@ def update_route(
 
 def delete_route(scenario_id: str, route_id: str) -> None:
     _delete_item(scenario_id, "routes", "id", route_id)
+    doc = _load(scenario_id)
+    doc["route_depot_assignments"] = [
+        item
+        for item in doc.get("route_depot_assignments") or []
+        if str(item.get("routeId")) != route_id
+    ]
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
 
 
 def replace_routes_from_source(
@@ -743,13 +840,18 @@ def replace_routes_from_source(
     route_import_meta = doc.setdefault("route_import_meta", {})
     preserved = [r for r in doc["routes"] if r.get("source") != source]
     doc["routes"] = preserved + routes
+    surviving_route_ids = {
+        str(r.get("id")) for r in doc["routes"] if r.get("id") is not None
+    }
+    doc["route_depot_assignments"] = [
+        assignment
+        for assignment in doc.get("route_depot_assignments") or []
+        if str(assignment.get("routeId") or "") in surviving_route_ids
+    ]
     if import_meta is not None:
         route_import_meta[source] = import_meta
 
     # Prune permissions referencing route IDs that no longer exist.
-    surviving_route_ids = {
-        str(r.get("id")) for r in doc["routes"] if r.get("id") is not None
-    }
     doc["depot_route_permissions"] = [
         perm
         for perm in doc.get("depot_route_permissions") or []
@@ -777,6 +879,113 @@ def get_route_import_meta(
         return dict(route_import_meta)
     value = route_import_meta.get(source)
     return dict(value) if isinstance(value, dict) else {}
+
+
+def list_route_depot_assignments(
+    scenario_id: str,
+    operator: Optional[str] = None,
+    unresolved_only: bool = False,
+) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    routes_by_id = {
+        str(route.get("id")): dict(route)
+        for route in doc.get("routes") or []
+        if route.get("id") is not None and _operator_matches_route(route, operator)
+    }
+    depots_by_id = {
+        str(depot.get("id")): dict(depot)
+        for depot in doc.get("depots") or []
+        if depot.get("id") is not None
+    }
+    assignments = _route_assignment_map(doc)
+    items: List[Dict[str, Any]] = []
+    for route_id, route in routes_by_id.items():
+        assignment = assignments.get(route_id)
+        if unresolved_only and assignment is not None:
+            continue
+        depot = depots_by_id.get(str(assignment.get("depotId"))) if assignment else None
+        items.append(
+            {
+                "routeId": route_id,
+                "routeName": route.get("name"),
+                "routeCode": route.get("routeCode") or route_id,
+                "startStop": route.get("startStop"),
+                "endStop": route.get("endStop"),
+                "source": route.get("source"),
+                "tripCount": route.get("tripCount") or 0,
+                "stopCount": len(list(route.get("stopSequence") or [])),
+                "depotId": assignment.get("depotId") if assignment else None,
+                "depotName": depot.get("name") if depot else None,
+                "assignmentType": assignment.get("assignmentType") if assignment else None,
+                "confidence": assignment.get("confidence") if assignment else None,
+                "reason": assignment.get("reason") if assignment else "",
+                "sourceRefs": assignment.get("sourceRefs") if assignment else [],
+                "updatedAt": assignment.get("updatedAt") if assignment else None,
+            }
+        )
+    items.sort(
+        key=lambda item: (
+            str(item.get("depotName") or "~"),
+            str(item.get("routeCode") or ""),
+            str(item.get("routeName") or ""),
+        )
+    )
+    return items
+
+
+def upsert_route_depot_assignment(
+    scenario_id: str,
+    route_id: str,
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    route_exists = any(
+        str(route.get("id")) == route_id for route in doc.get("routes") or []
+    )
+    if not route_exists:
+        raise KeyError(route_id)
+
+    depot_id = data.get("depotId")
+    if depot_id is not None:
+        depot_id = str(depot_id)
+        valid_depot_ids = {
+            str(depot.get("id"))
+            for depot in doc.get("depots") or []
+            if depot.get("id") is not None
+        }
+        if depot_id not in valid_depot_ids:
+            raise ValueError(f"Unknown depot '{depot_id}'")
+
+    doc["route_depot_assignments"] = [
+        item
+        for item in doc.get("route_depot_assignments") or []
+        if str(item.get("routeId")) != route_id
+    ]
+    if depot_id is not None:
+        doc["route_depot_assignments"].append(
+            {
+                "routeId": route_id,
+                "depotId": depot_id,
+                "assignmentType": str(data.get("assignmentType") or "manual_override"),
+                "confidence": float(data.get("confidence") or 1.0),
+                "reason": str(data.get("reason") or ""),
+                "sourceRefs": list(data.get("sourceRefs") or []),
+                "updatedAt": _now_iso(),
+            }
+        )
+    _invalidate_dispatch_artifacts(doc)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    assignment = _route_assignment_map(doc).get(route_id)
+    return {
+        "routeId": route_id,
+        "depotId": assignment.get("depotId") if assignment else None,
+        "assignmentType": assignment.get("assignmentType") if assignment else None,
+        "confidence": assignment.get("confidence") if assignment else None,
+        "reason": assignment.get("reason") if assignment else "",
+        "sourceRefs": assignment.get("sourceRefs") if assignment else [],
+        "updatedAt": assignment.get("updatedAt") if assignment else None,
+    }
 
 
 def list_stops(scenario_id: str) -> List[Dict[str, Any]]:

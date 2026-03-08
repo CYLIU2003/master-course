@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchJson } from "@/api/client";
+import { useUIStore } from "@/stores/ui-store";
 
 /**
  * ODPT Explorer Page
@@ -145,6 +146,38 @@ type OperationalExportResponse = {
     trips: RouteTimetableTrip[];
   }>;
   [key: string]: unknown;
+};
+
+type Depot = {
+  id: string;
+  name: string;
+};
+
+type ExplorerOverview = {
+  routeCount: number;
+  routeWithDepotCount: number;
+  routeWithStopsCount: number;
+  routeWithTimetableCount: number;
+  unresolvedDepotAssignmentCount: number;
+  warningCount: number;
+  imports: Record<string, Record<string, { warnings?: string[]; generatedAt?: string }>>;
+};
+
+type ExplorerDepotAssignment = {
+  routeId: string;
+  routeName: string;
+  routeCode: string;
+  startStop?: string;
+  endStop?: string;
+  source?: string;
+  tripCount: number;
+  stopCount: number;
+  depotId?: string | null;
+  depotName?: string | null;
+  assignmentType?: string | null;
+  confidence?: number | null;
+  reason?: string;
+  updatedAt?: string | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -541,6 +574,13 @@ function DbVisualizationPanel() {
 
 export function OdptExplorerPage() {
   const [tabMode, setTabMode] = useState<"db" | "api">("db");
+  const activeScenarioId = useUIStore((s) => s.activeScenarioId);
+  const [selectedScenarioOperator, setSelectedScenarioOperator] = useState<"tokyu" | "toei">("tokyu");
+  const [depots, setDepots] = useState<Depot[]>([]);
+  const [explorerOverview, setExplorerOverview] = useState<ExplorerOverview | null>(null);
+  const [assignmentRows, setAssignmentRows] = useState<ExplorerDepotAssignment[]>([]);
+  const [assignmentSavingRouteId, setAssignmentSavingRouteId] = useState("");
+  const [showUnresolvedOnly, setShowUnresolvedOnly] = useState(false);
   const [resource, setResource] = useState<string>(RESOURCE_OPTIONS[0]);
   const [dump, setDump] = useState(false);
   const [query, setQuery] = useState("odpt:operator=odpt.Operator:TokyuBus");
@@ -623,6 +663,32 @@ export function OdptExplorerPage() {
       ttlSec,
       includeStopTimetables,
     };
+  }
+
+  async function loadScenarioExplorerData() {
+    if (!activeScenarioId) {
+      setDepots([]);
+      setExplorerOverview(null);
+      setAssignmentRows([]);
+      return;
+    }
+    try {
+      const operator = selectedScenarioOperator;
+      const [depotsRes, overviewRes, assignmentsRes] = await Promise.all([
+        fetchJson<{ items: Depot[] }>(`/api/scenarios/${activeScenarioId}/depots`),
+        fetchJson<{ item: ExplorerOverview }>(
+          `/api/scenarios/${activeScenarioId}/explorer/overview?operator=${operator}`,
+        ),
+        fetchJson<{ items: ExplorerDepotAssignment[] }>(
+          `/api/scenarios/${activeScenarioId}/explorer/depot-assignments?operator=${operator}&unresolvedOnly=${showUnresolvedOnly ? "true" : "false"}`,
+        ),
+      ]);
+      setDepots(depotsRes.items ?? []);
+      setExplorerOverview(overviewRes.item ?? null);
+      setAssignmentRows(assignmentsRes.items ?? []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -721,6 +787,95 @@ export function OdptExplorerPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setCatalogRefreshing("");
+    }
+  }
+
+  async function importScenarioSource(source: "odpt" | "gtfs") {
+    if (!activeScenarioId) {
+      setError("先に scenario を選択してください。");
+      return;
+    }
+    setAssignmentSavingRouteId(`import:${source}`);
+    setError(null);
+    try {
+      if (source === "odpt") {
+        await Promise.all([
+          fetchJson(`/api/scenarios/${activeScenarioId}/routes/import-odpt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ operator: "odpt.Operator:TokyuBus", dump: true }),
+          }),
+          fetchJson(`/api/scenarios/${activeScenarioId}/stops/import-odpt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ operator: "odpt.Operator:TokyuBus", dump: true }),
+          }),
+          fetchJson(`/api/scenarios/${activeScenarioId}/timetable/import-odpt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ operator: "odpt.Operator:TokyuBus", dump: true, reset: true }),
+          }),
+          fetchJson(`/api/scenarios/${activeScenarioId}/stop-timetables/import-odpt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ operator: "odpt.Operator:TokyuBus", dump: true, reset: true }),
+          }),
+        ]);
+      } else {
+        await Promise.all([
+          fetchJson(`/api/scenarios/${activeScenarioId}/routes/import-gtfs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ feedPath: "GTFS/ToeiBus-GTFS" }),
+          }),
+          fetchJson(`/api/scenarios/${activeScenarioId}/stops/import-gtfs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ feedPath: "GTFS/ToeiBus-GTFS" }),
+          }),
+          fetchJson(`/api/scenarios/${activeScenarioId}/timetable/import-gtfs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ feedPath: "GTFS/ToeiBus-GTFS", reset: true }),
+          }),
+          fetchJson(`/api/scenarios/${activeScenarioId}/stop-timetables/import-gtfs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ feedPath: "GTFS/ToeiBus-GTFS", reset: true }),
+          }),
+        ]);
+      }
+      await loadScenarioExplorerData();
+      await loadCatalogSnapshots();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAssignmentSavingRouteId("");
+    }
+  }
+
+  async function updateDepotAssignment(routeId: string, depotId: string) {
+    if (!activeScenarioId) {
+      return;
+    }
+    setAssignmentSavingRouteId(routeId);
+    setError(null);
+    try {
+      await fetchJson(`/api/scenarios/${activeScenarioId}/explorer/depot-assignments/${encodeURIComponent(routeId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          depotId: depotId || null,
+          assignmentType: depotId ? "manual_override" : "manual_clear",
+          confidence: depotId ? 1.0 : 0.0,
+          reason: depotId ? "Assigned from Public Data Collection Explorer." : "Cleared from Public Data Collection Explorer.",
+        }),
+      });
+      await loadScenarioExplorerData();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAssignmentSavingRouteId("");
     }
   }
 
@@ -830,6 +985,10 @@ export function OdptExplorerPage() {
   }, []);
 
   useEffect(() => {
+    loadScenarioExplorerData();
+  }, [activeScenarioId, selectedScenarioOperator, showUnresolvedOnly]);
+
+  useEffect(() => {
     if (!selectedSnapshotKey) {
       return;
     }
@@ -908,10 +1067,10 @@ export function OdptExplorerPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-800">
-            Transit Data Explorer
+            Public Data Collection Explorer
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Per-operator DB visualization and API debug tools.
+            取込、正規化確認、所属営業所補正、warning 確認を集約します。
           </p>
         </div>
         <Link
@@ -920,6 +1079,150 @@ export function OdptExplorerPage() {
         >
           &larr; Back to Scenarios
         </Link>
+      </div>
+
+      <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Active scenario
+            </p>
+            <p className="text-sm font-medium text-slate-700">
+              {activeScenarioId ?? "No scenario selected"}
+            </p>
+          </div>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedScenarioOperator("tokyu")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                selectedScenarioOperator === "tokyu"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              Tokyu / ODPT
+            </button>
+            <button
+              onClick={() => setSelectedScenarioOperator("toei")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                selectedScenarioOperator === "toei"
+                  ? "bg-sky-100 text-sky-700"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              Toei / GTFS
+            </button>
+            <button
+              onClick={() => importScenarioSource("odpt")}
+              disabled={!activeScenarioId || assignmentSavingRouteId !== ""}
+              className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 disabled:opacity-50"
+            >
+              {assignmentSavingRouteId === "import:odpt" ? "Importing ODPT..." : "Import Tokyu ODPT"}
+            </button>
+            <button
+              onClick={() => importScenarioSource("gtfs")}
+              disabled={!activeScenarioId || assignmentSavingRouteId !== ""}
+              className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 disabled:opacity-50"
+            >
+              {assignmentSavingRouteId === "import:gtfs" ? "Importing GTFS..." : "Import Toei GTFS"}
+            </button>
+          </div>
+        </div>
+
+        {explorerOverview && (
+          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+            {[
+              ["Routes", explorerOverview.routeCount],
+              ["Assigned", explorerOverview.routeWithDepotCount],
+              ["Stops linked", explorerOverview.routeWithStopsCount],
+              ["Timetable linked", explorerOverview.routeWithTimetableCount],
+              ["Unresolved", explorerOverview.unresolvedDepotAssignmentCount],
+              ["Warnings", explorerOverview.warningCount],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="rounded-lg border border-slate-200 bg-white p-3">
+                <div className="text-xs text-slate-500">{label}</div>
+                <div className="mt-1 text-lg font-semibold text-slate-800">{value}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-700">Depot assignments</p>
+            <p className="text-xs text-slate-500">
+              所属営業所の確定・補正はここで行います。
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={showUnresolvedOnly}
+              onChange={(e) => setShowUnresolvedOnly(e.target.checked)}
+            />
+            unresolved only
+          </label>
+        </div>
+
+        {!activeScenarioId ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+            scenario を開いてから利用してください。
+          </div>
+        ) : assignmentRows.length === 0 ? (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+            表示対象の route がありません。
+          </div>
+        ) : (
+          <div className="overflow-auto rounded-lg border border-border">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50">
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 font-medium text-slate-500">Route</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Stops</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Trips</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Current depot</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Assign</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assignmentRows.map((row) => (
+                  <tr key={row.routeId} className="border-b border-slate-100">
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-slate-700">{row.routeCode || row.routeName}</div>
+                      <div className="text-slate-500">
+                        {row.routeName} {row.startStop || row.endStop ? `(${row.startStop ?? "-"} -> ${row.endStop ?? "-"})` : ""}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{row.stopCount}</td>
+                    <td className="px-3 py-2 text-slate-600">{row.tripCount}</td>
+                    <td className="px-3 py-2 text-slate-600">
+                      {row.depotName ?? <span className="text-amber-700">unassigned</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <select
+                        value={row.depotId ?? ""}
+                        disabled={assignmentSavingRouteId === row.routeId}
+                        onChange={(e) => updateDepotAssignment(row.routeId, e.target.value)}
+                        className="rounded border border-border bg-white px-2 py-1"
+                      >
+                        <option value="">未所属</option>
+                        {depots.map((depot) => (
+                          <option key={depot.id} value={depot.id}>
+                            {depot.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-3 py-2 text-slate-500">
+                      {row.reason || row.assignmentType || "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Tab bar */}

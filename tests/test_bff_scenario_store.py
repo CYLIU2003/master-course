@@ -449,3 +449,91 @@ def test_import_meta_helpers_preserve_progress_and_resource_type(temp_store_dir:
         scenario_store.get_stop_timetable_import_meta(scenario_id, "odpt")
         == stop_timetable_meta
     )
+
+
+def test_route_depot_assignments_filter_routes_and_preserve_unresolved(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Route assignments", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot_a = scenario_store.create_depot(scenario_id, {"name": "Depot A", "location": "A"})
+    depot_b = scenario_store.create_depot(scenario_id, {"name": "Depot B", "location": "B"})
+    route_a = scenario_store.create_route(
+        scenario_id,
+        {
+            "name": "Tokyu Assigned",
+            "startStop": "S1",
+            "endStop": "S2",
+            "distanceKm": 1.0,
+            "durationMin": 5,
+            "color": "#111111",
+            "enabled": True,
+            "source": "odpt",
+            "tripCount": 4,
+            "stopSequence": ["S1", "S2"],
+        },
+    )
+    route_b = scenario_store.create_route(
+        scenario_id,
+        {
+            "name": "Toei Assigned",
+            "startStop": "T1",
+            "endStop": "T2",
+            "distanceKm": 2.0,
+            "durationMin": 8,
+            "color": "#222222",
+            "enabled": True,
+            "source": "gtfs",
+            "tripCount": 6,
+            "stopSequence": ["T1", "T2", "T3"],
+        },
+    )
+    route_unassigned = scenario_store.create_route(
+        scenario_id,
+        {
+            "name": "Unassigned",
+            "startStop": "U1",
+            "endStop": "U2",
+            "distanceKm": 3.0,
+            "durationMin": 9,
+            "color": "#333333",
+            "enabled": True,
+            "source": "odpt",
+        },
+    )
+
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        route_a["id"],
+        {
+          "depotId": depot_a["id"],
+          "assignmentType": "manual_override",
+          "confidence": 1.0,
+          "reason": "Assigned in test",
+        },
+    )
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        route_b["id"],
+        {
+          "depotId": depot_b["id"],
+          "assignmentType": "official",
+          "confidence": 0.9,
+          "reason": "Official feed",
+        },
+    )
+
+    tokyo_routes = scenario_store.list_routes(
+        scenario_id,
+        depot_id=depot_a["id"],
+        operator="tokyu",
+    )
+    assert [route["id"] for route in tokyo_routes] == [route_a["id"]]
+    assert tokyo_routes[0]["depotId"] == depot_a["id"]
+
+    unresolved = scenario_store.list_route_depot_assignments(
+        scenario_id,
+        operator="tokyu",
+        unresolved_only=True,
+    )
+    assert [item["routeId"] for item in unresolved] == [route_unassigned["id"]]
+    assert unresolved[0]["depotId"] is None
