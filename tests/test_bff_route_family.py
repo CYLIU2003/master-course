@@ -282,3 +282,64 @@ def test_route_detail_reports_timetable_and_stop_timetable_links(
             "lastDeparture": "08:00",
         }
     ]
+
+
+def test_explorer_depot_assignments_are_grouped_by_route_family(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Explorer family sort", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [
+            {
+                "id": "b-out",
+                "name": "B02 (A -> B)",
+                "routeCode": "B02",
+                "routeLabel": "B02 (A -> B)",
+                "startStop": "A",
+                "endStop": "B",
+                "stopSequence": ["S1", "S2"],
+                "tripCount": 5,
+                "source": "odpt",
+            },
+            {
+                "id": "a-out",
+                "name": "A01 (X -> Y)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (X -> Y)",
+                "startStop": "X",
+                "endStop": "Y",
+                "stopSequence": ["S3", "S4"],
+                "tripCount": 6,
+                "source": "odpt",
+            },
+            {
+                "id": "a-in",
+                "name": "A01 (Y -> X)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (Y -> X)",
+                "startStop": "Y",
+                "endStop": "X",
+                "stopSequence": ["S4", "S3"],
+                "tripCount": 4,
+                "source": "odpt",
+            },
+        ],
+    )
+
+    body = master_data.list_explorer_depot_assignments(
+        scenario_id,
+        operator=None,
+        unresolved_only=False,
+    )
+
+    assert [item["routeId"] for item in body["items"]] == ["a-out", "a-in", "b-out"]
+    assert [item["routeFamilyCode"] for item in body["items"]] == ["A01", "A01", "B02"]
+    assert [item["routeVariantType"] for item in body["items"]] == [
+        "main_outbound",
+        "main_inbound",
+        "main",
+    ]

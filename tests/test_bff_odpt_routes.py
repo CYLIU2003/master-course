@@ -39,6 +39,8 @@ def test_build_routes_from_operational_prefers_full_trip_duration_and_distance()
     assert len(routes) == 1
     route = routes[0]
     assert route["name"] == "Line 1 (Start -> End)"
+    assert route["routeCode"] == "Line 1"
+    assert route["routeLabel"] == "Line 1 (Start -> End)"
     assert route["startStop"] == "Start"
     assert route["endStop"] == "End"
     assert route["distanceKm"] == 12.5

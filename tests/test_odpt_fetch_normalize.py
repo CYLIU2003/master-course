@@ -185,3 +185,120 @@ def test_data_hash_deterministic():
     h2 = _data_hash(obj)
     assert h1 == h2
     assert len(h1) == 64  # SHA-256 hex digest
+
+
+def test_normalize_bus_timetable_handles_raw_odpt_trip_shape(tmp_path):
+    from bff.services.odpt_normalize import normalize_bus_timetable
+
+    raw_data = [
+        {
+            "owl:sameAs": "odpt.BusTimetable:TokyuBus.A24.weekday.0800",
+            "odpt:calendar": "odpt.Calendar:Weekday",
+            "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.A24.out",
+            "odpt:busTimetableObject": [
+                {
+                    "odpt:index": 1,
+                    "odpt:busstopPole": "S1",
+                    "odpt:departureTime": "08:00",
+                },
+                {
+                    "odpt:index": 2,
+                    "odpt:busstopPole": "S2",
+                    "odpt:arrivalTime": "08:12",
+                },
+            ],
+        }
+    ]
+    route_patterns_lookup = {
+        "odpt.BusroutePattern:TokyuBus.A24.out": {
+            "route_id": "route-a24-out",
+            "total_distance_km": 4.8,
+        }
+    }
+    stop_lookup = {
+        "S1": {"name": "Start"},
+        "S2": {"name": "End"},
+    }
+
+    result = normalize_bus_timetable(
+        raw_data,
+        tmp_path,
+        route_patterns_lookup=route_patterns_lookup,
+        stop_lookup=stop_lookup,
+    )
+
+    assert result["trip_count"] == 1
+    assert result["stop_time_count"] == 2
+    assert result["trip_counts_by_route"] == {"route-a24-out": 1}
+
+    trips = [json.loads(line) for line in (tmp_path / "trips.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert trips == [
+        {
+            "trip_id": "odpt.BusTimetable:TokyuBus.A24.weekday.0800",
+            "route_id": "route-a24-out",
+            "service_id": "WEEKDAY",
+            "direction": "outbound",
+            "trip_index": 0,
+            "origin": "Start",
+            "destination": "End",
+            "departure": "08:00",
+            "arrival": "08:12",
+            "distance_km": 4.8,
+            "allowed_vehicle_types": ["BEV", "ICE"],
+            "source": "odpt",
+            "data_hash": trips[0]["data_hash"],
+        }
+    ]
+
+
+def test_normalize_busstop_pole_timetable_preserves_route_pattern_refs(tmp_path):
+    from bff.services.odpt_normalize import normalize_busstop_pole_timetable
+
+    raw_data = [
+        {
+            "owl:sameAs": "tt-1",
+            "odpt:busstopPole": "S1",
+            "odpt:calendar": "odpt.Calendar:Weekday",
+            "odpt:busstopPoleTimetableObject": [
+                {
+                    "odpt:departureTime": "08:00",
+                    "odpt:destinationBusstopPole": "S2",
+                    "odpt:busroutePattern": "pattern-1",
+                    "odpt:busroute": "route-1",
+                    "odpt:isMidnight": False,
+                }
+            ],
+        }
+    ]
+
+    result = normalize_busstop_pole_timetable(
+        raw_data,
+        tmp_path,
+        stop_lookup={"S1": {"name": "Start"}},
+    )
+
+    assert result["stop_timetable_count"] == 1
+    items = [
+        json.loads(line)
+        for line in (tmp_path / "busstop_pole_timetables.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert items == [
+        {
+            "id": "tt-1",
+            "source": "odpt",
+            "stopId": "S1",
+            "stopName": "Start",
+            "calendar": "odpt.Calendar:Weekday",
+            "service_id": "WEEKDAY",
+            "items": [
+                {
+                    "departure": "08:00",
+                    "destination": "S2",
+                    "busroutePattern": "pattern-1",
+                    "busroute": "route-1",
+                    "isMidnight": False,
+                    "note": "",
+                }
+            ],
+        }
+    ]

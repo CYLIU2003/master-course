@@ -21,7 +21,9 @@ from bff.services.gtfs_import import (
 from bff.services.odpt_routes import (
     DEFAULT_OPERATOR,
     build_routes_from_operational,
+    fetch_operational_dataset,
     fetch_operational_stage_dataset,
+    fetch_stop_timetable_stage_dataset,
 )
 from bff.services.odpt_fetch import (
     fetch_tokyu_odpt_bundle,
@@ -306,6 +308,243 @@ def _canonicalize_odpt_route_payloads(
             }
         )
     return items
+
+
+def _merge_odpt_route_payloads(
+    payloads: Iterable[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    merged: Dict[str, Dict[str, Any]] = {}
+    for payload in payloads:
+        route_id = str(payload.get("busroute_id") or payload.get("route_id") or "")
+        if not route_id:
+            continue
+        item = merged.setdefault(
+            route_id,
+            {
+                "route_id": route_id,
+                "route_code": str(payload.get("route_code") or route_id),
+                "route_label": str(
+                    payload.get("route_label") or payload.get("route_code") or route_id
+                ),
+                "patterns": {},
+                "trips": {},
+            },
+        )
+        if payload.get("route_code"):
+            item["route_code"] = str(payload.get("route_code"))
+        if payload.get("route_label"):
+            item["route_label"] = str(payload.get("route_label"))
+
+        for pattern in list(payload.get("patterns") or []):
+            pattern_id = str(pattern.get("pattern_id") or "")
+            if pattern_id:
+                item["patterns"][pattern_id] = dict(pattern)
+
+        for trip in list(payload.get("trips") or []):
+            trip_id = str(trip.get("trip_id") or "")
+            if trip_id:
+                item["trips"][trip_id] = dict(trip)
+
+    items: List[Dict[str, Any]] = []
+    for route_id, payload in merged.items():
+        trips = sorted(
+            payload["trips"].values(),
+            key=lambda trip: (
+                str(trip.get("service_id") or ""),
+                str(trip.get("departure") or ""),
+                str(trip.get("arrival") or ""),
+                str(trip.get("trip_id") or ""),
+            ),
+        )
+        services: Dict[str, Dict[str, Any]] = {}
+        first_departure: Optional[str] = None
+        last_arrival: Optional[str] = None
+        for trip in trips:
+            departure = trip.get("departure")
+            arrival = trip.get("arrival")
+            if departure and (first_departure is None or departure < first_departure):
+                first_departure = departure
+            if arrival and (last_arrival is None or arrival > last_arrival):
+                last_arrival = arrival
+            service_id = str(trip.get("service_id") or "unknown")
+            summary = services.setdefault(
+                service_id,
+                {
+                    "service_id": service_id,
+                    "trip_count": 0,
+                    "first_departure": None,
+                    "last_arrival": None,
+                },
+            )
+            summary["trip_count"] += 1
+            if departure and (
+                summary["first_departure"] is None or departure < summary["first_departure"]
+            ):
+                summary["first_departure"] = departure
+            if arrival and (
+                summary["last_arrival"] is None or arrival > summary["last_arrival"]
+            ):
+                summary["last_arrival"] = arrival
+
+        items.append(
+            {
+                "route_id": route_id,
+                "route_code": payload["route_code"],
+                "route_label": payload["route_label"],
+                "trip_count": len(trips),
+                "first_departure": first_departure,
+                "last_arrival": last_arrival,
+                "patterns": sorted(
+                    payload["patterns"].values(),
+                    key=lambda pattern: str(pattern.get("pattern_id") or ""),
+                ),
+                "services": [services[key] for key in sorted(services)],
+                "trips": trips,
+                "source": "odpt",
+            }
+        )
+
+    return items
+
+
+def _merge_stage_entity_maps(
+    target: Dict[str, Dict[str, Any]],
+    incoming: Dict[str, Dict[str, Any]],
+) -> None:
+    for key, value in incoming.items():
+        if key:
+            target[str(key)] = dict(value)
+
+
+def _merge_stage_indexes(
+    target: Dict[str, Dict[str, List[str]]],
+    incoming: Dict[str, Dict[str, List[str]]],
+) -> None:
+    for index_name, groups in incoming.items():
+        if not isinstance(groups, dict):
+            continue
+        target_groups = target.setdefault(index_name, {})
+        for group_key, values in groups.items():
+            bucket = list(target_groups.get(group_key) or [])
+            seen = {str(value) for value in bucket}
+            for value in values or []:
+                value_str = str(value)
+                if value_str not in seen:
+                    bucket.append(value_str)
+                    seen.add(value_str)
+            target_groups[group_key] = bucket
+
+
+def _refresh_odpt_snapshot_via_stage_bff(
+    *,
+    operator: str,
+    dump: bool,
+    force_refresh: bool,
+    ttl_sec: int,
+) -> Dict[str, Any]:
+    merged_dataset: Dict[str, Any] = {
+        "meta": {},
+        "stops": {},
+        "routePatterns": {},
+        "trips": {},
+        "stopTimetables": {},
+        "indexes": {},
+    }
+    route_payloads: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+    progress_meta: Dict[str, Dict[str, Any]] = {}
+    generated_at: Optional[str] = None
+
+    bus_cursor = 0
+    while True:
+        stage = fetch_operational_stage_dataset(
+            operator=operator,
+            dump=False,
+            force_refresh=force_refresh and bus_cursor == 0,
+            ttl_sec=ttl_sec,
+            bus_timetable_cursor=bus_cursor,
+            bus_timetable_batch_size=25,
+        )
+        meta = dict(stage.get("meta") or {})
+        generated_at = generated_at or meta.get("generatedAt")
+        warnings.extend(list(meta.get("warnings") or []))
+        progress = dict(((meta.get("progress") or {}).get("busTimetables")) or {})
+        if progress:
+            progress_meta["busTimetables"] = progress
+        _merge_stage_entity_maps(merged_dataset["stops"], dict(stage.get("stops") or {}))
+        _merge_stage_entity_maps(
+            merged_dataset["routePatterns"],
+            dict(stage.get("routePatterns") or {}),
+        )
+        _merge_stage_entity_maps(merged_dataset["trips"], dict(stage.get("trips") or {}))
+        _merge_stage_indexes(merged_dataset["indexes"], dict(stage.get("indexes") or {}))
+        route_payloads.extend(list(stage.get("routeTimetables") or []))
+
+        next_cursor = int(progress.get("nextCursor") or 0)
+        if progress.get("complete"):
+            break
+        if next_cursor <= bus_cursor:
+            warnings.append("BusTimetable staged fetch stopped before completion")
+            break
+        bus_cursor = next_cursor
+
+    stop_cursor = 0
+    while True:
+        stage = fetch_stop_timetable_stage_dataset(
+            operator=operator,
+            dump=False,
+            force_refresh=force_refresh and stop_cursor == 0,
+            ttl_sec=ttl_sec,
+            stop_timetable_cursor=stop_cursor,
+            stop_timetable_batch_size=50,
+        )
+        meta = dict(stage.get("meta") or {})
+        generated_at = generated_at or meta.get("generatedAt")
+        warnings.extend(list(meta.get("warnings") or []))
+        progress = dict(((meta.get("progress") or {}).get("stopTimetables")) or {})
+        if progress:
+            progress_meta["stopTimetables"] = progress
+        _merge_stage_entity_maps(merged_dataset["stops"], dict(stage.get("stops") or {}))
+        _merge_stage_entity_maps(
+            merged_dataset["stopTimetables"],
+            dict(stage.get("stopTimetables") or {}),
+        )
+
+        next_cursor = int(progress.get("nextCursor") or 0)
+        if progress.get("complete"):
+            break
+        if next_cursor <= stop_cursor:
+            warnings.append("BusstopPoleTimetable staged fetch stopped before completion")
+            break
+        stop_cursor = next_cursor
+
+    merged_dataset["meta"] = {
+        "generatedAt": generated_at,
+        "warnings": [],
+        "cache": {"staged": True},
+    }
+    signature = _serialize(
+        {
+            "operator": operator,
+            "snapshotStrategy": "bff-staged",
+            "tripCount": len(merged_dataset["trips"]),
+            "stopTimetableCount": len(merged_dataset["stopTimetables"]),
+        }
+    )
+
+    return _store_odpt_snapshot(
+        operator=operator,
+        dataset=merged_dataset,
+        route_payloads=_merge_odpt_route_payloads(route_payloads),
+        signature=signature,
+        requested_dump=dump,
+        effective_dump=False,
+        snapshot_source="bff-staged",
+        extra_meta={
+            "warnings": warnings,
+            "progress": progress_meta,
+        },
+    )
 
 
 def _trip_stop_times_from_route_payloads(
@@ -682,6 +921,15 @@ def _populate_operator_db_from_bundle(
     )
 
 
+def _odpt_snapshot_is_incomplete(bundle: Dict[str, Any]) -> bool:
+    routes = list(bundle.get("routes") or [])
+    timetable_rows = list(bundle.get("timetable_rows") or [])
+    stop_timetables = list(bundle.get("stop_timetables") or [])
+    if not routes:
+        return False
+    return len(timetable_rows) == 0 and len(stop_timetables) > 0
+
+
 def _store_odpt_snapshot(
     *,
     operator: str,
@@ -801,14 +1049,24 @@ def refresh_odpt_snapshot(
     force_refresh: bool = False,
     ttl_sec: int = 3600,
 ) -> Dict[str, Any]:
-    """Refresh ODPT snapshot using streaming file-based pipeline.
+    """Refresh ODPT snapshot.
 
-    1. Stream-download raw ODPT resources to server-side files
-    2. Normalize from files (never loads full payload into API response)
-    3. Store normalized entities into catalog DB
-    4. Return only metadata/counts (never raw payloads)
+    Prefer the chunked ODPT Explorer BFF staged pipeline for complete
+    timetable coverage. Fall back to the raw streaming fetch pipeline when
+    the BFF is unavailable.
     """
-    _log.info("refresh_odpt_snapshot: starting streaming file-based pipeline")
+    try:
+        _log.info("refresh_odpt_snapshot: trying staged BFF pipeline")
+        return _refresh_odpt_snapshot_via_stage_bff(
+            operator=operator,
+            dump=dump,
+            force_refresh=force_refresh,
+            ttl_sec=ttl_sec,
+        )
+    except Exception:
+        _log.exception("refresh_odpt_snapshot: staged BFF pipeline failed; falling back")
+
+    _log.info("refresh_odpt_snapshot: starting streaming file-based fallback pipeline")
 
     # -- Step 1: Fetch raw resources via streaming download --
     manifest = fetch_tokyu_odpt_bundle(operator_id=operator)
@@ -933,14 +1191,23 @@ def get_or_refresh_odpt_snapshot(
         and _has_snapshot_payload(snapshot_key, _ODPT_REQUIRED_ENTITY_TYPES)
     ):
         bundle = load_snapshot_bundle(snapshot_key)
-        _populate_operator_db_from_bundle(
-            operator_id="tokyu",
-            bundle=bundle,
-            snapshot_key=snapshot_key,
-            source="odpt",
-        )
-        bundle["meta"]["snapshotMode"] = "catalog"
-        return bundle
+        if _odpt_snapshot_is_incomplete(bundle):
+            _log.warning(
+                "ODPT catalog snapshot %s is incomplete (routes=%d, timetable_rows=%d, stop_timetables=%d); refreshing",
+                snapshot_key,
+                len(bundle.get("routes") or []),
+                len(bundle.get("timetable_rows") or []),
+                len(bundle.get("stop_timetables") or []),
+            )
+        else:
+            _populate_operator_db_from_bundle(
+                operator_id="tokyu",
+                bundle=bundle,
+                snapshot_key=snapshot_key,
+                source="odpt",
+            )
+            bundle["meta"]["snapshotMode"] = "catalog"
+            return bundle
 
     if not force_refresh:
         bootstrapped = bootstrap_odpt_snapshot_from_saved(operator=operator)
