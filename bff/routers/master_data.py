@@ -566,9 +566,66 @@ def create_route(scenario_id: str, body: CreateRouteBody) -> Dict[str, Any]:
 def get_route(scenario_id: str, route_id: str) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        return store.get_route(scenario_id, route_id)
+        route = store.get_route(scenario_id, route_id)
     except KeyError:
         raise _not_found("Route", route_id)
+
+    # ── Resolve stopSequence against stop catalog ────────────
+    stop_sequence = route.get("stopSequence") or []
+    if stop_sequence:
+        all_stops = store.list_stops(scenario_id)
+        stop_index: Dict[str, Dict[str, Any]] = {s["id"]: s for s in all_stops}
+
+        resolved_stops: List[Dict[str, Any]] = []
+        missing_stop_ids: List[str] = []
+
+        for seq, stop_id in enumerate(stop_sequence, start=1):
+            stop = stop_index.get(stop_id)
+            if stop:
+                resolved_stops.append({
+                    "id": stop["id"],
+                    "name": stop.get("name", stop_id),
+                    "kana": stop.get("kana"),
+                    "lat": stop.get("lat"),
+                    "lon": stop.get("lon"),
+                    "platformCode": stop.get("poleNumber") or stop.get("platformCode"),
+                    "sequence": seq,
+                })
+            else:
+                missing_stop_ids.append(stop_id)
+
+        stops_resolved = len(resolved_stops)
+        stops_missing = len(missing_stop_ids)
+        if stops_missing == 0 and stops_resolved > 0:
+            link_state = "linked"
+        elif stops_resolved > 0:
+            link_state = "partial"
+        else:
+            link_state = "unlinked"
+
+        route["resolvedStops"] = resolved_stops
+        route["linkStatus"] = {
+            "stopsResolved": stops_resolved,
+            "stopsMissing": stops_missing,
+            "missingStopIds": missing_stop_ids,
+            "tripsLinked": int(route.get("tripCount") or 0),
+            "stopTimetableEntriesLinked": 0,
+            "warnings": [f"missing stop: {sid}" for sid in missing_stop_ids],
+        }
+        route["linkState"] = link_state
+    else:
+        route["resolvedStops"] = []
+        route["linkStatus"] = {
+            "stopsResolved": 0,
+            "stopsMissing": 0,
+            "missingStopIds": [],
+            "tripsLinked": int(route.get("tripCount") or 0),
+            "stopTimetableEntriesLinked": 0,
+            "warnings": [],
+        }
+        route["linkState"] = "unlinked"
+
+    return route
 
 
 @router.put("/scenarios/{scenario_id}/routes/{route_id}")
