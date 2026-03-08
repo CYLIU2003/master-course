@@ -1,0 +1,36 @@
+{
+  "$id": "https://master-course/schemas/vehicle.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Vehicle and VehicleType",
+  "type": "object",
+  "definitions": {
+    "VehicleType": {
+      "type": "object",
+      "required": ["vehicle_type_id", "powertrain_type"],
+      "properties": {
+        "vehicle_type_id": { "type": "string" },
+        "powertrain_type": {
+          "type": "string",
+          "enum": ["BEV", "ICE", "FCEV", "PHEV"]
+        },
+        "battery_capacity_kwh": { "type": ["number", "null"] },
+        "charge_power_max_kw": { "type": ["number", "null"] },
+        "discharge_power_max_kw": { "type": ["number", "null"] },
+        "reserve_soc": { "type": ["number", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "Vehicle": {
+      "type": "object",
+      "required": ["vehicle_id", "vehicle_type_id", "home_depot_id"],
+      "properties": {
+        "vehicle_id": { "type": "string" },
+        "vehicle_type_id": { "type": "string" },
+        "home_depot_id": { "type": "string" },
+        "initial_soc": { "type": ["number", "null"] },
+        "available": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    }
+  }
+}

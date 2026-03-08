@@ -1,0 +1,16 @@
+{
+  "$id": "https://master-course/schemas/common.types.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Common Types",
+  "type": "object",
+  "definitions": {
+    "SolverMode": {
+      "type": "string",
+      "enum": ["milp", "alns", "hybrid"]
+    },
+    "PowertrainType": {
+      "type": "string",
+      "enum": ["BEV", "ICE", "FCEV", "PHEV"]
+    }
+  }
+}

@@ -9,29 +9,45 @@ import type {
   DutyValidationResponse,
   JobResponse,
 } from "@/types";
+import {
+  dutyValidationResponseSchema,
+  dutiesResponseSchema,
+  graphResponseSchema,
+  tripsListResponseSchema,
+} from "@/schemas/dispatch";
 
 export const graphApi = {
   // ── Trips ───────────────────────────────────────────────────
-  getTrips: (scenarioId: string) =>
-    api.get<TripsResponse>(`/scenarios/${scenarioId}/trips`),
+  getTrips: async (scenarioId: string) =>
+    tripsListResponseSchema.parse(
+      await api.get<TripsResponse>(`/scenarios/${scenarioId}/trips`),
+    ),
 
   buildTrips: (scenarioId: string, data?: BuildTripsRequest) =>
     api.post<JobResponse>(`/scenarios/${scenarioId}/build-trips`, data),
 
   // ── Graph ───────────────────────────────────────────────────
-  getGraph: (scenarioId: string) =>
-    api.get<GraphResponse>(`/scenarios/${scenarioId}/graph`),
+  getGraph: async (scenarioId: string) =>
+    graphResponseSchema.parse(
+      await api.get<GraphResponse>(`/scenarios/${scenarioId}/graph`),
+    ),
 
   buildGraph: (scenarioId: string, data?: BuildGraphRequest) =>
     api.post<JobResponse>(`/scenarios/${scenarioId}/build-graph`, data),
 
   // ── Duties ──────────────────────────────────────────────────
-  getDuties: (scenarioId: string) =>
-    api.get<DutiesResponse>(`/scenarios/${scenarioId}/duties`),
+  getDuties: async (scenarioId: string) =>
+    dutiesResponseSchema.parse(
+      await api.get<DutiesResponse>(`/scenarios/${scenarioId}/duties`),
+    ),
 
   generateDuties: (scenarioId: string, data?: GenerateDutiesRequest) =>
     api.post<JobResponse>(`/scenarios/${scenarioId}/generate-duties`, data),
 
-  validateDuties: (scenarioId: string) =>
-    api.get<DutyValidationResponse>(`/scenarios/${scenarioId}/duties/validate`),
+  validateDuties: async (scenarioId: string) =>
+    dutyValidationResponseSchema.parse(
+      await api.get<DutyValidationResponse>(
+        `/scenarios/${scenarioId}/duties/validate`,
+      ),
+    ),
 };

@@ -19,7 +19,7 @@ BackgroundTask. Poll GET /jobs/{job_id} for status.
 from __future__ import annotations
 
 import traceback
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
@@ -114,6 +114,83 @@ def _resolve_dispatch_scope(
     return scope
 
 
+def _allowed_vehicle_types_for_route(
+    scenario_id: str,
+    depot_id: str,
+    route_id: str,
+    vehicles: List[Dict[str, Any]],
+) -> Optional[Set[str]]:
+    """
+    Resolve which vehicle types at the selected depot may serve the route.
+
+    If no vehicles exist at the depot, return None so timetable-side allowed types
+    remain unchanged. If explicit vehicle-route permissions exist, they are honored;
+    otherwise a vehicle defaults to allowed for that route.
+    """
+    if not vehicles:
+        return None
+
+    permissions = store.get_vehicle_route_permissions(scenario_id)
+    by_vehicle_route: Dict[Tuple[str, str], bool] = {
+        (str(item.get("vehicleId")), str(item.get("routeId"))): bool(item.get("allowed"))
+        for item in permissions
+        if item.get("vehicleId") is not None and item.get("routeId") is not None
+    }
+
+    allowed_types: Set[str] = set()
+    for vehicle in vehicles:
+        vehicle_id = vehicle.get("id")
+        if vehicle_id is None:
+            continue
+        route_allowed = by_vehicle_route.get((str(vehicle_id), str(route_id)), True)
+        if route_allowed:
+            allowed_types.add(str(vehicle.get("type") or "BEV"))
+    return allowed_types
+
+
+def _normalize_allowed_types(
+    raw_allowed: Any,
+    route_allowed_types: Optional[Set[str]],
+) -> Tuple[str, ...]:
+    allowed = tuple(str(item) for item in (raw_allowed or ["BEV", "ICE"]))
+    if route_allowed_types is None:
+        return allowed
+    return tuple(item for item in allowed if item in route_allowed_types)
+
+
+def _build_turnaround_rules(
+    scenario_id: str,
+) -> Dict[str, TurnaroundRule]:
+    rules: Dict[str, TurnaroundRule] = {}
+    for item in store.get_turnaround_rules(scenario_id):
+        stop_id = item.get("stop_id")
+        if stop_id is None:
+            continue
+        rules[str(stop_id)] = TurnaroundRule(
+            stop_id=str(stop_id),
+            min_turnaround_min=max(0, int(item.get("min_turnaround_min") or 0)),
+        )
+    return rules
+
+
+def _build_deadhead_rules(
+    scenario_id: str,
+) -> Dict[Tuple[str, str], DeadheadRule]:
+    rules: Dict[Tuple[str, str], DeadheadRule] = {}
+    for item in store.get_deadhead_rules(scenario_id):
+        from_stop = item.get("from_stop")
+        to_stop = item.get("to_stop")
+        if from_stop is None or to_stop is None:
+            continue
+        key = (str(from_stop), str(to_stop))
+        rules[key] = DeadheadRule(
+            from_stop=key[0],
+            to_stop=key[1],
+            travel_time_min=max(0, int(item.get("travel_time_min") or 0)),
+        )
+    return rules
+
+
 def _build_dispatch_context(
     scenario_id: str,
     service_id: Optional[str] = None,
@@ -151,18 +228,45 @@ def _build_dispatch_context(
             "Import ODPT or GTFS timetable data, or adjust the depot route selection."
         )
 
+    vehicles = store.list_vehicles(scenario_id, depot_id=depot_id)
+
     # Convert raw trips to Trip objects
     trips: List[Trip] = []
 
     if raw_trips:
         for td in raw_trips:
+            route_allowed_types = _allowed_vehicle_types_for_route(
+                scenario_id,
+                depot_id,
+                str(td["route_id"]),
+                vehicles,
+            )
             trips.append(dict_to_trip(td))
+            trips[-1] = Trip(
+                trip_id=trips[-1].trip_id,
+                route_id=trips[-1].route_id,
+                origin=trips[-1].origin,
+                destination=trips[-1].destination,
+                departure_time=trips[-1].departure_time,
+                arrival_time=trips[-1].arrival_time,
+                distance_km=trips[-1].distance_km,
+                allowed_vehicle_types=_normalize_allowed_types(
+                    td.get("allowed_vehicle_types"),
+                    route_allowed_types,
+                ),
+            )
     else:
         # Build trips from timetable rows
         for i, row in enumerate(timetable_rows):
             trip_id = str(
                 row.get("trip_id")
                 or f"trip_{row['route_id']}_{row.get('direction', 'out')}_{i:03d}"
+            )
+            route_allowed_types = _allowed_vehicle_types_for_route(
+                scenario_id,
+                depot_id,
+                str(row["route_id"]),
+                vehicles,
             )
             trips.append(
                 Trip(
@@ -173,18 +277,18 @@ def _build_dispatch_context(
                     departure_time=row["departure"],
                     arrival_time=row["arrival"],
                     distance_km=float(row.get("distance_km", 0.0)),
-                    allowed_vehicle_types=tuple(
-                        row.get("allowed_vehicle_types", ["BEV", "ICE"])
+                    allowed_vehicle_types=_normalize_allowed_types(
+                        row.get("allowed_vehicle_types"),
+                        route_allowed_types,
                     ),
                 )
             )
 
-    # Build turnaround and deadhead rules from scenario (empty for now)
-    turnaround_rules: Dict[str, TurnaroundRule] = {}
-    deadhead_rules: Dict = {}
+    # Build turnaround and deadhead rules from scenario.
+    turnaround_rules = _build_turnaround_rules(scenario_id)
+    deadhead_rules = _build_deadhead_rules(scenario_id)
 
     # Build vehicle profiles from scenario vehicles
-    vehicles = store.list_vehicles(scenario_id, depot_id=depot_id)
     vehicle_profiles: Dict[str, VehicleProfile] = {}
     seen_types = set()
     for v in vehicles:
@@ -214,6 +318,70 @@ def _build_dispatch_context(
     )
 
 
+def _build_trips_payload(
+    scenario_id: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    context = _build_dispatch_context(scenario_id, service_id, depot_id)
+    return [trip_to_dict(t) for t in context.trips]
+
+
+def _build_graph_payload(
+    scenario_id: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    context = _build_dispatch_context(scenario_id, service_id, depot_id)
+    builder = ConnectionGraphBuilder()
+
+    combined_graph: Dict[str, Any] = {
+        "trips": [trip_to_dict(t) for t in context.trips],
+        "arcs": [],
+        "total_arcs": 0,
+        "feasible_arcs": 0,
+        "infeasible_arcs": 0,
+        "reason_counts": {},
+    }
+
+    for vt in list(context.vehicle_profiles.keys()):
+        analyzed_arcs = builder.analyze(context, vt)
+        partial = build_graph_response(context.trips, analyzed_arcs)
+        combined_graph["arcs"].extend(partial["arcs"])
+        combined_graph["feasible_arcs"] += partial["feasible_arcs"]
+        combined_graph["infeasible_arcs"] += partial["infeasible_arcs"]
+        combined_graph["total_arcs"] += partial["total_arcs"]
+        for reason_code, count in partial["reason_counts"].items():
+            combined_graph["reason_counts"][reason_code] = (
+                combined_graph["reason_counts"].get(reason_code, 0) + count
+            )
+
+    return combined_graph
+
+
+def _build_duties_payload(
+    scenario_id: str,
+    vehicle_type: Optional[str],
+    strategy: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    # strategy is reserved for future dispatch variants; greedy is the current baseline.
+    _ = strategy
+    context = _build_dispatch_context(scenario_id, service_id, depot_id)
+    pipeline = TimetableDispatchPipeline()
+    vehicle_types = (
+        [vehicle_type] if vehicle_type else list(context.vehicle_profiles.keys())
+    )
+
+    all_duties_json: List[Dict[str, Any]] = []
+    for vt in vehicle_types:
+        result = pipeline.run(context, vt)
+        for duty in result.duties:
+            all_duties_json.append(vehicle_duty_to_dict(duty))
+    return all_duties_json
+
+
 # ── Background task implementations ───────────────────────────
 
 
@@ -230,8 +398,7 @@ def _run_build_trips(
             progress=10,
             message="Building trips from timetable...",
         )
-        context = _build_dispatch_context(scenario_id, service_id, depot_id)
-        trips_json = [trip_to_dict(t) for t in context.trips]
+        trips_json = _build_trips_payload(scenario_id, service_id, depot_id)
         store.set_field(scenario_id, "trips", trips_json)
         store.update_scenario(scenario_id, status="trips_built")
         job_store.update_job(
@@ -263,25 +430,7 @@ def _run_build_graph(
             progress=10,
             message="Building feasibility graph...",
         )
-        context = _build_dispatch_context(scenario_id, service_id, depot_id)
-        builder = ConnectionGraphBuilder()
-
-        all_types = list(context.vehicle_profiles.keys())
-        combined_graph: Dict[str, Any] = {
-            "trips": [trip_to_dict(t) for t in context.trips],
-            "arcs": [],
-            "total_arcs": 0,
-            "feasible_arcs": 0,
-            "infeasible_arcs": 0,
-        }
-
-        for vt in all_types:
-            adjacency = builder.build(context, vt)
-            partial = build_graph_response(context.trips, adjacency)
-            combined_graph["arcs"].extend(partial["arcs"])
-            combined_graph["feasible_arcs"] += partial["feasible_arcs"]
-            combined_graph["total_arcs"] += partial["total_arcs"]
-
+        combined_graph = _build_graph_payload(scenario_id, service_id, depot_id)
         store.set_field(scenario_id, "graph", combined_graph)
         store.update_scenario(scenario_id, status="graph_built")
         job_store.update_job(
@@ -312,19 +461,13 @@ def _run_generate_duties(
         job_store.update_job(
             job_id, status="running", progress=10, message="Generating duties..."
         )
-        context = _build_dispatch_context(scenario_id, service_id, depot_id)
-        pipeline = TimetableDispatchPipeline()
-
-        vehicle_types = (
-            [vehicle_type] if vehicle_type else list(context.vehicle_profiles.keys())
+        all_duties_json = _build_duties_payload(
+            scenario_id,
+            vehicle_type,
+            strategy,
+            service_id,
+            depot_id,
         )
-
-        all_duties_json = []
-        for vt in vehicle_types:
-            result = pipeline.run(context, vt)
-            for duty in result.duties:
-                all_duties_json.append(vehicle_duty_to_dict(duty))
-
         store.set_field(scenario_id, "duties", all_duties_json)
         store.update_scenario(scenario_id, status="duties_generated")
         job_store.update_job(

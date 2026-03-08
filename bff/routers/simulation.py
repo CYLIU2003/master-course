@@ -8,21 +8,46 @@ Simulation endpoints:
 
 from __future__ import annotations
 
+import subprocess
 import traceback
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
+from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
+from bff.mappers.solver_results import (
+    deserialize_milp_result,
+    serialize_simulation_result,
+)
+from bff.routers.graph import _build_duties_payload, _build_graph_payload, _build_trips_payload
 from bff.store import job_store, scenario_store as store
+from src.milp_model import MILPResult
+from src.pipeline.simulate import simulate_problem_data
 
 router = APIRouter(tags=["simulation"])
 
 
 class RunSimulationBody(BaseModel):
-    force: bool = False
     service_id: Optional[str] = None
     depot_id: Optional[str] = None
+    source: str = "duties"
+
+
+def _simulation_capabilities() -> Dict[str, Any]:
+    return {
+        "implemented": True,
+        "async_job": True,
+        "job_persistence": dict(job_store.JOB_PERSISTENCE_INFO),
+        "primary_inputs": ["scenario", "dispatch_scope", "problem_data"],
+        "supported_sources": ["duties", "optimization_result"],
+        "notes": [
+            "Simulation runs against scenario-derived ProblemData.",
+            "Dispatch artifacts are auto-built when missing.",
+            "Results are persisted to the scenario snapshot; job state is not.",
+        ],
+    }
 
 
 def _not_found(scenario_id: str) -> HTTPException:
@@ -53,42 +78,162 @@ def _resolve_dispatch_scope(
     return scope
 
 
-def _run_simulation(
-    scenario_id: str, job_id: str, service_id: Optional[str], depot_id: Optional[str]
-) -> None:
-    """
-    Placeholder simulation runner.
-    Real implementation: call src/pipeline/simulate.py with the scenario's
-    duties, vehicle fleet, and simulation config.
-    """
+def _git_sha() -> str:
     try:
-        job_store.update_job(
-            job_id, status="running", progress=20, message="Running simulation..."
+        return (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        )
+    except Exception:
+        return ""
+
+
+def _ensure_dispatch_artifacts(scenario_id: str, service_id: str, depot_id: str) -> None:
+    if not store.get_field(scenario_id, "trips"):
+        store.set_field(scenario_id, "trips", _build_trips_payload(scenario_id, service_id, depot_id))
+    if not store.get_field(scenario_id, "graph"):
+        store.set_field(scenario_id, "graph", _build_graph_payload(scenario_id, service_id, depot_id))
+    if not store.get_field(scenario_id, "duties"):
+        store.set_field(
+            scenario_id,
+            "duties",
+            _build_duties_payload(scenario_id, None, "greedy", service_id, depot_id),
         )
 
+
+def _result_from_duties(data, duties_raw: list[dict]) -> MILPResult:
+    task_lut = {task.task_id: task for task in data.tasks}
+    vehicles_by_type: Dict[str, list] = {}
+    for vehicle in data.vehicles:
+        vehicles_by_type.setdefault(vehicle.vehicle_type, []).append(vehicle)
+
+    result = MILPResult(status="FEASIBLE", objective_value=0.0)
+    assigned_vehicle_ids: set[str] = set()
+    duty_index_by_type: Dict[str, int] = {}
+
+    for duty in duties_raw:
+        vehicle_type = str(duty.get("vehicle_type") or "BEV")
+        candidates = vehicles_by_type.get(vehicle_type) or data.vehicles
+        if not candidates:
+            continue
+        idx = duty_index_by_type.get(vehicle_type, 0)
+        vehicle = candidates[idx % len(candidates)]
+        duty_index_by_type[vehicle_type] = idx + 1
+        assigned_vehicle_ids.add(vehicle.vehicle_id)
+        trip_ids = [
+            str((leg.get("trip") or {}).get("trip_id"))
+            for leg in duty.get("legs", [])
+            if (leg.get("trip") or {}).get("trip_id") is not None
+        ]
+        result.assignment.setdefault(vehicle.vehicle_id, []).extend(trip_ids)
+
+    for vehicle in data.vehicles:
+        if vehicle.vehicle_type != "BEV":
+            continue
+        current_soc = vehicle.soc_init or vehicle.soc_max or vehicle.battery_capacity or 0.0
+        series = [current_soc for _ in range(data.num_periods + 1)]
+        for task_id in result.assignment.get(vehicle.vehicle_id, []):
+            task = task_lut.get(task_id)
+            if task is None:
+                continue
+            start = min(max(task.start_time_idx, 0), data.num_periods)
+            energy = task.energy_required_kwh_bev
+            for idx in range(start, data.num_periods + 1):
+                series[idx] = max(0.0, series[idx] - energy)
+        result.soc_series[vehicle.vehicle_id] = series
+
+    return result
+
+
+def _run_simulation(
+    scenario_id: str,
+    job_id: str,
+    service_id: str,
+    depot_id: str,
+    source: str,
+) -> None:
+    try:
+        job_store.update_job(
+            job_id, status="running", progress=15, message="Preparing simulation..."
+        )
         if not depot_id:
             raise ValueError("No depot selected. Configure dispatch scope first.")
 
-        duties = store.get_field(scenario_id, "duties") or []
-        if not duties:
-            raise ValueError("No duties found. Generate duties first.")
+        _ensure_dispatch_artifacts(scenario_id, service_id, depot_id)
+        scenario = store._load(scenario_id)
+        data, build_report = build_problem_data_from_scenario(
+            scenario,
+            depot_id=depot_id,
+            service_id=service_id,
+            mode="mode_milp_only",
+            use_existing_duties=True,
+        )
+        store.set_field(scenario_id, "problemdata_build_audit", build_report.to_dict())
 
-        # Stub result — real pipeline integration is future work
+        if source == "optimization_result":
+            optimization_result = store.get_field(scenario_id, "optimization_result") or {}
+            solver_result = optimization_result.get("solver_result")
+            if not solver_result:
+                raise ValueError("No optimization_result found. Run optimization first.")
+            milp_result = deserialize_milp_result(solver_result)
+        else:
+            duties = store.get_field(scenario_id, "duties") or []
+            if not duties:
+                raise ValueError("No duties found. Generate duties first.")
+            milp_result = _result_from_duties(data, duties)
+
+        job_store.update_job(
+            job_id, status="running", progress=60, message="Running simulator..."
+        )
+        sim_output = simulate_problem_data(data, milp_result)
+        sim_payload = serialize_simulation_result(sim_output["sim"])
+
+        total_distance_km = 0.0
+        total_energy_kwh = 0.0
+        task_lut = {task.task_id: task for task in data.tasks}
+        for task_ids in milp_result.assignment.values():
+            for task_id in task_ids:
+                task = task_lut.get(task_id)
+                if task is None:
+                    continue
+                total_distance_km += task.distance_km
+                total_energy_kwh += task.energy_required_kwh_bev
+
         result: Dict[str, Any] = {
             "scenario_id": scenario_id,
-            "scope": {
-                "serviceId": service_id or "WEEKDAY",
-                "depotId": depot_id,
+            "scope": {"serviceId": service_id, "depotId": depot_id},
+            "source": source,
+            "soc_trace": milp_result.soc_series,
+            "charger_usage_timeline": milp_result.charge_schedule,
+            "energy_consumption": milp_result.charge_power_kw,
+            "total_energy_kwh": total_energy_kwh,
+            "total_distance_km": total_distance_km,
+            "feasibility_violations": sim_payload.get("feasibility_violations", []),
+            "simulation_summary": sim_payload,
+        }
+
+        simulation_audit = {
+            "scenario_id": scenario_id,
+            "depot_id": depot_id,
+            "service_id": service_id,
+            "case_type": scenario.get("experiment_case_type"),
+            "input_counts": {
+                "vehicles": build_report.vehicle_count,
+                "tasks": build_report.task_count,
+                "duties": len(store.get_field(scenario_id, "duties") or []),
             },
-            "duties": duties,
-            "energy_consumption": [],
-            "soc_trace": [],
-            "total_energy_kwh": 0.0,
-            "total_distance_km": sum(d.get("total_distance_km", 0.0) for d in duties),
-            "feasibility_violations": [],
+            "output_counts": {
+                "soc_traces": len(milp_result.soc_series),
+                "feasibility_violations": len(result["feasibility_violations"]),
+            },
+            "warnings": build_report.warnings,
+            "errors": build_report.errors,
+            "source": source,
+            "git_sha": _git_sha(),
+            "executed_at": datetime.now(timezone.utc).isoformat(),
         }
 
         store.set_field(scenario_id, "simulation_result", result)
+        store.set_field(scenario_id, "simulation_audit", simulation_audit)
         store.update_scenario(scenario_id, status="simulated")
         job_store.update_job(
             job_id,
@@ -118,6 +263,12 @@ def get_simulation_result(scenario_id: str) -> Dict[str, Any]:
     return result
 
 
+@router.get("/scenarios/{scenario_id}/simulation/capabilities")
+def get_simulation_capabilities(scenario_id: str) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    return _simulation_capabilities()
+
+
 @router.post("/scenarios/{scenario_id}/run-simulation")
 def run_simulation(
     scenario_id: str,
@@ -125,18 +276,31 @@ def run_simulation(
     body: Optional[RunSimulationBody] = None,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    request = body or RunSimulationBody()
     scope = _resolve_dispatch_scope(
         scenario_id,
-        service_id=body.service_id if body else None,
-        depot_id=body.depot_id if body else None,
+        service_id=request.service_id,
+        depot_id=request.depot_id,
         persist=True,
     )
     job = job_store.create_job()
+    job_store.update_job(
+        job.job_id,
+        metadata={
+            "scenario_id": scenario_id,
+            "service_id": scope.get("serviceId") or "WEEKDAY",
+            "depot_id": scope.get("depotId"),
+            "stage": "queued",
+            "source": request.source,
+            "persistence": dict(job_store.JOB_PERSISTENCE_INFO),
+        },
+    )
     background_tasks.add_task(
         _run_simulation,
         scenario_id,
         job.job_id,
-        scope.get("serviceId"),
+        scope.get("serviceId") or "WEEKDAY",
         scope.get("depotId"),
+        request.source,
     )
     return job_store.job_to_dict(job)

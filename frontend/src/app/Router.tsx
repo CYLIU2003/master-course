@@ -12,7 +12,6 @@ import { ScenarioListPage } from "@/pages/scenario/ScenarioListPage";
 import { ScenarioOverviewPage } from "@/pages/scenario/ScenarioOverviewPage";
 
 // Tab 1: Planning
-import { MasterPlanningPage } from "@/pages/planning/MasterPlanningPage";
 import { MasterDataPage } from "@/pages/planning/MasterDataPage";
 import { VehicleTemplatesPage } from "@/pages/planning/VehicleTemplatesPage";
 import { TimetablePage } from "@/pages/inputs/TimetablePage";
@@ -74,7 +73,7 @@ const router = createBrowserRouter([
 
       // ── Tab 1: Planning (master data) ─────────────────────
       { path: "planning", element: <MasterDataPage /> },
-      { path: "planning-legacy", element: <MasterPlanningPage /> },
+      { path: "planning-legacy", element: <Navigate to="../planning" replace /> },
       { path: "vehicle-templates", element: <VehicleTemplatesPage /> },
       { path: "timetable", element: <TimetablePage /> },
       { path: "deadhead", element: <DeadheadPage /> },

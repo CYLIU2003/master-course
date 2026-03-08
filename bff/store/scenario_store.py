@@ -42,6 +42,25 @@ from typing import Any, Dict, List, Optional
 _STORE_DIR = Path(__file__).parent.parent.parent / "outputs" / "scenarios"
 
 
+def _default_dispatch_scope() -> Dict[str, Any]:
+    return {"depotId": None, "serviceId": "WEEKDAY"}
+
+
+def _default_v1_2_fields() -> Dict[str, Any]:
+    return {
+        "deadhead_rules": [],
+        "turnaround_rules": [],
+        "charger_sites": [],
+        "chargers": [],
+        "pv_profiles": [],
+        "energy_price_profiles": [],
+        "experiment_case_type": None,
+        "problemdata_build_audit": None,
+        "optimization_audit": None,
+        "simulation_audit": None,
+    }
+
+
 def _ensure_dir() -> None:
     _STORE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -63,7 +82,17 @@ def _load(scenario_id: str) -> Dict[str, Any]:
     doc.setdefault("stops", [])
     doc.setdefault("timetable_rows", [])
     doc.setdefault("stop_timetables", [])
-    doc.setdefault("dispatch_scope", {"depotId": None, "serviceId": "WEEKDAY"})
+    doc.setdefault("calendar", _default_calendar())
+    doc.setdefault("calendar_dates", [])
+    doc.setdefault("simulation_config", None)
+    doc.setdefault("trips", None)
+    doc.setdefault("graph", None)
+    doc.setdefault("duties", None)
+    doc.setdefault("simulation_result", None)
+    doc.setdefault("optimization_result", None)
+    doc.setdefault("dispatch_scope", _default_dispatch_scope())
+    for key, value in _default_v1_2_fields().items():
+        doc.setdefault(key, value)
     return doc
 
 
@@ -92,6 +121,9 @@ def _invalidate_dispatch_artifacts(doc: Dict[str, Any]) -> None:
     doc["duties"] = None
     doc["simulation_result"] = None
     doc["optimization_result"] = None
+    doc["problemdata_build_audit"] = None
+    doc["optimization_audit"] = None
+    doc["simulation_audit"] = None
     doc["meta"]["status"] = "draft"
 
 
@@ -297,7 +329,7 @@ def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
         "stop_timetables": [],
         "calendar": _default_calendar(),
         "calendar_dates": [],
-        "dispatch_scope": {"depotId": None, "serviceId": "WEEKDAY"},
+        "dispatch_scope": _default_dispatch_scope(),
         "simulation_config": None,
         "trips": None,
         "graph": None,
@@ -305,6 +337,7 @@ def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
         "simulation_result": None,
         "optimization_result": None,
     }
+    doc.update(_default_v1_2_fields())
     _save(doc)
     return meta
 
@@ -980,6 +1013,66 @@ def set_vehicle_route_permissions(
         if item.get("vehicleId") is not None and item.get("routeId") is not None
     ]
     doc["vehicle_route_permissions"] = sanitized
+    _invalidate_dispatch_artifacts(doc)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return list(sanitized)
+
+
+def get_deadhead_rules(scenario_id: str) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    return list(doc.get("deadhead_rules") or [])
+
+
+def set_deadhead_rules(
+    scenario_id: str, rules: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    sanitized = [
+        {
+            "from_stop": str(item.get("from_stop")),
+            "to_stop": str(item.get("to_stop")),
+            "travel_time_min": int(item.get("travel_time_min") or 0),
+            "distance_km": float(item.get("distance_km") or 0.0),
+            "energy_kwh_bev": (
+                float(item.get("energy_kwh_bev"))
+                if item.get("energy_kwh_bev") is not None
+                else None
+            ),
+            "fuel_l_ice": (
+                float(item.get("fuel_l_ice"))
+                if item.get("fuel_l_ice") is not None
+                else None
+            ),
+        }
+        for item in rules
+        if item.get("from_stop") is not None and item.get("to_stop") is not None
+    ]
+    doc["deadhead_rules"] = sanitized
+    _invalidate_dispatch_artifacts(doc)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return list(sanitized)
+
+
+def get_turnaround_rules(scenario_id: str) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    return list(doc.get("turnaround_rules") or [])
+
+
+def set_turnaround_rules(
+    scenario_id: str, rules: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    sanitized = [
+        {
+            "stop_id": str(item.get("stop_id")),
+            "min_turnaround_min": int(item.get("min_turnaround_min") or 0),
+        }
+        for item in rules
+        if item.get("stop_id") is not None
+    ]
+    doc["turnaround_rules"] = sanitized
     _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)

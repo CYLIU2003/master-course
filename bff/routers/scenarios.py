@@ -648,29 +648,19 @@ def export_timetable_csv(
 
 @router.get("/scenarios/{scenario_id}/deadhead-rules")
 def get_deadhead_rules(scenario_id: str) -> Dict[str, Any]:
-    """
-    Returns deadhead rules stored in the scenario document.
-    These are seeded from constant/ CSV data when a scenario is created
-    (future work). For now returns empty list.
-    """
     try:
         store.get_scenario(scenario_id)  # verify exists
     except KeyError:
         raise _not_found(scenario_id)
-    items: List[Dict[str, Any]] = []
-    return {"items": items, "total": 0}
+    items = store.get_deadhead_rules(scenario_id)
+    return {"items": items, "total": len(items)}
 
 
 @router.get("/scenarios/{scenario_id}/turnaround-rules")
 def get_turnaround_rules(scenario_id: str) -> Dict[str, Any]:
-    """
-    Returns turnaround rules stored in the scenario document.
-    These are seeded from constant/ CSV data when a scenario is created
-    (future work). For now returns empty list.
-    """
     try:
         store.get_scenario(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
-    items: List[Dict[str, Any]] = []
-    return {"items": items, "total": 0}
+    items = store.get_turnaround_rules(scenario_id)
+    return {"items": items, "total": len(items)}

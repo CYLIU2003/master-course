@@ -21,8 +21,15 @@ from .graph_builder import ConnectionGraphBuilder
 from .dispatcher import DispatchGenerator
 from .validator import DutyValidator
 from .pipeline import TimetableDispatchPipeline, PipelineResult
-from .context_builder import load_dispatch_context_from_csv
-from .odpt_adapter import supplement_context_from_odpt
+try:
+    from .context_builder import load_dispatch_context_from_csv
+except ModuleNotFoundError:  # pragma: no cover - optional dependency (pandas)
+    load_dispatch_context_from_csv = None
+
+try:
+    from .odpt_adapter import supplement_context_from_odpt
+except ModuleNotFoundError:  # pragma: no cover - optional dependency stack
+    supplement_context_from_odpt = None
 from .problemdata_adapter import (
     DispatchTravelBuildReport,
     build_travel_connections_via_dispatch,

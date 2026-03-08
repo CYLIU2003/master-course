@@ -87,6 +87,7 @@ class TestFeasibilityEngineSameStop:
         result = engine.can_connect(trip_i, trip_j, ctx, "BEV")
 
         assert result.feasible is True
+        assert result.reason_code == "feasible"
         assert result.slack_min == 20
         assert result.deadhead_time_min == 0
 
@@ -104,6 +105,7 @@ class TestFeasibilityEngineSameStop:
         result = engine.can_connect(trip_i, trip_j, ctx, "BEV")
 
         assert result.feasible is False
+        assert result.reason_code == "insufficient_time"
         assert result.slack_min < 0
         assert "Insufficient time" in result.reason
 
@@ -154,6 +156,7 @@ class TestFeasibilityEngineDeadhead:
         result = engine.can_connect(trip_i, trip_j, ctx, "BEV")
 
         assert result.feasible is False
+        assert result.reason_code == "missing_deadhead"
         assert "No deadhead path" in result.reason
 
     def test_deadhead_rule_exists_time_ok(self):
@@ -198,6 +201,7 @@ class TestFeasibilityEngineDeadhead:
         result = engine.can_connect(trip_i, trip_j, ctx, "BEV")
 
         assert result.feasible is False
+        assert result.reason_code == "insufficient_time"
         assert "Insufficient time" in result.reason
 
 
@@ -216,6 +220,7 @@ class TestFeasibilityEngineVehicleType:
         result = engine.can_connect(trip_i, trip_j, ctx, "BEV")
 
         assert result.feasible is False
+        assert result.reason_code == "vehicle_type_mismatch"
         assert "not allowed" in result.reason
 
     def test_vehicle_type_allowed_passes(self):

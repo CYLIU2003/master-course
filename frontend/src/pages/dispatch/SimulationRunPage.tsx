@@ -1,6 +1,11 @@
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useRunSimulation, useSimulationResult, useDispatchScope } from "@/hooks";
+import {
+  useRunSimulation,
+  useSimulationResult,
+  useSimulationCapabilities,
+  useDispatchScope,
+} from "@/hooks";
 import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { DispatchScopePanel } from "@/features/planning";
 
@@ -9,6 +14,7 @@ export function SimulationRunPage() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const { data: scope } = useDispatchScope(scenarioId!);
   const { data: result, isLoading, error } = useSimulationResult(scenarioId!);
+  const { data: capabilities } = useSimulationCapabilities(scenarioId!);
   const runMutation = useRunSimulation(scenarioId!);
 
   const handleRun = () => {
@@ -35,6 +41,13 @@ export function SimulationRunPage() {
           </button>
         }
       >
+        {capabilities && (
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+            <p className="font-semibold">Operational boundary</p>
+            <p className="mt-1">{capabilities.job_persistence.warning}</p>
+            <p className="mt-1">Sources: {(capabilities.supported_sources ?? []).join(", ")}</p>
+          </div>
+        )}
         {isLoading ? (
           <LoadingBlock message={t("simulation.loading")} />
         ) : error && !error.message.includes("404") ? (

@@ -1,0 +1,59 @@
+{
+  "$id": "https://master-course/schemas/result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OptimizationResult",
+  "type": "object",
+  "required": ["solver_mode", "solver_status", "objective_value", "feasible"],
+  "properties": {
+    "solver_mode": { "type": "string" },
+    "solver_status": { "type": "string" },
+    "objective_value": { "type": "number" },
+    "feasible": { "type": "boolean" },
+    "served_trip_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "unserved_trip_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "vehicle_paths": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "cost_breakdown": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "operator_stats": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "selected": { "type": "integer" },
+          "accepted": { "type": "integer" },
+          "rejected": { "type": "integer" },
+          "reward": { "type": "number" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "incumbent_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["iteration", "objective_value", "feasible"],
+        "properties": {
+          "iteration": { "type": "integer" },
+          "objective_value": { "type": "number" },
+          "feasible": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}
