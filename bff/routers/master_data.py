@@ -62,6 +62,41 @@ def _check_scenario(scenario_id: str) -> None:
         raise _scenario_not_found(scenario_id)
 
 
+def _load_odpt_bundle(
+    *,
+    operator: str,
+    dump: bool,
+    force_refresh: bool,
+    ttl_sec: int,
+) -> Dict[str, Any]:
+    if force_refresh:
+        return transit_catalog.refresh_odpt_snapshot(
+            operator=operator,
+            dump=dump,
+            force_refresh=True,
+            ttl_sec=ttl_sec,
+        )
+    bundle = transit_catalog.load_existing_odpt_snapshot(operator=operator)
+    if bundle is not None:
+        return bundle
+    raise RuntimeError(
+        "No saved ODPT snapshot is available. Run `python3 catalog_update_app.py refresh odpt` "
+        "or retry with forceRefresh=true."
+    )
+
+
+def _load_gtfs_bundle(*, feed_path: str, force_refresh: bool) -> Dict[str, Any]:
+    if force_refresh:
+        return transit_catalog.refresh_gtfs_snapshot(feed_path=feed_path)
+    bundle = transit_catalog.load_existing_gtfs_snapshot(feed_path=feed_path)
+    if bundle is not None:
+        return bundle
+    raise RuntimeError(
+        "No saved GTFS snapshot is available. Run `python3 catalog_update_app.py refresh gtfs` "
+        "or retry with forceRefresh=true."
+    )
+
+
 # ── Depot Pydantic models ──────────────────────────────────────
 
 
@@ -230,6 +265,7 @@ class ImportOdptStopsBody(BaseModel):
 
 class ImportGtfsStopsBody(BaseModel):
     feedPath: str = DEFAULT_GTFS_FEED_PATH
+    forceRefresh: bool = False
 
 
 # ── Vehicle endpoints ──────────────────────────────────────────
@@ -421,6 +457,7 @@ class ImportOdptRoutesBody(BaseModel):
 
 class ImportGtfsRoutesBody(BaseModel):
     feedPath: str = DEFAULT_GTFS_FEED_PATH
+    forceRefresh: bool = False
 
 
 def _build_explorer_overview(scenario_id: str, operator: Optional[str]) -> Dict[str, Any]:
@@ -475,7 +512,7 @@ def list_stops(scenario_id: str) -> Dict[str, Any]:
 def import_odpt_stops(scenario_id: str, body: ImportOdptStopsBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        bundle = transit_catalog.get_or_refresh_odpt_snapshot(
+        bundle = _load_odpt_bundle(
             operator=body.operator,
             dump=body.dump,
             force_refresh=body.forceRefresh,
@@ -515,7 +552,10 @@ def import_odpt_stops(scenario_id: str, body: ImportOdptStopsBody) -> Dict[str, 
 def import_gtfs_stops(scenario_id: str, body: ImportGtfsStopsBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=body.feedPath)
+        bundle = _load_gtfs_bundle(
+            feed_path=body.feedPath,
+            force_refresh=body.forceRefresh,
+        )
         imported_stops = list(bundle.get("stops") or [])
         meta = bundle.get("meta") or {}
         quality = summarize_gtfs_stop_import(imported_stops, {"meta": meta})
@@ -858,7 +898,7 @@ def delete_route(scenario_id: str, route_id: str) -> Response:
 def import_odpt_routes(scenario_id: str, body: ImportOdptRoutesBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        bundle = transit_catalog.get_or_refresh_odpt_snapshot(
+        bundle = _load_odpt_bundle(
             operator=body.operator,
             dump=body.dump,
             force_refresh=body.forceRefresh,
@@ -897,7 +937,10 @@ def import_odpt_routes(scenario_id: str, body: ImportOdptRoutesBody) -> Dict[str
 def import_gtfs_routes(scenario_id: str, body: ImportGtfsRoutesBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=body.feedPath)
+        bundle = _load_gtfs_bundle(
+            feed_path=body.feedPath,
+            force_refresh=body.forceRefresh,
+        )
         imported_routes = list(bundle.get("routes") or [])
         meta = bundle.get("meta") or {}
         quality = summarize_gtfs_routes_import(imported_routes, {"meta": meta})

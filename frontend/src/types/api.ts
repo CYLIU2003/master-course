@@ -205,6 +205,7 @@ export interface ImportOdptRoutesResponse extends ApiListResponse<Route> {
 
 export interface ImportGtfsRoutesRequest {
   feedPath?: string;
+  forceRefresh?: boolean;
 }
 
 export interface ImportGtfsRoutesResponse extends ApiListResponse<Route> {
@@ -264,6 +265,7 @@ export interface ImportOdptStopsResponse extends ApiListResponse<Stop> {
 
 export interface ImportGtfsStopsRequest {
   feedPath?: string;
+  forceRefresh?: boolean;
 }
 
 export interface ImportGtfsStopsResponse extends ApiListResponse<Stop> {
@@ -372,6 +374,7 @@ export interface ImportOdptTimetableResponse extends ApiListResponse<TimetableRo
 
 export interface ImportGtfsTimetableRequest {
   feedPath?: string;
+  forceRefresh?: boolean;
   reset?: boolean;
 }
 
@@ -481,6 +484,7 @@ export interface ImportOdptStopTimetableResponse
 
 export interface ImportGtfsStopTimetableRequest {
   feedPath?: string;
+  forceRefresh?: boolean;
   reset?: boolean;
 }
 

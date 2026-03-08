@@ -21,6 +21,7 @@ outputs/
 derived/
 results/
 backend/.env
+backend/.cache/
 
 # Per-operator SQLite databases (generated on import)
 data/*.db

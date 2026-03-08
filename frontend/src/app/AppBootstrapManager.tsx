@@ -78,64 +78,82 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         });
         if (cancelled) return;
         updateStep("cache", { status: "success", progress: 100 });
+        const runMasterStep = async () => {
+          updateStep("master", {
+            status: "running",
+            progress: 20,
+            detailMessage: "depots / routes / stops を先読み中",
+          });
+          await measureAsyncStep("boot:master", async () => {
+            await Promise.all([
+              queryClient.ensureQueryData({
+                queryKey: depotKeys.all(currentScenarioId),
+                queryFn: () => depotApi.list(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: routeKeys.all(currentScenarioId),
+                queryFn: () => routeApi.list(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: stopKeys.all(currentScenarioId),
+                queryFn: () => stopApi.list(currentScenarioId),
+              }),
+            ]);
+          });
+          if (cancelled) {
+            return;
+          }
+          updateStep("master", { status: "success", progress: 100 });
+          setTabStatus("planning", "ready", "基本マスタの先読みが完了");
+        };
 
-        updateStep("master", {
-          status: "running",
-          progress: 20,
-          detailMessage: "depots / routes / stops を先読み中",
-        });
-        await measureAsyncStep("boot:master", async () => {
-          await Promise.all([
-            queryClient.ensureQueryData({
-              queryKey: depotKeys.all(currentScenarioId),
-              queryFn: () => depotApi.list(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: routeKeys.all(currentScenarioId),
-              queryFn: () => routeApi.list(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: stopKeys.all(currentScenarioId),
-              queryFn: () => stopApi.list(currentScenarioId),
-            }),
-          ]);
-        });
-        if (cancelled) return;
-        updateStep("master", { status: "success", progress: 100 });
-        setTabStatus("planning", "ready", "基本マスタの先読みが完了");
+        const runTimetableStep = async () => {
+          updateStep("timetable", {
+            status: "running",
+            progress: 20,
+            detailMessage: "timetable / stop-timetable summary を構築中",
+          });
+          await measureAsyncStep("boot:timetable", async () => {
+            await Promise.all([
+              queryClient.ensureQueryData({
+                queryKey: scenarioKeys.timetableSummary(currentScenarioId),
+                queryFn: () => scenarioApi.getTimetableSummary(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: scenarioKeys.stopTimetablesSummary(currentScenarioId),
+                queryFn: () => scenarioApi.getStopTimetablesSummary(currentScenarioId),
+              }),
+            ]);
+          });
+          if (cancelled) {
+            return;
+          }
+          updateStep("timetable", { status: "success", progress: 100 });
+          setTabStatus("timetable", "ready", "時刻表 summary の先読みが完了");
+        };
 
-        updateStep("timetable", {
-          status: "running",
-          progress: 20,
-          detailMessage: "timetable / stop-timetable summary を構築中",
-        });
-        await measureAsyncStep("boot:timetable", async () => {
-          await Promise.all([
-            queryClient.ensureQueryData({
-              queryKey: scenarioKeys.timetableSummary(currentScenarioId),
-              queryFn: () => scenarioApi.getTimetableSummary(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: scenarioKeys.stopTimetablesSummary(currentScenarioId),
-              queryFn: () => scenarioApi.getStopTimetablesSummary(currentScenarioId),
-            }),
-          ]);
-        });
-        if (cancelled) return;
-        updateStep("timetable", { status: "success", progress: 100 });
-        setTabStatus("timetable", "ready", "時刻表 summary の先読みが完了");
+        const runExplorerStep = async () => {
+          updateStep("explorer", {
+            status: "running",
+            progress: 20,
+            detailMessage: "public-data overview を読込中",
+          });
+          await measureAsyncStep("boot:explorer", () =>
+            fetchMaybeJson(`/api/scenarios/${currentScenarioId}/explorer/overview?operator=tokyu`),
+          );
+          if (cancelled) {
+            return;
+          }
+          updateStep("explorer", { status: "success", progress: 100 });
+          setTabStatus("explorer", "ready", "Explorer overview の先読みが完了");
+        };
 
-        updateStep("explorer", {
-          status: "running",
-          progress: 20,
-          detailMessage: "public-data overview を読込中",
-        });
-        await measureAsyncStep("boot:explorer", () =>
-          fetchMaybeJson(`/api/scenarios/${currentScenarioId}/explorer/overview?operator=tokyu`),
-        );
+        await Promise.all([
+          runMasterStep(),
+          runTimetableStep(),
+          runExplorerStep(),
+        ]);
         if (cancelled) return;
-        updateStep("explorer", { status: "success", progress: 100 });
-        setTabStatus("explorer", "ready", "Explorer overview の先読みが完了");
 
         updateStep("tabs", {
           status: "running",

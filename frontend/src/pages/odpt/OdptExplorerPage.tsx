@@ -1547,6 +1547,7 @@ export function OdptExplorerPage() {
 
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <span>現在ソース: {selectedScenarioOperator === "tokyu" ? "Tokyu / ODPT" : "Toei / GTFS"}</span>
+          <span>差分取得は保存済み snapshot 優先です。重い更新は外部 updater で回す前提です。</span>
           <button
             onClick={() =>
               importScenarioSource(selectedScenarioOperator === "tokyu" ? "odpt" : "gtfs")
@@ -2069,6 +2070,9 @@ export function OdptExplorerPage() {
             <p className="text-sm text-slate-500">
               ODPT と GTFS を共通 SQLite カタログに保持し、route-wise API で便と停留所時刻を読む。
             </p>
+            <p className="mt-1 text-xs text-slate-500">
+              通常運用では `python3 catalog_update_app.py refresh odpt|gtfs` で catalog を更新し、この画面では snapshot の確認と scenario 反映を行います。
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -2092,7 +2096,7 @@ export function OdptExplorerPage() {
           <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
             {catalogLoading
               ? "カタログを読み込み中..."
-              : "まだ snapshot がありません。上の refresh ボタンか、scenario import を実行してください。"}
+              : "まだ snapshot がありません。通常は `python3 catalog_update_app.py refresh odpt|gtfs` を先に実行し、必要ならこの画面から refresh できます。"}
           </div>
         ) : (
           <>

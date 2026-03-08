@@ -194,6 +194,11 @@ python -m pytest tests/ -v
 # Frontend ビルド確認
 cd frontend && npm run build
 
+# 独立データ更新アプリ
+python catalog_update_app.py --help
+python catalog_update_app.py refresh odpt --force-refresh
+python catalog_update_app.py sync gtfs --scenario latest --refresh --resources all
+
 # Frontend Lint
 cd frontend && npm run lint
 
@@ -663,7 +668,9 @@ Route ──1:N──→ Trip
 
 ### 大規模時刻表対応 UI
 
-- `AppBootstrapManager` と `BootSplashOverlay` が scenario 起動時に段階 prefetch を行い、進捗率・ステップ名・件数を表示します。
+- ODPT / GTFS の重い更新処理は main app から切り離し、`catalog_update_app.py` で個別実行できます。通常の frontend/BFF 起動では保存済み catalog / scenario データを使います。
+- `AppBootstrapManager` と `BootSplashOverlay` が scenario 起動時に段階 prefetch を行い、進捗率・ステップ名・件数を表示します。依存のない `master / timetable / explorer` は並列 prewarm です。
+- Scenario import / Public Data Explorer は保存済み snapshot を優先して読み込みます。snapshot が無い状態では自動 refresh せず、`forceRefresh=true` を明示したときだけ app 側で更新を実行します。
 - 時刻表 UI は summary-first です。`/timetable/summary` と `/stop-timetables/summary` を先に読み、全件本文は `limit/offset` page に遅延します。
 - dispatch UI も summary-first です。`/trips/summary`、`/graph/summary`、`/duties/summary` を先に読み、一覧は page API で取得します。
 - `TabWarmBoundary` が planning / timetable / public-data / dispatch タブの warm state を扱い、重い tab mount を抑制します。
@@ -672,6 +679,35 @@ Route ──1:N──→ Trip
 - Router は route-level lazy loading を採用し、Vite build の main chunk は縮小済みです。現状の build warning は主に `MapLibre GL` 由来の地図 chunk です。
 - `/jobs/{job_id}` poll により、Trips / Graph / Duties / Simulation / Optimization の backend job progress を画面側で確認できます。
 - 開発モードでは `DebugPerfOverlay` が render count、selector time、import time、tab switch time を右下に表示します。
+
+### 独立データ更新アプリ
+
+`catalog_update_app.py` は ODPT / GTFS の catalog refresh と scenario sync を行う standalone Python app です。通常運用ではこの CLI で先に snapshot を更新し、frontend 側はその snapshot を参照して差分確認・取込を行います。
+
+```powershell
+# PowerShell / Windows 推奨
+.\catalog_update_app.ps1 --help
+.\catalog_update_app.ps1 refresh odpt --force-refresh
+.\catalog_update_app.ps1 refresh gtfs --feed-path GTFS/ToeiBus-GTFS
+.\catalog_update_app.ps1 sync odpt --scenario latest --refresh --resources all
+.\catalog_update_app.ps1 sync gtfs --scenario latest --refresh --resources routes,stops,timetable,stop-timetables,calendar
+```
+
+```bash
+# 直接 python を使う場合
+python catalog_update_app.py --help
+python catalog_update_app.py refresh odpt --force-refresh
+python catalog_update_app.py refresh gtfs --feed-path GTFS/ToeiBus-GTFS
+python catalog_update_app.py sync odpt --scenario latest --refresh --resources all
+python catalog_update_app.py sync gtfs --scenario latest --refresh --resources routes,stops,timetable,stop-timetables,calendar
+
+# 対話メニュー
+python catalog_update_app.py
+```
+
+PowerShell で `python3` を使うと、環境によっては Python 本体ではなく Windows の alias 側に吸われて期待通りに動かないことがあります。`python` か `.\catalog_update_app.ps1` を使ってください。
+
+この分離により、通常の frontend / BFF 起動時に ODPT / GTFS refresh を前提にしない運用ができます。機能自体は main app 側にも残りますが、重い更新作業は updater app 側で行う想定です。
 
 ---
 

@@ -57,7 +57,7 @@ tests/       回帰テスト
 
 - **実装（Frontend 基盤）**:
   - `frontend/src/app/AppBootstrapManager.tsx`
-    - app context / scenario / dispatch scope / master data / timetable summary / explorer overview を段階 prefetch。
+    - app context / scenario / dispatch scope を確認後、依存のない master data / timetable summary / explorer overview を並列 prefetch。
   - `frontend/src/app/BootSplashOverlay.tsx`
     - boot 進捗オーバーレイ + 完了時フェードアウトを実装。
   - `frontend/src/stores/boot-store.ts`
@@ -66,6 +66,8 @@ tests/       回帰テスト
     - planning / timetable / explorer / dispatch の warm state を管理。
   - `frontend/src/stores/import-job-store.ts`
     - import job の stage progress / logs を共通管理。
+  - `catalog_update_app.py`
+    - ODPT / GTFS の catalog refresh と scenario sync を行う standalone updater CLI を追加。
 
 - **実装（Frontend 表示最適化）**:
   - `frontend/src/pages/inputs/TimetablePage.tsx`
@@ -83,6 +85,15 @@ tests/       回帰テスト
     - VirtualizedList 化。
   - `frontend/src/features/common/TabWarmBoundary.tsx`
     - warm 中 placeholder を共通化。
+
+- **実装（Catalog / Import 運用分離）**:
+  - `bff/services/transit_catalog.py`
+    - source + dataset_ref から保存済み snapshot を引く helper を追加。
+  - `bff/routers/master_data.py`
+  - `bff/routers/scenarios.py`
+  - `bff/routers/public_data.py`
+    - import / public-data fetch を「保存済み snapshot 優先、明示時だけ refresh」に変更。
+    - snapshot 不在時は `catalog_update_app.py` を案内するエラーを返す。
 
 - **実装（Perf / Worker）**:
   - `frontend/src/utils/perf/`

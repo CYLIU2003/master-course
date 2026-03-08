@@ -361,6 +361,7 @@ class ImportOdptTimetableBody(BaseModel):
 
 class ImportGtfsTimetableBody(BaseModel):
     feedPath: str = DEFAULT_GTFS_FEED_PATH
+    forceRefresh: bool = False
     reset: bool = True
 
 
@@ -376,6 +377,7 @@ class ImportOdptStopTimetableBody(BaseModel):
 
 class ImportGtfsStopTimetableBody(BaseModel):
     feedPath: str = DEFAULT_GTFS_FEED_PATH
+    forceRefresh: bool = False
     reset: bool = True
 
 
@@ -384,6 +386,51 @@ class ImportGtfsStopTimetableBody(BaseModel):
 
 def _not_found(scenario_id: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
+
+
+def _load_odpt_bundle(
+    *,
+    operator: str,
+    dump: bool,
+    force_refresh: bool,
+    ttl_sec: int,
+    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
+) -> Dict[str, Any]:
+    if force_refresh:
+        return transit_catalog.refresh_odpt_snapshot(
+            operator=operator,
+            dump=dump,
+            force_refresh=True,
+            ttl_sec=ttl_sec,
+            progress_callback=progress_callback,
+        )
+    bundle = transit_catalog.load_existing_odpt_snapshot(operator=operator)
+    if bundle is not None:
+        return bundle
+    raise RuntimeError(
+        "No saved ODPT snapshot is available. Run `python3 catalog_update_app.py refresh odpt` "
+        "or retry with forceRefresh=true."
+    )
+
+
+def _load_gtfs_bundle(
+    *,
+    feed_path: str,
+    force_refresh: bool,
+    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
+) -> Dict[str, Any]:
+    if force_refresh:
+        return transit_catalog.refresh_gtfs_snapshot(
+            feed_path=feed_path,
+            progress_callback=progress_callback,
+        )
+    bundle = transit_catalog.load_existing_gtfs_snapshot(feed_path=feed_path)
+    if bundle is not None:
+        return bundle
+    raise RuntimeError(
+        "No saved GTFS snapshot is available. Run `python3 catalog_update_app.py refresh gtfs` "
+        "or retry with forceRefresh=true."
+    )
 
 
 def _pick_latest_scenario(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -701,55 +748,53 @@ def import_timetable_csv(scenario_id: str, body: ImportCsvBody) -> Dict[str, Any
     return {"items": rows, "total": len(rows)}
 
 
-@router.post("/scenarios/{scenario_id}/timetable/import-odpt")
-def import_timetable_odpt(
-    scenario_id: str, body: ImportOdptTimetableBody
+def _import_odpt_timetable_data(
+    scenario_id: str,
+    body: ImportOdptTimetableBody,
+    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
 ) -> Dict[str, Any]:
     try:
         store.get_scenario(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
 
-    try:
-        bundle = transit_catalog.get_or_refresh_odpt_snapshot(
-            operator=body.operator,
-            dump=body.dump,
-            force_refresh=body.forceRefresh,
-            ttl_sec=body.ttlSec,
-        )
-        rows = list(bundle.get("timetable_rows") or [])
-        merged_rows = store.upsert_timetable_rows_from_source(
-            scenario_id,
-            "odpt",
-            rows,
-            replace_existing_source=body.reset,
-        )
-        normalized_rows = normalize_timetable_row_indexes(merged_rows)
-        store.set_field(
-            scenario_id,
-            "timetable_rows",
-            normalized_rows,
-            invalidate_dispatch=True,
-        )
-        odpt_rows = [row for row in normalized_rows if row.get("source") == "odpt"]
-        quality = summarize_timetable_import(
-            odpt_rows,
-            {
-                "meta": bundle.get("meta") or {},
-                "stopTimetables": list(bundle.get("stop_timetables") or []),
-            },
-        )
-        import_meta = _build_odpt_import_meta(
-            dataset=bundle,
-            operator=body.operator,
-            dump=body.dump,
-            quality=quality,
-            progress_key="busTimetables",
-            resource_type="BusTimetable",
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
+    bundle = _load_odpt_bundle(
+        operator=body.operator,
+        dump=body.dump,
+        force_refresh=body.forceRefresh,
+        ttl_sec=body.ttlSec,
+        progress_callback=progress_callback,
+    )
+    rows = list(bundle.get("timetable_rows") or [])
+    merged_rows = store.upsert_timetable_rows_from_source(
+        scenario_id,
+        "odpt",
+        rows,
+        replace_existing_source=body.reset,
+    )
+    normalized_rows = normalize_timetable_row_indexes(merged_rows)
+    store.set_field(
+        scenario_id,
+        "timetable_rows",
+        normalized_rows,
+        invalidate_dispatch=True,
+    )
+    odpt_rows = [row for row in normalized_rows if row.get("source") == "odpt"]
+    quality = summarize_timetable_import(
+        odpt_rows,
+        {
+            "meta": bundle.get("meta") or {},
+            "stopTimetables": list(bundle.get("stop_timetables") or []),
+        },
+    )
+    import_meta = _build_odpt_import_meta(
+        dataset=bundle,
+        operator=body.operator,
+        dump=body.dump,
+        quality=quality,
+        progress_key="busTimetables",
+        resource_type="BusTimetable",
+    )
     store.set_timetable_import_meta(scenario_id, "odpt", import_meta)
     return {
         "items": odpt_rows,
@@ -758,64 +803,158 @@ def import_timetable_odpt(
     }
 
 
-@router.post("/scenarios/{scenario_id}/timetable/import-gtfs")
-def import_timetable_gtfs(
-    scenario_id: str, body: ImportGtfsTimetableBody
+def _import_gtfs_timetable_data(
+    scenario_id: str,
+    body: ImportGtfsTimetableBody,
+    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
 ) -> Dict[str, Any]:
     try:
         store.get_scenario(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
 
-    try:
-        bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=body.feedPath)
-        rows = list(bundle.get("timetable_rows") or [])
-        merged_rows = store.upsert_timetable_rows_from_source(
-            scenario_id,
-            "gtfs",
-            rows,
-            replace_existing_source=body.reset,
-        )
-        normalized_rows = normalize_timetable_row_indexes(merged_rows)
-        store.set_field(
-            scenario_id,
-            "timetable_rows",
-            normalized_rows,
-            invalidate_dispatch=True,
-        )
-        gtfs_rows = [row for row in normalized_rows if row.get("source") == "gtfs"]
-        quality = summarize_gtfs_timetable_import(
-            gtfs_rows,
-            {
-                "meta": bundle.get("meta") or {},
-                "stop_timetable_count": len(list(bundle.get("stop_timetables") or [])),
-            },
-        )
+    bundle = _load_gtfs_bundle(
+        feed_path=body.feedPath,
+        force_refresh=body.forceRefresh,
+        progress_callback=progress_callback,
+    )
+    rows = list(bundle.get("timetable_rows") or [])
+    merged_rows = store.upsert_timetable_rows_from_source(
+        scenario_id,
+        "gtfs",
+        rows,
+        replace_existing_source=body.reset,
+    )
+    normalized_rows = normalize_timetable_row_indexes(merged_rows)
+    store.set_field(
+        scenario_id,
+        "timetable_rows",
+        normalized_rows,
+        invalidate_dispatch=True,
+    )
+    gtfs_rows = [row for row in normalized_rows if row.get("source") == "gtfs"]
+    quality = summarize_gtfs_timetable_import(
+        gtfs_rows,
+        {
+            "meta": bundle.get("meta") or {},
+            "stop_timetable_count": len(list(bundle.get("stop_timetables") or [])),
+        },
+    )
 
-        # Sync calendar data from GTFS feed into scenario store
-        calendar_entries = list(bundle.get("calendar_entries") or [])
-        calendar_date_entries = list(bundle.get("calendar_date_entries") or [])
-        for entry in calendar_entries:
-            store.upsert_calendar_entry(scenario_id, entry)
-        for entry in calendar_date_entries:
-            store.upsert_calendar_date(scenario_id, entry)
-        quality["calendarEntriesSynced"] = len(calendar_entries)
-        quality["calendarDateEntriesSynced"] = len(calendar_date_entries)
+    calendar_entries = list(bundle.get("calendar_entries") or [])
+    calendar_date_entries = list(bundle.get("calendar_date_entries") or [])
+    for entry in calendar_entries:
+        store.upsert_calendar_entry(scenario_id, entry)
+    for entry in calendar_date_entries:
+        store.upsert_calendar_date(scenario_id, entry)
+    quality["calendarEntriesSynced"] = len(calendar_entries)
+    quality["calendarDateEntriesSynced"] = len(calendar_date_entries)
 
-        import_meta = _build_gtfs_import_meta(
-            bundle=bundle,
-            quality=quality,
-            resource_type="GTFSTrip",
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
+    import_meta = _build_gtfs_import_meta(
+        bundle=bundle,
+        quality=quality,
+        resource_type="GTFSTrip",
+    )
     store.set_timetable_import_meta(scenario_id, "gtfs", import_meta)
     return {
         "items": gtfs_rows,
         "total": len(gtfs_rows),
         "meta": import_meta,
     }
+
+
+def _import_odpt_stop_timetables_data(
+    scenario_id: str,
+    body: ImportOdptStopTimetableBody,
+    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
+) -> Dict[str, Any]:
+    try:
+        store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    bundle = _load_odpt_bundle(
+        operator=body.operator,
+        dump=body.dump,
+        force_refresh=body.forceRefresh,
+        ttl_sec=body.ttlSec,
+        progress_callback=progress_callback,
+    )
+    items = list(bundle.get("stop_timetables") or [])
+    merged_items = store.upsert_stop_timetables_from_source(
+        scenario_id,
+        "odpt",
+        items,
+        replace_existing_source=body.reset,
+    )
+    odpt_items = [item for item in merged_items if item.get("source") == "odpt"]
+    quality = summarize_stop_timetable_import(
+        odpt_items,
+        {"meta": bundle.get("meta") or {}},
+    )
+    import_meta = _build_odpt_import_meta(
+        dataset=bundle,
+        operator=body.operator,
+        dump=body.dump,
+        quality=quality,
+        progress_key="stopTimetables",
+        resource_type="BusstopPoleTimetable",
+    )
+    store.set_stop_timetable_import_meta(scenario_id, "odpt", import_meta)
+    return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
+
+
+def _import_gtfs_stop_timetables_data(
+    scenario_id: str,
+    body: ImportGtfsStopTimetableBody,
+    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
+) -> Dict[str, Any]:
+    try:
+        store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    bundle = _load_gtfs_bundle(
+        feed_path=body.feedPath,
+        force_refresh=body.forceRefresh,
+        progress_callback=progress_callback,
+    )
+    items = list(bundle.get("stop_timetables") or [])
+    merged_items = store.upsert_stop_timetables_from_source(
+        scenario_id,
+        "gtfs",
+        items,
+        replace_existing_source=body.reset,
+    )
+    gtfs_items = [item for item in merged_items if item.get("source") == "gtfs"]
+    quality = summarize_gtfs_stop_timetable_import(gtfs_items, bundle)
+    import_meta = _build_gtfs_import_meta(
+        bundle=bundle,
+        quality=quality,
+        resource_type="GTFSStopTimetable",
+    )
+    store.set_stop_timetable_import_meta(scenario_id, "gtfs", import_meta)
+    return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
+
+
+@router.post("/scenarios/{scenario_id}/timetable/import-odpt")
+def import_timetable_odpt(
+    scenario_id: str, body: ImportOdptTimetableBody
+) -> Dict[str, Any]:
+    try:
+        return _import_odpt_timetable_data(scenario_id, body)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.post("/scenarios/{scenario_id}/timetable/import-gtfs")
+def import_timetable_gtfs(
+    scenario_id: str, body: ImportGtfsTimetableBody
+) -> Dict[str, Any]:
+    try:
+        return _import_gtfs_timetable_data(scenario_id, body)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.get("/scenarios/{scenario_id}/stop-timetables")
@@ -866,42 +1005,9 @@ def import_stop_timetables_odpt(
     scenario_id: str, body: ImportOdptStopTimetableBody
 ) -> Dict[str, Any]:
     try:
-        store.get_scenario(scenario_id)
-    except KeyError:
-        raise _not_found(scenario_id)
-
-    try:
-        bundle = transit_catalog.get_or_refresh_odpt_snapshot(
-            operator=body.operator,
-            dump=body.dump,
-            force_refresh=body.forceRefresh,
-            ttl_sec=body.ttlSec,
-        )
-        items = list(bundle.get("stop_timetables") or [])
-        merged_items = store.upsert_stop_timetables_from_source(
-            scenario_id,
-            "odpt",
-            items,
-            replace_existing_source=body.reset,
-        )
-        odpt_items = [item for item in merged_items if item.get("source") == "odpt"]
-        quality = summarize_stop_timetable_import(
-            odpt_items,
-            {"meta": bundle.get("meta") or {}},
-        )
-        import_meta = _build_odpt_import_meta(
-            dataset=bundle,
-            operator=body.operator,
-            dump=body.dump,
-            quality=quality,
-            progress_key="stopTimetables",
-            resource_type="BusstopPoleTimetable",
-        )
+        return _import_odpt_stop_timetables_data(scenario_id, body)
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-
-    store.set_stop_timetable_import_meta(scenario_id, "odpt", import_meta)
-    return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
 
 
 @router.post("/scenarios/{scenario_id}/stop-timetables/import-gtfs")
@@ -909,31 +1015,9 @@ def import_stop_timetables_gtfs(
     scenario_id: str, body: ImportGtfsStopTimetableBody
 ) -> Dict[str, Any]:
     try:
-        store.get_scenario(scenario_id)
-    except KeyError:
-        raise _not_found(scenario_id)
-
-    try:
-        bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=body.feedPath)
-        items = list(bundle.get("stop_timetables") or [])
-        merged_items = store.upsert_stop_timetables_from_source(
-            scenario_id,
-            "gtfs",
-            items,
-            replace_existing_source=body.reset,
-        )
-        gtfs_items = [item for item in merged_items if item.get("source") == "gtfs"]
-        quality = summarize_gtfs_stop_timetable_import(gtfs_items, bundle)
-        import_meta = _build_gtfs_import_meta(
-            bundle=bundle,
-            quality=quality,
-            resource_type="GTFSStopTimetable",
-        )
+        return _import_gtfs_stop_timetables_data(scenario_id, body)
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-
-    store.set_stop_timetable_import_meta(scenario_id, "gtfs", import_meta)
-    return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
 
 
 @router.get("/scenarios/{scenario_id}/timetable/export-csv")
