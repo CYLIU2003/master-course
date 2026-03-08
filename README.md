@@ -1,22 +1,62 @@
-# EV Bus Dispatch Planning System (Master Course) / EV Bus Dispatch Planning System / 电动公交调度规划系统（硕士研究）
+# 🚌 EV Bus Dispatch Planning System / 电动公交调度规划系统
 
-このリポジトリは、修士研究向けの **EVバス配車・充電計画・運行最適化** プロジェクトです。現行 `main` ブランチは **React Frontend + FastAPI BFF + Python Core (`src/`)** を前提に開発しています。
+> **修士研究向け 電動バス配車・充電計画・運行最適化 プロジェクト**
+>
+> **电动公交调度、充电计划与运营优化 — 硕士研究项目**
 
-This repository is a master's research project for **EV bus dispatch, charging planning, and operations optimization**. The current `main` branch follows a **React Frontend + FastAPI BFF + Python Core (`src/`)** architecture.
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
+[![Tests](https://img.shields.io/badge/tests-215%20passed-brightgreen.svg)](#13-テスト状況--test-status)
 
-本仓库是一个面向硕士研究的 **电动公交调度、充电计划与运营优化** 项目。当前 `main` 分支采用 **React 前端 + FastAPI BFF + Python Core (`src/`)** 架构。
+---
+
+## 📖 概要 / Overview / 概述
+
+本リポジトリは、修士研究のための **EVバス（電気バス）の配車・充電スケジューリング・運行最適化** システムです。
+
+時刻表データからバスの配車計画を生成し、電力制約（SOC管理・充電器容量・デマンド料金など）を考慮した最適なスケジュールを求めます。MILP / ALNS / Hybrid の 3 つのソルバーモードをサポートし、シミュレーション・感度分析・ギャップ分析といった研究評価パイプラインを備えます。
+
+**This repository** is a master's research project for **EV bus dispatch, charging, and operations optimization**. It produces dispatch plans from timetable data, computes optimal schedules under power constraints (SOC management, charger capacity, demand charges), and supports three solver modes (MILP / ALNS / Hybrid) along with simulation, sensitivity analysis, and gap analysis pipelines.
+
+本仓库是一个面向硕士研究的 **电动公交调度、充电计划与运营优化** 系统。从时刻表数据生成公交调度计划，在电力约束（SOC 管理、充电桩容量、需量电费等）下求解最优调度方案。支持 MILP / ALNS / Hybrid 三种求解模式，并配备仿真、灵敏度分析和差距分析等研究评估流水线。
+
+---
+
+## 目次 / Table of Contents
+
+1. [ブランチ方針 / Branch Policy](#1-ブランチ方針--branch-policy)
+2. [アーキテクチャ / Architecture](#2-アーキテクチャ--architecture)
+3. [技術スタック / Tech Stack](#3-技術スタック--tech-stack)
+4. [クイックスタート / Quick Start](#4-クイックスタート--quick-start)
+5. [開発コマンド / Dev Commands](#5-開発コマンド--dev-commands)
+6. [ディレクトリ構成 / Directory Structure](#6-ディレクトリ構成--directory-structure)
+7. [研究コア (src/) の設計 / Core Module Design](#7-研究コア-src-の設計--core-module-design)
+8. [Dispatch モジュール / Dispatch Module](#8-dispatch-モジュール--dispatch-module)
+9. [最適化エンジン / Optimization Engine](#9-最適化エンジン--optimization-engine)
+10. [BFF API / BFF API Reference](#10-bff-api--bff-api-reference)
+11. [フロントエンド / Frontend](#11-フロントエンド--frontend)
+12. [実験ワークフロー / Experiment Workflow](#12-実験ワークフロー--experiment-workflow)
+13. [テスト状況 / Test Status](#13-テスト状況--test-status)
+14. [10 KPI 定義 / 10 KPI Definitions](#14-10-kpi-定義--10-kpi-definitions)
+15. [データ構成 / Data Structure](#15-データ構成--data-structure)
+16. [Git ポリシー / Git Policy](#16-git-ポリシー--git-policy)
+17. [関連ドキュメント / Related Documents](#17-関連ドキュメント--related-documents)
+18. [現在の制約と優先事項 / Limitations & Priorities](#18-現在の制約と優先事項--limitations--priorities)
+19. [メンテナー向けメモ / Maintainer Notes](#19-メンテナー向けメモ--maintainer-notes)
 
 ---
 
 ## 1. ブランチ方針 / Branch Policy / 分支策略
 
-- `main`: 現行開発ブランチ（frontend-first + API-driven）
-- `old`: 旧 Streamlit 資産の退避ブランチ（原則更新しない）
+| ブランチ | 役割 |
+|---------|------|
+| `main` | 現行開発ブランチ（React Frontend + FastAPI BFF + Python Core） |
+| `old` | 旧 Streamlit UI 資産の退避ブランチ（原則更新しない） |
 
-Related docs:
-
-- `DATA_GOVERNANCE_AND_BRANCH_STRATEGY.md`: operator-oriented data governance and branch role guidance
-- `constant/README.md`: index for overlapping research/spec markdown files under `constant/`
+- 新機能開発は `main` で行います。
+- 旧 Streamlit UI は `old` ブランチにアーカイブ済みです（参照が必要な場合: `git checkout old`）。
+- 運用者向けデータガバナンス・ブランチ戦略は [`DATA_GOVERNANCE_AND_BRANCH_STRATEGY.md`](DATA_GOVERNANCE_AND_BRANCH_STRATEGY.md) を参照。
 
 EN: Develop new features on `main`. `old` is archival for legacy Streamlit references.
 
@@ -27,19 +67,35 @@ EN: Develop new features on `main`. `old` is archival for legacy Streamlit refer
 ## 2. アーキテクチャ / Architecture / 架构
 
 ```text
-React Frontend (frontend/)
-  -> HTTP /api
-FastAPI BFF (bff/)
-  -> src.dispatch (timetable-first dispatch)
-  -> src.pipeline (build_inputs / solve / simulate / report)
-  -> src.* (schema / constraints / simulator / optimizer)
+┌───────────────────────────────────────────────────┐
+│              React Frontend (frontend/)            │
+│  React 19 + TypeScript + Vite 7 + Tailwind CSS v4 │
+│  MapLibre GL · TanStack Query · Zustand · Zod     │
+└──────────────────────┬────────────────────────────┘
+                       │  HTTP /api (Vite proxy)
+┌──────────────────────▼────────────────────────────┐
+│              FastAPI BFF (bff/)                    │
+│  Scenario / MasterData / Timetable / Graph /       │
+│  Simulation / Optimization / Catalog / Jobs        │
+│  ── DTO 整形 + ジョブ制御 ──                        │
+└──────────────────────┬────────────────────────────┘
+                       │  Python import
+┌──────────────────────▼────────────────────────────┐
+│          Python Research Core (src/)               │
+│  dispatch/ · pipeline/ · optimization/ ·           │
+│  constraints/ · preprocess/ · schemas/ ·           │
+│  simulator · milp_model · data_loader · ...        │
+└───────────────────────────────────────────────────┘
 ```
 
-- Frontend は `/api` のみ呼び出し、研究ロジックを直接持たない
-- BFF は UI 向け DTO とジョブ制御を提供
-- コア計算は `src/` に集約
+### 設計原則 / Design Principles / 设计原则
 
-EN: Frontend only calls `/api`, BFF orchestrates APIs/jobs, and core research logic stays in `src/`.
+- **Frontend は `/api` のみ呼び出し**、研究ロジックを直接持たない
+- **BFF は UI 向け DTO とジョブ制御** を提供する薄いオーケストレーション層
+- **コア計算は `src/` に集約**。dispatch / pipeline / optimization / simulator 等
+- **Timetable first, dispatch second**: 配車計画は常に時刻表制約から生成
+
+EN: Frontend only calls `/api`. BFF orchestrates APIs/jobs. Core research logic stays in `src/`.
 
 中文：前端仅调用 `/api`，BFF 负责编排与任务管理，核心研究逻辑集中在 `src/`。
 
@@ -49,222 +105,735 @@ EN: Frontend only calls `/api`, BFF orchestrates APIs/jobs, and core research lo
 
 ### Backend (Python)
 
-- Python 3.11+
-- FastAPI, Uvicorn
-- pandas, scipy, plotly
-- Optional: `gurobipy` (最適化実行時のみ、別途ライセンス必須)
+| ライブラリ | 用途 |
+|-----------|------|
+| Python 3.11+ | ランタイム |
+| FastAPI + Uvicorn | BFF API サーバー |
+| pandas ≥ 2.0 | データ処理 |
+| scipy ≥ 1.11 | 科学計算 |
+| plotly ≥ 5.18 | 可視化 |
+| gurobipy *(optional)* | MILP ソルバー（別途 Gurobi ライセンス必須） |
 
 ### Frontend
 
-- React 19 + TypeScript
-- Vite 7
-- React Router 7
-- TanStack Query
-- Zustand
-- Zod
-- Tailwind CSS v4
-- MapLibre GL
+| ライブラリ | バージョン | 用途 |
+|-----------|-----------|------|
+| React | 19 | UIフレームワーク |
+| TypeScript | 5.9 | 型安全 |
+| Vite | 7 | 開発サーバー・ビルドツール |
+| React Router | 7 | SPA ルーティング |
+| TanStack Query | 5 | サーバー状態管理 |
+| Zustand | 5 | クライアント状態管理 |
+| Zod | 4 | スキーマバリデーション |
+| Tailwind CSS | v4 | スタイリング |
+| MapLibre GL | 5 | 地図表示 |
+| React Hook Form | 7 | フォーム管理 |
+| i18next | 25 | 国際化 (i18n) |
 
 ---
 
 ## 4. クイックスタート / Quick Start / 快速开始
 
-### 4.1 前提 / Prerequisites / 前置条件
+### 4.1 前提条件 / Prerequisites / 前置条件
 
-- Python 3.11+
-- Node.js 18+
-- npm 9+
+- **Python 3.11+**
+- **Node.js 18+** / npm 9+
+- （最適化実行時のみ）**Gurobi** + ライセンス
 
-### 4.2 依存関係インストール / Install Dependencies / 安装依赖
+### 4.2 セットアップ / Install Dependencies / 安装依赖
 
 ```bash
+# Python 依存関係
 python -m pip install -r requirements.txt
-```
 
-```bash
+# Frontend 依存関係
 cd frontend
 npm install
 ```
 
 ### 4.3 起動 / Run / 启动
 
-ターミナル1（BFF）:
+**ターミナル 1 — BFF サーバー:**
 
 ```bash
 python -m uvicorn bff.main:app --reload --port 8000
 ```
 
-ターミナル2（Frontend）:
+**ターミナル 2 — Frontend 開発サーバー:**
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-- BFF API base: `http://localhost:8000/api`
-- Health: `http://localhost:8000/health`
-- Frontend: `http://localhost:5173/`
+### 4.4 アクセス先 / Access URLs / 访问地址
 
-EN: On startup, the app calls `GET /api/scenarios/default`; it opens the latest scenario or auto-creates a default one.
+| サービス | URL |
+|---------|-----|
+| Frontend (UI) | http://localhost:5173/ |
+| BFF API | http://localhost:8000/api |
+| Health Check | http://localhost:8000/health |
 
-中文：启动后会调用 `GET /api/scenarios/default`；若无场景会自动创建默认场景并进入操作页面。
+> 起動後、アプリは `GET /api/scenarios/default` を呼び出し、最新シナリオがあればそれを開き、なければデフォルトシナリオを自動作成して `/planning` 画面へ遷移します。
+>
+> EN: On startup, the app calls `GET /api/scenarios/default`; it opens the latest scenario or auto-creates a default one.
+>
+> 中文：启动后会调用 `GET /api/scenarios/default`；若无场景会自动创建默认场景并进入操作页面。
 
 ---
 
 ## 5. 開発コマンド / Dev Commands / 开发命令
 
-Python テスト:
-
 ```bash
+# Python テスト実行
 python -m pytest tests/ -q
-```
 
-Frontend ビルド確認:
+# 詳細テスト（verbose）
+python -m pytest tests/ -v
 
-```bash
-cd frontend
-npm run build
-```
+# Frontend ビルド確認
+cd frontend && npm run build
 
-BFF import 確認:
+# Frontend Lint
+cd frontend && npm run lint
 
-```bash
-python -c "from bff.main import app; print(len(app.routes))"
+# BFF import 確認
+python -c "from bff.main import app; print(f'Routes: {len(app.routes)}')"
+
+# 単一ケース実験実行（Gurobi 必須）
+python run_case.py --case config/cases/mode_A_case01.json
+
+# 修論実験エントリポイント（Gurobi 必須）
+python run_experiment.py --config config/experiment_config.json
 ```
 
 ---
 
-## 6. BFF API の責務 / BFF API Scope / BFF API 职责
+## 6. ディレクトリ構成 / Directory Structure / 目录结构
 
-`bff/` は UI から見た操作単位で API を提供します。
-
-- Scenario CRUD
-- Depot / Vehicle / Route CRUD
-- Depot-Route / Vehicle-Route permissions
-- Timetable + Calendar CRUD
-- Dispatch pipeline jobs
-  - `POST /api/scenarios/{id}/build-trips`
-  - `POST /api/scenarios/{id}/build-graph`
-  - `POST /api/scenarios/{id}/generate-duties`
-  - `GET /api/scenarios/{id}/duties/validate`
-- Job polling
-  - `GET /api/jobs/{job_id}`
-
-現時点で暫定（stub）:
-
-- `POST /api/scenarios/{id}/run-simulation`
-- `POST /api/scenarios/{id}/run-optimization`
-
-EN: Scenario documents are persisted as JSON files under `outputs/scenarios/`. Job status is stored in-memory (ephemeral).
-
-中文：场景数据以 JSON 文件保存到 `outputs/scenarios/`；任务状态为内存存储（服务重启后不保留）。
+```text
+master-course/
+├── README.md                       # 本ファイル
+├── AGENTS.md                       # アーキテクチャ制約と不変条件
+├── DEVELOPMENT_NOTES.md            # 研究実験ログ
+├── DATA_GOVERNANCE_AND_BRANCH_STRATEGY.md
+├── requirements.txt                # Python 依存関係
+├── run_case.py                     # ケース別実験 CLI ハーネス
+├── run_experiment.py               # 修論実験エントリポイント
+│
+├── frontend/                       # React 19 + TypeScript + Vite 7
+│   ├── src/
+│   │   ├── api/                    # API クライアント層 (fetch wrapper)
+│   │   ├── app/                    # Router, QueryProvider
+│   │   ├── features/               # UI コンポーネント群
+│   │   │   ├── common/             # 共通UI: PageSection, EmptyState 等
+│   │   │   ├── layout/             # AppLayout, Header, Sidebar
+│   │   │   └── planning/           # 計画系コンポーネント
+│   │   ├── hooks/                  # TanStack Query hooks (scenario, master-data, graph, run)
+│   │   ├── i18n/                   # 国際化 (日英中)
+│   │   ├── pages/                  # ページコンポーネント
+│   │   │   ├── planning/           # マスタ計画・シミュレーション環境
+│   │   │   ├── inputs/             # 時刻表・デッドヘッド・ルール
+│   │   │   ├── dispatch/           # 便・グラフ・勤務・事前確認
+│   │   │   ├── results/            # 結果表示（配車・エネルギー・コスト）
+│   │   │   ├── scenario/           # シナリオ一覧・概要
+│   │   │   ├── compare/            # シナリオ比較
+│   │   │   └── odpt/               # ODPT 連携
+│   │   ├── stores/                 # Zustand (ui-store, compare-store)
+│   │   ├── schemas/                # Zod バリデーション
+│   │   ├── types/                  # 型定義 (domain, api)
+│   │   └── utils/                  # ユーティリティ (format, time)
+│   └── README.md                   # Frontend 固有の README
+│
+├── bff/                            # FastAPI BFF (Backend For Frontend)
+│   ├── main.py                     # アプリエントリポイント (/api prefix)
+│   ├── routers/                    # API ルーター
+│   │   ├── scenarios.py            # Scenario CRUD
+│   │   ├── timetable.py            # Timetable + Calendar CRUD
+│   │   ├── master_data.py          # Depot / Vehicle / Route / Permission CRUD
+│   │   ├── catalog.py              # Transit Catalog (ODPT/GTFS import)
+│   │   ├── graph.py                # Trips / Connection Graph / Duties
+│   │   ├── simulation.py           # Simulation 実行
+│   │   ├── optimization.py         # Optimization 実行
+│   │   └── jobs.py                 # 非同期ジョブポーリング
+│   ├── services/                   # ビジネスロジック
+│   │   ├── gtfs_import.py          # GTFS インポート
+│   │   ├── odpt_timetable.py       # ODPT 時刻表取得
+│   │   ├── odpt_routes.py          # ODPT 路線取得
+│   │   ├── odpt_stops.py           # ODPT 停留所取得
+│   │   ├── odpt_stop_timetables.py # ODPT 停留所時刻表
+│   │   ├── transit_catalog.py      # Transit カタログ管理
+│   │   └── transit_db.py           # Transit DB 操作
+│   ├── store/                      # メモリストア (Scenario JSON 永続化)
+│   └── mappers/                    # DTO マッパー
+│
+├── src/                            # 研究コア (Research Core)
+│   ├── dispatch/                   # 配車ロジック
+│   │   ├── models.py               # DispatchTrip, VehicleDuty 等のデータクラス
+│   │   ├── feasibility.py          # 接続可否判定（位置・時刻・車種制約）
+│   │   ├── graph_builder.py        # 有向接続グラフ構築
+│   │   ├── dispatcher.py           # 貪欲法による配車生成
+│   │   ├── validator.py            # 勤務バリデーション
+│   │   ├── pipeline.py             # Dispatch パイプライン統合
+│   │   ├── context_builder.py      # CSV → DispatchContext 構築
+│   │   ├── problemdata_adapter.py  # ProblemData → Dispatch グラフ変換
+│   │   └── odpt_adapter.py         # ODPT データ → Dispatch モデル変換
+│   │
+│   ├── pipeline/                   # パイプライン処理
+│   │   ├── build_inputs.py         # 入力データ構築
+│   │   ├── solve.py                # MILP 求解メインエントリ
+│   │   ├── simulate.py             # シミュレーション実行
+│   │   ├── report.py               # レポート生成
+│   │   ├── gap_analysis.py         # ギャップ分析
+│   │   ├── delay_resilience.py     # 遅延耐性テスト
+│   │   ├── sensitivity_runner.py   # 感度分析
+│   │   └── logger.py               # パイプラインロガー
+│   │
+│   ├── optimization/               # 最適化エンジン
+│   │   ├── common/                 # 共通インターフェース・正規化問題
+│   │   ├── milp/                   # MILP ソルバー
+│   │   ├── alns/                   # ALNS (適応大近傍探索)
+│   │   ├── hybrid/                 # ハイブリッド (MILP + ALNS)
+│   │   ├── rolling/                # ローリングホライゾン
+│   │   └── engine.py               # ソルバーエントリポイント
+│   │
+│   ├── constraints/                # 制約定義
+│   │   ├── assignment.py           # 車両割当制約
+│   │   ├── charging.py             # 充電制約
+│   │   ├── energy_balance.py       # エネルギー収支
+│   │   ├── duty_assignment.py      # 勤務割当
+│   │   ├── charger_capacity.py     # 充電器容量
+│   │   ├── battery_degradation.py  # バッテリー劣化
+│   │   ├── soc_threshold_charging.py # SOC 閾値充電
+│   │   ├── optional_v2g.py         # V2G (Vehicle-to-Grid)
+│   │   └── pv_grid.py              # PV・系統連携
+│   │
+│   ├── preprocess/                 # 前処理
+│   │   ├── energy_model.py         # 電費推定モデル
+│   │   ├── fuel_model.py           # 燃費モデル
+│   │   ├── deadhead_builder.py     # デッドヘッド走行構築
+│   │   ├── duty_loader.py          # 勤務データ読込
+│   │   ├── passenger_load.py       # 乗客荷重
+│   │   ├── route_builder.py        # 路線構築
+│   │   ├── tariff_loader.py        # 電気料金読込
+│   │   ├── timetable_generator.py  # 時刻表生成
+│   │   ├── trip_converter.py       # 便変換
+│   │   ├── trip_generator.py       # 便生成
+│   │   └── scenario_generator.py   # シナリオ生成
+│   │
+│   ├── schemas/                    # 内部スキーマ定義
+│   │   ├── duty_entities.py        # 勤務エンティティ
+│   │   ├── fleet_entities.py       # 車両エンティティ
+│   │   ├── route_entities.py       # 路線エンティティ
+│   │   └── trip_entities.py        # 便エンティティ
+│   │
+│   ├── data_loader.py              # load_problem_data()
+│   ├── data_schema.py              # ProblemData 定義
+│   ├── milp_model.py               # MILP モデル構築
+│   ├── model_factory.py            # モデルファクトリ
+│   ├── model_sets.py               # build_model_sets()
+│   ├── objective.py                # 目的関数構築
+│   ├── parameter_builder.py        # build_derived_params()
+│   ├── simulator.py                # スケジュール実行可能性チェック
+│   ├── solver_runner.py            # Gurobi ソルバー実行
+│   ├── solver_alns.py              # ALNS ソルバー
+│   ├── route_cost_simulator.py     # 路線コストシミュレータ
+│   ├── result_exporter.py          # 結果エクスポート
+│   ├── visualization.py            # 可視化
+│   ├── engine_bus_extractor.py     # エンジンバス性能抽出
+│   └── engine_bus_loader.py        # エンジンバスデータ読込
+│
+├── tests/                          # テストスイート (24 テストファイル)
+│   ├── test_dispatch_*.py          # Dispatch モジュールテスト (6 ファイル)
+│   ├── test_bff_*.py               # BFF ルーターテスト (8 ファイル)
+│   ├── test_simulator.py           # シミュレータテスト
+│   ├── test_route_cost_simulator.py # 路線コストシミュレータテスト
+│   ├── test_optimization_engine.py # 最適化エンジンテスト
+│   ├── test_energy_model.py        # 電費モデルテスト
+│   ├── test_engine_bus_*.py        # エンジンバステスト (2 ファイル)
+│   └── ...
+│
+├── schema/                         # JSON Schema 定義 (12 ファイル)
+│   ├── canonical-problem.schema.json
+│   ├── dispatch_input.schema.json
+│   ├── scenario.schema.json
+│   ├── vehicle.schema.json
+│   ├── trip.schema.json
+│   └── ...
+│
+├── config/                         # 実験・テスト設定
+│   ├── cases/                      # ケース別設定
+│   │   ├── mode_A_case01.json      # Mode A: 行路後充電決定 ✅ VERIFIED
+│   │   ├── mode_B_case01.json      # Mode B: 車両割当+充電同時最適化 ✅ VERIFIED
+│   │   ├── mode_B_case01_build_inputs.json
+│   │   └── toy_mode_A_case01.json  # Toy: 手計算検証用 ✅ VERIFIED
+│   └── experiment_config.json      # 修論実験設定
+│
+├── data/                           # 入力データ
+│   ├── cases/                      # 実験ケースデータ
+│   ├── toy/                        # 検証用トイデータ
+│   ├── engine_bus/                 # エンジンバス参照データ
+│   ├── external/                   # 外部データ
+│   ├── fleet/                      # 車両フリートデータ
+│   ├── infra/                      # インフラデータ（充電器等）
+│   ├── operations/                 # 運行データ
+│   ├── route_master/               # 路線マスタ
+│   ├── sim_configs/                # シミュレーション設定
+│   └── vehicle_catalog.json        # 車両カタログ
+│
+├── GTFS/                           # GTFS データ (都営バス)
+│   └── ToeiBus-GTFS/
+│
+├── constant/                       # 読取専用の研究仕様書・指示書
+│   ├── README.md                   # 文書インデックス
+│   ├── formulation.md              # MILP 数理定式化
+│   ├── masters_thesis_simulation_spec_v2.md  # 修論仕様書
+│   └── ...                         # (詳細は constant/README.md 参照)
+│
+├── docs/                           # 開発ドキュメント
+│   ├── dispatch_preprocess_config.md
+│   ├── dispatch_contracts.md
+│   ├── reproduction_spec.md
+│   └── ...
+│
+├── scripts/                        # ユーティリティスクリプト
+│   ├── batch_sensitivity.py        # バッチ感度分析
+│   ├── dispatch_prototype.py       # Dispatch プロトタイプ
+│   ├── run_route_cost_sim.py       # 路線コストシミュレーション実行
+│   ├── extract_engine_bus.py       # エンジンバスデータ抽出
+│   └── query_engine_bus.py         # エンジンバスデータ照会
+│
+└── outputs/                        # 実行出力 (.gitignore 管理)
+```
 
 ---
 
-## 7. Dispatch コア不変条件 / Dispatch Invariants / 调度核心不变条件
+## 7. 研究コア (src/) の設計 / Core Module Design / 研究核心设计
 
-`src/dispatch/` は **Timetable first, dispatch second** を厳守します。
+`src/` は研究計算のすべてを担います。UI や API 層からは独立しており、単独でテスト・実行可能です。
 
-接続可否は次の 3 条件を全て満たす必要があります。
+EN: `src/` handles all research computation. It is independent of UI and API layers and can be tested/run standalone.
 
-1. 位置連続性（`destination -> origin` の deadhead ルール）
-2. 時刻連続性（`arrival + turnaround + deadhead <= next departure`）
-3. 車種制約（`allowed_vehicle_types`）
+中文：`src/` 承担所有研究计算。它独立于 UI 和 API 层，可单独测试与运行。
+
+### データフロー
+
+```text
+config/*.json ──→ data_loader.py ──→ ProblemData
+                                          │
+                                     model_sets.py ──→ ModelSets
+                                          │
+                                  parameter_builder.py ──→ DerivedParams
+                                          │
+                              ┌───────────┼────────────┐
+                              ▼           ▼            ▼
+                        milp_model.py  solver_alns.py  optimization/
+                              │           │            │
+                              └───────────┼────────────┘
+                                          ▼
+                                     MILPResult
+                                          │
+                                   simulator.py ──→ SimulationResult
+                                          │
+                              ┌───────────┼────────────┐
+                              ▼           ▼            ▼
+                      gap_analysis  delay_resilience  report
+```
+
+### 主要エントリポイント
+
+| ファイル | 関数 | 説明 |
+|---------|------|------|
+| `pipeline/solve.py` | `solve(config_path, mode)` | パイプラインメイン。データ読込→求解→シミュレーション→レポート |
+| `data_loader.py` | `load_problem_data(path)` | 設定 JSON から `ProblemData` を構築 |
+| `model_sets.py` | `build_model_sets(data)` | 車両・タスク・充電器の集合を構築 |
+| `parameter_builder.py` | `build_derived_params(data, ms)` | 派生パラメータ（エネルギー消費率等）を計算 |
+| `simulator.py` | `simulate(data, ms, dp, result)` | ソルバー結果の実行可能性を検証 |
+
+---
+
+## 8. Dispatch モジュール / Dispatch Module / 调度模块
+
+`src/dispatch/` は **Timetable first, dispatch second** の不変条件を厳守します。
 
 EN: Physically impossible chains are hard-infeasible and must never appear in output.
 
 中文：任何物理上不可行的班次连接都属于硬约束违规，禁止出现在输出中。
 
----
+### 接続可否判定（ハード制約）
 
-## 8. ディレクトリ構成 / Directory Structure / 目录结构
+車両がトリップ **j** をトリップ **i** の直後に運行できるのは、以下の **3条件すべて** を満たす場合のみです：
+
+| # | 制約 | 条件 |
+|---|------|------|
+| 1 | **位置連続性** | `trip_i.destination → trip_j.origin` のデッドヘッド移動が可能 |
+| 2 | **時刻連続性** | `arrival(i) + turnaround + deadhead_time ≤ departure(j)` |
+| 3 | **車種制約** | `vehicle_type ∈ trip_j.allowed_vehicle_types` |
+
+### 処理パイプライン
 
 ```text
-master-course/
-|- AGENTS.md
-|- README.md
-|- requirements.txt
-|
-|- frontend/                    # React 19 + TS + Vite 7
-|  |- src/
-|  |  |- api/
-|  |  |- app/
-|  |  |- features/
-|  |  |- hooks/
-|  |  |- pages/
-|  |  |- schemas/
-|  |  |- stores/
-|  |  `- types/
-|  `- README.md
-|
-|- bff/                         # FastAPI BFF
-|  |- main.py
-|  |- routers/
-|  |  |- scenarios.py
-|  |  |- timetable.py
-|  |  |- master_data.py
-|  |  |- graph.py
-|  |  |- simulation.py
-|  |  |- optimization.py
-|  |  `- jobs.py
-|  |- store/
-|  `- mappers/
-|
-|- src/                         # Research core
-|  |- dispatch/
-|  |  |- models.py
-|  |  |- feasibility.py
-|  |  |- graph_builder.py
-|  |  |- dispatcher.py
-|  |  |- validator.py
-|  |  |- pipeline.py
-|  |  |- context_builder.py
-|  |  `- problemdata_adapter.py
-|  |- pipeline/
-|  |  |- build_inputs.py
-|  |  |- solve.py
-|  |  |- simulate.py
-|  |  |- report.py
-|  |  |- gap_analysis.py
-|  |  |- delay_resilience.py
-|  |  `- sensitivity_runner.py
-|  |- constraints/
-|  |- preprocess/
-|  `- schemas/
-|
-|- tests/                       # Python test suite
-|- data/                        # Input datasets
-|- config/                      # Experiment configurations
-|- constant/                    # Read-only constants/spec artifacts
-|- docs/
-|- GTFS/
-`- outputs/
+1. 時刻表データ読込
+2. 候補ペアの接続可否チェック (feasibility.py)
+3. 有向接続グラフ構築 (graph_builder.py)
+4. 配車勤務生成 — 貪欲法ベースライン (dispatcher.py)
+5. 生成された勤務のバリデーション (validator.py)
 ```
 
----
+### 出力
 
-## 9. テスト状況 / Test Status / 测试状态
+- `VehicleDuty`: `duty_id`, `vehicle_type`, `legs` (deadhead 付き DutyLeg 列)
+- `ValidationResult`: `valid`, `errors`
+- `PipelineResult`: `uncovered_trip_ids`, `duplicate_trip_ids`, `invalid_duties`
 
-- 最新実行（`python -m pytest -q`）: **180 passed**
-- 実行日: 2026-03-06
-- 主要カバレッジ:
-  - dispatch feasibility / graph / validator / pipeline
-  - data_loader dispatch preprocess
-  - simulator checks
-  - route cost and energy model
-
-EN: Keep all pre-existing tests green when making code changes.
-
-中文：进行任何代码修改时，必须保持现有测试全部通过。
+> 詳細は [`AGENTS.md`](AGENTS.md) を参照。
 
 ---
 
-## 10. 現在の制約と優先実装 / Current Limitations & Priorities / 当前限制与优先事项
+## 9. 最適化エンジン / Optimization Engine / 优化引擎
 
-1. BFF `run-simulation` の本結合（`src/pipeline/simulate.py`）
-2. BFF `run-optimization` の本結合（`src/pipeline/solve.py`）
-3. Simulation 設定画面の実データ接続
-4. Zod バリデーションと編集 UX 改善
+`src/optimization/` は 3 つのソルバーモードをサポートします。
+
+| モード | 説明 | 用途 |
+|-------|------|------|
+| `milp` | 混合整数線形計画法 | ベースライン・厳密解 |
+| `alns` | 適応大近傍探索 | 大規模探索 |
+| `hybrid` | MILP + ALNS | **デフォルト研究モード** |
+
+### レイヤー構成
+
+```text
+optimization/
+├── common/     # 共通インターフェース、正規化問題オブジェクト
+├── milp/       # MILP ソルバー (Gurobi 抽象化)
+├── alns/       # ALNS ソルバー
+│   ├── destroy operators
+│   ├── repair operators
+│   ├── acceptance criterion
+│   ├── operator selection
+│   └── stopping criterion
+├── hybrid/     # MILP初期解 + ALNS探索 + MILP部分修復
+└── rolling/    # ローリングホライゾン再最適化
+```
+
+### MILP 設計ルール
+
+- ソルバーバックエンドは抽象化（Gurobi 固有 API をビジネスロジックに埋め込まない）
+- Warm start / time limit / MIP gap は設定可能
+- 不実行可能性診断を出力
+
+### Hybrid モード
+
+1. MILP で初期解を生成
+2. ALNS 外部ループで探索
+3. 部分 MILP 修復
+4. Incumbent polishing
+
+### 将来の拡張ポイント
+
+- フリート構成最適化
+- 充電器配置探索
+- Column Generation (`ColumnPool`, `PricingProblem`)
+- GTFS 前処理フック拡張
+
+---
+
+## 10. BFF API / BFF API Reference / BFF API 参考
+
+すべてのエンドポイントは `/api` プレフィックス下にマウントされます。
+
+### Scenario
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/api/scenarios` | シナリオ一覧 |
+| POST | `/api/scenarios` | シナリオ作成 |
+| GET | `/api/scenarios/default` | デフォルトシナリオ取得/作成 |
+| GET | `/api/scenarios/{id}` | シナリオ詳細 |
+| PUT | `/api/scenarios/{id}` | シナリオ更新 |
+| DELETE | `/api/scenarios/{id}` | シナリオ削除 |
+
+### Master Data（Depot / Vehicle / Route / Permission）
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET/POST | `/api/scenarios/{id}/depots` | 営業所 CRUD |
+| GET/POST | `/api/scenarios/{id}/vehicles` | 車両 CRUD |
+| GET/POST | `/api/scenarios/{id}/routes` | 路線 CRUD |
+| PUT/DELETE | `.../depots/{depotId}` 等 | 個別更新・削除 |
+| GET/PUT | `.../depot-route-permissions` | 営業所→路線 許可 |
+| GET/PUT | `.../vehicle-route-permissions` | 車両→路線 許可 |
+
+### Timetable & Calendar
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET/PUT | `/api/scenarios/{id}/timetable` | 時刻表 CRUD |
+| GET/PUT | `/api/scenarios/{id}/calendar` | 運行カレンダー |
+
+### Dispatch Pipeline
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| POST | `/api/scenarios/{id}/build-trips` | 便生成 |
+| POST | `/api/scenarios/{id}/build-graph` | 接続グラフ構築 |
+| POST | `/api/scenarios/{id}/generate-duties` | 勤務生成 |
+| GET | `/api/scenarios/{id}/duties/validate` | 勤務バリデーション |
+
+### Simulation / Optimization
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| POST | `/api/scenarios/{id}/run-simulation` | シミュレーション実行 |
+| POST | `/api/scenarios/{id}/run-optimization` | 最適化実行 |
+
+### Transit Catalog (ODPT / GTFS)
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| POST | `/api/catalog/gtfs/import` | GTFS インポート |
+| GET | `/api/catalog/operators` | 事業者一覧 |
+
+### Jobs
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/api/jobs/{job_id}` | ジョブステータス取得 |
+
+> **永続化**: シナリオデータは `outputs/scenarios/` に JSON で保存。ジョブステータスはインメモリ（サーバー再起動で消失）。
+>
+> EN: Scenario documents are persisted as JSON files under `outputs/scenarios/`. Job status is stored in-memory (ephemeral).
+>
+> 中文：场景数据以 JSON 文件保存到 `outputs/scenarios/`；任务状态为内存存储（服务重启后不保留）。
+
+---
+
+## 11. フロントエンド / Frontend / 前端
+
+### タブ構成
+
+| タブ | 名称 | 内容 |
+|-----|------|------|
+| **Tab 1** | Planning（営業所・車両・路線） | マスタデータ管理 |
+| **Tab 2** | Simulation（シミュレーション環境） | シミュレーション設定 |
+
+これに加え、**Dispatch**（配車パイプライン）と **Results**（結果表示）セクションが常時表示されます。
+
+### ユーザーワークフロー
+
+```text
+1. 営業所を作成
+2. 車両を営業所に追加
+3. 路線を作成
+4. 営業所→路線 許可を設定
+5. 車両→路線 許可を設定
+6. シミュレーション環境を設定
+7. Dispatch パイプラインを実行（便生成→グラフ構築→勤務生成）
+8. 結果を確認
+```
+
+### ドメインモデル
+
+```text
+Depot ──1:N──→ Vehicle (vehicle.depotId)
+Depot ──M:N──→ Route   (DepotRoutePermission)
+Vehicle ──M:N──→ Route  (VehicleRoutePermission)
+Route ──1:N──→ Trip
+```
+
+### 主要ルート
+
+| パス | ページ |
+|------|--------|
+| `/scenarios` | シナリオ一覧 |
+| `/scenarios/:id/planning` | マスタ計画（Tab 1） |
+| `/scenarios/:id/simulation-env` | シミュレーション環境（Tab 2） |
+| `/scenarios/:id/timetable` | 時刻表管理 |
+| `/scenarios/:id/trips` | 便一覧 |
+| `/scenarios/:id/graph` | 接続グラフ |
+| `/scenarios/:id/duties` | 勤務表 |
+| `/scenarios/:id/simulation` | シミュレーション実行 |
+| `/scenarios/:id/optimization` | 最適化実行 |
+| `/scenarios/:id/results/*` | 結果（配車/エネルギー/コスト） |
+| `/compare` | シナリオ比較 |
+
+> 詳細は [`frontend/README.md`](frontend/README.md) を参照。
+
+---
+
+## 12. 実験ワークフロー / Experiment Workflow / 实验工作流
+
+### CLI による単一ケース実験
+
+```bash
+# Mode A: 行路後充電決定
+python run_case.py --case config/cases/mode_A_case01.json
+
+# Mode B: 車両割当+充電同時最適化
+python run_case.py --case config/cases/mode_B_case01.json
+
+# Toy ケース（手計算検証用）
+python run_case.py --case config/cases/toy_mode_A_case01.json
+
+# Verbose（Gurobi ログ表示）
+python run_case.py --case config/cases/mode_A_case01.json --verbose
+```
+
+### 出力ファイル
+
+各ケースの結果は `results/{case_name}/` に出力されます：
+
+| ファイル | 内容 |
+|---------|------|
+| `kpi.json` | 10 KPI の数値データ |
+| `kpi.csv` | 論文比較用フラット CSV |
+| `report.md` | 実験サマリ Markdown |
+
+### 修論実験（フル機能）
+
+```bash
+python run_experiment.py \
+    --config config/experiment_config.json \
+    --time-limit 300 \
+    --verbose
+```
+
+オプション: `--no-pv`, `--no-demand-charge`, `--soft-soc`, `--allow-partial`
+
+---
+
+## 13. テスト状況 / Test Status / 测试状态
+
+```
+最終実行: 2026-03-08
+コマンド: python -m pytest tests/ -q
+結果:   215 passed ✅
+```
+
+### テストカバレッジ（主要領域）
+
+| カテゴリ | テストファイル | 件数 |
+|---------|--------------|------|
+| Dispatch | `test_dispatch_feasibility.py`, `test_dispatch_graph.py`, `test_dispatch_validator.py`, `test_dispatch_pipeline.py`, `test_dispatch_context_builder.py`, `test_dispatch_problemdata_adapter.py` | 6 |
+| BFF Routers | `test_bff_graph_router.py`, `test_bff_scenario_store.py`, `test_bff_gtfs_import.py`, `test_bff_odpt_*.py`, `test_bff_optimization_router.py`, `test_bff_runtime_capabilities.py`, `test_bff_scenario_to_problemdata.py` | 8 |
+| Simulator | `test_simulator.py` | 1 |
+| Route Cost | `test_route_cost_simulator.py` | 1 |
+| Optimization | `test_optimization_engine.py` | 1 |
+| Data Loader | `test_data_loader_dispatch_preprocess.py` | 1 |
+| Energy Model | `test_energy_model.py` | 1 |
+| Engine Bus | `test_engine_bus_extractor.py`, `test_engine_bus_loader.py` | 2 |
+| Pipeline | `test_pipeline_solve_dispatch_report.py` | 1 |
+| Jobs | `test_job_store.py` | 1 |
+
+> ⚠️ コード変更時は、既存テストがすべて通ることを確認してください。
+>
+> EN: Keep all pre-existing tests green when making code changes.
+>
+> 中文：进行任何代码修改时，必须保持现有测试全部通过。
+
+---
+
+## 14. 10 KPI 定義 / 10 KPI Definitions / 10 KPI 定义
+
+全ソルバーモード共通の評価指標です。
+
+| KPI | 説明 | 単位 |
+|-----|------|------|
+| `objective_value` | ソルバー目的関数値 | 円 |
+| `total_energy_cost` | 電力量料金合計 | 円 |
+| `total_demand_charge` | デマンド料金合計 | 円 |
+| `total_fuel_cost` | ICE 燃料費合計 | 円 |
+| `vehicle_fixed_cost` | 使用車両の固定費合計 | 円 |
+| `unmet_trips` | 未割当タスク数 | 件 |
+| `soc_min_margin_kwh` | SOC 下限余裕（最小 SOC − 下限閾値） | kWh |
+| `charger_utilization` | 充電器平均稼働率 | % |
+| `peak_grid_power_kw` | 系統ピーク受電電力 | kW |
+| `solve_time_sec` | ソルバー計算時間 | 秒 |
+
+---
+
+## 15. データ構成 / Data Structure / 数据结构
+
+### 実験ケースデータ
+
+| ケース | 車両構成 | タスク数 | 検証状態 |
+|-------|---------|---------|---------|
+| `mode_A_case01` | 3 BEV | 6 タスク, 64 スロット (15分/スロット) | ✅ VERIFIED |
+| `mode_B_case01` | 3 BEV + 1 ICE | 8 タスク | ✅ VERIFIED |
+| `toy_mode_A_case01` | 2 BEV | 5 タスク, 20 スロット (60分/スロット) | ✅ VERIFIED (手計算一致) |
+
+### 外部データ
+
+| データ | 格納先 | 説明 |
+|-------|-------|------|
+| GTFS | `GTFS/ToeiBus-GTFS/` | 都営バス GTFS データ |
+| ODPT | `data/odpt_tokyu.db` 等 | 公共交通 Open Data |
+| 車両カタログ | `data/vehicle_catalog.json` | BEV/ICE 車両仕様 |
+| エンジンバス参照 | `data/engine_bus/` + `constant/*.xlsx` | JH25 年式バス性能データ |
+| 路線マスタ | `data/route_master/` | 路線定義 CSV |
+| 運行データ | `data/operations/` | 運行実績 CSV |
+
+### JSON Schema
+
+`schema/` ディレクトリに 12 の JSON Schema 定義があります：
+
+- `canonical-problem.schema.json` — 正規化問題
+- `dispatch_input.schema.json` — Dispatch 入力 (8.6KB)
+- `scenario.schema.json` — シナリオ
+- `vehicle.schema.json`, `trip.schema.json`, `depot.schema.json`, `charger.schema.json` 等
+
+---
+
+## 16. Git ポリシー / Git Policy / Git 策略
+
+生成物は追跡しません（`.gitignore` で管理）。
+
+| 除外対象 | 理由 |
+|---------|------|
+| `outputs/`, `derived/`, `results/` | 実行時生成物 |
+| `__pycache__/`, `*.pyc` | Python バイトコード |
+| `frontend/node_modules/`, `frontend/dist/` | Frontend ビルド成果物 |
+| `*.db`, `*.sqlite3` | インポート時生成 DB |
+| `.venv/`, `.env` | 環境固有設定 |
+
+> 明示的にリリースパッケージに含める必要がない限り、生成物をコミットしないでください。
+>
+> EN: Do not commit generated artifacts unless explicitly required for release packaging.
+>
+> 中文：除非发布流程明确要求，否则不要提交构建/运行生成物。
+
+---
+
+## 17. 関連ドキュメント / Related Documents / 相关文档
+
+| ドキュメント | 内容 |
+|------------|------|
+| [`AGENTS.md`](AGENTS.md) | アーキテクチャ制約 / 非交渉点 / 最適化エンジン設計 |
+| [`DEVELOPMENT_NOTES.md`](DEVELOPMENT_NOTES.md) | 研究実験ログ / 実験結果 / バグ修正履歴 |
+| [`DATA_GOVERNANCE_AND_BRANCH_STRATEGY.md`](DATA_GOVERNANCE_AND_BRANCH_STRATEGY.md) | 運用者向けデータガバナンス / ブランチ戦略 |
+| [`frontend/README.md`](frontend/README.md) | Frontend 詳細ドキュメント |
+| [`constant/README.md`](constant/README.md) | 研究仕様書・文書インデックス |
+| [`docs/dispatch_preprocess_config.md`](docs/dispatch_preprocess_config.md) | Dispatch 前処理設定ガイド |
+| [`docs/dispatch_contracts.md`](docs/dispatch_contracts.md) | Dispatch API 契約 |
+| [`docs/reproduction_spec.md`](docs/reproduction_spec.md) | 先行研究再現仕様 |
+
+---
+
+## 18. 現在の制約と優先事項 / Limitations & Priorities / 当前限制与优先事项
+
+### 未完了の主要タスク
+
+1. **BFF `run-simulation` の本結合** — `src/pipeline/simulate.py` と接続
+2. **BFF `run-optimization` の本結合** — `src/pipeline/solve.py` と接続
+3. **Simulation 設定画面** — 実データ接続
+4. **Zod バリデーション** — 編集 UX 改善
+5. **Editor Drawer** — インライン編集 UI
+6. **ページ遅延読み込み** — パフォーマンス改善
+
+### 前提のある機能
+
+- **完全な最適化機能**: Gurobi のインストールとライセンスが必要
+- **ODPT データ取得**: インターネット接続と API キーが必要
 
 EN: Full optimization requires Gurobi installation and license.
 
@@ -272,39 +841,20 @@ EN: Full optimization requires Gurobi installation and license.
 
 ---
 
-## 11. Git ポリシー / Git Policy / Git 策略
+## 19. メンテナー向けメモ / Maintainer Notes / 维护者说明
 
-生成物は追跡しません（`.gitignore` 管理）。
-
-- `outputs/`
-- `derived/`
-- `results/`
-- `__pycache__/`, `*.pyc`
-- `frontend/node_modules/`, `frontend/dist/`
-
-EN: Do not commit generated artifacts unless explicitly required for release packaging.
-
-中文：除非发布流程明确要求，否则不要提交构建/运行生成物。
-
----
-
-## 12. 旧 Streamlit 資産 / Legacy Streamlit Assets / 旧版 Streamlit 资产
-
-- `main` には旧 UI を置いていません
-- 参照が必要な場合のみ `old` ブランチを利用してください
-
-```bash
-git checkout old
-```
-
----
-
-## 13. Maintainer メモ / Maintainer Notes / 维护者说明
-
-- 研究ロジックは `src/` に集約し、UI 層へ埋め込まない
-- BFF は「薄いオーケストレーション + DTO 整形」を維持する
-- `constant/` は読み取り専用として扱う
+1. **研究ロジックは `src/` に集約** — UI 層 (`frontend/`) や API 層 (`bff/`) に研究ロジックを埋め込まない
+2. **BFF は薄いオーケストレーション + DTO 整形** を維持
+3. **`constant/` は読み取り専用** — 明示的な指示がない限り変更しない
+4. **Dispatch モジュールは Timetable-driven** を維持し、物理的に実行不可能な出力を禁止
+5. **時刻変換は `hhmm_to_min()`** を正式関数とし、整数分（midnight 基準）で比較
+6. **デッドヘッドは有向** （from → to）で、対称性を仮定しない
+7. **依存関係の方向**: `src/dispatch/` は `frontend/`, `bff/`, `src/constraints/`, `src/pipeline/` をインポートしない
 
 EN: Keep the dispatch module timetable-driven and physically feasible by construction.
 
 中文：保持调度模块“时刻表优先”，并确保输出在物理约束上始终可行。
+
+---
+
+*Last updated: 2026-03-08*
