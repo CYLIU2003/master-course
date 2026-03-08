@@ -339,6 +339,9 @@ export function MasterDataHeader({ scenarioId }: Props) {
               {t("master.import_stop_timetables", "バス停時刻表")}
             </button>
           </div>
+          <p className="mt-2 text-[11px] text-emerald-800/80">
+            重い ODPT / GTFS 更新は通常 `python3 catalog_update_app.py` で先に実行し、この画面では保存済み snapshot の取込を行う運用を推奨します。
+          </p>
         </div>
       </div>
 

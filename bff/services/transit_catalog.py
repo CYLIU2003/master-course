@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import logging as _logging
 
@@ -69,6 +69,8 @@ _GTFS_REQUIRED_ENTITY_TYPES = (
     "stop_timetables",
     "calendar_entries",
 )
+
+ProgressCallback = Callable[[str, Dict[str, Any]], None]
 
 
 def _now_iso() -> str:
@@ -441,6 +443,7 @@ def _refresh_odpt_snapshot_via_stage_bff(
     dump: bool,
     force_refresh: bool,
     ttl_sec: int,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> Dict[str, Any]:
     merged_dataset: Dict[str, Any] = {
         "meta": {},
@@ -471,6 +474,19 @@ def _refresh_odpt_snapshot_via_stage_bff(
         progress = dict(((meta.get("progress") or {}).get("busTimetables")) or {})
         if progress:
             progress_meta["busTimetables"] = progress
+            if progress_callback is not None:
+                progress_callback(
+                    "odpt_bus_timetables",
+                    {
+                        "resource": "busTimetables",
+                        "progress": progress,
+                        "counts": {
+                            "stops": len(merged_dataset["stops"]),
+                            "routePayloads": len(route_payloads),
+                            "timetableRows": len(merged_dataset["trips"]),
+                        },
+                    },
+                )
         _merge_stage_entity_maps(merged_dataset["stops"], dict(stage.get("stops") or {}))
         _merge_stage_entity_maps(
             merged_dataset["routePatterns"],
@@ -504,6 +520,18 @@ def _refresh_odpt_snapshot_via_stage_bff(
         progress = dict(((meta.get("progress") or {}).get("stopTimetables")) or {})
         if progress:
             progress_meta["stopTimetables"] = progress
+            if progress_callback is not None:
+                progress_callback(
+                    "odpt_stop_timetables",
+                    {
+                        "resource": "stopTimetables",
+                        "progress": progress,
+                        "counts": {
+                            "stops": len(merged_dataset["stops"]),
+                            "stopTimetables": len(merged_dataset["stopTimetables"]),
+                        },
+                    },
+                )
         _merge_stage_entity_maps(merged_dataset["stops"], dict(stage.get("stops") or {}))
         _merge_stage_entity_maps(
             merged_dataset["stopTimetables"],
@@ -778,6 +806,24 @@ def get_snapshot(snapshot_key: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def find_snapshot(source: str, dataset_ref: str) -> Optional[Dict[str, Any]]:
+    with closing(_connect()) as conn:
+        _ensure_schema(conn)
+        row = conn.execute(
+            """
+            SELECT snapshot_key
+            FROM catalog_snapshots
+            WHERE source = ? AND dataset_ref = ?
+            ORDER BY refreshed_at DESC, snapshot_key DESC
+            LIMIT 1
+            """,
+            (source, dataset_ref),
+        ).fetchone()
+    if row is None:
+        return None
+    return get_snapshot(str(row["snapshot_key"]))
+
+
 def load_snapshot_bundle(snapshot_key: str) -> Dict[str, Any]:
     snapshot = get_snapshot(snapshot_key)
     if snapshot is None:
@@ -806,6 +852,22 @@ def load_snapshot_bundle(snapshot_key: str) -> Dict[str, Any]:
         "calendar_date_entries": _load_entities(snapshot_key, "calendar_date_entries"),
         "route_payloads": route_payloads,
     }
+
+
+def load_existing_odpt_snapshot(operator: str = DEFAULT_OPERATOR) -> Optional[Dict[str, Any]]:
+    snapshot = find_snapshot("odpt", operator)
+    if snapshot is None:
+        return None
+    return load_snapshot_bundle(str(snapshot["snapshotKey"]))
+
+
+def load_existing_gtfs_snapshot(
+    feed_path: str | Path = DEFAULT_GTFS_FEED_PATH,
+) -> Optional[Dict[str, Any]]:
+    snapshot = find_snapshot("gtfs", _gtfs_dataset_ref(feed_path))
+    if snapshot is None:
+        return None
+    return load_snapshot_bundle(str(snapshot["snapshotKey"]))
 
 
 def list_route_payload_summaries(snapshot_key: str) -> List[Dict[str, Any]]:
@@ -1048,6 +1110,7 @@ def refresh_odpt_snapshot(
     dump: bool = True,
     force_refresh: bool = False,
     ttl_sec: int = 3600,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> Dict[str, Any]:
     """Refresh ODPT snapshot.
 
@@ -1062,6 +1125,7 @@ def refresh_odpt_snapshot(
             dump=dump,
             force_refresh=force_refresh,
             ttl_sec=ttl_sec,
+            progress_callback=progress_callback,
         )
     except Exception:
         _log.exception("refresh_odpt_snapshot: staged BFF pipeline failed; falling back")
@@ -1079,6 +1143,11 @@ def refresh_odpt_snapshot(
         snapshot_id,
         snapshot_dir,
     )
+    if progress_callback is not None:
+        progress_callback(
+            "odpt_raw_fetch_complete",
+            {"snapshotId": snapshot_id, "counts": {"warnings": len(fetch_warnings)}},
+        )
 
     # -- Step 2: Normalize from files --
     normalize_summary = normalize_odpt_snapshot(snapshot_dir)
@@ -1089,6 +1158,11 @@ def refresh_odpt_snapshot(
         "refresh_odpt_snapshot: normalization complete, dir=%s",
         normalized_dir,
     )
+    if progress_callback is not None:
+        progress_callback(
+            "odpt_normalize_complete",
+            {"normalizedDir": str(normalized_dir), "counts": {"warnings": len(normalize_warnings)}},
+        )
 
     # -- Step 3: Load normalized entities and store in catalog DB --
     bundle = load_normalized_bundle(normalized_dir)
@@ -1096,6 +1170,18 @@ def refresh_odpt_snapshot(
     stops = bundle.get("stops", [])
     trips = bundle.get("trips", [])
     stop_timetables = bundle.get("stop_timetables", [])
+    if progress_callback is not None:
+        progress_callback(
+            "odpt_bundle_loaded",
+            {
+                "counts": {
+                    "routes": len(routes),
+                    "stops": len(stops),
+                    "timetableRows": len(trips),
+                    "stopTimetables": len(stop_timetables),
+                }
+            },
+        )
 
     all_warnings = list(dict.fromkeys(fetch_warnings + normalize_warnings))
     all_warnings.insert(
@@ -1182,6 +1268,7 @@ def get_or_refresh_odpt_snapshot(
     dump: bool = True,
     force_refresh: bool = False,
     ttl_sec: int = 3600,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> Dict[str, Any]:
     snapshot_key = _odpt_snapshot_key(operator)
     snapshot = get_snapshot(snapshot_key)
@@ -1206,6 +1293,19 @@ def get_or_refresh_odpt_snapshot(
                 snapshot_key=snapshot_key,
                 source="odpt",
             )
+            if progress_callback is not None:
+                progress_callback(
+                    "odpt_cached_snapshot",
+                    {
+                        "snapshotMode": "catalog",
+                        "counts": {
+                            "routes": len(bundle.get("routes") or []),
+                            "stops": len(bundle.get("stops") or []),
+                            "timetableRows": len(bundle.get("timetable_rows") or []),
+                            "stopTimetables": len(bundle.get("stop_timetables") or []),
+                        },
+                    },
+                )
             bundle["meta"]["snapshotMode"] = "catalog"
             return bundle
 
@@ -1219,6 +1319,19 @@ def get_or_refresh_odpt_snapshot(
                 snapshot_key=bootstrapped["snapshotKey"],
                 source="odpt",
             )
+            if progress_callback is not None:
+                progress_callback(
+                    "odpt_saved_snapshot",
+                    {
+                        "snapshotMode": "saved-json",
+                        "counts": {
+                            "routes": len(bundle.get("routes") or []),
+                            "stops": len(bundle.get("stops") or []),
+                            "timetableRows": len(bundle.get("timetable_rows") or []),
+                            "stopTimetables": len(bundle.get("stop_timetables") or []),
+                        },
+                    },
+                )
             bundle["meta"]["snapshotMode"] = "saved-json"
             return bundle
 
@@ -1227,6 +1340,7 @@ def get_or_refresh_odpt_snapshot(
         dump=dump,
         force_refresh=force_refresh,
         ttl_sec=ttl_sec,
+        progress_callback=progress_callback,
     )
     bundle = load_snapshot_bundle(refreshed["snapshotKey"])
     bundle["meta"]["snapshotMode"] = "refreshed"
@@ -1236,12 +1350,35 @@ def get_or_refresh_odpt_snapshot(
 def refresh_gtfs_snapshot(
     *,
     feed_path: str | Path = DEFAULT_GTFS_FEED_PATH,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> Dict[str, Any]:
     dataset_ref = _gtfs_dataset_ref(feed_path)
     signature = _serialize(gtfs_feed_signature(feed_path))
     core = load_gtfs_core_bundle(feed_path)
+    if progress_callback is not None:
+        progress_callback(
+            "gtfs_core_loaded",
+            {
+                "counts": {
+                    "stops": len(list(core.get("stops") or [])),
+                    "routes": len(list(core.get("routes") or [])),
+                    "timetableRows": len(list(core.get("timetable_rows") or [])),
+                    "calendarEntries": len(list(core.get("calendar_entries") or [])),
+                }
+            },
+        )
     stop_bundle = build_gtfs_stop_timetables(feed_path)
+    if progress_callback is not None:
+        progress_callback(
+            "gtfs_stop_timetables_built",
+            {"counts": {"stopTimetables": len(list(stop_bundle.get("stop_timetables") or []))}},
+        )
     route_bundle = build_gtfs_route_timetables(feed_path)
+    if progress_callback is not None:
+        progress_callback(
+            "gtfs_route_payloads_built",
+            {"counts": {"routePayloads": len(list(route_bundle.get("route_timetables") or []))}},
+        )
     meta = {
         **dict(core.get("meta") or {}),
         "source": "gtfs",
@@ -1307,6 +1444,7 @@ def refresh_gtfs_snapshot(
 def get_or_refresh_gtfs_snapshot(
     *,
     feed_path: str | Path = DEFAULT_GTFS_FEED_PATH,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> Dict[str, Any]:
     snapshot_key = _gtfs_snapshot_key(feed_path)
     expected_signature = _serialize(gtfs_feed_signature(feed_path))
@@ -1323,10 +1461,23 @@ def get_or_refresh_gtfs_snapshot(
             snapshot_key=snapshot_key,
             source="gtfs",
         )
+        if progress_callback is not None:
+            progress_callback(
+                "gtfs_cached_snapshot",
+                {
+                    "snapshotMode": "catalog",
+                    "counts": {
+                        "routes": len(bundle.get("routes") or []),
+                        "stops": len(bundle.get("stops") or []),
+                        "timetableRows": len(bundle.get("timetable_rows") or []),
+                        "stopTimetables": len(bundle.get("stop_timetables") or []),
+                    },
+                },
+            )
         bundle["meta"]["snapshotMode"] = "catalog"
         return bundle
 
-    refreshed = refresh_gtfs_snapshot(feed_path=feed_path)
+    refreshed = refresh_gtfs_snapshot(feed_path=feed_path, progress_callback=progress_callback)
     bundle = load_snapshot_bundle(refreshed["snapshotKey"])
     bundle["meta"]["snapshotMode"] = "refreshed"
     return bundle

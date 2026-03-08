@@ -157,6 +157,39 @@ def _source_label(source_type: PublicSourceType) -> str:
     return "odpt" if source_type == "odpt" else "gtfs"
 
 
+def _load_public_bundle(
+    source_type: PublicSourceType,
+    *,
+    dataset_ref: str,
+    force_refresh: bool,
+) -> Dict[str, Any]:
+    if source_type == "odpt":
+        if force_refresh:
+            return transit_catalog.refresh_odpt_snapshot(
+                operator=dataset_ref,
+                dump=True,
+                force_refresh=True,
+                ttl_sec=3600,
+            )
+        bundle = transit_catalog.load_existing_odpt_snapshot(operator=dataset_ref)
+        if bundle is not None:
+            return bundle
+        raise RuntimeError(
+            "No saved ODPT snapshot is available. Run `python3 catalog_update_app.py refresh odpt` "
+            "or retry with force_refresh=true."
+        )
+
+    if force_refresh:
+        return transit_catalog.refresh_gtfs_snapshot(feed_path=dataset_ref)
+    bundle = transit_catalog.load_existing_gtfs_snapshot(feed_path=dataset_ref)
+    if bundle is not None:
+        return bundle
+    raise RuntimeError(
+        "No saved GTFS snapshot is available. Run `python3 catalog_update_app.py refresh gtfs` "
+        "or retry with force_refresh=true."
+    )
+
+
 class PublicDataFetchRequest(BaseModel):
     source_type: PublicSourceType
     operator_id: Optional[str] = None
@@ -204,15 +237,13 @@ def fetch_public_data(scenario_id: str, body: PublicDataFetchRequest) -> Dict[st
         if body.source_type == "odpt":
             operator = body.operator_id or body.operatorScope or DEFAULT_OPERATOR
             dataset_ref = operator
-            bundle = transit_catalog.get_or_refresh_odpt_snapshot(
-                operator=operator,
-                dump=True,
-                force_refresh=force_refresh,
-                ttl_sec=3600,
-            )
         else:
             dataset_ref = body.operator_id or body.operatorScope or DEFAULT_GTFS_FEED_PATH
-            bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=dataset_ref)
+        bundle = _load_public_bundle(
+            body.source_type,
+            dataset_ref=dataset_ref,
+            force_refresh=force_refresh,
+        )
     except RuntimeError as exc:
         raise HTTPException(
             status_code=502,

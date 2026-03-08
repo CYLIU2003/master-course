@@ -618,6 +618,9 @@ export function TimetablePage() {
           </div>
         }
       >
+        <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          起動時に ODPT / GTFS の更新は走りません。重い更新は通常 `python3 catalog_update_app.py refresh odpt|gtfs` を先に実行し、この画面では保存済み snapshot をシナリオへ反映します。
+        </div>
         <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <ImportProgressPanel />
           <ImportLogPanel />
