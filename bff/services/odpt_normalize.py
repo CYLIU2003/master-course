@@ -176,6 +176,8 @@ def normalize_busroute_pattern(
         route = {
             "id": route_id,
             "name": name,
+            "routeCode": title or _short_id(pattern_id, route_id),
+            "routeLabel": name,
             "startStop": start_stop,
             "endStop": end_stop,
             "distanceKm": round(total_distance_km, 3),
@@ -300,6 +302,7 @@ def normalize_bus_timetable(
 
     # Track trip counts per route for updating routes later
     trip_counts_by_route: Dict[str, int] = {}
+    grouped_trip_indexes: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
 
     def _stop_label(stop_id: Optional[str]) -> str:
         if not stop_id:
@@ -318,7 +321,8 @@ def normalize_bus_timetable(
         if not pattern_id or not timetable_objects:
             continue
 
-        route_id = _route_id_from_pattern(pattern_id)
+        pattern = patterns.get(pattern_id, {})
+        route_id = str(pattern.get("route_id") or _route_id_from_pattern(pattern_id))
 
         # Determine service
         service_key = _short_id(calendar_raw, "unknown")
@@ -332,62 +336,80 @@ def normalize_bus_timetable(
                 "calendar_raw": calendar_raw,
             }
 
-        # Each timetable object represents one trip
-        for trip_idx, tt_obj in enumerate(timetable_objects):
-            if not isinstance(tt_obj, list):
+        trip_id = str(
+            timetable.get("owl:sameAs")
+            or timetable.get("@id")
+            or f"odpt-trip-{hashlib.sha1(_data_hash(timetable).encode()).hexdigest()[:12]}"
+        )
+
+        trip_stop_times: List[Dict[str, Any]] = []
+        ordered_stop_objects = sorted(
+            [obj for obj in timetable_objects if isinstance(obj, dict)],
+            key=lambda obj: int(obj.get("odpt:index") or 0),
+        )
+        for st_idx, st in enumerate(ordered_stop_objects):
+            stop_id = str(st.get("odpt:busstopPole") or "")
+            departure = _safe_time(st.get("odpt:departureTime"))
+            arrival = _safe_time(st.get("odpt:arrivalTime"))
+            resolved_departure = departure or arrival
+            resolved_arrival = arrival or departure
+            if not stop_id or (resolved_departure is None and resolved_arrival is None):
                 continue
 
-            trip_id_base = f"{_short_id(pattern_id)}_{service_key}_{trip_idx}"
-            trip_id = f"odpt-trip-{hashlib.sha1(trip_id_base.encode()).hexdigest()[:12]}"
-
-            trip_stop_times: List[Dict[str, Any]] = []
-            for st_idx, st in enumerate(tt_obj):
-                if not isinstance(st, dict):
-                    continue
-                stop_id = str(st.get("odpt:busstopPole") or "")
-                departure = _safe_time(st.get("odpt:departureTime"))
-                arrival = _safe_time(st.get("odpt:arrivalTime"))
-
-                st_entry = {
-                    "trip_id": trip_id,
-                    "stop_id": stop_id,
-                    "stop_name": _stop_label(stop_id),
-                    "sequence": st_idx,
-                    "departure": departure or arrival,
-                    "arrival": arrival or departure,
-                    "source": "odpt",
-                }
-                stop_times.append(st_entry)
-                trip_stop_times.append(st_entry)
-
-            if len(trip_stop_times) < 2:
-                continue
-
-            first_st = trip_stop_times[0]
-            last_st = trip_stop_times[-1]
-
-            # Calculate direction
-            direction = "outbound"  # default
-
-            trip = {
+            st_entry = {
                 "trip_id": trip_id,
-                "route_id": route_id,
-                "service_id": service_id,
-                "direction": direction,
-                "trip_index": trip_idx,
-                "origin": first_st.get("stop_name", ""),
-                "destination": last_st.get("stop_name", ""),
-                "departure": first_st.get("departure", ""),
-                "arrival": last_st.get("arrival", ""),
-                "distance_km": 0.0,
-                "allowed_vehicle_types": ["BEV", "ICE"],
+                "stop_id": stop_id,
+                "stop_name": _stop_label(stop_id),
+                "sequence": st_idx,
+                "departure": resolved_departure,
+                "arrival": resolved_arrival,
                 "source": "odpt",
-                "data_hash": "",
             }
+            stop_times.append(st_entry)
+            trip_stop_times.append(st_entry)
+
+        if len(trip_stop_times) < 2:
+            continue
+
+        first_st = trip_stop_times[0]
+        last_st = trip_stop_times[-1]
+        departure_time = first_st.get("departure") or first_st.get("arrival")
+        arrival_time = last_st.get("arrival") or last_st.get("departure")
+        if not departure_time or not arrival_time:
+            continue
+
+        direction = "outbound"
+        trip = {
+            "trip_id": trip_id,
+            "route_id": route_id,
+            "service_id": service_id,
+            "direction": direction,
+            "trip_index": 0,
+            "origin": first_st.get("stop_name", ""),
+            "destination": last_st.get("stop_name", ""),
+            "departure": departure_time,
+            "arrival": arrival_time,
+            "distance_km": float(pattern.get("total_distance_km") or 0.0),
+            "allowed_vehicle_types": ["BEV", "ICE"],
+            "source": "odpt",
+            "data_hash": "",
+        }
+        grouped_trip_indexes.setdefault((route_id, service_id, direction), []).append(trip)
+        trip_counts_by_route[route_id] = trip_counts_by_route.get(route_id, 0) + 1
+
+    for group_key in sorted(grouped_trip_indexes):
+        grouped_trips = sorted(
+            grouped_trip_indexes[group_key],
+            key=lambda item: (
+                str(item.get("departure") or ""),
+                str(item.get("arrival") or ""),
+                str(item.get("trip_id") or ""),
+            ),
+        )
+        for trip_index, trip in enumerate(grouped_trips):
+            trip["trip_index"] = trip_index
             trip["data_hash"] = _data_hash(trip)
             trips.append(trip)
-
-            trip_counts_by_route[route_id] = trip_counts_by_route.get(route_id, 0) + 1
 
     cal_list = list(service_calendars.values())
 
@@ -441,7 +463,9 @@ def normalize_busstop_pole_timetable(
                 {
                     "departure": _safe_time(obj.get("odpt:departureTime")),
                     "destination": str(obj.get("odpt:destinationBusstopPole") or ""),
+                    "busroutePattern": str(obj.get("odpt:busroutePattern") or ""),
                     "busroute": str(obj.get("odpt:busroute") or ""),
+                    "isMidnight": bool(obj.get("odpt:isMidnight")),
                     "note": str(obj.get("odpt:note") or ""),
                 }
             )

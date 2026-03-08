@@ -170,6 +170,9 @@ type ExplorerDepotAssignment = {
   routeId: string;
   routeName: string;
   routeCode: string;
+  routeFamilyCode?: string;
+  routeVariantType?: string;
+  familySortOrder?: number;
   startStop?: string;
   endStop?: string;
   source?: string;
@@ -854,6 +857,18 @@ export function OdptExplorerPage() {
   const sortedAssignmentRows = useMemo(
     () =>
       [...assignmentRows].sort((left, right) => {
+        const familyCmp = compareRouteCodeLike(
+          left.routeFamilyCode || left.routeCode || left.routeName,
+          right.routeFamilyCode || right.routeCode || right.routeName,
+        );
+        if (familyCmp !== 0) {
+          return familyCmp;
+        }
+        const familyOrderCmp =
+          Number(left.familySortOrder ?? 999) - Number(right.familySortOrder ?? 999);
+        if (familyOrderCmp !== 0) {
+          return familyOrderCmp;
+        }
         const codeCmp = compareRouteCodeLike(
           left.routeCode || left.routeName,
           right.routeCode || right.routeName,

@@ -741,6 +741,48 @@ def _enrich_routes_for_display(
     return enrich_routes_with_family(enriched)
 
 
+def _enrich_explorer_assignments_for_display(
+    scenario_id: str,
+    assignments: List[Dict[str, Any]],
+    *,
+    operator: Optional[str],
+) -> List[Dict[str, Any]]:
+    routes = _enrich_routes_for_display(
+        scenario_id,
+        store.list_routes(scenario_id, operator=operator),
+    )
+    route_meta = {
+        str(route.get("id")): route
+        for route in routes
+        if route.get("id") is not None
+    }
+    enriched: List[Dict[str, Any]] = []
+    for assignment in assignments:
+        route = route_meta.get(str(assignment.get("routeId")))
+        item = dict(assignment)
+        if route:
+            item["routeCode"] = (
+                route.get("routeCode")
+                or route.get("routeFamilyCode")
+                or assignment.get("routeCode")
+            )
+            item["routeFamilyCode"] = route.get("routeFamilyCode")
+            item["routeVariantType"] = route.get("routeVariantType")
+            item["familySortOrder"] = route.get("familySortOrder")
+        enriched.append(item)
+    enriched.sort(
+        key=lambda item: (
+            str(item.get("routeFamilyCode") or item.get("routeCode") or item.get("routeName") or ""),
+            int(item.get("familySortOrder") or 999),
+            str(item.get("routeCode") or ""),
+            str(item.get("routeName") or ""),
+            str(item.get("startStop") or ""),
+            str(item.get("endStop") or ""),
+        )
+    )
+    return enriched
+
+
 @router.post("/scenarios/{scenario_id}/routes", status_code=201)
 def create_route(scenario_id: str, body: CreateRouteBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
@@ -904,6 +946,11 @@ def list_explorer_depot_assignments(
         scenario_id,
         operator=operator,
         unresolved_only=unresolved_only,
+    )
+    items = _enrich_explorer_assignments_for_display(
+        scenario_id,
+        items,
+        operator=operator,
     )
     return {"items": items, "total": len(items)}
 

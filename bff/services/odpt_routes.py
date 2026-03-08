@@ -311,6 +311,8 @@ def build_routes_from_operational(dataset: Dict[str, Any]) -> List[Dict[str, Any
             {
                 "id": _route_id_from_pattern(pattern_id),
                 "name": name,
+                "routeCode": title or _short_id(pattern_id, pattern_id),
+                "routeLabel": name,
                 "startStop": start_stop,
                 "endStop": end_stop,
                 "distanceKm": round(float(distance_km or 0.0), 3),
