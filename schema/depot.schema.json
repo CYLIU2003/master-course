@@ -1,0 +1,20 @@
+{
+  "$id": "https://master-course/schemas/depot.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Depot",
+  "type": "object",
+  "required": ["depot_id", "name"],
+  "properties": {
+    "depot_id": { "type": "string" },
+    "name": { "type": "string" },
+    "charger_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "contracted_power_kw": { "type": "number", "default": 0 },
+    "import_limit_kw": { "type": "number", "default": 0 },
+    "export_limit_kw": { "type": "number", "default": 0 }
+  },
+  "additionalProperties": false
+}

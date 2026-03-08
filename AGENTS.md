@@ -158,3 +158,108 @@ Coverage integrity must also be checked:
 - Add multi-depot support with expanded deadhead rule tables.
 - Add driver constraints (shift/break regulations).
 - Support mixed-fleet relay duties if required.
+
+---
+
+## Optimization Engine Design Rules
+
+### Purpose
+
+The optimization backend must support:
+
+- timetable-to-connection-graph conversion
+- vehicle assignment
+- charging / discharging scheduling
+- depot / charger constraints
+- PV-assisted energy use
+- rolling-horizon re-optimization
+
+Supported solver modes:
+
+- `milp`
+- `alns`
+- `hybrid`
+
+`hybrid` is the default research mode.
+
+### Core Design Policy
+
+1. Separate domain model from optimization model
+   Raw GTFS / odpt / CSV / manual inputs must be normalized before solver logic.
+
+2. Shared canonical problem
+   `milp`, `alns`, and `hybrid` must consume the same canonical problem object.
+
+3. Hybrid-first principle
+   Use MILP for baseline and exact subproblems, ALNS for exploration, and Hybrid for production-scale experiments.
+
+4. Research-grade extensibility
+   Leave hooks for multi-depot, mixed fleet, charger planning, fleet composition, and column generation.
+
+### Required Optimization Layers
+
+- `src/optimization/common/`
+- `src/optimization/milp/`
+- `src/optimization/alns/`
+- `src/optimization/hybrid/`
+- `src/optimization/rolling/`
+
+### MILP Rules
+
+- Solver backend must be abstracted.
+- Business logic must not hard-code solver-specific APIs.
+- Warm start, time limit, and mip gap must be configurable.
+- Infeasibility diagnostics must be surfaced when available.
+
+### ALNS Rules
+
+ALNS state must expose:
+
+- `objective()`
+- `clone()`
+- `is_feasible()`
+
+ALNS controls must be separate components:
+
+- destroy operators
+- repair operators
+- acceptance criterion
+- operator selection
+- stopping criterion
+
+### Hybrid Rules
+
+Hybrid mode must support:
+
+- MILP-based initial solution
+- ALNS outer loop
+- partial MILP repair
+- incumbent polishing hooks
+
+### UCDavis-Inspired Extension Points
+
+Keep placeholders for:
+
+- fleet composition optimization
+- charger location / infrastructure search
+- `ColumnPool`
+- `PricingProblem`
+- infrastructure neighborhoods
+- GTFS preprocessing hooks beyond dispatch preprocessing
+
+These are extension points only; they must not bypass timetable-first dispatch feasibility.
+
+### Logging and Reproducibility
+
+Every optimization run must save:
+
+- scenario snapshot
+- normalized problem summary
+- solver config
+- random seed
+- best objective
+- cost breakdown
+- feasibility flags
+- operator statistics
+- runtime
+- incumbent history

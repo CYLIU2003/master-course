@@ -1,0 +1,32 @@
+{
+  "$id": "https://master-course/schemas/scenario.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scenario",
+  "type": "object",
+  "definitions": {
+    "OptimizationScenario": {
+      "type": "object",
+      "required": ["scenario_id", "timestep_min"],
+      "properties": {
+        "scenario_id": { "type": "string" },
+        "horizon_start": { "type": ["string", "null"] },
+        "horizon_end": { "type": ["string", "null"] },
+        "timestep_min": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "LockedOperation": {
+      "type": "object",
+      "required": ["trip_id"],
+      "properties": {
+        "trip_id": { "type": "string" },
+        "duty_id": { "type": ["string", "null"] },
+        "vehicle_id": { "type": ["string", "null"] },
+        "fixed_before_min": { "type": ["integer", "null"] },
+        "actual_soc": { "type": ["number", "null"] },
+        "actual_location": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    }
+  }
+}

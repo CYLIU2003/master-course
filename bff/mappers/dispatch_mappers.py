@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from src.dispatch.models import (
+    ConnectionArc,
     DeadheadRule,
     DutyLeg,
     Trip,
@@ -141,37 +142,35 @@ def validation_result_to_dict(duty_id: str, result: ValidationResult) -> Dict[st
 
 def build_graph_response(
     trips: List[Trip],
-    adjacency: Dict[str, List[str]],
+    arcs: List[ConnectionArc],
 ) -> Dict[str, Any]:
-    """
-    Build the ConnectionGraph JSON response from the dispatch graph.
+    feasible_count = sum(1 for arc in arcs if arc.feasible)
+    serialized_arcs = []
+    reason_counts: Dict[str, int] = {}
 
-    The adjacency list from ConnectionGraphBuilder is:
-        { trip_id_i: [trip_id_j, ...] }
-
-    We expand this into full ConnectionArc objects.
-    """
-    arcs = []
-    feasible_count = 0
-    for from_id, to_ids in adjacency.items():
-        for to_id in to_ids:
-            arcs.append(
-                {
-                    "from_trip_id": from_id,
-                    "to_trip_id": to_id,
-                    "deadhead_time_min": 0,
-                    "deadhead_distance_km": 0.0,
-                    "idle_time_min": 0,
-                    "feasible": True,
-                    "reason": "feasible",
-                }
-            )
-            feasible_count += 1
+    for arc in arcs:
+        reason_counts[arc.reason_code] = reason_counts.get(arc.reason_code, 0) + 1
+        serialized_arcs.append(
+            {
+                "from_trip_id": arc.from_trip_id,
+                "to_trip_id": arc.to_trip_id,
+                "vehicle_type": arc.vehicle_type,
+                "deadhead_time_min": arc.deadhead_time_min,
+                "deadhead_distance_km": 0.0,
+                "turnaround_time_min": arc.turnaround_time_min,
+                "slack_min": arc.slack_min,
+                "idle_time_min": max(0, arc.slack_min),
+                "feasible": arc.feasible,
+                "reason_code": arc.reason_code,
+                "reason": arc.reason,
+            }
+        )
 
     return {
         "trips": [trip_to_dict(t) for t in trips],
-        "arcs": arcs,
-        "total_arcs": len(arcs),
+        "arcs": serialized_arcs,
+        "total_arcs": len(serialized_arcs),
         "feasible_arcs": feasible_count,
-        "infeasible_arcs": 0,
+        "infeasible_arcs": len(serialized_arcs) - feasible_count,
+        "reason_counts": reason_counts,
     }

@@ -457,6 +457,102 @@ def solve(
     }
 
 
+def solve_problem_data(
+    data,
+    *,
+    mode: str = "mode_milp_only",
+    time_limit_seconds: float = 300.0,
+    mip_gap: float = 0.01,
+    output_dir: str = "outputs",
+) -> dict:
+    """
+    Execute the optimization pipeline directly from an in-memory ProblemData.
+    This is the BFF-facing entrypoint used by scenario_to_problemdata.
+    """
+    from src.model_sets import build_model_sets
+    from src.parameter_builder import build_derived_params
+
+    cfg: Dict[str, Any] = {
+        "time_limit_sec": time_limit_seconds,
+        "mip_gap": mip_gap,
+        "output_dir": output_dir,
+    }
+    run_mode = mode or "mode_milp_only"
+    dispatch_report = getattr(data, "_dispatch_preprocess_report", None)
+
+    ms = build_model_sets(data)
+    dp = build_derived_params(data, ms)
+
+    t_total_start = _time.perf_counter()
+    alns_time = 0.0
+    milp_time = 0.0
+    method = "MILP"
+    alns_params_used = None
+
+    try:
+        if run_mode == "mode_milp_only":
+            result, milp_time = _solve_milp_core(
+                cfg,
+                data,
+                ms,
+                dp,
+                "thesis_mode",
+                flag_overrides=None,
+            )
+        elif run_mode == "mode_alns_only":
+            method = "ALNS"
+            result, alns_params_used = _solve_alns_core(cfg, data, ms, dp)
+            alns_time = result.solve_time_sec
+        elif run_mode == "mode_alns_milp":
+            method = "ALNS+MILP"
+            result, _alns_r, _milp_r, alns_time, milp_time, alns_params_used = (
+                _solve_alns_milp(cfg, data, ms, dp, None)
+            )
+        else:
+            result, milp_time = _solve_milp_core(cfg, data, ms, dp, run_mode)
+    except Exception as exc:
+        from src.milp_model import MILPResult
+
+        message = str(exc)
+        status = (
+            "GUROBI_UNAVAILABLE"
+            if "Gurobi" in message or "gurobipy" in message
+            else "ERROR"
+        )
+        result = MILPResult(status=status, infeasibility_info=message)
+
+    total_time = _time.perf_counter() - t_total_start
+
+    sim_result = None
+    try:
+        from src.simulator import simulate
+
+        sim_result = simulate(data, ms, dp, result)
+    except Exception:
+        sim_result = None
+
+    try:
+        from src.result_exporter import export_all
+
+        if sim_result is not None:
+            export_all(data, ms, dp, result, sim_result, output_dir)
+        else:
+            _export_minimal(result, output_dir)
+    except Exception:
+        pass
+
+    return {
+        "result": result,
+        "sim_result": sim_result,
+        "method": method,
+        "dispatch_preprocess": dispatch_report,
+        "alns_time_sec": alns_time,
+        "milp_time_sec": milp_time,
+        "total_time_sec": total_time,
+        "alns_params": alns_params_used,
+    }
+
+
 def _export_minimal(result, out_root):
     """SimulationResult なしで最低限の結果を保存する。"""
     from datetime import datetime

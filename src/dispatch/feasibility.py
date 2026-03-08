@@ -37,6 +37,7 @@ class FeasibilityEngine:
         if vehicle_type not in trip_j.allowed_vehicle_types:
             return ConnectionResult(
                 feasible=False,
+                reason_code="vehicle_type_mismatch",
                 reason=(
                     f"Vehicle type '{vehicle_type}' not allowed for trip "
                     f"'{trip_j.trip_id}' (allowed: {trip_j.allowed_vehicle_types})"
@@ -52,6 +53,7 @@ class FeasibilityEngine:
             # No deadhead path exists between these stops.
             return ConnectionResult(
                 feasible=False,
+                reason_code="missing_deadhead",
                 reason=(
                     f"No deadhead path from '{from_stop}' to '{to_stop}': "
                     f"location continuity broken between trip '{trip_i.trip_id}' "
@@ -67,6 +69,7 @@ class FeasibilityEngine:
         if slack < 0:
             return ConnectionResult(
                 feasible=False,
+                reason_code="insufficient_time",
                 reason=(
                     f"Insufficient time: trip '{trip_i.trip_id}' arrives at "
                     f"{trip_i.arrival_time}, turnaround {turnaround_min} min, "
@@ -75,15 +78,18 @@ class FeasibilityEngine:
                     f"departs at {trip_j.departure_min} min (slack={slack})"
                 ),
                 deadhead_time_min=deadhead_min,
+                turnaround_time_min=turnaround_min,
                 slack_min=slack,
             )
 
         return ConnectionResult(
             feasible=True,
+            reason_code="feasible",
             reason=(
                 f"OK: slack={slack} min, deadhead={deadhead_min} min, "
                 f"turnaround={turnaround_min} min"
             ),
             deadhead_time_min=deadhead_min,
+            turnaround_time_min=turnaround_min,
             slack_min=slack,
         )
