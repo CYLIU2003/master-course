@@ -1,0 +1,50 @@
+{
+  "$id": "https://master-course/schemas/trip.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Route Trip ConnectionArc",
+  "type": "object",
+  "definitions": {
+    "Route": {
+      "type": "object",
+      "required": ["route_id"],
+      "properties": {
+        "route_id": { "type": "string" },
+        "trip_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "route_name": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "Trip": {
+      "type": "object",
+      "required": [
+        "trip_id",
+        "route_id",
+        "origin",
+        "destination",
+        "departure_min",
+        "arrival_min",
+        "distance_km",
+        "allowed_vehicle_types"
+      ],
+      "properties": {
+        "trip_id": { "type": "string" },
+        "route_id": { "type": "string" },
+        "origin": { "type": "string" },
+        "destination": { "type": "string" },
+        "departure_min": { "type": "integer", "minimum": 0 },
+        "arrival_min": { "type": "integer", "minimum": 0 },
+        "distance_km": { "type": "number" },
+        "energy_kwh": { "type": "number", "default": 0 },
+        "allowed_vehicle_types": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

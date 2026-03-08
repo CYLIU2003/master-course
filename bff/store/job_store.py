@@ -12,6 +12,13 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 
+JOB_PERSISTENCE_INFO: Dict[str, Any] = {
+    "store": "process_memory",
+    "survives_restart": False,
+    "warning": "Background jobs are stored in process memory and are lost if the BFF restarts.",
+}
+
+
 @dataclass
 class Job:
     job_id: str
@@ -20,6 +27,7 @@ class Job:
     message: str = ""
     result_key: Optional[str] = None
     error: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 # Module-level store — single instance per process
@@ -28,7 +36,7 @@ _jobs: Dict[str, Job] = {}
 
 def create_job() -> Job:
     job_id = str(uuid.uuid4())
-    job = Job(job_id=job_id)
+    job = Job(job_id=job_id, metadata={"persistence": dict(JOB_PERSISTENCE_INFO)})
     _jobs[job_id] = job
     return job
 
@@ -47,6 +55,7 @@ def update_job(
     message: Optional[str] = None,
     result_key: Optional[str] = None,
     error: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Job:
     job = get_job(job_id)
     if status is not None:
@@ -59,6 +68,8 @@ def update_job(
         job.result_key = result_key
     if error is not None:
         job.error = error
+    if metadata is not None:
+        job.metadata = dict(metadata)
     return job
 
 
@@ -70,4 +81,6 @@ def job_to_dict(job: Job) -> Dict[str, Any]:
         "message": job.message,
         "result_key": job.result_key,
         "error": job.error,
+        "metadata": job.metadata,
+        "persistence": dict(JOB_PERSISTENCE_INFO),
     }

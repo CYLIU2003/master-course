@@ -22,6 +22,7 @@ import type {
   SimulationConfig,
   OptimizationResult,
   Job,
+  RunCapabilities,
 } from "./domain";
 
 // ── Generic wrappers ──────────────────────────────────────────
@@ -513,6 +514,7 @@ export interface GenerateDutiesRequest {
 export type SimulationResultResponse = SimulationResult;
 export type SimulationConfigResponse = SimulationConfig;
 export type DispatchScopeResponse = DispatchScope;
+export type SimulationCapabilitiesResponse = RunCapabilities;
 
 export interface UpdateDispatchScopeRequest {
   depotId?: string | null;
@@ -528,11 +530,36 @@ export interface RunSimulationRequest {
 // ── Optimization ──────────────────────────────────────────────
 
 export type OptimizationResultResponse = OptimizationResult;
+export type OptimizationCapabilitiesResponse = RunCapabilities;
 
 export interface RunOptimizationRequest {
   mode: Scenario["mode"];
   time_limit_seconds?: number;
   mip_gap?: number;
+  service_id?: string;
+  depot_id?: string;
+  rebuild_dispatch?: boolean;
+  use_existing_duties?: boolean;
+  alns_iterations?: number;
+}
+
+export interface DelayEventRequest {
+  trip_id: string;
+  delay_min: number;
+}
+
+export interface ReoptimizeRequest {
+  mode?: string;
+  current_time: string;
+  time_limit_seconds?: number;
+  mip_gap?: number;
+  alns_iterations?: number;
+  service_id?: string;
+  depot_id?: string;
+  actual_soc?: Record<string, number>;
+  actual_location_node_id?: Record<string, string>;
+  delays?: DelayEventRequest[];
+  updated_pv_profile?: Array<Record<string, unknown>>;
 }
 
 // ── Jobs ──────────────────────────────────────────────────────

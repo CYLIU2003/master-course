@@ -245,6 +245,88 @@ def test_duplicate_vehicle_batch_to_target_depot_filters_route_permissions(
     ]
 
 
+def test_create_scenario_seeds_v1_2_backend_fields(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("v1.2 defaults", "", "thesis_mode")
+
+    doc = scenario_store._load(meta["id"])
+
+    assert doc["deadhead_rules"] == []
+    assert doc["turnaround_rules"] == []
+    assert doc["charger_sites"] == []
+    assert doc["chargers"] == []
+    assert doc["pv_profiles"] == []
+    assert doc["energy_price_profiles"] == []
+    assert doc["experiment_case_type"] is None
+    assert doc["problemdata_build_audit"] is None
+    assert doc["optimization_audit"] is None
+    assert doc["simulation_audit"] is None
+
+
+def test_rule_updates_invalidate_dispatch_artifacts_and_roundtrip(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Rule roundtrip", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    scenario_store.set_field(
+        scenario_id,
+        "trips",
+        [{"trip_id": "T1"}],
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "graph",
+        {"arcs": []},
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "duties",
+        [{"duty_id": "D1"}],
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "problemdata_build_audit",
+        {"ok": True},
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "optimization_audit",
+        {"ok": True},
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "simulation_audit",
+        {"ok": True},
+    )
+
+    deadhead = scenario_store.set_deadhead_rules(
+        scenario_id,
+        [
+            {
+                "from_stop": "A",
+                "to_stop": "B",
+                "travel_time_min": 12,
+                "distance_km": 3.4,
+                "energy_kwh_bev": 4.5,
+                "fuel_l_ice": 0.8,
+            }
+        ],
+    )
+    turnaround = scenario_store.set_turnaround_rules(
+        scenario_id,
+        [{"stop_id": "B", "min_turnaround_min": 8}],
+    )
+
+    doc = scenario_store._load(scenario_id)
+
+    assert deadhead == scenario_store.get_deadhead_rules(scenario_id)
+    assert turnaround == scenario_store.get_turnaround_rules(scenario_id)
+    assert doc["trips"] is None
+    assert doc["graph"] is None
+    assert doc["duties"] is None
+    assert doc["problemdata_build_audit"] is None
+    assert doc["optimization_audit"] is None
+    assert doc["simulation_audit"] is None
+
+
 def test_upsert_timetable_rows_from_source_preserves_manual_rows(temp_store_dir: Path):
     meta = scenario_store.create_scenario("Timetable import", "", "thesis_mode")
     scenario_id = meta["id"]

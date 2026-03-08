@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Dict, List
 
 from .feasibility import FeasibilityEngine
-from .models import DispatchContext
+from .models import ConnectionArc, DispatchContext
 
 
 class ConnectionGraphBuilder:
@@ -32,24 +32,47 @@ class ConnectionGraphBuilder:
         All trips that are *allowed* for *vehicle_type* appear as nodes
         (even if they have no outgoing edges).
         """
-        trips = context.trips
-        # Seed graph: every eligible trip appears as a node.
         graph: Dict[str, List[str]] = {
-            t.trip_id: [] for t in trips if vehicle_type in t.allowed_vehicle_types
+            t.trip_id: []
+            for t in context.trips
+            if vehicle_type in t.allowed_vehicle_types
         }
 
-        trip_by_id = context.trips_by_id()
+        for arc in self.analyze(context, vehicle_type):
+            if arc.feasible:
+                graph[arc.from_trip_id].append(arc.to_trip_id)
+
+        return graph
+
+    def analyze(
+        self,
+        context: DispatchContext,
+        vehicle_type: str,
+    ) -> List[ConnectionArc]:
+        """Return all analyzed candidate arcs for the given vehicle type."""
+        trips = [
+            trip for trip in context.trips if vehicle_type in trip.allowed_vehicle_types
+        ]
+        arcs: List[ConnectionArc] = []
 
         for trip_i in trips:
-            if vehicle_type not in trip_i.allowed_vehicle_types:
-                continue
             for trip_j in trips:
                 if trip_i.trip_id == trip_j.trip_id:
                     continue
-                if vehicle_type not in trip_j.allowed_vehicle_types:
-                    continue
-                result = self._engine.can_connect(trip_i, trip_j, context, vehicle_type)
-                if result.feasible:
-                    graph[trip_i.trip_id].append(trip_j.trip_id)
 
-        return graph
+                result = self._engine.can_connect(trip_i, trip_j, context, vehicle_type)
+                arcs.append(
+                    ConnectionArc(
+                        from_trip_id=trip_i.trip_id,
+                        to_trip_id=trip_j.trip_id,
+                        vehicle_type=vehicle_type,
+                        deadhead_time_min=result.deadhead_time_min,
+                        turnaround_time_min=result.turnaround_time_min,
+                        slack_min=result.slack_min,
+                        feasible=result.feasible,
+                        reason_code=result.reason_code,
+                        reason=result.reason,
+                    )
+                )
+
+        return arcs

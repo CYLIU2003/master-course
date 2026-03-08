@@ -1,0 +1,35 @@
+{
+  "$id": "https://master-course/schemas/reoptimize-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReoptimizeRequest",
+  "type": "object",
+  "required": ["scenario_id", "current_time"],
+  "properties": {
+    "scenario_id": { "type": "string" },
+    "current_time": { "type": "string" },
+    "solver_mode": {
+      "type": "string",
+      "enum": ["milp", "alns", "hybrid"],
+      "default": "hybrid"
+    },
+    "actual_soc": {
+      "type": "object",
+      "additionalProperties": { "type": "number" },
+      "default": {}
+    },
+    "delays": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["trip_id", "delay_min"],
+        "properties": {
+          "trip_id": { "type": "string" },
+          "delay_min": { "type": "number" }
+        },
+        "additionalProperties": false
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false
+}

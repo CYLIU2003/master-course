@@ -1,0 +1,19 @@
+{
+  "$id": "https://master-course/schemas/optimize-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OptimizeRequest",
+  "type": "object",
+  "required": ["scenario_id"],
+  "properties": {
+    "scenario_id": { "type": "string" },
+    "solver_mode": {
+      "type": "string",
+      "enum": ["milp", "alns", "hybrid"],
+      "default": "hybrid"
+    },
+    "time_limit_sec": { "type": "integer", "minimum": 1, "default": 300 },
+    "mip_gap": { "type": "number", "minimum": 0, "default": 0.02 },
+    "alns_iterations": { "type": "integer", "minimum": 1, "default": 2000 }
+  },
+  "additionalProperties": false
+}

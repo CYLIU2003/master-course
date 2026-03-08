@@ -229,18 +229,22 @@ export interface TurnaroundRule {
 
 export type FeasibilityReason =
   | "feasible"
-  | "location_unreachable"
-  | "time_insufficient"
+  | "missing_deadhead"
+  | "insufficient_time"
   | "vehicle_type_mismatch";
 
 export interface ConnectionArc {
   from_trip_id: string;
   to_trip_id: string;
+  vehicle_type: string;
   deadhead_time_min: number;
   deadhead_distance_km: number;
+  turnaround_time_min: number;
+  slack_min: number;
   idle_time_min: number;
   feasible: boolean;
-  reason: FeasibilityReason;
+  reason_code: FeasibilityReason;
+  reason: string;
 }
 
 export interface ConnectionGraph {
@@ -249,6 +253,7 @@ export interface ConnectionGraph {
   total_arcs: number;
   feasible_arcs: number;
   infeasible_arcs: number;
+  reason_counts: Partial<Record<FeasibilityReason, number>>;
 }
 
 // ── Duties ────────────────────────────────────────────────────
@@ -360,6 +365,15 @@ export interface OptimizationResult {
   duties: VehicleDuty[];
   charging_schedule: ChargingSlot[];
   cost_breakdown: CostBreakdown;
+  feasible?: boolean;
+  solver_mode?: string;
+  warnings?: string[];
+  infeasibility_reasons?: string[];
+  vehicle_paths?: Record<string, string[]>;
+  operator_stats?: Record<string, { selected: number; accepted: number; rejected: number; reward: number }>;
+  incumbent_history?: Array<{ iteration: number; objective_value: number; feasible: boolean }>;
+  reoptimized?: boolean;
+  reoptimization_request?: Record<string, unknown>;
 }
 
 export interface ChargingSlot {
@@ -390,6 +404,27 @@ export interface Job {
   message: string;
   result_key?: string;
   error?: string;
+  metadata?: Record<string, unknown>;
+  persistence?: {
+    store: string;
+    survives_restart: boolean;
+    warning: string;
+  };
+}
+
+export interface RunCapabilities {
+  implemented: boolean;
+  async_job: boolean;
+  job_persistence: {
+    store: string;
+    survives_restart: boolean;
+    warning: string;
+  };
+  primary_inputs?: string[];
+  supported_sources?: string[];
+  supported_modes?: string[];
+  supports_reoptimization?: boolean;
+  notes: string[];
 }
 
 // ── Derived / Computed (for UI convenience) ───────────────────

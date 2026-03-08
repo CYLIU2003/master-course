@@ -59,6 +59,18 @@ def simulate_from_outputs(config_path: str = "config/experiment_config.json") ->
     return {"result": result, "sim": sim}
 
 
+def simulate_problem_data(data, milp_result) -> dict:
+    """Run the simulator directly from an in-memory ProblemData and MILPResult."""
+    from src.model_sets import build_model_sets
+    from src.parameter_builder import build_derived_params
+    from src.simulator import simulate
+
+    ms = build_model_sets(data)
+    dp = build_derived_params(data, ms)
+    sim = simulate(data, ms, dp, milp_result)
+    return {"result": milp_result, "sim": sim}
+
+
 def main():
     parser = argparse.ArgumentParser(description="simulate — シミュレーション評価")
     parser.add_argument("--config", default="config/experiment_config.json")

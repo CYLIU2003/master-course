@@ -1,0 +1,53 @@
+{
+  "$id": "https://master-course/schemas/canonical-problem.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CanonicalOptimizationProblem",
+  "type": "object",
+  "required": [
+    "scenario",
+    "trips",
+    "vehicles"
+  ],
+  "properties": {
+    "scenario": { "$ref": "scenario.schema.json#/definitions/OptimizationScenario" },
+    "depots": {
+      "type": "array",
+      "items": { "$ref": "depot.schema.json" },
+      "default": []
+    },
+    "vehicle_types": {
+      "type": "array",
+      "items": { "$ref": "vehicle.schema.json#/definitions/VehicleType" },
+      "default": []
+    },
+    "vehicles": {
+      "type": "array",
+      "items": { "$ref": "vehicle.schema.json#/definitions/Vehicle" }
+    },
+    "routes": {
+      "type": "array",
+      "items": { "$ref": "trip.schema.json#/definitions/Route" },
+      "default": []
+    },
+    "trips": {
+      "type": "array",
+      "items": { "$ref": "trip.schema.json#/definitions/Trip" }
+    },
+    "chargers": {
+      "type": "array",
+      "items": { "$ref": "charger.schema.json" },
+      "default": []
+    },
+    "price_slots": {
+      "type": "array",
+      "items": { "$ref": "energy.schema.json#/definitions/EnergyPriceSlot" },
+      "default": []
+    },
+    "pv_slots": {
+      "type": "array",
+      "items": { "$ref": "energy.schema.json#/definitions/PVSlot" },
+      "default": []
+    }
+  },
+  "additionalProperties": true
+}

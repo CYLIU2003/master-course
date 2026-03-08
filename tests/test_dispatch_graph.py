@@ -235,3 +235,35 @@ class TestGraphBuilderEdges:
         assert "T1" not in graph["T2"]
         assert "T1" not in graph["T3"]
         assert "T2" not in graph["T3"]
+
+
+class TestGraphBuilderAnalyze:
+    """Detailed arc analysis used by the BFF graph contract."""
+
+    def test_analyze_includes_feasible_and_infeasible_arcs_with_reasons(self):
+        trips = [
+            make_trip("T1", "A", "B", "07:00", "07:30"),
+            make_trip("T2", "C", "D", "08:10", "08:40"),
+            make_trip("T3", "C", "E", "07:45", "08:15"),
+        ]
+        ctx = make_context(
+            trips=trips,
+            deadhead_rules={("B", "C"): DeadheadRule("B", "C", 20)},
+            turnaround_rules={"B": TurnaroundRule("B", 5)},
+        )
+
+        arcs = ConnectionGraphBuilder().analyze(ctx, "BEV")
+
+        by_pair = {(arc.from_trip_id, arc.to_trip_id): arc for arc in arcs}
+        feasible = by_pair[("T1", "T2")]
+        infeasible = by_pair[("T1", "T3")]
+
+        assert feasible.feasible is True
+        assert feasible.reason_code == "feasible"
+        assert feasible.turnaround_time_min == 5
+        assert feasible.deadhead_time_min == 20
+        assert feasible.slack_min == 15
+
+        assert infeasible.feasible is False
+        assert infeasible.reason_code == "insufficient_time"
+        assert infeasible.slack_min == -10
