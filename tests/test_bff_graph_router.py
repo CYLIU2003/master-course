@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from bff.routers.graph import _build_dispatch_context, _build_graph_payload
+from bff.routers.graph import (
+    _build_blocks_payload,
+    _build_dispatch_context,
+    _build_dispatch_plan_payload,
+    _build_graph_payload,
+)
 from bff.store import scenario_store
 
 
@@ -231,3 +236,126 @@ def test_build_graph_payload_returns_reasoned_arcs(temp_store_dir: Path):
     assert arc["slack_min"] == 10
     assert arc["reason_code"] == "feasible"
     assert arc["reason"].startswith("OK:")
+
+
+def test_build_blocks_payload_groups_feasible_chains(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Block payload", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Main depot", "location": "A"},
+    )
+    scenario_store.create_vehicle(
+        scenario_id,
+        {
+            "depotId": depot["id"],
+            "type": "BEV",
+            "modelName": "EV-1",
+            "batteryKwh": 300.0,
+            "energyConsumption": 1.2,
+        },
+    )
+    scenario_store.set_depot_route_permissions(
+        scenario_id,
+        [{"depotId": depot["id"], "routeId": "R1", "allowed": True}],
+    )
+    scenario_store.set_deadhead_rules(
+        scenario_id,
+        [{"from_stop": "B", "to_stop": "C", "travel_time_min": 10}],
+    )
+    scenario_store.set_turnaround_rules(
+        scenario_id,
+        [{"stop_id": "B", "min_turnaround_min": 5}],
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "timetable_rows",
+        [
+            {
+                "trip_id": "T1",
+                "route_id": "R1",
+                "service_id": "WEEKDAY",
+                "origin": "A",
+                "destination": "B",
+                "departure": "07:00",
+                "arrival": "07:30",
+                "distance_km": 10.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+            {
+                "trip_id": "T2",
+                "route_id": "R1",
+                "service_id": "WEEKDAY",
+                "origin": "C",
+                "destination": "D",
+                "departure": "07:50",
+                "arrival": "08:20",
+                "distance_km": 9.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+        ],
+        invalidate_dispatch=True,
+    )
+
+    blocks = _build_blocks_payload(scenario_id, "BEV", "greedy", "WEEKDAY", depot["id"])
+
+    assert len(blocks) == 1
+    assert blocks[0]["vehicle_type"] == "BEV"
+    assert blocks[0]["trip_ids"] == ["T1", "T2"]
+
+
+def test_build_dispatch_plan_payload_contains_blocks_and_duties(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Dispatch plan payload", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Main depot", "location": "A"},
+    )
+    scenario_store.create_vehicle(
+        scenario_id,
+        {
+            "depotId": depot["id"],
+            "type": "BEV",
+            "modelName": "EV-1",
+            "batteryKwh": 300.0,
+            "energyConsumption": 1.2,
+        },
+    )
+    scenario_store.set_depot_route_permissions(
+        scenario_id,
+        [{"depotId": depot["id"], "routeId": "R1", "allowed": True}],
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "timetable_rows",
+        [
+            {
+                "trip_id": "T1",
+                "route_id": "R1",
+                "service_id": "WEEKDAY",
+                "origin": "A",
+                "destination": "B",
+                "departure": "07:00",
+                "arrival": "07:30",
+                "distance_km": 10.0,
+                "allowed_vehicle_types": ["BEV"],
+            }
+        ],
+        invalidate_dispatch=True,
+    )
+
+    payload = _build_dispatch_plan_payload(
+        scenario_id,
+        "BEV",
+        "greedy",
+        "WEEKDAY",
+        depot["id"],
+    )
+
+    assert payload["total_plans"] == 1
+    assert payload["total_blocks"] == 1
+    assert payload["total_duties"] == 1
+    assert payload["plans"][0]["blocks"][0]["trip_ids"] == ["T1"]
+    assert payload["plans"][0]["duties"][0]["legs"][0]["trip"]["trip_id"] == "T1"

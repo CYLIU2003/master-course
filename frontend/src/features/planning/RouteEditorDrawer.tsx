@@ -14,9 +14,9 @@ import {
   useUpdateRoute,
   useDeleteRoute,
 } from "@/hooks";
-import type { Route, RouteResolvedStop } from "@/types";
+import type { Route, RouteResolvedStop, RouteVariantType } from "@/types";
 import type { CreateRouteRequest, UpdateRouteRequest } from "@/types/api";
-import { getRouteVariantLabel } from "./route-family-display";
+import { getRouteVariantLabel, ROUTE_VARIANT_LABELS } from "./route-family-display";
 
 interface Props {
   scenarioId: string;
@@ -32,6 +32,7 @@ type FormData = {
   durationMin: string;
   color: string;
   enabled: boolean;
+  routeVariantTypeManual: RouteVariantType | "";
 };
 
 const EMPTY_FORM: FormData = {
@@ -42,6 +43,7 @@ const EMPTY_FORM: FormData = {
   durationMin: "0",
   color: "#3b82f6",
   enabled: true,
+  routeVariantTypeManual: "",
 };
 
 function routeToForm(r: Route): FormData {
@@ -53,6 +55,7 @@ function routeToForm(r: Route): FormData {
     durationMin: String(r.durationMin),
     color: r.color || "#3b82f6",
     enabled: r.enabled,
+    routeVariantTypeManual: r.routeVariantTypeManual ?? "",
   };
 }
 
@@ -116,6 +119,8 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
         durationMin: Number(form.durationMin) || 0,
         color: form.color,
         enabled: form.enabled,
+        routeVariantTypeManual: form.routeVariantTypeManual || null,
+        canonicalDirectionManual: null,
       };
       updateRoute.mutate(req, {
         onSuccess: () => setDirty(false),
@@ -223,6 +228,44 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
             checked={form.enabled}
             onChange={(v) => updateField("enabled", v)}
           />
+          {!isCreate && route && (
+            <Field label="路線 variant 手動補正">
+              <div className="space-y-2">
+                <select
+                  value={form.routeVariantTypeManual}
+                  onChange={(e) =>
+                    updateField(
+                      "routeVariantTypeManual",
+                      e.target.value as FormData["routeVariantTypeManual"],
+                    )
+                  }
+                  className="field-input"
+                >
+                  <option value="">自動判定を使用</option>
+                  {(
+                    Object.entries(ROUTE_VARIANT_LABELS) as [RouteVariantType, string][]
+                  ).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">
+                  要確認や誤判定の variant はここで固定できます。route family はそのまま維持し、trip
+                  ベースの配車判定は変えません。
+                </p>
+                {route.routeVariantTypeManual && (
+                  <button
+                    type="button"
+                    onClick={() => updateField("routeVariantTypeManual", "")}
+                    className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                  >
+                    自動判定に戻す
+                  </button>
+                )}
+              </div>
+            </Field>
+          )}
         </div>
       )}
 
@@ -295,6 +338,11 @@ function RouteMetaBadges({ route }: { route: Route }) {
         {variantLabel && (
           <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
             Variant: {variantLabel}
+          </span>
+        )}
+        {route.classificationSource === "manual_override" && (
+          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-700">
+            手動補正
           </span>
         )}
         {route.classificationConfidence != null && (

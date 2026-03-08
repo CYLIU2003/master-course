@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 from .graph_builder import ConnectionGraphBuilder
-from .models import DispatchContext, DutyLeg, Trip, VehicleDuty
+from .models import DispatchContext, DispatchPlan, DutyLeg, Trip, VehicleBlock, VehicleDuty
 
 
 class DispatchGenerator:
@@ -44,6 +44,45 @@ class DispatchGenerator:
         """
         graph = self._graph_builder.build(context, vehicle_type)
         return self.generate_greedy_duties_from_graph(context, vehicle_type, graph)
+
+    def generate_greedy_blocks(
+        self,
+        context: DispatchContext,
+        vehicle_type: str,
+    ) -> List[VehicleBlock]:
+        graph = self._graph_builder.build(context, vehicle_type)
+        return self.generate_greedy_blocks_from_graph(context, vehicle_type, graph)
+
+    def generate_greedy_blocks_from_graph(
+        self,
+        context: DispatchContext,
+        vehicle_type: str,
+        graph: Dict[str, List[str]],
+    ) -> List[VehicleBlock]:
+        duties = self.generate_greedy_duties_from_graph(context, vehicle_type, graph)
+        return [
+            VehicleBlock(
+                block_id=f"BLOCK-{vehicle_type}-{index:04d}",
+                vehicle_type=vehicle_type,
+                trip_ids=tuple(duty.trip_ids),
+            )
+            for index, duty in enumerate(duties, start=1)
+        ]
+
+    def generate_greedy_plan(
+        self,
+        context: DispatchContext,
+        vehicle_type: str,
+    ) -> DispatchPlan:
+        graph = self._graph_builder.build(context, vehicle_type)
+        duties = self.generate_greedy_duties_from_graph(context, vehicle_type, graph)
+        blocks = self.generate_greedy_blocks_from_graph(context, vehicle_type, graph)
+        return DispatchPlan(
+            plan_id=f"PLAN-{vehicle_type}",
+            vehicle_blocks=tuple(blocks),
+            duties=tuple(duties),
+            charging_plan=(),
+        )
 
     def generate_greedy_duties_from_graph(
         self,

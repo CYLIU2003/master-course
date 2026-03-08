@@ -4,12 +4,18 @@ import type {
   BuildTripsRequest,
   GraphResponse,
   BuildGraphRequest,
+  BlocksResponse,
+  BuildBlocksRequest,
   DutiesResponse,
   GenerateDutiesRequest,
+  DispatchPlanArtifactResponse,
+  BuildDispatchPlanRequest,
   DutyValidationResponse,
   JobResponse,
 } from "@/types";
 import {
+  blocksResponseSchema,
+  dispatchPlanResponseSchema,
   dutyValidationResponseSchema,
   dutiesResponseSchema,
   graphResponseSchema,
@@ -36,6 +42,14 @@ export const graphApi = {
     api.post<JobResponse>(`/scenarios/${scenarioId}/build-graph`, data),
 
   // ── Duties ──────────────────────────────────────────────────
+  getBlocks: async (scenarioId: string) =>
+    blocksResponseSchema.parse(
+      await api.get<BlocksResponse>(`/scenarios/${scenarioId}/blocks`),
+    ),
+
+  buildBlocks: (scenarioId: string, data?: BuildBlocksRequest) =>
+    api.post<JobResponse>(`/scenarios/${scenarioId}/build-blocks`, data),
+
   getDuties: async (scenarioId: string) =>
     dutiesResponseSchema.parse(
       await api.get<DutiesResponse>(`/scenarios/${scenarioId}/duties`),
@@ -50,4 +64,12 @@ export const graphApi = {
         `/scenarios/${scenarioId}/duties/validate`,
       ),
     ),
+
+  getDispatchPlan: async (scenarioId: string) =>
+    dispatchPlanResponseSchema.parse(
+      await api.get<DispatchPlanArtifactResponse>(`/scenarios/${scenarioId}/dispatch-plan`),
+    ),
+
+  buildDispatchPlan: (scenarioId: string, data?: BuildDispatchPlanRequest) =>
+    api.post<JobResponse>(`/scenarios/${scenarioId}/build-dispatch-plan`, data),
 };

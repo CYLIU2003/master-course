@@ -9,6 +9,7 @@ from src.dispatch.graph_builder import ConnectionGraphBuilder
 from src.dispatch.models import (
     DeadheadRule,
     DispatchContext,
+    DutyLeg,
     Trip,
     TurnaroundRule,
     VehicleDuty,
@@ -56,6 +57,7 @@ class ProblemBuilder:
         pv_slots = self._build_pv_slots_from_scenario(scenario)
         vehicle_counts = self._vehicle_counts_from_scenario(scenario, depot_id)
         weights = self._objective_weights_from_scenario(scenario)
+        baseline = self._build_baseline_plan_from_scenario(scenario, context)
         return self.build_from_dispatch(
             context,
             scenario_id=str((scenario.get("meta") or {}).get("id") or ""),
@@ -65,6 +67,7 @@ class ProblemBuilder:
             price_slots=price_slots,
             pv_slots=pv_slots,
             objective_weights=weights,
+            baseline_plan=baseline,
         )
 
     def build_from_dispatch(
@@ -78,6 +81,7 @@ class ProblemBuilder:
         price_slots: Sequence[EnergyPriceSlot] = (),
         pv_slots: Sequence[PVSlot] = (),
         objective_weights: Optional[OptimizationObjectiveWeights] = None,
+        baseline_plan: Optional[AssignmentPlan] = None,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -121,7 +125,7 @@ class ProblemBuilder:
                 merged.update(successors)
                 feasible_connections[trip_id] = tuple(sorted(merged))
 
-        baseline = self._build_baseline_plan(context)
+        baseline = baseline_plan or self._build_baseline_plan(context)
         return CanonicalOptimizationProblem(
             scenario=OptimizationScenario(
                 scenario_id=scenario_id,
@@ -147,6 +151,7 @@ class ProblemBuilder:
                 "trip_count": len(trip_nodes),
                 "route_count": len(route_nodes),
                 "charger_count": len(chargers),
+                "baseline_plan_source": (baseline.metadata or {}).get("source", "dispatch_greedy_baseline"),
             },
         )
 
@@ -318,6 +323,58 @@ class ProblemBuilder:
             served_trip_ids=tuple(sorted(set(served_trip_ids))),
             unserved_trip_ids=tuple(sorted(all_trip_ids - set(served_trip_ids))),
             metadata={"source": "dispatch_greedy_baseline"},
+        )
+
+    def _build_baseline_plan_from_scenario(
+        self,
+        scenario: Dict[str, Any],
+        context: DispatchContext,
+    ) -> Optional[AssignmentPlan]:
+        dispatch_plan = scenario.get("dispatch_plan") or {}
+        plans = list(dispatch_plan.get("plans") or [])
+        if not plans:
+            return None
+
+        trip_map = context.trips_by_id()
+        duties: List[VehicleDuty] = []
+        served_trip_ids: List[str] = []
+
+        for plan in plans:
+            for duty_raw in plan.get("duties") or []:
+                legs: List[DutyLeg] = []
+                for leg_raw in duty_raw.get("legs") or []:
+                    trip_id = str(((leg_raw.get("trip") or {}).get("trip_id")) or "")
+                    trip = trip_map.get(trip_id)
+                    if trip is None:
+                        continue
+                    legs.append(
+                        DutyLeg(
+                            trip=trip,
+                            deadhead_from_prev_min=int(leg_raw.get("deadhead_time_min") or 0),
+                        )
+                    )
+                if not legs:
+                    continue
+                duties.append(
+                    VehicleDuty(
+                        duty_id=str(duty_raw.get("duty_id") or f"DUTY-{len(duties)+1:04d}"),
+                        vehicle_type=str(duty_raw.get("vehicle_type") or legs[0].trip.allowed_vehicle_types[0]),
+                        legs=tuple(legs),
+                    )
+                )
+                served_trip_ids.extend(leg.trip.trip_id for leg in legs)
+
+        if not duties:
+            return None
+
+        all_trip_ids = {trip.trip_id for trip in context.trips}
+        served_set = set(served_trip_ids)
+        return AssignmentPlan(
+            duties=tuple(duties),
+            charging_slots=(),
+            served_trip_ids=tuple(sorted(served_set)),
+            unserved_trip_ids=tuple(sorted(all_trip_ids - served_set)),
+            metadata={"source": "scenario_dispatch_plan"},
         )
 
     def _estimate_trip_energy(self, distance_km: float, context: DispatchContext) -> float:

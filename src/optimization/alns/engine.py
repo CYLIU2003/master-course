@@ -15,6 +15,7 @@ from .operators_destroy import (
     worst_trip_removal,
 )
 from .operators_repair import (
+    baseline_dispatch_repair,
     charger_reassignment_repair,
     energy_aware_insertion,
     greedy_trip_insertion,
@@ -59,6 +60,7 @@ class ALNSOptimizer:
                 "greedy_trip_insertion": 1.0,
                 "regret_k_insertion": 1.0,
                 "energy_aware_insertion": 1.0,
+                "baseline_dispatch_repair": 1.0,
                 "charger_reassignment_repair": 1.0,
                 "soc_repair": 1.0,
                 "partial_milp_repair": 1.0,
@@ -80,6 +82,7 @@ class ALNSOptimizer:
             "greedy_trip_insertion": greedy_trip_insertion,
             "regret_k_insertion": regret_k_insertion,
             "energy_aware_insertion": energy_aware_insertion,
+            "baseline_dispatch_repair": baseline_dispatch_repair,
             "charger_reassignment_repair": charger_reassignment_repair,
             "soc_repair": soc_repair,
             "partial_milp_repair": partial_milp_repair,

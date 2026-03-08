@@ -19,6 +19,8 @@ from pydantic import BaseModel
 from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
 from bff.mappers.solver_results import serialize_milp_result, serialize_simulation_result
 from bff.routers.graph import (
+    _build_blocks_payload,
+    _build_dispatch_plan_payload,
     _build_duties_payload,
     _build_graph_payload,
     _build_trips_payload,
@@ -125,10 +127,20 @@ def _rebuild_dispatch_artifacts(
 ) -> None:
     trips = _build_trips_payload(scenario_id, service_id, depot_id)
     graph = _build_graph_payload(scenario_id, service_id, depot_id)
+    blocks = _build_blocks_payload(scenario_id, None, "greedy", service_id, depot_id)
     duties = _build_duties_payload(scenario_id, None, "greedy", service_id, depot_id)
+    dispatch_plan = _build_dispatch_plan_payload(
+        scenario_id,
+        None,
+        "greedy",
+        service_id,
+        depot_id,
+    )
     store.set_field(scenario_id, "trips", trips)
     store.set_field(scenario_id, "graph", graph)
+    store.set_field(scenario_id, "blocks", blocks)
     store.set_field(scenario_id, "duties", duties)
+    store.set_field(scenario_id, "dispatch_plan", dispatch_plan)
 
 
 def _job_metadata(

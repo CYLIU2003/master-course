@@ -50,5 +50,7 @@ class MILPOptimizer:
                 },
                 "time_limit_sec": config.time_limit_sec,
                 "mip_gap": config.mip_gap,
+                "warm_start_enabled": config.warm_start,
+                "warm_start_source": (plan.metadata or {}).get("source") if plan else None,
             },
         )

@@ -178,6 +178,21 @@ def _stable_id(prefix: str, *parts: str) -> str:
     return f"{prefix}-{digest}"
 
 
+def _direction_for_variant_type(
+    variant_type: VariantType,
+    fallback: DirectionType = "unknown",
+) -> DirectionType:
+    if variant_type in {"main_outbound", "depot_out"}:
+        return "outbound"
+    if variant_type in {"main_inbound", "depot_in"}:
+        return "inbound"
+    if variant_type in {"main", "branch", "unknown"}:
+        return fallback
+    if variant_type == "short_turn":
+        return fallback
+    return fallback
+
+
 # ── Terminal pair helpers ──────────────────────────────────────
 
 def _terminal_pair(route: RawRoute) -> Tuple[str, str]:
@@ -509,6 +524,23 @@ def enrich_routes_with_family(
         meta = metadata.get(route_id)
         if meta:
             route.update(meta.to_dict())
+        manual_variant = route.get("routeVariantTypeManual")
+        if manual_variant:
+            route["routeVariantType"] = manual_variant
+            route["canonicalDirection"] = (
+                route.get("canonicalDirectionManual")
+                or _direction_for_variant_type(
+                    manual_variant,
+                    route.get("canonicalDirection") or "unknown",
+                )
+            )
+            route["classificationConfidence"] = 1.0
+            route["classificationReasons"] = [
+                f"manual override: {manual_variant}",
+            ]
+            route["classificationSource"] = "manual_override"
+        else:
+            route["classificationSource"] = "derived"
     return routes
 
 

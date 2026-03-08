@@ -20,7 +20,8 @@ Routes:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
@@ -40,7 +41,6 @@ from bff.services.route_family import (
     enrich_routes_with_family,
     build_route_family_summary,
     build_route_family_detail,
-    derive_route_family_metadata,
 )
 from bff.store import scenario_store as store
 
@@ -400,6 +400,8 @@ class UpdateRouteBody(BaseModel):
     durationMin: Optional[int] = None
     color: Optional[str] = None
     enabled: Optional[bool] = None
+    routeVariantTypeManual: Optional[str] = None
+    canonicalDirectionManual: Optional[str] = None
 
 
 class UpsertRouteDepotAssignmentBody(BaseModel):
@@ -554,9 +556,7 @@ def list_routes(
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     items = store.list_routes(scenario_id, depot_id=depot_id, operator=operator)
-
-    # Always enrich with family metadata
-    items = enrich_routes_with_family(items)
+    items = _enrich_routes_for_display(scenario_id, items)
     if group_by_family:
         items = sorted(
             items,
@@ -578,6 +578,169 @@ def list_routes(
     }
 
 
+def _route_match_keys(route: Dict[str, Any]) -> Set[str]:
+    return {
+        str(value)
+        for value in (
+            route.get("id"),
+            route.get("odptPatternId"),
+            route.get("odptBusrouteId"),
+        )
+        if value
+    }
+
+
+def _route_stop_timetable_entry_count(
+    route: Dict[str, Any],
+    stop_timetables: List[Dict[str, Any]],
+    trip_ids: Set[str],
+) -> int:
+    route_keys = _route_match_keys(route)
+    if not route_keys and not trip_ids:
+        return 0
+
+    count = 0
+    for stop_timetable in stop_timetables:
+        direct_route_id = stop_timetable.get("route_id") or stop_timetable.get("routeId")
+        if direct_route_id and str(direct_route_id) in route_keys:
+            count += len(stop_timetable.get("items") or [])
+            continue
+
+        for entry in stop_timetable.get("items") or []:
+            busroute_pattern = entry.get("busroutePattern") or entry.get("route_id")
+            bus_timetable = entry.get("busTimetable") or entry.get("trip_id")
+            if (
+                (busroute_pattern and str(busroute_pattern) in route_keys)
+                or (bus_timetable and str(bus_timetable) in trip_ids)
+            ):
+                count += 1
+
+    return count
+
+
+def _route_service_summary(timetable_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    grouped: Dict[str, Dict[str, Any]] = defaultdict(
+        lambda: {
+            "serviceId": "",
+            "tripCount": 0,
+            "firstDeparture": None,
+            "lastDeparture": None,
+        }
+    )
+    for row in timetable_rows:
+        service_id = str(row.get("service_id") or "WEEKDAY")
+        summary = grouped[service_id]
+        summary["serviceId"] = service_id
+        summary["tripCount"] += 1
+
+        departure = row.get("departure")
+        if departure and (
+            summary["firstDeparture"] is None or departure < summary["firstDeparture"]
+        ):
+            summary["firstDeparture"] = departure
+        if departure and (
+            summary["lastDeparture"] is None or departure > summary["lastDeparture"]
+        ):
+            summary["lastDeparture"] = departure
+
+    return [grouped[key] for key in sorted(grouped)]
+
+
+def _build_route_link_data(
+    route: Dict[str, Any],
+    *,
+    stops: List[Dict[str, Any]],
+    timetable_rows: List[Dict[str, Any]],
+    stop_timetables: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    stop_sequence = list(route.get("stopSequence") or [])
+    stop_index = {str(stop.get("id")): stop for stop in stops if stop.get("id") is not None}
+
+    resolved_stops: List[Dict[str, Any]] = []
+    missing_stop_ids: List[str] = []
+    for seq, stop_id in enumerate(stop_sequence, start=1):
+        stop = stop_index.get(str(stop_id))
+        if stop:
+            resolved_stops.append(
+                {
+                    "id": stop["id"],
+                    "name": stop.get("name", stop_id),
+                    "kana": stop.get("kana"),
+                    "lat": stop.get("lat"),
+                    "lon": stop.get("lon"),
+                    "platformCode": stop.get("poleNumber") or stop.get("platformCode"),
+                    "sequence": seq,
+                }
+            )
+        else:
+            missing_stop_ids.append(str(stop_id))
+
+    route_keys = _route_match_keys(route)
+    matching_rows = [
+        row
+        for row in timetable_rows
+        if str(row.get("route_id") or "") in route_keys
+    ]
+    trip_ids = {str(row.get("trip_id")) for row in matching_rows if row.get("trip_id")}
+    stop_tt_linked = _route_stop_timetable_entry_count(route, stop_timetables, trip_ids)
+
+    warnings = [f"missing stop: {sid}" for sid in missing_stop_ids]
+    if not matching_rows:
+        warnings.append("no linked timetable rows")
+    if stop_timetables and stop_tt_linked == 0:
+        warnings.append("no linked stop timetable entries")
+
+    has_stop_sequence = bool(stop_sequence)
+    stops_complete = (not has_stop_sequence) or (
+        len(resolved_stops) > 0 and not missing_stop_ids
+    )
+    trips_complete = len(matching_rows) > 0
+    stop_timetable_complete = (not stop_timetables) or stop_tt_linked > 0
+
+    if stops_complete and trips_complete and stop_timetable_complete:
+        link_state = "linked"
+    elif resolved_stops or matching_rows or stop_tt_linked or missing_stop_ids:
+        link_state = "partial"
+    else:
+        link_state = "unlinked"
+
+    return {
+        "resolvedStops": resolved_stops,
+        "linkState": link_state,
+        "linkStatus": {
+            "stopsResolved": len(resolved_stops),
+            "stopsMissing": len(missing_stop_ids),
+            "missingStopIds": missing_stop_ids,
+            "tripsLinked": len(matching_rows),
+            "stopTimetableEntriesLinked": stop_tt_linked,
+            "warnings": warnings,
+        },
+        "serviceSummary": _route_service_summary(matching_rows),
+    }
+
+
+def _enrich_routes_for_display(
+    scenario_id: str,
+    routes: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    stops = store.list_stops(scenario_id)
+    timetable_rows = store.get_field(scenario_id, "timetable_rows") or []
+    stop_timetables = store.get_field(scenario_id, "stop_timetables") or []
+
+    enriched = [dict(route) for route in routes]
+    for route in enriched:
+        route.update(
+            _build_route_link_data(
+                route,
+                stops=stops,
+                timetable_rows=timetable_rows,
+                stop_timetables=stop_timetables,
+            )
+        )
+
+    return enrich_routes_with_family(enriched)
+
+
 @router.post("/scenarios/{scenario_id}/routes", status_code=201)
 def create_route(scenario_id: str, body: CreateRouteBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
@@ -592,69 +755,7 @@ def get_route(scenario_id: str, route_id: str) -> Dict[str, Any]:
     except KeyError:
         raise _not_found("Route", route_id)
 
-    # ── Resolve stopSequence against stop catalog ────────────
-    stop_sequence = route.get("stopSequence") or []
-    if stop_sequence:
-        all_stops = store.list_stops(scenario_id)
-        stop_index: Dict[str, Dict[str, Any]] = {s["id"]: s for s in all_stops}
-
-        resolved_stops: List[Dict[str, Any]] = []
-        missing_stop_ids: List[str] = []
-
-        for seq, stop_id in enumerate(stop_sequence, start=1):
-            stop = stop_index.get(stop_id)
-            if stop:
-                resolved_stops.append({
-                    "id": stop["id"],
-                    "name": stop.get("name", stop_id),
-                    "kana": stop.get("kana"),
-                    "lat": stop.get("lat"),
-                    "lon": stop.get("lon"),
-                    "platformCode": stop.get("poleNumber") or stop.get("platformCode"),
-                    "sequence": seq,
-                })
-            else:
-                missing_stop_ids.append(stop_id)
-
-        stops_resolved = len(resolved_stops)
-        stops_missing = len(missing_stop_ids)
-        if stops_missing == 0 and stops_resolved > 0:
-            link_state = "linked"
-        elif stops_resolved > 0:
-            link_state = "partial"
-        else:
-            link_state = "unlinked"
-
-        route["resolvedStops"] = resolved_stops
-        route["linkStatus"] = {
-            "stopsResolved": stops_resolved,
-            "stopsMissing": stops_missing,
-            "missingStopIds": missing_stop_ids,
-            "tripsLinked": int(route.get("tripCount") or 0),
-            "stopTimetableEntriesLinked": 0,
-            "warnings": [f"missing stop: {sid}" for sid in missing_stop_ids],
-        }
-        route["linkState"] = link_state
-    else:
-        route["resolvedStops"] = []
-        route["linkStatus"] = {
-            "stopsResolved": 0,
-            "stopsMissing": 0,
-            "missingStopIds": [],
-            "tripsLinked": int(route.get("tripCount") or 0),
-            "stopTimetableEntriesLinked": 0,
-            "warnings": [],
-        }
-        route["linkState"] = "unlinked"
-
-    # ── Enrich with family/variant metadata ──────────────────
-    all_routes = store.list_routes(scenario_id)
-    family_meta = derive_route_family_metadata(all_routes)
-    route_meta = family_meta.get(route.get("id", ""))
-    if route_meta:
-        route.update(route_meta.to_dict())
-
-    return route
+    return _enrich_routes_for_display(scenario_id, [route])[0]
 
 
 # ── Route Family endpoints ─────────────────────────────────────
@@ -667,7 +768,7 @@ def list_route_families(
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     items = store.list_routes(scenario_id, operator=operator)
-    items = enrich_routes_with_family(items)
+    items = _enrich_routes_for_display(scenario_id, items)
     families = build_route_family_summary(items)
     return {
         "items": families,
@@ -682,7 +783,7 @@ def get_route_family(
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     items = store.list_routes(scenario_id)
-    items = enrich_routes_with_family(items)
+    items = _enrich_routes_for_display(scenario_id, items)
     detail = build_route_family_detail(route_family_id, items)
     if not detail:
         raise _not_found("RouteFamily", route_family_id)
@@ -695,7 +796,7 @@ def update_route(
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        patch = {k: v for k, v in body.model_dump().items() if v is not None}
+        patch = body.model_dump(exclude_unset=True)
         return store.update_route(scenario_id, route_id, patch)
     except KeyError:
         raise _not_found("Route", route_id)

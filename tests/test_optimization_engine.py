@@ -1,5 +1,7 @@
 from src.dispatch.models import DeadheadRule, DispatchContext, Trip, TurnaroundRule, VehicleProfile
 from src.optimization import OptimizationConfig, OptimizationEngine, OptimizationMode, ProblemBuilder
+from src.optimization.alns.operators_repair import baseline_dispatch_repair
+from src.optimization.common.problem import AssignmentPlan
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.common.result import ResultSerializer
 from src.optimization.rolling.state_locking import lock_started_trips
@@ -159,6 +161,109 @@ def test_problem_builder_builds_from_scenario_profiles():
     assert len(problem.chargers) == 1
     assert len(problem.price_slots) == 2
     assert len(problem.pv_slots) == 2
+
+
+def test_problem_builder_uses_scenario_dispatch_plan_as_baseline():
+    scenario = {
+        "meta": {"id": "scenario-y", "updatedAt": "2026-03-08T00:00:00+00:00"},
+        "depots": [{"id": "D1", "name": "Depot 1"}],
+        "vehicles": [
+            {
+                "id": "V1",
+                "depotId": "D1",
+                "type": "BEV",
+                "batteryKwh": 300.0,
+                "energyConsumption": 1.4,
+                "chargePowerKw": 150.0,
+            }
+        ],
+        "routes": [{"id": "R1"}],
+        "depot_route_permissions": [{"depotId": "D1", "routeId": "R1", "allowed": True}],
+        "vehicle_route_permissions": [{"vehicleId": "V1", "routeId": "R1", "allowed": True}],
+        "timetable_rows": [
+            {
+                "trip_id": "T1",
+                "route_id": "R1",
+                "service_id": "WEEKDAY",
+                "origin": "A",
+                "destination": "B",
+                "departure": "07:00",
+                "arrival": "07:30",
+                "distance_km": 10.0,
+                "allowed_vehicle_types": ["BEV"],
+            }
+        ],
+        "dispatch_plan": {
+            "plans": [
+                {
+                    "plan_id": "PLAN-BEV",
+                    "vehicle_type": "BEV",
+                    "blocks": [{"block_id": "BLOCK-BEV-0001", "vehicle_type": "BEV", "trip_ids": ["T1"]}],
+                    "duties": [
+                        {
+                            "duty_id": "DUTY-BEV-0001",
+                            "vehicle_type": "BEV",
+                            "legs": [
+                                {
+                                    "trip": {"trip_id": "T1"},
+                                    "deadhead_time_min": 0,
+                                }
+                            ],
+                        }
+                    ],
+                    "charging_plan": [],
+                }
+            ]
+        },
+    }
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="D1",
+        service_id="WEEKDAY",
+        config=OptimizationConfig(mode=OptimizationMode.HYBRID),
+    )
+
+    assert problem.baseline_plan is not None
+    assert problem.baseline_plan.metadata["source"] == "scenario_dispatch_plan"
+    assert problem.baseline_plan.served_trip_ids == ("T1",)
+
+
+def test_baseline_dispatch_repair_restores_missing_baseline_duties():
+    problem = ProblemBuilder().build_from_dispatch(
+        _context(),
+        scenario_id="sc-opt-006",
+        vehicle_counts={"BEV": 1},
+    )
+    empty_plan = AssignmentPlan(
+        duties=(),
+        charging_slots=(),
+        served_trip_ids=(),
+        unserved_trip_ids=tuple(trip.trip_id for trip in problem.trips),
+        metadata={},
+    )
+
+    repaired = baseline_dispatch_repair(problem, empty_plan)
+
+    assert set(repaired.served_trip_ids) == {"T1", "T2", "T3"}
+    assert repaired.unserved_trip_ids == ()
+    assert repaired.metadata["repair_operator"] == "baseline_dispatch_repair"
+
+
+def test_milp_result_exposes_warm_start_metadata():
+    problem = ProblemBuilder().build_from_dispatch(
+        _context(),
+        scenario_id="sc-opt-007",
+        vehicle_counts={"BEV": 1},
+    )
+
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(mode=OptimizationMode.MILP),
+    )
+
+    assert result.solver_metadata["warm_start_enabled"] is True
+    assert result.solver_metadata["warm_start_source"] == "dispatch_greedy_baseline"
 
 
 def test_milp_model_builder_generates_assignment_and_constraint_specs():

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from bff.routers import master_data
-from bff.services.route_family import derive_route_family_metadata
+from bff.services.route_family import derive_route_family_metadata, enrich_routes_with_family
 from bff.store import scenario_store
 
 
@@ -163,3 +163,122 @@ def test_route_family_router_enriches_routes_and_returns_family_detail(
     assert detail["canonicalMainPair"]["outboundRouteId"] == "r-out"
     assert detail["canonicalMainPair"]["inboundRouteId"] == "r-in"
     assert detail["timetableDiagnostics"]["rawRouteCount"] == 2
+
+
+def test_route_family_manual_override_takes_precedence():
+    routes = [
+        {
+            "id": "r-1",
+            "name": "園01 本線",
+            "routeCode": "園01",
+            "startStop": "A",
+            "endStop": "B",
+            "stopSequence": ["A", "X", "B"],
+            "tripCount": 8,
+            "routeVariantTypeManual": "branch",
+        },
+        {
+            "id": "r-2",
+            "name": "園01 逆",
+            "routeCode": "園01",
+            "startStop": "B",
+            "endStop": "A",
+            "stopSequence": ["B", "X", "A"],
+            "tripCount": 7,
+        },
+    ]
+
+    enriched = enrich_routes_with_family(routes)
+    overridden = next(item for item in enriched if item["id"] == "r-1")
+
+    assert overridden["routeVariantType"] == "branch"
+    assert overridden["classificationSource"] == "manual_override"
+    assert overridden["classificationConfidence"] == pytest.approx(1.0)
+    assert overridden["classificationReasons"] == ["manual override: branch"]
+
+
+def test_route_detail_reports_timetable_and_stop_timetable_links(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Route links", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    scenario_store.set_field(
+        scenario_id,
+        "stops",
+        [
+            {"id": "S1", "name": "Start", "lat": 35.0, "lon": 139.0},
+            {"id": "S2", "name": "End", "lat": 35.1, "lon": 139.1},
+        ],
+    )
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [
+            {
+                "id": "route-1",
+                "name": "園01",
+                "routeCode": "園01",
+                "odptPatternId": "pattern-1",
+                "startStop": "Start",
+                "endStop": "End",
+                "stopSequence": ["S1", "S2"],
+                "source": "odpt",
+            }
+        ],
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "timetable_rows",
+        [
+            {
+                "trip_id": "trip-1",
+                "route_id": "route-1",
+                "service_id": "WEEKDAY",
+                "origin": "Start",
+                "destination": "End",
+                "departure": "08:00",
+                "arrival": "08:30",
+                "distance_km": 10.0,
+                "allowed_vehicle_types": ["BEV"],
+                "source": "odpt",
+            }
+        ],
+        invalidate_dispatch=True,
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "stop_timetables",
+        [
+            {
+                "id": "st-1",
+                "stopId": "S1",
+                "service_id": "WEEKDAY",
+                "items": [
+                    {
+                        "index": 0,
+                        "departure": "08:00",
+                        "busroutePattern": "pattern-1",
+                        "busTimetable": "trip-1",
+                    }
+                ],
+                "source": "odpt",
+            }
+        ],
+        invalidate_dispatch=True,
+    )
+
+    route = master_data.get_route(scenario_id, "route-1")
+
+    assert route["linkState"] == "linked"
+    assert route["linkStatus"]["stopsResolved"] == 2
+    assert route["linkStatus"]["tripsLinked"] == 1
+    assert route["linkStatus"]["stopTimetableEntriesLinked"] == 1
+    assert route["serviceSummary"] == [
+        {
+            "serviceId": "WEEKDAY",
+            "tripCount": 1,
+            "firstDeparture": "08:00",
+            "lastDeparture": "08:00",
+        }
+    ]

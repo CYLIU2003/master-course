@@ -132,6 +132,35 @@ class VehicleDuty:
 
 
 @dataclass(frozen=True)
+class VehicleBlock:
+    """
+    One vehicle-continuous chain of trips.
+
+    This sits between trip-level feasibility and final dispatch planning:
+      Trip -> ConnectionArc -> VehicleBlock -> DispatchPlan
+    """
+
+    block_id: str
+    vehicle_type: str
+    trip_ids: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DispatchPlan:
+    """
+    Final dispatch-facing output container.
+
+    Duties remain the validated execution unit. Blocks provide a lighter-weight
+    chain abstraction that heuristic / optimization layers can build first.
+    """
+
+    plan_id: str
+    vehicle_blocks: Tuple[VehicleBlock, ...] = ()
+    duties: Tuple[VehicleDuty, ...] = ()
+    charging_plan: Tuple[dict, ...] = ()
+
+
+@dataclass(frozen=True)
 class ValidationResult:
     """Outcome of validating a VehicleDuty."""
 

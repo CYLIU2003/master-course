@@ -223,6 +223,12 @@ export interface Route {
   classificationConfidence?: number;
   /** Explanation of classification decision */
   classificationReasons?: string[];
+  /** Classification source shown by BFF */
+  classificationSource?: "derived" | "manual_override";
+  /** Persisted manual override for route variant classification */
+  routeVariantTypeManual?: RouteVariantType | null;
+  /** Optional persisted manual override for direction */
+  canonicalDirectionManual?: RouteCanonicalDirection | null;
 }
 
 export interface Stop {
@@ -417,6 +423,27 @@ export interface VehicleDuty {
   total_service_time_min: number;
   start_time: HHMMTime;
   end_time: HHMMTime;
+}
+
+export interface VehicleBlock {
+  block_id: string;
+  vehicle_type: string;
+  trip_ids: string[];
+}
+
+export interface DispatchPlanArtifact {
+  plan_id: string;
+  vehicle_type: string;
+  blocks: VehicleBlock[];
+  duties: VehicleDuty[];
+  charging_plan: unknown[];
+}
+
+export interface DispatchPlanResponse {
+  plans: DispatchPlanArtifact[];
+  total_plans: number;
+  total_blocks: number;
+  total_duties: number;
 }
 
 export interface DutyValidationResult {

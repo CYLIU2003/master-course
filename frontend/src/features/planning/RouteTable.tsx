@@ -1,22 +1,38 @@
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useRoutes, useCreateRoute, useDeleteRoute } from "@/hooks";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import type { Route } from "@/types";
+import {
+  selectVisibleRoutes,
+  usePlanningDatasetStore,
+} from "@/stores/planning-dataset-store";
 
 interface RouteTableProps {
   scenarioId: string;
+  depotId?: string;
 }
 
-export function RouteTable({ scenarioId }: RouteTableProps) {
+export function RouteTable({ scenarioId, depotId }: RouteTableProps) {
   const { t } = useTranslation();
-  const { data, isLoading, error } = useRoutes(scenarioId);
+  const { data, isLoading, error } = useRoutes(
+    scenarioId,
+    depotId ? { depotId } : undefined,
+  );
+  const syncRoutes = usePlanningDatasetStore((s) => s.syncRoutes);
+  const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
+  const routes = usePlanningDatasetStore(selectVisibleRoutes);
   const createRoute = useCreateRoute(scenarioId);
   const deleteRoute = useDeleteRoute(scenarioId);
+  useEffect(() => {
+    syncRoutes((data?.items as Route[] | undefined) ?? []);
+  }, [data?.items, syncRoutes]);
+  useEffect(() => {
+    setActiveDepotId(depotId ?? null);
+  }, [depotId, setActiveDepotId]);
 
   if (isLoading) return <LoadingBlock message={t("routes.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;
-
-  const routes: Route[] = data?.items ?? [];
 
   const handleAdd = () => {
     createRoute.mutate({

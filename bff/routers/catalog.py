@@ -118,23 +118,49 @@ def get_operator_schema(operator_id: str) -> Dict[str, Any]:
 
 
 @router.get("/catalog/operators/{operator_id}/routes")
-def list_operator_routes(operator_id: str) -> Dict[str, Any]:
-    """Return all routes from an operator's per-operator DB."""
+def list_operator_routes(
+    operator_id: str,
+    q: Optional[str] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    """Return paginated routes from an operator's per-operator DB."""
     try:
-        items = transit_db.list_routes(operator_id)
+        items = transit_db.list_routes(operator_id, q=q, limit=limit, offset=offset)
+        total = transit_db.count_routes(operator_id, q=q)
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
-    return {"items": items, "total": len(items)}
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/catalog/operators/{operator_id}/routes/{route_id}")
+def get_operator_route(operator_id: str, route_id: str) -> Dict[str, Any]:
+    try:
+        item = transit_db.get_route(operator_id, route_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
+    if item is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Route '{route_id}' not found for operator '{operator_id}'",
+        )
+    return {"item": item}
 
 
 @router.get("/catalog/operators/{operator_id}/stops")
-def list_operator_stops(operator_id: str) -> Dict[str, Any]:
-    """Return all stops from an operator's per-operator DB."""
+def list_operator_stops(
+    operator_id: str,
+    q: Optional[str] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    """Return paginated stops from an operator's per-operator DB."""
     try:
-        items = transit_db.list_stops(operator_id)
+        items = transit_db.list_stops(operator_id, q=q, limit=limit, offset=offset)
+        total = transit_db.count_stops(operator_id, q=q)
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
-    return {"items": items, "total": len(items)}
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/catalog/operators/{operator_id}/timetable")
@@ -172,6 +198,41 @@ def operator_timetable_summary(operator_id: str) -> Dict[str, Any]:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
     return {"item": summary}
+
+
+@router.get("/catalog/operators/{operator_id}/timetable/{trip_id}/stop-times")
+def list_operator_trip_stop_times(operator_id: str, trip_id: str) -> Dict[str, Any]:
+    try:
+        items = transit_db.list_trip_stop_times(operator_id, trip_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/catalog/operators/{operator_id}/stop-timetables/{stop_id}")
+def list_operator_stop_timetables(
+    operator_id: str,
+    stop_id: str,
+    service_id: Optional[str] = Query(default=None, alias="serviceId"),
+    limit: int = Query(default=500, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    try:
+        items = transit_db.list_stop_timetables(
+            operator_id,
+            stop_id,
+            service_id=service_id,
+            limit=limit,
+            offset=offset,
+        )
+        total = transit_db.count_stop_timetable_entries(
+            operator_id,
+            stop_id,
+            service_id=service_id,
+        )
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/catalog/operators/{operator_id}/calendar")
