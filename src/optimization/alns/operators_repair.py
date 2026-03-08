@@ -56,6 +56,61 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
     )
 
 
+def baseline_dispatch_repair(
+    problem: CanonicalOptimizationProblem,
+    plan: AssignmentPlan,
+) -> AssignmentPlan:
+    baseline = problem.baseline_plan
+    if baseline is None or not baseline.duties:
+        return greedy_trip_insertion(problem, plan)
+
+    existing = list(plan.duties)
+    served = set(plan.served_trip_ids)
+    missing = set(plan.unserved_trip_ids)
+
+    for duty in baseline.duties:
+        duty_trip_ids = set(duty.trip_ids)
+        if not duty_trip_ids.intersection(missing):
+            continue
+        if duty_trip_ids.issubset(served):
+            continue
+        if duty_trip_ids.intersection(served):
+            continue
+        existing.append(
+            VehicleDuty(
+                duty_id=f"{duty.duty_id}-B",
+                vehicle_type=duty.vehicle_type,
+                legs=tuple(
+                    DutyLeg(
+                        trip=leg.trip,
+                        deadhead_from_prev_min=leg.deadhead_from_prev_min,
+                    )
+                    for leg in duty.legs
+                ),
+            )
+        )
+        served.update(duty_trip_ids)
+        missing.difference_update(duty_trip_ids)
+
+    if missing:
+        repaired = AssignmentPlan(
+            duties=tuple(existing),
+            charging_slots=plan.charging_slots,
+            served_trip_ids=tuple(sorted(served)),
+            unserved_trip_ids=tuple(sorted(missing)),
+            metadata={**dict(plan.metadata), "repair_operator": "baseline_dispatch_repair"},
+        )
+        return greedy_trip_insertion(problem, repaired)
+
+    return AssignmentPlan(
+        duties=tuple(existing),
+        charging_slots=plan.charging_slots,
+        served_trip_ids=tuple(sorted(served)),
+        unserved_trip_ids=tuple(),
+        metadata={**dict(plan.metadata), "repair_operator": "baseline_dispatch_repair"},
+    )
+
+
 def partial_milp_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> AssignmentPlan:
     return greedy_trip_insertion(problem, plan)
 

@@ -1,6 +1,16 @@
 import type { Route } from "@/types";
 
 export const LOW_CONFIDENCE_VARIANT_THRESHOLD = 0.6;
+export const ROUTE_VARIANT_LABELS: Record<NonNullable<Route["routeVariantType"]>, string> = {
+  main: "本線",
+  main_outbound: "本線 上り",
+  main_inbound: "本線 下り",
+  short_turn: "区間便",
+  branch: "枝線",
+  depot_out: "出庫便",
+  depot_in: "入庫便",
+  unknown: "要確認",
+};
 
 export function getDisplayRouteVariantType(
   route: Pick<Route, "routeVariantType" | "classificationConfidence">,
@@ -21,17 +31,5 @@ export function getRouteVariantLabel(
   if (!variantType) {
     return null;
   }
-
-  const labels: Record<NonNullable<Route["routeVariantType"]>, string> = {
-    main: "本線",
-    main_outbound: "本線 上り",
-    main_inbound: "本線 下り",
-    short_turn: "区間便",
-    branch: "枝線",
-    depot_out: "出庫便",
-    depot_in: "入庫便",
-    unknown: "要確認",
-  };
-
-  return labels[variantType];
+  return ROUTE_VARIANT_LABELS[variantType];
 }

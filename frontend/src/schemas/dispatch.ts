@@ -69,9 +69,35 @@ const vehicleDutySchema = z.object({
   end_time: z.string(),
 });
 
+const vehicleBlockSchema = z.object({
+  block_id: z.string(),
+  vehicle_type: z.string(),
+  trip_ids: z.array(z.string()),
+});
+
 export const dutiesResponseSchema = z.object({
   items: z.array(vehicleDutySchema),
   total: z.number().int().nonnegative(),
+});
+
+export const blocksResponseSchema = z.object({
+  items: z.array(vehicleBlockSchema),
+  total: z.number().int().nonnegative(),
+});
+
+export const dispatchPlanResponseSchema = z.object({
+  plans: z.array(
+    z.object({
+      plan_id: z.string(),
+      vehicle_type: z.string(),
+      blocks: z.array(vehicleBlockSchema),
+      duties: z.array(vehicleDutySchema),
+      charging_plan: z.array(z.unknown()),
+    }),
+  ),
+  total_plans: z.number().int().nonnegative(),
+  total_blocks: z.number().int().nonnegative(),
+  total_duties: z.number().int().nonnegative(),
 });
 
 export const dutyValidationResponseSchema = z.object({

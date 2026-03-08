@@ -109,7 +109,9 @@ def _load(scenario_id: str) -> Dict[str, Any]:
     doc.setdefault("simulation_config", None)
     doc.setdefault("trips", None)
     doc.setdefault("graph", None)
+    doc.setdefault("blocks", None)
     doc.setdefault("duties", None)
+    doc.setdefault("dispatch_plan", None)
     doc.setdefault("simulation_result", None)
     doc.setdefault("optimization_result", None)
     doc.setdefault("dispatch_scope", _default_dispatch_scope())
@@ -161,7 +163,9 @@ def _new_id() -> str:
 def _invalidate_dispatch_artifacts(doc: Dict[str, Any]) -> None:
     doc["trips"] = None
     doc["graph"] = None
+    doc["blocks"] = None
     doc["duties"] = None
+    doc["dispatch_plan"] = None
     doc["simulation_result"] = None
     doc["optimization_result"] = None
     doc["problemdata_build_audit"] = None
@@ -377,7 +381,9 @@ def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
         "simulation_config": None,
         "trips": None,
         "graph": None,
+        "blocks": None,
         "duties": None,
+        "dispatch_plan": None,
         "simulation_result": None,
         "optimization_result": None,
         "public_data": _default_public_data_state(),

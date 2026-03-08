@@ -1,9 +1,14 @@
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDuties, useGenerateDuties, useDutyValidation, useDispatchScope } from "@/hooks";
 import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { DispatchScopePanel } from "@/features/planning";
 import { formatDuration } from "@/utils/time";
+import {
+  selectVisibleDuties,
+  usePlanningDatasetStore,
+} from "@/stores/planning-dataset-store";
 
 export function DutiesPage() {
   const { t } = useTranslation();
@@ -12,11 +17,20 @@ export function DutiesPage() {
   const { data, isLoading, error } = useDuties(scenarioId!);
   const { data: validation } = useDutyValidation(scenarioId!);
   const generateMutation = useGenerateDuties(scenarioId!);
-
-  const duties = data?.items ?? [];
+  const syncDuties = usePlanningDatasetStore((s) => s.syncDuties);
+  const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
+  const duties = usePlanningDatasetStore(selectVisibleDuties);
   const validationMap = new Map(
     (validation?.items ?? []).map((v) => [v.duty_id, v]),
   );
+
+  useEffect(() => {
+    syncDuties(data?.items ?? []);
+  }, [data?.items, syncDuties]);
+
+  useEffect(() => {
+    setActiveDepotId(scope?.depotId ?? null);
+  }, [scope?.depotId, setActiveDepotId]);
 
   const handleGenerate = () => {
     generateMutation.mutate({

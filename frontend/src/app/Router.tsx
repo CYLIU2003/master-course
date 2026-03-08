@@ -4,6 +4,7 @@ import {
   Navigate,
   redirect,
 } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { fetchMaybeJson } from "@/api/client";
 import { AppLayout } from "@/features/layout/AppLayout";
 import { ErrorBoundary, RouteErrorPage } from "@/features/common";
@@ -39,7 +40,11 @@ import { CostResultsPage } from "@/pages/results/CostResultsPage";
 import { ComparePage } from "@/pages/compare/ComparePage";
 
 // ODPT Explorer
-import { OdptExplorerPage } from "@/pages/odpt/OdptExplorerPage";
+const OdptExplorerPage = lazy(() =>
+  import("@/pages/odpt/OdptExplorerPage").then((module) => ({
+    default: module.OdptExplorerPage,
+  })),
+);
 
 async function startupLoader() {
   try {
@@ -97,7 +102,14 @@ const router = createBrowserRouter([
       // ── Tab 1: Planning (master data) ─────────────────────
       { path: "planning", element: <MasterDataPage /> },
       { path: "planning-legacy", element: <Navigate to="../planning" replace /> },
-      { path: "public-data", element: <OdptExplorerPage /> },
+      {
+        path: "public-data",
+        element: (
+          <Suspense fallback={<div className="p-6 text-sm text-slate-400">Loading explorer...</div>}>
+            <OdptExplorerPage />
+          </Suspense>
+        ),
+      },
       { path: "vehicle-templates", element: <VehicleTemplatesPage /> },
       { path: "timetable", element: <TimetablePage /> },
       { path: "deadhead", element: <DeadheadPage /> },

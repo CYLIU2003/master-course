@@ -1,8 +1,13 @@
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useTrips, useBuildTrips, useDispatchScope } from "@/hooks";
 import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { DispatchScopePanel } from "@/features/planning";
+import {
+  selectVisibleTrips,
+  usePlanningDatasetStore,
+} from "@/stores/planning-dataset-store";
 
 export function TripsPage() {
   const { t } = useTranslation();
@@ -10,8 +15,17 @@ export function TripsPage() {
   const { data: scope } = useDispatchScope(scenarioId!);
   const { data, isLoading, error } = useTrips(scenarioId!);
   const buildMutation = useBuildTrips(scenarioId!);
+  const syncTrips = usePlanningDatasetStore((s) => s.syncTrips);
+  const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
+  const trips = usePlanningDatasetStore(selectVisibleTrips);
 
-  const trips = data?.items ?? [];
+  useEffect(() => {
+    syncTrips(data?.items ?? []);
+  }, [data?.items, syncTrips]);
+
+  useEffect(() => {
+    setActiveDepotId(scope?.depotId ?? null);
+  }, [scope?.depotId, setActiveDepotId]);
 
   const handleBuild = () => {
     buildMutation.mutate({

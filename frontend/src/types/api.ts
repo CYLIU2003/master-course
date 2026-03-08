@@ -15,8 +15,10 @@ import type {
   DeadheadRule,
   TurnaroundRule,
   ConnectionGraph,
+  VehicleBlock,
   VehicleDuty,
   DutyValidationResult,
+  DispatchPlanResponse,
   DispatchScope,
   SimulationResult,
   SimulationConfig,
@@ -181,7 +183,10 @@ export interface CreateRouteRequest {
   enabled?: boolean;
 }
 
-export type UpdateRouteRequest = Partial<CreateRouteRequest>;
+export interface UpdateRouteRequest extends Partial<CreateRouteRequest> {
+  routeVariantTypeManual?: Route["routeVariantType"] | null;
+  canonicalDirectionManual?: Route["canonicalDirection"] | null;
+}
 
 export interface ImportOdptRoutesRequest {
   operator?: string;
@@ -500,10 +505,26 @@ export interface BuildGraphRequest {
 
 // ── Duties ────────────────────────────────────────────────────
 
+export type BlocksResponse = ApiListResponse<VehicleBlock>;
 export type DutiesResponse = ApiListResponse<VehicleDuty>;
 export type DutyValidationResponse = ApiListResponse<DutyValidationResult>;
+export type DispatchPlanArtifactResponse = DispatchPlanResponse;
+
+export interface BuildBlocksRequest {
+  vehicle_type?: string;
+  strategy?: "greedy" | "milp";
+  service_id?: string;
+  depot_id?: string;
+}
 
 export interface GenerateDutiesRequest {
+  vehicle_type?: string;
+  strategy?: "greedy" | "milp";
+  service_id?: string;
+  depot_id?: string;
+}
+
+export interface BuildDispatchPlanRequest {
   vehicle_type?: string;
   strategy?: "greedy" | "milp";
   service_id?: string;

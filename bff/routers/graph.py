@@ -1,15 +1,19 @@
 """
 bff/routers/graph.py
 
-Dispatch pipeline endpoints: trips, graph, duties.
+Dispatch pipeline endpoints: trips, graph, blocks, duties, dispatch plans.
 
 Routes:
   GET   /scenarios/{id}/trips                   → get built trips
   POST  /scenarios/{id}/build-trips             → async: build Trip list from timetable
   GET   /scenarios/{id}/graph                   → get built connection graph
   POST  /scenarios/{id}/build-graph             → async: build feasibility graph
+  GET   /scenarios/{id}/blocks                  → get generated vehicle blocks
+  POST  /scenarios/{id}/build-blocks            → async: build greedy vehicle blocks
   GET   /scenarios/{id}/duties                  → get generated duties
   POST  /scenarios/{id}/generate-duties         → async: generate duties
+  GET   /scenarios/{id}/dispatch-plan           → get greedy dispatch plan artifact
+  POST  /scenarios/{id}/build-dispatch-plan     → async: build greedy dispatch plan
   GET   /scenarios/{id}/duties/validate         → validate duties
 
 All POST operations return a JobResponse immediately and execute in a
@@ -64,6 +68,20 @@ class GenerateDutiesBody(BaseModel):
     vehicle_type: Optional[str] = None
     strategy: str = "greedy"
     service_id: Optional[str] = None  # filter timetable rows by service_id
+    depot_id: Optional[str] = None
+
+
+class BuildBlocksBody(BaseModel):
+    vehicle_type: Optional[str] = None
+    strategy: str = "greedy"
+    service_id: Optional[str] = None
+    depot_id: Optional[str] = None
+
+
+class BuildDispatchPlanBody(BaseModel):
+    vehicle_type: Optional[str] = None
+    strategy: str = "greedy"
+    service_id: Optional[str] = None
     depot_id: Optional[str] = None
 
 
@@ -382,6 +400,80 @@ def _build_duties_payload(
     return all_duties_json
 
 
+def _build_blocks_payload(
+    scenario_id: str,
+    vehicle_type: Optional[str],
+    strategy: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    _ = strategy
+    from src.dispatch.dispatcher import DispatchGenerator
+
+    context = _build_dispatch_context(scenario_id, service_id, depot_id)
+    generator = DispatchGenerator()
+    vehicle_types = [vehicle_type] if vehicle_type else list(context.vehicle_profiles.keys())
+
+    items: List[Dict[str, Any]] = []
+    for vt in vehicle_types:
+        blocks = generator.generate_greedy_blocks(context, vt)
+        for block in blocks:
+            items.append(
+                {
+                    "block_id": block.block_id,
+                    "vehicle_type": block.vehicle_type,
+                    "trip_ids": list(block.trip_ids),
+                }
+            )
+    return items
+
+
+def _build_dispatch_plan_payload(
+    scenario_id: str,
+    vehicle_type: Optional[str],
+    strategy: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    _ = strategy
+    from src.dispatch.dispatcher import DispatchGenerator
+
+    context = _build_dispatch_context(scenario_id, service_id, depot_id)
+    generator = DispatchGenerator()
+    vehicle_types = [vehicle_type] if vehicle_type else list(context.vehicle_profiles.keys())
+
+    plans: List[Dict[str, Any]] = []
+    total_blocks = 0
+    total_duties = 0
+    for vt in vehicle_types:
+        plan = generator.generate_greedy_plan(context, vt)
+        total_blocks += len(plan.vehicle_blocks)
+        total_duties += len(plan.duties)
+        plans.append(
+            {
+                "plan_id": plan.plan_id,
+                "vehicle_type": vt,
+                "blocks": [
+                    {
+                        "block_id": block.block_id,
+                        "vehicle_type": block.vehicle_type,
+                        "trip_ids": list(block.trip_ids),
+                    }
+                    for block in plan.vehicle_blocks
+                ],
+                "duties": [vehicle_duty_to_dict(duty) for duty in plan.duties],
+                "charging_plan": list(plan.charging_plan),
+            }
+        )
+
+    return {
+        "plans": plans,
+        "total_plans": len(plans),
+        "total_blocks": total_blocks,
+        "total_duties": total_duties,
+    }
+
+
 # ── Background task implementations ───────────────────────────
 
 
@@ -486,6 +578,103 @@ def _run_generate_duties(
         )
 
 
+def _run_build_blocks(
+    scenario_id: str,
+    job_id: str,
+    vehicle_type: Optional[str],
+    strategy: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+) -> None:
+    try:
+        job_store.update_job(
+            job_id, status="running", progress=10, message="Building vehicle blocks..."
+        )
+        blocks_json = _build_blocks_payload(
+            scenario_id,
+            vehicle_type,
+            strategy,
+            service_id,
+            depot_id,
+        )
+        store.set_field(scenario_id, "blocks", blocks_json)
+        job_store.update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            message=f"Built {len(blocks_json)} blocks.",
+            result_key="blocks",
+        )
+    except Exception:
+        job_store.update_job(
+            job_id,
+            status="failed",
+            message="Build blocks failed.",
+            error=traceback.format_exc(),
+        )
+
+
+def _run_build_dispatch_plan(
+    scenario_id: str,
+    job_id: str,
+    vehicle_type: Optional[str],
+    strategy: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+) -> None:
+    try:
+        job_store.update_job(
+            job_id,
+            status="running",
+            progress=10,
+            message="Building dispatch plan...",
+        )
+        plan_json = _build_dispatch_plan_payload(
+            scenario_id,
+            vehicle_type,
+            strategy,
+            service_id,
+            depot_id,
+        )
+        store.set_field(scenario_id, "dispatch_plan", plan_json)
+        store.set_field(
+            scenario_id,
+            "blocks",
+            [
+                block
+                for plan in plan_json["plans"]
+                for block in plan.get("blocks", [])
+            ],
+        )
+        store.set_field(
+            scenario_id,
+            "duties",
+            [
+                duty
+                for plan in plan_json["plans"]
+                for duty in plan.get("duties", [])
+            ],
+        )
+        store.update_scenario(scenario_id, status="duties_generated")
+        job_store.update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            message=(
+                f"Built {plan_json['total_blocks']} blocks and "
+                f"{plan_json['total_duties']} duties."
+            ),
+            result_key="dispatch_plan",
+        )
+    except Exception:
+        job_store.update_job(
+            job_id,
+            status="failed",
+            message="Build dispatch plan failed.",
+            error=traceback.format_exc(),
+        )
+
+
 # ── Trips endpoints ────────────────────────────────────────────
 
 
@@ -567,6 +756,81 @@ def get_duties(scenario_id: str) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     items = store.get_field(scenario_id, "duties") or []
     return {"items": items, "total": len(items)}
+
+
+@router.get("/scenarios/{scenario_id}/blocks")
+def get_blocks(scenario_id: str) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    items = store.get_field(scenario_id, "blocks") or []
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/scenarios/{scenario_id}/dispatch-plan")
+def get_dispatch_plan(scenario_id: str) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    plan = store.get_field(scenario_id, "dispatch_plan")
+    if plan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dispatch plan has not been built yet. POST to /build-dispatch-plan first.",
+        )
+    return plan
+
+
+@router.post("/scenarios/{scenario_id}/build-blocks")
+def build_blocks(
+    scenario_id: str,
+    background_tasks: BackgroundTasks,
+    body: Optional[BuildBlocksBody] = None,
+) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    vt = body.vehicle_type if body else None
+    strategy = body.strategy if body else "greedy"
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=body.service_id if body else None,
+        depot_id=body.depot_id if body else None,
+        persist=True,
+    )
+    job = job_store.create_job()
+    background_tasks.add_task(
+        _run_build_blocks,
+        scenario_id,
+        job.job_id,
+        vt,
+        strategy,
+        scope.get("serviceId"),
+        scope.get("depotId"),
+    )
+    return job_store.job_to_dict(job)
+
+
+@router.post("/scenarios/{scenario_id}/build-dispatch-plan")
+def build_dispatch_plan(
+    scenario_id: str,
+    background_tasks: BackgroundTasks,
+    body: Optional[BuildDispatchPlanBody] = None,
+) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    vt = body.vehicle_type if body else None
+    strategy = body.strategy if body else "greedy"
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=body.service_id if body else None,
+        depot_id=body.depot_id if body else None,
+        persist=True,
+    )
+    job = job_store.create_job()
+    background_tasks.add_task(
+        _run_build_dispatch_plan,
+        scenario_id,
+        job.job_id,
+        vt,
+        strategy,
+        scope.get("serviceId"),
+        scope.get("depotId"),
+    )
+    return job_store.job_to_dict(job)
 
 
 @router.post("/scenarios/{scenario_id}/generate-duties")

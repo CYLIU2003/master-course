@@ -33,7 +33,9 @@ export type {
   FeasibilityReason,
   // Duties
   DutyLeg,
+  VehicleBlock,
   VehicleDuty,
+  DispatchPlanResponse,
   DutyValidationResult,
   DispatchScope,
   // Simulation config
@@ -130,9 +132,13 @@ export type {
   GraphResponse,
   BuildGraphRequest,
   // Duties
+  BlocksResponse,
+  BuildBlocksRequest,
   DutiesResponse,
   DutyValidationResponse,
   GenerateDutiesRequest,
+  DispatchPlanArtifactResponse,
+  BuildDispatchPlanRequest,
   // Simulation
   SimulationResultResponse,
   SimulationConfigResponse,

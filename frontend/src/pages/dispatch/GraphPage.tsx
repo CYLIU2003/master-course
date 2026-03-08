@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useGraph, useBuildGraph, useDispatchScope } from "@/hooks";
 import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { DispatchScopePanel } from "@/features/planning";
 import type { FeasibilityReason } from "@/types";
+import {
+  selectVisibleArcs,
+  usePlanningDatasetStore,
+} from "@/stores/planning-dataset-store";
 
 export function GraphPage() {
   const { t } = useTranslation();
@@ -13,6 +17,17 @@ export function GraphPage() {
   const { data: graph, isLoading, error } = useGraph(scenarioId!);
   const buildMutation = useBuildGraph(scenarioId!);
   const [reasonFilter, setReasonFilter] = useState<FeasibilityReason | "all">("all");
+  const syncGraph = usePlanningDatasetStore((s) => s.syncGraph);
+  const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
+  const visibleArcs = usePlanningDatasetStore(selectVisibleArcs);
+
+  useEffect(() => {
+    syncGraph(graph);
+  }, [graph, syncGraph]);
+
+  useEffect(() => {
+    setActiveDepotId(scope?.depotId ?? null);
+  }, [scope?.depotId, setActiveDepotId]);
 
   const handleBuild = () => {
     buildMutation.mutate({
@@ -21,8 +36,9 @@ export function GraphPage() {
     });
   };
 
-  const filteredArcs =
-    graph?.arcs.filter((arc) => reasonFilter === "all" || arc.reason_code === reasonFilter) ?? [];
+  const filteredArcs = visibleArcs.filter(
+    (arc) => reasonFilter === "all" || arc.reason_code === reasonFilter,
+  );
 
   const displayedArcs = filteredArcs.slice(0, 12);
 

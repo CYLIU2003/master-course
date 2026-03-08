@@ -1,13 +1,23 @@
 // ── MasterCenterPanel ─────────────────────────────────────────
 // Renders the appropriate content based on activeTab + viewMode.
 
+import { Suspense, lazy } from "react";
 import { useMasterUiStore } from "@/stores/master-ui-store";
 import { DepotTableNew } from "@/features/planning/DepotTableNew";
 import { VehicleTableNew } from "@/features/planning/VehicleTableNew";
 import { RouteTableNew } from "@/features/planning/RouteTableNew";
 import { StopTable } from "@/features/planning/StopTable";
-import { RouteNodeGraphPanel } from "@/features/planning/RouteNodeGraphPanel";
-import { RouteMapPanel } from "@/features/planning/RouteMapPanel";
+
+const RouteNodeGraphPanel = lazy(() =>
+  import("@/features/planning/RouteNodeGraphPanel").then((module) => ({
+    default: module.RouteNodeGraphPanel,
+  })),
+);
+const RouteMapPanel = lazy(() =>
+  import("@/features/planning/RouteMapPanel").then((module) => ({
+    default: module.RouteMapPanel,
+  })),
+);
 
 interface Props {
   scenarioId: string;
@@ -20,12 +30,20 @@ export function MasterCenterPanel({ scenarioId }: Props) {
 
   // Node graph mode — routes tab only
   if (viewMode === "node" && activeTab === "routes") {
-    return <RouteNodeGraphPanel scenarioId={scenarioId} />;
+    return (
+      <Suspense fallback={<PanelFallback />}>
+        <RouteNodeGraphPanel scenarioId={scenarioId} />
+      </Suspense>
+    );
   }
 
   // Map mode — all tabs
   if (viewMode === "map" && activeTab !== "stops") {
-    return <RouteMapPanel scenarioId={scenarioId} />;
+    return (
+      <Suspense fallback={<PanelFallback />}>
+        <RouteMapPanel scenarioId={scenarioId} />
+      </Suspense>
+    );
   }
 
   // Split mode — table + map side by side
@@ -50,7 +68,9 @@ export function MasterCenterPanel({ scenarioId }: Props) {
           {activeTab === "routes" && <RouteTableNew scenarioId={scenarioId} />}
         </div>
         <div className="flex-1">
-          <RouteMapPanel scenarioId={scenarioId} />
+          <Suspense fallback={<PanelFallback />}>
+            <RouteMapPanel scenarioId={scenarioId} />
+          </Suspense>
         </div>
       </div>
     );
@@ -86,4 +106,12 @@ export function MasterCenterPanel({ scenarioId }: Props) {
         </div>
       );
   }
+}
+
+function PanelFallback() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-slate-400">
+      Loading panel...
+    </div>
+  );
 }

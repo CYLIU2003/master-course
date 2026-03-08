@@ -13,6 +13,7 @@ import { useMasterUiStore } from "@/stores/master-ui-store";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import type { Route } from "@/types";
 import { getRouteVariantLabel } from "./route-family-display";
+import { compareRouteCodeLike, normalizeRouteCode } from "@/lib/route-code";
 
 interface Props {
   scenarioId: string;
@@ -74,6 +75,13 @@ export function RouteTableNew({ scenarioId }: Props) {
         const rightOrder = right.familySortOrder ?? 999;
         if (leftOrder !== rightOrder) {
           return leftOrder - rightOrder;
+        }
+        const codeCmp = compareRouteCodeLike(
+          left.routeCode ?? left.routeFamilyCode ?? left.name,
+          right.routeCode ?? right.routeFamilyCode ?? right.name,
+        );
+        if (codeCmp !== 0) {
+          return codeCmp;
         }
         return `${left.routeLabel ?? left.name}|${left.id}`.localeCompare(
           `${right.routeLabel ?? right.name}|${right.id}`,
@@ -182,7 +190,7 @@ export function RouteTableNew({ scenarioId }: Props) {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700">
-                            {group.familyCode}
+                            {normalizeRouteCode(group.familyCode)}
                           </span>
                           <span className="truncate text-sm font-medium text-slate-700">
                             {group.familyLabel}

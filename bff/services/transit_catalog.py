@@ -308,6 +308,38 @@ def _canonicalize_odpt_route_payloads(
     return items
 
 
+def _trip_stop_times_from_route_payloads(
+    route_payloads: Iterable[Dict[str, Any]],
+    *,
+    source: str,
+) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for payload in route_payloads:
+        for trip in list(payload.get("trips") or []):
+            trip_id = str(trip.get("trip_id") or "")
+            if not trip_id:
+                continue
+            for index, stop_time in enumerate(list(trip.get("stop_times") or [])):
+                if not isinstance(stop_time, dict):
+                    continue
+                stop_id = str(stop_time.get("stop_id") or "")
+                if not stop_id:
+                    continue
+                items.append(
+                    {
+                        "trip_id": trip_id,
+                        "stop_id": stop_id,
+                        "stop_name": stop_time.get("stop_name"),
+                        "sequence": stop_time.get("index", index),
+                        "departure": stop_time.get("departure"),
+                        "arrival": stop_time.get("arrival"),
+                        "source": source,
+                        "time": stop_time.get("time"),
+                    }
+                )
+    return items
+
+
 def _replace_snapshot(
     *,
     snapshot_key: str,
@@ -511,6 +543,19 @@ def load_snapshot_bundle(snapshot_key: str) -> Dict[str, Any]:
     snapshot = get_snapshot(snapshot_key)
     if snapshot is None:
         raise KeyError(snapshot_key)
+    route_payloads: List[Dict[str, Any]] = []
+    with closing(_connect()) as conn:
+        _ensure_schema(conn)
+        rows = conn.execute(
+            """
+            SELECT payload_json
+            FROM catalog_route_payloads
+            WHERE snapshot_key = ?
+            ORDER BY route_code ASC, route_label ASC, route_id ASC
+            """,
+            (snapshot_key,),
+        ).fetchall()
+    route_payloads = [dict(_deserialize(row["payload_json"]) or {}) for row in rows]
     return {
         "snapshot": snapshot,
         "meta": dict(snapshot.get("meta") or {}),
@@ -520,6 +565,7 @@ def load_snapshot_bundle(snapshot_key: str) -> Dict[str, Any]:
         "stop_timetables": _load_entities(snapshot_key, "stop_timetables"),
         "calendar_entries": _load_entities(snapshot_key, "calendar_entries"),
         "calendar_date_entries": _load_entities(snapshot_key, "calendar_date_entries"),
+        "route_payloads": route_payloads,
     }
 
 
@@ -609,6 +655,33 @@ def _load_saved_odpt_snapshot(operator: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def _populate_operator_db_from_bundle(
+    *,
+    operator_id: str,
+    bundle: Dict[str, Any],
+    snapshot_key: str,
+    source: str,
+) -> None:
+    trip_stop_times = list(bundle.get("stop_times") or [])
+    if not trip_stop_times:
+        trip_stop_times = _trip_stop_times_from_route_payloads(
+            list(bundle.get("route_payloads") or []),
+            source=source,
+        )
+
+    _tdb.replace_all(
+        operator_id,
+        routes=list(bundle.get("routes") or []),
+        stops=list(bundle.get("stops") or []),
+        timetable_rows=list(bundle.get("timetable_rows") or []),
+        trip_stop_times=trip_stop_times,
+        stop_timetables=list(bundle.get("stop_timetables") or []),
+        calendar_entries=list(bundle.get("calendar_entries") or []),
+        calendar_date_entries=list(bundle.get("calendar_date_entries") or []),
+        meta={"catalog_snapshot_key": snapshot_key},
+    )
+
+
 def _store_odpt_snapshot(
     *,
     operator: str,
@@ -679,6 +752,10 @@ def _store_odpt_snapshot(
             routes=routes,
             stops=stops,
             timetable_rows=timetable_rows,
+            trip_stop_times=_trip_stop_times_from_route_payloads(
+                canonical_route_payloads,
+                source="odpt",
+            ),
             stop_timetables=stop_timetables,
             calendar_entries=[],
             calendar_date_entries=[],
@@ -823,6 +900,7 @@ def refresh_odpt_snapshot(
             routes=routes,
             stops=stops,
             timetable_rows=trips,
+            trip_stop_times=bundle.get("stop_times", []),
             stop_timetables=stop_timetables,
             calendar_entries=bundle.get("service_calendars", []),
             calendar_date_entries=[],
@@ -855,6 +933,12 @@ def get_or_refresh_odpt_snapshot(
         and _has_snapshot_payload(snapshot_key, _ODPT_REQUIRED_ENTITY_TYPES)
     ):
         bundle = load_snapshot_bundle(snapshot_key)
+        _populate_operator_db_from_bundle(
+            operator_id="tokyu",
+            bundle=bundle,
+            snapshot_key=snapshot_key,
+            source="odpt",
+        )
         bundle["meta"]["snapshotMode"] = "catalog"
         return bundle
 
@@ -862,6 +946,12 @@ def get_or_refresh_odpt_snapshot(
         bootstrapped = bootstrap_odpt_snapshot_from_saved(operator=operator)
         if bootstrapped is not None:
             bundle = load_snapshot_bundle(bootstrapped["snapshotKey"])
+            _populate_operator_db_from_bundle(
+                operator_id="tokyu",
+                bundle=bundle,
+                snapshot_key=bootstrapped["snapshotKey"],
+                source="odpt",
+            )
             bundle["meta"]["snapshotMode"] = "saved-json"
             return bundle
 
@@ -930,6 +1020,10 @@ def refresh_gtfs_snapshot(
             routes=_routes,
             stops=_stops,
             timetable_rows=_tt_rows,
+            trip_stop_times=_trip_stop_times_from_route_payloads(
+                list(route_bundle.get("route_timetables") or []),
+                source="gtfs",
+            ),
             stop_timetables=_st,
             calendar_entries=_cal,
             calendar_date_entries=_cal_dates,
@@ -956,6 +1050,12 @@ def get_or_refresh_gtfs_snapshot(
         and _has_snapshot_payload(snapshot_key, _GTFS_REQUIRED_ENTITY_TYPES)
     ):
         bundle = load_snapshot_bundle(snapshot_key)
+        _populate_operator_db_from_bundle(
+            operator_id="toei",
+            bundle=bundle,
+            snapshot_key=snapshot_key,
+            source="gtfs",
+        )
         bundle["meta"]["snapshotMode"] = "catalog"
         return bundle
 

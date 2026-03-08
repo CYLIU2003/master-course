@@ -70,7 +70,9 @@ export const permissionKeys = {
 function invalidateDispatchOutputs(qc: ReturnType<typeof useQueryClient>, scenarioId: string) {
   qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "trips"], exact: false });
   qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "graph"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "blocks"], exact: false });
   qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "duties"], exact: false });
+  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "dispatch-plan"], exact: false });
   qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "simulation"], exact: false });
   qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "optimization"], exact: false });
   qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });

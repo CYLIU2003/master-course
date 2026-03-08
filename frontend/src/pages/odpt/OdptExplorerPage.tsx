@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchJson } from "@/api/client";
+import { VirtualizedList } from "@/features/common/VirtualizedList";
+import { compareRouteCodeLike, normalizeRouteCode } from "@/lib/route-code";
+import { useMasterUiStore } from "@/stores/master-ui-store";
 import { useUIStore } from "@/stores/ui-store";
 
 /**
@@ -280,6 +283,16 @@ type DbRoute = {
   last_arrival?: string;
 };
 
+type DbStop = {
+  stop_id: string;
+  stop_name: string;
+  stop_name_en?: string;
+  lat?: number;
+  lon?: number;
+  kind?: string;
+  source?: string;
+};
+
 type DbTimetableRow = {
   trip_id: string;
   route_id: string;
@@ -307,9 +320,17 @@ type TimetableSummary = {
 // ── DB Visualization Panel ───────────────────────────────────────────────────
 
 function DbVisualizationPanel() {
+  const pageSize = 200;
   const [operators, setOperators] = useState<OperatorInfo[]>([]);
   const [selectedOp, setSelectedOp] = useState("");
   const [routes, setRoutes] = useState<DbRoute[]>([]);
+  const [routesTotal, setRoutesTotal] = useState(0);
+  const [routeQuery, setRouteQuery] = useState("");
+  const [routeOffset, setRouteOffset] = useState(0);
+  const [stops, setStops] = useState<DbStop[]>([]);
+  const [stopsTotal, setStopsTotal] = useState(0);
+  const [stopQuery, setStopQuery] = useState("");
+  const [stopOffset, setStopOffset] = useState(0);
   const [ttSummary, setTtSummary] = useState<TimetableSummary | null>(null);
   const [ttRows, setTtRows] = useState<DbTimetableRow[]>([]);
   const [ttFilter, setTtFilter] = useState({ serviceId: "", routeId: "" });
@@ -340,19 +361,32 @@ function DbVisualizationPanel() {
   useEffect(() => {
     if (!selectedOp) return;
     setRoutes([]);
+    setRoutesTotal(0);
+    setStops([]);
+    setStopsTotal(0);
     setTtSummary(null);
     setTtRows([]);
     setTtTotal(0);
+    setRouteOffset(0);
+    setStopOffset(0);
     setTtFilter({ serviceId: "", routeId: "" });
     (async () => {
       setLoading(true);
       setError(null);
       try {
-        const [routesRes, summaryRes] = await Promise.all([
-          fetchJson<{ items: DbRoute[] }>(`/api/catalog/operators/${selectedOp}/routes`),
+        const [routesRes, stopsRes, summaryRes] = await Promise.all([
+          fetchJson<{ items: DbRoute[]; total: number }>(
+            `/api/catalog/operators/${selectedOp}/routes?limit=${pageSize}&offset=0`,
+          ),
+          fetchJson<{ items: DbStop[]; total: number }>(
+            `/api/catalog/operators/${selectedOp}/stops?limit=${pageSize}&offset=0`,
+          ),
           fetchJson<{ item: TimetableSummary }>(`/api/catalog/operators/${selectedOp}/timetable/summary`),
         ]);
         setRoutes(routesRes.items ?? []);
+        setRoutesTotal(routesRes.total ?? 0);
+        setStops(stopsRes.items ?? []);
+        setStopsTotal(stopsRes.total ?? 0);
         setTtSummary(summaryRes.item ?? null);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : String(e));
@@ -360,7 +394,51 @@ function DbVisualizationPanel() {
         setLoading(false);
       }
     })();
-  }, [selectedOp]);
+  }, [pageSize, selectedOp]);
+
+  async function loadRoutesPage(nextOffset = routeOffset, nextQuery = routeQuery) {
+    if (!selectedOp) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", String(pageSize));
+      params.set("offset", String(nextOffset));
+      if (nextQuery.trim()) params.set("q", nextQuery.trim());
+      const body = await fetchJson<{ items: DbRoute[]; total: number }>(
+        `/api/catalog/operators/${selectedOp}/routes?${params.toString()}`,
+      );
+      setRoutes(body.items ?? []);
+      setRoutesTotal(body.total ?? 0);
+      setRouteOffset(nextOffset);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadStopsPage(nextOffset = stopOffset, nextQuery = stopQuery) {
+    if (!selectedOp) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", String(pageSize));
+      params.set("offset", String(nextOffset));
+      if (nextQuery.trim()) params.set("q", nextQuery.trim());
+      const body = await fetchJson<{ items: DbStop[]; total: number }>(
+        `/api/catalog/operators/${selectedOp}/stops?${params.toString()}`,
+      );
+      setStops(body.items ?? []);
+      setStopsTotal(body.total ?? 0);
+      setStopOffset(nextOffset);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function loadTimetableRows() {
     if (!selectedOp) return;
@@ -478,41 +556,166 @@ function DbVisualizationPanel() {
       )}
 
       {/* Routes table */}
-      {routes.length > 0 && (
-        <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-700">
-            Routes ({routes.length})
-          </h2>
-          <div className="overflow-auto max-h-[400px]">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-surface-raised">
-                <tr className="border-b border-slate-200">
-                  <th className="py-2 pr-3 text-left font-semibold text-slate-500">route_id</th>
-                  <th className="py-2 pr-3 text-left font-semibold text-slate-500">name</th>
-                  <th className="py-2 pr-3 text-left font-semibold text-slate-500">dir</th>
-                  <th className="py-2 pr-3 text-right font-semibold text-slate-500">stops</th>
-                  <th className="py-2 pr-3 text-right font-semibold text-slate-500">trips</th>
-                  <th className="py-2 pr-3 text-left font-semibold text-slate-500">first</th>
-                  <th className="py-2 text-left font-semibold text-slate-500">last</th>
-                </tr>
-              </thead>
-              <tbody>
-                {routes.map((r) => (
-                  <tr key={r.route_id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-1.5 pr-3 font-mono truncate max-w-[200px]" title={r.route_id}>{r.route_code || r.route_id}</td>
-                    <td className="py-1.5 pr-3 truncate max-w-[200px]" title={r.route_name}>{r.route_name}</td>
-                    <td className="py-1.5 pr-3">{r.direction ?? "-"}</td>
-                    <td className="py-1.5 pr-3 text-right">{r.stop_count}</td>
-                    <td className="py-1.5 pr-3 text-right">{r.trip_count}</td>
-                    <td className="py-1.5 pr-3 font-mono">{r.first_departure ?? "-"}</td>
-                    <td className="py-1.5 font-mono">{r.last_arrival ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-500">route search</label>
+            <input
+              type="text"
+              value={routeQuery}
+              onChange={(e) => setRouteQuery(e.target.value)}
+              placeholder="route_id / route_code / name"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm w-64"
+            />
+          </div>
+          <button
+            onClick={() => void loadRoutesPage(0, routeQuery)}
+            disabled={loading || !selectedOp}
+            className="rounded-lg border border-border bg-surface px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Search routes
+          </button>
+          <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
+            <button
+              onClick={() => void loadRoutesPage(Math.max(0, routeOffset - pageSize), routeQuery)}
+              disabled={loading || routeOffset === 0}
+              className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40"
+            >
+              Prev
+            </button>
+            <span>
+              {routes.length > 0 ? routeOffset + 1 : 0}-
+              {Math.min(routeOffset + routes.length, routesTotal)} / {routesTotal.toLocaleString()}
+            </span>
+            <button
+              onClick={() => void loadRoutesPage(routeOffset + pageSize, routeQuery)}
+              disabled={loading || routeOffset + routes.length >= routesTotal}
+              className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40"
+            >
+              Next
+            </button>
           </div>
         </div>
-      )}
+        <h2 className="text-sm font-semibold text-slate-700">
+          Routes ({routesTotal.toLocaleString()} total)
+        </h2>
+        {routes.length > 0 ? (
+          <div className="rounded-lg border border-slate-200">
+            <div className="grid grid-cols-[1.4fr_1.4fr_0.7fr_0.6fr_0.6fr_0.8fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+              <span>route_id</span>
+              <span>name</span>
+              <span>dir</span>
+              <span className="text-right">stops</span>
+              <span className="text-right">trips</span>
+              <span>first</span>
+              <span>last</span>
+            </div>
+            <VirtualizedList
+              items={routes}
+              height={400}
+              itemHeight={40}
+              className="bg-white"
+              getKey={(route) => route.route_id}
+              renderItem={(route) => (
+                <div className="grid h-full grid-cols-[1.4fr_1.4fr_0.7fr_0.6fr_0.6fr_0.8fr_0.8fr] gap-3 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
+                  <div className="truncate font-mono" title={route.route_id}>
+                    {route.route_code || route.route_id}
+                  </div>
+                  <div className="truncate" title={route.route_name}>
+                    {route.route_name}
+                  </div>
+                  <div>{route.direction ?? "-"}</div>
+                  <div className="text-right">{route.stop_count}</div>
+                  <div className="text-right">{route.trip_count}</div>
+                  <div className="font-mono">{route.first_departure ?? "-"}</div>
+                  <div className="font-mono">{route.last_arrival ?? "-"}</div>
+                </div>
+              )}
+            />
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
+            条件に一致する route はありません。
+          </div>
+        )}
+      </div>
+
+      {/* Stops table */}
+      <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-500">stop search</label>
+            <input
+              type="text"
+              value={stopQuery}
+              onChange={(e) => setStopQuery(e.target.value)}
+              placeholder="stop_id / stop_name"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm w-64"
+            />
+          </div>
+          <button
+            onClick={() => void loadStopsPage(0, stopQuery)}
+            disabled={loading || !selectedOp}
+            className="rounded-lg border border-border bg-surface px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Search stops
+          </button>
+          <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
+            <button
+              onClick={() => void loadStopsPage(Math.max(0, stopOffset - pageSize), stopQuery)}
+              disabled={loading || stopOffset === 0}
+              className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40"
+            >
+              Prev
+            </button>
+            <span>
+              {stops.length > 0 ? stopOffset + 1 : 0}-
+              {Math.min(stopOffset + stops.length, stopsTotal)} / {stopsTotal.toLocaleString()}
+            </span>
+            <button
+              onClick={() => void loadStopsPage(stopOffset + pageSize, stopQuery)}
+              disabled={loading || stopOffset + stops.length >= stopsTotal}
+              className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+        <h2 className="text-sm font-semibold text-slate-700">
+          Stops ({stopsTotal.toLocaleString()} total)
+        </h2>
+        {stops.length > 0 ? (
+          <div className="rounded-lg border border-slate-200">
+            <div className="grid grid-cols-[1.2fr_1.6fr_0.8fr_0.8fr_0.6fr] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+              <span>stop_id</span>
+              <span>name</span>
+              <span>lat</span>
+              <span>lon</span>
+              <span>kind</span>
+            </div>
+            <VirtualizedList
+              items={stops}
+              height={320}
+              itemHeight={38}
+              className="bg-white"
+              getKey={(stop) => stop.stop_id}
+              renderItem={(stop) => (
+                <div className="grid h-full grid-cols-[1.2fr_1.6fr_0.8fr_0.8fr_0.6fr] gap-3 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
+                  <div className="truncate font-mono" title={stop.stop_id}>{stop.stop_id}</div>
+                  <div className="truncate" title={stop.stop_name}>{stop.stop_name}</div>
+                  <div className="font-mono">{stop.lat ?? "-"}</div>
+                  <div className="font-mono">{stop.lon ?? "-"}</div>
+                  <div>{stop.kind ?? "-"}</div>
+                </div>
+              )}
+            />
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
+            条件に一致する stop はありません。
+          </div>
+        )}
+      </div>
 
       {/* Timetable rows query */}
       <div className="rounded-xl border border-border bg-surface-raised p-5 space-y-3">
@@ -552,37 +755,42 @@ function DbVisualizationPanel() {
           )}
         </div>
         {ttRows.length > 0 && (
-          <div className="overflow-auto max-h-[500px]">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-surface-raised">
-                <tr className="border-b border-slate-200">
-                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">trip_id</th>
-                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">route_id</th>
-                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">service</th>
-                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">origin</th>
-                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">dest</th>
-                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">dep</th>
-                  <th className="py-2 pr-2 text-left font-semibold text-slate-500">arr</th>
-                  <th className="py-2 pr-2 text-right font-semibold text-slate-500">km</th>
-                  <th className="py-2 text-left font-semibold text-slate-500">types</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ttRows.map((r, i) => (
-                  <tr key={`${r.trip_id}-${i}`} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-1 pr-2 font-mono truncate max-w-[140px]" title={r.trip_id}>{r.trip_id}</td>
-                    <td className="py-1 pr-2 font-mono truncate max-w-[120px]" title={r.route_id}>{r.route_id}</td>
-                    <td className="py-1 pr-2">{r.service_id}</td>
-                    <td className="py-1 pr-2 truncate max-w-[100px]" title={r.origin}>{r.origin}</td>
-                    <td className="py-1 pr-2 truncate max-w-[100px]" title={r.destination}>{r.destination}</td>
-                    <td className="py-1 pr-2 font-mono">{r.departure}</td>
-                    <td className="py-1 pr-2 font-mono">{r.arrival}</td>
-                    <td className="py-1 pr-2 text-right">{r.distance_km?.toFixed(1) ?? "-"}</td>
-                    <td className="py-1 font-mono text-xs">{Array.isArray(r.allowed_vehicle_types) ? r.allowed_vehicle_types.join(",") : "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="rounded-lg border border-slate-200">
+            <div className="grid grid-cols-[1fr_1fr_0.7fr_0.9fr_0.9fr_0.6fr_0.6fr_0.5fr_1fr] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+              <span>trip_id</span>
+              <span>route_id</span>
+              <span>service</span>
+              <span>origin</span>
+              <span>dest</span>
+              <span>dep</span>
+              <span>arr</span>
+              <span className="text-right">km</span>
+              <span>types</span>
+            </div>
+            <VirtualizedList
+              items={ttRows}
+              height={500}
+              itemHeight={36}
+              className="bg-white"
+              getKey={(row, index) => `${row.trip_id}-${index}`}
+              renderItem={(row) => (
+                <div className="grid h-full grid-cols-[1fr_1fr_0.7fr_0.9fr_0.9fr_0.6fr_0.6fr_0.5fr_1fr] gap-2 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
+                  <div className="truncate font-mono" title={row.trip_id}>{row.trip_id}</div>
+                  <div className="truncate font-mono" title={row.route_id}>{row.route_id}</div>
+                  <div>{row.service_id}</div>
+                  <div className="truncate" title={row.origin}>{row.origin}</div>
+                  <div className="truncate" title={row.destination}>{row.destination}</div>
+                  <div className="font-mono">{row.departure}</div>
+                  <div className="font-mono">{row.arrival}</div>
+                  <div className="text-right">{row.distance_km?.toFixed(1) ?? "-"}</div>
+                  <div className="truncate font-mono text-[11px]">
+                    {Array.isArray(row.allowed_vehicle_types)
+                      ? row.allowed_vehicle_types.join(",")
+                      : "-"}
+                  </div>
+                </div>
+              )}
+            />
           </div>
         )}
       </div>
@@ -596,6 +804,8 @@ export function OdptExplorerPage() {
   const { scenarioId: routeScenarioId } = useParams<{ scenarioId: string }>();
   const [tabMode, setTabMode] = useState<"db" | "api">("db");
   const storeScenarioId = useUIStore((s) => s.activeScenarioId);
+  const setSelectedDepotId = useUIStore((s) => s.setSelectedDepotId);
+  const selectMasterDepot = useMasterUiStore((s) => s.selectDepot);
   const activeScenarioId = routeScenarioId ?? storeScenarioId;
   const [selectedScenarioOperator, setSelectedScenarioOperator] = useState<"tokyu" | "toei">("tokyu");
   const [latestDiffSessionId, setLatestDiffSessionId] = useState("");
@@ -628,6 +838,7 @@ export function OdptExplorerPage() {
   const [selectedSnapshotKey, setSelectedSnapshotKey] = useState("");
   const [selectedRouteId, setSelectedRouteId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("all");
+  const [selectedCatalogTripId, setSelectedCatalogTripId] = useState("");
 
   const [exporting, setExporting] = useState(false);
   const [exportRes, setExportRes] = useState<OperationalExportResponse | null>(null);
@@ -639,6 +850,24 @@ export function OdptExplorerPage() {
     routeTimetablesSavedTo?: string;
     meta: unknown;
   } | null>(null);
+  const [odptBackendHealthy, setOdptBackendHealthy] = useState<boolean | null>(null);
+  const sortedAssignmentRows = useMemo(
+    () =>
+      [...assignmentRows].sort((left, right) => {
+        const codeCmp = compareRouteCodeLike(
+          left.routeCode || left.routeName,
+          right.routeCode || right.routeName,
+        );
+        if (codeCmp !== 0) {
+          return codeCmp;
+        }
+        return `${left.routeName}|${left.startStop ?? ""}|${left.endStop ?? ""}`.localeCompare(
+          `${right.routeName}|${right.startStop ?? ""}|${right.endStop ?? ""}`,
+          "ja",
+        );
+      }),
+    [assignmentRows],
+  );
 
   const [error, setError] = useState<string | null>(null);
 
@@ -681,6 +910,28 @@ export function OdptExplorerPage() {
   useEffect(() => {
     setSelectedServiceId("all");
   }, [selectedRouteId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function probeOdptBackend() {
+      try {
+        await fetchJson<{ status: string }>("/api/odpt/health");
+        if (!cancelled) {
+          setOdptBackendHealthy(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setOdptBackendHealthy(false);
+        }
+      }
+    }
+
+    void probeOdptBackend();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function buildExportPayload() {
     return {
@@ -928,6 +1179,8 @@ export function OdptExplorerPage() {
           reason: depotId ? "Assigned from Public Data Collection Explorer." : "Cleared from Public Data Collection Explorer.",
         }),
       });
+      setSelectedDepotId(depotId || null);
+      selectMasterDepot(depotId || null);
       await loadScenarioExplorerData();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -1089,6 +1342,23 @@ export function OdptExplorerPage() {
     return catalogRoute.trips.filter((trip) => trip.service_id === selectedServiceId);
   }, [catalogRoute, selectedServiceId]);
 
+  useEffect(() => {
+    if (!filteredTrips.length) {
+      setSelectedCatalogTripId("");
+      return;
+    }
+    setSelectedCatalogTripId((current) =>
+      filteredTrips.some((trip) => trip.trip_id === current)
+        ? current
+        : filteredTrips[0].trip_id,
+    );
+  }, [filteredTrips]);
+
+  const selectedCatalogTrip = useMemo(
+    () => filteredTrips.find((trip) => trip.trip_id === selectedCatalogTripId) ?? null,
+    [filteredTrips, selectedCatalogTripId],
+  );
+
   const exportPreview = useMemo(() => {
     if (!exportRes) {
       return "";
@@ -1210,6 +1480,13 @@ export function OdptExplorerPage() {
           {syncMessage && <span className="text-emerald-700">{syncMessage}</span>}
         </div>
 
+        {odptBackendHealthy === false && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            ODPT Explorer backend (`localhost:3001`) に接続できません。Scenario 同期は FastAPI 側で続行できますが、
+            Proxy Fetch / Introspect / Export Operational / Save to Disk は無効になります。
+          </div>
+        )}
+
         {explorerOverview && (
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
             {[
@@ -1306,59 +1583,63 @@ export function OdptExplorerPage() {
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
             scenario を開いてから利用してください。
           </div>
-        ) : assignmentRows.length === 0 ? (
+        ) : sortedAssignmentRows.length === 0 ? (
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
             表示対象の route がありません。
           </div>
         ) : (
-          <div className="overflow-auto rounded-lg border border-border">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50">
-                <tr className="border-b border-border">
-                  <th className="px-3 py-2 font-medium text-slate-500">Route</th>
-                  <th className="px-3 py-2 font-medium text-slate-500">Stops</th>
-                  <th className="px-3 py-2 font-medium text-slate-500">Trips</th>
-                  <th className="px-3 py-2 font-medium text-slate-500">Current depot</th>
-                  <th className="px-3 py-2 font-medium text-slate-500">Assign</th>
-                  <th className="px-3 py-2 font-medium text-slate-500">Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {assignmentRows.map((row) => (
-                  <tr key={row.routeId} className="border-b border-slate-100">
-                    <td className="px-3 py-2">
-                      <div className="font-medium text-slate-700">{row.routeCode || row.routeName}</div>
-                      <div className="text-slate-500">
-                        {row.routeName} {row.startStop || row.endStop ? `(${row.startStop ?? "-"} -> ${row.endStop ?? "-"})` : ""}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">{row.stopCount}</td>
-                    <td className="px-3 py-2 text-slate-600">{row.tripCount}</td>
-                    <td className="px-3 py-2 text-slate-600">
-                      {row.depotName ?? <span className="text-amber-700">unassigned</span>}
-                    </td>
-                    <td className="px-3 py-2">
-                      <select
-                        value={row.depotId ?? ""}
-                        disabled={assignmentSavingRouteId === row.routeId}
-                        onChange={(e) => updateDepotAssignment(row.routeId, e.target.value)}
-                        className="rounded border border-border bg-white px-2 py-1"
-                      >
-                        <option value="">未所属</option>
-                        {depots.map((depot) => (
-                          <option key={depot.id} value={depot.id}>
-                            {depot.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-3 py-2 text-slate-500">
-                      {row.reason || row.assignmentType || "-"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="rounded-lg border border-border">
+            <div className="grid grid-cols-[1.8fr_0.5fr_0.5fr_1fr_1fr_1.2fr] gap-3 border-b border-border bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
+              <span>Route</span>
+              <span>Stops</span>
+              <span>Trips</span>
+              <span>Current depot</span>
+              <span>Assign</span>
+              <span>Reason</span>
+            </div>
+            <VirtualizedList
+              items={sortedAssignmentRows}
+              height={420}
+              itemHeight={72}
+              className="bg-white"
+              getKey={(row) => row.routeId}
+              renderItem={(row) => (
+                <div className="grid h-full grid-cols-[1.8fr_0.5fr_0.5fr_1fr_1fr_1.2fr] gap-3 border-b border-slate-100 px-3 py-2 text-xs">
+                  <div>
+                    <div className="font-medium text-slate-700">
+                      {normalizeRouteCode(row.routeCode) || row.routeName}
+                    </div>
+                    <div className="text-slate-500">
+                      {row.routeName}{" "}
+                      {row.startStop || row.endStop
+                        ? `(${row.startStop ?? "-"} -> ${row.endStop ?? "-"})`
+                        : ""}
+                    </div>
+                  </div>
+                  <div className="text-slate-600">{row.stopCount}</div>
+                  <div className="text-slate-600">{row.tripCount}</div>
+                  <div className="text-slate-600">
+                    {row.depotName ?? <span className="text-amber-700">unassigned</span>}
+                  </div>
+                  <div>
+                    <select
+                      value={row.depotId ?? ""}
+                      disabled={assignmentSavingRouteId === row.routeId}
+                      onChange={(e) => updateDepotAssignment(row.routeId, e.target.value)}
+                      className="w-full rounded border border-border bg-white px-2 py-1"
+                    >
+                      <option value="">未所属</option>
+                      {depots.map((depot) => (
+                        <option key={depot.id} value={depot.id}>
+                          {depot.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="text-slate-500">{row.reason || row.assignmentType || "-"}</div>
+                </div>
+              )}
+            />
           </div>
         )}
       </div>
@@ -1485,14 +1766,14 @@ export function OdptExplorerPage() {
             </label>
             <button
               onClick={runProxy}
-              disabled={loading}
+              disabled={loading || odptBackendHealthy === false}
               className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
             >
               {loading ? "Fetching…" : "Proxy Fetch"}
             </button>
             <button
               onClick={runIntrospect}
-              disabled={introspecting || !proxyRes?.data?.length}
+              disabled={introspecting || !proxyRes?.data?.length || odptBackendHealthy === false}
               className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
             >
               {introspecting ? "Introspecting…" : "Introspect"}
@@ -1506,14 +1787,14 @@ export function OdptExplorerPage() {
             </label>
             <button
               onClick={runExportOperational}
-              disabled={exporting}
+              disabled={exporting || odptBackendHealthy === false}
               className="w-full rounded-lg border border-primary-300 bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-40 transition-colors"
             >
               {exporting ? "Exporting…" : "Export Operational"}
             </button>
             <button
               onClick={runSaveToDisk}
-              disabled={saving}
+              disabled={saving || odptBackendHealthy === false}
               className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 transition-colors"
             >
               {saving ? "Saving…" : "Save to Disk"}
@@ -1902,93 +2183,103 @@ export function OdptExplorerPage() {
             ))}
           </div>
 
-          <div className="space-y-3">
-            {filteredTrips.map((trip) => (
-              <details
-                key={trip.trip_id}
-                className="overflow-hidden rounded-lg border border-border bg-surface"
-              >
-                <summary className="cursor-pointer list-none px-4 py-3">
+          <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+            <div className="rounded-lg border border-border bg-white">
+              <div className="border-b border-border px-4 py-3 text-xs text-slate-500">
+                {filteredTrips.length} trips
+              </div>
+              <VirtualizedList
+                items={filteredTrips}
+                height={520}
+                itemHeight={72}
+                className="bg-white"
+                getKey={(trip) => trip.trip_id}
+                renderItem={(trip) => (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCatalogTripId(trip.trip_id)}
+                    className={`grid h-full w-full gap-1 border-b border-slate-100 px-4 py-3 text-left hover:bg-slate-50 ${
+                      trip.trip_id === selectedCatalogTripId ? "bg-primary-50" : ""
+                    }`}
+                  >
+                    <span className="text-sm font-semibold text-slate-800">
+                      {(trip.departure ?? "--:--") +
+                        " -> " +
+                        (trip.arrival ?? "--:--")}
+                    </span>
+                    <span className="truncate text-xs text-slate-500">
+                      {(trip.origin_stop_name ?? "Unknown") +
+                        " -> " +
+                        (trip.destination_stop_name ?? "Unknown")}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {serviceLabel(trip.service_id)} / {trip.direction} / {trip.pattern_id}
+                    </span>
+                  </button>
+                )}
+              />
+            </div>
+
+            {selectedCatalogTrip ? (
+              <div className="overflow-hidden rounded-lg border border-border bg-surface">
+                <div className="border-b border-border px-4 py-3">
                   <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-slate-800">
-                        {(trip.departure ?? "--:--") +
+                        {(selectedCatalogTrip.departure ?? "--:--") +
                           " -> " +
-                          (trip.arrival ?? "--:--") +
+                          (selectedCatalogTrip.arrival ?? "--:--") +
                           " · " +
-                          (trip.origin_stop_name ?? "Unknown") +
+                          (selectedCatalogTrip.origin_stop_name ?? "Unknown") +
                           " -> " +
-                          (trip.destination_stop_name ?? "Unknown")}
+                          (selectedCatalogTrip.destination_stop_name ?? "Unknown")}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {serviceLabel(trip.service_id)} / {trip.direction} / {trip.pattern_id}
+                        {serviceLabel(selectedCatalogTrip.service_id)} / {selectedCatalogTrip.direction} / {selectedCatalogTrip.pattern_id}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                      <span>{trip.stop_times.length} stops</span>
-                      {typeof trip.estimated_distance_km === "number" && (
-                        <span>{trip.estimated_distance_km.toFixed(2)} km</span>
+                      <span>{selectedCatalogTrip.stop_times.length} stops</span>
+                      {typeof selectedCatalogTrip.estimated_distance_km === "number" && (
+                        <span>{selectedCatalogTrip.estimated_distance_km.toFixed(2)} km</span>
                       )}
-                      {trip.is_partial && (
+                      {selectedCatalogTrip.is_partial && (
                         <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">
                           partial
                         </span>
                       )}
                     </div>
                   </div>
-                </summary>
-                <div className="border-t border-border bg-white px-4 py-3">
-                  <div className="overflow-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-slate-50 text-left text-slate-600">
-                          <th className="border-b border-border px-3 py-2 font-semibold">
-                            #
-                          </th>
-                          <th className="border-b border-border px-3 py-2 font-semibold">
-                            Stop
-                          </th>
-                          <th className="border-b border-border px-3 py-2 font-semibold">
-                            Arrival
-                          </th>
-                          <th className="border-b border-border px-3 py-2 font-semibold">
-                            Departure
-                          </th>
-                          <th className="border-b border-border px-3 py-2 font-semibold">
-                            Pass time
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {trip.stop_times.map((stopTime) => (
-                          <tr
-                            key={`${trip.trip_id}-${stopTime.index}-${stopTime.stop_id}`}
-                            className="border-b border-slate-100"
-                          >
-                            <td className="px-3 py-2 text-slate-500">
-                              {stopTime.index}
-                            </td>
-                            <td className="px-3 py-2 text-slate-700">
-                              {stopTime.stop_name}
-                            </td>
-                            <td className="px-3 py-2 text-slate-600">
-                              {stopTime.arrival ?? ""}
-                            </td>
-                            <td className="px-3 py-2 text-slate-600">
-                              {stopTime.departure ?? ""}
-                            </td>
-                            <td className="px-3 py-2 font-mono text-slate-700">
-                              {stopTime.time ?? ""}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
                 </div>
-              </details>
-            ))}
-            {!filteredTrips.length && (
+                <div className="overflow-auto px-4 py-3">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-left text-slate-600">
+                        <th className="border-b border-border px-3 py-2 font-semibold">#</th>
+                        <th className="border-b border-border px-3 py-2 font-semibold">Stop</th>
+                        <th className="border-b border-border px-3 py-2 font-semibold">Arrival</th>
+                        <th className="border-b border-border px-3 py-2 font-semibold">Departure</th>
+                        <th className="border-b border-border px-3 py-2 font-semibold">Pass time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedCatalogTrip.stop_times.map((stopTime) => (
+                        <tr
+                          key={`${selectedCatalogTrip.trip_id}-${stopTime.index}-${stopTime.stop_id}`}
+                          className="border-b border-slate-100"
+                        >
+                          <td className="px-3 py-2 text-slate-500">{stopTime.index}</td>
+                          <td className="px-3 py-2 text-slate-700">{stopTime.stop_name}</td>
+                          <td className="px-3 py-2 text-slate-600">{stopTime.arrival ?? ""}</td>
+                          <td className="px-3 py-2 text-slate-600">{stopTime.departure ?? ""}</td>
+                          <td className="px-3 py-2 font-mono text-slate-700">{stopTime.time ?? ""}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
               <p className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
                 この条件に一致する便はありません。
               </p>

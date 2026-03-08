@@ -1,6 +1,8 @@
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react";
 import { useUIStore } from "@/stores/ui-store";
+import { usePlanningDatasetStore } from "@/stores/planning-dataset-store";
 import { PageSection } from "@/features/common";
 import { DepotListPanel, DepotDetailPanel, RouteTable, VehicleRouteMatrix } from "@/features/planning";
 
@@ -8,6 +10,17 @@ export function MasterPlanningPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const selectedDepotId = useUIStore((s) => s.selectedDepotId);
+  const [showAllRoutes, setShowAllRoutes] = useState(false);
+  const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
+  const setShowAllRoutesStore = usePlanningDatasetStore((s) => s.setShowAllRoutes);
+
+  useEffect(() => {
+    setActiveDepotId(selectedDepotId);
+  }, [selectedDepotId, setActiveDepotId]);
+
+  useEffect(() => {
+    setShowAllRoutesStore(showAllRoutes);
+  }, [showAllRoutes, setShowAllRoutesStore]);
 
   if (!scenarioId) return null;
 
@@ -48,9 +61,28 @@ export function MasterPlanningPage() {
       {/* Routes section (not depot-scoped) */}
       <PageSection
         title={t("planning.routes_title")}
-        description={t("planning.routes_description")}
+        description={
+          selectedDepotId && !showAllRoutes
+            ? "Explorer で最後に確定した営業所に関係する route を優先表示しています。"
+            : t("planning.routes_description")
+        }
+        actions={
+          selectedDepotId ? (
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={showAllRoutes}
+                onChange={(e) => setShowAllRoutes(e.target.checked)}
+              />
+              すべて表示
+            </label>
+          ) : undefined
+        }
       >
-        <RouteTable scenarioId={scenarioId} />
+        <RouteTable
+          scenarioId={scenarioId}
+          depotId={selectedDepotId && !showAllRoutes ? selectedDepotId : undefined}
+        />
       </PageSection>
 
       {/* Vehicle-Route permission matrix */}

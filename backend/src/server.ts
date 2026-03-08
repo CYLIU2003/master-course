@@ -11,6 +11,7 @@ import { buildRouteTimetables } from "./odpt/routeTimetables";
 import { normalizeAll } from "./odpt/normalize/index";
 import type { NormalizedDataset } from "./odpt/normalize/index";
 
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 dotenv.config();
 
 const app = express();
@@ -789,6 +790,10 @@ app.post(
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
+  res.json({ status: "ok", service: "odpt-explorer-bff" });
+});
+
+app.get("/api/odpt/health", (_req, res) => {
   res.json({ status: "ok", service: "odpt-explorer-bff" });
 });
 

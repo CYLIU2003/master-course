@@ -13,12 +13,14 @@ import { useTranslation } from "react-i18next";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useMasterUiStore } from "@/stores/master-ui-store";
-import { useDepots } from "@/hooks";
-import type { Depot } from "@/types";
+import { useDepots, useRoute, useRoutes, useStops } from "@/hooks";
+import type { Depot, Route, Stop } from "@/types";
 
 const FREE_STYLE = "https://demotiles.maplibre.org/style.json";
 const DEFAULT_CENTER: [number, number] = [139.7671, 35.6812]; // Tokyo
 const DEFAULT_ZOOM = 10;
+const ROUTE_SOURCE_ID = "selected-route-source";
+const ROUTE_LAYER_ID = "selected-route-line";
 
 interface Props {
   scenarioId: string;
@@ -27,13 +29,62 @@ interface Props {
 export function RouteMapPanel({ scenarioId }: Props) {
   const { t } = useTranslation();
   const activeTab = useMasterUiStore((s) => s.activeTab);
+  const selectedDepotId = useMasterUiStore((s) => s.selectedDepotId);
+  const selectedRouteId = useMasterUiStore((s) => s.selectedRouteId);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
 
   const { data: depotsData } = useDepots(scenarioId);
+  const { data: routesData } = useRoutes(scenarioId, {
+    depotId: selectedDepotId ?? undefined,
+    groupByFamily: true,
+  });
+  const { data: routeDetail } = useRoute(scenarioId, selectedRouteId ?? "");
+  const { data: stopsData } = useStops(scenarioId);
   const depots = useMemo<Depot[]>(() => depotsData?.items ?? [], [depotsData]);
+  const routes = useMemo<Route[]>(() => routesData?.items ?? [], [routesData]);
+  const stops = useMemo<Stop[]>(() => stopsData?.items ?? [], [stopsData]);
+  const stopByName = useMemo(() => {
+    const normalized = (value: string | null | undefined) =>
+      String(value ?? "")
+        .normalize("NFKC")
+        .replace(/\s+/g, "")
+        .trim();
+    const index = new Map<string, Stop>();
+    for (const stop of stops) {
+      if (stop.lat == null || stop.lon == null) {
+        continue;
+      }
+      const key = normalized(stop.name);
+      if (!key || index.has(key)) {
+        continue;
+      }
+      index.set(key, stop);
+    }
+    return { get: (name: string | null | undefined) => index.get(normalized(name)) };
+  }, [stops]);
+  const visibleRoute = useMemo(
+    () => routeDetail ?? routes.find((route) => route.id === selectedRouteId) ?? null,
+    [routeDetail, routes, selectedRouteId],
+  );
+  const routeCoordinates = useMemo(() => {
+    if (!visibleRoute) {
+      return [] as [number, number][];
+    }
+    const resolved = (visibleRoute.resolvedStops ?? [])
+      .filter((stop) => stop.lat != null && stop.lon != null)
+      .sort((left, right) => left.sequence - right.sequence)
+      .map((stop) => [stop.lon!, stop.lat!] as [number, number]);
+    if (resolved.length >= 2) {
+      return resolved;
+    }
+    return (visibleRoute.stopSequence ?? [])
+      .map((stopName) => stopByName.get(stopName))
+      .filter((stop): stop is Stop => stop != null && stop.lat != null && stop.lon != null)
+      .map((stop) => [stop.lon!, stop.lat!] as [number, number]);
+  }, [visibleRoute, stopByName]);
 
   // ── Map lifecycle ───────────────────────────────────────────
 
@@ -54,6 +105,12 @@ export function RouteMapPanel({ scenarioId }: Props) {
     return () => {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
+      if (map.getLayer(ROUTE_LAYER_ID)) {
+        map.removeLayer(ROUTE_LAYER_ID);
+      }
+      if (map.getSource(ROUTE_SOURCE_ID)) {
+        map.removeSource(ROUTE_SOURCE_ID);
+      }
       map.remove();
       mapRef.current = null;
     };
@@ -68,10 +125,95 @@ export function RouteMapPanel({ scenarioId }: Props) {
     // Remove old markers
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
+    if (map.getLayer(ROUTE_LAYER_ID)) {
+      map.removeLayer(ROUTE_LAYER_ID);
+    }
+    if (map.getSource(ROUTE_SOURCE_ID)) {
+      map.removeSource(ROUTE_SOURCE_ID);
+    }
+
+    if (activeTab === "routes") {
+      if (!visibleRoute) {
+        return;
+      }
+      const startStop = stopByName.get(visibleRoute.startStop);
+      const endStop = stopByName.get(visibleRoute.endStop);
+      const geoStops = [startStop, endStop].filter(
+        (stop): stop is Stop => stop != null && stop.lat != null && stop.lon != null,
+      );
+
+      for (const [index, stop] of geoStops.entries()) {
+        const el = document.createElement("div");
+        el.style.cssText = `
+          width: 18px;
+          height: 18px;
+          border-radius: 9999px;
+          border: 2px solid white;
+          background: ${index === 0 ? "#0f766e" : "#b91c1c"};
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        `;
+        const label = index === 0 ? "Start" : "End";
+        const popup = new maplibregl.Popup({ offset: 14, closeButton: false }).setHTML(`
+          <div style="font-size:12px;font-weight:600;color:#1e293b;">${label}: ${stop.name}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:1px;">${visibleRoute.routeCode || visibleRoute.routeFamilyCode || visibleRoute.name}</div>
+        `);
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([stop.lon!, stop.lat!])
+          .setPopup(popup)
+          .addTo(map);
+        markersRef.current.push(marker);
+      }
+
+      if (routeCoordinates.length >= 2) {
+        map.addSource(ROUTE_SOURCE_ID, {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            properties: {
+              routeId: visibleRoute.id,
+            },
+            geometry: {
+              type: "LineString",
+              coordinates: routeCoordinates,
+            },
+          },
+        });
+        map.addLayer({
+          id: ROUTE_LAYER_ID,
+          type: "line",
+          source: ROUTE_SOURCE_ID,
+          paint: {
+            "line-color": visibleRoute.color || "#2563eb",
+            "line-width": 5,
+            "line-opacity": 0.85,
+          },
+        });
+      }
+
+      if (routeCoordinates.length >= 2) {
+        const bounds = new maplibregl.LngLatBounds();
+        for (const [lon, lat] of routeCoordinates) {
+          bounds.extend([lon, lat]);
+        }
+        map.fitBounds(bounds, { padding: 80, maxZoom: 14 });
+      } else if (geoStops.length === 1) {
+        map.flyTo({ center: [geoStops[0].lon!, geoStops[0].lat!], zoom: 13 });
+      } else if (geoStops.length > 1) {
+        const bounds = new maplibregl.LngLatBounds();
+        for (const stop of geoStops) {
+          bounds.extend([stop.lon!, stop.lat!]);
+        }
+        map.fitBounds(bounds, { padding: 80, maxZoom: 14 });
+      }
+      return;
+    }
 
     if (activeTab !== "depots" && activeTab !== "vehicles") return;
 
-    const geoDepots = depots.filter(
+    const sourceDepots = selectedDepotId
+      ? depots.filter((depot) => depot.id === selectedDepotId)
+      : depots;
+    const geoDepots = sourceDepots.filter(
       (d) => typeof d.lat === "number" && typeof d.lon === "number",
     );
 
@@ -114,7 +256,7 @@ export function RouteMapPanel({ scenarioId }: Props) {
       for (const d of geoDepots) bounds.extend([d.lon, d.lat]);
       map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
     }
-  }, [depots, activeTab]);
+  }, [depots, activeTab, routeCoordinates, selectedDepotId, stopByName, visibleRoute]);
 
   // ── Routes tab: clear depot markers ────────────────────────
   useEffect(() => {
@@ -144,7 +286,12 @@ export function RouteMapPanel({ scenarioId }: Props) {
       {/* Routes tab hint */}
       {activeTab === "routes" && (
         <div className="z-10 border-b border-border bg-slate-50 px-3 py-1.5 text-xs text-slate-400">
-          {t("map.routes_placeholder", "路線ジオメトリ表示は Phase 3B で実装予定")}
+          {visibleRoute
+            ? t(
+                "map.routes_selected_only",
+                "選択中 route の stop sequence から polyline を描画しています。",
+              )
+            : t("map.routes_placeholder", "route を選択すると selected-only で描画します")}
         </div>
       )}
 

@@ -11,7 +11,9 @@ const promises_1 = require("node:fs/promises");
 const proxy_1 = require("./odpt/proxy");
 const introspect_1 = require("./odpt/introspect");
 const enrich_1 = require("./odpt/enrich");
+const routeTimetables_1 = require("./odpt/routeTimetables");
 const index_1 = require("./odpt/normalize/index");
+dotenv_1.default.config({ path: node_path_1.default.resolve(__dirname, "../.env") });
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 app.use(express_1.default.json({ limit: "10mb" }));
@@ -370,7 +372,8 @@ async function fetchStopTimetablesDataset(baseQuery, stopsRaw, options) {
 async function fetchOperationalDataset(options) {
     const { meta, normalized } = await fetchNormalizedDataset(options);
     const operational = (0, enrich_1.enrichOperationalData)(normalized);
-    return { meta, normalized, operational };
+    const routeTimetables = (0, routeTimetables_1.buildRouteTimetables)(operational);
+    return { meta, normalized, operational, routeTimetables };
 }
 function filterNormalizedForOperationalStage(normalized) {
     const patternIds = new Set();
@@ -498,14 +501,15 @@ app.post("/api/odpt/export/normalized", async (req, res) => {
  * POST /api/odpt/export/operational
  *
  * Fetches and normalizes ODPT data, then enriches it with route totals,
- * trip distance estimates, and service/pattern indexes.
+ * trip distance estimates, service/pattern indexes, and route timetable groups.
  */
 app.post("/api/odpt/export/operational", async (req, res) => {
     try {
-        const { meta, operational } = await fetchOperationalDataset(parseNormalizedRequest(req));
+        const { meta, operational, routeTimetables } = await fetchOperationalDataset(parseNormalizedRequest(req));
         res.json({
             meta,
             ...operational,
+            routeTimetables,
         });
     }
     catch (e) {
@@ -524,9 +528,11 @@ app.post("/api/odpt/export/operational-stage", async (req, res) => {
         });
         const filtered = filterNormalizedForOperationalStage(normalized);
         const operational = (0, enrich_1.enrichOperationalData)(filtered);
+        const routeTimetables = (0, routeTimetables_1.buildRouteTimetables)(operational);
         res.json({
             meta,
             ...operational,
+            routeTimetables,
         });
     }
     catch (e) {
@@ -557,28 +563,36 @@ app.post("/api/odpt/export/stop-timetables-stage", async (req, res) => {
 /**
  * POST /api/odpt/export/save
  *
- * Fetches, normalizes, enriches, and writes both normalized and operational
- * datasets to data/odpt/tokyu relative to the project root.
+ * Fetches, normalizes, enriches, and writes normalized / operational /
+ * route_timetables datasets to data/odpt/tokyu relative to the project root.
  */
 app.post("/api/odpt/export/save", async (req, res) => {
     try {
-        const { meta, normalized, operational } = await fetchOperationalDataset(parseNormalizedRequest(req));
+        const { meta, normalized, operational, routeTimetables } = await fetchOperationalDataset(parseNormalizedRequest(req));
         const normalizedDataset = { meta, ...normalized };
-        const operationalDataset = { meta, ...operational };
-        // Write to <project-root>/data/odpt/tokyu/{normalized,operational}_dataset.json
+        const operationalDataset = { meta, ...operational, routeTimetables };
+        const routeTimetableDataset = {
+            meta,
+            total: routeTimetables.length,
+            items: routeTimetables,
+        };
+        // Write route exports under <project-root>/data/odpt/tokyu/.
         // cwd when running via `npm run dev` from backend/ is backend/,
         // so we go up one level to reach the project root.
         const outDir = node_path_1.default.resolve(process.cwd(), "..", "data", "odpt", "tokyu");
         await (0, promises_1.mkdir)(outDir, { recursive: true });
         const normalizedOutPath = node_path_1.default.join(outDir, "normalized_dataset.json");
         const operationalOutPath = node_path_1.default.join(outDir, "operational_dataset.json");
+        const routeTimetablesOutPath = node_path_1.default.join(outDir, "route_timetables_dataset.json");
         await Promise.all([
             (0, promises_1.writeFile)(normalizedOutPath, JSON.stringify(normalizedDataset, null, 2), "utf-8"),
             (0, promises_1.writeFile)(operationalOutPath, JSON.stringify(operationalDataset, null, 2), "utf-8"),
+            (0, promises_1.writeFile)(routeTimetablesOutPath, JSON.stringify(routeTimetableDataset, null, 2), "utf-8"),
         ]);
         res.json({
             savedTo: operationalOutPath,
             normalizedSavedTo: normalizedOutPath,
+            routeTimetablesSavedTo: routeTimetablesOutPath,
             meta,
         });
     }
@@ -589,6 +603,9 @@ app.post("/api/odpt/export/save", async (req, res) => {
 });
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
+    res.json({ status: "ok", service: "odpt-explorer-bff" });
+});
+app.get("/api/odpt/health", (_req, res) => {
     res.json({ status: "ok", service: "odpt-explorer-bff" });
 });
 // ── Start ─────────────────────────────────────────────────────────────────────
