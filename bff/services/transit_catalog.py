@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -308,7 +309,7 @@ def _replace_snapshot(
     entities: Dict[str, List[Dict[str, Any]]],
     route_payloads: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    with _connect() as conn:
+    with closing(_connect()) as conn:
         _ensure_schema(conn)
         conn.execute("DELETE FROM catalog_entities WHERE snapshot_key = ?", (snapshot_key,))
         conn.execute(
@@ -406,7 +407,7 @@ def _replace_snapshot(
 
 
 def _load_entities(snapshot_key: str, entity_type: str) -> List[Dict[str, Any]]:
-    with _connect() as conn:
+    with closing(_connect()) as conn:
         _ensure_schema(conn)
         rows = conn.execute(
             """
@@ -421,7 +422,7 @@ def _load_entities(snapshot_key: str, entity_type: str) -> List[Dict[str, Any]]:
 
 
 def _has_snapshot_payload(snapshot_key: str, required_entity_types: Iterable[str]) -> bool:
-    with _connect() as conn:
+    with closing(_connect()) as conn:
         _ensure_schema(conn)
         for entity_type in required_entity_types:
             count = conn.execute(
@@ -446,7 +447,7 @@ def _has_snapshot_payload(snapshot_key: str, required_entity_types: Iterable[str
 
 
 def list_snapshots() -> List[Dict[str, Any]]:
-    with _connect() as conn:
+    with closing(_connect()) as conn:
         _ensure_schema(conn)
         rows = conn.execute(
             """
@@ -474,7 +475,7 @@ def list_snapshots() -> List[Dict[str, Any]]:
 
 
 def get_snapshot(snapshot_key: str) -> Optional[Dict[str, Any]]:
-    with _connect() as conn:
+    with closing(_connect()) as conn:
         _ensure_schema(conn)
         row = conn.execute(
             """
@@ -514,7 +515,7 @@ def load_snapshot_bundle(snapshot_key: str) -> Dict[str, Any]:
 
 
 def list_route_payload_summaries(snapshot_key: str) -> List[Dict[str, Any]]:
-    with _connect() as conn:
+    with closing(_connect()) as conn:
         _ensure_schema(conn)
         rows = conn.execute(
             """
@@ -541,7 +542,7 @@ def list_route_payload_summaries(snapshot_key: str) -> List[Dict[str, Any]]:
 
 
 def get_route_payload(snapshot_key: str, route_id: str) -> Optional[Dict[str, Any]]:
-    with _connect() as conn:
+    with closing(_connect()) as conn:
         _ensure_schema(conn)
         row = conn.execute(
             """

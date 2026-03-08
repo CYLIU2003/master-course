@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -184,7 +185,7 @@ def _connect(operator_id: str) -> sqlite3.Connection:
 
 def ensure_schema(operator_id: str) -> None:
     """Create tables / indexes if they do not yet exist."""
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         conn.commit()
 
@@ -202,7 +203,7 @@ def _json_dumps(value: Any) -> str:
 # ---------------------------------------------------------------------------
 
 def set_metadata(operator_id: str, key: str, value: str) -> None:
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         conn.execute(
             """INSERT INTO metadata (key, value, updated_at) VALUES (?, ?, ?)
@@ -213,14 +214,14 @@ def set_metadata(operator_id: str, key: str, value: str) -> None:
 
 
 def get_metadata(operator_id: str, key: str) -> Optional[str]:
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         row = conn.execute("SELECT value FROM metadata WHERE key=?", (key,)).fetchone()
     return row["value"] if row else None
 
 
 def get_all_metadata(operator_id: str) -> Dict[str, str]:
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         rows = conn.execute("SELECT key, value, updated_at FROM metadata").fetchall()
     return {r["key"]: r["value"] for r in rows}
@@ -250,7 +251,7 @@ def replace_all(
         raise ValueError(f"Unknown operator_id: {operator_id!r}")
     source = info["source"]
 
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
 
         # Clear existing data
@@ -522,7 +523,7 @@ def get_db_info(operator_id: str) -> Dict[str, Any]:
             "exists": False,
             "tables": {},
         }
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         tables: Dict[str, int] = {}
         for tbl in ("routes", "stops", "timetable_rows", "stop_timetables", "calendar", "calendar_dates"):
@@ -544,7 +545,7 @@ def get_db_info(operator_id: str) -> Dict[str, Any]:
 
 def list_routes(operator_id: str) -> List[Dict[str, Any]]:
     """Return all routes for an operator (lightweight summary)."""
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         rows = conn.execute(
             "SELECT route_id, route_code, route_name, direction, "
@@ -557,7 +558,7 @@ def list_routes(operator_id: str) -> List[Dict[str, Any]]:
 
 def list_stops(operator_id: str) -> List[Dict[str, Any]]:
     """Return all stops for an operator."""
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         rows = conn.execute(
             "SELECT stop_id, stop_name, stop_name_en, lat, lon, kind, source "
@@ -592,7 +593,7 @@ def list_timetable_rows(
     where = " AND ".join(clauses) if clauses else "1=1"
     params.extend([limit, offset])
 
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         rows = conn.execute(
             f"SELECT trip_id, route_id, service_id, direction, trip_index, "
@@ -634,7 +635,7 @@ def count_timetable_rows(
         clauses.append("route_id = ?")
         params.append(route_id)
     where = " AND ".join(clauses) if clauses else "1=1"
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         row = conn.execute(
             f"SELECT COUNT(*) AS n FROM timetable_rows WHERE {where}", params
@@ -644,7 +645,7 @@ def count_timetable_rows(
 
 def timetable_summary(operator_id: str) -> Dict[str, Any]:
     """Return aggregated timetable statistics per service_id."""
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         rows = conn.execute(
             "SELECT service_id, COUNT(*) AS trip_count, "
@@ -674,7 +675,7 @@ def list_stop_timetables(
         clauses.append("service_id = ?")
         params.append(service_id)
     where = " AND ".join(clauses)
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         rows = conn.execute(
             f"SELECT stop_id, route_id, service_id, direction, time, "
@@ -688,7 +689,7 @@ def list_stop_timetables(
 
 def list_calendar(operator_id: str) -> List[Dict[str, Any]]:
     """Return calendar definitions."""
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         rows = conn.execute(
             "SELECT service_id, service_name, monday, tuesday, wednesday, "
@@ -700,7 +701,7 @@ def list_calendar(operator_id: str) -> List[Dict[str, Any]]:
 
 def list_calendar_dates(operator_id: str) -> List[Dict[str, Any]]:
     """Return calendar date exceptions."""
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         conn.executescript(_SCHEMA_SQL)
         rows = conn.execute(
             "SELECT service_id, date, exception_type "
@@ -782,7 +783,7 @@ def table_schema(operator_id: str) -> List[Dict[str, Any]]:
     """Return the schema of all tables in the operator database."""
     if not db_exists(operator_id):
         return []
-    with _connect(operator_id) as conn:
+    with closing(_connect(operator_id)) as conn:
         tables = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         ).fetchall()

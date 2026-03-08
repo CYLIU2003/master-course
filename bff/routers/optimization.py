@@ -401,6 +401,10 @@ def _parse_optimization_mode(mode: str) -> OptimizationMode:
     return OptimizationMode.HYBRID
 
 
+def _parse_mode(mode: str) -> OptimizationMode:
+    return _parse_optimization_mode(mode)
+
+
 def _apply_reoptimization_inputs(
     scenario: Dict[str, Any],
     body: ReoptimizeBody,
