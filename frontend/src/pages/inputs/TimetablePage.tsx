@@ -1,11 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   useImportGtfsStopTimetables,
   useImportGtfsTimetable,
-  useTimetable,
-  useStopTimetables,
+  useTimetablePage,
+  useTimetableSummary,
+  useStopTimetablesSummary,
   useImportTimetableCsv,
   useImportOdptTimetable,
   useImportOdptStopTimetables,
@@ -14,10 +15,22 @@ import {
   useCalendar,
   useCalendarDates,
 } from "@/hooks";
-import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { scenarioApi } from "@/api/scenario";
+import {
+  PageSection,
+  LoadingBlock,
+  ErrorBlock,
+  EmptyState,
+  TabWarmBoundary,
+} from "@/features/common";
 import { TimetableGeneratorDrawer } from "@/features/planning/TimetableGeneratorDrawer";
+import { ImportLogPanel } from "@/features/explorer/ImportLogPanel";
+import { ImportProgressPanel } from "@/features/explorer/ImportProgressPanel";
 import type { TimetableRow } from "@/types";
 import type { ImportProgress } from "@/types/api";
+import { useImportJobStore } from "@/stores/import-job-store";
+import { measureAsyncStep } from "@/utils/perf/measureAsyncStep";
+import { useRenderTrace } from "@/utils/perf/useRenderTrace";
 
 // ── Service-ID filter tabs ─────────────────────────────────────
 
@@ -46,6 +59,7 @@ type ImportHistoryEntry = {
 };
 
 const GTFS_FEED_PATH = "GTFS/ToeiBus-GTFS";
+const PAGE_SIZE = 100;
 
 // ── Empty new row factory ──────────────────────────────────────
 
@@ -69,13 +83,28 @@ function emptyRow(serviceId: string): TimetableRow {
 export function TimetablePage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
+  useRenderTrace("TimetablePage");
 
   // Filter state
   const [activeFilter, setActiveFilter] = useState<ServiceFilter>(undefined);
+  const [pageOffset, setPageOffset] = useState(0);
+
+  useEffect(() => {
+    setPageOffset(0);
+  }, [activeFilter]);
 
   // Data
-  const { data, isLoading, error } = useTimetable(scenarioId!, activeFilter ?? undefined);
-  const { data: stopTimetablesData } = useStopTimetables(scenarioId!);
+  const {
+    data: pageData,
+    isLoading: isPageLoading,
+    error,
+  } = useTimetablePage(scenarioId!, {
+    serviceId: activeFilter ?? undefined,
+    limit: PAGE_SIZE,
+    offset: pageOffset,
+  });
+  const { data: summaryData, isLoading: isSummaryLoading } = useTimetableSummary(scenarioId!);
+  const { data: stopTimetablesData } = useStopTimetablesSummary(scenarioId!);
   const { data: calendarData } = useCalendar(scenarioId!);
   const { data: calendarDatesData } = useCalendarDates(scenarioId!);
 
@@ -87,10 +116,15 @@ export function TimetablePage() {
   const importGtfsStopTimetablesMutation = useImportGtfsStopTimetables(scenarioId!);
   const exportCsvMutation = useExportTimetableCsv(scenarioId!);
   const updateTimetable = useUpdateTimetable(scenarioId!);
-  const odptImportMeta = data?.meta?.imports?.odpt;
-  const gtfsImportMeta = data?.meta?.imports?.gtfs;
-  const odptStopTimetableImportMeta = stopTimetablesData?.meta?.imports?.odpt;
-  const gtfsStopTimetableImportMeta = stopTimetablesData?.meta?.imports?.gtfs;
+  const startJob = useImportJobStore((state) => state.startJob);
+  const updateStage = useImportJobStore((state) => state.updateStage);
+  const appendLog = useImportJobStore((state) => state.appendLog);
+  const completeJob = useImportJobStore((state) => state.completeJob);
+  const failJob = useImportJobStore((state) => state.failJob);
+  const odptImportMeta = summaryData?.item.imports?.odpt;
+  const gtfsImportMeta = summaryData?.item.imports?.gtfs;
+  const odptStopTimetableImportMeta = stopTimetablesData?.item.imports?.odpt;
+  const gtfsStopTimetableImportMeta = stopTimetablesData?.item.imports?.gtfs;
 
   // Calendar sync counts
   const calendarCount = calendarData?.total ?? 0;
@@ -141,6 +175,23 @@ export function TimetablePage() {
       },
       ...prev,
     ].slice(0, 8));
+  }
+
+  function startImportJob(
+    jobId: string,
+    label: string,
+    source: "odpt" | "gtfs",
+  ) {
+    startJob({
+      jobId,
+      source,
+      label,
+      stages: [
+        { id: "fetch", label: "Fetch source data", weight: 45 },
+        { id: "persist", label: "Normalize / save", weight: 40 },
+        { id: "refresh", label: "Refresh timetable view", weight: 15 },
+      ],
+    });
   }
 
   // ── Import CSV ────────────────────────────────────────────
@@ -195,12 +246,28 @@ export function TimetablePage() {
     }
 
     try {
+      const jobId = "timetable-import-odpt";
+      startImportJob(jobId, "ODPT BusTimetable import", "odpt");
+      updateStage(jobId, "fetch", { status: "running", progress: 20 });
+      appendLog(jobId, { level: "info", message: "ODPT BusTimetable import started" });
       setBusImportState({ active: true, progress: null, rounds: 0 });
-      const result = await importOdptMutation.mutateAsync({
-        operator: "odpt.Operator:TokyuBus",
-        dump: true,
-        reset: true,
+      const result = await measureAsyncStep("timetable:import-odpt", () =>
+        importOdptMutation.mutateAsync({
+          operator: "odpt.Operator:TokyuBus",
+          dump: true,
+          reset: true,
+        }),
+      );
+      updateStage(jobId, "fetch", { status: "success", progress: 100 });
+      updateStage(jobId, "persist", {
+        status: "success",
+        progress: 100,
+        currentCount: result.total,
+        totalCount: result.total,
+        message: `${result.meta.quality.routeCount} routes / ${result.total} rows`,
       });
+      updateStage(jobId, "refresh", { status: "success", progress: 100 });
+      completeJob(jobId, "ODPT BusTimetable import completed");
 
       const details = [
         t("timetable.import_odpt_success", "{{count}} 件の時刻表行を取り込みました。", {
@@ -234,6 +301,7 @@ export function TimetablePage() {
       });
       alert(details.join("\n"));
     } catch (err) {
+      failJob("timetable-import-odpt", err instanceof Error ? err.message : String(err));
       setBusImportState({ active: false, progress: null, rounds: 0 });
       alert(String(err));
     }
@@ -252,10 +320,26 @@ export function TimetablePage() {
     }
 
     try {
-      const result = await importGtfsMutation.mutateAsync({
-        feedPath: GTFS_FEED_PATH,
-        reset: true,
+      const jobId = "timetable-import-gtfs";
+      startImportJob(jobId, "GTFS timetable import", "gtfs");
+      updateStage(jobId, "fetch", { status: "running", progress: 20 });
+      appendLog(jobId, { level: "info", message: "GTFS timetable import started" });
+      const result = await measureAsyncStep("timetable:import-gtfs", () =>
+        importGtfsMutation.mutateAsync({
+          feedPath: GTFS_FEED_PATH,
+          reset: true,
+        }),
+      );
+      updateStage(jobId, "fetch", { status: "success", progress: 100 });
+      updateStage(jobId, "persist", {
+        status: "success",
+        progress: 100,
+        currentCount: result.total,
+        totalCount: result.total,
+        message: `${result.meta.quality.routeCount} routes / ${result.total} rows`,
       });
+      updateStage(jobId, "refresh", { status: "success", progress: 100 });
+      completeJob(jobId, "GTFS timetable import completed");
       const details = [
         t("timetable.import_gtfs_success", "{{count}} 件の GTFS 時刻表行を取り込みました。", {
           count: result.total,
@@ -283,6 +367,7 @@ export function TimetablePage() {
       });
       alert(details.join("\n"));
     } catch (err) {
+      failJob("timetable-import-gtfs", err instanceof Error ? err.message : String(err));
       alert(String(err));
     }
   }
@@ -300,12 +385,28 @@ export function TimetablePage() {
     }
 
     try {
+      const jobId = "stop-timetable-import-odpt";
+      startImportJob(jobId, "ODPT stop timetable import", "odpt");
+      updateStage(jobId, "fetch", { status: "running", progress: 20 });
+      appendLog(jobId, { level: "info", message: "ODPT stop timetable import started" });
       setStopImportState({ active: true, progress: null, rounds: 0 });
-      const result = await importOdptStopTimetablesMutation.mutateAsync({
-        operator: "odpt.Operator:TokyuBus",
-        dump: true,
-        reset: true,
+      const result = await measureAsyncStep("timetable:import-odpt-stop-timetables", () =>
+        importOdptStopTimetablesMutation.mutateAsync({
+          operator: "odpt.Operator:TokyuBus",
+          dump: true,
+          reset: true,
+        }),
+      );
+      updateStage(jobId, "fetch", { status: "success", progress: 100 });
+      updateStage(jobId, "persist", {
+        status: "success",
+        progress: 100,
+        currentCount: result.meta.quality.stopTimetableCount,
+        totalCount: result.meta.quality.stopTimetableCount,
+        message: `${result.meta.quality.entryCount} entries saved`,
       });
+      updateStage(jobId, "refresh", { status: "success", progress: 100 });
+      completeJob(jobId, "ODPT stop timetable import completed");
 
       const details = [
         t(
@@ -341,6 +442,10 @@ export function TimetablePage() {
       });
       alert(details.join("\n"));
     } catch (err) {
+      failJob(
+        "stop-timetable-import-odpt",
+        err instanceof Error ? err.message : String(err),
+      );
       setStopImportState({ active: false, progress: null, rounds: 0 });
       alert(String(err));
     }
@@ -359,10 +464,26 @@ export function TimetablePage() {
     }
 
     try {
-      const result = await importGtfsStopTimetablesMutation.mutateAsync({
-        feedPath: GTFS_FEED_PATH,
-        reset: true,
+      const jobId = "stop-timetable-import-gtfs";
+      startImportJob(jobId, "GTFS stop timetable import", "gtfs");
+      updateStage(jobId, "fetch", { status: "running", progress: 20 });
+      appendLog(jobId, { level: "info", message: "GTFS stop timetable import started" });
+      const result = await measureAsyncStep("timetable:import-gtfs-stop-timetables", () =>
+        importGtfsStopTimetablesMutation.mutateAsync({
+          feedPath: GTFS_FEED_PATH,
+          reset: true,
+        }),
+      );
+      updateStage(jobId, "fetch", { status: "success", progress: 100 });
+      updateStage(jobId, "persist", {
+        status: "success",
+        progress: 100,
+        currentCount: result.meta.quality.stopTimetableCount,
+        totalCount: result.meta.quality.stopTimetableCount,
+        message: `${result.meta.quality.entryCount} entries saved`,
       });
+      updateStage(jobId, "refresh", { status: "success", progress: 100 });
+      completeJob(jobId, "GTFS stop timetable import completed");
       const details = [
         t(
           "timetable.import_gtfs_stop_timetable_success",
@@ -392,6 +513,10 @@ export function TimetablePage() {
       });
       alert(details.join("\n"));
     } catch (err) {
+      failJob(
+        "stop-timetable-import-gtfs",
+        err instanceof Error ? err.message : String(err),
+      );
       alert(String(err));
     }
   }
@@ -408,7 +533,7 @@ export function TimetablePage() {
   }
 
   async function handleAddRowSave() {
-    const current = data?.items ?? [];
+    const current = (await scenarioApi.getTimetable(scenarioId!)).items ?? [];
     const updated = [...current, { ...newRow, trip_index: current.length }];
     updateTimetable.mutate(
       { rows: updated },
@@ -425,13 +550,18 @@ export function TimetablePage() {
 
   // ── Render ────────────────────────────────────────────────
 
-  if (isLoading) return <LoadingBlock message={t("timetable.loading")} />;
+  if (isSummaryLoading || isPageLoading) {
+    return <LoadingBlock message={t("timetable.loading")} />;
+  }
   if (error) return <ErrorBlock message={error.message} />;
 
-  const rows = data?.items ?? [];
+  const rows = pageData?.items ?? [];
+  const totalRows = pageData?.total ?? summaryData?.item.totalRows ?? 0;
+  const pageEnd = Math.min(pageOffset + rows.length, totalRows);
 
   return (
-    <>
+    <TabWarmBoundary tab="timetable" title="Timetable tab を準備しています">
+      <>
       {/* Hidden file input for CSV import */}
       <input
         ref={fileInputRef}
@@ -446,7 +576,7 @@ export function TimetablePage() {
         open={showGenerator}
         scenarioId={scenarioId!}
         defaultServiceId={activeFilter ?? "WEEKDAY"}
-        existingRows={data?.items ?? []}
+        existingRowCount={totalRows}
         onClose={() => setShowGenerator(false)}
       />
 
@@ -488,6 +618,11 @@ export function TimetablePage() {
           </div>
         }
       >
+        <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <ImportProgressPanel />
+          <ImportLogPanel />
+        </div>
+
         {/* ── Operator import sections ───────────────────── */}
         <div className="mb-4 grid gap-3 md:grid-cols-2">
           {/* ── 東急バス（ODPT）取込 ──────────── */}
@@ -725,7 +860,7 @@ export function TimetablePage() {
           ))}
           {/* Row count badge */}
           <span className="ml-auto self-center pr-1 text-xs text-slate-400">
-            {rows.length} {rows.length === 1 ? "row" : "rows"}
+            {totalRows === 0 ? "0 / 0" : `${pageOffset + 1}-${pageEnd} / ${totalRows}`}
           </span>
         </div>
 
@@ -853,6 +988,35 @@ export function TimetablePage() {
         )}
 
         {/* Table */}
+        {summaryData && (
+          <div className="mb-3 grid gap-2 md:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+              <div className="text-slate-500">Total rows</div>
+              <div className="mt-1 text-lg font-semibold text-slate-800">
+                {summaryData.item.totalRows.toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+              <div className="text-slate-500">Services</div>
+              <div className="mt-1 text-lg font-semibold text-slate-800">
+                {summaryData.item.serviceCount.toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+              <div className="text-slate-500">Routes</div>
+              <div className="mt-1 text-lg font-semibold text-slate-800">
+                {summaryData.item.routeCount.toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+              <div className="text-slate-500">Updated</div>
+              <div className="mt-1 font-mono text-sm text-slate-700">
+                {summaryData.item.updatedAt ?? "-"}
+              </div>
+            </div>
+          </div>
+        )}
+
         {rows.length === 0 ? (
           <EmptyState
             title={t("timetable.no_rows")}
@@ -900,7 +1064,36 @@ export function TimetablePage() {
             </table>
           </div>
         )}
+
+        {totalRows > PAGE_SIZE && (
+          <div className="mt-3 flex items-center justify-end gap-2 text-xs text-slate-500">
+            <button
+              type="button"
+              onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}
+              disabled={pageOffset === 0}
+              className="rounded border border-border bg-white px-2 py-1 disabled:opacity-40"
+            >
+              Prev
+            </button>
+            <span>
+              {totalRows === 0 ? 0 : pageOffset + 1}-{pageEnd} / {totalRows.toLocaleString()}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setPageOffset((current) =>
+                  current + PAGE_SIZE >= totalRows ? current : current + PAGE_SIZE,
+                )
+              }
+              disabled={pageOffset + PAGE_SIZE >= totalRows}
+              className="rounded border border-border bg-white px-2 py-1 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </PageSection>
-    </>
+      </>
+    </TabWarmBoundary>
   );
 }

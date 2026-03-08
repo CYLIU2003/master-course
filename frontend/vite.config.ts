@@ -5,6 +5,50 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return undefined;
+          }
+          const modulePath = id.split("node_modules/")[1] ?? "";
+          const packageName = modulePath.startsWith("@")
+            ? modulePath.split("/").slice(0, 2).join("/")
+            : modulePath.split("/")[0];
+          if (
+            packageName === "react" ||
+            packageName === "react-dom" ||
+            packageName === "react-router" ||
+            packageName === "react-router-dom"
+          ) {
+            return "vendor-react";
+          }
+          if (packageName === "@tanstack/react-query" || packageName === "zustand") {
+            return "vendor-state";
+          }
+          if (packageName === "i18next" || packageName === "react-i18next") {
+            return "vendor-i18n";
+          }
+          if (packageName === "zod") {
+            return "vendor-schema";
+          }
+          if (packageName === "leaflet") {
+            return "vendor-map";
+          }
+          if (
+            packageName === "cookie" ||
+            packageName === "set-cookie-parser" ||
+            packageName === "void-elements" ||
+            packageName === "html-parse-stringify"
+          ) {
+            return undefined;
+          }
+          return `vendor-${packageName.replace(/[@/]/g, "-")}`;
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

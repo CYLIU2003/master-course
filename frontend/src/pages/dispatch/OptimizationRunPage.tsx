@@ -1,19 +1,23 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  useJob,
   useRunOptimization,
   useOptimizationResult,
   useOptimizationCapabilities,
 } from "@/hooks";
-import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { BackendJobPanel, PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { formatCurrency } from "@/utils/format";
 
 export function OptimizationRunPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const { data: result, isLoading, error } = useOptimizationResult(scenarioId!);
   const { data: capabilities } = useOptimizationCapabilities(scenarioId!);
   const runMutation = useRunOptimization(scenarioId!);
+  const { data: activeJob } = useJob(activeJobId);
 
   if (isLoading) return <LoadingBlock message={t("optimization.loading")} />;
   if (error && !error.message.includes("404")) return <ErrorBlock message={error.message} />;
@@ -24,12 +28,13 @@ export function OptimizationRunPage() {
       description={t("optimization.description")}
       actions={
         <button
-          onClick={() =>
-            runMutation.mutate({
+          onClick={async () => {
+            const job = await runMutation.mutateAsync({
               mode: "mode_B_resource_assignment",
               time_limit_seconds: 300,
-            })
-          }
+            });
+            setActiveJobId(job.job_id);
+          }}
           disabled={runMutation.isPending}
           className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
         >
@@ -37,6 +42,7 @@ export function OptimizationRunPage() {
         </button>
       }
     >
+      <BackendJobPanel job={activeJob} className="mb-4" />
       {capabilities && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           <p className="font-semibold">Operational boundary</p>

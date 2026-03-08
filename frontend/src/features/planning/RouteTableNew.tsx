@@ -9,11 +9,12 @@
 import { useTranslation } from "react-i18next";
 import { Fragment, useEffect, useMemo } from "react";
 import { useRoutes } from "@/hooks";
+import { useGroupedRouteFamilies } from "@/hooks/useGroupedRouteFamilies";
 import { useMasterUiStore } from "@/stores/master-ui-store";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import type { Route } from "@/types";
 import { getRouteVariantLabel } from "./route-family-display";
-import { compareRouteCodeLike, normalizeRouteCode } from "@/lib/route-code";
+import { normalizeRouteCode } from "@/lib/route-code";
 
 interface Props {
   scenarioId: string;
@@ -40,56 +41,7 @@ export function RouteTableNew({ scenarioId }: Props) {
 
   const routes: Route[] = data?.items ?? [];
   const total = data?.total ?? routes.length;
-  const familyGroups = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        familyId: string;
-        familyCode: string;
-        familyLabel: string;
-        members: Route[];
-      }
-    >();
-
-    for (const route of routes) {
-      const familyId = route.routeFamilyId ?? `raw:${route.id}`;
-      const familyCode = route.routeFamilyCode ?? route.routeCode ?? route.name;
-      const familyLabel = route.routeFamilyLabel ?? familyCode;
-      const group = groups.get(familyId);
-      if (group) {
-        group.members.push(route);
-      } else {
-        groups.set(familyId, {
-          familyId,
-          familyCode,
-          familyLabel,
-          members: [route],
-        });
-      }
-    }
-
-    return Array.from(groups.values()).map((group) => ({
-      ...group,
-      members: [...group.members].sort((left, right) => {
-        const leftOrder = left.familySortOrder ?? 999;
-        const rightOrder = right.familySortOrder ?? 999;
-        if (leftOrder !== rightOrder) {
-          return leftOrder - rightOrder;
-        }
-        const codeCmp = compareRouteCodeLike(
-          left.routeCode ?? left.routeFamilyCode ?? left.name,
-          right.routeCode ?? right.routeFamilyCode ?? right.name,
-        );
-        if (codeCmp !== 0) {
-          return codeCmp;
-        }
-        return `${left.routeLabel ?? left.name}|${left.id}`.localeCompare(
-          `${right.routeLabel ?? right.name}|${right.id}`,
-          "ja",
-        );
-      }),
-    }));
-  }, [routes]);
+  const familyGroups = useGroupedRouteFamilies(routes);
 
   useEffect(() => {
     // Only clear selection if filter results are loaded (not loading)

@@ -29,7 +29,7 @@ from __future__ import annotations
 import csv
 import io
 from threading import Lock
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
@@ -50,6 +50,7 @@ from bff.services.odpt_timetable import (
 )
 from bff.services import transit_catalog
 from bff.store import scenario_store as store
+from src.dispatch.models import hhmm_to_min
 
 router = APIRouter(tags=["scenarios"])
 _default_scenario_lock = Lock()
@@ -68,6 +69,238 @@ _CSV_COLUMNS = [
     "distance_km",
     "allowed_vehicle_types",
 ]
+
+_MAX_PAGE_LIMIT = 500
+
+
+def _paginate_items(
+    items: List[Dict[str, Any]],
+    limit: Optional[int],
+    offset: int,
+) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+    if limit is None:
+        return items[offset:], None
+    bounded_limit = max(1, min(limit, _MAX_PAGE_LIMIT))
+    start = max(0, offset)
+    end = start + bounded_limit
+    return items[start:end], bounded_limit
+
+
+def _updated_at_from_imports(imports: Dict[str, Any]) -> Optional[str]:
+    generated_values = [
+        str(meta.get("generatedAt"))
+        for meta in (imports or {}).values()
+        if isinstance(meta, dict) and meta.get("generatedAt")
+    ]
+    return max(generated_values) if generated_values else None
+
+
+def _min_hhmm(values: List[str]) -> Optional[str]:
+    usable = [value for value in values if isinstance(value, str) and value.strip()]
+    if not usable:
+        return None
+    return min(usable, key=hhmm_to_min)
+
+
+def _max_hhmm(values: List[str]) -> Optional[str]:
+    usable = [value for value in values if isinstance(value, str) and value.strip()]
+    if not usable:
+        return None
+    return max(usable, key=hhmm_to_min)
+
+
+def _build_timetable_summary(
+    rows: List[Dict[str, Any]],
+    imports: Dict[str, Any],
+) -> Dict[str, Any]:
+    by_service: Dict[str, Dict[str, Any]] = {}
+    by_route: Dict[str, Dict[str, Any]] = {}
+    route_service_counts: Dict[str, Dict[str, int]] = {}
+    stop_counts: Dict[str, int] = {}
+
+    for row in rows:
+        service_id = str(row.get("service_id") or "WEEKDAY")
+        route_id = str(row.get("route_id") or "")
+        departure = str(row.get("departure") or "")
+        arrival = str(row.get("arrival") or "")
+        origin = str(row.get("origin") or "")
+        destination = str(row.get("destination") or "")
+        trip_id = str(row.get("trip_id") or "")
+
+        service_bucket = by_service.setdefault(
+            service_id,
+            {
+                "serviceId": service_id,
+                "rowCount": 0,
+                "routeIds": set(),
+                "departures": [],
+                "arrivals": [],
+            },
+        )
+        service_bucket["rowCount"] += 1
+        if route_id:
+            service_bucket["routeIds"].add(route_id)
+        if departure:
+            service_bucket["departures"].append(departure)
+        if arrival:
+            service_bucket["arrivals"].append(arrival)
+
+        route_bucket = by_route.setdefault(
+            route_id or "__unknown__",
+            {
+                "routeId": route_id,
+                "rowCount": 0,
+                "serviceIds": set(),
+                "departures": [],
+                "arrivals": [],
+                "sampleTripIds": [],
+            },
+        )
+        route_bucket["rowCount"] += 1
+        route_bucket["serviceIds"].add(service_id)
+        if departure:
+            route_bucket["departures"].append(departure)
+        if arrival:
+            route_bucket["arrivals"].append(arrival)
+        if trip_id and len(route_bucket["sampleTripIds"]) < 5:
+            route_bucket["sampleTripIds"].append(trip_id)
+
+        route_service_counts.setdefault(service_id, {})
+        if route_id:
+            route_service_counts[service_id][route_id] = (
+                route_service_counts[service_id].get(route_id, 0) + 1
+            )
+
+        if origin:
+            stop_counts[origin] = stop_counts.get(origin, 0) + 1
+        if destination:
+            stop_counts[destination] = stop_counts.get(destination, 0) + 1
+
+    service_summaries = sorted(
+        [
+            {
+                "serviceId": bucket["serviceId"],
+                "rowCount": bucket["rowCount"],
+                "routeCount": len(bucket["routeIds"]),
+                "firstDeparture": _min_hhmm(bucket["departures"]),
+                "lastArrival": _max_hhmm(bucket["arrivals"]),
+            }
+            for bucket in by_service.values()
+        ],
+        key=lambda item: item["serviceId"],
+    )
+
+    route_summaries = sorted(
+        [
+            {
+                "routeId": bucket["routeId"],
+                "rowCount": bucket["rowCount"],
+                "serviceCount": len(bucket["serviceIds"]),
+                "firstDeparture": _min_hhmm(bucket["departures"]),
+                "lastArrival": _max_hhmm(bucket["arrivals"]),
+                "sampleTripIds": bucket["sampleTripIds"],
+            }
+            for bucket in by_route.values()
+            if bucket["routeId"]
+        ],
+        key=lambda item: (item["routeId"], item["firstDeparture"] or ""),
+    )
+
+    return {
+        "totalRows": len(rows),
+        "serviceCount": len(service_summaries),
+        "routeCount": len(route_summaries),
+        "stopCount": len(stop_counts),
+        "updatedAt": _updated_at_from_imports(imports),
+        "byService": service_summaries,
+        "byRoute": route_summaries[:200],
+        "routeServiceCounts": route_service_counts,
+        "previewTripIds": [
+            str(row.get("trip_id") or "")
+            for row in rows[: min(100, len(rows))]
+            if row.get("trip_id")
+        ],
+        "imports": imports,
+    }
+
+
+def _build_stop_timetable_summary(
+    items: List[Dict[str, Any]],
+    imports: Dict[str, Any],
+) -> Dict[str, Any]:
+    by_service: Dict[str, Dict[str, Any]] = {}
+    by_stop: Dict[str, Dict[str, Any]] = {}
+    total_entries = 0
+
+    for item in items:
+        service_id = str(item.get("service_id") or "WEEKDAY")
+        stop_id = str(item.get("stopId") or item.get("stop_id") or "")
+        stop_name = str(item.get("stopName") or item.get("stop_name") or stop_id)
+        entry_count = len(item.get("items") or [])
+        total_entries += entry_count
+
+        service_bucket = by_service.setdefault(
+            service_id,
+            {
+                "serviceId": service_id,
+                "timetableCount": 0,
+                "entryCount": 0,
+                "stopIds": set(),
+            },
+        )
+        service_bucket["timetableCount"] += 1
+        service_bucket["entryCount"] += entry_count
+        if stop_id:
+            service_bucket["stopIds"].add(stop_id)
+
+        stop_bucket = by_stop.setdefault(
+            stop_id or "__unknown__",
+            {
+                "stopId": stop_id,
+                "stopName": stop_name,
+                "timetableCount": 0,
+                "entryCount": 0,
+                "serviceIds": set(),
+            },
+        )
+        stop_bucket["timetableCount"] += 1
+        stop_bucket["entryCount"] += entry_count
+        stop_bucket["serviceIds"].add(service_id)
+
+    return {
+        "totalTimetables": len(items),
+        "totalEntries": total_entries,
+        "serviceCount": len(by_service),
+        "stopCount": len([key for key in by_stop.keys() if key != "__unknown__"]),
+        "updatedAt": _updated_at_from_imports(imports),
+        "byService": sorted(
+            [
+                {
+                    "serviceId": bucket["serviceId"],
+                    "timetableCount": bucket["timetableCount"],
+                    "entryCount": bucket["entryCount"],
+                    "stopCount": len(bucket["stopIds"]),
+                }
+                for bucket in by_service.values()
+            ],
+            key=lambda item: item["serviceId"],
+        ),
+        "byStop": sorted(
+            [
+                {
+                    "stopId": bucket["stopId"],
+                    "stopName": bucket["stopName"],
+                    "timetableCount": bucket["timetableCount"],
+                    "entryCount": bucket["entryCount"],
+                    "serviceCount": len(bucket["serviceIds"]),
+                }
+                for bucket in by_stop.values()
+                if bucket["stopId"]
+            ],
+            key=lambda item: (item["stopName"], item["stopId"]),
+        )[:200],
+        "imports": imports,
+    }
 
 
 # ── Pydantic models ────────────────────────────────────────────
@@ -366,6 +599,13 @@ def get_timetable(
     service_id: Optional[str] = Query(
         default=None, description="Filter by service_id (WEEKDAY / SAT / SUN_HOL)"
     ),
+    limit: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=_MAX_PAGE_LIMIT,
+        description="Optional page size. Omit to return all rows.",
+    ),
+    offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     try:
         rows = store.get_field(scenario_id, "timetable_rows")
@@ -374,11 +614,24 @@ def get_timetable(
     rows = rows or []
     if service_id:
         rows = [r for r in rows if r.get("service_id", "WEEKDAY") == service_id]
+    paged_rows, page_limit = _paginate_items(rows, limit, offset)
     return {
-        "items": rows,
+        "items": paged_rows,
         "total": len(rows),
+        "limit": page_limit,
+        "offset": offset,
         "meta": {"imports": store.get_timetable_import_meta(scenario_id)},
     }
+
+
+@router.get("/scenarios/{scenario_id}/timetable/summary")
+def get_timetable_summary(scenario_id: str) -> Dict[str, Any]:
+    try:
+        rows = store.get_field(scenario_id, "timetable_rows") or []
+    except KeyError:
+        raise _not_found(scenario_id)
+    imports = store.get_timetable_import_meta(scenario_id)
+    return {"item": _build_timetable_summary(rows, imports)}
 
 
 @router.put("/scenarios/{scenario_id}/timetable")
@@ -570,6 +823,13 @@ def get_stop_timetables(
     scenario_id: str,
     stop_id: Optional[str] = Query(default=None),
     service_id: Optional[str] = Query(default=None),
+    limit: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=_MAX_PAGE_LIMIT,
+        description="Optional page size. Omit to return all stop timetables.",
+    ),
+    offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     try:
         items = store.get_field(scenario_id, "stop_timetables") or []
@@ -580,12 +840,25 @@ def get_stop_timetables(
         items = [item for item in items if item.get("stopId") == stop_id]
     if service_id:
         items = [item for item in items if item.get("service_id") == service_id]
+    paged_items, page_limit = _paginate_items(items, limit, offset)
 
     return {
-        "items": items,
+        "items": paged_items,
         "total": len(items),
+        "limit": page_limit,
+        "offset": offset,
         "meta": {"imports": store.get_stop_timetable_import_meta(scenario_id)},
     }
+
+
+@router.get("/scenarios/{scenario_id}/stop-timetables/summary")
+def get_stop_timetables_summary(scenario_id: str) -> Dict[str, Any]:
+    try:
+        items = store.get_field(scenario_id, "stop_timetables") or []
+    except KeyError:
+        raise _not_found(scenario_id)
+    imports = store.get_stop_timetable_import_meta(scenario_id)
+    return {"item": _build_stop_timetable_summary(items, imports)}
 
 
 @router.post("/scenarios/{scenario_id}/stop-timetables/import-odpt")

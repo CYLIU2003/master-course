@@ -1,50 +1,52 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useGraph, useBuildGraph, useDispatchScope } from "@/hooks";
-import { PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { useGraphArcs, useGraphSummary, useBuildGraph, useDispatchScope, useJob } from "@/hooks";
+import { BackendJobPanel, PageSection, LoadingBlock, ErrorBlock, EmptyState, TabWarmBoundary, VirtualizedList } from "@/features/common";
 import { DispatchScopePanel } from "@/features/planning";
 import type { FeasibilityReason } from "@/types";
-import {
-  selectVisibleArcs,
-  usePlanningDatasetStore,
-} from "@/stores/planning-dataset-store";
+import { useRenderTrace } from "@/utils/perf/useRenderTrace";
+
+const PAGE_SIZE = 120;
 
 export function GraphPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
+  useRenderTrace("GraphPage");
   const { data: scope } = useDispatchScope(scenarioId!);
-  const { data: graph, isLoading, error } = useGraph(scenarioId!);
   const buildMutation = useBuildGraph(scenarioId!);
   const [reasonFilter, setReasonFilter] = useState<FeasibilityReason | "all">("all");
-  const syncGraph = usePlanningDatasetStore((s) => s.syncGraph);
-  const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
-  const visibleArcs = usePlanningDatasetStore(selectVisibleArcs);
+  const [pageOffset, setPageOffset] = useState(0);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const { data: summary, isLoading, error } = useGraphSummary(scenarioId!);
+  const { data: arcsData } = useGraphArcs(scenarioId!, {
+    reasonCode: reasonFilter === "all" ? undefined : reasonFilter,
+    limit: PAGE_SIZE,
+    offset: pageOffset,
+  });
+  const { data: activeJob } = useJob(activeJobId);
 
   useEffect(() => {
-    syncGraph(graph);
-  }, [graph, syncGraph]);
+    setPageOffset(0);
+  }, [reasonFilter]);
 
-  useEffect(() => {
-    setActiveDepotId(scope?.depotId ?? null);
-  }, [scope?.depotId, setActiveDepotId]);
-
-  const handleBuild = () => {
-    buildMutation.mutate({
+  const handleBuild = async () => {
+    const job = await buildMutation.mutateAsync({
       depot_id: scope?.depotId ?? undefined,
       service_id: scope?.serviceId ?? undefined,
     });
+    setActiveJobId(job.job_id);
   };
-
-  const filteredArcs = visibleArcs.filter(
-    (arc) => reasonFilter === "all" || arc.reason_code === reasonFilter,
-  );
-
-  const displayedArcs = filteredArcs.slice(0, 12);
+  const arcs = arcsData?.items ?? [];
+  const total = arcsData?.total ?? 0;
+  const pageStart = total === 0 ? 0 : pageOffset + 1;
+  const pageEnd = Math.min(pageOffset + arcs.length, total);
 
   return (
+    <TabWarmBoundary tab="dispatch" title="Dispatch tab を準備しています">
     <div className="space-y-6">
       <DispatchScopePanel scenarioId={scenarioId!} />
+      <BackendJobPanel job={activeJob} />
 
       <PageSection
         title={t("graph.title")}
@@ -63,14 +65,14 @@ export function GraphPage() {
           <LoadingBlock message={t("graph.loading")} />
         ) : error ? (
           <ErrorBlock message={error.message} />
-        ) : !graph ? (
+        ) : !summary ? (
           <EmptyState title={t("graph.no_graph")} description={t("graph.no_graph_description")} />
         ) : (
           <>
             <div className="mb-4 grid grid-cols-3 gap-4">
-              <StatCard label={t("graph.total_arcs")} value={graph.total_arcs} />
-              <StatCard label={t("graph.feasible")} value={graph.feasible_arcs} color="green" />
-              <StatCard label={t("graph.infeasible")} value={graph.infeasible_arcs} color="red" />
+              <StatCard label={t("graph.total_arcs")} value={summary.item.totalArcs} />
+              <StatCard label={t("graph.feasible")} value={summary.item.feasibleArcs} color="green" />
+              <StatCard label={t("graph.infeasible")} value={summary.item.infeasibleArcs} color="red" />
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -85,7 +87,7 @@ export function GraphPage() {
                     className="rounded border border-border bg-white px-2 py-1 text-xs"
                   >
                     <option value="all">all</option>
-                    {Object.keys(graph.reason_counts).map((reasonCode) => (
+                    {Object.keys(summary.item.reasonCounts).map((reasonCode) => (
                       <option key={reasonCode} value={reasonCode}>
                         {reasonCode}
                       </option>
@@ -93,7 +95,7 @@ export function GraphPage() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  {Object.entries(graph.reason_counts).map(([reasonCode, count]) => (
+                  {Object.entries(summary.item.reasonCounts).map(([reasonCode, count]) => (
                     <div
                       key={reasonCode}
                       className="flex items-center justify-between rounded border border-border px-3 py-2 text-xs"
@@ -109,41 +111,64 @@ export function GraphPage() {
                 <div className="border-b border-border px-4 py-3">
                   <h3 className="text-sm font-semibold text-slate-800">Analyzed connections</h3>
                   <p className="mt-1 text-xs text-slate-500">
-                    {filteredArcs.length} arcs match the current filter. Showing the first {displayedArcs.length}.
+                    {pageStart}-{pageEnd} / {total} arcs for the current filter.
                   </p>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-xs">
-                    <thead className="bg-surface-sunken text-slate-500">
-                      <tr>
-                        <th className="px-4 py-2 font-medium">Vehicle</th>
-                        <th className="px-4 py-2 font-medium">From</th>
-                        <th className="px-4 py-2 font-medium">To</th>
-                        <th className="px-4 py-2 font-medium">Reason</th>
-                        <th className="px-4 py-2 font-medium">Turn</th>
-                        <th className="px-4 py-2 font-medium">Deadhead</th>
-                        <th className="px-4 py-2 font-medium">Slack</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayedArcs.map((arc) => (
-                        <tr key={`${arc.vehicle_type}:${arc.from_trip_id}:${arc.to_trip_id}`} className="border-t border-border">
-                          <td className="px-4 py-2 font-mono">{arc.vehicle_type}</td>
-                          <td className="px-4 py-2 font-mono">{arc.from_trip_id}</td>
-                          <td className="px-4 py-2 font-mono">{arc.to_trip_id}</td>
-                          <td className="px-4 py-2">
-                            <div className="font-mono text-slate-700">{arc.reason_code}</div>
-                            <div className="mt-1 text-slate-500">{arc.reason}</div>
-                          </td>
-                          <td className="px-4 py-2">{arc.turnaround_time_min}</td>
-                          <td className="px-4 py-2">{arc.deadhead_time_min}</td>
-                          <td className={`px-4 py-2 font-semibold ${arc.feasible ? "text-green-700" : "text-red-600"}`}>
-                            {arc.slack_min}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="grid grid-cols-[0.7fr_1fr_1fr_1.3fr_0.45fr_0.55fr_0.45fr] gap-3 border-b border-border bg-surface-sunken px-4 py-2 text-[11px] font-medium uppercase text-slate-500">
+                  <span>Vehicle</span>
+                  <span>From</span>
+                  <span>To</span>
+                  <span>Reason</span>
+                  <span>Turn</span>
+                  <span>Deadhead</span>
+                  <span>Slack</span>
+                </div>
+                <VirtualizedList
+                  items={arcs}
+                  height={520}
+                  itemHeight={56}
+                  className="bg-white"
+                  perfLabel="graph-arcs"
+                  getKey={(arc) => `${arc.vehicle_type}:${arc.from_trip_id}:${arc.to_trip_id}`}
+                  renderItem={(arc) => (
+                    <div className="grid h-full grid-cols-[0.7fr_1fr_1fr_1.3fr_0.45fr_0.55fr_0.45fr] gap-3 border-b border-slate-100 px-4 py-2 text-xs">
+                      <div className="font-mono">{arc.vehicle_type}</div>
+                      <div className="truncate font-mono">{arc.from_trip_id}</div>
+                      <div className="truncate font-mono">{arc.to_trip_id}</div>
+                      <div>
+                        <div className="font-mono text-slate-700">{arc.reason_code}</div>
+                        <div className="truncate text-slate-500">{arc.reason}</div>
+                      </div>
+                      <div>{arc.turnaround_time_min}</div>
+                      <div>{arc.deadhead_time_min}</div>
+                      <div className={arc.feasible ? "font-semibold text-green-700" : "font-semibold text-red-600"}>
+                        {arc.slack_min}
+                      </div>
+                    </div>
+                  )}
+                />
+                <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-slate-500">
+                  <span>
+                    {pageStart}-{pageEnd} / {total}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}
+                      disabled={pageOffset === 0}
+                      className="rounded border border-border px-3 py-1 disabled:opacity-40"
+                    >
+                      Prev
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPageOffset((current) => current + PAGE_SIZE)}
+                      disabled={pageOffset + PAGE_SIZE >= total}
+                      className="rounded border border-border px-3 py-1 disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -151,6 +176,7 @@ export function GraphPage() {
         )}
       </PageSection>
     </div>
+    </TabWarmBoundary>
   );
 }
 

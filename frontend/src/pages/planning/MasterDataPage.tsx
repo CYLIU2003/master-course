@@ -6,6 +6,7 @@
 
 import { useParams } from "react-router-dom";
 import { ThreePaneLayout } from "@/features/common/ThreePaneLayout";
+import { TabWarmBoundary } from "@/features/common";
 import { MasterDataHeader } from "./MasterDataHeader";
 import { MasterDataTabs } from "./MasterDataTabs";
 import { MasterLeftPanel } from "./MasterLeftPanel";
@@ -24,11 +25,13 @@ export function MasterDataPage() {
       <MasterDataTabs />
 
       {/* 3-pane body */}
-      <ThreePaneLayout
-        left={<MasterLeftPanel scenarioId={scenarioId} />}
-        center={<MasterCenterPanel scenarioId={scenarioId} />}
-        right={<MasterEditorDrawerHost scenarioId={scenarioId} />}
-      />
+      <TabWarmBoundary tab="planning" title="Planning tab を準備しています">
+        <ThreePaneLayout
+          left={<MasterLeftPanel scenarioId={scenarioId} />}
+          center={<MasterCenterPanel scenarioId={scenarioId} />}
+          right={<MasterEditorDrawerHost scenarioId={scenarioId} />}
+        />
+      </TabWarmBoundary>
     </div>
   );
 }

@@ -4,11 +4,16 @@ import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 import { useUIStore } from "@/stores/ui-store";
 import { fetchMaybeJson } from "@/api/client";
+import { AppBootstrapManager } from "@/app/AppBootstrapManager";
+import { BootSplashOverlay } from "@/app/BootSplashOverlay";
+import { DebugPerfOverlay } from "@/utils/perf/debugPerfOverlay";
+import { useRenderTrace } from "@/utils/perf/useRenderTrace";
 
 export function AppLayout() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const setActiveScenarioId = useUIStore((s) => s.setActiveScenarioId);
+  useRenderTrace("AppLayout");
 
   useEffect(() => {
     setActiveScenarioId(scenarioId ?? null);
@@ -22,6 +27,8 @@ export function AppLayout() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
+      <AppBootstrapManager scenarioId={scenarioId ?? null} />
+      <BootSplashOverlay />
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar open={sidebarOpen} scenarioId={scenarioId ?? ""} />
@@ -29,6 +36,7 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <DebugPerfOverlay />
     </div>
   );
 }

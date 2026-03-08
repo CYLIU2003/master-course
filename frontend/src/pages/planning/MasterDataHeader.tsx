@@ -6,11 +6,17 @@ import {
   useImportOdptStopTimetables,
   useImportOdptTimetable,
   useRoutes,
-  useStopTimetables,
+  useStopTimetablesSummary,
   useStops,
-  useTimetable,
+  useTimetableSummary,
 } from "@/hooks";
 import { useMasterUiStore } from "@/stores/master-ui-store";
+import { useImportJobStore } from "@/stores/import-job-store";
+import { useTabWarmStore } from "@/stores/tab-warm-store";
+import { ImportLogPanel } from "@/features/explorer/ImportLogPanel";
+import { ImportProgressPanel } from "@/features/explorer/ImportProgressPanel";
+import { measureAsyncStep } from "@/utils/perf/measureAsyncStep";
+import { useRenderTrace } from "@/utils/perf/useRenderTrace";
 import type { ViewMode, MasterTabKey } from "@/types/master";
 
 interface Props {
@@ -36,18 +42,25 @@ const MODES_STOPS: ModeSpec[] = [{ key: "table", label: "表" }];
 
 export function MasterDataHeader({ scenarioId }: Props) {
   const { t } = useTranslation();
+  useRenderTrace("MasterDataHeader");
   const activeTab = useMasterUiStore((s) => s.activeTab);
   const viewMode = useMasterUiStore((s) => s.viewMode);
   const setViewMode = useMasterUiStore((s) => s.setViewMode);
   const openDrawer = useMasterUiStore((s) => s.openDrawer);
   const { data: routesData } = useRoutes(scenarioId);
   const { data: stopsData } = useStops(scenarioId);
-  const { data: timetableData } = useTimetable(scenarioId);
-  const { data: stopTimetablesData } = useStopTimetables(scenarioId);
+  const { data: timetableSummary } = useTimetableSummary(scenarioId);
+  const { data: stopTimetablesSummary } = useStopTimetablesSummary(scenarioId);
   const importOdptRoutes = useImportOdptRoutes(scenarioId);
   const importOdptStops = useImportOdptStops(scenarioId);
   const importOdptTimetable = useImportOdptTimetable(scenarioId);
   const importOdptStopTimetables = useImportOdptStopTimetables(scenarioId);
+  const startJob = useImportJobStore((state) => state.startJob);
+  const updateStage = useImportJobStore((state) => state.updateStage);
+  const appendLog = useImportJobStore((state) => state.appendLog);
+  const completeJob = useImportJobStore((state) => state.completeJob);
+  const failJob = useImportJobStore((state) => state.failJob);
+  const warmTabs = useTabWarmStore((state) => state.tabs);
 
   const addLabel: Partial<Record<MasterTabKey, string>> = {
     depots: t("master.add_depot", "+ 営業所追加"),
@@ -72,10 +85,13 @@ export function MasterDataHeader({ scenarioId }: Props) {
   const summaryCards = [
     { label: t("master.summary_routes", "路線"), value: routesData?.total ?? 0 },
     { label: t("master.summary_stops", "停留所"), value: stopsData?.total ?? 0 },
-    { label: t("master.summary_timetable", "時刻表"), value: timetableData?.total ?? 0 },
+    {
+      label: t("master.summary_timetable", "時刻表"),
+      value: timetableSummary?.item.totalRows ?? 0,
+    },
     {
       label: t("master.summary_stop_timetables", "バス停時刻表"),
-      value: stopTimetablesData?.total ?? 0,
+      value: stopTimetablesSummary?.item.totalTimetables ?? 0,
     },
   ];
 
@@ -92,42 +108,104 @@ export function MasterDataHeader({ scenarioId }: Props) {
       return;
     }
 
+    const jobId = `master-import-${resource}`;
+    startJob({
+      jobId,
+      source: "odpt",
+      label: `ODPT ${resource} import`,
+      stages: [
+        { id: "request", label: "ODPT fetch", weight: 50 },
+        { id: "persist", label: "Normalize / save", weight: 35 },
+        { id: "refresh", label: "Refresh UI cache", weight: 15 },
+      ],
+    });
+    appendLog(jobId, { level: "info", message: `${resource} import started` });
+
     try {
       if (resource === "stops") {
-        const result = await importOdptStops.mutateAsync({
-          operator: "odpt.Operator:TokyuBus",
-          dump: true,
+        updateStage(jobId, "request", { status: "running", progress: 30 });
+        const result = await measureAsyncStep("master:import-stops", () =>
+          importOdptStops.mutateAsync({
+            operator: "odpt.Operator:TokyuBus",
+            dump: true,
+          }),
+        );
+        updateStage(jobId, "request", { status: "success", progress: 100 });
+        updateStage(jobId, "persist", {
+          status: "success",
+          progress: 100,
+          currentCount: result.total,
+          totalCount: result.total,
+          message: `${result.total} stops imported`,
         });
-        window.alert(`停留所を ${result.total} 件取り込みました。`);
+        updateStage(jobId, "refresh", { status: "success", progress: 100 });
+        completeJob(jobId, `停留所を ${result.total} 件取り込みました。`);
         return;
       }
       if (resource === "routes") {
-        const result = await importOdptRoutes.mutateAsync({
-          operator: "odpt.Operator:TokyuBus",
-          dump: true,
+        updateStage(jobId, "request", { status: "running", progress: 30 });
+        const result = await measureAsyncStep("master:import-routes", () =>
+          importOdptRoutes.mutateAsync({
+            operator: "odpt.Operator:TokyuBus",
+            dump: true,
+          }),
+        );
+        updateStage(jobId, "request", { status: "success", progress: 100 });
+        updateStage(jobId, "persist", {
+          status: "success",
+          progress: 100,
+          currentCount: result.total,
+          totalCount: result.total,
+          message: `${result.total} routes imported`,
         });
-        window.alert(`路線を ${result.total} 件取り込みました。`);
+        updateStage(jobId, "refresh", { status: "success", progress: 100 });
+        completeJob(jobId, `路線を ${result.total} 件取り込みました。`);
         return;
       }
       if (resource === "timetable") {
-        const result = await importOdptTimetable.mutateAsync({
+        updateStage(jobId, "request", { status: "running", progress: 30 });
+        const result = await measureAsyncStep("master:import-timetable", () =>
+          importOdptTimetable.mutateAsync({
+            operator: "odpt.Operator:TokyuBus",
+            dump: true,
+            reset: true,
+          }),
+        );
+        updateStage(jobId, "request", { status: "success", progress: 100 });
+        updateStage(jobId, "persist", {
+          status: "success",
+          progress: 100,
+          currentCount: result.total,
+          totalCount: result.total,
+          message: `${result.total} timetable rows imported`,
+        });
+        updateStage(jobId, "refresh", { status: "success", progress: 100 });
+        completeJob(jobId, `時刻表を ${result.total} 件取り込みました。`);
+        return;
+      }
+      updateStage(jobId, "request", { status: "running", progress: 30 });
+      const result = await measureAsyncStep("master:import-stop-timetables", () =>
+        importOdptStopTimetables.mutateAsync({
           operator: "odpt.Operator:TokyuBus",
           dump: true,
           reset: true,
-        });
-        window.alert(`時刻表を ${result.total} 件取り込みました。`);
-        return;
-      }
-      const result = await importOdptStopTimetables.mutateAsync({
-        operator: "odpt.Operator:TokyuBus",
-        dump: true,
-        reset: true,
+        }),
+      );
+      updateStage(jobId, "request", { status: "success", progress: 100 });
+      updateStage(jobId, "persist", {
+        status: "success",
+        progress: 100,
+        currentCount: result.meta.quality.stopTimetableCount,
+        totalCount: result.meta.quality.stopTimetableCount,
+        message: `${result.meta.quality.entryCount} stop timetable entries imported`,
       });
-      window.alert(
+      updateStage(jobId, "refresh", { status: "success", progress: 100 });
+      completeJob(
+        jobId,
         `バス停時刻表を ${result.meta.quality.stopTimetableCount} 件取り込みました。`,
       );
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      failJob(jobId, error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -210,6 +288,21 @@ export function MasterDataHeader({ scenarioId }: Props) {
               </div>
             ))}
           </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(
+              Object.entries(warmTabs) as Array<
+                [keyof typeof warmTabs, { status: string; detail?: string }]
+              >
+            ).map(([tab, state]) => (
+              <span
+                key={tab}
+                className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600"
+                title={state.detail}
+              >
+                {tab}: {state.status}
+              </span>
+            ))}
+          </div>
         </div>
 
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3">
@@ -247,6 +340,11 @@ export function MasterDataHeader({ scenarioId }: Props) {
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <ImportProgressPanel />
+        <ImportLogPanel />
       </div>
     </div>
   );

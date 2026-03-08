@@ -226,7 +226,8 @@ master-course/
 │   │   ├── api/                    # API クライアント層 (fetch wrapper)
 │   │   ├── app/                    # Router, QueryProvider
 │   │   ├── features/               # UI コンポーネント群
-│   │   │   ├── common/             # 共通UI: PageSection, EmptyState 等
+│   │   │   ├── common/             # 共通UI: PageSection, EmptyState, TabWarmBoundary 等
+│   │   │   ├── explorer/           # 取込進捗 / ログ可視化
 │   │   │   ├── layout/             # AppLayout, Header, Sidebar
 │   │   │   └── planning/           # 計画系コンポーネント
 │   │   ├── hooks/                  # TanStack Query hooks (scenario, master-data, graph, run)
@@ -239,10 +240,11 @@ master-course/
 │   │   │   ├── scenario/           # シナリオ一覧・概要
 │   │   │   ├── compare/            # シナリオ比較
 │   │   │   └── odpt/               # ODPT 連携
-│   │   ├── stores/                 # Zustand (ui-store, compare-store)
+│   │   ├── stores/                 # Zustand (ui-store, boot-store, import-job-store)
 │   │   ├── schemas/                # Zod バリデーション
 │   │   ├── types/                  # 型定義 (domain, api)
-│   │   └── utils/                  # ユーティリティ (format, time)
+│   │   ├── utils/                  # ユーティリティ (format, time, perf)
+│   │   └── workers/                # 重いUI導出処理の Web Worker
 │   └── README.md                   # Frontend 固有の README
 │
 ├── bff/                            # FastAPI BFF (Backend For Frontend)
@@ -658,6 +660,18 @@ Route ──1:N──→ Trip
 | `/compare` | シナリオ比較 |
 
 > 詳細は [`frontend/README.md`](frontend/README.md) を参照。
+
+### 大規模時刻表対応 UI
+
+- `AppBootstrapManager` と `BootSplashOverlay` が scenario 起動時に段階 prefetch を行い、進捗率・ステップ名・件数を表示します。
+- 時刻表 UI は summary-first です。`/timetable/summary` と `/stop-timetables/summary` を先に読み、全件本文は `limit/offset` page に遅延します。
+- dispatch UI も summary-first です。`/trips/summary`、`/graph/summary`、`/duties/summary` を先に読み、一覧は page API で取得します。
+- `TabWarmBoundary` が planning / timetable / public-data / dispatch タブの warm state を扱い、重い tab mount を抑制します。
+- `ImportJobStore`、`ImportProgressPanel`、`ImportLogPanel` が ODPT / GTFS import と public-data sync の進捗・ログを共通方式で表示します。
+- 大きい一覧は `VirtualizedList` に統一し、explorer の depot assignment sort は `assignment-sort.worker.ts`、route family grouping は `route-family-group.worker.ts`、public diff preview は `public-diff-preview.worker.ts` へオフロードしています。
+- Router は route-level lazy loading を採用し、Vite build の main chunk は縮小済みです。現状の build warning は主に `MapLibre GL` 由来の地図 chunk です。
+- `/jobs/{job_id}` poll により、Trips / Graph / Duties / Simulation / Optimization の backend job progress を画面側で確認できます。
+- 開発モードでは `DebugPerfOverlay` が render count、selector time、import time、tab switch time を右下に表示します。
 
 ---
 
