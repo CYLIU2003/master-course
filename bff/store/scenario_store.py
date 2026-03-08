@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 _STORE_DIR = Path(__file__).parent.parent.parent / "outputs" / "scenarios"
+_APP_CONTEXT_PATH = Path(__file__).parent.parent.parent / "outputs" / "app_context.json"
 
 
 def _default_dispatch_scope() -> Dict[str, Any]:
@@ -58,6 +59,26 @@ def _default_v1_2_fields() -> Dict[str, Any]:
         "problemdata_build_audit": None,
         "optimization_audit": None,
         "simulation_audit": None,
+    }
+
+
+def _default_public_data_state() -> Dict[str, Any]:
+    return {
+        "raw_snapshots": [],
+        "normalized_snapshots": [],
+        "diff_sessions": [],
+        "sync_histories": [],
+        "change_logs": [],
+        "warnings": [],
+    }
+
+
+def _default_app_context() -> Dict[str, Any]:
+    return {
+        "contextKey": "local-default",
+        "activeScenarioId": None,
+        "lastOpenedPage": None,
+        "updatedAt": _now_iso(),
     }
 
 
@@ -92,6 +113,7 @@ def _load(scenario_id: str) -> Dict[str, Any]:
     doc.setdefault("simulation_result", None)
     doc.setdefault("optimization_result", None)
     doc.setdefault("dispatch_scope", _default_dispatch_scope())
+    doc.setdefault("public_data", _default_public_data_state())
     for key, value in _default_v1_2_fields().items():
         doc.setdefault(key, value)
     return doc
@@ -101,6 +123,26 @@ def _save(doc: Dict[str, Any]) -> None:
     _ensure_dir()
     scenario_id = doc["meta"]["id"]
     _path(scenario_id).write_text(
+        json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def _load_app_context() -> Dict[str, Any]:
+    _ensure_dir()
+    if not _APP_CONTEXT_PATH.exists():
+        return _default_app_context()
+    try:
+        doc = json.loads(_APP_CONTEXT_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return _default_app_context()
+    normalized = _default_app_context()
+    normalized.update({k: v for k, v in doc.items() if k in normalized})
+    return normalized
+
+
+def _save_app_context(doc: Dict[str, Any]) -> None:
+    _ensure_dir()
+    _APP_CONTEXT_PATH.write_text(
         json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
@@ -338,6 +380,7 @@ def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
         "duties": None,
         "simulation_result": None,
         "optimization_result": None,
+        "public_data": _default_public_data_state(),
     }
     doc.update(_default_v1_2_fields())
     _save(doc)
@@ -374,6 +417,25 @@ def delete_scenario(scenario_id: str) -> None:
     if not p.exists():
         raise KeyError(scenario_id)
     p.unlink()
+    context = _load_app_context()
+    if context.get("activeScenarioId") == scenario_id:
+        context["activeScenarioId"] = None
+        context["updatedAt"] = _now_iso()
+        _save_app_context(context)
+
+
+def duplicate_scenario(scenario_id: str, *, name: Optional[str] = None) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    new_id = _new_id()
+    now = _now_iso()
+    cloned = json.loads(json.dumps(doc))
+    cloned["meta"]["id"] = new_id
+    cloned["meta"]["name"] = name or f'{doc["meta"].get("name") or "Scenario"} Copy'
+    cloned["meta"]["createdAt"] = now
+    cloned["meta"]["updatedAt"] = now
+    cloned["meta"]["status"] = "draft"
+    _save(cloned)
+    return dict(cloned["meta"])
 
 
 # ── Generic sub-document accessors ────────────────────────────
@@ -496,6 +558,44 @@ def delete_depot(scenario_id: str, depot_id: str) -> None:
     ]
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
+
+
+def get_public_data_state(scenario_id: str) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    state = doc.get("public_data")
+    if not isinstance(state, dict):
+        return _default_public_data_state()
+    normalized = _default_public_data_state()
+    normalized.update(state)
+    return normalized
+
+
+def set_public_data_state(scenario_id: str, state: Dict[str, Any]) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    normalized = _default_public_data_state()
+    normalized.update(state)
+    doc["public_data"] = normalized
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return dict(normalized)
+
+
+def get_app_context() -> Dict[str, Any]:
+    return _load_app_context()
+
+
+def set_active_scenario(
+    scenario_id: Optional[str],
+    *,
+    last_opened_page: Optional[str] = None,
+) -> Dict[str, Any]:
+    context = _load_app_context()
+    context["activeScenarioId"] = scenario_id
+    if last_opened_page is not None:
+        context["lastOpenedPage"] = last_opened_page
+    context["updatedAt"] = _now_iso()
+    _save_app_context(context)
+    return dict(context)
 
 
 # ── Vehicle helpers ────────────────────────────────────────────

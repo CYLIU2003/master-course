@@ -42,14 +42,31 @@ import { OdptExplorerPage } from "@/pages/odpt/OdptExplorerPage";
 
 async function startupLoader() {
   try {
-    const scenario = await fetchMaybeJson<{ id?: string }>(
-      "/api/scenarios/default",
+    const context = await fetchMaybeJson<{
+      activeScenarioId?: string | null;
+      lastOpenedPage?: string | null;
+    }>(
+      "/api/app/context",
     );
-    if (!scenario?.id) {
+    if (!context?.activeScenarioId) {
       return redirect("/scenarios");
     }
+    const nextPath = context.lastOpenedPage || "planning";
+    return redirect(`/scenarios/${context.activeScenarioId}/${nextPath}`);
+  } catch {
+    return redirect("/scenarios");
+  }
+}
 
-    return redirect(`/scenarios/${scenario.id}/planning`);
+async function activeScenarioRedirectLoader(targetPath: string) {
+  try {
+    const context = await fetchMaybeJson<{ activeScenarioId?: string | null }>(
+      "/api/app/context",
+    );
+    if (!context?.activeScenarioId) {
+      return redirect("/scenarios");
+    }
+    return redirect(`/scenarios/${context.activeScenarioId}/${targetPath}`);
   } catch {
     return redirect("/scenarios");
   }
@@ -74,6 +91,7 @@ const router = createBrowserRouter([
       // ── Tab 1: Planning (master data) ─────────────────────
       { path: "planning", element: <MasterDataPage /> },
       { path: "planning-legacy", element: <Navigate to="../planning" replace /> },
+      { path: "public-data", element: <OdptExplorerPage /> },
       { path: "vehicle-templates", element: <VehicleTemplatesPage /> },
       { path: "timetable", element: <TimetablePage /> },
       { path: "deadhead", element: <DeadheadPage /> },
@@ -102,7 +120,8 @@ const router = createBrowserRouter([
   },
   {
     path: "/odpt-explorer",
-    element: <OdptExplorerPage />,
+    loader: () => activeScenarioRedirectLoader("public-data"),
+    element: <Navigate to="/scenarios" replace />,
   },
 ]);
 

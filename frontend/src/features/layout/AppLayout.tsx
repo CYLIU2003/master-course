@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 import { useUIStore } from "@/stores/ui-store";
+import { fetchMaybeJson } from "@/api/client";
 
 export function AppLayout() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
@@ -11,6 +12,11 @@ export function AppLayout() {
 
   useEffect(() => {
     setActiveScenarioId(scenarioId ?? null);
+    if (scenarioId) {
+      void fetchMaybeJson(`/api/scenarios/${scenarioId}/activate`, {
+        method: "POST",
+      });
+    }
     return () => setActiveScenarioId(null);
   }, [scenarioId, setActiveScenarioId]);
 
