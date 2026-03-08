@@ -16,6 +16,7 @@ import {
 } from "@/hooks";
 import type { Route, RouteResolvedStop } from "@/types";
 import type { CreateRouteRequest, UpdateRouteRequest } from "@/types/api";
+import { getRouteVariantLabel } from "./route-family-display";
 
 interface Props {
   scenarioId: string;
@@ -261,6 +262,8 @@ function RouteMetaBadges({ route }: { route: Route }) {
     error: "エラー",
   };
 
+  const variantLabel = getRouteVariantLabel(route);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
       <div className="flex flex-wrap gap-2">
@@ -284,7 +287,27 @@ function RouteMetaBadges({ route }: { route: Route }) {
         <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
           {route.depotId ? `営業所: 所属済` : "営業所: 未所属"}
         </span>
+        {route.routeFamilyCode && (
+          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+            Family: {route.routeFamilyCode}
+          </span>
+        )}
+        {variantLabel && (
+          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+            Variant: {variantLabel}
+          </span>
+        )}
+        {route.classificationConfidence != null && (
+          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+            信頼度: {Math.round(route.classificationConfidence * 100)}%
+          </span>
+        )}
       </div>
+      {(route.classificationReasons?.length ?? 0) > 0 && (
+        <p className="mt-2 text-slate-500">
+          判定根拠: {route.classificationReasons!.join(" / ")}
+        </p>
+      )}
       <p className="mt-2 text-slate-500">
         所属営業所の編集は Public Data Collection Explorer で行います。
       </p>

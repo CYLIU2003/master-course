@@ -130,11 +130,12 @@ export const vehicleTemplateApi = {
 export const routeApi = {
   list: (
     scenarioId: string,
-    params?: { depotId?: string; operator?: string },
+    params?: { depotId?: string; operator?: string; groupByFamily?: boolean },
   ) => {
     const query = new URLSearchParams();
     if (params?.depotId) query.set("depotId", params.depotId);
     if (params?.operator) query.set("operator", params.operator);
+    if (params?.groupByFamily) query.set("groupByFamily", "true");
     const suffix = query.size ? `?${query.toString()}` : "";
     return api.get<RoutesResponse>(`/scenarios/${scenarioId}/routes${suffix}`);
   },

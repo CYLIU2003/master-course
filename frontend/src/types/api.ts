@@ -165,6 +165,7 @@ export interface RouteImportMeta {
 export interface RoutesResponse extends ApiListResponse<Route> {
   meta?: {
     imports?: Partial<Record<string, RouteImportMeta>>;
+    groupedByFamily?: boolean;
   };
 }
 
