@@ -1,15 +1,18 @@
 """
 bff/routers/scenarios.py
 
-Scenario CRUD + timetable + deadhead/turnaround rules endpoints.
+Scenario CRUD + app context + timetable + deadhead/turnaround rules endpoints.
 
 Routes:
   GET    /scenarios                    → list
-  GET    /scenarios/default            → get latest scenario, or auto-create default
+  GET    /scenarios/default            → get latest scenario metadata (legacy helper)
   POST   /scenarios                    → create
   GET    /scenarios/{id}               → get
   PUT    /scenarios/{id}               → update
   DELETE /scenarios/{id}               → delete
+  POST   /scenarios/{id}/duplicate     → duplicate
+  POST   /scenarios/{id}/activate      → set active scenario
+  GET    /app/context                  → get app context
 
   GET    /scenarios/{id}/timetable               → get timetable rows (optional ?service_id=)
   PUT    /scenarios/{id}/timetable               → replace timetable rows
@@ -80,6 +83,10 @@ class UpdateScenarioBody(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     mode: Optional[str] = None
+
+
+class DuplicateScenarioBody(BaseModel):
+    name: Optional[str] = None
 
 
 class UpdateDispatchScopeBody(BaseModel):
@@ -219,20 +226,15 @@ def list_scenarios() -> Dict[str, Any]:
 @router.get("/scenarios/default")
 def get_or_create_default_scenario() -> Dict[str, Any]:
     """
-    Returns the latest scenario for immediate startup routing.
-    If no scenario exists, creates a default one once.
+    Legacy helper retained for compatibility.
+    Returns the latest scenario metadata if one exists.
     """
     with _default_scenario_lock:
         items = store.list_scenarios()
         latest = _pick_latest_scenario(items)
-        if latest is not None:
-            return latest
-
-        return store.create_scenario(
-            name="Default Scenario",
-            description="Auto-created on first launch.",
-            mode="mode_B_resource_assignment",
-        )
+        if latest is None:
+            raise HTTPException(status_code=404, detail="No scenarios found")
+        return latest
 
 
 @router.post("/scenarios", status_code=201)
@@ -242,6 +244,16 @@ def create_scenario(body: CreateScenarioBody) -> Dict[str, Any]:
         description=body.description,
         mode=body.mode,
     )
+
+
+@router.post("/scenarios/{scenario_id}/duplicate", status_code=201)
+def duplicate_scenario(
+    scenario_id: str, body: Optional[DuplicateScenarioBody] = None
+) -> Dict[str, Any]:
+    try:
+        return store.duplicate_scenario(scenario_id, name=body.name if body else None)
+    except KeyError:
+        raise _not_found(scenario_id)
 
 
 @router.get("/scenarios/{scenario_id}")
@@ -290,6 +302,59 @@ def delete_scenario(scenario_id: str) -> Response:
     except KeyError:
         raise _not_found(scenario_id)
     return Response(status_code=204)
+
+
+@router.post("/scenarios/{scenario_id}/activate")
+def activate_scenario(scenario_id: str) -> Dict[str, Any]:
+    try:
+        scenario = store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+    context = store.set_active_scenario(scenario_id)
+    return {
+        "activeScenarioId": scenario_id,
+        "scenarioName": scenario.get("name"),
+        "selectedOperatorId": None,
+        "availableModules": [
+            "planning",
+            "simulation",
+            "dispatch",
+            "results",
+            "public-data",
+        ],
+        "lastOpenedPage": context.get("lastOpenedPage"),
+        "updatedAt": context.get("updatedAt"),
+    }
+
+
+@router.get("/app/context")
+def get_app_context() -> Dict[str, Any]:
+    context = store.get_app_context()
+    scenario_id = context.get("activeScenarioId")
+    scenario = None
+    if isinstance(scenario_id, str):
+        try:
+            scenario = store.get_scenario(scenario_id)
+        except KeyError:
+            context = store.set_active_scenario(
+                None,
+                last_opened_page=context.get("lastOpenedPage"),
+            )
+            scenario_id = None
+    return {
+        "activeScenarioId": scenario_id,
+        "scenarioName": scenario.get("name") if scenario else None,
+        "selectedOperatorId": None,
+        "availableModules": [
+            "planning",
+            "simulation",
+            "dispatch",
+            "results",
+            "public-data",
+        ],
+        "lastOpenedPage": context.get("lastOpenedPage"),
+        "updatedAt": context.get("updatedAt"),
+    }
 
 
 # ── Timetable ──────────────────────────────────────────────────

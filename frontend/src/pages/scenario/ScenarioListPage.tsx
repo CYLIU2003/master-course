@@ -1,11 +1,13 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useScenarios, useCreateScenario, useDeleteScenario } from "@/hooks";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { formatDate } from "@/utils/format";
+import { fetchMaybeJson } from "@/api/client";
 
 export function ScenarioListPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { data, isLoading, error } = useScenarios();
   const createMutation = useCreateScenario();
   const deleteMutation = useDeleteScenario();
@@ -15,18 +17,24 @@ export function ScenarioListPage() {
 
   const scenarios = data?.items ?? [];
 
+  async function activateAndOpen(scenarioId: string) {
+    await fetchMaybeJson(`/api/scenarios/${scenarioId}/activate`, { method: "POST" });
+    navigate(`/scenarios/${scenarioId}/planning`);
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-800">{t("scenarios.title")}</h1>
         <button
-          onClick={() =>
-            createMutation.mutate({
+          onClick={async () => {
+            const created = await createMutation.mutateAsync({
               name: `Scenario ${scenarios.length + 1}`,
               description: "",
               mode: "mode_B_resource_assignment",
-            })
-          }
+            });
+            await activateAndOpen(created.id);
+          }}
           disabled={createMutation.isPending}
           className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
         >
@@ -46,15 +54,16 @@ export function ScenarioListPage() {
               key={s.id}
               className="flex items-center justify-between rounded-lg border border-border bg-surface-raised px-4 py-3 hover:border-primary-200"
             >
-              <Link
-                to={`/scenarios/${s.id}`}
-                className="flex-1"
+              <button
+                type="button"
+                onClick={() => void activateAndOpen(s.id)}
+                className="flex-1 text-left"
               >
                 <p className="text-sm font-medium text-slate-800">{s.name}</p>
                 <p className="text-xs text-slate-400">
                   {s.mode} &middot; {s.status} &middot; {formatDate(s.updatedAt)}
                 </p>
-              </Link>
+              </button>
               <button
                 onClick={(e) => {
                   e.preventDefault();

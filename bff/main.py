@@ -24,6 +24,7 @@ from bff.routers import (
     jobs,
     master_data,
     optimization,
+    public_data,
     scenarios,
     simulation,
     timetable,
@@ -58,6 +59,7 @@ PREFIX = "/api"
 app.include_router(scenarios.router, prefix=PREFIX)
 app.include_router(timetable.router, prefix=PREFIX)
 app.include_router(master_data.router, prefix=PREFIX)
+app.include_router(public_data.router, prefix=PREFIX)
 app.include_router(catalog.router, prefix=PREFIX)
 app.include_router(graph.router, prefix=PREFIX)
 app.include_router(simulation.router, prefix=PREFIX)

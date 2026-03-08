@@ -87,6 +87,11 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
   const planningNavItems: NavItem[] = [
     { labelKey: "sidebar.depots_vehicles_routes", to: "planning" },
     {
+      labelKey: "nav.odpt_explorer",
+      to: "public-data",
+      fallbackLabel: "公開情報",
+    },
+    {
       labelKey: "sidebar.vehicle_templates",
       to: "vehicle-templates",
       fallbackLabel: "車両テンプレート",

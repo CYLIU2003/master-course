@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { fetchJson } from "@/api/client";
 import { useUIStore } from "@/stores/ui-store";
 
@@ -180,6 +180,24 @@ type ExplorerDepotAssignment = {
   updatedAt?: string | null;
 };
 
+type PublicDiffSummary = {
+  new_count: number;
+  changed_count: number;
+  deleted_candidate_count: number;
+  conflict_count: number;
+};
+
+type PublicDiffItem = {
+  id: string;
+  entity_type: string;
+  entity_key: string;
+  display_name: string;
+  change_type: string;
+  suggested_action: string;
+  conflict_flags?: Record<string, unknown>;
+  field_diff?: Record<string, unknown>;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function prettyJson(x: unknown): string {
@@ -315,7 +333,9 @@ function DbVisualizationPanel() {
     }
   }, [selectedOp]);
 
-  useEffect(() => { loadOperators(); }, []);
+  useEffect(() => {
+    void loadOperators();
+  }, [loadOperators]);
 
   useEffect(() => {
     if (!selectedOp) return;
@@ -573,9 +593,15 @@ function DbVisualizationPanel() {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function OdptExplorerPage() {
+  const { scenarioId: routeScenarioId } = useParams<{ scenarioId: string }>();
   const [tabMode, setTabMode] = useState<"db" | "api">("db");
-  const activeScenarioId = useUIStore((s) => s.activeScenarioId);
+  const storeScenarioId = useUIStore((s) => s.activeScenarioId);
+  const activeScenarioId = routeScenarioId ?? storeScenarioId;
   const [selectedScenarioOperator, setSelectedScenarioOperator] = useState<"tokyu" | "toei">("tokyu");
+  const [latestDiffSessionId, setLatestDiffSessionId] = useState("");
+  const [latestDiffSummary, setLatestDiffSummary] = useState<PublicDiffSummary | null>(null);
+  const [latestDiffItems, setLatestDiffItems] = useState<PublicDiffItem[]>([]);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [depots, setDepots] = useState<Depot[]>([]);
   const [explorerOverview, setExplorerOverview] = useState<ExplorerOverview | null>(null);
   const [assignmentRows, setAssignmentRows] = useState<ExplorerDepotAssignment[]>([]);
@@ -665,7 +691,7 @@ export function OdptExplorerPage() {
     };
   }
 
-  async function loadScenarioExplorerData() {
+  const loadScenarioExplorerData = useCallback(async () => {
     if (!activeScenarioId) {
       setDepots([]);
       setExplorerOverview(null);
@@ -689,7 +715,7 @@ export function OdptExplorerPage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }
+  }, [activeScenarioId, selectedScenarioOperator, showUnresolvedOnly]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -797,56 +823,87 @@ export function OdptExplorerPage() {
     }
     setAssignmentSavingRouteId(`import:${source}`);
     setError(null);
+    setSyncMessage(null);
     try {
-      if (source === "odpt") {
-        await Promise.all([
-          fetchJson(`/api/scenarios/${activeScenarioId}/routes/import-odpt`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ operator: "odpt.Operator:TokyuBus", dump: true }),
-          }),
-          fetchJson(`/api/scenarios/${activeScenarioId}/stops/import-odpt`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ operator: "odpt.Operator:TokyuBus", dump: true }),
-          }),
-          fetchJson(`/api/scenarios/${activeScenarioId}/timetable/import-odpt`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ operator: "odpt.Operator:TokyuBus", dump: true, reset: true }),
-          }),
-          fetchJson(`/api/scenarios/${activeScenarioId}/stop-timetables/import-odpt`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ operator: "odpt.Operator:TokyuBus", dump: true, reset: true }),
-          }),
-        ]);
-      } else {
-        await Promise.all([
-          fetchJson(`/api/scenarios/${activeScenarioId}/routes/import-gtfs`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ feedPath: "GTFS/ToeiBus-GTFS" }),
-          }),
-          fetchJson(`/api/scenarios/${activeScenarioId}/stops/import-gtfs`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ feedPath: "GTFS/ToeiBus-GTFS" }),
-          }),
-          fetchJson(`/api/scenarios/${activeScenarioId}/timetable/import-gtfs`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ feedPath: "GTFS/ToeiBus-GTFS", reset: true }),
-          }),
-          fetchJson(`/api/scenarios/${activeScenarioId}/stop-timetables/import-gtfs`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ feedPath: "GTFS/ToeiBus-GTFS", reset: true }),
-          }),
-        ]);
-      }
+      const fetchRes = await fetchJson<{
+        id: string;
+        snapshot_id?: string;
+      }>(`/api/scenarios/${activeScenarioId}/public-data/fetch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_type: source,
+          operator_id:
+            source === "odpt" ? "odpt.Operator:TokyuBus" : "GTFS/ToeiBus-GTFS",
+          fetch_mode: "incremental",
+          resource_targets:
+            source === "odpt"
+              ? ["odpt:BusroutePattern", "odpt:BusstopPole", "odpt:BusTimetable"]
+              : ["routes", "stops", "trips"],
+        }),
+      });
+      const rawSnapshotId = fetchRes.snapshot_id ?? fetchRes.id;
+      const normalizeRes = await fetchJson<{ normalized_snapshot_id: string }>(
+        `/api/scenarios/${activeScenarioId}/public-data/normalize`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ raw_snapshot_id: rawSnapshotId }),
+        },
+      );
+      const diffRes = await fetchJson<{
+        diff_session_id: string;
+        summary: PublicDiffSummary;
+      }>(`/api/scenarios/${activeScenarioId}/public-data/diff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          normalized_snapshot_id: normalizeRes.normalized_snapshot_id,
+          compare_mode: "new_and_update",
+          compare_targets: ["routes", "stops", "trips", "stop_times", "service_calendars"],
+        }),
+      });
+      const diffItemsRes = await fetchJson<{ items: PublicDiffItem[] }>(
+        `/api/scenarios/${activeScenarioId}/public-data/diff/${diffRes.diff_session_id}/items?limit=50`,
+      );
+      setLatestDiffSessionId(diffRes.diff_session_id);
+      setLatestDiffSummary(diffRes.summary);
+      setLatestDiffItems(diffItemsRes.items ?? []);
+      setSyncMessage("差分を取得しました。内容を確認してから反映できます。");
       await loadScenarioExplorerData();
       await loadCatalogSnapshots();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAssignmentSavingRouteId("");
+    }
+  }
+
+  async function applyLatestDiff() {
+    if (!activeScenarioId || !latestDiffSessionId) {
+      return;
+    }
+    setAssignmentSavingRouteId("sync:apply");
+    setError(null);
+    setSyncMessage(null);
+    try {
+      const syncRes = await fetchJson<{
+        inserted_count: number;
+        updated_count: number;
+        skipped_count: number;
+        conflict_count: number;
+      }>(`/api/scenarios/${activeScenarioId}/public-data/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          diff_session_id: latestDiffSessionId,
+          sync_mode: "insert_and_update",
+        }),
+      });
+      setSyncMessage(
+        `反映完了: +${syncRes.inserted_count} / 更新 ${syncRes.updated_count} / スキップ ${syncRes.skipped_count} / conflict ${syncRes.conflict_count}`,
+      );
+      await loadScenarioExplorerData();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -985,8 +1042,15 @@ export function OdptExplorerPage() {
   }, []);
 
   useEffect(() => {
-    loadScenarioExplorerData();
-  }, [activeScenarioId, selectedScenarioOperator, showUnresolvedOnly]);
+    void loadScenarioExplorerData();
+  }, [loadScenarioExplorerData]);
+
+  useEffect(() => {
+    setLatestDiffSessionId("");
+    setLatestDiffSummary(null);
+    setLatestDiffItems([]);
+    setSyncMessage(null);
+  }, [selectedScenarioOperator, activeScenarioId]);
 
   useEffect(() => {
     if (!selectedSnapshotKey) {
@@ -1049,7 +1113,8 @@ export function OdptExplorerPage() {
       sample_trip: route.trips[0],
     }));
 
-    const { routeTimetables: _omitted, ...rest } = exportRes;
+    const rest = { ...exportRes };
+    delete rest.routeTimetables;
     return prettyJson({
       ...rest,
       routeTimetables: {
@@ -1066,18 +1131,16 @@ export function OdptExplorerPage() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-800">
-            Public Data Collection Explorer
-          </h1>
+          <h1 className="text-xl font-semibold text-slate-800">Public Data Explorer</h1>
           <p className="mt-1 text-sm text-slate-500">
-            取込、正規化確認、所属営業所補正、warning 確認を集約します。
+            scenario 配下の公開情報同期、差分確認、所属営業所補正を集約します。
           </p>
         </div>
         <Link
-          to="/scenarios"
+          to={activeScenarioId ? `/scenarios/${activeScenarioId}/planning` : "/scenarios"}
           className="text-sm text-primary-600 hover:underline"
         >
-          &larr; Back to Scenarios
+          &larr; Back to Planning
         </Link>
       </div>
 
@@ -1113,20 +1176,38 @@ export function OdptExplorerPage() {
               Toei / GTFS
             </button>
             <button
-              onClick={() => importScenarioSource("odpt")}
+              onClick={() =>
+                importScenarioSource(selectedScenarioOperator === "tokyu" ? "odpt" : "gtfs")
+              }
               disabled={!activeScenarioId || assignmentSavingRouteId !== ""}
               className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 disabled:opacity-50"
             >
-              {assignmentSavingRouteId === "import:odpt" ? "Importing ODPT..." : "Import Tokyu ODPT"}
+              {assignmentSavingRouteId.startsWith("import:")
+                ? "同期中..."
+                : "公開情報から同期更新"}
             </button>
             <button
-              onClick={() => importScenarioSource("gtfs")}
-              disabled={!activeScenarioId || assignmentSavingRouteId !== ""}
+              onClick={applyLatestDiff}
+              disabled={!activeScenarioId || !latestDiffSessionId || assignmentSavingRouteId !== ""}
               className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 disabled:opacity-50"
             >
-              {assignmentSavingRouteId === "import:gtfs" ? "Importing GTFS..." : "Import Toei GTFS"}
+              {assignmentSavingRouteId === "sync:apply" ? "反映中..." : "差分を反映"}
             </button>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <span>現在ソース: {selectedScenarioOperator === "tokyu" ? "Tokyu / ODPT" : "Toei / GTFS"}</span>
+          <button
+            onClick={() =>
+              importScenarioSource(selectedScenarioOperator === "tokyu" ? "odpt" : "gtfs")
+            }
+            disabled={!activeScenarioId || assignmentSavingRouteId !== ""}
+            className="rounded border border-slate-300 bg-white px-2 py-1 font-medium text-slate-700 disabled:opacity-50"
+          >
+            差分確認を更新
+          </button>
+          {syncMessage && <span className="text-emerald-700">{syncMessage}</span>}
         </div>
 
         {explorerOverview && (
@@ -1144,6 +1225,63 @@ export function OdptExplorerPage() {
                 <div className="mt-1 text-lg font-semibold text-slate-800">{value}</div>
               </div>
             ))}
+          </div>
+        )}
+
+        {latestDiffSummary && (
+          <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-700">差分サマリー</p>
+                <p className="text-xs text-slate-500">
+                  反映前に entity 単位の差分を確認できます。
+                </p>
+              </div>
+              <span className="text-xs text-slate-500">session: {latestDiffSessionId}</span>
+            </div>
+            <div className="grid gap-3 md:grid-cols-4">
+              {[
+                ["新規", latestDiffSummary.new_count],
+                ["変更", latestDiffSummary.changed_count],
+                ["削除候補", latestDiffSummary.deleted_candidate_count],
+                ["Conflict", latestDiffSummary.conflict_count],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded border border-amber-200 bg-white px-3 py-2">
+                  <div className="text-[11px] text-slate-500">{label}</div>
+                  <div className="text-lg font-semibold text-slate-800">{value}</div>
+                </div>
+              ))}
+            </div>
+            <div className="overflow-auto rounded border border-amber-200 bg-white">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-amber-50">
+                  <tr>
+                    <th className="px-3 py-2 font-medium text-slate-500">Entity</th>
+                    <th className="px-3 py-2 font-medium text-slate-500">Name</th>
+                    <th className="px-3 py-2 font-medium text-slate-500">Type</th>
+                    <th className="px-3 py-2 font-medium text-slate-500">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {latestDiffItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-3 text-slate-500">
+                        差分はありません。
+                      </td>
+                    </tr>
+                  ) : (
+                    latestDiffItems.map((item) => (
+                      <tr key={item.id} className="border-t border-slate-100">
+                        <td className="px-3 py-2 text-slate-600">{item.entity_type}</td>
+                        <td className="px-3 py-2 text-slate-700">{item.display_name}</td>
+                        <td className="px-3 py-2 text-slate-600">{item.change_type}</td>
+                        <td className="px-3 py-2 text-slate-600">{item.suggested_action}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
