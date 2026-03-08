@@ -48,6 +48,10 @@ export const vehicleKeys = {
 
 export const routeKeys = {
   all: (scenarioId: string) => ["routes", scenarioId] as const,
+  filtered: (
+    scenarioId: string,
+    filters: { depotId?: string; operator?: string },
+  ) => ["routes", scenarioId, filters] as const,
   detail: (scenarioId: string, routeId: string) =>
     ["routes", scenarioId, routeId] as const,
 };
@@ -289,10 +293,13 @@ export function useDeleteVehicleTemplate(scenarioId: string) {
 
 // ── Route queries ─────────────────────────────────────────────
 
-export function useRoutes(scenarioId: string) {
+export function useRoutes(
+  scenarioId: string,
+  filters?: { depotId?: string; operator?: string },
+) {
   return useQuery({
-    queryKey: routeKeys.all(scenarioId),
-    queryFn: () => routeApi.list(scenarioId),
+    queryKey: filters ? routeKeys.filtered(scenarioId, filters) : routeKeys.all(scenarioId),
+    queryFn: () => routeApi.list(scenarioId, filters),
     enabled: !!scenarioId,
   });
 }

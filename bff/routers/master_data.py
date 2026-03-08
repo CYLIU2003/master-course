@@ -396,6 +396,14 @@ class UpdateRouteBody(BaseModel):
     enabled: Optional[bool] = None
 
 
+class UpsertRouteDepotAssignmentBody(BaseModel):
+    depotId: Optional[str] = None
+    assignmentType: str = "manual_override"
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    reason: str = ""
+    sourceRefs: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class ImportOdptRoutesBody(BaseModel):
     operator: str = DEFAULT_OPERATOR
     dump: bool = True
@@ -405,6 +413,38 @@ class ImportOdptRoutesBody(BaseModel):
 
 class ImportGtfsRoutesBody(BaseModel):
     feedPath: str = DEFAULT_GTFS_FEED_PATH
+
+
+def _build_explorer_overview(scenario_id: str, operator: Optional[str]) -> Dict[str, Any]:
+    routes = store.list_routes(scenario_id, operator=operator)
+    assignments = store.list_route_depot_assignments(scenario_id, operator=operator)
+    unresolved_assignments = sum(1 for item in assignments if not item.get("depotId"))
+    routes_with_stops = sum(1 for route in routes if len(route.get("stopSequence") or []) > 0)
+    routes_with_timetable = sum(1 for route in routes if int(route.get("tripCount") or 0) > 0)
+    import_sources = (
+        store.get_route_import_meta(scenario_id),
+        store.get_stop_import_meta(scenario_id),
+        store.get_timetable_import_meta(scenario_id),
+        store.get_stop_timetable_import_meta(scenario_id),
+    )
+    warning_count = 0
+    for meta_group in import_sources:
+        for meta in meta_group.values():
+            warning_count += len(list((meta or {}).get("warnings") or []))
+    return {
+        "routeCount": len(routes),
+        "routeWithDepotCount": len(routes) - unresolved_assignments,
+        "routeWithStopsCount": routes_with_stops,
+        "routeWithTimetableCount": routes_with_timetable,
+        "unresolvedDepotAssignmentCount": unresolved_assignments,
+        "warningCount": warning_count,
+        "imports": {
+            "routes": store.get_route_import_meta(scenario_id),
+            "stops": store.get_stop_import_meta(scenario_id),
+            "timetable": store.get_timetable_import_meta(scenario_id),
+            "stopTimetables": store.get_stop_timetable_import_meta(scenario_id),
+        },
+    }
 
 
 # ── Stop endpoints ──────────────────────────────────────────────
@@ -500,9 +540,13 @@ def import_gtfs_stops(scenario_id: str, body: ImportGtfsStopsBody) -> Dict[str, 
 
 
 @router.get("/scenarios/{scenario_id}/routes")
-def list_routes(scenario_id: str) -> Dict[str, Any]:
+def list_routes(
+    scenario_id: str,
+    depot_id: Optional[str] = Query(None, alias="depotId"),
+    operator: Optional[str] = Query(None),
+) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    items = store.list_routes(scenario_id)
+    items = store.list_routes(scenario_id, depot_id=depot_id, operator=operator)
     return {
         "items": items,
         "total": len(items),
@@ -619,6 +663,46 @@ def import_gtfs_routes(scenario_id: str, body: ImportGtfsRoutesBody) -> Dict[str
         "allRoutesTotal": len(all_routes),
         "meta": import_meta,
     }
+
+
+@router.get("/scenarios/{scenario_id}/explorer/overview")
+def explorer_overview(
+    scenario_id: str,
+    operator: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    return {"item": _build_explorer_overview(scenario_id, operator)}
+
+
+@router.get("/scenarios/{scenario_id}/explorer/depot-assignments")
+def list_explorer_depot_assignments(
+    scenario_id: str,
+    operator: Optional[str] = Query(None),
+    unresolved_only: bool = Query(False, alias="unresolvedOnly"),
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    items = store.list_route_depot_assignments(
+        scenario_id,
+        operator=operator,
+        unresolved_only=unresolved_only,
+    )
+    return {"items": items, "total": len(items)}
+
+
+@router.patch("/scenarios/{scenario_id}/explorer/depot-assignments/{route_id}")
+def patch_explorer_depot_assignment(
+    scenario_id: str,
+    route_id: str,
+    body: UpsertRouteDepotAssignmentBody,
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    try:
+        item = store.upsert_route_depot_assignment(scenario_id, route_id, body.model_dump())
+    except KeyError:
+        raise _not_found("Route", route_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"item": item}
 
 
 # ── Permission Pydantic models ─────────────────────────────────

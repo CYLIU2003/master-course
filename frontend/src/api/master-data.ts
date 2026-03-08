@@ -128,8 +128,16 @@ export const vehicleTemplateApi = {
 // ── Routes ────────────────────────────────────────────────────
 
 export const routeApi = {
-  list: (scenarioId: string) =>
-    api.get<RoutesResponse>(`/scenarios/${scenarioId}/routes`),
+  list: (
+    scenarioId: string,
+    params?: { depotId?: string; operator?: string },
+  ) => {
+    const query = new URLSearchParams();
+    if (params?.depotId) query.set("depotId", params.depotId);
+    if (params?.operator) query.set("operator", params.operator);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return api.get<RoutesResponse>(`/scenarios/${scenarioId}/routes${suffix}`);
+  },
 
   get: (scenarioId: string, routeId: string) =>
     api.get<RouteDetailResponse>(`/scenarios/${scenarioId}/routes/${routeId}`),
