@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from bff.services.gtfs_import import DEFAULT_GTFS_FEED_PATH
 from bff.services.odpt_routes import DEFAULT_OPERATOR
+from bff.services import runtime_catalog
 from bff.services import transit_catalog
 from bff.services import transit_db
 
@@ -22,6 +23,10 @@ class RefreshOdptSnapshotBody(BaseModel):
 
 class RefreshGtfsSnapshotBody(BaseModel):
     feedPath: str = DEFAULT_GTFS_FEED_PATH
+
+
+class RefreshRuntimeSnapshotBody(BaseModel):
+    snapshotId: Optional[str] = None
 
 
 @router.get("/catalog/snapshots")
@@ -47,13 +52,47 @@ def refresh_catalog_gtfs(body: RefreshGtfsSnapshotBody) -> Dict[str, Any]:
     return {"item": snapshot}
 
 
+@router.get("/catalog/runtime-snapshots")
+def list_runtime_snapshots() -> Dict[str, Any]:
+    items = runtime_catalog.list_runtime_snapshots()
+    return {
+        "items": items,
+        "total": len(items),
+        "latestSnapshotId": runtime_catalog.get_latest_runtime_snapshot_id(),
+    }
+
+
+@router.get("/catalog/runtime-snapshots/{snapshot_id}")
+def get_runtime_snapshot(snapshot_id: str) -> Dict[str, Any]:
+    try:
+        bundle = runtime_catalog.load_runtime_snapshot(snapshot_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {"item": bundle}
+
+
+@router.post("/catalog/refresh/runtime")
+def refresh_runtime_snapshot(
+    body: Optional[RefreshRuntimeSnapshotBody] = None,
+) -> Dict[str, Any]:
+    try:
+        bundle = runtime_catalog.load_runtime_snapshot(
+            (body or RefreshRuntimeSnapshotBody()).snapshotId
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {"item": bundle}
+
+
 @router.get("/catalog/routes")
 def list_catalog_routes(
     snapshot_key: str = Query(..., alias="snapshotKey"),
 ) -> Dict[str, Any]:
     snapshot = transit_catalog.get_snapshot(snapshot_key)
     if snapshot is None:
-        raise HTTPException(status_code=404, detail=f"Snapshot '{snapshot_key}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Snapshot '{snapshot_key}' not found"
+        )
     items = transit_catalog.list_route_payload_summaries(snapshot_key)
     return {
         "items": items,
@@ -71,7 +110,9 @@ def get_catalog_route(
 ) -> Dict[str, Any]:
     snapshot = transit_catalog.get_snapshot(snapshot_key)
     if snapshot is None:
-        raise HTTPException(status_code=404, detail=f"Snapshot '{snapshot_key}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Snapshot '{snapshot_key}' not found"
+        )
     payload = transit_catalog.get_route_payload(snapshot_key, route_id)
     if payload is None:
         raise HTTPException(
@@ -89,6 +130,7 @@ def get_catalog_route(
 # ---------------------------------------------------------------------------
 # Per-operator SQLite DB endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.get("/catalog/operators")
 def list_operators() -> Dict[str, Any]:

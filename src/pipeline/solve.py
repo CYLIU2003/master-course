@@ -463,6 +463,7 @@ def solve_problem_data(
     mode: str = "mode_milp_only",
     time_limit_seconds: float = 300.0,
     mip_gap: float = 0.01,
+    random_seed: int = 42,
     output_dir: str = "outputs",
 ) -> dict:
     """
@@ -476,6 +477,7 @@ def solve_problem_data(
         "time_limit_sec": time_limit_seconds,
         "mip_gap": mip_gap,
         "output_dir": output_dir,
+        "alns": {"seed": random_seed},
     }
     run_mode = mode or "mode_milp_only"
     dispatch_report = getattr(data, "_dispatch_preprocess_report", None)

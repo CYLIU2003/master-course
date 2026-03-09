@@ -48,9 +48,11 @@ from bff.services.odpt_timetable import (
     normalize_timetable_row_indexes,
     summarize_timetable_import,
 )
+from bff.services import runtime_catalog
 from bff.services import transit_catalog
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
+from src.tokyubus_gtfs.constants import DEFAULT_TURNAROUND_SEC
 
 router = APIRouter(tags=["scenarios"])
 _default_scenario_lock = Lock()
@@ -187,7 +189,7 @@ def _build_timetable_summary(
             }
             for bucket in by_service.values()
         ],
-        key=lambda item: item["serviceId"],
+        key=lambda item: str(item.get("serviceId") or ""),
     )
 
     route_summaries = sorted(
@@ -203,7 +205,10 @@ def _build_timetable_summary(
             for bucket in by_route.values()
             if bucket["routeId"]
         ],
-        key=lambda item: (item["routeId"], item["firstDeparture"] or ""),
+        key=lambda item: (
+            str(item.get("routeId") or ""),
+            str(item.get("firstDeparture") or ""),
+        ),
     )
 
     return {
@@ -381,6 +386,13 @@ class ImportGtfsStopTimetableBody(BaseModel):
     reset: bool = True
 
 
+class ImportRuntimeSnapshotBody(BaseModel):
+    snapshotId: Optional[str] = None
+    importDeadheadRules: bool = True
+    importTurnaroundRules: bool = True
+    resetRuntimeSource: bool = True
+
+
 # ── Helpers ────────────────────────────────────────────────────
 
 
@@ -492,6 +504,64 @@ def _build_gtfs_import_meta(
         "snapshotMode": meta.get("snapshotMode"),
         "quality": quality,
     }
+
+
+def _build_runtime_import_meta(
+    *,
+    bundle: Dict[str, Any],
+    quality: Dict[str, Any],
+    resource_type: str,
+) -> Dict[str, Any]:
+    meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
+    return {
+        "source": "gtfs_runtime",
+        "operator": meta.get("operator") or "tokyu",
+        "resourceType": resource_type,
+        "generatedAt": meta.get("generatedAt"),
+        "warnings": meta.get("warnings", []),
+        "snapshotId": meta.get("snapshotId"),
+        "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
+        "snapshotMode": meta.get("snapshotMode"),
+        "canonicalDir": meta.get("canonicalDir"),
+        "featuresDir": meta.get("featuresDir"),
+        "featureCounts": meta.get("featureCounts") or {},
+        "quality": quality,
+    }
+
+
+def _runtime_deadhead_rules(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
+    items = list(((bundle.get("features") or {}).get("deadhead_candidates") or []))
+    return [
+        {
+            "from_stop": str(item.get("from_stop_id") or ""),
+            "to_stop": str(item.get("to_stop_id") or ""),
+            "travel_time_min": int(round(float(item.get("estimated_time_min") or 0.0))),
+            "distance_km": float(item.get("estimated_road_km") or 0.0),
+        }
+        for item in items
+        if item.get("from_stop_id") is not None and item.get("to_stop_id") is not None
+    ]
+
+
+def _runtime_turnaround_rules(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
+    route_items = list(bundle.get("routes") or [])
+    turnaround_min = max(1, int(round(DEFAULT_TURNAROUND_SEC / 60)))
+    stop_ids = {
+        str(stop_id)
+        for route in route_items
+        for stop_id in (route.get("startStopId"), route.get("endStopId"))
+        if stop_id
+    }
+    if not stop_ids:
+        stop_ids = {
+            str(item.get("id"))
+            for item in list(bundle.get("stops") or [])
+            if item.get("id") is not None
+        }
+    return [
+        {"stop_id": stop_id, "min_turnaround_min": turnaround_min}
+        for stop_id in sorted(stop_ids)
+    ]
 
 
 # ── Scenario CRUD ──────────────────────────────────────────────
@@ -955,6 +1025,134 @@ def import_timetable_gtfs(
         return _import_gtfs_timetable_data(scenario_id, body)
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.post("/scenarios/{scenario_id}/import-runtime-snapshot")
+def import_runtime_snapshot(
+    scenario_id: str,
+    body: Optional[ImportRuntimeSnapshotBody] = None,
+) -> Dict[str, Any]:
+    try:
+        store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    request = body or ImportRuntimeSnapshotBody()
+    try:
+        bundle = runtime_catalog.load_runtime_snapshot(request.snapshotId)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    stops = list(bundle.get("stops") or [])
+    routes = list(bundle.get("routes") or [])
+    timetable_rows = list(bundle.get("timetable_rows") or [])
+    stop_timetables = list(bundle.get("stop_timetables") or [])
+    calendar_entries = list(bundle.get("calendar_entries") or [])
+    calendar_date_entries = list(bundle.get("calendar_date_entries") or [])
+    features = dict(bundle.get("features") or {})
+
+    stop_import_meta = _build_runtime_import_meta(
+        bundle=bundle,
+        quality={"stopCount": len(stops)},
+        resource_type="RuntimeStop",
+    )
+    route_import_meta = _build_runtime_import_meta(
+        bundle=bundle,
+        quality={"routeCount": len(routes)},
+        resource_type="RuntimeRoute",
+    )
+    timetable_import_meta = _build_runtime_import_meta(
+        bundle=bundle,
+        quality=summarize_gtfs_timetable_import(
+            timetable_rows,
+            {
+                "meta": bundle.get("meta") or {},
+                "stop_timetable_count": len(stop_timetables),
+            },
+        ),
+        resource_type="RuntimeTrip",
+    )
+    stop_timetable_import_meta = _build_runtime_import_meta(
+        bundle=bundle,
+        quality=summarize_gtfs_stop_timetable_import(stop_timetables, bundle),
+        resource_type="RuntimeStopTimetable",
+    )
+
+    store.replace_stops_from_source(
+        scenario_id,
+        "gtfs_runtime",
+        stops,
+        import_meta=stop_import_meta,
+    )
+    store.replace_routes_from_source(
+        scenario_id,
+        "gtfs_runtime",
+        routes,
+        import_meta=route_import_meta,
+    )
+    merged_rows = store.upsert_timetable_rows_from_source(
+        scenario_id,
+        "gtfs_runtime",
+        timetable_rows,
+        replace_existing_source=request.resetRuntimeSource,
+    )
+    store.set_field(
+        scenario_id,
+        "timetable_rows",
+        normalize_timetable_row_indexes(merged_rows),
+        invalidate_dispatch=True,
+    )
+    store.set_timetable_import_meta(scenario_id, "gtfs_runtime", timetable_import_meta)
+    store.upsert_stop_timetables_from_source(
+        scenario_id,
+        "gtfs_runtime",
+        stop_timetables,
+        replace_existing_source=request.resetRuntimeSource,
+    )
+    store.set_stop_timetable_import_meta(
+        scenario_id,
+        "gtfs_runtime",
+        stop_timetable_import_meta,
+    )
+    if calendar_entries:
+        store.set_calendar(scenario_id, calendar_entries)
+    if calendar_date_entries or request.resetRuntimeSource:
+        store.set_calendar_dates(scenario_id, calendar_date_entries)
+
+    if request.importDeadheadRules:
+        store.set_deadhead_rules(scenario_id, _runtime_deadhead_rules(bundle))
+    if request.importTurnaroundRules:
+        store.set_turnaround_rules(scenario_id, _runtime_turnaround_rules(bundle))
+
+    source_snapshot = {
+        "source": "gtfs_runtime",
+        "snapshotId": (bundle.get("meta") or {}).get("snapshotId"),
+        "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
+        "canonicalDir": (bundle.get("meta") or {}).get("canonicalDir"),
+        "featuresDir": (bundle.get("meta") or {}).get("featuresDir"),
+        "featureCounts": (bundle.get("meta") or {}).get("featureCounts") or {},
+    }
+    store.set_field(scenario_id, "source_snapshot", source_snapshot)
+    store.set_field(scenario_id, "runtime_features", features)
+
+    return {
+        "snapshot": source_snapshot,
+        "counts": {
+            "stops": len(stops),
+            "routes": len(routes),
+            "timetableRows": len(timetable_rows),
+            "stopTimetables": len(stop_timetables),
+            "calendarEntries": len(calendar_entries),
+            "deadheadRules": len(store.get_deadhead_rules(scenario_id) or []),
+            "turnaroundRules": len(store.get_turnaround_rules(scenario_id) or []),
+        },
+        "imports": {
+            "stops": stop_import_meta,
+            "routes": route_import_meta,
+            "timetable": timetable_import_meta,
+            "stopTimetables": stop_timetable_import_meta,
+        },
+    }
 
 
 @router.get("/scenarios/{scenario_id}/stop-timetables")

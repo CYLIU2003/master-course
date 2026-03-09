@@ -59,6 +59,8 @@ def _default_v1_2_fields() -> Dict[str, Any]:
         "problemdata_build_audit": None,
         "optimization_audit": None,
         "simulation_audit": None,
+        "source_snapshot": None,
+        "runtime_features": None,
     }
 
 
@@ -430,13 +432,15 @@ def delete_scenario(scenario_id: str) -> None:
         _save_app_context(context)
 
 
-def duplicate_scenario(scenario_id: str, *, name: Optional[str] = None) -> Dict[str, Any]:
+def duplicate_scenario(
+    scenario_id: str, *, name: Optional[str] = None
+) -> Dict[str, Any]:
     doc = _load(scenario_id)
     new_id = _new_id()
     now = _now_iso()
     cloned = json.loads(json.dumps(doc))
     cloned["meta"]["id"] = new_id
-    cloned["meta"]["name"] = name or f'{doc["meta"].get("name") or "Scenario"} Copy'
+    cloned["meta"]["name"] = name or f"{doc['meta'].get('name') or 'Scenario'} Copy"
     cloned["meta"]["createdAt"] = now
     cloned["meta"]["updatedAt"] = now
     cloned["meta"]["status"] = "draft"
@@ -884,15 +888,21 @@ def list_routes(
             continue
         route_id = route.get("id")
         assignment = assignments.get(str(route_id)) if route_id is not None else None
-        effective_depot_id = assignment.get("depotId") if assignment else route.get("depotId")
+        effective_depot_id = (
+            assignment.get("depotId") if assignment else route.get("depotId")
+        )
         if depot_id and effective_depot_id != depot_id:
             continue
         items.append(
             {
                 **route,
                 "depotId": effective_depot_id,
-                "assignmentType": assignment.get("assignmentType") if assignment else None,
-                "assignmentConfidence": assignment.get("confidence") if assignment else None,
+                "assignmentType": assignment.get("assignmentType")
+                if assignment
+                else None,
+                "assignmentConfidence": assignment.get("confidence")
+                if assignment
+                else None,
                 "assignmentReason": assignment.get("reason") if assignment else None,
             }
         )
@@ -1022,7 +1032,9 @@ def list_route_depot_assignments(
                 "stopCount": len(list(route.get("stopSequence") or [])),
                 "depotId": assignment.get("depotId") if assignment else None,
                 "depotName": depot.get("name") if depot else None,
-                "assignmentType": assignment.get("assignmentType") if assignment else None,
+                "assignmentType": assignment.get("assignmentType")
+                if assignment
+                else None,
                 "confidence": assignment.get("confidence") if assignment else None,
                 "reason": assignment.get("reason") if assignment else "",
                 "sourceRefs": assignment.get("sourceRefs") if assignment else [],
@@ -1343,22 +1355,20 @@ def set_deadhead_rules(
     scenario_id: str, rules: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     doc = _load(scenario_id)
+
+    def _optional_float(value: Any) -> Optional[float]:
+        if value in (None, ""):
+            return None
+        return float(value)
+
     sanitized = [
         {
             "from_stop": str(item.get("from_stop")),
             "to_stop": str(item.get("to_stop")),
             "travel_time_min": int(item.get("travel_time_min") or 0),
             "distance_km": float(item.get("distance_km") or 0.0),
-            "energy_kwh_bev": (
-                float(item.get("energy_kwh_bev"))
-                if item.get("energy_kwh_bev") is not None
-                else None
-            ),
-            "fuel_l_ice": (
-                float(item.get("fuel_l_ice"))
-                if item.get("fuel_l_ice") is not None
-                else None
-            ),
+            "energy_kwh_bev": _optional_float(item.get("energy_kwh_bev")),
+            "fuel_l_ice": _optional_float(item.get("fuel_l_ice")),
         }
         for item in rules
         if item.get("from_stop") is not None and item.get("to_stop") is not None
