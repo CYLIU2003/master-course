@@ -52,13 +52,13 @@ export function MasterCenterPanel({ scenarioId }: Props) {
   if (viewMode === "split") {
     if (activeTab === "stops") {
       return (
-        <div className="p-4">
+        <div className="min-h-0 p-4">
           <StopTable scenarioId={scenarioId} />
         </div>
       );
     }
     return (
-      <div className="flex h-full">
+      <div className="flex h-full min-h-0">
         <div className="flex-1 overflow-y-auto border-r border-border p-4">
           {activeTab === "depots" && <DepotTableNew scenarioId={scenarioId} />}
           {activeTab === "vehicles" && (
@@ -82,13 +82,13 @@ export function MasterCenterPanel({ scenarioId }: Props) {
   switch (activeTab) {
     case "depots":
       return (
-        <div className="p-4">
+        <div className="min-h-0 p-4">
           <DepotTableNew scenarioId={scenarioId} />
         </div>
       );
     case "vehicles":
       return (
-        <div className="p-4">
+        <div className="min-h-0 p-4">
           <VehicleTableNew
             scenarioId={scenarioId}
             depotId={selectedDepotId ?? undefined}
@@ -97,13 +97,13 @@ export function MasterCenterPanel({ scenarioId }: Props) {
       );
     case "routes":
       return (
-        <div className="p-4">
+        <div className="min-h-0 p-4">
           <RouteTableNew scenarioId={scenarioId} />
         </div>
       );
     case "stops":
       return (
-        <div className="p-4">
+        <div className="min-h-0 p-4">
           <StopTable scenarioId={scenarioId} />
         </div>
       );

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from typing import Any, Dict, List, Optional, Sequence
 
 DEFAULT_OPERATOR = "odpt.Operator:TokyuBus"
@@ -45,6 +46,12 @@ def _format_counts(counts: Dict[str, Any]) -> str:
         return "-"
     parts = [f"{key}={value}" for key, value in counts.items()]
     return ", ".join(parts)
+
+
+def _fast_ingest():
+    from tools import fast_catalog_ingest
+
+    return fast_catalog_ingest
 
 
 def _build_odpt_import_meta(
@@ -400,6 +407,23 @@ def _cmd_list_snapshots(_: argparse.Namespace) -> int:
 
 
 def _cmd_refresh(args: argparse.Namespace) -> int:
+    if getattr(args, "fast_path", False):
+        if args.source != "odpt":
+            raise RuntimeError("--fast-path refresh is currently supported for ODPT only")
+        out_dir = args.out_dir or "./data/catalog-fast"
+        fast_args = [
+            "fetch-odpt",
+            "--out-dir",
+            out_dir,
+            "--concurrency",
+            str(args.concurrency),
+            "--build-bundle",
+        ]
+        if args.resume:
+            fast_args.append("--resume")
+        if args.skip_stop_timetables:
+            fast_args.append("--skip-stop-timetables")
+        return _fast_ingest().main(fast_args)
     _get_or_load_bundle(
         args.source,
         operator=args.operator,
@@ -412,6 +436,60 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
 
 
 def _cmd_sync(args: argparse.Namespace) -> int:
+    if getattr(args, "fast_path", False):
+        if args.source == "gtfs":
+            fast_args = [
+                "sync-gtfs",
+                "--scenario",
+                args.scenario,
+                "--resources",
+                args.resources,
+                "--feed-path",
+                args.feed_path,
+                "--ttl-sec",
+                str(args.ttl_sec),
+            ]
+            if args.refresh:
+                fast_args.append("--refresh")
+            if args.force_refresh:
+                fast_args.append("--force-refresh")
+            if args.keep_existing_source:
+                fast_args.append("--keep-existing-source")
+            return _fast_ingest().main(fast_args)
+
+        out_dir = args.out_dir or "./data/catalog-fast"
+        started = time.perf_counter()
+        fast_args = [
+            "fetch-odpt",
+            "--out-dir",
+            out_dir,
+            "--concurrency",
+            str(args.concurrency),
+            "--build-bundle",
+        ]
+        if args.resume:
+            fast_args.append("--resume")
+        if args.skip_stop_timetables:
+            fast_args.append("--skip-stop-timetables")
+        rc = _fast_ingest().main(fast_args)
+        if rc != 0:
+            return rc
+        bundle_path = _fast_ingest().Path(out_dir).resolve() / "bundle.json"
+        bundle = _fast_ingest()._json_load(bundle_path)
+        scenario_id = _resolve_scenario_id(args.scenario, args.create_scenario_name, args.mode)
+        resources = _parse_resources(args.resources)
+        _sync_bundle_to_scenario(
+            scenario_id=scenario_id,
+            source="odpt",
+            bundle=bundle,
+            operator=args.operator,
+            feed_path=args.feed_path,
+            resources=resources,
+            reset_existing=not args.keep_existing_source,
+        )
+        print(f"[done] scenario={scenario_id} elapsed={time.perf_counter() - started:.2f}s")
+        return 0
+
     scenario_id = _resolve_scenario_id(args.scenario, args.create_scenario_name, args.mode)
     resources = _parse_resources(args.resources)
     bundle = _get_or_load_bundle(
@@ -519,6 +597,11 @@ def _build_parser() -> argparse.ArgumentParser:
     refresh_parser.add_argument("--feed-path", default=DEFAULT_GTFS_FEED_PATH)
     refresh_parser.add_argument("--ttl-sec", type=int, default=3600)
     refresh_parser.add_argument("--force-refresh", action="store_true")
+    refresh_parser.add_argument("--fast-path", action="store_true")
+    refresh_parser.add_argument("--out-dir", default="./data/catalog-fast")
+    refresh_parser.add_argument("--concurrency", type=int, default=32)
+    refresh_parser.add_argument("--resume", action="store_true")
+    refresh_parser.add_argument("--skip-stop-timetables", action="store_true")
 
     sync_parser = subparsers.add_parser("sync", help="Refresh catalog and sync data into a scenario")
     sync_parser.add_argument("source", choices=["odpt", "gtfs"])
@@ -532,6 +615,11 @@ def _build_parser() -> argparse.ArgumentParser:
     sync_parser.add_argument("--refresh", action="store_true")
     sync_parser.add_argument("--force-refresh", action="store_true")
     sync_parser.add_argument("--keep-existing-source", action="store_true")
+    sync_parser.add_argument("--fast-path", action="store_true")
+    sync_parser.add_argument("--out-dir", default="./data/catalog-fast")
+    sync_parser.add_argument("--concurrency", type=int, default=32)
+    sync_parser.add_argument("--resume", action="store_true")
+    sync_parser.add_argument("--skip-stop-timetables", action="store_true")
     return parser
 
 

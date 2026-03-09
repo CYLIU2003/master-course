@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "canonical/route_stop.schema.json",
+  "title": "CanonicalRouteStop",
+  "description": "A stop within a route's ordered stop sequence.",
+  "type": "object",
+  "required": ["route_id", "stop_id", "stop_sequence"],
+  "properties": {
+    "route_id": { "type": "string" },
+    "stop_id": { "type": "string" },
+    "stop_sequence": { "type": "integer", "minimum": 0 },
+    "stop_name": { "type": "string" },
+    "odpt_pattern_id": { "type": "string" },
+    "distance_from_start_m": { "type": ["number", "null"], "minimum": 0 }
+  }
+}

@@ -26,13 +26,13 @@ export function AppLayout() {
   }, [scenarioId, setActiveScenarioId]);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-screen min-h-0 flex-col overflow-hidden">
       <AppBootstrapManager scenarioId={scenarioId ?? null} />
       <BootSplashOverlay />
       <Header />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar open={sidebarOpen} scenarioId={scenarioId ?? ""} />
-        <main className="flex-1 overflow-y-auto bg-surface p-6">
+        <main className="min-h-0 flex-1 overflow-y-auto bg-surface p-6">
           <Outlet />
         </main>
       </div>

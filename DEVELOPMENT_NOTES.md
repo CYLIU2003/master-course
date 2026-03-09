@@ -95,6 +95,14 @@ tests/       回帰テスト
     - import / public-data fetch を「保存済み snapshot 優先、明示時だけ refresh」に変更。
     - snapshot 不在時は `catalog_update_app.py` を案内するエラーを返す。
 
+- **実装（Fast ingest 追加）**:
+  - `tools/fast_catalog_ingest.py`
+    - ODPT の raw JSON を async + http2 + retry/backoff で取得する別 CLI を追加。
+    - `raw/*.json` と `raw/*.ndjson`、checkpoint、benchmark、`bundle.json`、`operational_dataset.json` を生成。
+    - 途中中断後は resource 単位で resume 可能。
+  - `tests/test_fast_catalog_ingest.py`
+    - 最小 raw snapshot から bundle/operational_dataset を再構築できることを確認する回帰テストを追加。
+
 - **実装（Perf / Worker）**:
   - `frontend/src/utils/perf/`
     - `useRenderTrace`, `useMeasuredMemo`, `measureAsyncStep`, `useTabSwitchTrace`, `DebugPerfOverlay`
@@ -370,3 +378,7 @@ master-course/
 ├── docs/reproduction/mode_A_reproduction_spec.md
 └── run_case.py                    ← CLI実行ハーネス
 ```
+- 2026-03-09
+  - `catalog_update_app.py` の `--fast-path` 運用を README に明記し、`tools/benchmark_catalog_ingest.py` / `tools/profile_catalog_ingest.py` の使用例を追記。
+  - 開発用 perf は明示 opt-in に変更。`?debugPerf=1` か `localStorage["debug-perf"]="1"` が無い限り observer / entry push を止め、通常の開発表示負荷を下げた。
+  - `RouteTableNew` を family group 付きの virtualized list へ切り替え、planning の route 一覧でも全件 DOM 描画を避ける構成にした。

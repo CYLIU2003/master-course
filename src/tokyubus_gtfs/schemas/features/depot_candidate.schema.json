@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "features/depot_candidate.schema.json",
+  "title": "DepotCandidate",
+  "description": "Research feature: potential depot/garage location identified by heuristics.",
+  "type": "object",
+  "required": ["stop_id"],
+  "properties": {
+    "stop_id": { "type": "string" },
+    "stop_name": { "type": "string" },
+    "lat": { "type": ["number", "null"] },
+    "lon": { "type": ["number", "null"] },
+    "terminal_route_count": { "type": "integer", "minimum": 0 },
+    "depot_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "reasons": { "type": "array", "items": { "type": "string" } }
+  }
+}

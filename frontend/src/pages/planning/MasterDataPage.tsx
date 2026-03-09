@@ -19,19 +19,21 @@ export function MasterDataPage() {
   if (!scenarioId) return null;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 flex-col">
       {/* Header + Tabs + Mode switch */}
       <MasterDataHeader scenarioId={scenarioId} />
       <MasterDataTabs />
 
       {/* 3-pane body */}
-      <TabWarmBoundary tab="planning" title="Planning tab を準備しています">
-        <ThreePaneLayout
-          left={<MasterLeftPanel scenarioId={scenarioId} />}
-          center={<MasterCenterPanel scenarioId={scenarioId} />}
-          right={<MasterEditorDrawerHost scenarioId={scenarioId} />}
-        />
-      </TabWarmBoundary>
+      <div className="min-h-0 flex-1">
+        <TabWarmBoundary tab="planning" title="Planning tab を準備しています">
+          <ThreePaneLayout
+            left={<MasterLeftPanel scenarioId={scenarioId} />}
+            center={<MasterCenterPanel scenarioId={scenarioId} />}
+            right={<MasterEditorDrawerHost scenarioId={scenarioId} />}
+          />
+        </TabWarmBoundary>
+      </div>
     </div>
   );
 }

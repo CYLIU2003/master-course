@@ -1,6 +1,6 @@
 export interface PerfEntry {
   id: string;
-  kind: "render" | "async" | "tab" | "selector";
+  kind: "render" | "async" | "tab" | "selector" | "longtask" | "memory";
   label: string;
   durationMs: number;
   at: string;
@@ -9,11 +9,22 @@ export interface PerfEntry {
 const listeners = new Set<(entries: PerfEntry[]) => void>();
 let entries: PerfEntry[] = [];
 const pendingEntries = new Map<string, { kind: PerfEntry["kind"]; label: string; startedAt: number }>();
+let observersInitialized = false;
+
+declare global {
+  interface Performance {
+    memory?: {
+      usedJSHeapSize: number;
+      totalJSHeapSize: number;
+      jsHeapSizeLimit: number;
+    };
+  }
+}
 
 export function pushPerfEntry(
   entry: Omit<PerfEntry, "id" | "at">,
 ) {
-  if (!import.meta.env.DEV) {
+  if (!isPerfDebugEnabled()) {
     return;
   }
   entries = [
@@ -38,14 +49,14 @@ export function startTimedEntry(
   kind: PerfEntry["kind"],
   label: string,
 ) {
-  if (!import.meta.env.DEV) {
+  if (!isPerfDebugEnabled()) {
     return;
   }
   pendingEntries.set(id, { kind, label, startedAt: performance.now() });
 }
 
 export function completeTimedEntry(id: string) {
-  if (!import.meta.env.DEV) {
+  if (!isPerfDebugEnabled()) {
     return;
   }
   const pending = pendingEntries.get(id);
@@ -58,4 +69,49 @@ export function completeTimedEntry(id: string) {
     label: pending.label,
     durationMs: performance.now() - pending.startedAt,
   });
+}
+
+export function isPerfDebugEnabled() {
+  if (!import.meta.env.DEV || typeof window === "undefined") {
+    return false;
+  }
+  const params = new URLSearchParams(window.location.search);
+  return params.get("debugPerf") === "1" || window.localStorage.getItem("debug-perf") === "1";
+}
+
+export function initPerfObservers() {
+  if (!isPerfDebugEnabled() || observersInitialized) {
+    return;
+  }
+  observersInitialized = true;
+
+  if ("PerformanceObserver" in window) {
+    try {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          pushPerfEntry({
+            kind: "longtask",
+            label: entry.name || "longtask",
+            durationMs: entry.duration,
+          });
+        }
+      });
+      observer.observe({ entryTypes: ["longtask"] });
+    } catch {
+      // ignore unsupported observers
+    }
+  }
+
+  if (performance.memory) {
+    window.setInterval(() => {
+      const usedMb = performance.memory
+        ? performance.memory.usedJSHeapSize / 1024 / 1024
+        : 0;
+      pushPerfEntry({
+        kind: "memory",
+        label: `heap ${usedMb.toFixed(1)}MB`,
+        durationMs: usedMb,
+      });
+    }, 15000);
+  }
 }

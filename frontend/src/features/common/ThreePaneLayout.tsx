@@ -18,18 +18,18 @@ export function ThreePaneLayout({
   leftWidth = "w-56",
 }: ThreePaneLayoutProps) {
   return (
-    <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+    <div className="flex h-full min-h-0 flex-1 overflow-hidden" style={{ minHeight: 0 }}>
       {/* Left pane */}
       {left && (
         <div
-          className={`${leftWidth} shrink-0 overflow-y-auto border-r border-border bg-surface-raised`}
+          className={`${leftWidth} min-h-0 shrink-0 overflow-y-auto border-r border-border bg-surface-raised`}
         >
           {left}
         </div>
       )}
 
       {/* Center pane */}
-      <div className="flex-1 overflow-y-auto">{center}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{center}</div>
 
       {/* Right pane (drawer) */}
       {right}

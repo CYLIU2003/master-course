@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { subscribePerfEntries, type PerfEntry } from "./perf-store";
+import { isPerfDebugEnabled, subscribePerfEntries, type PerfEntry } from "./perf-store";
 
 export function DebugPerfOverlay() {
   const [entries, setEntries] = useState<PerfEntry[]>([]);
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribePerfEntries(setEntries);
@@ -11,7 +12,11 @@ export function DebugPerfOverlay() {
     };
   }, []);
 
-  if (!import.meta.env.DEV || entries.length === 0) {
+  useEffect(() => {
+    setEnabled(isPerfDebugEnabled());
+  }, []);
+
+  if (!import.meta.env.DEV || !enabled || entries.length === 0) {
     return null;
   }
 

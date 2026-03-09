@@ -1,0 +1,395 @@
+"""
+src.tokyubus_gtfs.gtfs_export — Layer C: GTFS feed writer.
+
+Reads canonical JSONL tables and writes a standard GTFS feed
+plus sidecar files for metadata that GTFS cannot represent.
+
+Output directory::
+
+    GTFS/TokyuBus-GTFS/
+        agency.txt
+        stops.txt
+        routes.txt
+        trips.txt
+        stop_times.txt
+        calendar.txt
+        feed_info.txt
+        # sidecar files
+        sidecar_route_patterns.json
+        sidecar_stop_metadata.json
+        sidecar_odpt_provenance.json
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from .constants import (
+    GTFS_FEED_LANG,
+    GTFS_FEED_PUBLISHER_NAME,
+    GTFS_FEED_PUBLISHER_URL,
+    GTFS_FEED_TIMEZONE,
+    GTFS_OUTPUT_DIR,
+    TOKYU_OPERATOR_ID,
+    TOKYU_OPERATOR_NAME,
+    TOKYU_OPERATOR_NAME_EN,
+    TOKYU_OPERATOR_URL,
+)
+
+_log = logging.getLogger(__name__)
+
+
+def _write_csv(rows: List[Dict[str, Any]], path: Path, fieldnames: List[str]) -> int:
+    """Write a list of dicts as a CSV file (GTFS standard)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    return len(rows)
+
+
+def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    items = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                items.append(json.loads(line))
+    return items
+
+
+# ---------------------------------------------------------------------------
+# GTFS file writers
+# ---------------------------------------------------------------------------
+
+
+def _write_agency(out_dir: Path) -> None:
+    rows = [
+        {
+            "agency_id": TOKYU_OPERATOR_ID,
+            "agency_name": TOKYU_OPERATOR_NAME,
+            "agency_url": TOKYU_OPERATOR_URL,
+            "agency_timezone": GTFS_FEED_TIMEZONE,
+            "agency_lang": GTFS_FEED_LANG,
+        }
+    ]
+    _write_csv(
+        rows,
+        out_dir / "agency.txt",
+        [
+            "agency_id",
+            "agency_name",
+            "agency_url",
+            "agency_timezone",
+            "agency_lang",
+        ],
+    )
+
+
+def _write_feed_info(out_dir: Path) -> None:
+    rows = [
+        {
+            "feed_publisher_name": GTFS_FEED_PUBLISHER_NAME,
+            "feed_publisher_url": GTFS_FEED_PUBLISHER_URL,
+            "feed_lang": GTFS_FEED_LANG,
+        }
+    ]
+    _write_csv(
+        rows,
+        out_dir / "feed_info.txt",
+        [
+            "feed_publisher_name",
+            "feed_publisher_url",
+            "feed_lang",
+        ],
+    )
+
+
+def _export_stops(canonical_dir: Path, out_dir: Path) -> int:
+    stops = _read_jsonl(canonical_dir / "stops.jsonl")
+    rows = []
+    for s in stops:
+        rows.append(
+            {
+                "stop_id": s.get("stop_id", ""),
+                "stop_code": s.get("stop_code", ""),
+                "stop_name": s.get("stop_name", ""),
+                "stop_lat": s.get("lat") or "",
+                "stop_lon": s.get("lon") or "",
+            }
+        )
+    count = _write_csv(
+        rows,
+        out_dir / "stops.txt",
+        [
+            "stop_id",
+            "stop_code",
+            "stop_name",
+            "stop_lat",
+            "stop_lon",
+        ],
+    )
+    _log.info("Exported %d stops to stops.txt", count)
+    return count
+
+
+def _export_routes(canonical_dir: Path, out_dir: Path) -> int:
+    routes = _read_jsonl(canonical_dir / "routes.jsonl")
+    rows = []
+    for r in routes:
+        color = (r.get("route_color") or "").lstrip("#")
+        rows.append(
+            {
+                "route_id": r.get("route_id", ""),
+                "agency_id": TOKYU_OPERATOR_ID,
+                "route_short_name": r.get("route_code", ""),
+                "route_long_name": r.get("route_name", ""),
+                "route_type": r.get("route_type", 3),
+                "route_color": color,
+            }
+        )
+    count = _write_csv(
+        rows,
+        out_dir / "routes.txt",
+        [
+            "route_id",
+            "agency_id",
+            "route_short_name",
+            "route_long_name",
+            "route_type",
+            "route_color",
+        ],
+    )
+    _log.info("Exported %d routes to routes.txt", count)
+    return count
+
+
+def _export_calendar(canonical_dir: Path, out_dir: Path) -> int:
+    services = _read_jsonl(canonical_dir / "services.jsonl")
+    rows = []
+    for s in services:
+        rows.append(
+            {
+                "service_id": s.get("service_id", ""),
+                "monday": int(s.get("monday", False)),
+                "tuesday": int(s.get("tuesday", False)),
+                "wednesday": int(s.get("wednesday", False)),
+                "thursday": int(s.get("thursday", False)),
+                "friday": int(s.get("friday", False)),
+                "saturday": int(s.get("saturday", False)),
+                "sunday": int(s.get("sunday", False)),
+                "start_date": (s.get("start_date") or "20250401").replace("-", ""),
+                "end_date": (s.get("end_date") or "20260331").replace("-", ""),
+            }
+        )
+    count = _write_csv(
+        rows,
+        out_dir / "calendar.txt",
+        [
+            "service_id",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+            "start_date",
+            "end_date",
+        ],
+    )
+    _log.info("Exported %d service calendars to calendar.txt", count)
+    return count
+
+
+def _export_trips(canonical_dir: Path, out_dir: Path) -> int:
+    trips = _read_jsonl(canonical_dir / "trips.jsonl")
+    rows = []
+    for t in trips:
+        direction_id = 0 if t.get("direction") == "outbound" else 1
+        rows.append(
+            {
+                "route_id": t.get("route_id", ""),
+                "service_id": t.get("service_id", ""),
+                "trip_id": t.get("trip_id", ""),
+                "direction_id": direction_id,
+                "trip_headsign": t.get("destination_name", ""),
+            }
+        )
+    count = _write_csv(
+        rows,
+        out_dir / "trips.txt",
+        [
+            "route_id",
+            "service_id",
+            "trip_id",
+            "direction_id",
+            "trip_headsign",
+        ],
+    )
+    _log.info("Exported %d trips to trips.txt", count)
+    return count
+
+
+def _export_stop_times(canonical_dir: Path, out_dir: Path) -> int:
+    stop_times = _read_jsonl(canonical_dir / "stop_times.jsonl")
+    rows = []
+    for st in stop_times:
+        rows.append(
+            {
+                "trip_id": st.get("trip_id", ""),
+                "arrival_time": st.get("arrival_time")
+                or st.get("departure_time")
+                or "",
+                "departure_time": st.get("departure_time")
+                or st.get("arrival_time")
+                or "",
+                "stop_id": st.get("stop_id", ""),
+                "stop_sequence": st.get("stop_sequence", 0),
+            }
+        )
+    count = _write_csv(
+        rows,
+        out_dir / "stop_times.txt",
+        [
+            "trip_id",
+            "arrival_time",
+            "departure_time",
+            "stop_id",
+            "stop_sequence",
+        ],
+    )
+    _log.info("Exported %d stop_times to stop_times.txt", count)
+    return count
+
+
+# ---------------------------------------------------------------------------
+# Sidecar files (ODPT metadata GTFS cannot represent)
+# ---------------------------------------------------------------------------
+
+
+def _write_sidecar_route_patterns(canonical_dir: Path, out_dir: Path) -> None:
+    """Sidecar: full route pattern / variant metadata."""
+    routes = _read_jsonl(canonical_dir / "routes.jsonl")
+    route_stops = _read_jsonl(canonical_dir / "route_stops.jsonl")
+
+    # Group stops by route
+    stops_by_route: Dict[str, List[Dict[str, Any]]] = {}
+    for rs in route_stops:
+        rid = rs.get("route_id", "")
+        stops_by_route.setdefault(rid, []).append(rs)
+
+    patterns = []
+    for r in routes:
+        rid = r.get("route_id", "")
+        patterns.append(
+            {
+                "route_id": rid,
+                "odpt_pattern_id": r.get("odpt_pattern_id", ""),
+                "odpt_busroute_id": r.get("odpt_busroute_id", ""),
+                "route_code": r.get("route_code", ""),
+                "route_name": r.get("route_name", ""),
+                "route_family_code": r.get("route_family_code"),
+                "route_variant_type": r.get("route_variant_type", "unknown"),
+                "canonical_direction": r.get("canonical_direction", "unknown"),
+                "classification_confidence": r.get("classification_confidence", 0.0),
+                "classification_reasons": r.get("classification_reasons", []),
+                "stop_sequence": [
+                    s.get("stop_id")
+                    for s in sorted(
+                        stops_by_route.get(rid, []),
+                        key=lambda x: x.get("stop_sequence", 0),
+                    )
+                ],
+            }
+        )
+
+    path = out_dir / "sidecar_route_patterns.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(patterns, f, ensure_ascii=False, indent=2)
+    _log.info("Wrote sidecar_route_patterns.json (%d entries)", len(patterns))
+
+
+def _write_sidecar_stop_metadata(canonical_dir: Path, out_dir: Path) -> None:
+    """Sidecar: stop coordinate provenance and ODPT metadata."""
+    stops = _read_jsonl(canonical_dir / "stops.jsonl")
+    meta = []
+    for s in stops:
+        meta.append(
+            {
+                "stop_id": s.get("stop_id", ""),
+                "odpt_id": s.get("odpt_id", ""),
+                "coord_source_type": s.get("coord_source_type", "unknown"),
+                "coord_confidence": s.get("coord_confidence", 0.0),
+                "pole_number": s.get("pole_number"),
+            }
+        )
+
+    path = out_dir / "sidecar_stop_metadata.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    _log.info("Wrote sidecar_stop_metadata.json (%d entries)", len(meta))
+
+
+# ---------------------------------------------------------------------------
+# Main export function
+# ---------------------------------------------------------------------------
+
+
+def export_gtfs(
+    canonical_dir: Path,
+    *,
+    out_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """
+    Export canonical tables to a GTFS feed directory.
+
+    Parameters
+    ----------
+    canonical_dir
+        Directory containing canonical JSONL files.
+    out_dir
+        Output directory for the GTFS feed.
+        Defaults to ``GTFS/TokyuBus-GTFS/``.
+
+    Returns
+    -------
+    dict
+        Export summary with file counts.
+    """
+    if out_dir is None:
+        out_dir = GTFS_OUTPUT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    _log.info("Exporting GTFS feed to %s …", out_dir)
+
+    _write_agency(out_dir)
+    _write_feed_info(out_dir)
+    n_stops = _export_stops(canonical_dir, out_dir)
+    n_routes = _export_routes(canonical_dir, out_dir)
+    n_cal = _export_calendar(canonical_dir, out_dir)
+    n_trips = _export_trips(canonical_dir, out_dir)
+    n_st = _export_stop_times(canonical_dir, out_dir)
+
+    # Sidecar files
+    _write_sidecar_route_patterns(canonical_dir, out_dir)
+    _write_sidecar_stop_metadata(canonical_dir, out_dir)
+
+    summary = {
+        "gtfs_dir": str(out_dir),
+        "stops": n_stops,
+        "routes": n_routes,
+        "calendars": n_cal,
+        "trips": n_trips,
+        "stop_times": n_st,
+    }
+    _log.info("GTFS export complete: %s", summary)
+    return summary

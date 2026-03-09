@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useStops } from "@/hooks";
-import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { LoadingBlock, ErrorBlock, EmptyState, VirtualizedList } from "@/features/common";
 import type { Stop } from "@/types";
 
 interface Props {
@@ -30,44 +30,30 @@ export function StopTable({ scenarioId }: Props) {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-border bg-slate-50">
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("stops.col_name", "停留所名")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("stops.col_code", "コード")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("stops.col_pole", "ポール番号")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
-              {t("stops.col_lat", "緯度")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
-              {t("stops.col_lon", "経度")}
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {stops.map((stop) => (
-            <tr key={stop.id} className="hover:bg-slate-50/50">
-              <td className="px-3 py-2 font-medium text-slate-700">{stop.name}</td>
-              <td className="px-3 py-2 text-xs text-slate-600">{stop.code || "-"}</td>
-              <td className="px-3 py-2 text-xs text-slate-600">
-                {stop.poleNumber || "-"}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-slate-600">
-                {stop.lat ?? "-"}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-slate-600">
-                {stop.lon ?? "-"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="grid grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_0.8fr] border-b border-border bg-slate-50 text-left text-sm">
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("stops.col_name", "停留所名")}</div>
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("stops.col_code", "コード")}</div>
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("stops.col_pole", "ポール番号")}</div>
+        <div className="px-3 py-2 text-right text-xs font-medium text-slate-500">{t("stops.col_lat", "緯度")}</div>
+        <div className="px-3 py-2 text-right text-xs font-medium text-slate-500">{t("stops.col_lon", "経度")}</div>
+      </div>
+      <VirtualizedList
+        items={stops}
+        height={560}
+        itemHeight={42}
+        className="bg-white"
+        perfLabel="master-stops-table"
+        getKey={(stop) => stop.id}
+        renderItem={(stop) => (
+          <div className="grid h-full grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_0.8fr] border-b border-border px-0 text-sm hover:bg-slate-50/50">
+            <div className="px-3 py-2 font-medium text-slate-700">{stop.name}</div>
+            <div className="px-3 py-2 text-xs text-slate-600">{stop.code || "-"}</div>
+            <div className="px-3 py-2 text-xs text-slate-600">{stop.poleNumber || "-"}</div>
+            <div className="px-3 py-2 text-right font-mono text-xs text-slate-600">{stop.lat ?? "-"}</div>
+            <div className="px-3 py-2 text-right font-mono text-xs text-slate-600">{stop.lon ?? "-"}</div>
+          </div>
+        )}
+      />
     </div>
   );
 }

@@ -361,10 +361,11 @@ export function useImportOdptRoutes(scenarioId: string) {
   return useMutation({
     mutationFn: (data?: ImportOdptRoutesRequest) =>
       routeApi.importOdpt(scenarioId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
-      qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
-      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      await qc.refetchQueries({ queryKey: routeKeys.all(scenarioId), exact: true });
+      await qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      await qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -375,10 +376,11 @@ export function useImportGtfsRoutes(scenarioId: string) {
   return useMutation({
     mutationFn: (data?: ImportGtfsRoutesRequest) =>
       routeApi.importGtfs(scenarioId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
-      qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
-      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      await qc.refetchQueries({ queryKey: routeKeys.all(scenarioId), exact: true });
+      await qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      await qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -397,8 +399,9 @@ export function useImportOdptStops(scenarioId: string) {
   return useMutation({
     mutationFn: (data?: ImportOdptStopsRequest) =>
       stopApi.importOdpt(scenarioId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: stopKeys.all(scenarioId) });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: stopKeys.all(scenarioId) });
+      await qc.refetchQueries({ queryKey: stopKeys.all(scenarioId), exact: true });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -409,8 +412,9 @@ export function useImportGtfsStops(scenarioId: string) {
   return useMutation({
     mutationFn: (data?: ImportGtfsStopsRequest) =>
       stopApi.importGtfs(scenarioId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: stopKeys.all(scenarioId) });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: stopKeys.all(scenarioId) });
+      await qc.refetchQueries({ queryKey: stopKeys.all(scenarioId), exact: true });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });

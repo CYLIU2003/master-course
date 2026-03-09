@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "canonical/trip.schema.json",
+  "title": "CanonicalTrip",
+  "description": "A single bus trip (one run of one route).",
+  "type": "object",
+  "required": ["trip_id", "route_id", "service_id"],
+  "properties": {
+    "trip_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "service_id": { "type": "string" },
+    "direction": { "type": "string", "enum": ["outbound", "inbound", "circular", "unknown"] },
+    "trip_index": { "type": "integer", "minimum": 0 },
+    "origin_stop_id": { "type": "string" },
+    "destination_stop_id": { "type": "string" },
+    "origin_name": { "type": "string" },
+    "destination_name": { "type": "string" },
+    "departure_time": { "type": "string", "description": "HH:MM:SS (may exceed 24h)" },
+    "arrival_time": { "type": "string" },
+    "departure_seconds": { "type": ["integer", "null"], "description": "Seconds from midnight" },
+    "arrival_seconds": { "type": ["integer", "null"] },
+    "distance_km": { "type": "number", "minimum": 0 },
+    "runtime_min": { "type": "number", "minimum": 0 },
+    "allowed_vehicle_types": { "type": "array", "items": { "type": "string" } },
+    "trip_category": { "type": "string", "enum": ["revenue", "deadhead", "pull_out", "pull_in"] },
+    "odpt_timetable_id": { "type": "string" },
+    "odpt_pattern_id": { "type": "string" },
+    "odpt_calendar_raw": { "type": "string" }
+  }
+}

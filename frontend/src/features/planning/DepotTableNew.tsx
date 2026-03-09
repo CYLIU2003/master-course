@@ -5,7 +5,7 @@
 import { useTranslation } from "react-i18next";
 import { useDepots } from "@/hooks";
 import { useMasterUiStore } from "@/stores/master-ui-store";
-import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { LoadingBlock, ErrorBlock, EmptyState, VirtualizedList } from "@/features/common";
 import type { Depot } from "@/types";
 
 interface Props {
@@ -44,78 +44,53 @@ export function DepotTableNew({ scenarioId }: Props) {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-border bg-slate-50">
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("depots.col_name", "営業所名")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("depots.col_location", "住所")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
-              {t("depots.col_normal_chargers", "普通充電器")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
-              {t("depots.col_fast_chargers", "急速充電器")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
-              {t("depots.col_parking", "駐車台数")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("depots.col_fuel", "燃料")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("depots.col_overnight", "夜間充電")}
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {depots.map((depot) => (
-            <tr
-              key={depot.id}
-              onClick={() => handleRowClick(depot.id)}
-              className={`cursor-pointer transition-colors ${
-                selectedDepotId === depot.id
-                  ? "bg-primary-50"
-                  : "hover:bg-slate-50/50"
-              }`}
-            >
-              <td className="px-3 py-2 font-medium text-slate-700">
-                {depot.name}
-              </td>
-              <td className="px-3 py-2 text-slate-600">
-                {depot.location || "-"}
-              </td>
-              <td className="px-3 py-2 text-right text-slate-600">
-                {depot.normalChargerCount}
-              </td>
-              <td className="px-3 py-2 text-right text-slate-600">
-                {depot.fastChargerCount}
-              </td>
-              <td className="px-3 py-2 text-right text-slate-600">
-                {depot.parkingCapacity}
-              </td>
-              <td className="px-3 py-2">
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${
-                    depot.hasFuelFacility ? "bg-amber-400" : "bg-slate-300"
-                  }`}
-                  title={depot.hasFuelFacility ? "あり" : "なし"}
-                />
-              </td>
-              <td className="px-3 py-2">
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${
-                    depot.overnightCharging ? "bg-green-400" : "bg-slate-300"
-                  }`}
-                  title={depot.overnightCharging ? "あり" : "なし"}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="grid grid-cols-[1.3fr_1.8fr_0.7fr_0.7fr_0.7fr_0.5fr_0.6fr] border-b border-border bg-slate-50 text-left text-sm">
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("depots.col_name", "営業所名")}</div>
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("depots.col_location", "住所")}</div>
+        <div className="px-3 py-2 text-right text-xs font-medium text-slate-500">{t("depots.col_normal_chargers", "普通充電器")}</div>
+        <div className="px-3 py-2 text-right text-xs font-medium text-slate-500">{t("depots.col_fast_chargers", "急速充電器")}</div>
+        <div className="px-3 py-2 text-right text-xs font-medium text-slate-500">{t("depots.col_parking", "駐車台数")}</div>
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("depots.col_fuel", "燃料")}</div>
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("depots.col_overnight", "夜間充電")}</div>
+      </div>
+      <VirtualizedList
+        items={depots}
+        height={560}
+        itemHeight={46}
+        className="bg-white"
+        perfLabel="master-depots-table"
+        getKey={(depot) => depot.id}
+        renderItem={(depot) => (
+          <div
+            onClick={() => handleRowClick(depot.id)}
+            className={`grid h-full cursor-pointer grid-cols-[1.3fr_1.8fr_0.7fr_0.7fr_0.7fr_0.5fr_0.6fr] border-b border-border text-sm transition-colors ${
+              selectedDepotId === depot.id ? "bg-primary-50" : "hover:bg-slate-50/50"
+            }`}
+          >
+            <div className="px-3 py-2 font-medium text-slate-700">{depot.name}</div>
+            <div className="px-3 py-2 text-slate-600">{depot.location || "-"}</div>
+            <div className="px-3 py-2 text-right text-slate-600">{depot.normalChargerCount}</div>
+            <div className="px-3 py-2 text-right text-slate-600">{depot.fastChargerCount}</div>
+            <div className="px-3 py-2 text-right text-slate-600">{depot.parkingCapacity}</div>
+            <div className="px-3 py-2">
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  depot.hasFuelFacility ? "bg-amber-400" : "bg-slate-300"
+                }`}
+                title={depot.hasFuelFacility ? "あり" : "なし"}
+              />
+            </div>
+            <div className="px-3 py-2">
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  depot.overnightCharging ? "bg-green-400" : "bg-slate-300"
+                }`}
+                title={depot.overnightCharging ? "あり" : "なし"}
+              />
+            </div>
+          </div>
+        )}
+      />
     </div>
   );
 }
