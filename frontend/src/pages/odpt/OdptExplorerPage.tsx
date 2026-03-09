@@ -4,6 +4,7 @@ import { fetchJson } from "@/api/client";
 import { ImportLogPanel } from "@/features/explorer/ImportLogPanel";
 import { ImportProgressPanel } from "@/features/explorer/ImportProgressPanel";
 import { TabWarmBoundary, VirtualizedList } from "@/features/common";
+import { useScenario } from "@/hooks";
 import { usePreparedPublicDiffItems } from "@/hooks/usePreparedPublicDiffItems";
 import { useSortedAssignments } from "@/hooks/useSortedAssignments";
 import { normalizeRouteCode } from "@/lib/route-code";
@@ -844,6 +845,7 @@ export function OdptExplorerPage() {
   const completeJob = useImportJobStore((state) => state.completeJob);
   const failJob = useImportJobStore((state) => state.failJob);
   const activeScenarioId = routeScenarioId ?? storeScenarioId;
+  const { data: activeScenario } = useScenario(activeScenarioId ?? "");
   const [selectedScenarioOperator, setSelectedScenarioOperator] = useState<"tokyu" | "toei">("tokyu");
   const [latestDiffSessionId, setLatestDiffSessionId] = useState("");
   const [latestDiffSummary, setLatestDiffSummary] = useState<PublicDiffSummary | null>(null);
@@ -896,6 +898,12 @@ export function OdptExplorerPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Reset downstream state when controls change
+  useEffect(() => {
+    if (activeScenario?.operatorId) {
+      setSelectedScenarioOperator(activeScenario.operatorId);
+    }
+  }, [activeScenario?.operatorId]);
+
   useEffect(() => {
     setIntroRes(null);
     setExportRes(null);
@@ -1535,21 +1543,23 @@ export function OdptExplorerPage() {
           </div>
           <div className="ml-auto flex flex-wrap gap-2">
             <button
-              onClick={() => setSelectedScenarioOperator("tokyu")}
+              type="button"
+              disabled
               className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
                 selectedScenarioOperator === "tokyu"
                   ? "bg-emerald-100 text-emerald-700"
-                  : "bg-slate-100 text-slate-600"
+                  : "bg-slate-100 text-slate-400"
               }`}
             >
               Tokyu / ODPT
             </button>
             <button
-              onClick={() => setSelectedScenarioOperator("toei")}
+              type="button"
+              disabled
               className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
                 selectedScenarioOperator === "toei"
                   ? "bg-sky-100 text-sky-700"
-                  : "bg-slate-100 text-slate-600"
+                  : "bg-slate-100 text-slate-400"
               }`}
             >
               Toei / GTFS
@@ -1577,6 +1587,7 @@ export function OdptExplorerPage() {
 
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <span>現在ソース: {selectedScenarioOperator === "tokyu" ? "Tokyu / ODPT" : "Toei / GTFS"}</span>
+          <span>operator は scenario 作成時に固定され、ここでは切り替えません。</span>
           <span>差分取得は保存済み snapshot 優先です。重い更新は外部 updater で回す前提です。</span>
           <button
             onClick={() =>

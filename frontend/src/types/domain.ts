@@ -16,6 +16,7 @@ export interface Scenario {
   name: string;
   description: string;
   mode: SolverMode;
+  operatorId: "tokyu" | "toei";
   createdAt: string;
   updatedAt: string;
   status: ScenarioStatus;
@@ -461,6 +462,29 @@ export interface DutyValidationResult {
 }
 
 export interface DispatchScope {
+  scopeId?: string | null;
+  operatorId?: string | null;
+  datasetVersion?: string | null;
+  depotSelection?: {
+    mode: "include";
+    depotIds: string[];
+    primaryDepotId: string | null;
+  };
+  routeSelection?: {
+    mode: "all" | "include" | "exclude" | "refine";
+    includeRouteIds: string[];
+    excludeRouteIds: string[];
+  };
+  serviceSelection?: {
+    serviceIds: string[];
+  };
+  tripSelection?: {
+    includeShortTurn: boolean;
+    includeDepotMoves: boolean;
+    includeDeadhead: boolean;
+  };
+  candidateRouteIds?: string[];
+  effectiveRouteIds?: string[];
   depotId: string | null;
   serviceId: string;
 }

@@ -51,12 +51,14 @@ export interface CreateScenarioRequest {
   name: string;
   description: string;
   mode: Scenario["mode"];
+  operatorId: Scenario["operatorId"];
 }
 
 export interface UpdateScenarioRequest {
   name?: string;
   description?: string;
   mode?: Scenario["mode"];
+  operatorId?: Scenario["operatorId"];
 }
 
 // ── Depots ────────────────────────────────────────────────────
@@ -645,8 +647,29 @@ export type DispatchScopeResponse = DispatchScope;
 export type SimulationCapabilitiesResponse = RunCapabilities;
 
 export interface UpdateDispatchScopeRequest {
+  scopeId?: string | null;
+  operatorId?: string | null;
+  datasetVersion?: string | null;
   depotId?: string | null;
   serviceId?: string;
+  depotSelection?: {
+    mode?: "include";
+    depotIds?: string[];
+    primaryDepotId?: string | null;
+  };
+  routeSelection?: {
+    mode?: "all" | "include" | "exclude" | "refine";
+    includeRouteIds?: string[];
+    excludeRouteIds?: string[];
+  };
+  serviceSelection?: {
+    serviceIds?: string[];
+  };
+  tripSelection?: {
+    includeShortTurn?: boolean;
+    includeDepotMoves?: boolean;
+    includeDeadhead?: boolean;
+  };
 }
 
 export interface RunSimulationRequest {

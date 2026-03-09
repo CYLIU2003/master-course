@@ -6,7 +6,6 @@ import {
   useTimetableSummary,
   useDepots,
   useDispatchScope,
-  useDepotRoutePermissions,
   useDeadheadRules,
   useTurnaroundRules,
   useVehicles,
@@ -34,11 +33,10 @@ export function PrecheckPage() {
   const { data: depotsData, isLoading: ld } = useDepots(scenarioId!);
   const { data: vehiclesData, isLoading: lv } = useVehicles(scenarioId!);
   const { data: scope, isLoading: lsc } = useDispatchScope(scenarioId!);
-  const { data: permissionsData, isLoading: lp } = useDepotRoutePermissions(scenarioId!);
   const { data: deadheadData, isLoading: ldh } = useDeadheadRules(scenarioId!);
   const { data: turnaroundData, isLoading: lta } = useTurnaroundRules(scenarioId!);
 
-  const isLoading = lr || ls || lt || ld || lv || lsc || lp || ldh || lta;
+  const isLoading = lr || ls || lt || ld || lv || lsc || ldh || lta;
 
   const checks: CheckItem[] = useMeasuredMemo("selector:precheck-checks", () => {
     if (isLoading) return [];
@@ -49,11 +47,11 @@ export function PrecheckPage() {
     const routeServiceCounts = timetableSummary?.item.routeServiceCounts ?? {};
     const depots = depotsData?.items ?? [];
     const vehicles = vehiclesData?.items ?? [];
-    const permissions = permissionsData?.items ?? [];
     const deadhead = deadheadData?.items ?? [];
     const turnaround = turnaroundData?.items ?? [];
     const selectedDepotId = scope?.depotId ?? null;
     const selectedServiceId = scope?.serviceId ?? "WEEKDAY";
+    const effectiveRouteIds = new Set(scope?.effectiveRouteIds ?? []);
 
     const items: CheckItem[] = [];
 
@@ -119,10 +117,7 @@ export function PrecheckPage() {
     });
 
     // 7. Allowed routes for selected depot > 0
-    const allowedRoutes = selectedDepotId
-      ? permissions.filter((p) => p.depotId === selectedDepotId && p.allowed)
-      : [];
-    const allowedRouteCount = selectedDepotId ? allowedRoutes.length : routes.length;
+    const allowedRouteCount = selectedDepotId ? effectiveRouteIds.size : routes.length;
     items.push({
       key: "allowed_routes",
       label: t("precheck.check_allowed_routes", "許可路線"),
@@ -133,13 +128,10 @@ export function PrecheckPage() {
     });
 
     // 8. Filtered timetable rows (by service_id and allowed routes) > 0
-    const allowedRouteIds = new Set(
-      selectedDepotId
-        ? allowedRoutes.map((p) => p.routeId)
-        : routes.map((r) => r.id),
-    );
     const serviceRouteCounts = routeServiceCounts[selectedServiceId] ?? {};
-    const filteredTimetableCount = Array.from(allowedRouteIds).reduce(
+    const filteredTimetableCount = Array.from(
+      selectedDepotId ? effectiveRouteIds : new Set(routes.map((r) => r.id)),
+    ).reduce(
       (sum, routeId) => sum + (serviceRouteCounts[routeId] ?? 0),
       0,
     );
@@ -188,7 +180,7 @@ export function PrecheckPage() {
     return items;
   }, [
     isLoading, routesData, stopsData, timetableSummary, depotsData, vehiclesData,
-    scope, permissionsData, deadheadData, turnaroundData, t,
+    scope, deadheadData, turnaroundData, t,
   ]);
 
   const failCount = checks.filter((c) => c.status === "fail").length;

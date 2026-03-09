@@ -312,3 +312,168 @@ def extract_operator_dispatch_trips(
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
     return {"items": items, "total": len(items)}
+
+
+# ---------------------------------------------------------------------------
+# Operator boundary helpers
+# ---------------------------------------------------------------------------
+
+_VALID_OPERATOR_IDS = frozenset(transit_db.OPERATORS.keys())
+
+
+def _require_operator_id(operator_id: str | None) -> str:
+    """Validate and return the operator_id, raising HTTP errors for invalid values."""
+    if operator_id is None:
+        raise HTTPException(status_code=400, detail="operatorId is required")
+    if operator_id not in _VALID_OPERATOR_IDS:
+        raise HTTPException(status_code=404, detail=f"unknown operatorId: {operator_id}")
+    return operator_id
+
+
+def _build_operator_summary(operator_id: str) -> Dict[str, Any]:
+    """Build a summary dict for a single operator from its transit_db."""
+    info = transit_db.OPERATORS.get(operator_id)
+    if info is None:
+        raise ValueError(f"Unknown operator_id: {operator_id!r}")
+    db_info = transit_db.get_db_info(operator_id)
+    tables = db_info.get("tables") or {}
+    metadata = db_info.get("metadata") or {}
+
+    return {
+        "operatorId": operator_id,
+        "operatorLabel": info.get("name_ja", operator_id),
+        "sourceType": info.get("source", "unknown"),
+        "datasetVersion": metadata.get("dataset_id") or metadata.get("snapshot_id") or "",
+        "counts": {
+            "routes": tables.get("routes", 0),
+            "stops": tables.get("stops", 0),
+            "timetableRows": tables.get("timetable_rows", 0),
+            "stopTimetables": tables.get("stop_timetables", 0),
+            "stopTimetableEntries": tables.get("stop_timetable_entries", 0),
+            "tripStopTimes": tables.get("trip_stop_times", 0),
+            "calendar": tables.get("calendar", 0),
+            "calendarDates": tables.get("calendar_dates", 0),
+        },
+        "dbExists": db_info.get("exists", False),
+        "updatedAt": metadata.get("last_import_at"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Summary & map-overview endpoints (operator boundary enforced)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/catalog/summary")
+def get_catalog_summary(
+    operator_id: Optional[str] = Query(default=None, alias="operatorId"),
+) -> Dict[str, Any]:
+    """Return aggregate summary counts.
+
+    - Without operatorId: returns summaries for ALL operators.
+    - With operatorId: returns summary for the specified operator only.
+    """
+    if operator_id is not None:
+        operator_id = _require_operator_id(operator_id)
+        return {"item": _build_operator_summary(operator_id)}
+
+    # All operators
+    items = []
+    for op_id in transit_db.OPERATORS:
+        try:
+            items.append(_build_operator_summary(op_id))
+        except Exception:
+            items.append({"operatorId": op_id, "error": True})
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/catalog/map-overview")
+def get_catalog_map_overview(
+    operator_id: str = Query(..., alias="operatorId"),
+) -> Dict[str, Any]:
+    """Return lightweight map preview data for an operator.
+
+    operatorId is **required** (per Operator Boundary Invariants).
+    Returns bounds, stop clusters, and depot points from the operator DB.
+    """
+    operator_id = _require_operator_id(operator_id)
+
+    info = transit_db.OPERATORS[operator_id]
+    db_info = transit_db.get_db_info(operator_id)
+    if not db_info.get("exists"):
+        return {
+            "operatorId": operator_id,
+            "bounds": None,
+            "stopClusters": [],
+            "depotPoints": [],
+            "updatedAt": None,
+        }
+
+    # Compute bounds and basic stop cluster data from DB
+    from contextlib import closing as _closing
+    from bff.services.transit_db import _connect, _ensure_ready
+
+    with _closing(_connect(operator_id)) as conn:
+        _ensure_ready(conn)
+
+        # Bounds from stops with coordinates
+        bounds_row = conn.execute(
+            "SELECT MIN(lat) AS min_lat, MAX(lat) AS max_lat, "
+            "       MIN(lon) AS min_lon, MAX(lon) AS max_lon "
+            "FROM stops WHERE lat IS NOT NULL AND lon IS NOT NULL"
+        ).fetchone()
+
+        bounds = None
+        if bounds_row and bounds_row["min_lat"] is not None:
+            bounds = {
+                "minLat": bounds_row["min_lat"],
+                "maxLat": bounds_row["max_lat"],
+                "minLon": bounds_row["min_lon"],
+                "maxLon": bounds_row["max_lon"],
+            }
+
+        # Simple stop clusters: group by rounded (lat, lon) at ~0.01 degree (~1km)
+        cluster_rows = conn.execute(
+            "SELECT ROUND(lat, 2) AS clat, ROUND(lon, 2) AS clon, COUNT(*) AS cnt "
+            "FROM stops WHERE lat IS NOT NULL AND lon IS NOT NULL "
+            "GROUP BY ROUND(lat, 2), ROUND(lon, 2) "
+            "ORDER BY cnt DESC "
+            "LIMIT 500"
+        ).fetchall()
+
+        stop_clusters = [
+            {
+                "id": f"{operator_id}:c:{i}",
+                "lat": row["clat"],
+                "lon": row["clon"],
+                "count": row["cnt"],
+            }
+            for i, row in enumerate(cluster_rows)
+        ]
+
+        # Depot candidate points: stops whose name contains depot-like keywords
+        depot_rows = conn.execute(
+            "SELECT stop_id, stop_name, lat, lon FROM stops "
+            "WHERE (stop_name LIKE '%営業所%' OR stop_name LIKE '%車庫%' "
+            "       OR stop_name LIKE '%操車所%') "
+            "  AND lat IS NOT NULL AND lon IS NOT NULL"
+        ).fetchall()
+
+        depot_points = [
+            {
+                "id": f"{operator_id}:depot:{row['stop_id']}",
+                "label": row["stop_name"],
+                "lat": row["lat"],
+                "lon": row["lon"],
+            }
+            for row in depot_rows
+        ]
+
+    metadata = db_info.get("metadata") or {}
+    return {
+        "operatorId": operator_id,
+        "bounds": bounds,
+        "stopClusters": stop_clusters,
+        "depotPoints": depot_points,
+        "updatedAt": metadata.get("last_import_at"),
+    }

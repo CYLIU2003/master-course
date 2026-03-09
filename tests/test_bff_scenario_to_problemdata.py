@@ -109,3 +109,68 @@ def test_build_problem_data_from_scenario_uses_scope_rules_and_profiles():
     by_pair = {(tc.from_task_id, tc.to_task_id): tc for tc in data.travel_connections}
     assert by_pair[("T1", "T2")].can_follow is True
     assert by_pair[("T1", "T2")].deadhead_time_slot == 1
+
+
+def test_build_problem_data_from_scenario_applies_analysis_scope_filters():
+    scenario = {
+        "meta": {"id": "scenario-scope", "updatedAt": "2026-03-08T00:00:00+00:00"},
+        "depots": [{"id": "D1"}],
+        "routes": [
+            {"id": "R_MAIN", "routeVariantType": "main"},
+            {"id": "R_SHORT", "routeVariantType": "short_turn"},
+        ],
+        "vehicles": [{"id": "V1", "depotId": "D1", "type": "BEV", "batteryKwh": 300.0}],
+        "route_depot_assignments": [
+            {"routeId": "R_MAIN", "depotId": "D1", "confidence": 1.0},
+            {"routeId": "R_SHORT", "depotId": "D1", "confidence": 1.0},
+        ],
+        "timetable_rows": [
+            {
+                "trip_id": "T1",
+                "route_id": "R_MAIN",
+                "service_id": "WEEKDAY",
+                "origin": "A",
+                "destination": "B",
+                "departure": "07:00",
+                "arrival": "07:30",
+                "distance_km": 10.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+            {
+                "trip_id": "T2",
+                "route_id": "R_SHORT",
+                "service_id": "WEEKDAY",
+                "origin": "B",
+                "destination": "C",
+                "departure": "07:40",
+                "arrival": "07:55",
+                "distance_km": 3.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+        ],
+        "simulation_config": {"start_time": "05:00", "time_step_min": 15},
+    }
+
+    data, report = build_problem_data_from_scenario(
+        scenario,
+        depot_id="D1",
+        service_id="WEEKDAY",
+        mode="mode_milp_only",
+        analysis_scope={
+            "depotSelection": {"depotIds": ["D1"], "primaryDepotId": "D1"},
+            "routeSelection": {
+                "mode": "refine",
+                "includeRouteIds": [],
+                "excludeRouteIds": [],
+            },
+            "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+            "tripSelection": {
+                "includeShortTurn": False,
+                "includeDepotMoves": True,
+                "includeDeadhead": True,
+            },
+        },
+    )
+
+    assert report.trip_count == 1
+    assert [task.task_id for task in data.tasks] == ["T1"]

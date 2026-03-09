@@ -100,22 +100,6 @@ def _require_scenario(scenario_id: str) -> None:
         raise _not_found(scenario_id)
 
 
-def _allowed_route_ids_for_depot(scenario_id: str, depot_id: str) -> Optional[set[str]]:
-    permissions = store.get_depot_route_permissions(scenario_id)
-    matching_permissions = [
-        permission
-        for permission in permissions
-        if permission.get("depotId") == depot_id
-    ]
-    if not matching_permissions:
-        return None
-    return {
-        str(permission.get("routeId"))
-        for permission in matching_permissions
-        if permission.get("allowed") is True and permission.get("routeId") is not None
-    }
-
-
 def _resolve_dispatch_scope(
     scenario_id: str,
     *,
@@ -124,13 +108,20 @@ def _resolve_dispatch_scope(
     persist: bool = False,
 ) -> Dict[str, Any]:
     current = store.get_dispatch_scope(scenario_id)
-    scope = {
-        "serviceId": service_id or current.get("serviceId") or "WEEKDAY",
-        "depotId": depot_id if depot_id is not None else current.get("depotId"),
-    }
+    scope: Dict[str, Any] = {}
+    if service_id is not None:
+        scope["serviceId"] = service_id
+    if depot_id is not None:
+        scope["depotId"] = depot_id
+    if not scope:
+        return current
     if persist:
         return store.set_dispatch_scope(scenario_id, scope)
-    return scope
+    merged = dict(current)
+    merged.update(scope)
+    doc = store._load(scenario_id)
+    doc["dispatch_scope"] = merged
+    return store._normalize_dispatch_scope(doc)
 
 
 def _allowed_vehicle_types_for_route(
@@ -220,26 +211,50 @@ def _build_dispatch_context(
     Uses timetable_rows if no trips have been built yet.
     If service_id is provided, only rows matching that service_id are used.
     """
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=service_id,
+        depot_id=depot_id,
+        persist=False,
+    )
+    depot_id = scope.get("depotId")
+    service_id = scope.get("serviceId")
     if not depot_id:
         raise ValueError("No depot selected. Configure dispatch scope first.")
 
     raw_trips = store.get_field(scenario_id, "trips") or []
     timetable_rows = store.get_field(scenario_id, "timetable_rows") or []
-    allowed_route_ids = _allowed_route_ids_for_depot(scenario_id, depot_id)
+    effective_route_ids = set(store.effective_route_ids_for_scope(scenario_id, scope))
+    trip_selection = dict(scope.get("tripSelection") or {})
+    route_lookup = {
+        str(route.get("id")): route for route in store.list_routes(scenario_id)
+    }
 
-    # Filter by service_id when requested
     if service_id:
-        timetable_rows = [
-            r for r in timetable_rows if r.get("service_id", "WEEKDAY") == service_id
-        ]
+        timetable_rows = [r for r in timetable_rows if r.get("service_id", "WEEKDAY") == service_id]
 
-    if allowed_route_ids is not None:
-        timetable_rows = [
-            row for row in timetable_rows if row.get("route_id") in allowed_route_ids
-        ]
-        raw_trips = [
-            trip for trip in raw_trips if trip.get("route_id") in allowed_route_ids
-        ]
+    if effective_route_ids:
+        timetable_rows = [row for row in timetable_rows if str(row.get("route_id")) in effective_route_ids]
+        raw_trips = [trip for trip in raw_trips if str(trip.get("route_id")) in effective_route_ids]
+
+    def _trip_allowed_by_variant(route_id: str) -> bool:
+        route = route_lookup.get(route_id) or {}
+        variant_type = str(route.get("routeVariantType") or "unknown")
+        if not trip_selection.get("includeShortTurn", True) and variant_type == "short_turn":
+            return False
+        if (
+            not trip_selection.get("includeDepotMoves", True)
+            and variant_type in {"depot_in", "depot_out"}
+        ):
+            return False
+        return True
+
+    timetable_rows = [
+        row for row in timetable_rows if _trip_allowed_by_variant(str(row.get("route_id") or ""))
+    ]
+    raw_trips = [
+        trip for trip in raw_trips if _trip_allowed_by_variant(str(trip.get("route_id") or ""))
+    ]
 
     if not raw_trips and not timetable_rows:
         raise ValueError(
