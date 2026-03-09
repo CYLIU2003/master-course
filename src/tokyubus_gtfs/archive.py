@@ -44,6 +44,28 @@ def _resource_filename(resource_type: str) -> str:
     return resource_type.replace(":", "_") + ".json"
 
 
+def _candidate_paths(source_dir: Path, resource_type: str) -> List[Path]:
+    short = resource_type.split(":")[-1]
+    snake = "".join(
+        [f"_{c.lower()}" if c.isupper() else c for c in short]
+    ).lstrip("_")
+    names = [
+        _resource_filename(resource_type),
+        f"{short}.json",
+        f"{short}.ndjson",
+        f"{snake}.json",
+        f"{snake}.ndjson",
+    ]
+    roots = [source_dir, source_dir / "raw"]
+    candidates: List[Path] = []
+    for root in roots:
+        for name in names:
+            path = root / name
+            if path not in candidates:
+                candidates.append(path)
+    return candidates
+
+
 def create_snapshot_id() -> str:
     """Generate a timestamp-based snapshot ID."""
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -88,16 +110,11 @@ def archive_raw_snapshot(
 
     for rtype in resource_types:
         fname = _resource_filename(rtype)
-        src_path = source_dir / fname
-        # Also try the name the fast_catalog_ingest uses
-        if not src_path.exists():
-            alt_name = rtype.split(":")[-1] + ".json"
-            src_path = source_dir / alt_name
-        if not src_path.exists():
-            # Try NDJSON variant
-            ndjson_name = rtype.split(":")[-1] + ".ndjson"
-            src_path = source_dir / ndjson_name
-        if not src_path.exists():
+        src_path = next(
+            (path for path in _candidate_paths(source_dir, rtype) if path.exists()),
+            None,
+        )
+        if src_path is None or not src_path.exists():
             warnings.append(f"Missing raw file for {rtype}")
             _log.warning("Raw file not found for %s in %s", rtype, source_dir)
             continue
@@ -164,14 +181,11 @@ def load_raw_resource(snapshot_dir: Path, resource_type: str) -> list:
     Supports both JSON array files and NDJSON files.
     """
     fname = _resource_filename(resource_type)
-    path = snapshot_dir / fname
-    if not path.exists():
-        alt = resource_type.split(":")[-1] + ".json"
-        path = snapshot_dir / alt
-    if not path.exists():
-        ndjson = resource_type.split(":")[-1] + ".ndjson"
-        path = snapshot_dir / ndjson
-    if not path.exists():
+    path = next(
+        (candidate for candidate in _candidate_paths(snapshot_dir, resource_type) if candidate.exists()),
+        None,
+    )
+    if path is None or not path.exists():
         raise FileNotFoundError(f"No file for {resource_type} in {snapshot_dir}")
 
     with path.open("r", encoding="utf-8") as f:
