@@ -198,6 +198,7 @@ cd frontend && npm run build
 python catalog_update_app.py --help
 python catalog_update_app.py refresh odpt --force-refresh
 python catalog_update_app.py sync gtfs --scenario latest --refresh --resources all
+python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
 
 # Frontend Lint
 cd frontend && npm run lint
@@ -678,7 +679,7 @@ Route ──1:N──→ Trip
 - 大きい一覧は `VirtualizedList` に統一し、explorer の depot assignment sort は `assignment-sort.worker.ts`、route family grouping は `route-family-group.worker.ts`、public diff preview は `public-diff-preview.worker.ts` へオフロードしています。
 - Router は route-level lazy loading を採用し、Vite build の main chunk は縮小済みです。現状の build warning は主に `MapLibre GL` 由来の地図 chunk です。
 - `/jobs/{job_id}` poll により、Trips / Graph / Duties / Simulation / Optimization の backend job progress を画面側で確認できます。
-- 開発モードでは `DebugPerfOverlay` が render count、selector time、import time、tab switch time を右下に表示します。
+- 開発モードの `DebugPerfOverlay` は常時表示ではありません。`?debugPerf=1` を URL に付けるか、`localStorage["debug-perf"]="1"` を設定したときだけ render count、selector time、import time、tab switch time、long task、heap 使用量を右下に表示します。
 
 ### 独立データ更新アプリ
 
@@ -700,12 +701,34 @@ python catalog_update_app.py refresh odpt --force-refresh
 python catalog_update_app.py refresh gtfs --feed-path GTFS/ToeiBus-GTFS
 python catalog_update_app.py sync odpt --scenario latest --refresh --resources all
 python catalog_update_app.py sync gtfs --scenario latest --refresh --resources routes,stops,timetable,stop-timetables,calendar
+python catalog_update_app.py refresh odpt --fast-path --out-dir ./data/catalog-fast --concurrency 64 --resume
+python catalog_update_app.py sync odpt --scenario latest --refresh --resources all --fast-path --out-dir ./data/catalog-fast --concurrency 64
 
 # 対話メニュー
 python catalog_update_app.py
 ```
 
 PowerShell で `python3` を使うと、環境によっては Python 本体ではなく Windows の alias 側に吸われて期待通りに動かないことがあります。`python` か `.\catalog_update_app.ps1` を使ってください。
+
+### 高速 ingest CLI
+
+ODPT の重い raw 取得を高速化したい場合は `tools/fast_catalog_ingest.py` を使えます。raw JSON を保持しつつ、`raw/*.ndjson`、checkpoint、`bundle.json`、`operational_dataset.json` を生成します。
+
+```bash
+python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
+python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --resume --only stopTimetables --build-bundle
+python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --skip-stop-timetables --build-bundle
+python tools/fast_catalog_ingest.py sync-gtfs --scenario latest --refresh --resources all
+```
+
+ベースライン比較と profiling も別 CLI で実行できます。
+
+```bash
+python tools/benchmark_catalog_ingest.py odpt --include-baseline --out-dir ./data/catalog-fast
+python tools/benchmark_catalog_ingest.py gtfs --scenario latest --resources all --refresh
+python tools/profile_catalog_ingest.py catalog -- refresh odpt --force-refresh
+python tools/profile_catalog_ingest.py fast -- fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
+```
 
 この分離により、通常の frontend / BFF 起動時に ODPT / GTFS refresh を前提にしない運用ができます。機能自体は main app 側にも残りますが、重い更新作業は updater app 側で行う想定です。
 

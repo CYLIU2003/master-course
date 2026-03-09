@@ -5,7 +5,7 @@
 import { useTranslation } from "react-i18next";
 import { useVehicles } from "@/hooks";
 import { useMasterUiStore } from "@/stores/master-ui-store";
-import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { LoadingBlock, ErrorBlock, EmptyState, VirtualizedList } from "@/features/common";
 import type { Vehicle } from "@/types";
 
 interface Props {
@@ -44,80 +44,49 @@ export function VehicleTableNew({ scenarioId, depotId }: Props) {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-border bg-slate-50">
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("vehicles.col_model", "車両名")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("vehicles.col_type", "種別")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
-              {t("vehicles.col_capacity", "定員")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
-              {t("vehicles.col_battery", "バッテリー (kWh)")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
-              {t("vehicles.col_fuel_tank", "燃料タンク (L)")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
-              {t("vehicles.col_consumption", "消費")}
-            </th>
-            <th className="px-3 py-2 text-xs font-medium text-slate-500">
-              {t("vehicles.col_status", "状態")}
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {vehicles.map((v) => (
-            <tr
-              key={v.id}
-              onClick={() => handleRowClick(v.id)}
-              className={`cursor-pointer transition-colors ${
-                selectedVehicleId === v.id
-                  ? "bg-primary-50"
-                  : "hover:bg-slate-50/50"
-              }`}
-            >
-              <td className="px-3 py-2 font-medium text-slate-700">
-                {v.modelName}
-              </td>
-              <td className="px-3 py-2">
-                <span
-                  className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${
-                    v.type === "BEV"
-                      ? "bg-green-50 text-green-700"
-                      : "bg-amber-50 text-amber-700"
-                  }`}
-                >
-                  {v.type === "BEV" ? "EV" : "エンジン"}
-                </span>
-              </td>
-              <td className="px-3 py-2 text-right text-slate-600">
-                {v.capacityPassengers}
-              </td>
-              <td className="px-3 py-2 text-right text-slate-600">
-                {v.batteryKwh ?? "-"}
-              </td>
-              <td className="px-3 py-2 text-right text-slate-600">
-                {v.fuelTankL ?? "-"}
-              </td>
-              <td className="px-3 py-2 text-right text-slate-600">
-                {v.energyConsumption}
-              </td>
-              <td className="px-3 py-2">
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${
-                    v.enabled ? "bg-green-400" : "bg-slate-300"
-                  }`}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="grid grid-cols-[1.4fr_0.8fr_0.6fr_0.8fr_0.8fr_0.8fr_0.5fr] border-b border-border bg-slate-50 text-left text-sm">
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("vehicles.col_model", "車両名")}</div>
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("vehicles.col_type", "種別")}</div>
+        <div className="px-3 py-2 text-right text-xs font-medium text-slate-500">{t("vehicles.col_capacity", "定員")}</div>
+        <div className="px-3 py-2 text-right text-xs font-medium text-slate-500">{t("vehicles.col_battery", "バッテリー (kWh)")}</div>
+        <div className="px-3 py-2 text-right text-xs font-medium text-slate-500">{t("vehicles.col_fuel_tank", "燃料タンク (L)")}</div>
+        <div className="px-3 py-2 text-right text-xs font-medium text-slate-500">{t("vehicles.col_consumption", "消費")}</div>
+        <div className="px-3 py-2 text-xs font-medium text-slate-500">{t("vehicles.col_status", "状態")}</div>
+      </div>
+      <VirtualizedList
+        items={vehicles}
+        height={560}
+        itemHeight={46}
+        className="bg-white"
+        perfLabel="master-vehicles-table"
+        getKey={(vehicle) => vehicle.id}
+        renderItem={(v) => (
+          <div
+            onClick={() => handleRowClick(v.id)}
+            className={`grid h-full cursor-pointer grid-cols-[1.4fr_0.8fr_0.6fr_0.8fr_0.8fr_0.8fr_0.5fr] border-b border-border text-sm transition-colors ${
+              selectedVehicleId === v.id ? "bg-primary-50" : "hover:bg-slate-50/50"
+            }`}
+          >
+            <div className="px-3 py-2 font-medium text-slate-700">{v.modelName}</div>
+            <div className="px-3 py-2">
+              <span
+                className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${
+                  v.type === "BEV" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"
+                }`}
+              >
+                {v.type === "BEV" ? "EV" : "エンジン"}
+              </span>
+            </div>
+            <div className="px-3 py-2 text-right text-slate-600">{v.capacityPassengers}</div>
+            <div className="px-3 py-2 text-right text-slate-600">{v.batteryKwh ?? "-"}</div>
+            <div className="px-3 py-2 text-right text-slate-600">{v.fuelTankL ?? "-"}</div>
+            <div className="px-3 py-2 text-right text-slate-600">{v.energyConsumption}</div>
+            <div className="px-3 py-2">
+              <span className={`inline-block h-2 w-2 rounded-full ${v.enabled ? "bg-green-400" : "bg-slate-300"}`} />
+            </div>
+          </div>
+        )}
+      />
     </div>
   );
 }

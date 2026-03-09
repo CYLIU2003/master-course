@@ -286,14 +286,15 @@ export function useImportOdptTimetable(scenarioId: string) {
   return useMutation({
     mutationFn: (data?: ImportOdptTimetableRequest) =>
       scenarioApi.importOdptTimetable(scenarioId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({
+    onSuccess: async () => {
+      await qc.invalidateQueries({
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
-      qc.invalidateQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId) });
+      await qc.refetchQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId), exact: true });
       invalidateDispatchOutputs(qc, scenarioId);
-      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });
 }
@@ -303,17 +304,18 @@ export function useImportGtfsTimetable(scenarioId: string) {
   return useMutation({
     mutationFn: (data?: ImportGtfsTimetableRequest) =>
       scenarioApi.importGtfsTimetable(scenarioId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({
+    onSuccess: async () => {
+      await qc.invalidateQueries({
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
-      qc.invalidateQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId) });
+      await qc.refetchQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId), exact: true });
       // GTFS timetable import also syncs calendar data
-      qc.invalidateQueries({ queryKey: scenarioKeys.calendar(scenarioId) });
-      qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.calendar(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
-      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });
 }
@@ -323,14 +325,18 @@ export function useImportOdptStopTimetables(scenarioId: string) {
   return useMutation({
     mutationFn: (data?: ImportOdptStopTimetableRequest) =>
       scenarioApi.importOdptStopTimetables(scenarioId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({
+    onSuccess: async () => {
+      await qc.invalidateQueries({
         queryKey: ["scenarios", scenarioId, "stop-timetables"],
         exact: false,
       });
-      qc.invalidateQueries({ queryKey: scenarioKeys.stopTimetablesSummary(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.stopTimetablesSummary(scenarioId) });
+      await qc.refetchQueries({
+        queryKey: scenarioKeys.stopTimetablesSummary(scenarioId),
+        exact: true,
+      });
       invalidateDispatchOutputs(qc, scenarioId);
-      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });
 }
@@ -340,14 +346,18 @@ export function useImportGtfsStopTimetables(scenarioId: string) {
   return useMutation({
     mutationFn: (data?: ImportGtfsStopTimetableRequest) =>
       scenarioApi.importGtfsStopTimetables(scenarioId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({
+    onSuccess: async () => {
+      await qc.invalidateQueries({
         queryKey: ["scenarios", scenarioId, "stop-timetables"],
         exact: false,
       });
-      qc.invalidateQueries({ queryKey: scenarioKeys.stopTimetablesSummary(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.stopTimetablesSummary(scenarioId) });
+      await qc.refetchQueries({
+        queryKey: scenarioKeys.stopTimetablesSummary(scenarioId),
+        exact: true,
+      });
       invalidateDispatchOutputs(qc, scenarioId);
-      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+      await qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });
 }
