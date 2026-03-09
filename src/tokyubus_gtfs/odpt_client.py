@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .constants import ODPT_RESOURCE_TYPES, TOKYU_OPERATOR_ID
+from .archive import _candidate_paths
 
 _log = logging.getLogger(__name__)
 
@@ -180,13 +181,5 @@ def check_raw_files(
     """
     result = {}
     for rtype in resource_types:
-        fname = _resource_filename(rtype)
-        exists = (source_dir / fname).exists()
-        if not exists:
-            alt = rtype.split(":")[-1] + ".json"
-            exists = (source_dir / alt).exists()
-        if not exists:
-            ndjson = rtype.split(":")[-1] + ".ndjson"
-            exists = (source_dir / ndjson).exists()
-        result[rtype] = exists
+        result[rtype] = any(path.exists() for path in _candidate_paths(source_dir, rtype))
     return result
