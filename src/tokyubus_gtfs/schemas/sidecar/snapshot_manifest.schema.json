@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sidecar/snapshot_manifest.schema.json",
+  "title": "SnapshotManifestSidecar",
+  "type": "object",
+  "required": ["canonical_summary", "raw_snapshot_manifest"],
+  "properties": {
+    "canonical_summary": { "type": "object" },
+    "raw_snapshot_manifest": { "type": "object" }
+  }
+}

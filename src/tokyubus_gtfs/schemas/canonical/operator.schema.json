@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "canonical/operator.schema.json",
+  "title": "CanonicalOperator",
+  "type": "object",
+  "required": ["operator_id", "name"],
+  "properties": {
+    "operator_id": { "type": "string" },
+    "name": { "type": "string" },
+    "name_en": { "type": "string" },
+    "url": { "type": "string" },
+    "phone": { "type": "string" },
+    "timezone": { "type": "string" },
+    "lang": { "type": "string" }
+  }
+}

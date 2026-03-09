@@ -147,7 +147,7 @@ Coverage integrity must also be checked:
    Never modify files under `constant/` unless explicitly instructed.
 
 5. **All pre-existing tests must stay green**
-   Current baseline: **180 passing tests** (verified 2026-03-06).
+   Current baseline: **245 passing tests** (verified 2026-03-09).
 
 ---
 
@@ -386,4 +386,102 @@ The following must be handled explicitly:
 If `timetable_rows = 0`, `stop_timetables = 0`, or `Timetable linked = 0`,
 the implementation must first verify ingestion / storage / linker paths before
 assuming a UI-only issue.
+
+---
+
+## GTFS Pipeline Architecture (tokyubus-gtfs)
+
+### Purpose
+
+`src/tokyubus_gtfs/` implements a 4-layer data pipeline that transforms raw
+ODPT JSON into a canonical transit model, standard GTFS feed, and a research
+feature store.  This replaces direct ODPT-to-scenario ingestion for Tokyu Bus
+data with a reproducible, auditable pipeline.
+
+### 4-Layer Architecture
+
+```text
+Layer A: Raw Archive     data/tokyubus/raw/{snapshot_id}/
+    │   Immutable ODPT JSON snapshots with SHA-256 manifests
+    ▼
+Layer B: Canonical       data/tokyubus/canonical/{snapshot_id}/
+    │   Normalised JSONL (stops, routes, route_stops, trips,
+    │   stop_times, services, stop_timetables)
+    ▼
+Layer C: GTFS Export     GTFS/TokyuBus-GTFS/
+    │   Standard GTFS feed + sidecar JSON for ODPT metadata
+    ▼
+Layer D: Features        data/tokyubus/features/{snapshot_id}/
+        Research feature store (trip_chains, energy_estimates,
+        depot_candidates, stop_distances, charging_windows,
+        deadhead_candidates)
+```
+
+### Pipeline Execution Order
+
+1. Archive raw ODPT snapshot (Layer A)
+2. Normalise to canonical model (Layer B)
+3. Export GTFS feed + sidecar files (Layer C)
+4. Build research features (Layer D)
+
+### Data Contracts
+
+- **Raw data is immutable**: Once archived, snapshot files are never modified.
+- **Original ODPT IDs preserved**: `odpt_id`, `odpt_pattern_id`, `odpt_raw`
+  fields retain source provenance.
+- **Both raw and normalised time values**: Original ODPT time strings AND
+  `_seconds` (seconds from midnight) are stored side by side.
+- **Coordinates carry provenance**: `coord_source_type` and `coord_confidence`
+  on every stop.
+- **Sidecar files for GTFS gaps**: Route patterns, variant metadata, ODPT
+  provenance go in sidecar JSON — not flattened into GTFS core.
+
+### File Layout
+
+| Layer | Path | Contents |
+|-------|------|----------|
+| Pipeline code | `src/tokyubus_gtfs/` | Python package |
+| JSON schemas | `src/tokyubus_gtfs/schemas/` | Canonical, sidecar, feature schemas |
+| Raw archive | `data/tokyubus/raw/` | Immutable snapshots |
+| Canonical | `data/tokyubus/canonical/` | JSONL tables |
+| GTFS feed | `GTFS/TokyuBus-GTFS/` | Standard GTFS + sidecars |
+| Features | `data/tokyubus/features/` | Research feature tables |
+
+### Dependency Boundaries
+
+1. `src/tokyubus_gtfs/` must not import from `frontend/` or `bff/`.
+2. `src/tokyubus_gtfs/` may import from `src/dispatch/` constants only when
+   needed for feature builders (e.g. deadhead rules).
+3. `src/tokyubus_gtfs/models.py` is independent of `src/schemas/*`.
+4. BFF and `catalog_update_app.py` call the pipeline through
+   `src.tokyubus_gtfs.pipeline.run_pipeline()`.
+
+### CLI Entry Points
+
+```bash
+# Full pipeline
+python -m src.tokyubus_gtfs run --source-dir ./data/raw-odpt
+
+# Individual layers
+python -m src.tokyubus_gtfs archive --source-dir ./data/raw-odpt
+python -m src.tokyubus_gtfs canonical --snapshot <id>
+python -m src.tokyubus_gtfs gtfs --snapshot <id>
+python -m src.tokyubus_gtfs features --snapshot <id>
+
+# Via catalog_update_app.py
+python catalog_update_app.py refresh gtfs-pipeline --source-dir ./data/raw-odpt
+```
+
+### Non-Negotiable Rules
+
+1. **Raw snapshots are immutable** — never modify archived JSON.
+2. **Never discard ODPT identifiers** — `odpt_id`, `odpt_pattern_id`,
+   `odpt_raw_*` fields must survive normalisation.
+3. **Do not flatten arrays into comma-joined strings** — use JSON lists.
+4. **Vehicle type metadata lives in features, not GTFS** — BEV/ICE, charging
+   constraints, depot info are Layer D concerns.
+5. **Timetable-first principle still applies** — dispatch and optimisation
+   consume trips from canonical/feature tables, never raw ODPT directly.
+6. **`odpt_only` branch preserves legacy** — the ODPT-direct implementation
+   is preserved on the `odpt_only` branch as a disabled fallback.
 

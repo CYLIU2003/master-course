@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "features/charging_window.schema.json",
+  "title": "ChargingWindow",
+  "type": "object",
+  "required": ["service_id", "stop_id", "trip_before_id", "trip_after_id"],
+  "properties": {
+    "service_id": { "type": "string" },
+    "stop_id": { "type": "string" },
+    "trip_before_id": { "type": "string" },
+    "trip_after_id": { "type": "string" },
+    "arrival_seconds": { "type": "integer", "minimum": 0 },
+    "departure_seconds": { "type": "integer", "minimum": 0 },
+    "turnaround_sec": { "type": "integer", "minimum": 0 },
+    "usable_charging_sec": { "type": "integer", "minimum": 0 },
+    "usable_charging_min": { "type": "number", "minimum": 0 }
+  }
+}
