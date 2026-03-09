@@ -58,6 +58,7 @@ if "ODPT_CONSUMER_KEY" not in os.environ and "ODPT_TOKEN" in os.environ:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 from bff.routers import (
     catalog,
@@ -81,13 +82,26 @@ app = FastAPI(
 # Allow the Vite dev server (localhost:5173) to call the BFF.
 # In production (same origin), CORS is not needed.
 
+default_allow_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+]
+allow_origins_env = os.getenv("BFF_CORS_ALLOW_ORIGINS", "")
+allow_origins = [
+    origin.strip()
+    for origin in allow_origins_env.split(",")
+    if origin.strip()
+] or default_allow_origins
+allow_origin_regex = os.getenv(
+    "BFF_CORS_ALLOW_ORIGIN_REGEX",
+    r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-    ],
+    allow_origins=allow_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
