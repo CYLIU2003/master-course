@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useScenarios, useCreateScenario, useDeleteScenario } from "@/hooks";
@@ -11,6 +12,7 @@ export function ScenarioListPage() {
   const { data, isLoading, error } = useScenarios();
   const createMutation = useCreateScenario();
   const deleteMutation = useDeleteScenario();
+  const [newScenarioOperator, setNewScenarioOperator] = useState<"tokyu" | "toei">("tokyu");
 
   if (isLoading) return <LoadingBlock message={t("scenarios.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;
@@ -26,20 +28,38 @@ export function ScenarioListPage() {
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-800">{t("scenarios.title")}</h1>
-        <button
-          onClick={async () => {
-            const created = await createMutation.mutateAsync({
-              name: `Scenario ${scenarios.length + 1}`,
-              description: "",
-              mode: "mode_B_resource_assignment",
-            });
-            await activateAndOpen(created.id);
-          }}
-          disabled={createMutation.isPending}
-          className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-        >
-          {createMutation.isPending ? t("scenarios.creating") : t("scenarios.new_scenario")}
-        </button>
+        <div className="flex items-end gap-3">
+          <label className="space-y-1 text-sm">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Operator
+            </span>
+            <select
+              value={newScenarioOperator}
+              onChange={(event) =>
+                setNewScenarioOperator(event.target.value as "tokyu" | "toei")
+              }
+              className="rounded-md border border-border bg-white px-3 py-1.5 text-sm text-slate-700"
+            >
+              <option value="tokyu">Tokyu Bus</option>
+              <option value="toei">Toei Bus</option>
+            </select>
+          </label>
+          <button
+            onClick={async () => {
+              const created = await createMutation.mutateAsync({
+                name: `${newScenarioOperator === "tokyu" ? "Tokyu" : "Toei"} Scenario ${scenarios.length + 1}`,
+                description: "",
+                mode: "mode_B_resource_assignment",
+                operatorId: newScenarioOperator,
+              });
+              await activateAndOpen(created.id);
+            }}
+            disabled={createMutation.isPending}
+            className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+          >
+            {createMutation.isPending ? t("scenarios.creating") : t("scenarios.new_scenario")}
+          </button>
+        </div>
       </div>
 
       {scenarios.length === 0 ? (
@@ -61,7 +81,7 @@ export function ScenarioListPage() {
               >
                 <p className="text-sm font-medium text-slate-800">{s.name}</p>
                 <p className="text-xs text-slate-400">
-                  {s.mode} &middot; {s.status} &middot; {formatDate(s.updatedAt)}
+                  {s.operatorId} &middot; {s.mode} &middot; {s.status} &middot; {formatDate(s.updatedAt)}
                 </p>
               </button>
               <button

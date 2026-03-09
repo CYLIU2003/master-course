@@ -29,7 +29,7 @@ from __future__ import annotations
 import csv
 import io
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
@@ -316,12 +316,14 @@ class CreateScenarioBody(BaseModel):
     name: str
     description: str = ""
     mode: str = "thesis_mode"
+    operatorId: Literal["tokyu", "toei"]
 
 
 class UpdateScenarioBody(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     mode: Optional[str] = None
+    operatorId: Optional[Literal["tokyu", "toei"]] = None
 
 
 class DuplicateScenarioBody(BaseModel):
@@ -329,8 +331,15 @@ class DuplicateScenarioBody(BaseModel):
 
 
 class UpdateDispatchScopeBody(BaseModel):
+    scopeId: Optional[str] = None
+    operatorId: Optional[str] = None
+    datasetVersion: Optional[str] = None
     depotId: Optional[str] = None
     serviceId: Optional[str] = None
+    depotSelection: Optional[Dict[str, Any]] = None
+    routeSelection: Optional[Dict[str, Any]] = None
+    serviceSelection: Optional[Dict[str, Any]] = None
+    tripSelection: Optional[Dict[str, Any]] = None
 
 
 class TimetableRowBody(BaseModel):
@@ -657,6 +666,7 @@ def create_scenario(body: CreateScenarioBody) -> Dict[str, Any]:
         name=body.name,
         description=body.description,
         mode=body.mode,
+        operator_id=body.operatorId,
     )
 
 
@@ -686,6 +696,7 @@ def update_scenario(scenario_id: str, body: UpdateScenarioBody) -> Dict[str, Any
             name=body.name,
             description=body.description,
             mode=body.mode,
+            operator_id=body.operatorId,
         )
     except KeyError:
         raise _not_found(scenario_id)
@@ -728,7 +739,7 @@ def activate_scenario(scenario_id: str) -> Dict[str, Any]:
     return {
         "activeScenarioId": scenario_id,
         "scenarioName": scenario.get("name"),
-        "selectedOperatorId": None,
+        "selectedOperatorId": scenario.get("operatorId"),
         "availableModules": [
             "planning",
             "simulation",
@@ -758,7 +769,7 @@ def get_app_context() -> Dict[str, Any]:
     return {
         "activeScenarioId": scenario_id,
         "scenarioName": scenario.get("name") if scenario else None,
-        "selectedOperatorId": None,
+        "selectedOperatorId": context.get("selectedOperatorId") or (scenario.get("operatorId") if scenario else None),
         "availableModules": [
             "planning",
             "simulation",

@@ -78,6 +78,10 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         });
         if (cancelled) return;
         updateStep("cache", { status: "success", progress: 100 });
+        const scenarioDetail = queryClient.getQueryData<{
+          operatorId?: "tokyu" | "toei";
+        }>(scenarioKeys.detail(currentScenarioId));
+        const scenarioOperator = scenarioDetail?.operatorId ?? "tokyu";
         const runMasterStep = async () => {
           updateStep("master", {
             status: "running",
@@ -139,7 +143,9 @@ export function AppBootstrapManager({ scenarioId }: Props) {
             detailMessage: "public-data overview を読込中",
           });
           await measureAsyncStep("boot:explorer", () =>
-            fetchMaybeJson(`/api/scenarios/${currentScenarioId}/explorer/overview?operator=tokyu`),
+            fetchMaybeJson(
+              `/api/scenarios/${currentScenarioId}/explorer/overview?operator=${scenarioOperator}`,
+            ),
           );
           if (cancelled) {
             return;

@@ -262,6 +262,26 @@ def test_create_scenario_seeds_v1_2_backend_fields(temp_store_dir: Path):
     assert doc["simulation_audit"] is None
     assert doc["feed_context"] is None
     assert meta["feedContext"] is None
+    assert meta["operatorId"] == "tokyu"
+    assert doc["dispatch_scope"]["operatorId"] == "tokyu"
+
+
+def test_create_scenario_can_fix_operator_and_activation_updates_app_context(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario(
+        "Toei scenario",
+        "",
+        "thesis_mode",
+        operator_id="toei",
+    )
+
+    assert meta["operatorId"] == "toei"
+
+    context = scenario_store.set_active_scenario(meta["id"])
+
+    assert context["activeScenarioId"] == meta["id"]
+    assert context["selectedOperatorId"] == "toei"
 
 
 def test_feed_context_roundtrip_is_exposed_in_scenario_meta(temp_store_dir: Path):
@@ -565,3 +585,97 @@ def test_route_depot_assignments_filter_routes_and_preserve_unresolved(temp_stor
     )
     assert [item["routeId"] for item in unresolved] == [route_unassigned["id"]]
     assert unresolved[0]["depotId"] is None
+
+
+def test_dispatch_scope_supports_depot_route_and_trip_filters(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Analysis scope", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot_a = scenario_store.create_depot(scenario_id, {"name": "Depot A", "location": "A"})
+    depot_b = scenario_store.create_depot(scenario_id, {"name": "Depot B", "location": "B"})
+    route_main = scenario_store.create_route(
+        scenario_id,
+        {
+            "id": "R_MAIN",
+            "name": "Main",
+            "startStop": "S1",
+            "endStop": "S2",
+            "distanceKm": 1.0,
+            "durationMin": 5,
+            "color": "#111111",
+            "enabled": True,
+            "routeVariantType": "main",
+        },
+    )
+    scenario_store.create_route(
+        scenario_id,
+        {
+            "id": "R_SHORT",
+            "name": "Short",
+            "startStop": "S1",
+            "endStop": "S3",
+            "distanceKm": 1.0,
+            "durationMin": 5,
+            "color": "#222222",
+            "enabled": True,
+            "routeVariantType": "short_turn",
+        },
+    )
+    scenario_store.create_route(
+        scenario_id,
+        {
+            "id": "R_REMOTE",
+            "name": "Remote",
+            "startStop": "X1",
+            "endStop": "X2",
+            "distanceKm": 1.0,
+            "durationMin": 5,
+            "color": "#333333",
+            "enabled": True,
+            "routeVariantType": "main",
+        },
+    )
+
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        "R_MAIN",
+        {"depotId": depot_a["id"], "assignmentType": "manual_override", "confidence": 1.0},
+    )
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        "R_SHORT",
+        {"depotId": depot_a["id"], "assignmentType": "manual_override", "confidence": 1.0},
+    )
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        "R_REMOTE",
+        {"depotId": depot_b["id"], "assignmentType": "manual_override", "confidence": 1.0},
+    )
+
+    scope = scenario_store.set_dispatch_scope(
+        scenario_id,
+        {
+            "scopeId": "tokyu-a-weekday",
+            "depotSelection": {
+                "depotIds": [depot_a["id"], depot_b["id"]],
+                "primaryDepotId": depot_a["id"],
+            },
+            "routeSelection": {
+                "mode": "refine",
+                "includeRouteIds": [],
+                "excludeRouteIds": ["R_REMOTE"],
+            },
+            "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+            "tripSelection": {
+                "includeShortTurn": False,
+                "includeDepotMoves": True,
+                "includeDeadhead": True,
+            },
+        },
+    )
+
+    assert scope["depotId"] == depot_a["id"]
+    assert scope["serviceId"] == "WEEKDAY"
+    assert scope["candidateRouteIds"] == ["R_MAIN", "R_SHORT", "R_REMOTE"]
+    assert scope["effectiveRouteIds"] == ["R_MAIN", "R_SHORT"]
+    assert scope["tripSelection"]["includeShortTurn"] is False

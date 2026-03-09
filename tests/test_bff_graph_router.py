@@ -238,6 +238,146 @@ def test_build_graph_payload_returns_reasoned_arcs(temp_store_dir: Path):
     assert arc["reason"].startswith("OK:")
 
 
+def test_build_dispatch_context_applies_analysis_scope_route_and_trip_filters(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Analysis scope dispatch", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Main depot", "location": "A"},
+    )
+    scenario_store.create_vehicle(
+        scenario_id,
+        {
+            "depotId": depot["id"],
+            "type": "BEV",
+            "modelName": "EV-1",
+            "batteryKwh": 300.0,
+            "energyConsumption": 1.2,
+        },
+    )
+    scenario_store.create_route(
+        scenario_id,
+        {
+            "id": "R_MAIN",
+            "name": "Main",
+            "startStop": "A",
+            "endStop": "B",
+            "distanceKm": 10.0,
+            "durationMin": 30,
+            "color": "#111111",
+            "enabled": True,
+            "routeVariantType": "main",
+        },
+    )
+    scenario_store.create_route(
+        scenario_id,
+        {
+            "id": "R_SHORT",
+            "name": "Short",
+            "startStop": "B",
+            "endStop": "C",
+            "distanceKm": 4.0,
+            "durationMin": 15,
+            "color": "#222222",
+            "enabled": True,
+            "routeVariantType": "short_turn",
+        },
+    )
+    scenario_store.create_route(
+        scenario_id,
+        {
+            "id": "R_DEPOT",
+            "name": "Depot",
+            "startStop": "C",
+            "endStop": "D",
+            "distanceKm": 2.0,
+            "durationMin": 10,
+            "color": "#333333",
+            "enabled": True,
+            "routeVariantType": "depot_out",
+        },
+    )
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        "R_MAIN",
+        {"depotId": depot["id"], "assignmentType": "manual_override", "confidence": 1.0},
+    )
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        "R_SHORT",
+        {"depotId": depot["id"], "assignmentType": "manual_override", "confidence": 1.0},
+    )
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        "R_DEPOT",
+        {"depotId": depot["id"], "assignmentType": "manual_override", "confidence": 1.0},
+    )
+    scenario_store.set_dispatch_scope(
+        scenario_id,
+        {
+            "depotSelection": {"depotIds": [depot["id"]], "primaryDepotId": depot["id"]},
+            "routeSelection": {
+                "mode": "refine",
+                "includeRouteIds": [],
+                "excludeRouteIds": ["R_DEPOT"],
+            },
+            "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+            "tripSelection": {
+                "includeShortTurn": False,
+                "includeDepotMoves": False,
+                "includeDeadhead": True,
+            },
+        },
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "timetable_rows",
+        [
+            {
+                "trip_id": "T_MAIN",
+                "route_id": "R_MAIN",
+                "service_id": "WEEKDAY",
+                "origin": "A",
+                "destination": "B",
+                "departure": "07:00",
+                "arrival": "07:30",
+                "distance_km": 10.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+            {
+                "trip_id": "T_SHORT",
+                "route_id": "R_SHORT",
+                "service_id": "WEEKDAY",
+                "origin": "B",
+                "destination": "C",
+                "departure": "07:40",
+                "arrival": "07:55",
+                "distance_km": 4.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+            {
+                "trip_id": "T_DEPOT",
+                "route_id": "R_DEPOT",
+                "service_id": "WEEKDAY",
+                "origin": "C",
+                "destination": "D",
+                "departure": "08:10",
+                "arrival": "08:20",
+                "distance_km": 2.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+        ],
+        invalidate_dispatch=True,
+    )
+
+    context = _build_dispatch_context(scenario_id)
+
+    assert [trip.trip_id for trip in context.trips] == ["T_MAIN"]
+
+
 def test_build_blocks_payload_groups_feasible_chains(temp_store_dir: Path):
     meta = scenario_store.create_scenario("Block payload", "", "thesis_mode")
     scenario_id = meta["id"]

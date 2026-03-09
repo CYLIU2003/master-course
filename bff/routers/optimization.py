@@ -117,13 +117,18 @@ def _resolve_dispatch_scope(
     persist: bool = False,
 ) -> Dict[str, Any]:
     current = store.get_dispatch_scope(scenario_id)
-    scope = {
-        "serviceId": service_id or current.get("serviceId") or "WEEKDAY",
-        "depotId": depot_id if depot_id is not None else current.get("depotId"),
-    }
+    scope: Dict[str, Any] = {}
+    if service_id is not None:
+        scope["serviceId"] = service_id
+    if depot_id is not None:
+        scope["depotId"] = depot_id
+    if not scope:
+        return current
     if persist:
         return store.set_dispatch_scope(scenario_id, scope)
-    return scope
+    doc = store._load(scenario_id)
+    doc["dispatch_scope"] = {**current, **scope}
+    return store._normalize_dispatch_scope(doc)
 
 
 def _git_sha() -> str:
@@ -305,6 +310,7 @@ def _run_optimization(
             service_id=service_id,
             mode=mode,
             use_existing_duties=use_existing_duties,
+            analysis_scope=store.get_dispatch_scope(scenario_id),
         )
         store.set_field(scenario_id, "problemdata_build_audit", build_report.to_dict())
         canonical_problem = ProblemBuilder().build_from_scenario(

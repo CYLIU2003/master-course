@@ -485,3 +485,111 @@ python catalog_update_app.py refresh gtfs-pipeline --source-dir ./data/raw-odpt
 6. **`odpt_only` branch preserves legacy** — the ODPT-direct implementation
    is preserved on the `odpt_only` branch as a disabled fallback.
 
+---
+
+## Operator Boundary Invariants（最重要）
+
+本プロジェクトでは、公開交通データ・研究用前処理・可視化・最適化のすべてにおいて、
+**operator（事業者）境界の厳密分離** を最優先とする。
+
+対象例:
+- Tokyu Bus（東急バス）
+- Toei Bus（都営バス）
+
+### Hard Rules
+
+1. すべての公開交通エンティティは `operator_id` を必須とする。
+   - stops
+   - routes
+   - route_patterns
+   - trips
+   - stop_times
+   - timetables
+   - shapes
+   - depots
+   - blocks / duties / vehicle_assignments
+   - deadhead candidates
+
+2. `operator_id` の無いデータは保存・返却・描画してはならない。
+   - missing operator_id は validation error
+   - fallback 推定は禁止
+   - UI での暗黙混在は禁止
+
+3. entity の一意キーは、単独 id ではなく namespaced key を前提とする。
+   - bad: `stop_id`
+   - good: `${operator_id}:${stop_id}`
+
+4. 詳細APIは `operatorId` 必須とする。
+   - 一覧・比較用 summary を除き、詳細系 endpoint は operator 未指定を許可しない
+   - `all` は summary / compare 専用であり、詳細データ取得では使用禁止
+
+5. フロント store は operator 別に保持する。
+   - bad: 全 operator の stop / route / trip を単一配列で保持
+   - good: `datasetsByOperator.tokyu`, `datasetsByOperator.toei`
+
+6. selector / memo / map layer は必ず operator スコープ内で動作する。
+   - `selectedOperator` を見ない selector は不正
+   - `all` 比較画面では summary だけを扱う
+   - 詳細画面では operator を固定する
+
+7. Explorer 初期表示は summary-first とする。
+   - 初期表示で全 stops / 全 shapes / 全 timetables をロードしない
+   - まず operator 別 summary と preview map のみ表示する
+
+8. map preview は軽量化済みデータのみ使用する。
+   - stop cluster
+   - simplified polyline
+   - bounds
+   - depot preview
+   full geometry は必要時に遅延読込する
+
+9. catalog refresh 時に operator ごとの summary を事前計算する。
+   - counts
+   - bounds
+   - preview stats
+   - updated_at
+   を `summary.json` 等に保存し、Explorer はそれを優先使用する
+
+10. 研究用の dispatch / optimization / simulation も operator 単位で閉じる。
+    - trip cover
+    - compatibility graph
+    - deadhead inference
+    - depot assignment
+    は同一 operator 内でのみ定義する
+    - cross-operator 接続は将来拡張とし、現段階では禁止
+
+### Validation Rules
+
+- mixed operator join を禁止
+- join 条件には `operator_id` を必ず含める
+- `route_id`, `trip_id`, `stop_id` 単独 join を禁止
+- catalog build 時に operator 混在チェックを実施する
+
+### API Design Rules
+
+- `/summary` 系のみ operator 省略可
+- `/routes`, `/stops`, `/trips`, `/map-overview`, `/timetables` は `operatorId` 必須
+- invalid operatorId は 400
+- missing operatorId は 400
+- unknown operatorId は 404
+
+### UI Rules
+
+- Explorer トップでは operator cards を必ず表示
+- 詳細ビューに入る前に operator を確定させる
+- 「全体表示」は比較用の件数・棒グラフ・bounds のみに限定
+- stop / trip / timetable の大量描画は operator 固定後のみ許可
+
+### Performance Rules
+
+- 初期描画で full dataset を読むな
+- summary は事前計算済み JSON を返す
+- 詳細一覧は pagination / virtualization を必須とする
+- 地図は cluster / simplified shape を優先する
+
+### Research Integrity Rules
+
+- 修論・実験で使う dataset は必ず operator, source_type, dataset_version を明記する
+- 研究出力の KPI は operator ごとに区別して保存する
+- mixed-operator input での実験は禁止
+

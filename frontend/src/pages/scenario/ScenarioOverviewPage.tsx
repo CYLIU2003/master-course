@@ -16,6 +16,7 @@ export function ScenarioOverviewPage() {
     <div>
       <PageSection title={scenario.name} description={scenario.description}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <InfoCard label="Operator" value={scenario.operatorId} />
           <InfoCard label={t("scenarios.mode")} value={scenario.mode} />
           <InfoCard label={t("scenarios.status")} value={scenario.status} />
           <InfoCard label={t("scenarios.created")} value={scenario.createdAt} />

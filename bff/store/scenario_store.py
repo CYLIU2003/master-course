@@ -21,7 +21,30 @@ Each file stores the complete scenario document:
     "stop_timetables": [ StopTimetable ... ],
     "calendar": [ ServiceCalendar ... ],      # WEEKDAY/SAT/SUN_HOL definitions
     "calendar_dates": [ CalendarDate ... ],   # exception overrides
-    "dispatch_scope": { "depotId": str | null, "serviceId": str },
+    "dispatch_scope": {
+        "scopeId": str | null,
+        "operatorId": str | null,
+        "datasetVersion": str | null,
+        "depotSelection": {
+            "mode": "include",
+            "depotIds": [str, ...],
+            "primaryDepotId": str | null,
+        },
+        "routeSelection": {
+            "mode": "refine",
+            "includeRouteIds": [str, ...],
+            "excludeRouteIds": [str, ...],
+        },
+        "serviceSelection": { "serviceIds": [str, ...] },
+        "tripSelection": {
+            "includeShortTurn": bool,
+            "includeDepotMoves": bool,
+            "includeDeadhead": bool,
+        },
+        # legacy aliases kept for compatibility
+        "depotId": str | null,
+        "serviceId": str,
+    },
     "simulation_config": { ... } | null,
     "trips":   [ Trip ... ] | null,
     "graph":   { ... } | null,
@@ -41,10 +64,35 @@ from typing import Any, Dict, List, Optional
 
 _STORE_DIR = Path(__file__).parent.parent.parent / "outputs" / "scenarios"
 _APP_CONTEXT_PATH = Path(__file__).parent.parent.parent / "outputs" / "app_context.json"
+_VALID_OPERATOR_IDS = {"tokyu", "toei"}
 
 
 def _default_dispatch_scope() -> Dict[str, Any]:
-    return {"depotId": None, "serviceId": "WEEKDAY"}
+    return {
+        "scopeId": None,
+        "operatorId": None,
+        "datasetVersion": None,
+        "depotSelection": {
+            "mode": "include",
+            "depotIds": [],
+            "primaryDepotId": None,
+        },
+        "routeSelection": {
+            "mode": "refine",
+            "includeRouteIds": [],
+            "excludeRouteIds": [],
+        },
+        "serviceSelection": {
+            "serviceIds": ["WEEKDAY"],
+        },
+        "tripSelection": {
+            "includeShortTurn": True,
+            "includeDepotMoves": True,
+            "includeDeadhead": True,
+        },
+        "depotId": None,
+        "serviceId": "WEEKDAY",
+    }
 
 
 def _default_v1_2_fields() -> Dict[str, Any]:
@@ -80,6 +128,7 @@ def _default_app_context() -> Dict[str, Any]:
     return {
         "contextKey": "local-default",
         "activeScenarioId": None,
+        "selectedOperatorId": None,
         "lastOpenedPage": None,
         "updatedAt": _now_iso(),
     }
@@ -98,6 +147,8 @@ def _load(scenario_id: str) -> Dict[str, Any]:
     if not p.exists():
         raise KeyError(scenario_id)
     doc = json.loads(p.read_text(encoding="utf-8"))
+    doc.setdefault("meta", {})
+    doc["meta"].setdefault("operatorId", "tokyu")
     doc.setdefault("vehicle_templates", [])
     doc.setdefault("route_depot_assignments", [])
     doc.setdefault("route_import_meta", {})
@@ -177,8 +228,18 @@ def _normalize_feed_context(
 
 def _meta_payload(doc: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(doc["meta"])
+    payload.setdefault("operatorId", "tokyu")
     payload["feedContext"] = _normalize_feed_context(doc.get("feed_context"))
     return payload
+
+
+def _normalize_operator_id(value: Any, default: Optional[str] = None) -> Optional[str]:
+    operator_id = str(value or default or "").strip().lower()
+    if not operator_id:
+        return None
+    if operator_id not in _VALID_OPERATOR_IDS:
+        raise ValueError(f"Unknown operator '{operator_id}'")
+    return operator_id
 
 
 # ── Public helpers ─────────────────────────────────────────────
@@ -208,19 +269,169 @@ def _invalidate_dispatch_artifacts(doc: Dict[str, Any]) -> None:
 
 def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
     scope = doc.setdefault("dispatch_scope", {})
-    scope["serviceId"] = str(scope.get("serviceId") or "WEEKDAY")
+    defaults = _default_dispatch_scope()
+
     depot_ids = {
         str(depot.get("id"))
         for depot in doc.get("depots") or []
         if depot.get("id") is not None
     }
-    depot_id = scope.get("depotId")
-    if depot_id is None:
-        scope["depotId"] = None
-    else:
+    route_ids = {
+        str(route.get("id"))
+        for route in doc.get("routes") or []
+        if route.get("id") is not None
+    }
+    service_ids = {
+        str(entry.get("service_id"))
+        for entry in doc.get("calendar") or _default_calendar()
+        if entry.get("service_id") is not None
+    }
+    assignment_map = _route_assignment_map(doc)
+
+    legacy_depot_id = scope.get("depotId")
+    legacy_service_id = str(scope.get("serviceId") or "WEEKDAY")
+
+    depot_selection = scope.get("depotSelection")
+    if not isinstance(depot_selection, dict):
+        depot_selection = {}
+    selected_depots = []
+    for depot_id in depot_selection.get("depotIds") or []:
         depot_id = str(depot_id)
-        scope["depotId"] = depot_id if depot_id in depot_ids else None
-    return dict(scope)
+        if depot_id in depot_ids and depot_id not in selected_depots:
+            selected_depots.append(depot_id)
+    if legacy_depot_id is not None:
+        legacy_depot_id = str(legacy_depot_id)
+        if legacy_depot_id in depot_ids and legacy_depot_id not in selected_depots:
+            selected_depots.insert(0, legacy_depot_id)
+    primary_depot_id = depot_selection.get("primaryDepotId")
+    if primary_depot_id is not None:
+        primary_depot_id = str(primary_depot_id)
+        if primary_depot_id not in depot_ids:
+            primary_depot_id = None
+    if primary_depot_id is None and selected_depots:
+        primary_depot_id = selected_depots[0]
+    if primary_depot_id and primary_depot_id not in selected_depots:
+        selected_depots.insert(0, primary_depot_id)
+
+    route_selection = scope.get("routeSelection")
+    if not isinstance(route_selection, dict):
+        route_selection = {}
+    route_mode = str(route_selection.get("mode") or defaults["routeSelection"]["mode"])
+    if route_mode not in {"all", "include", "exclude", "refine"}:
+        route_mode = defaults["routeSelection"]["mode"]
+    include_route_ids = []
+    for route_id in route_selection.get("includeRouteIds") or []:
+        route_id = str(route_id)
+        if route_id in route_ids and route_id not in include_route_ids:
+            include_route_ids.append(route_id)
+    exclude_route_ids = []
+    for route_id in route_selection.get("excludeRouteIds") or []:
+        route_id = str(route_id)
+        if route_id in route_ids and route_id not in exclude_route_ids:
+            exclude_route_ids.append(route_id)
+
+    service_selection = scope.get("serviceSelection")
+    if not isinstance(service_selection, dict):
+        service_selection = {}
+    selected_service_ids = []
+    for service_id in service_selection.get("serviceIds") or []:
+        service_id = str(service_id)
+        if service_id in service_ids and service_id not in selected_service_ids:
+            selected_service_ids.append(service_id)
+    if not selected_service_ids:
+        selected_service_ids = [legacy_service_id if legacy_service_id in service_ids else "WEEKDAY"]
+
+    trip_selection = scope.get("tripSelection")
+    if not isinstance(trip_selection, dict):
+        trip_selection = {}
+    normalized_trip_selection = {
+        "includeShortTurn": bool(
+            trip_selection.get(
+                "includeShortTurn",
+                defaults["tripSelection"]["includeShortTurn"],
+            )
+        ),
+        "includeDepotMoves": bool(
+            trip_selection.get(
+                "includeDepotMoves",
+                defaults["tripSelection"]["includeDepotMoves"],
+            )
+        ),
+        "includeDeadhead": bool(
+            trip_selection.get(
+                "includeDeadhead",
+                defaults["tripSelection"]["includeDeadhead"],
+            )
+        ),
+    }
+
+    candidate_route_ids: List[str] = []
+    if selected_depots:
+        for route_id, assignment in assignment_map.items():
+            if str(assignment.get("depotId")) in selected_depots and route_id not in candidate_route_ids:
+                candidate_route_ids.append(route_id)
+        for item in doc.get("depot_route_permissions") or []:
+            route_id = item.get("routeId")
+            depot_id = item.get("depotId")
+            if route_id is None or depot_id is None:
+                continue
+            route_id = str(route_id)
+            if (
+                route_id in route_ids
+                and str(depot_id) in selected_depots
+                and bool(item.get("allowed")) is True
+                and route_id not in candidate_route_ids
+            ):
+                candidate_route_ids.append(route_id)
+    else:
+        candidate_route_ids = sorted(route_ids)
+
+    if route_mode == "all":
+        effective_route_ids = [route_id for route_id in sorted(route_ids) if route_id not in exclude_route_ids]
+    elif route_mode == "include":
+        effective_route_ids = [route_id for route_id in include_route_ids if route_id not in exclude_route_ids]
+    elif route_mode == "exclude":
+        effective_route_ids = [route_id for route_id in candidate_route_ids if route_id not in exclude_route_ids]
+    else:
+        effective_route_ids = list(candidate_route_ids)
+        for route_id in include_route_ids:
+            if route_id not in effective_route_ids:
+                effective_route_ids.append(route_id)
+        effective_route_ids = [route_id for route_id in effective_route_ids if route_id not in exclude_route_ids]
+
+    operator_id = scope.get("operatorId")
+    if operator_id is None:
+        operator_id = (doc.get("meta") or {}).get("operatorId")
+    if operator_id is not None:
+        operator_id = str(operator_id).strip().lower() or None
+
+    normalized = {
+        "scopeId": str(scope.get("scopeId")).strip() if scope.get("scopeId") else None,
+        "operatorId": operator_id,
+        "datasetVersion": str(scope.get("datasetVersion")).strip()
+        if scope.get("datasetVersion")
+        else None,
+        "depotSelection": {
+            "mode": "include",
+            "depotIds": selected_depots,
+            "primaryDepotId": primary_depot_id,
+        },
+        "routeSelection": {
+            "mode": route_mode,
+            "includeRouteIds": include_route_ids,
+            "excludeRouteIds": exclude_route_ids,
+        },
+        "serviceSelection": {
+            "serviceIds": selected_service_ids,
+        },
+        "tripSelection": normalized_trip_selection,
+        "depotId": primary_depot_id,
+        "serviceId": selected_service_ids[0],
+        "candidateRouteIds": candidate_route_ids,
+        "effectiveRouteIds": effective_route_ids,
+    }
+    doc["dispatch_scope"] = normalized
+    return dict(normalized)
 
 
 def _sync_depot_route_permissions(
@@ -379,18 +590,27 @@ def list_scenarios() -> List[Dict[str, Any]]:
     return results
 
 
-def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
+def create_scenario(
+    name: str,
+    description: str,
+    mode: str,
+    operator_id: str = "tokyu",
+) -> Dict[str, Any]:
     scenario_id = _new_id()
     now = _now_iso()
+    normalized_operator_id = _normalize_operator_id(operator_id, "tokyu")
     meta = {
         "id": scenario_id,
         "name": name,
         "description": description,
         "mode": mode,
+        "operatorId": normalized_operator_id,
         "createdAt": now,
         "updatedAt": now,
         "status": "draft",
     }
+    dispatch_scope = _default_dispatch_scope()
+    dispatch_scope["operatorId"] = normalized_operator_id
     doc: Dict[str, Any] = {
         "meta": meta,
         "depots": [],
@@ -409,7 +629,7 @@ def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
         "stop_timetables": [],
         "calendar": _default_calendar(),
         "calendar_dates": [],
-        "dispatch_scope": _default_dispatch_scope(),
+        "dispatch_scope": dispatch_scope,
         "simulation_config": None,
         "trips": None,
         "graph": None,
@@ -435,6 +655,7 @@ def update_scenario(
     name: Optional[str] = None,
     description: Optional[str] = None,
     mode: Optional[str] = None,
+    operator_id: Optional[str] = None,
     status: Optional[str] = None,
 ) -> Dict[str, Any]:
     doc = _load(scenario_id)
@@ -444,6 +665,12 @@ def update_scenario(
         doc["meta"]["description"] = description
     if mode is not None:
         doc["meta"]["mode"] = mode
+    if operator_id is not None:
+        normalized_operator_id = _normalize_operator_id(operator_id)
+        doc["meta"]["operatorId"] = normalized_operator_id
+        scope = doc.get("dispatch_scope") or _default_dispatch_scope()
+        scope["operatorId"] = normalized_operator_id
+        doc["dispatch_scope"] = scope
     if status is not None:
         doc["meta"]["status"] = status
     doc["meta"]["updatedAt"] = _now_iso()
@@ -647,6 +874,12 @@ def set_active_scenario(
 ) -> Dict[str, Any]:
     context = _load_app_context()
     context["activeScenarioId"] = scenario_id
+    context["selectedOperatorId"] = None
+    if scenario_id is not None:
+        scenario = _load(scenario_id)
+        context["selectedOperatorId"] = (
+            scenario.get("meta") or {}
+        ).get("operatorId")
     if last_opened_page is not None:
         context["lastOpenedPage"] = last_opened_page
     context["updatedAt"] = _now_iso()
@@ -1458,10 +1691,46 @@ def get_dispatch_scope(scenario_id: str) -> Dict[str, Any]:
 def set_dispatch_scope(scenario_id: str, scope: Dict[str, Any]) -> Dict[str, Any]:
     doc = _load(scenario_id)
     current = _normalize_dispatch_scope(doc)
+    depot_selection = dict(current.get("depotSelection") or {})
+    route_selection = dict(current.get("routeSelection") or {})
+    service_selection = dict(current.get("serviceSelection") or {})
+    trip_selection = dict(current.get("tripSelection") or {})
+
+    incoming_depot_selection = scope.get("depotSelection")
+    if isinstance(incoming_depot_selection, dict):
+        depot_selection.update(incoming_depot_selection)
+    if "depotId" in scope:
+        depot_selection["primaryDepotId"] = scope.get("depotId")
+        if scope.get("depotId") is None:
+            depot_selection["depotIds"] = []
+        else:
+            depot_selection["depotIds"] = [scope.get("depotId")]
+
+    incoming_route_selection = scope.get("routeSelection")
+    if isinstance(incoming_route_selection, dict):
+        route_selection.update(incoming_route_selection)
+
+    incoming_service_selection = scope.get("serviceSelection")
+    if isinstance(incoming_service_selection, dict):
+        service_selection.update(incoming_service_selection)
+    if "serviceId" in scope:
+        service_selection["serviceIds"] = [scope.get("serviceId")]
+
+    incoming_trip_selection = scope.get("tripSelection")
+    if isinstance(incoming_trip_selection, dict):
+        trip_selection.update(incoming_trip_selection)
+
     next_scope = {
-        "depotId": scope.get("depotId"),
-        "serviceId": str(
-            scope.get("serviceId") or current.get("serviceId") or "WEEKDAY"
+        "scopeId": scope.get("scopeId", current.get("scopeId")),
+        "operatorId": scope.get("operatorId", current.get("operatorId")),
+        "datasetVersion": scope.get("datasetVersion", current.get("datasetVersion")),
+        "depotSelection": depot_selection,
+        "routeSelection": route_selection,
+        "serviceSelection": service_selection,
+        "tripSelection": trip_selection,
+        "depotId": depot_selection.get("primaryDepotId"),
+        "serviceId": (
+            (service_selection.get("serviceIds") or [current.get("serviceId") or "WEEKDAY"])[0]
         ),
     }
     doc["dispatch_scope"] = next_scope
@@ -1471,6 +1740,28 @@ def set_dispatch_scope(scenario_id: str, scope: Dict[str, Any]) -> Dict[str, Any
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
     return normalized
+
+
+def effective_route_ids_for_scope(
+    scenario_id: str,
+    scope: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    doc = _load(scenario_id)
+    if scope is not None:
+        doc["dispatch_scope"] = scope
+    normalized = _normalize_dispatch_scope(doc)
+    return list(normalized.get("effectiveRouteIds") or [])
+
+
+def route_ids_for_selected_depots(
+    scenario_id: str,
+    scope: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    doc = _load(scenario_id)
+    if scope is not None:
+        doc["dispatch_scope"] = scope
+    normalized = _normalize_dispatch_scope(doc)
+    return list(normalized.get("candidateRouteIds") or [])
 
 
 # ── Calendar helpers ───────────────────────────────────────────

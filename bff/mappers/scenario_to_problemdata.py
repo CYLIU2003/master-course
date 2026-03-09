@@ -19,6 +19,7 @@ from src.preprocess.trip_converter import (
     build_vehicle_task_compat,
 )
 from src.schemas.duty_entities import DutyLeg, VehicleDuty
+from bff.store import scenario_store
 
 
 @dataclass
@@ -90,21 +91,50 @@ def _filter_rows_for_scope(
     scenario: Dict[str, Any],
     depot_id: str,
     service_id: str,
+    analysis_scope: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    allowed_route_ids = {
-        str(item.get("routeId"))
-        for item in _as_list(scenario.get("depot_route_permissions"))
-        if item.get("depotId") == depot_id and item.get("allowed") is True
+    scope = dict(analysis_scope or scenario.get("dispatch_scope") or {})
+    if not analysis_scope:
+        scope.setdefault("depotId", depot_id)
+        scope.setdefault("serviceId", service_id)
+    temp_scenario_id = str((scenario.get("meta") or {}).get("id") or "")
+    effective_route_ids = set(scope.get("effectiveRouteIds") or [])
+    if temp_scenario_id and not effective_route_ids:
+        temp_doc = dict(scenario)
+        temp_doc["dispatch_scope"] = scope
+        normalized_scope = scenario_store._normalize_dispatch_scope(temp_doc)
+        effective_route_ids = set(normalized_scope.get("effectiveRouteIds") or [])
+        scope = normalized_scope
+
+    route_lookup = {
+        str(route.get("id")): route
+        for route in _as_list(scenario.get("routes"))
+        if route.get("id") is not None
     }
     timetable_rows = [
         row
         for row in _as_list(scenario.get("timetable_rows"))
         if row.get("service_id", "WEEKDAY") == service_id
     ]
-    if allowed_route_ids:
+    if effective_route_ids:
         timetable_rows = [
-            row for row in timetable_rows if str(row.get("route_id")) in allowed_route_ids
+            row for row in timetable_rows if str(row.get("route_id")) in effective_route_ids
         ]
+    trip_selection = dict(scope.get("tripSelection") or {})
+    if trip_selection:
+        filtered_rows: List[Dict[str, Any]] = []
+        for row in timetable_rows:
+            route = route_lookup.get(str(row.get("route_id")) or "") or {}
+            variant_type = str(route.get("routeVariantType") or "unknown")
+            if not trip_selection.get("includeShortTurn", True) and variant_type == "short_turn":
+                continue
+            if (
+                not trip_selection.get("includeDepotMoves", True)
+                and variant_type in {"depot_in", "depot_out"}
+            ):
+                continue
+            filtered_rows.append(row)
+        timetable_rows = filtered_rows
     return timetable_rows
 
 
@@ -145,20 +175,21 @@ def _collect_trips_for_scope(
     scenario: Dict[str, Any],
     depot_id: str,
     service_id: str,
+    analysis_scope: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
+    scoped_rows = _filter_rows_for_scope(scenario, depot_id, service_id, analysis_scope)
     depot_vehicles = [
         vehicle
         for vehicle in _as_list(scenario.get("vehicles"))
         if vehicle.get("depotId") == depot_id
     ]
+    allowed_route_ids = {str(row.get("route_id")) for row in scoped_rows}
     prebuilt_trips = [
         trip
         for trip in _as_list(scenario.get("trips"))
-        if str(trip.get("route_id", "")) in {
-            str(row.get("route_id")) for row in _filter_rows_for_scope(scenario, depot_id, service_id)
-        }
+        if str(trip.get("route_id", "")) in allowed_route_ids
     ]
-    trips_source = prebuilt_trips or _filter_rows_for_scope(scenario, depot_id, service_id)
+    trips_source = prebuilt_trips or scoped_rows
     trips: List[Dict[str, Any]] = []
     for index, item in enumerate(trips_source):
         route_id = str(item.get("route_id") or "")
@@ -463,6 +494,7 @@ def build_problem_data_from_scenario(
     service_id: str,
     mode: str,
     use_existing_duties: bool = False,
+    analysis_scope: Optional[Dict[str, Any]] = None,
 ) -> tuple[ProblemData, ScenarioBuildReport]:
     meta = scenario.get("meta") or {}
     simulation_cfg = scenario.get("simulation_config") or {}
@@ -478,7 +510,12 @@ def build_problem_data_from_scenario(
         10,
     )
 
-    trips = _collect_trips_for_scope(scenario, depot_id, service_id)
+    trips = _collect_trips_for_scope(
+        scenario,
+        depot_id,
+        service_id,
+        analysis_scope=analysis_scope,
+    )
     scope_vehicles_raw = _vehicles_for_scope(scenario, depot_id)
     vehicles = [_build_vehicle(item) for item in scope_vehicles_raw]
     tasks = _build_tasks(trips, scope_vehicles_raw, start_time, delta_t_min)
