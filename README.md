@@ -143,6 +143,24 @@ EN: Frontend only calls `/api`. BFF orchestrates APIs/jobs. Core research logic 
 - **Node.js 18+** / npm 9+
 - （最適化実行時のみ）**Gurobi** + ライセンス
 
+`npm` は Node.js に同梱されています。PowerShell で `npm` が見つからない場合は、
+まず Node.js が未導入か、PATH が通っていない可能性を確認してください。
+
+```powershell
+node -v
+npm -v
+```
+
+どちらかが `not recognized` になる場合は、先に Node.js を導入してください。
+
+- Windows:
+  [Node.js 公式サイト](https://nodejs.org/) から LTS 版をインストール
+- バージョン管理を使う場合:
+  `nvm-windows` 等で Node.js 18 以上を導入
+
+インストール後に PowerShell を開き直し、`node -v` と `npm -v` が表示されることを確認してから
+`frontend/` で `npm install` を実行してください。
+
 ### 4.2 セットアップ / Install Dependencies / 安装依赖
 
 ```bash
@@ -154,12 +172,44 @@ cd frontend
 npm install
 ```
 
+Windows / PowerShell での例:
+
+```powershell
+cd D:\master-course\frontend
+node -v
+npm -v
+npm install
+```
+
+Remote SSH / 別ホストで frontend と backend を分けて動かす場合は、
+`frontend/.env.example` を元に `frontend/.env.development.local` を作成し、
+接続先を明示してください。
+
+```bash
+cd frontend
+cp .env.example .env.development.local
+```
+
+同一リモートホスト上で frontend と BFF を動かす場合の基本設定:
+
+```dotenv
+VITE_DEV_HOST=0.0.0.0
+VITE_DEV_PORT=5173
+VITE_API_BASE_URL=/api
+VITE_API_PROXY_TARGET=http://127.0.0.1:8000
+VITE_ODPT_PROXY_TARGET=http://127.0.0.1:3001
+```
+
+frontend から別ホストの BFF を直接叩く場合は、`VITE_API_BASE_URL` に
+`http://<backend-host>:8000/api` を設定してください。その場合は BFF 側でも
+`BFF_CORS_ALLOW_ORIGINS` または `BFF_CORS_ALLOW_ORIGIN_REGEX` を合わせて設定します。
+
 ### 4.3 起動 / Run / 启动
 
 **ターミナル 1 — BFF サーバー:**
 
 ```bash
-python -m uvicorn bff.main:app --reload --port 8000
+python -m uvicorn bff.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **ターミナル 2 — Frontend 開発サーバー:**
@@ -168,6 +218,8 @@ python -m uvicorn bff.main:app --reload --port 8000
 cd frontend
 npm run dev
 ```
+
+VS Code Remote SSH を使う場合は、`8000` と `5173` のポートフォワードを有効にしてください。
 
 ### 4.4 アクセス先 / Access URLs / 访问地址
 
@@ -715,12 +767,63 @@ python catalog_update_app.py
 
 PowerShell で `python3` を使うと、環境によっては Python 本体ではなく Windows の alias 側に吸われて期待通りに動かないことがあります。`python` か `.\catalog_update_app.ps1` を使ってください。
 
+### ODPT → GTFS 変換フロー
+
+Tokyu Bus については、ODPT の生 JSON を直接研究本体や UI に読ませず、次の 4 層で処理します。
+
+```text
+Raw ODPT -> Raw Archive -> Canonical JSONL -> GTFS + Sidecar -> Research Features
+```
+
+標準ルートは、まず ODPT を取得し、その出力を `src.tokyubus_gtfs` に渡す形です。
+
+```bash
+# 1. ODPT raw を取得
+python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
+
+# 2. Raw ODPT -> Canonical -> GTFS -> Features を一括実行
+python -m src.tokyubus_gtfs run --source-dir ./data/catalog-fast
+```
+
+`run` は `./data/catalog-fast/raw/` でも動きます。入力として受け付けるのは、`BusstopPole.json`、`busstop_pole.json`、各 `.ndjson` のような raw ファイルです。
+
+段階実行したい場合は次の順です。
+
+```bash
+python -m src.tokyubus_gtfs archive --source-dir ./data/catalog-fast
+python -m src.tokyubus_gtfs canonical --snapshot <snapshot_id>
+python -m src.tokyubus_gtfs gtfs --snapshot <snapshot_id>
+python -m src.tokyubus_gtfs features --snapshot <snapshot_id>
+```
+
+出力先は次の通りです。
+
+- Raw archive: `data/tokyubus/raw/{snapshot_id}/`
+- Canonical: `data/tokyubus/canonical/{snapshot_id}/`
+- GTFS: `GTFS/TokyuBus-GTFS/`
+- Features: `data/tokyubus/features/{snapshot_id}/`
+
+`catalog_update_app.py` 経由で一括実行する場合はこれです。
+
+```bash
+python catalog_update_app.py refresh gtfs-pipeline --source-dir ./data/catalog-fast
+```
+
 ### 高速 ingest CLI
 
 ODPT の重い raw 取得を高速化したい場合は `tools/fast_catalog_ingest.py` を使えます。raw JSON を保持しつつ、`raw/*.ndjson`、checkpoint、`bundle.json`、`operational_dataset.json` を生成します。
 
+`httpx` の HTTP/2 を使える環境では自動で HTTP/2 を使います。`h2` が未導入でも
+CLI は HTTP/1.1 に自動フォールバックします。HTTP/2 を明示的に無効化したい場合は
+`--http1-only` を使ってください。必要なら次でも導入できます。
+
+```bash
+python -m pip install "httpx[http2]"
+```
+
 ```bash
 python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
+python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --http1-only --build-bundle
 python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --resume --only stopTimetables --build-bundle
 python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --skip-stop-timetables --build-bundle
 python tools/fast_catalog_ingest.py sync-gtfs --scenario latest --refresh --resources all

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -57,6 +58,14 @@ ODPT_RESOURCE_SPECS: Dict[str, Dict[str, str]] = {
         "ndjson_name": "busstop_pole_timetable.ndjson",
     },
 }
+
+
+def _http2_available() -> bool:
+    return importlib.util.find_spec("h2") is not None
+
+
+def _build_async_client(*, http2: bool, limits: httpx.Limits) -> httpx.AsyncClient:
+    return httpx.AsyncClient(http2=http2, follow_redirects=True, limits=limits)
 
 
 def _json_dumps(value: Any) -> bytes:
@@ -698,7 +707,13 @@ async def run_fetch_odpt(args: argparse.Namespace) -> int:
     limits = httpx.Limits(max_keepalive_connections=max(4, args.concurrency), max_connections=max(4, args.concurrency))
     semaphore = asyncio.Semaphore(max(1, args.concurrency))
     started = _now()
-    async with httpx.AsyncClient(http2=True, follow_redirects=True, limits=limits) as client:
+    http2_enabled = not args.http1_only and _http2_available()
+    if args.http1_only:
+        print("[fast-ingest] HTTP/2 disabled by --http1-only; using HTTP/1.1")
+    elif not http2_enabled:
+        print("[fast-ingest] Optional package 'h2' is not installed; falling back to HTTP/1.1")
+
+    async with _build_async_client(http2=http2_enabled, limits=limits) as client:
         tasks = [
             _download_odpt_resource(
                 client=client,
@@ -815,6 +830,11 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_odpt.add_argument("--build-bundle", action="store_true")
     fetch_odpt.add_argument("--timeout-sec", type=float, default=300.0)
     fetch_odpt.add_argument("--max-retries", type=int, default=3)
+    fetch_odpt.add_argument(
+        "--http1-only",
+        action="store_true",
+        help="Disable HTTP/2 even if the optional 'h2' package is installed",
+    )
 
     sync_gtfs = subparsers.add_parser("sync-gtfs", help="GTFS scenario sync wrapper with benchmark output")
     sync_gtfs.add_argument("--scenario", default="latest")

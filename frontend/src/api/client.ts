@@ -1,6 +1,9 @@
 import type { ApiError } from "@/types";
 
-const BASE_URL = "/api";
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || "/api";
+const BASE_URL = configuredBaseUrl.endsWith("/")
+  ? configuredBaseUrl.slice(0, -1)
+  : configuredBaseUrl;
 
 function extractErrorMessage(body: unknown): string | null {
   if (!body || typeof body !== "object") {
