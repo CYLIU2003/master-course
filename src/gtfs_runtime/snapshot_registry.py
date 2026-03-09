@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from src.feed_identity import TOKYU_ODPT_GTFS_FEED_ID, build_dataset_id
 from src.tokyubus_gtfs.constants import CANONICAL_DIR, FEATURES_DIR, GTFS_OUTPUT_DIR
 
 
@@ -65,7 +66,12 @@ def list_tokyubus_snapshots(
         }
         items.append(
             {
+                "feed_id": str(summary.get("feed_id") or TOKYU_ODPT_GTFS_FEED_ID),
                 "snapshot_id": snapshot_id,
+                "dataset_id": str(
+                    summary.get("dataset_id")
+                    or build_dataset_id(TOKYU_ODPT_GTFS_FEED_ID, snapshot_id)
+                ),
                 "canonical_dir": str(canonical_dir),
                 "feature_dir": str(feature_dir),
                 "raw_archive_path": summary.get("raw_archive_path"),

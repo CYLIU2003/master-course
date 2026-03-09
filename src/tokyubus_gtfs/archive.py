@@ -174,6 +174,62 @@ def list_snapshots(archive_root: Optional[Path] = None) -> List[Dict[str, Any]]:
     return manifests
 
 
+def load_manifest(snapshot_dir: Path) -> Dict[str, Any]:
+    """Load ``manifest.json`` from a snapshot directory."""
+    manifest_path = snapshot_dir / "manifest.json"
+    if not manifest_path.exists():
+        return {}
+    with manifest_path.open("r", encoding="utf-8") as f:
+        payload = json.load(f)
+    return payload if isinstance(payload, dict) else {}
+
+
+def manifest_file_map(manifest: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Map ``resource_type`` -> file metadata for a snapshot manifest."""
+    files = manifest.get("files") or []
+    return {
+        str(item.get("resource_type") or ""): dict(item)
+        for item in files
+        if item.get("resource_type")
+    }
+
+
+def diff_resource_types(
+    current_manifest: Dict[str, Any],
+    previous_manifest: Optional[Dict[str, Any]],
+) -> set[str]:
+    """Return ODPT resource types whose SHA differs between two manifests."""
+    current_files = manifest_file_map(current_manifest)
+    previous_files = manifest_file_map(previous_manifest or {})
+    changed: set[str] = set()
+    for resource_type, current_meta in current_files.items():
+        current_sha = str(current_meta.get("sha256") or "")
+        previous_sha = str((previous_files.get(resource_type) or {}).get("sha256") or "")
+        if not previous_sha or current_sha != previous_sha:
+            changed.add(resource_type)
+    return changed
+
+
+def find_previous_snapshot_manifest(
+    snapshot_id: str,
+    archive_root: Optional[Path] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Find the most recent snapshot manifest older than ``snapshot_id``.
+
+    Snapshot IDs are timestamp-based, so lexical ordering is sufficient.
+    """
+    root = archive_root or RAW_ARCHIVE_DIR
+    candidates = []
+    for manifest in list_snapshots(root):
+        manifest_snapshot_id = str(manifest.get("snapshot_id") or "")
+        if manifest_snapshot_id and manifest_snapshot_id < snapshot_id:
+            candidates.append(manifest)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: str(item.get("snapshot_id") or ""))
+
+
 def load_raw_resource(snapshot_dir: Path, resource_type: str) -> list:
     """
     Load a single raw ODPT resource from a snapshot directory.

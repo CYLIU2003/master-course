@@ -260,6 +260,34 @@ def test_create_scenario_seeds_v1_2_backend_fields(temp_store_dir: Path):
     assert doc["problemdata_build_audit"] is None
     assert doc["optimization_audit"] is None
     assert doc["simulation_audit"] is None
+    assert doc["feed_context"] is None
+    assert meta["feedContext"] is None
+
+
+def test_feed_context_roundtrip_is_exposed_in_scenario_meta(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Feed context", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    scenario_store.set_feed_context(
+        scenario_id,
+        {
+            "feed_id": "tokyu_odpt_gtfs",
+            "snapshot_id": "2026-03-09T180500Z",
+            "dataset_id": "tokyu_odpt_gtfs:2026-03-09T180500Z",
+            "source": "gtfs_runtime",
+        },
+    )
+
+    reloaded = scenario_store.get_scenario(scenario_id)
+    listed = scenario_store.list_scenarios()
+
+    assert reloaded["feedContext"] == {
+        "feedId": "tokyu_odpt_gtfs",
+        "snapshotId": "2026-03-09T180500Z",
+        "datasetId": "tokyu_odpt_gtfs:2026-03-09T180500Z",
+        "source": "gtfs_runtime",
+    }
+    assert listed[0]["feedContext"]["feedId"] == "tokyu_odpt_gtfs"
 
 
 def test_rule_updates_invalidate_dispatch_artifacts_and_roundtrip(temp_store_dir: Path):

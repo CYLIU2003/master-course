@@ -13,11 +13,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
-import httpx
-
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+import httpx
+
+try:
+    from tools._config_runtime import get_runtime_secret
+except ModuleNotFoundError:  # pragma: no cover - direct script execution fallback
+    _config_runtime_path = Path(__file__).with_name("_config_runtime.py")
+    _config_runtime_spec = importlib.util.spec_from_file_location(
+        "tools._config_runtime",
+        _config_runtime_path,
+    )
+    if _config_runtime_spec is None or _config_runtime_spec.loader is None:
+        raise
+    _config_runtime_module = importlib.util.module_from_spec(_config_runtime_spec)
+    _config_runtime_spec.loader.exec_module(_config_runtime_module)
+    get_runtime_secret = _config_runtime_module.get_runtime_secret
 
 from bff.services.odpt_fetch import build_odpt_url
 from bff.services.odpt_normalize import normalize_odpt_snapshot
@@ -135,10 +149,17 @@ def _max_rss_mb() -> Optional[float]:
 
 
 def _consumer_key() -> str:
-    key = os.environ.get("ODPT_CONSUMER_KEY") or os.environ.get("ODPT_TOKEN")
+    key = get_runtime_secret(["ODPT_CONSUMER_KEY", "ODPT_TOKEN"])
     if not key:
-        raise RuntimeError("ODPT_CONSUMER_KEY or ODPT_TOKEN is required for fast ingest.")
+        raise RuntimeError(
+            "ODPT consumer key is missing. Set ODPT_CONSUMER_KEY or ODPT_TOKEN "
+            "in environment variables, .env, .env.local, or config/local.json."
+        )
     return key
+
+
+def _validate_fetch_odpt_preconditions() -> None:
+    _consumer_key()
 
 
 def _load_state(path: Path) -> Dict[str, Any]:
@@ -692,6 +713,7 @@ async def _download_odpt_resource(
 
 
 async def run_fetch_odpt(args: argparse.Namespace) -> int:
+    _validate_fetch_odpt_preconditions()
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     state_path = out_dir / "checkpoints" / "fetch_state.json"

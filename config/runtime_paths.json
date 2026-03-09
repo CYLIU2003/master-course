@@ -1,0 +1,7 @@
+{
+  "odpt_snapshot_dir": "./data/odpt/tokyu",
+  "transit_catalog_db_path": "./outputs/transit_catalog.sqlite",
+  "transit_db_tokyu": "./data/odpt_tokyu.db",
+  "transit_db_toei": "./data/gtfs_toei.db",
+  "catalog_fast_dir": "./data/catalog-fast"
+}

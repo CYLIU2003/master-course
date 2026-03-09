@@ -109,6 +109,25 @@ def cmd_features(args: argparse.Namespace) -> None:
     print(json.dumps(results, indent=2, ensure_ascii=False))
 
 
+def cmd_validate(args: argparse.Namespace) -> None:
+    from .validate import validate_gtfs_feed
+
+    canonical_dir = (
+        Path(args.canonical_dir)
+        if args.canonical_dir
+        else _resolve_canonical_dir(args.snapshot)
+    )
+    gtfs_dir = Path(args.gtfs_dir) if args.gtfs_dir else None
+    report_path = Path(args.report_path) if args.report_path else None
+    result = validate_gtfs_feed(
+        canonical_dir,
+        gtfs_dir=gtfs_dir or Path("GTFS/TokyuBus-GTFS"),
+        report_path=report_path,
+        validator_command=args.validator_command,
+    )
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     from .pipeline import PipelineConfig, run_pipeline
 
@@ -118,6 +137,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         skip_archive=args.skip_archive,
         skip_gtfs=args.skip_gtfs,
         skip_features=args.skip_features,
+        profile=args.profile,
     )
     result = run_pipeline(config)
     print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
@@ -160,6 +180,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_feat.add_argument("--snapshot", default=None, help="Snapshot ID under data/tokyubus/canonical/")
     p_feat.add_argument("--out-dir", default=None, help="Feature output directory")
 
+    # validate
+    p_val = sub.add_parser("validate", help="Validate Tokyu GTFS export")
+    p_val.add_argument("canonical_dir", nargs="?", help="Canonical JSONL directory")
+    p_val.add_argument("--snapshot", default=None, help="Snapshot ID under data/tokyubus/canonical/")
+    p_val.add_argument("--gtfs-dir", default=None, help="GTFS output directory")
+    p_val.add_argument("--report-path", default=None, help="Validation report output path")
+    p_val.add_argument(
+        "--validator-command",
+        default=None,
+        help="Optional external validator command. Use {feed_zip} and {report_dir} placeholders.",
+    )
+
     # run (full pipeline)
     p_run = sub.add_parser("run", help="Run full pipeline (A → B → C → D)")
     p_run.add_argument("--source-dir", required=True, help="Directory with raw ODPT JSON files")
@@ -167,6 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--skip-archive", action="store_true", help="Skip Layer A")
     p_run.add_argument("--skip-gtfs", action="store_true", help="Skip Layer C")
     p_run.add_argument("--skip-features", action="store_true", help="Skip Layer D")
+    p_run.add_argument("--profile", choices=["fast", "full"], default="full")
 
     return parser
 
@@ -181,6 +214,7 @@ def main(argv: list[str] | None = None) -> None:
         "canonical": cmd_canonical,
         "gtfs": cmd_gtfs,
         "features": cmd_features,
+        "validate": cmd_validate,
         "run": cmd_run,
     }
 

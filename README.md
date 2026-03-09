@@ -253,7 +253,7 @@ cd frontend && npm run build
 python catalog_update_app.py --help
 python catalog_update_app.py refresh odpt --force-refresh
 python catalog_update_app.py sync gtfs --scenario latest --refresh --resources all
-python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
+python -m tools.fast_catalog_ingest fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
 
 # Frontend Lint
 cd frontend && npm run lint
@@ -767,25 +767,36 @@ python catalog_update_app.py
 
 PowerShell で `python3` を使うと、環境によっては Python 本体ではなく Windows の alias 側に吸われて期待通りに動かないことがあります。`python` か `.\catalog_update_app.ps1` を使ってください。
 
-### ODPT → GTFS 変換フロー
+### Tokyu Bus ODPT → GTFS Pipeline / 东急巴士 ODPT → GTFS 流水线
 
 Tokyu Bus については、ODPT の生 JSON を直接研究本体や UI に読ませず、次の 4 層で処理します。
+
+For Tokyu Bus, do not feed raw ODPT JSON directly into the research core or UI. Always use the layered pipeline below.
+
+对于东急巴士，不要将原始 ODPT JSON 直接送入研究核心或 UI。必须经过以下分层流水线。
 
 ```text
 Raw ODPT -> Raw Archive -> Canonical JSONL -> GTFS + Sidecar -> Research Features
 ```
 
-標準ルートは、まず ODPT を取得し、その出力を `src.tokyubus_gtfs` に渡す形です。
+標準の実行順 / Standard execution order / 标准执行顺序:
+
+1. `tools.fast_catalog_ingest` で raw ODPT を取得
+2. `src.tokyubus_gtfs` で `archive -> canonical -> gtfs -> features`
+3. `validate` で GTFS の必須ファイル・件数整合・参照整合を監査
 
 ```bash
-# 1. ODPT raw を取得
-python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
+# 1. Fetch ODPT raw bundle
+python -m tools.fast_catalog_ingest fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
 
-# 2. Raw ODPT -> Canonical -> GTFS -> Features を一括実行
+# 2. Run the full Tokyu layered pipeline
 python -m src.tokyubus_gtfs run --source-dir ./data/catalog-fast
+
+# 3. Audit the GTFS export
+python -m src.tokyubus_gtfs validate --snapshot <snapshot_id>
 ```
 
-`run` は `./data/catalog-fast/raw/` でも動きます。入力として受け付けるのは、`BusstopPole.json`、`busstop_pole.json`、各 `.ndjson` のような raw ファイルです。
+`run` は `./data/catalog-fast/raw/` でも動きます。入力として受け付けるのは `BusstopPole.json`、`busstop_pole.json`、`*.ndjson` などの raw ファイルです。
 
 段階実行したい場合は次の順です。
 
@@ -794,14 +805,34 @@ python -m src.tokyubus_gtfs archive --source-dir ./data/catalog-fast
 python -m src.tokyubus_gtfs canonical --snapshot <snapshot_id>
 python -m src.tokyubus_gtfs gtfs --snapshot <snapshot_id>
 python -m src.tokyubus_gtfs features --snapshot <snapshot_id>
+python -m src.tokyubus_gtfs validate --snapshot <snapshot_id>
 ```
 
-出力先は次の通りです。
+出力先 / Outputs / 输出目录:
 
 - Raw archive: `data/tokyubus/raw/{snapshot_id}/`
 - Canonical: `data/tokyubus/canonical/{snapshot_id}/`
 - GTFS: `GTFS/TokyuBus-GTFS/`
 - Features: `data/tokyubus/features/{snapshot_id}/`
+- Manual route-family map: `data/tokyubus/manual/route_family_map.csv`
+
+Tokyu GTFS export now writes `feed_metadata.json` and `validation_report.json` under `GTFS/TokyuBus-GTFS/`.
+
+東急 GTFS を family ベースの `routes.txt` に切り替える前に、`data/tokyubus/manual/route_family_map.csv` を先に手で整備してください。
+
+Before switching Tokyu GTFS export to family-based `routes.txt`, curate `data/tokyubus/manual/route_family_map.csv` first.
+
+东急 GTFS 在切换到 family 级 `routes.txt` 之前，应先维护 `data/tokyubus/manual/route_family_map.csv`。
+
+この CSV は、現在 trip が付いている pattern を seed として並べた初期マッピングです。`direction_bucket` と `pattern_role` は必ず人手で再確認してください。
+
+GTFS validation checks:
+
+- required GTFS files
+- count alignment against `canonical_summary.json`
+- route/trip/stop/service/shape referential integrity
+- duplicate `stop_sequence`, time regression, `arrival_time > departure_time`
+- optional external validator command output
 
 `catalog_update_app.py` 経由で一括実行する場合はこれです。
 
@@ -809,7 +840,7 @@ python -m src.tokyubus_gtfs features --snapshot <snapshot_id>
 python catalog_update_app.py refresh gtfs-pipeline --source-dir ./data/catalog-fast
 ```
 
-### 高速 ingest CLI
+### 高速 ingest CLI / Fast ingest CLI / 高速采集 CLI
 
 ODPT の重い raw 取得を高速化したい場合は `tools/fast_catalog_ingest.py` を使えます。raw JSON を保持しつつ、`raw/*.ndjson`、checkpoint、`bundle.json`、`operational_dataset.json` を生成します。
 
@@ -822,11 +853,11 @@ python -m pip install "httpx[http2]"
 ```
 
 ```bash
-python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
-python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --http1-only --build-bundle
-python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --resume --only stopTimetables --build-bundle
-python tools/fast_catalog_ingest.py fetch-odpt --out-dir ./data/catalog-fast --skip-stop-timetables --build-bundle
-python tools/fast_catalog_ingest.py sync-gtfs --scenario latest --refresh --resources all
+python -m tools.fast_catalog_ingest fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
+python -m tools.fast_catalog_ingest fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --http1-only --build-bundle
+python -m tools.fast_catalog_ingest fetch-odpt --out-dir ./data/catalog-fast --resume --only stopTimetables --build-bundle
+python -m tools.fast_catalog_ingest fetch-odpt --out-dir ./data/catalog-fast --skip-stop-timetables --build-bundle
+python -m tools.fast_catalog_ingest sync-gtfs --scenario latest --refresh --resources all
 ```
 
 ベースライン比較と profiling も別 CLI で実行できます。
@@ -839,6 +870,28 @@ python tools/profile_catalog_ingest.py fast -- fetch-odpt --out-dir ./data/catal
 ```
 
 この分離により、通常の frontend / BFF 起動時に ODPT / GTFS refresh を前提にしない運用ができます。機能自体は main app 側にも残りますが、重い更新作業は updater app 側で行う想定です。
+
+### Feed Identity / Feed ID 設計 / Feed 标识设计
+
+混線防止のため、GTFS 系 feed は永続 `feed_id` を持ちます。
+
+To prevent Toei/Tokyu collisions, GTFS-backed datasets use stable feed identities.
+
+为避免都营与东急在内部 ID 上发生冲突，GTFS 数据集使用稳定的 `feed_id`。
+
+| Feed | feed_id | snapshot_id example | dataset_id example |
+|------|---------|---------------------|--------------------|
+| Toei Bus GTFS | `toei_gtfs` | `2026-03-09-official` | `toei_gtfs:2026-03-09-official` |
+| Tokyu Bus ODPT→GTFS | `tokyu_odpt_gtfs` | `2026-03-09T180500Z` | `tokyu_odpt_gtfs:2026-03-09T180500Z` |
+
+API / runtime bundle / GTFS import payloads should expose scoped identifiers alongside raw IDs:
+
+```text
+scoped_route_id   = "{feed_id}:{route_id}"
+scoped_trip_id    = "{feed_id}:{trip_id}"
+scoped_stop_id    = "{feed_id}:{stop_id}"
+scoped_service_id = "{feed_id}:{service_id}"
+```
 
 ---
 
@@ -948,8 +1001,8 @@ python run_experiment.py \
 | データ | 格納先 | 説明 |
 |-------|-------|------|
 | GTFS | `GTFS/ToeiBus-GTFS/` | 都営バス GTFS データ |
-| Tokyu Bus GTFS | `GTFS/TokyuBus-GTFS/` | Tokyu Bus layered pipeline の出力 GTFS |
-| Tokyu Canonical | `data/tokyubus/canonical/` | Tokyu Bus canonical JSONL |
+| Tokyu Bus GTFS | `GTFS/TokyuBus-GTFS/` | Tokyu Bus layered pipeline の出力 GTFS + sidecars + `feed_metadata.json` + `validation_report.json` |
+| Tokyu Canonical | `data/tokyubus/canonical/` | Tokyu Bus canonical JSONL + `canonical_summary.json` |
 | Tokyu Features | `data/tokyubus/features/` | Tokyu Bus research feature store |
 | ODPT | `data/odpt_tokyu.db` 等 | 公共交通 Open Data |
 | 車両カタログ | `data/vehicle_catalog.json` | BEV/ICE 車両仕様 |
@@ -979,6 +1032,8 @@ python run_experiment.py \
 | `frontend/node_modules/`, `frontend/dist/` | Frontend ビルド成果物 |
 | `*.db`, `*.sqlite3` | インポート時生成 DB |
 | `.venv/`, `.env` | 環境固有設定 |
+
+`GTFS/TokyuBus-GTFS/feed_metadata.json` と `GTFS/TokyuBus-GTFS/validation_report.json` も通常は生成物として扱います。
 
 > 明示的にリリースパッケージに含める必要がない限り、生成物をコミットしないでください。
 >

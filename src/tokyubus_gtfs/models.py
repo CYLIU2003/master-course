@@ -100,7 +100,7 @@ class CanonicalStop(BaseModel):
 
 
 class CanonicalRoute(BaseModel):
-    """Normalised route (one per ODPT BusroutePattern)."""
+    """Passenger-facing public route family."""
 
     route_id: str
     route_code: str = ""
@@ -118,17 +118,36 @@ class CanonicalRoute(BaseModel):
     distance_km: float = 0.0
     trip_count: int = 0
     stop_count: int = 0
-    # ODPT provenance
+    route_family_code: Optional[str] = None
+    route_family_label: Optional[str] = None
+    primary_pattern_id: Optional[str] = None
+    family_sort_order: int = 0
+    classification_confidence: float = 0.0
+    classification_reasons: List[str] = Field(default_factory=list)
+
+
+class CanonicalRoutePattern(BaseModel):
+    """Fine-grained ODPT pattern mapped into a public route family."""
+
+    pattern_id: str
+    route_id: str
+    pattern_code: Optional[str] = None
+    pattern_role: RouteVariantType = RouteVariantType.unknown
+    direction_bucket: Optional[int] = Field(default=None, ge=0, le=1)
+    shape_id: Optional[str] = None
+    first_stop_id: str = ""
+    last_stop_id: str = ""
+    first_stop_name: str = ""
+    last_stop_name: str = ""
+    stop_count: int = 0
+    distance_km: float = 0.0
+    is_passenger_service: bool = True
+    include_in_public_gtfs: bool = True
+    route_short_name_hint: str = ""
+    route_long_name_hint: str = ""
     odpt_pattern_id: str = ""
     odpt_busroute_id: str = ""
     odpt_raw_title: str = ""
-    # route family (derived)
-    route_family_code: Optional[str] = None
-    route_family_label: Optional[str] = None
-    route_variant_type: RouteVariantType = RouteVariantType.unknown
-    canonical_direction: CanonicalDirection = CanonicalDirection.unknown
-    is_primary_variant: bool = False
-    family_sort_order: int = 0
     classification_confidence: float = 0.0
     classification_reasons: List[str] = Field(default_factory=list)
 
@@ -136,6 +155,7 @@ class CanonicalRoute(BaseModel):
 class CanonicalRouteStop(BaseModel):
     """A stop within a route's ordered sequence."""
 
+    pattern_id: str
     route_id: str
     stop_id: str
     stop_sequence: int
@@ -168,8 +188,10 @@ class CanonicalTrip(BaseModel):
 
     trip_id: str
     route_id: str
+    pattern_id: str = ""
     service_id: str
     direction: CanonicalDirection = CanonicalDirection.unknown
+    direction_id: Optional[int] = Field(default=None, ge=0, le=1)
     trip_index: int = 0
     # terminal info
     origin_stop_id: str = ""
@@ -181,12 +203,16 @@ class CanonicalTrip(BaseModel):
     arrival_time: str = ""
     departure_seconds: Optional[int] = None  # seconds from midnight
     arrival_seconds: Optional[int] = None
+    shape_id: str = ""
+    office_id: Optional[str] = None
     # metrics
     distance_km: float = 0.0
     runtime_min: float = 0.0
     # vehicle
     allowed_vehicle_types: List[str] = Field(default_factory=lambda: ["BEV", "ICE"])
     trip_category: str = "revenue"
+    trip_role: str = "service"
+    is_public_trip: bool = True
     # ODPT provenance
     odpt_timetable_id: str = ""
     odpt_pattern_id: str = ""
@@ -268,10 +294,14 @@ class SourceLineage(BaseModel):
 class NormalizationSummary(BaseModel):
     """Summary of a full normalisation run."""
 
+    feed_id: str = ""
     snapshot_id: str = ""
+    dataset_id: str = ""
     raw_archive_path: str = ""
     canonical_dir: str = ""
     normalised_at: str = ""
     entity_counts: Dict[str, int] = Field(default_factory=dict)
     reconciliation: Dict[str, Any] = Field(default_factory=dict)
     warnings: List[str] = Field(default_factory=list)
+    rebuilt_tables: List[str] = Field(default_factory=list)
+    reused_tables: List[str] = Field(default_factory=list)

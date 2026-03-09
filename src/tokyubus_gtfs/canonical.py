@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from .archive import load_raw_resource
+from src.feed_identity import TOKYU_ODPT_GTFS_FEED_ID, build_dataset_id
 from .constants import (
     CANONICAL_DIR,
     TOKYU_OPERATOR_ID,
@@ -24,6 +26,7 @@ from .constants import (
 from .models import (
     CanonicalShapePoint,
     CanonicalRoute,
+    CanonicalRoutePattern,
     CanonicalRouteStop,
     CanonicalService,
     CanonicalStop,
@@ -42,6 +45,11 @@ from .normalizers.stops import normalize_busstop_poles
 from .normalizers.trips import normalize_bus_timetables
 
 _log = logging.getLogger(__name__)
+
+_RESOURCE_STOPS = "odpt:BusstopPole"
+_RESOURCE_PATTERNS = "odpt:BusroutePattern"
+_RESOURCE_TIMETABLES = "odpt:BusTimetable"
+_RESOURCE_STOP_TIMETABLES = "odpt:BusstopPoleTimetable"
 
 
 # ---------------------------------------------------------------------------
@@ -82,13 +90,13 @@ def _build_shape_points(
     route_stops: List[CanonicalRouteStop],
     stop_lookup: Dict[str, Dict[str, Any]],
 ) -> List[CanonicalShapePoint]:
-    by_route: Dict[str, List[CanonicalRouteStop]] = {}
+    by_pattern: Dict[str, List[CanonicalRouteStop]] = {}
     for route_stop in route_stops:
-        by_route.setdefault(route_stop.route_id, []).append(route_stop)
+        by_pattern.setdefault(route_stop.pattern_id, []).append(route_stop)
 
     shape_points: List[CanonicalShapePoint] = []
-    for route_id, items in by_route.items():
-        shape_id = f"shape_{route_id}"
+    for pattern_id, items in by_pattern.items():
+        shape_id = f"shape_{pattern_id}"
         for item in sorted(items, key=lambda route_stop: route_stop.stop_sequence):
             stop_meta = stop_lookup.get(item.stop_id, {})
             lat = stop_meta.get("lat")
@@ -104,7 +112,7 @@ def _build_shape_points(
                     shape_dist_traveled_km=round(
                         float(item.distance_from_start_m or 0.0) / 1000.0, 3
                     ),
-                    route_id=route_id,
+                    route_id=item.route_id,
                     stop_id=item.stop_id,
                 )
             )
@@ -132,6 +140,7 @@ def _build_source_lineage(
         "stops": "odpt:BusstopPole",
         "stop_poles": "odpt:BusstopPole",
         "routes": "odpt:BusroutePattern",
+        "route_patterns": "odpt:BusroutePattern",
         "route_stops": "odpt:BusroutePattern",
         "trips": "odpt:BusTimetable",
         "stop_times": "odpt:BusTimetable",
@@ -157,6 +166,89 @@ def _build_source_lineage(
     return lineage
 
 
+def _copy_if_present(src_dir: Path, dst_dir: Path, filenames: List[str]) -> List[str]:
+    copied: List[str] = []
+    for filename in filenames:
+        src = src_dir / filename
+        if not src.exists():
+            continue
+        dst = dst_dir / filename
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        copied.append(filename)
+    return copied
+
+
+def _stop_lookup_from_canonical(out_dir: Path) -> Dict[str, Dict[str, Any]]:
+    lookup: Dict[str, Dict[str, Any]] = {}
+    for item in _read_jsonl(out_dir / "stops.jsonl"):
+        stop_id = str(item.get("stop_id") or "")
+        if not stop_id:
+            continue
+        lookup[stop_id] = {
+            "name": item.get("stop_name"),
+            "lat": item.get("lat"),
+            "lon": item.get("lon"),
+        }
+    return lookup
+
+
+def _route_models_from_canonical(out_dir: Path) -> List[CanonicalRoute]:
+    return [CanonicalRoute.model_validate(item) for item in _read_jsonl(out_dir / "routes.jsonl")]
+
+
+def _route_patterns_from_canonical(out_dir: Path) -> List[CanonicalRoutePattern]:
+    return [
+        CanonicalRoutePattern.model_validate(item)
+        for item in _read_jsonl(out_dir / "route_patterns.jsonl")
+    ]
+
+
+def _route_stops_from_canonical(out_dir: Path) -> List[CanonicalRouteStop]:
+    return [CanonicalRouteStop.model_validate(item) for item in _read_jsonl(out_dir / "route_stops.jsonl")]
+
+
+def _pattern_lookup_from_canonical(out_dir: Path) -> Dict[str, Dict[str, Any]]:
+    lookup: Dict[str, Dict[str, Any]] = {}
+    for item in _read_jsonl(out_dir / "route_patterns.jsonl"):
+        odpt_pattern_id = str(item.get("odpt_pattern_id") or "")
+        if not odpt_pattern_id:
+            continue
+        lookup[odpt_pattern_id] = {
+            "route_id": item.get("route_id"),
+            "pattern_id": item.get("pattern_id"),
+            "shape_id": item.get("shape_id"),
+            "direction_bucket": item.get("direction_bucket"),
+            "pattern_role": item.get("pattern_role"),
+            "is_passenger_service": item.get("is_passenger_service"),
+            "include_in_public_gtfs": item.get("include_in_public_gtfs"),
+            "total_distance_km": item.get("distance_km"),
+            "stop_count": item.get("stop_count"),
+            "origin_name": item.get("first_stop_name"),
+            "destination_name": item.get("last_stop_name"),
+        }
+    return lookup
+
+
+def _trip_models_from_canonical(out_dir: Path) -> List[CanonicalTrip]:
+    return [CanonicalTrip.model_validate(item) for item in _read_jsonl(out_dir / "trips.jsonl")]
+
+
+def _service_models_from_canonical(out_dir: Path) -> List[CanonicalService]:
+    return [CanonicalService.model_validate(item) for item in _read_jsonl(out_dir / "services.jsonl")]
+
+
+def _stop_timetable_models_from_canonical(out_dir: Path) -> List[CanonicalStopTimetable]:
+    return [
+        CanonicalStopTimetable.model_validate(item)
+        for item in _read_jsonl(out_dir / "stop_timetables.jsonl")
+    ]
+
+
+def _shape_models_from_canonical(out_dir: Path) -> List[CanonicalShapePoint]:
+    return [CanonicalShapePoint.model_validate(item) for item in _read_jsonl(out_dir / "shapes.jsonl")]
+
+
 # ---------------------------------------------------------------------------
 # Reconciliation
 # ---------------------------------------------------------------------------
@@ -170,11 +262,13 @@ def reconcile(out_dir: Path) -> Dict[str, Any]:
 
     stops_data = _read_jsonl(out_dir / "stops.jsonl")
     routes_data = _read_jsonl(out_dir / "routes.jsonl")
+    route_patterns_data = _read_jsonl(out_dir / "route_patterns.jsonl")
     trips_data = _read_jsonl(out_dir / "trips.jsonl")
     route_stops_data = _read_jsonl(out_dir / "route_stops.jsonl")
 
     stop_ids = {s["stop_id"] for s in stops_data if s.get("stop_id")}
     route_ids = {r["route_id"] for r in routes_data if r.get("route_id")}
+    pattern_ids = {r["pattern_id"] for r in route_patterns_data if r.get("pattern_id")}
 
     # Stops referenced in route_stops but missing from stops table
     missing_stops = set()
@@ -187,20 +281,29 @@ def reconcile(out_dir: Path) -> Dict[str, Any]:
             f"{len(missing_stops)} stop(s) in route patterns not in BusstopPole data"
         )
 
-    # Routes referenced in trips but missing from routes table
+    # Public routes referenced in trips but missing from routes table
     trip_route_ids = {t.get("route_id") for t in trips_data if t.get("route_id")}
     orphan = trip_route_ids - route_ids
     if orphan:
         warnings.append(
-            f"{len(orphan)} route(s) in timetables not in BusroutePattern data"
+            f"{len(orphan)} route family id(s) in trips not in routes table"
+        )
+
+    trip_pattern_ids = {t.get("pattern_id") for t in trips_data if t.get("pattern_id")}
+    missing_patterns = trip_pattern_ids - pattern_ids
+    if missing_patterns:
+        warnings.append(
+            f"{len(missing_patterns)} pattern id(s) in trips not in route_patterns table"
         )
 
     return {
         "route_count": len(routes_data),
+        "route_pattern_count": len(route_patterns_data),
         "stop_count": len(stops_data),
         "trip_count": len(trips_data),
         "missing_stop_count": len(missing_stops),
         "orphan_route_count": len(orphan),
+        "missing_pattern_count": len(missing_patterns),
         "warnings": warnings,
     }
 
@@ -214,6 +317,8 @@ def build_canonical(
     snapshot_dir: Path,
     *,
     out_dir: Optional[Path] = None,
+    previous_canonical_dir: Optional[Path] = None,
+    changed_resources: Optional[Set[str]] = None,
 ) -> NormalizationSummary:
     """
     Run the complete ODPT → Canonical pipeline for a single snapshot.
@@ -246,90 +351,157 @@ def build_canonical(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     all_warnings: List[str] = []
+    changed = set(changed_resources or set())
+    reuse_enabled = previous_canonical_dir is not None and previous_canonical_dir.exists()
+    rebuilt_tables: List[str] = []
+    reused_tables: List[str] = []
+
+    rebuild_stops = (not reuse_enabled) or (_RESOURCE_STOPS in changed)
+    rebuild_routes = (not reuse_enabled) or bool(changed & {_RESOURCE_STOPS, _RESOURCE_PATTERNS})
+    rebuild_trips = (not reuse_enabled) or bool(
+        changed & {_RESOURCE_STOPS, _RESOURCE_PATTERNS, _RESOURCE_TIMETABLES}
+    )
+    rebuild_services = (not reuse_enabled) or (_RESOURCE_TIMETABLES in changed)
+    rebuild_stop_timetables = (not reuse_enabled) or bool(
+        changed & {_RESOURCE_STOPS, _RESOURCE_STOP_TIMETABLES}
+    )
+    rebuild_shapes = (not reuse_enabled) or bool(changed & {_RESOURCE_STOPS, _RESOURCE_PATTERNS})
 
     # -- 1. Stops --
-    _log.info("Step 1/6: Normalizing BusstopPole …")
-    try:
-        raw_stops = load_raw_resource(snapshot_dir, "odpt:BusstopPole")
-    except FileNotFoundError:
-        raw_stops = []
-        all_warnings.append("BusstopPole raw file not found")
+    if rebuild_stops:
+        _log.info("Step 1/6: Normalizing BusstopPole …")
+        try:
+            raw_stops = load_raw_resource(snapshot_dir, _RESOURCE_STOPS)
+        except FileNotFoundError:
+            raw_stops = []
+            all_warnings.append("BusstopPole raw file not found")
 
-    stops, stop_lookup, w = normalize_busstop_poles(raw_stops)
-    all_warnings.extend(w)
-    _write_jsonl(stops, out_dir / "stops.jsonl")
-    stop_poles = [
-        CanonicalStopPole(
-            stop_pole_id=stop.stop_id,
-            stop_id=stop.stop_id,
-            stop_name=stop.stop_name,
-            pole_number=stop.pole_number,
-            lat=stop.lat,
-            lon=stop.lon,
-            odpt_id=stop.odpt_id,
-        )
-        for stop in stops
-    ]
-    _write_jsonl(stop_poles, out_dir / "stop_poles.jsonl")
+        stops, stop_lookup, w = normalize_busstop_poles(raw_stops)
+        all_warnings.extend(w)
+        _write_jsonl(stops, out_dir / "stops.jsonl")
+        stop_poles = [
+            CanonicalStopPole(
+                stop_pole_id=stop.stop_id,
+                stop_id=stop.stop_id,
+                stop_name=stop.stop_name,
+                pole_number=stop.pole_number,
+                lat=stop.lat,
+                lon=stop.lon,
+                odpt_id=stop.odpt_id,
+            )
+            for stop in stops
+        ]
+        _write_jsonl(stop_poles, out_dir / "stop_poles.jsonl")
+        rebuilt_tables.extend(["stops", "stop_poles"])
+    else:
+        assert previous_canonical_dir is not None
+        _copy_if_present(previous_canonical_dir, out_dir, ["stops.jsonl", "stop_poles.jsonl"])
+        stops = [CanonicalStop.model_validate(item) for item in _read_jsonl(out_dir / "stops.jsonl")]
+        stop_poles = [CanonicalStopPole.model_validate(item) for item in _read_jsonl(out_dir / "stop_poles.jsonl")]
+        stop_lookup = _stop_lookup_from_canonical(out_dir)
+        reused_tables.extend(["stops", "stop_poles"])
 
     # -- 2. Routes --
-    _log.info("Step 2/6: Normalizing BusroutePattern …")
-    try:
-        raw_patterns = load_raw_resource(snapshot_dir, "odpt:BusroutePattern")
-    except FileNotFoundError:
-        raw_patterns = []
-        all_warnings.append("BusroutePattern raw file not found")
+    if rebuild_routes:
+        _log.info("Step 2/6: Normalizing BusroutePattern …")
+        try:
+            raw_patterns = load_raw_resource(snapshot_dir, _RESOURCE_PATTERNS)
+        except FileNotFoundError:
+            raw_patterns = []
+            all_warnings.append("BusroutePattern raw file not found")
 
-    routes, route_stops, pattern_lookup, w = normalize_busroute_patterns(
-        raw_patterns, stop_lookup
-    )
-    all_warnings.extend(w)
-    _write_jsonl(routes, out_dir / "routes.jsonl")
-    _write_jsonl(route_stops, out_dir / "route_stops.jsonl")
+        routes, route_patterns, route_stops, pattern_lookup, w = normalize_busroute_patterns(
+            raw_patterns, stop_lookup
+        )
+        all_warnings.extend(w)
+        _write_jsonl(routes, out_dir / "routes.jsonl")
+        _write_jsonl(route_patterns, out_dir / "route_patterns.jsonl")
+        _write_jsonl(route_stops, out_dir / "route_stops.jsonl")
+        rebuilt_tables.extend(["routes", "route_patterns", "route_stops"])
+    else:
+        assert previous_canonical_dir is not None
+        _copy_if_present(
+            previous_canonical_dir,
+            out_dir,
+            ["routes.jsonl", "route_patterns.jsonl", "route_stops.jsonl"],
+        )
+        routes = _route_models_from_canonical(out_dir)
+        route_patterns = _route_patterns_from_canonical(out_dir)
+        route_stops = _route_stops_from_canonical(out_dir)
+        pattern_lookup = _pattern_lookup_from_canonical(out_dir)
+        reused_tables.extend(["routes", "route_patterns", "route_stops"])
 
     # -- 3. Trips --
-    _log.info("Step 3/6: Normalizing BusTimetable …")
-    try:
-        raw_timetable = load_raw_resource(snapshot_dir, "odpt:BusTimetable")
-    except FileNotFoundError:
-        raw_timetable = []
-        all_warnings.append("BusTimetable raw file not found")
+    if rebuild_trips:
+        _log.info("Step 3/6: Normalizing BusTimetable …")
+        try:
+            raw_timetable = load_raw_resource(snapshot_dir, _RESOURCE_TIMETABLES)
+        except FileNotFoundError:
+            raw_timetable = []
+            all_warnings.append("BusTimetable raw file not found")
 
-    trips, stop_times, trip_counts, w = normalize_bus_timetables(
-        raw_timetable, pattern_lookup, stop_lookup
-    )
-    all_warnings.extend(w)
-    _write_jsonl(trips, out_dir / "trips.jsonl")
-    _write_jsonl(stop_times, out_dir / "stop_times.jsonl")
+        trips, stop_times, trip_counts, w = normalize_bus_timetables(
+            raw_timetable, pattern_lookup, stop_lookup
+        )
+        all_warnings.extend(w)
+        _write_jsonl(trips, out_dir / "trips.jsonl")
+        _write_jsonl(stop_times, out_dir / "stop_times.jsonl")
 
-    # Update route trip counts
-    route_map = {r.route_id: r for r in routes}
-    for rid, cnt in trip_counts.items():
-        if rid in route_map:
-            route_map[rid].trip_count = cnt
-    _write_jsonl(list(route_map.values()), out_dir / "routes.jsonl")
+        # Update route trip counts
+        route_map = {r.route_id: r for r in routes}
+        for route in route_map.values():
+            route.trip_count = 0
+        for rid, cnt in trip_counts.items():
+            if rid in route_map:
+                route_map[rid].trip_count = cnt
+        routes = list(route_map.values())
+        _write_jsonl(routes, out_dir / "routes.jsonl")
+        rebuilt_tables.extend(["trips", "stop_times"])
+        if "routes" not in rebuilt_tables:
+            rebuilt_tables.append("routes")
+            reused_tables = [item for item in reused_tables if item != "routes"]
+    else:
+        assert previous_canonical_dir is not None
+        _copy_if_present(previous_canonical_dir, out_dir, ["trips.jsonl", "stop_times.jsonl"])
+        trips = _trip_models_from_canonical(out_dir)
+        stop_times = [CanonicalTripStopTime.model_validate(item) for item in _read_jsonl(out_dir / "stop_times.jsonl")]
+        reused_tables.extend(["trips", "stop_times"])
 
     # -- 4. Service calendars --
-    _log.info("Step 4/6: Building service calendars …")
-    calendar_keys = set()
-    for trip in trips:
-        if trip.odpt_calendar_raw:
-            calendar_keys.add(trip.odpt_calendar_raw)
-    services, w = build_service_calendars(calendar_keys)
-    all_warnings.extend(w)
-    _write_jsonl(services, out_dir / "services.jsonl")
+    if rebuild_services:
+        _log.info("Step 4/6: Building service calendars …")
+        calendar_keys = set()
+        for trip in trips:
+            if trip.odpt_calendar_raw:
+                calendar_keys.add(trip.odpt_calendar_raw)
+        services, w = build_service_calendars(calendar_keys)
+        all_warnings.extend(w)
+        _write_jsonl(services, out_dir / "services.jsonl")
+        rebuilt_tables.append("services")
+    else:
+        assert previous_canonical_dir is not None
+        _copy_if_present(previous_canonical_dir, out_dir, ["services.jsonl"])
+        services = _service_models_from_canonical(out_dir)
+        reused_tables.append("services")
 
     # -- 5. Stop timetables --
-    _log.info("Step 5/6: Normalizing BusstopPoleTimetable …")
-    try:
-        raw_stt = load_raw_resource(snapshot_dir, "odpt:BusstopPoleTimetable")
-    except FileNotFoundError:
-        raw_stt = []
-        all_warnings.append("BusstopPoleTimetable raw file not found")
+    if rebuild_stop_timetables:
+        _log.info("Step 5/6: Normalizing BusstopPoleTimetable …")
+        try:
+            raw_stt = load_raw_resource(snapshot_dir, _RESOURCE_STOP_TIMETABLES)
+        except FileNotFoundError:
+            raw_stt = []
+            all_warnings.append("BusstopPoleTimetable raw file not found")
 
-    stop_timetables, w = normalize_busstop_pole_timetables(raw_stt, stop_lookup)
-    all_warnings.extend(w)
-    _write_jsonl(stop_timetables, out_dir / "stop_timetables.jsonl")
+        stop_timetables, w = normalize_busstop_pole_timetables(raw_stt, stop_lookup)
+        all_warnings.extend(w)
+        _write_jsonl(stop_timetables, out_dir / "stop_timetables.jsonl")
+        rebuilt_tables.append("stop_timetables")
+    else:
+        assert previous_canonical_dir is not None
+        _copy_if_present(previous_canonical_dir, out_dir, ["stop_timetables.jsonl"])
+        stop_timetables = _stop_timetable_models_from_canonical(out_dir)
+        reused_tables.append("stop_timetables")
 
     operators = [
         Operator(
@@ -341,8 +513,15 @@ def build_canonical(
     ]
     _write_jsonl(operators, out_dir / "operators.jsonl")
 
-    shape_points = _build_shape_points(route_stops, stop_lookup)
-    _write_jsonl(shape_points, out_dir / "shapes.jsonl")
+    if rebuild_shapes:
+        shape_points = _build_shape_points(route_stops, stop_lookup)
+        _write_jsonl(shape_points, out_dir / "shapes.jsonl")
+        rebuilt_tables.append("shapes")
+    else:
+        assert previous_canonical_dir is not None
+        _copy_if_present(previous_canonical_dir, out_dir, ["shapes.jsonl"])
+        shape_points = _shape_models_from_canonical(out_dir)
+        reused_tables.append("shapes")
 
     # -- 6. Reconcile --
     _log.info("Step 6/6: Reconciling …")
@@ -352,13 +531,16 @@ def build_canonical(
     # -- Summary --
     now_str = datetime.now(timezone.utc).isoformat()
     summary = NormalizationSummary(
+        feed_id=TOKYU_ODPT_GTFS_FEED_ID,
         snapshot_id=snapshot_name,
+        dataset_id=build_dataset_id(TOKYU_ODPT_GTFS_FEED_ID, snapshot_name),
         raw_archive_path=str(snapshot_dir),
         canonical_dir=str(out_dir),
         normalised_at=now_str,
         entity_counts={
             "operators": 1,
             "routes": len(routes),
+            "route_patterns": len(route_patterns),
             "route_stops": len(route_stops),
             "stops": len(stops),
             "stop_poles": len(stop_poles),
@@ -370,6 +552,8 @@ def build_canonical(
         },
         reconciliation=recon,
         warnings=list(dict.fromkeys(all_warnings)),
+        rebuilt_tables=sorted(set(rebuilt_tables)),
+        reused_tables=sorted(set(reused_tables)),
     )
 
     summary_path = out_dir / "canonical_summary.json"

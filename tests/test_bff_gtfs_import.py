@@ -21,6 +21,20 @@ def _create_feed(tmp_path: Path) -> Path:
 
     _write_feed_file(
         feed_dir,
+        "feed_metadata.json",
+        """
+        {
+          "feed_id": "toei_gtfs",
+          "snapshot_id": "2026-03-09-official",
+          "dataset_id": "toei_gtfs:2026-03-09-official",
+          "source_type": "gtfs_static",
+          "operator": "ToeiBus",
+          "generated_at": "2026-03-09T00:00:00Z"
+        }
+        """,
+    )
+    _write_feed_file(
+        feed_dir,
         "agency.txt",
         """
         agency_id,agency_name,agency_url,agency_timezone,agency_lang
@@ -90,6 +104,9 @@ def test_load_gtfs_core_bundle_builds_routes_stops_and_timetable_rows(tmp_path: 
     bundle = load_gtfs_core_bundle(feed_dir)
 
     assert bundle["meta"]["source"] == "gtfs"
+    assert bundle["meta"]["feed_id"] == "toei_gtfs"
+    assert bundle["meta"]["snapshot_id"] == "2026-03-09-official"
+    assert bundle["meta"]["dataset_id"] == "toei_gtfs:2026-03-09-official"
     assert bundle["meta"]["agencyName"] == "Sample Bus"
     assert bundle["meta"]["warnings"] == []
     assert len(bundle["stops"]) == 3
@@ -101,6 +118,8 @@ def test_load_gtfs_core_bundle_builds_routes_stops_and_timetable_rows(tmp_path: 
     inbound_route = next(route for route in bundle["routes"] if route["startStop"] == "End")
 
     assert outbound_route["source"] == "gtfs"
+    assert outbound_route["feed_id"] == "toei_gtfs"
+    assert outbound_route["scopedRouteId"].startswith("toei_gtfs:")
     assert outbound_route["tripCount"] == 2
     assert outbound_route["distanceKm"] > 0
     assert inbound_route["tripCount"] == 1
@@ -132,6 +151,8 @@ def test_build_gtfs_stop_timetables_groups_entries_by_stop_and_service(tmp_path:
     )
 
     assert weekday_start["source"] == "gtfs"
+    assert weekday_start["feed_id"] == "toei_gtfs"
+    assert weekday_start["scopedStopId"].startswith("toei_gtfs:")
     assert weekday_start["stopName"] == "Start"
     assert len(weekday_start["items"]) == 2
     assert weekday_start["items"][0]["busroutePattern"].startswith("gtfs-route-")

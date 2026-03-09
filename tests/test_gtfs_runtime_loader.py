@@ -162,6 +162,9 @@ def test_load_tokyubus_runtime_bundle(tmp_path: Path) -> None:
         features_root=features_root,
     )
     assert bundle["meta"]["snapshotId"] == "snap-rt-001"
+    assert bundle["meta"]["feed_id"] == "tokyu_odpt_gtfs"
+    assert bundle["meta"]["dataset_id"] == "tokyu_odpt_gtfs:snap-rt-001"
+    assert bundle["routes"][0]["scopedRouteId"].startswith("tokyu_odpt_gtfs:")
     assert len(bundle["stops"]) == 2
     assert len(bundle["routes"]) == 1
     assert len(bundle["timetable_rows"]) == 2

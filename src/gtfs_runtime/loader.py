@@ -5,6 +5,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional
 
+from src.feed_identity import (
+    TOKYU_ODPT_GTFS_FEED_ID,
+    build_dataset_id,
+    build_scoped_id,
+)
 from src.gtfs_runtime.snapshot_registry import get_latest_tokyubus_snapshot_id
 from src.tokyubus_gtfs.constants import CANONICAL_DIR, FEATURES_DIR
 
@@ -57,6 +62,9 @@ def _build_stop_items(stops: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [
         {
             "id": str(stop.get("stop_id") or ""),
+            "scopedStopId": build_scoped_id(
+                TOKYU_ODPT_GTFS_FEED_ID, stop.get("stop_id")
+            ),
             "code": str(stop.get("stop_code") or stop.get("stop_id") or ""),
             "name": str(stop.get("stop_name") or stop.get("stop_id") or ""),
             "lat": stop.get("lat"),
@@ -64,6 +72,7 @@ def _build_stop_items(stops: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "poleNumber": stop.get("pole_number"),
             "parentStationId": stop.get("parent_station_id"),
             "source": "gtfs_runtime",
+            "feed_id": TOKYU_ODPT_GTFS_FEED_ID,
             "odptId": stop.get("odpt_id"),
         }
         for stop in stops
@@ -104,6 +113,7 @@ def _build_route_items(
         items.append(
             {
                 "id": route_id,
+                "scopedRouteId": build_scoped_id(TOKYU_ODPT_GTFS_FEED_ID, route_id),
                 "routeCode": str(route.get("route_code") or route_id),
                 "routeLabel": str(
                     route.get("route_name") or route.get("route_code") or route_id
@@ -120,6 +130,7 @@ def _build_route_items(
                 "color": str(route.get("route_color") or ""),
                 "enabled": True,
                 "source": "gtfs_runtime",
+                "feed_id": TOKYU_ODPT_GTFS_FEED_ID,
                 "tripCount": int(
                     route.get("trip_count") or trip_counts.get(route_id) or 0
                 ),
@@ -152,8 +163,15 @@ def _build_timetable_rows(trips: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         grouped[(route_id, service_id, direction)].append(
             {
                 "trip_id": str(trip.get("trip_id") or ""),
+                "scopedTripId": build_scoped_id(
+                    TOKYU_ODPT_GTFS_FEED_ID, trip.get("trip_id")
+                ),
                 "route_id": route_id,
+                "scopedRouteId": build_scoped_id(TOKYU_ODPT_GTFS_FEED_ID, route_id),
                 "service_id": service_id,
+                "scopedServiceId": build_scoped_id(
+                    TOKYU_ODPT_GTFS_FEED_ID, service_id
+                ),
                 "direction": direction,
                 "origin": str(
                     trip.get("origin_name") or trip.get("origin_stop_id") or ""
@@ -170,6 +188,7 @@ def _build_timetable_rows(trips: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     trip.get("allowed_vehicle_types") or ["BEV", "ICE"]
                 ),
                 "source": "gtfs_runtime",
+                "feed_id": TOKYU_ODPT_GTFS_FEED_ID,
             }
         )
 
@@ -216,11 +235,20 @@ def _build_stop_timetables(
         items.append(
             {
                 "id": str(timetable_id),
+                "scopedStopTimetableId": build_scoped_id(
+                    TOKYU_ODPT_GTFS_FEED_ID, timetable_id
+                ),
                 "source": "gtfs_runtime",
+                "feed_id": TOKYU_ODPT_GTFS_FEED_ID,
                 "stopId": str(stop_id),
+                "scopedStopId": build_scoped_id(TOKYU_ODPT_GTFS_FEED_ID, stop_id),
                 "stopName": str(timetable.get("stop_name") or stop_id),
                 "calendar": str(timetable.get("service_id") or "WEEKDAY"),
                 "service_id": str(timetable.get("service_id") or "WEEKDAY"),
+                "scopedServiceId": build_scoped_id(
+                    TOKYU_ODPT_GTFS_FEED_ID,
+                    timetable.get("service_id") or "WEEKDAY",
+                ),
                 "items": normalized_items,
             }
         )
@@ -231,7 +259,11 @@ def _build_calendar_entries(services: List[Dict[str, Any]]) -> List[Dict[str, An
     return [
         {
             "service_id": str(service.get("service_id") or "WEEKDAY"),
+            "scopedServiceId": build_scoped_id(
+                TOKYU_ODPT_GTFS_FEED_ID, service.get("service_id") or "WEEKDAY"
+            ),
             "name": str(service.get("service_name") or service.get("service_id") or ""),
+            "feed_id": TOKYU_ODPT_GTFS_FEED_ID,
             **_service_flags(service),
             "start_date": str(service.get("start_date") or "2026-01-01"),
             "end_date": str(service.get("end_date") or "2026-12-31"),
@@ -291,6 +323,7 @@ def _build_route_payloads(
         payloads.append(
             {
                 "route_id": route_id,
+                "scoped_route_id": build_scoped_id(TOKYU_ODPT_GTFS_FEED_ID, route_id),
                 "route_code": route.get("routeCode") or route_id,
                 "route_label": route.get("routeLabel") or route.get("name") or route_id,
                 "trip_count": len(rows),
@@ -319,8 +352,14 @@ def _build_route_payloads(
                 "trips": [
                     {
                         "trip_id": row.get("trip_id"),
+                        "scoped_trip_id": build_scoped_id(
+                            TOKYU_ODPT_GTFS_FEED_ID, row.get("trip_id")
+                        ),
                         "pattern_id": route_id,
                         "service_id": row.get("service_id"),
+                        "scoped_service_id": build_scoped_id(
+                            TOKYU_ODPT_GTFS_FEED_ID, row.get("service_id")
+                        ),
                         "direction": row.get("direction"),
                         "origin_stop_name": row.get("origin"),
                         "destination_stop_name": row.get("destination"),
@@ -330,6 +369,7 @@ def _build_route_payloads(
                     }
                     for row in ordered_rows
                 ],
+                "feed_id": TOKYU_ODPT_GTFS_FEED_ID,
             }
         )
     return payloads
@@ -380,14 +420,20 @@ def load_tokyubus_snapshot_bundle(
 
     return {
         "snapshot": {
-            "snapshotKey": f"gtfs_runtime::{resolved_snapshot_id}",
+            "snapshotKey": f"{TOKYU_ODPT_GTFS_FEED_ID}::{resolved_snapshot_id}",
             "source": "gtfs_runtime",
             "datasetRef": resolved_snapshot_id,
+            "feedId": TOKYU_ODPT_GTFS_FEED_ID,
+            "snapshotId": resolved_snapshot_id,
+            "datasetId": build_dataset_id(TOKYU_ODPT_GTFS_FEED_ID, resolved_snapshot_id),
         },
         "meta": {
             "source": "gtfs_runtime",
             "operator": "tokyu",
+            "feed_id": TOKYU_ODPT_GTFS_FEED_ID,
             "snapshotId": resolved_snapshot_id,
+            "snapshot_id": resolved_snapshot_id,
+            "dataset_id": build_dataset_id(TOKYU_ODPT_GTFS_FEED_ID, resolved_snapshot_id),
             "generatedAt": summary.get("normalised_at"),
             "snapshotMode": "layered-pipeline",
             "warnings": list(summary.get("warnings") or []),

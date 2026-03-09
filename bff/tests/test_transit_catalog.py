@@ -71,7 +71,7 @@ class TransitCatalogTest(unittest.TestCase):
             snapshot_key,
             "odpt.Busroute:TokyuBus.T98",
         )
-        self.assertIsNotNone(route_payload)
+        assert route_payload is not None
         self.assertEqual(route_payload["trip_count"], 1)
 
     def test_gtfs_snapshot_round_trips_through_catalog(self) -> None:
@@ -89,13 +89,35 @@ class TransitCatalogTest(unittest.TestCase):
         summaries = transit_catalog.list_route_payload_summaries(snapshot_key)
         self.assertEqual(len(summaries), 1)
         route_payload = transit_catalog.get_route_payload(snapshot_key, summaries[0]["route_id"])
-        self.assertIsNotNone(route_payload)
+        assert route_payload is not None
         self.assertEqual(route_payload["trip_count"], 1)
         self.assertEqual(route_payload["trips"][0]["origin_stop_name"], "Alpha Stop")
         self.assertEqual(route_payload["trips"][0]["destination_stop_name"], "Beta Stop")
 
         second_bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=feed_dir)
         self.assertEqual(second_bundle["meta"]["snapshotMode"], "catalog")
+
+    def test_gtfs_snapshot_normalizes_add_remove_calendar_dates(self) -> None:
+        feed_dir = self.tmp_path / "mini_gtfs_calendar_dates"
+        self._write_minimal_gtfs_feed(feed_dir, include_calendar_dates=True)
+
+        bundle = transit_catalog.refresh_gtfs_snapshot(feed_path=feed_dir)
+        stored = transit_catalog.load_snapshot_bundle(bundle["snapshotKey"])
+
+        exception_types = {item["exception_type"] for item in stored["calendar_date_entries"]}
+        self.assertEqual(exception_types, {1, 2})
+        self.assertNotIn("warning", bundle)
+
+    def test_gtfs_snapshot_surfaces_db_warning_without_aborting(self) -> None:
+        feed_dir = self.tmp_path / "mini_gtfs_warning"
+        self._write_minimal_gtfs_feed(feed_dir)
+
+        with patch("bff.services.transit_catalog._tdb.replace_all", side_effect=RuntimeError("db offline")):
+            bundle = transit_catalog.refresh_gtfs_snapshot(feed_path=feed_dir)
+
+        self.assertEqual(bundle["warning"]["code"], "TRANSIT_DB_POPULATE_FAILED")
+        self.assertIn("db offline", bundle["warning"]["message"])
+        self.assertTrue(any("TRANSIT_DB_POPULATE_FAILED" in item for item in bundle["meta"]["warnings"]))
 
     def _sample_odpt_operational(self) -> dict:
         return {
@@ -264,7 +286,7 @@ class TransitCatalogTest(unittest.TestCase):
             ],
         }
 
-    def _write_minimal_gtfs_feed(self, feed_dir: Path) -> None:
+    def _write_minimal_gtfs_feed(self, feed_dir: Path, *, include_calendar_dates: bool = False) -> None:
         feed_dir.mkdir(parents=True, exist_ok=True)
         files = {
             "agency.txt": "\n".join(
@@ -306,6 +328,14 @@ class TransitCatalogTest(unittest.TestCase):
                 ]
             ),
         }
+        if include_calendar_dates:
+            files["calendar_dates.txt"] = "\n".join(
+                [
+                    "service_id,date,exception_type",
+                    "WK,20260105,2",
+                    "HOL,20260111,1",
+                ]
+            )
         for name, content in files.items():
             (feed_dir / name).write_text(f"{content}\n", encoding="utf-8")
 

@@ -4,8 +4,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from tools.fast_catalog_ingest import build_bundle_artifacts
+from tools.fast_catalog_ingest import _consumer_key, build_bundle_artifacts
 
 
 def _write_json(path: Path, payload: list[dict]) -> None:
@@ -14,6 +15,16 @@ def _write_json(path: Path, payload: list[dict]) -> None:
 
 
 class FastCatalogIngestTest(unittest.TestCase):
+    def test_consumer_key_uses_runtime_secret(self) -> None:
+        with mock.patch("tools.fast_catalog_ingest.get_runtime_secret", return_value="token-123"):
+            self.assertEqual(_consumer_key(), "token-123")
+
+    def test_consumer_key_missing_reports_supported_sources(self) -> None:
+        with mock.patch("tools.fast_catalog_ingest.get_runtime_secret", return_value=None):
+            with self.assertRaises(RuntimeError) as ctx:
+                _consumer_key()
+        self.assertIn(".env.local", str(ctx.exception))
+
     def test_build_bundle_artifacts_from_raw_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)

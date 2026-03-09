@@ -21,6 +21,14 @@ from .helpers import (
 _log = logging.getLogger(__name__)
 
 
+def _direction_from_bucket(bucket: Any) -> CanonicalDirection:
+    if bucket == 0:
+        return CanonicalDirection.outbound
+    if bucket == 1:
+        return CanonicalDirection.inbound
+    return CanonicalDirection.unknown
+
+
 def normalize_bus_timetables(
     raw_data: list,
     pattern_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -70,6 +78,7 @@ def normalize_bus_timetables(
 
         pattern = patterns.get(pattern_id, {})
         route_id = str(pattern.get("route_id") or stable_id("route", pattern_id))
+        resolved_pattern_id = str(pattern.get("pattern_id") or stable_id("route", pattern_id))
 
         service_key = short_id(calendar_raw, "unknown")
         service_id = service_id_from_odpt(service_key)
@@ -137,8 +146,10 @@ def normalize_bus_timetables(
         trip = CanonicalTrip(
             trip_id=timetable_id,
             route_id=route_id,
+            pattern_id=resolved_pattern_id,
             service_id=service_id,
-            direction=CanonicalDirection.outbound,
+            direction=_direction_from_bucket(pattern.get("direction_bucket")),
+            direction_id=pattern.get("direction_bucket"),
             origin_stop_id=first.stop_id,
             destination_stop_id=last.stop_id,
             origin_name=first.stop_name,
@@ -147,16 +158,26 @@ def normalize_bus_timetables(
             arrival_time=arr_time or "",
             departure_seconds=dep_sec,
             arrival_seconds=arr_sec,
+            shape_id=str(pattern.get("shape_id") or f"shape_{resolved_pattern_id}"),
             distance_km=distance_km,
             runtime_min=round(runtime_min, 1),
+            trip_category=(
+                "revenue" if pattern.get("is_passenger_service", True) else "deadhead"
+            ),
+            trip_role=(
+                "service" if pattern.get("is_passenger_service", True) else "deadhead"
+            ),
+            is_public_trip=bool(pattern.get("include_in_public_gtfs", True)),
             odpt_timetable_id=timetable_id,
             odpt_pattern_id=pattern_id,
             odpt_calendar_raw=calendar_raw,
         )
 
-        group_key = (route_id, service_id, "outbound")
+        direction_group = str(trip.direction.value or "unknown")
+        group_key = (route_id, service_id, direction_group)
         grouped.setdefault(group_key, []).append(trip)
-        trip_counts_by_route[route_id] = trip_counts_by_route.get(route_id, 0) + 1
+        if trip.is_public_trip:
+            trip_counts_by_route[route_id] = trip_counts_by_route.get(route_id, 0) + 1
 
     # Assign trip indexes within each (route, service, direction) group
     for key in sorted(grouped):

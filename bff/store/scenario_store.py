@@ -60,6 +60,7 @@ def _default_v1_2_fields() -> Dict[str, Any]:
         "optimization_audit": None,
         "simulation_audit": None,
         "source_snapshot": None,
+        "feed_context": None,
         "runtime_features": None,
     }
 
@@ -149,6 +150,35 @@ def _save_app_context(doc: Dict[str, Any]) -> None:
     _APP_CONTEXT_PATH.write_text(
         json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+
+def _normalize_feed_context(
+    feed_context: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(feed_context, dict):
+        return None
+    feed_id = str(feed_context.get("feed_id") or feed_context.get("feedId") or "").strip()
+    snapshot_id = str(
+        feed_context.get("snapshot_id") or feed_context.get("snapshotId") or ""
+    ).strip()
+    dataset_id = str(
+        feed_context.get("dataset_id") or feed_context.get("datasetId") or ""
+    ).strip()
+    source = str(feed_context.get("source") or "").strip()
+    if not any((feed_id, snapshot_id, dataset_id, source)):
+        return None
+    return {
+        "feedId": feed_id or None,
+        "snapshotId": snapshot_id or None,
+        "datasetId": dataset_id or None,
+        "source": source or None,
+    }
+
+
+def _meta_payload(doc: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(doc["meta"])
+    payload["feedContext"] = _normalize_feed_context(doc.get("feed_context"))
+    return payload
 
 
 # ── Public helpers ─────────────────────────────────────────────
@@ -343,7 +373,7 @@ def list_scenarios() -> List[Dict[str, Any]]:
     for p in sorted(_STORE_DIR.glob("*.json")):
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
-            results.append(doc["meta"])
+            results.append(_meta_payload(doc))
         except Exception:
             pass
     return results
@@ -389,14 +419,15 @@ def create_scenario(name: str, description: str, mode: str) -> Dict[str, Any]:
         "simulation_result": None,
         "optimization_result": None,
         "public_data": _default_public_data_state(),
+        "feed_context": None,
     }
     doc.update(_default_v1_2_fields())
     _save(doc)
-    return meta
+    return _meta_payload(doc)
 
 
 def get_scenario(scenario_id: str) -> Dict[str, Any]:
-    return _load(scenario_id)["meta"]
+    return _meta_payload(_load(scenario_id))
 
 
 def update_scenario(
@@ -417,7 +448,7 @@ def update_scenario(
         doc["meta"]["status"] = status
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
-    return doc["meta"]
+    return _meta_payload(doc)
 
 
 def delete_scenario(scenario_id: str) -> None:
@@ -445,7 +476,7 @@ def duplicate_scenario(
     cloned["meta"]["updatedAt"] = now
     cloned["meta"]["status"] = "draft"
     _save(cloned)
-    return dict(cloned["meta"])
+    return _meta_payload(cloned)
 
 
 # ── Generic sub-document accessors ────────────────────────────
@@ -464,6 +495,21 @@ def set_field(
         _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
+
+
+def get_feed_context(scenario_id: str) -> Optional[Dict[str, Any]]:
+    return _normalize_feed_context(_load(scenario_id).get("feed_context"))
+
+
+def set_feed_context(
+    scenario_id: str,
+    feed_context: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    doc["feed_context"] = _normalize_feed_context(feed_context)
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return doc["feed_context"]
 
 
 # ── Master-data helpers ────────────────────────────────────────

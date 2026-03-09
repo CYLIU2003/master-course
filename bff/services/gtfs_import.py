@@ -11,6 +11,8 @@ from statistics import median
 from string import hexdigits
 from typing import Any, DefaultDict, Dict, Iterable, List, Optional, Tuple, cast
 
+from src.feed_identity import build_dataset_id, build_scoped_id, load_feed_metadata
+
 DEFAULT_GTFS_FEED_PATH = "GTFS/ToeiBus-GTFS"
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -305,6 +307,8 @@ def _load_gtfs_core_bundle_cached(
     del signature
 
     feed_root = Path(feed_root_str)
+    feed_metadata = load_feed_metadata(feed_root)
+    feed_id = str(feed_metadata.get("feed_id") or "gtfs")
     warnings: list[str] = []
     stats: DefaultDict[str, int] = defaultdict(int)
     unknown_service_ids: set[str] = set()
@@ -344,11 +348,13 @@ def _load_gtfs_core_bundle_cached(
         stop_items.append(
             {
                 "id": stop_id,
+                "scopedStopId": build_scoped_id(feed_id, stop_id),
                 "code": str(row.get("stop_code") or stop_id).strip() or stop_id,
                 "name": stop_name,
                 "lat": stop_coord_by_id[stop_id][0],
                 "lon": stop_coord_by_id[stop_id][1],
                 "source": "gtfs",
+                "feed_id": feed_id,
             }
         )
 
@@ -649,6 +655,7 @@ def _load_gtfs_core_bundle_cached(
         route_items.append(
             {
                 "id": route_id,
+                "scopedRouteId": build_scoped_id(feed_id, route_id),
                 "routeCode": str(
                     raw_route.get("route_short_name")
                     or raw_route.get("route_long_name")
@@ -675,6 +682,7 @@ def _load_gtfs_core_bundle_cached(
                 "color": _route_color(pattern_key, raw_route.get("route_color")),
                 "enabled": True,
                 "source": "gtfs",
+                "feed_id": feed_id,
                 "tripCount": len(summaries),
                 "durationSource": "stop_times_median" if duration_min > 0 else "none",
                 "distanceSource": "stop_geometry_median" if distance_km > 0 else "none",
@@ -699,8 +707,13 @@ def _load_gtfs_core_bundle_cached(
             ].append(
                 {
                     "trip_id": trip_id,
+                    "scopedTripId": build_scoped_id(feed_id, trip_id),
                     "route_id": route_id,
+                    "scopedRouteId": build_scoped_id(feed_id, route_id),
                     "service_id": str(summary["service_id"]),
+                    "scopedServiceId": build_scoped_id(
+                        feed_id, str(summary["service_id"])
+                    ),
                     "direction": str(summary["direction"]),
                     "origin": str(summary["origin_name"]),
                     "destination": str(summary["destination_name"]),
@@ -709,6 +722,7 @@ def _load_gtfs_core_bundle_cached(
                     "distance_km": round(float(summary.get("distance_km") or 0.0), 3),
                     "allowed_vehicle_types": ["BEV", "ICE"],
                     "source": "gtfs",
+                    "feed_id": feed_id,
                 }
             )
 
@@ -730,6 +744,10 @@ def _load_gtfs_core_bundle_cached(
         "meta": {
             "source": "gtfs",
             "feedPath": _display_feed_path(feed_root),
+            "feed_id": feed_id,
+            "snapshot_id": feed_metadata.get("snapshot_id"),
+            "dataset_id": feed_metadata.get("dataset_id")
+            or build_dataset_id(feed_id, feed_metadata.get("snapshot_id")),
             "agencyName": agency_name,
             "generatedAt": _generated_at(feed_root),
             "warnings": warnings,
@@ -792,11 +810,24 @@ def build_gtfs_stop_timetables(
         items.append(
             {
                 "id": _stop_timetable_id(stop_id, service_id),
+                "scopedStopTimetableId": build_scoped_id(
+                    str((core.get("meta") or {}).get("feed_id") or "gtfs"),
+                    _stop_timetable_id(stop_id, service_id),
+                ),
                 "source": "gtfs",
+                "feed_id": str((core.get("meta") or {}).get("feed_id") or "gtfs"),
                 "stopId": stop_id,
+                "scopedStopId": build_scoped_id(
+                    str((core.get("meta") or {}).get("feed_id") or "gtfs"),
+                    stop_id,
+                ),
                 "stopName": str(stop_name_by_id.get(stop_id) or stop_id),
                 "calendar": service_id,
                 "service_id": service_id,
+                "scopedServiceId": build_scoped_id(
+                    str((core.get("meta") or {}).get("feed_id") or "gtfs"),
+                    service_id,
+                ),
                 "items": [
                     {
                         "index": index,
@@ -945,6 +976,10 @@ def build_gtfs_route_timetables(
         route_timetables.append(
             {
                 "route_id": route_id,
+                "scoped_route_id": build_scoped_id(
+                    str((core.get("meta") or {}).get("feed_id") or "gtfs"),
+                    route_id,
+                ),
                 "route_code": str(route.get("routeCode") or route_id),
                 "route_label": str(route.get("routeLabel") or route.get("name") or route_id),
                 "trip_count": len(trips),
@@ -972,6 +1007,7 @@ def build_gtfs_route_timetables(
                     key=lambda item: str(item.get("service_id") or ""),
                 ),
                 "trips": trips,
+                "feed_id": str((core.get("meta") or {}).get("feed_id") or "gtfs"),
             }
         )
 

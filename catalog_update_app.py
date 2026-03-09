@@ -421,13 +421,16 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
                 skip_archive=args.skip_archive,
                 skip_gtfs=args.skip_gtfs,
                 skip_features=args.skip_features,
+                profile=args.profile,
             )
         )
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         return 0
-    if getattr(args, "fast_path", False):
-        if args.source != "odpt":
-            raise RuntimeError("--fast-path refresh is currently supported for ODPT only")
+    if args.source == "odpt":
+        from pathlib import Path
+
+        from src.tokyubus_gtfs.pipeline import PipelineConfig, run_pipeline
+
         out_dir = args.out_dir or "./data/catalog-fast"
         fast_args = [
             "fetch-odpt",
@@ -435,13 +438,29 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
             out_dir,
             "--concurrency",
             str(args.concurrency),
-            "--build-bundle",
         ]
         if args.resume:
             fast_args.append("--resume")
         if args.skip_stop_timetables:
             fast_args.append("--skip-stop-timetables")
-        return _fast_ingest().main(fast_args)
+        rc = _fast_ingest().main(fast_args)
+        if rc != 0 or args.fetch_only:
+            return rc
+        result = run_pipeline(
+            PipelineConfig(
+                source_dir=Path(out_dir).resolve(),
+                snapshot_id=args.snapshot_id,
+                skip_archive=args.skip_archive,
+                skip_gtfs=args.skip_gtfs,
+                skip_features=args.skip_features,
+                profile=args.profile,
+            )
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if getattr(args, "fast_path", False):
+        if args.source != "odpt":
+            raise RuntimeError("--fast-path refresh is currently supported for ODPT only")
     _get_or_load_bundle(
         args.source,
         operator=args.operator,
@@ -557,6 +576,13 @@ def _run_interactive() -> int:
                 skip_archive=False,
                 skip_gtfs=False,
                 skip_features=False,
+                fast_path=False,
+                fetch_only=False,
+                profile="fast",
+                out_dir="./data/catalog-fast",
+                concurrency=32,
+                resume=False,
+                skip_stop_timetables=False,
             )
         )
     if choice == "4":
@@ -572,6 +598,13 @@ def _run_interactive() -> int:
                 skip_archive=False,
                 skip_gtfs=False,
                 skip_features=False,
+                fast_path=False,
+                fetch_only=False,
+                profile="fast",
+                out_dir="./data/catalog-fast",
+                concurrency=32,
+                resume=False,
+                skip_stop_timetables=False,
             )
         )
     if choice == "5":
@@ -635,6 +668,8 @@ def _build_parser() -> argparse.ArgumentParser:
     refresh_parser.add_argument("--concurrency", type=int, default=32)
     refresh_parser.add_argument("--resume", action="store_true")
     refresh_parser.add_argument("--skip-stop-timetables", action="store_true")
+    refresh_parser.add_argument("--fetch-only", action="store_true")
+    refresh_parser.add_argument("--profile", choices=["fast", "full"], default="fast")
 
     sync_parser = subparsers.add_parser("sync", help="Refresh catalog and sync data into a scenario")
     sync_parser.add_argument("source", choices=["odpt", "gtfs"])

@@ -25,8 +25,15 @@ from __future__ import annotations
 import csv
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from src.feed_identity import (
+    TOKYU_ODPT_GTFS_FEED_ID,
+    build_dataset_id,
+    build_feed_metadata,
+)
 
 from .constants import (
     GTFS_FEED_LANG,
@@ -64,6 +71,54 @@ def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
             if line:
                 items.append(json.loads(line))
     return items
+
+
+def _read_json(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as f:
+        payload = json.load(f)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _is_truthy(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y"}:
+        return True
+    if text in {"0", "false", "no", "n"}:
+        return False
+    return default
+
+
+def _build_route_pattern_lookup(canonical_dir: Path) -> Dict[str, Dict[str, Any]]:
+    return {
+        str(item.get("pattern_id") or ""): item
+        for item in _read_jsonl(canonical_dir / "route_patterns.jsonl")
+        if item.get("pattern_id")
+    }
+
+
+def _select_public_trips(canonical_dir: Path) -> List[Dict[str, Any]]:
+    route_patterns = _build_route_pattern_lookup(canonical_dir)
+    public_trips: List[Dict[str, Any]] = []
+    for trip in _read_jsonl(canonical_dir / "trips.jsonl"):
+        trip_role = str(trip.get("trip_role") or "service").strip().lower()
+        if trip_role == "deadhead":
+            continue
+        pattern_id = str(trip.get("pattern_id") or "")
+        pattern = route_patterns.get(pattern_id, {})
+        include_in_public_gtfs = _is_truthy(
+            pattern.get("include_in_public_gtfs"),
+            _is_truthy(trip.get("is_public_trip"), True),
+        )
+        if not include_in_public_gtfs:
+            continue
+        public_trips.append(trip)
+    return public_trips
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +168,30 @@ def _write_feed_info(out_dir: Path) -> None:
     )
 
 
+def _write_feed_metadata(canonical_dir: Path, out_dir: Path) -> Dict[str, Any]:
+    canonical_summary = _read_json(canonical_dir / "canonical_summary.json")
+    snapshot_id = str(canonical_summary.get("snapshot_id") or canonical_dir.name)
+    generated_at = datetime.now(timezone.utc).isoformat()
+    metadata = build_feed_metadata(
+        feed_id=TOKYU_ODPT_GTFS_FEED_ID,
+        snapshot_id=snapshot_id,
+        generated_at=generated_at,
+        source_type="odpt_json",
+        operator="TokyuBus",
+        extra={
+            "dataset_id": build_dataset_id(TOKYU_ODPT_GTFS_FEED_ID, snapshot_id),
+            "canonical_dir": str(canonical_dir),
+            "gtfs_dir": str(out_dir),
+            "raw_archive_path": canonical_summary.get("raw_archive_path"),
+        },
+    )
+    path = out_dir / "feed_metadata.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
+    _log.info("Wrote feed_metadata.json")
+    return metadata
+
+
 def _export_stops(canonical_dir: Path, out_dir: Path) -> int:
     stops = _read_jsonl(canonical_dir / "stops.jsonl")
     rows = []
@@ -143,12 +222,20 @@ def _export_stops(canonical_dir: Path, out_dir: Path) -> int:
 
 def _export_routes(canonical_dir: Path, out_dir: Path) -> int:
     routes = _read_jsonl(canonical_dir / "routes.jsonl")
+    public_route_ids = {
+        str(trip.get("route_id") or "")
+        for trip in _select_public_trips(canonical_dir)
+        if trip.get("route_id")
+    }
     rows = []
     for r in routes:
+        route_id = str(r.get("route_id") or "")
+        if route_id not in public_route_ids:
+            continue
         color = (r.get("route_color") or "").lstrip("#")
         rows.append(
             {
-                "route_id": r.get("route_id", ""),
+                "route_id": route_id,
                 "agency_id": TOKYU_OPERATOR_ID,
                 "route_short_name": r.get("route_code", ""),
                 "route_long_name": r.get("route_name", ""),
@@ -211,10 +298,12 @@ def _export_calendar(canonical_dir: Path, out_dir: Path) -> int:
 
 
 def _export_trips(canonical_dir: Path, out_dir: Path) -> int:
-    trips = _read_jsonl(canonical_dir / "trips.jsonl")
+    trips = _select_public_trips(canonical_dir)
     rows = []
     for t in trips:
-        direction_id = 0 if t.get("direction") == "outbound" else 1
+        direction_id = t.get("direction_id")
+        if direction_id is None:
+            direction_id = 0 if t.get("direction") == "outbound" else 1
         rows.append(
             {
                 "route_id": t.get("route_id", ""),
@@ -222,6 +311,7 @@ def _export_trips(canonical_dir: Path, out_dir: Path) -> int:
                 "trip_id": t.get("trip_id", ""),
                 "direction_id": direction_id,
                 "trip_headsign": t.get("destination_name", ""),
+                "shape_id": t.get("shape_id", ""),
             }
         )
     count = _write_csv(
@@ -233,6 +323,7 @@ def _export_trips(canonical_dir: Path, out_dir: Path) -> int:
             "trip_id",
             "direction_id",
             "trip_headsign",
+            "shape_id",
         ],
     )
     _log.info("Exported %d trips to trips.txt", count)
@@ -240,9 +331,15 @@ def _export_trips(canonical_dir: Path, out_dir: Path) -> int:
 
 
 def _export_stop_times(canonical_dir: Path, out_dir: Path) -> int:
+    public_trip_ids = {
+        str(trip.get("trip_id") or "")
+        for trip in _select_public_trips(canonical_dir)
+    }
     stop_times = _read_jsonl(canonical_dir / "stop_times.jsonl")
     rows = []
     for st in stop_times:
+        if str(st.get("trip_id") or "") not in public_trip_ids:
+            continue
         rows.append(
             {
                 "trip_id": st.get("trip_id", ""),
@@ -299,9 +396,14 @@ def _export_shapes(canonical_dir: Path, out_dir: Path) -> int:
     GTFS shapes or GPS trace data that ODPT does not provide.
     """
     shape_points = _read_jsonl(canonical_dir / "shapes.jsonl")
+    public_shape_ids = {
+        str(trip.get("shape_id") or "")
+        for trip in _select_public_trips(canonical_dir)
+        if trip.get("shape_id")
+    }
     rows: List[Dict[str, Any]] = []
     for point in sorted(
-        shape_points,
+        [point for point in shape_points if point.get("shape_id") in public_shape_ids],
         key=lambda item: (
             str(item.get("shape_id") or ""),
             int(item.get("shape_pt_sequence") or 0),
@@ -339,34 +441,35 @@ def _export_shapes(canonical_dir: Path, out_dir: Path) -> int:
 
 def _write_sidecar_route_patterns(canonical_dir: Path, out_dir: Path) -> int:
     """Sidecar: full route pattern / variant metadata."""
-    routes = _read_jsonl(canonical_dir / "routes.jsonl")
+    route_patterns = _read_jsonl(canonical_dir / "route_patterns.jsonl")
     route_stops = _read_jsonl(canonical_dir / "route_stops.jsonl")
 
-    # Group stops by route
-    stops_by_route: Dict[str, List[Dict[str, Any]]] = {}
+    stops_by_pattern: Dict[str, List[Dict[str, Any]]] = {}
     for rs in route_stops:
-        rid = rs.get("route_id", "")
-        stops_by_route.setdefault(rid, []).append(rs)
+        pattern_id = rs.get("pattern_id", "")
+        stops_by_pattern.setdefault(pattern_id, []).append(rs)
 
     patterns = []
-    for r in routes:
-        rid = r.get("route_id", "")
+    for r in route_patterns:
+        pattern_id = r.get("pattern_id", "")
         patterns.append(
             {
-                "route_id": rid,
+                "pattern_id": pattern_id,
+                "route_id": r.get("route_id", ""),
                 "odpt_pattern_id": r.get("odpt_pattern_id", ""),
                 "odpt_busroute_id": r.get("odpt_busroute_id", ""),
-                "route_code": r.get("route_code", ""),
-                "route_name": r.get("route_name", ""),
-                "route_family_code": r.get("route_family_code"),
-                "route_variant_type": r.get("route_variant_type", "unknown"),
-                "canonical_direction": r.get("canonical_direction", "unknown"),
+                "route_short_name_hint": r.get("route_short_name_hint", ""),
+                "route_long_name_hint": r.get("route_long_name_hint", ""),
+                "pattern_role": r.get("pattern_role", "unknown"),
+                "direction_bucket": r.get("direction_bucket"),
+                "shape_id": r.get("shape_id", ""),
+                "include_in_public_gtfs": r.get("include_in_public_gtfs", True),
                 "classification_confidence": r.get("classification_confidence", 0.0),
                 "classification_reasons": r.get("classification_reasons", []),
                 "stop_sequence": [
                     s.get("stop_id")
                     for s in sorted(
-                        stops_by_route.get(rid, []),
+                        stops_by_pattern.get(pattern_id, []),
                         key=lambda x: x.get("stop_sequence", 0),
                     )
                 ],
@@ -409,11 +512,14 @@ def _write_sidecar_trip_odpt_extra(canonical_dir: Path, out_dir: Path) -> int:
         payload.append(
             {
                 "trip_id": trip.get("trip_id", ""),
+                "pattern_id": trip.get("pattern_id", ""),
                 "odpt_timetable_id": trip.get("odpt_timetable_id", ""),
                 "odpt_pattern_id": trip.get("odpt_pattern_id", ""),
                 "odpt_calendar_raw": trip.get("odpt_calendar_raw", ""),
                 "allowed_vehicle_types": trip.get("allowed_vehicle_types") or [],
                 "trip_category": trip.get("trip_category", "revenue"),
+                "trip_role": trip.get("trip_role", "service"),
+                "is_public_trip": trip.get("is_public_trip", True),
             }
         )
     path = out_dir / "sidecar_trip_odpt_extra.json"
@@ -499,6 +605,7 @@ def export_gtfs(
 
     _write_agency(out_dir)
     _write_feed_info(out_dir)
+    feed_metadata = _write_feed_metadata(canonical_dir, out_dir)
     n_stops = _export_stops(canonical_dir, out_dir)
     n_routes = _export_routes(canonical_dir, out_dir)
     n_cal = _export_calendar(canonical_dir, out_dir)
@@ -527,6 +634,7 @@ def export_gtfs(
         "stop_times": n_st,
         "shapes": n_shapes,
         "sidecars": sidecars,
+        "feed_metadata": feed_metadata,
     }
     _log.info("GTFS export complete: %s", summary)
     return summary

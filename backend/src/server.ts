@@ -10,6 +10,7 @@ import { enrichOperationalData } from "./odpt/enrich";
 import { buildRouteTimetables } from "./odpt/routeTimetables";
 import { normalizeAll } from "./odpt/normalize/index";
 import type { NormalizedDataset } from "./odpt/normalize/index";
+import { resolveRuntimePath } from "./runtimePaths";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 dotenv.config();
@@ -18,11 +19,11 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 
 // ── Token guard ───────────────────────────────────────────────────────────────
-const token = process.env.ODPT_TOKEN;
+const token = process.env.ODPT_TOKEN ?? process.env.ODPT_CONSUMER_KEY;
 if (!token) {
   console.error(
-    "ERROR: ODPT_TOKEN environment variable is missing.\n" +
-      "Copy backend/.env.example to backend/.env and set your token."
+    "ERROR: ODPT_TOKEN / ODPT_CONSUMER_KEY environment variable is missing.\n" +
+      "Set it in backend/.env, repo .env, or your shell environment."
   );
   process.exit(1);
 }
@@ -72,6 +73,21 @@ type ProxyAggregateMeta = {
   failedChunkCount?: number;
   progress?: FetchProgressMeta;
 };
+
+function getSnapshotStatus() {
+  const snapshotDir = resolveRuntimePath("odpt_snapshot_dir");
+  const operationalPath = path.join(snapshotDir, "operational_dataset.json");
+  const routeTimetablesPath = path.join(snapshotDir, "route_timetables_dataset.json");
+  const available = fs.existsSync(operationalPath);
+  return {
+    available,
+    snapshotDir,
+    files: {
+      operational_dataset_json: fs.existsSync(operationalPath),
+      route_timetables_dataset_json: fs.existsSync(routeTimetablesPath),
+    },
+  };
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -748,7 +764,7 @@ app.post(
       // Write route exports under <project-root>/data/odpt/tokyu/.
       // cwd when running via `npm run dev` from backend/ is backend/,
       // so we go up one level to reach the project root.
-      const outDir = path.resolve(process.cwd(), "..", "data", "odpt", "tokyu");
+      const outDir = resolveRuntimePath("odpt_snapshot_dir");
       await mkdir(outDir, { recursive: true });
       const normalizedOutPath = path.join(outDir, "normalized_dataset.json");
       const operationalOutPath = path.join(outDir, "operational_dataset.json");
@@ -793,8 +809,34 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "odpt-explorer-bff" });
 });
 
+app.get("/healthz", (_req, res) => {
+  res.json({ ok: true, service: "odpt-explorer-backend", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/odpt/healthz", (_req, res) => {
+  res.json({ ok: true, service: "odpt-explorer-backend", timestamp: new Date().toISOString() });
+});
+
 app.get("/api/odpt/health", (_req, res) => {
   res.json({ status: "ok", service: "odpt-explorer-bff" });
+});
+
+app.get("/api/status/snapshot", (_req, res) => {
+  try {
+    res.json({ ok: true, snapshot: getSnapshotStatus() });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
+app.get("/api/odpt/status/snapshot", (_req, res) => {
+  try {
+    res.json({ ok: true, snapshot: getSnapshotStatus() });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ ok: false, error: message });
+  }
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
