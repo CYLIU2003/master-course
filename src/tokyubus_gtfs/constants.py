@@ -17,8 +17,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 RAW_ARCHIVE_DIR = _REPO_ROOT / "data" / "tokyubus" / "raw"
 CANONICAL_DIR = _REPO_ROOT / "data" / "tokyubus" / "canonical"
 FEATURES_DIR = _REPO_ROOT / "data" / "tokyubus" / "features"
+MANUAL_DIR = _REPO_ROOT / "data" / "tokyubus" / "manual"
 GTFS_OUTPUT_DIR = _REPO_ROOT / "GTFS" / "TokyuBus-GTFS"
 SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
+ROUTE_FAMILY_MAP_PATH = MANUAL_DIR / "route_family_map.csv"
 
 # ---------------------------------------------------------------------------
 # ODPT operator identifiers

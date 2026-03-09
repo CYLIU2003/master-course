@@ -99,6 +99,9 @@ type CatalogSnapshot = {
   snapshotKey: string;
   source: string;
   datasetRef: string;
+  feedId?: string | null;
+  snapshotId?: string | null;
+  datasetId?: string | null;
   generatedAt?: string;
   refreshedAt?: string;
   meta?: {
@@ -159,6 +162,21 @@ type OperationalExportResponse = {
   }>;
   [key: string]: unknown;
 };
+
+type ExplorerSnapshotStatusResponse = {
+  ok: boolean;
+  snapshot?: {
+    available: boolean;
+    snapshotDir: string;
+    files?: Record<string, boolean>;
+  };
+};
+
+type ExplorerBackendStatus =
+  | { kind: "unknown" }
+  | { kind: "backend_unreachable" }
+  | { kind: "snapshot_missing"; snapshotDir?: string }
+  | { kind: "ok"; snapshotDir?: string };
 
 type Depot = {
   id: string;
@@ -251,7 +269,8 @@ function routeOptionLabel(route: CatalogRouteSummary): string {
 
 function snapshotLabel(snapshot: CatalogSnapshot): string {
   const source = snapshot.source.toUpperCase();
-  return `${source} · ${snapshot.datasetRef}`;
+  const feedLabel = snapshot.feedId ? ` · ${snapshot.feedId}` : "";
+  return `${source}${feedLabel} · ${snapshot.datasetRef}`;
 }
 
 function patternSummary(pattern: RouteTimetablePattern): string {
@@ -869,7 +888,9 @@ export function OdptExplorerPage() {
     routeTimetablesSavedTo?: string;
     meta: unknown;
   } | null>(null);
-  const [odptBackendHealthy, setOdptBackendHealthy] = useState<boolean | null>(null);
+  const [explorerBackendStatus, setExplorerBackendStatus] = useState<ExplorerBackendStatus>({
+    kind: "unknown",
+  });
   const sortedAssignmentRows = useSortedAssignments(assignmentRows);
 
   const [error, setError] = useState<string | null>(null);
@@ -919,13 +940,22 @@ export function OdptExplorerPage() {
 
     async function probeOdptBackend() {
       try {
-        await fetchJson<{ status: string }>("/api/odpt/health");
-        if (!cancelled) {
-          setOdptBackendHealthy(true);
+        await fetchJson<{ ok: boolean }>("/api/odpt/healthz");
+        const snapshot = await fetchJson<ExplorerSnapshotStatusResponse>("/api/odpt/status/snapshot");
+        if (cancelled) {
+          return;
         }
+        if (!snapshot.snapshot?.available) {
+          setExplorerBackendStatus({
+            kind: "snapshot_missing",
+            snapshotDir: snapshot.snapshot?.snapshotDir,
+          });
+          return;
+        }
+        setExplorerBackendStatus({ kind: "ok", snapshotDir: snapshot.snapshot?.snapshotDir });
       } catch {
         if (!cancelled) {
-          setOdptBackendHealthy(false);
+          setExplorerBackendStatus({ kind: "backend_unreachable" });
         }
       }
     }
@@ -1560,10 +1590,19 @@ export function OdptExplorerPage() {
           {syncMessage && <span className="text-emerald-700">{syncMessage}</span>}
         </div>
 
-        {odptBackendHealthy === false && (
+        {explorerBackendStatus.kind === "backend_unreachable" && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             ODPT Explorer backend (`localhost:3001`) に接続できません。Scenario 同期は FastAPI 側で続行できますが、
             Proxy Fetch / Introspect / Export Operational / Save to Disk は無効になります。
+          </div>
+        )}
+
+        {explorerBackendStatus.kind === "snapshot_missing" && (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+            Explorer backend には接続できましたが、保存済み ODPT snapshot がありません。
+            `python tools/fast_catalog_ingest.py fetch-odpt --build-bundle` または
+            `python catalog_update_app.py refresh odpt` を実行してください。
+            {explorerBackendStatus.snapshotDir ? ` 保存先: ${explorerBackendStatus.snapshotDir}` : ""}
           </div>
         )}
 
@@ -1857,14 +1896,18 @@ export function OdptExplorerPage() {
             </label>
             <button
               onClick={runProxy}
-              disabled={loading || odptBackendHealthy === false}
+              disabled={loading || explorerBackendStatus.kind === "backend_unreachable"}
               className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
             >
               {loading ? "Fetching…" : "Proxy Fetch"}
             </button>
             <button
               onClick={runIntrospect}
-              disabled={introspecting || !proxyRes?.data?.length || odptBackendHealthy === false}
+              disabled={
+                introspecting ||
+                !proxyRes?.data?.length ||
+                explorerBackendStatus.kind === "backend_unreachable"
+              }
               className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
             >
               {introspecting ? "Introspecting…" : "Introspect"}
@@ -1878,14 +1921,14 @@ export function OdptExplorerPage() {
             </label>
             <button
               onClick={runExportOperational}
-              disabled={exporting || odptBackendHealthy === false}
+              disabled={exporting || explorerBackendStatus.kind === "backend_unreachable"}
               className="w-full rounded-lg border border-primary-300 bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-40 transition-colors"
             >
               {exporting ? "Exporting…" : "Export Operational"}
             </button>
             <button
               onClick={runSaveToDisk}
-              disabled={saving || odptBackendHealthy === false}
+              disabled={saving || explorerBackendStatus.kind === "backend_unreachable"}
               className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 transition-colors"
             >
               {saving ? "Saving…" : "Save to Disk"}
@@ -2122,6 +2165,12 @@ export function OdptExplorerPage() {
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     refreshed: {snapshot.refreshedAt ?? "-"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    snapshot: {snapshot.snapshotId ?? "-"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    dataset: {snapshot.datasetId ?? "-"}
                   </p>
                 </button>
               ))}

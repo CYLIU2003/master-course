@@ -52,6 +52,7 @@ from bff.services import runtime_catalog
 from bff.services import transit_catalog
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
+from src.feed_identity import TOKYU_ODPT_GTFS_FEED_ID, build_dataset_id, infer_feed_id
 from src.tokyubus_gtfs.constants import DEFAULT_TURNAROUND_SEC
 
 router = APIRouter(tags=["scenarios"])
@@ -475,6 +476,15 @@ def _build_odpt_import_meta(
         "dump": meta.get("effectiveDump", meta.get("dump", dump)),
         "requestedDump": dump,
         "source": "odpt",
+        "feed_id": str(meta.get("feed_id") or TOKYU_ODPT_GTFS_FEED_ID),
+        "snapshot_id": meta.get("snapshotId"),
+        "dataset_id": str(
+            meta.get("dataset_id")
+            or build_dataset_id(
+                str(meta.get("feed_id") or TOKYU_ODPT_GTFS_FEED_ID),
+                str(meta.get("snapshotId") or "") or None,
+            )
+        ),
         "resourceType": resource_type,
         "generatedAt": meta.get("generatedAt"),
         "warnings": meta.get("warnings", []),
@@ -493,10 +503,18 @@ def _build_gtfs_import_meta(
     resource_type: str,
 ) -> Dict[str, Any]:
     meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
+    feed_id = str(meta.get("feed_id") or infer_feed_id(meta.get("feedPath") or "") or "")
+    snapshot_id = str(meta.get("snapshot_id") or "") or None
+    dataset_id = str(meta.get("dataset_id") or "") or (
+        build_dataset_id(feed_id, snapshot_id) if feed_id else ""
+    )
     return {
         "feedPath": meta.get("feedPath"),
         "agencyName": meta.get("agencyName"),
         "source": "gtfs",
+        "feed_id": feed_id or None,
+        "snapshot_id": snapshot_id,
+        "dataset_id": dataset_id or None,
         "resourceType": resource_type,
         "generatedAt": meta.get("generatedAt"),
         "warnings": meta.get("warnings", []),
@@ -516,6 +534,9 @@ def _build_runtime_import_meta(
     return {
         "source": "gtfs_runtime",
         "operator": meta.get("operator") or "tokyu",
+        "feed_id": meta.get("feed_id"),
+        "snapshot_id": meta.get("snapshotId"),
+        "dataset_id": meta.get("dataset_id"),
         "resourceType": resource_type,
         "generatedAt": meta.get("generatedAt"),
         "warnings": meta.get("warnings", []),
@@ -562,6 +583,49 @@ def _runtime_turnaround_rules(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
         {"stop_id": stop_id, "min_turnaround_min": turnaround_min}
         for stop_id in sorted(stop_ids)
     ]
+
+
+def _bundle_feed_context(source: str, bundle: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
+    feed_id = str(
+        meta.get("feed_id")
+        or infer_feed_id(meta.get("feedPath") or "")
+        or (TOKYU_ODPT_GTFS_FEED_ID if source in {"odpt", "gtfs_runtime"} else "")
+    ).strip()
+    snapshot_id = str(
+        meta.get("snapshot_id") or meta.get("snapshotId") or ""
+    ).strip()
+    dataset_id = str(meta.get("dataset_id") or "").strip()
+    if feed_id and not dataset_id:
+        dataset_id = build_dataset_id(feed_id, snapshot_id or None)
+    if not any((feed_id, snapshot_id, dataset_id)):
+        return None
+    return {
+        "feed_id": feed_id or None,
+        "snapshot_id": snapshot_id or None,
+        "dataset_id": dataset_id or None,
+        "source": source,
+    }
+
+
+def _source_snapshot_from_bundle(source: str, bundle: Dict[str, Any]) -> Dict[str, Any]:
+    meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
+    snapshot = {
+        "source": source,
+        "snapshotId": meta.get("snapshot_id") or meta.get("snapshotId"),
+        "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
+        "feedId": meta.get("feed_id") or infer_feed_id(meta.get("feedPath") or ""),
+        "datasetId": meta.get("dataset_id"),
+    }
+    if source == "gtfs_runtime":
+        snapshot.update(
+            {
+                "canonicalDir": meta.get("canonicalDir"),
+                "featuresDir": meta.get("featuresDir"),
+                "featureCounts": meta.get("featureCounts") or {},
+            }
+        )
+    return snapshot
 
 
 # ── Scenario CRUD ──────────────────────────────────────────────
@@ -866,6 +930,12 @@ def _import_odpt_timetable_data(
         resource_type="BusTimetable",
     )
     store.set_timetable_import_meta(scenario_id, "odpt", import_meta)
+    store.set_field(
+        scenario_id,
+        "source_snapshot",
+        _source_snapshot_from_bundle("odpt", bundle),
+    )
+    store.set_feed_context(scenario_id, _bundle_feed_context("odpt", bundle))
     return {
         "items": odpt_rows,
         "total": len(odpt_rows),
@@ -926,6 +996,12 @@ def _import_gtfs_timetable_data(
         resource_type="GTFSTrip",
     )
     store.set_timetable_import_meta(scenario_id, "gtfs", import_meta)
+    store.set_field(
+        scenario_id,
+        "source_snapshot",
+        _source_snapshot_from_bundle("gtfs", bundle),
+    )
+    store.set_feed_context(scenario_id, _bundle_feed_context("gtfs", bundle))
     return {
         "items": gtfs_rows,
         "total": len(gtfs_rows),
@@ -971,6 +1047,12 @@ def _import_odpt_stop_timetables_data(
         resource_type="BusstopPoleTimetable",
     )
     store.set_stop_timetable_import_meta(scenario_id, "odpt", import_meta)
+    store.set_field(
+        scenario_id,
+        "source_snapshot",
+        _source_snapshot_from_bundle("odpt", bundle),
+    )
+    store.set_feed_context(scenario_id, _bundle_feed_context("odpt", bundle))
     return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
 
 
@@ -1004,6 +1086,12 @@ def _import_gtfs_stop_timetables_data(
         resource_type="GTFSStopTimetable",
     )
     store.set_stop_timetable_import_meta(scenario_id, "gtfs", import_meta)
+    store.set_field(
+        scenario_id,
+        "source_snapshot",
+        _source_snapshot_from_bundle("gtfs", bundle),
+    )
+    store.set_feed_context(scenario_id, _bundle_feed_context("gtfs", bundle))
     return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
 
 
@@ -1124,15 +1212,9 @@ def import_runtime_snapshot(
     if request.importTurnaroundRules:
         store.set_turnaround_rules(scenario_id, _runtime_turnaround_rules(bundle))
 
-    source_snapshot = {
-        "source": "gtfs_runtime",
-        "snapshotId": (bundle.get("meta") or {}).get("snapshotId"),
-        "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
-        "canonicalDir": (bundle.get("meta") or {}).get("canonicalDir"),
-        "featuresDir": (bundle.get("meta") or {}).get("featuresDir"),
-        "featureCounts": (bundle.get("meta") or {}).get("featureCounts") or {},
-    }
+    source_snapshot = _source_snapshot_from_bundle("gtfs_runtime", bundle)
     store.set_field(scenario_id, "source_snapshot", source_snapshot)
+    store.set_feed_context(scenario_id, _bundle_feed_context("gtfs_runtime", bundle))
     store.set_field(scenario_id, "runtime_features", features)
 
     return {

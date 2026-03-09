@@ -40,13 +40,15 @@ from bff.services.odpt_timetable import (
     build_timetable_rows_from_operational,
     normalize_timetable_row_indexes,
 )
+from bff.services.runtime_paths import resolve_runtime_path
 from bff.services import transit_db as _tdb
+from src.feed_identity import build_dataset_id, infer_feed_id
 
 _log = _logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_CATALOG_DB_PATH_DEFAULT = _REPO_ROOT / "outputs" / "transit_catalog.sqlite"
-_ODPT_SAVED_SNAPSHOT_DIR_DEFAULT = _REPO_ROOT / "data" / "odpt" / "tokyu"
+_CATALOG_DB_PATH_DEFAULT = resolve_runtime_path("transit_catalog_db_path", "./outputs/transit_catalog.sqlite")
+_ODPT_SAVED_SNAPSHOT_DIR_DEFAULT = resolve_runtime_path("odpt_snapshot_dir", "./data/odpt/tokyu")
 
 _ENTITY_TYPES = (
     "stops",
@@ -88,7 +90,7 @@ def _catalog_db_path() -> Path:
     configured = os.environ.get("TRANSIT_CATALOG_DB_PATH")
     if configured:
         return _resolve_repo_path(configured)
-    return _CATALOG_DB_PATH_DEFAULT
+    return resolve_runtime_path("transit_catalog_db_path", _CATALOG_DB_PATH_DEFAULT)
 
 
 def _odpt_saved_snapshot_dir(operator: str) -> Optional[Path]:
@@ -96,8 +98,34 @@ def _odpt_saved_snapshot_dir(operator: str) -> Optional[Path]:
     if configured:
         return _resolve_repo_path(configured)
     if operator == DEFAULT_OPERATOR:
-        return _ODPT_SAVED_SNAPSHOT_DIR_DEFAULT
+        return resolve_runtime_path("odpt_snapshot_dir", _ODPT_SAVED_SNAPSHOT_DIR_DEFAULT)
     return None
+
+
+def _normalize_exception_type(value: Any) -> int:
+    return _tdb._normalize_exception_type(value)
+
+
+def _normalize_calendar_date_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(entry)
+    normalized["exception_type"] = _normalize_exception_type(entry.get("exception_type"))
+    return normalized
+
+
+def _normalize_calendar_date_entries(entries: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [_normalize_calendar_date_entry(entry) for entry in entries]
+
+
+def _db_warning(code: str, exc: Exception) -> Dict[str, Any]:
+    return {"code": code, "message": str(exc)}
+
+
+def _append_warning_list(meta: Dict[str, Any], warning: Optional[Dict[str, Any]]) -> None:
+    if warning is None:
+        return
+    warnings = list(meta.get("warnings") or [])
+    warnings.append(f"{warning['code']}: {warning['message']}")
+    meta["warnings"] = list(dict.fromkeys(warnings))
 
 
 def _ensure_parent_dir(path: Path) -> None:
@@ -196,6 +224,25 @@ def _file_signature(paths: Iterable[Path]) -> str:
 
 def _normalize_snapshot_key(source: str, dataset_ref: str) -> str:
     return f"{source}::{dataset_ref}"
+
+
+def _snapshot_identity(
+    source: str,
+    dataset_ref: str,
+    meta: Dict[str, Any],
+) -> Dict[str, Any]:
+    feed_id = str(meta.get("feed_id") or "")
+    snapshot_id = meta.get("snapshot_id")
+    if source == "gtfs" and not feed_id:
+        feed_id = infer_feed_id(dataset_ref) or "gtfs"
+    dataset_id = str(meta.get("dataset_id") or "")
+    if feed_id and not dataset_id:
+        dataset_id = build_dataset_id(feed_id, str(snapshot_id) if snapshot_id else None)
+    return {
+        "feedId": feed_id or None,
+        "snapshotId": str(snapshot_id) if snapshot_id else None,
+        "datasetId": dataset_id or None,
+    }
 
 
 def _entity_id(entity_type: str, item: Dict[str, Any], index: int) -> str:
@@ -777,6 +824,7 @@ def list_snapshots() -> List[Dict[str, Any]]:
                 "generatedAt": row["generated_at"],
                 "refreshedAt": row["refreshed_at"],
                 "meta": meta,
+                **_snapshot_identity(str(row["source"]), str(row["dataset_ref"]), meta),
             }
         )
     return items
@@ -795,6 +843,7 @@ def get_snapshot(snapshot_key: str) -> Optional[Dict[str, Any]]:
         ).fetchone()
     if row is None:
         return None
+    meta = dict(_deserialize(row["meta_json"]) or {})
     return {
         "snapshotKey": row["snapshot_key"],
         "source": row["source"],
@@ -802,7 +851,8 @@ def get_snapshot(snapshot_key: str) -> Optional[Dict[str, Any]]:
         "signature": row["signature"],
         "generatedAt": row["generated_at"],
         "refreshedAt": row["refreshed_at"],
-        "meta": dict(_deserialize(row["meta_json"]) or {}),
+        "meta": meta,
+        **_snapshot_identity(str(row["source"]), str(row["dataset_ref"]), meta),
     }
 
 
@@ -841,9 +891,17 @@ def load_snapshot_bundle(snapshot_key: str) -> Dict[str, Any]:
             (snapshot_key,),
         ).fetchall()
     route_payloads = [dict(_deserialize(row["payload_json"]) or {}) for row in rows]
+    meta = dict(snapshot.get("meta") or {})
     return {
         "snapshot": snapshot,
-        "meta": dict(snapshot.get("meta") or {}),
+        "meta": {
+            **meta,
+            **_snapshot_identity(
+                str(snapshot.get("source") or ""),
+                str(snapshot.get("datasetRef") or ""),
+                meta,
+            ),
+        },
         "stops": _load_entities(snapshot_key, "stops"),
         "routes": _load_entities(snapshot_key, "routes"),
         "timetable_rows": _load_entities(snapshot_key, "timetable_rows"),
@@ -962,7 +1020,7 @@ def _populate_operator_db_from_bundle(
     bundle: Dict[str, Any],
     snapshot_key: str,
     source: str,
-) -> None:
+) -> Optional[Dict[str, Any]]:
     trip_stop_times = list(bundle.get("stop_times") or [])
     if not trip_stop_times:
         trip_stop_times = _trip_stop_times_from_route_payloads(
@@ -970,17 +1028,31 @@ def _populate_operator_db_from_bundle(
             source=source,
         )
 
-    _tdb.replace_all(
-        operator_id,
-        routes=list(bundle.get("routes") or []),
-        stops=list(bundle.get("stops") or []),
-        timetable_rows=list(bundle.get("timetable_rows") or []),
-        trip_stop_times=trip_stop_times,
-        stop_timetables=list(bundle.get("stop_timetables") or []),
-        calendar_entries=list(bundle.get("calendar_entries") or []),
-        calendar_date_entries=list(bundle.get("calendar_date_entries") or []),
-        meta={"catalog_snapshot_key": snapshot_key},
-    )
+    try:
+        _tdb.replace_all(
+            operator_id,
+            routes=list(bundle.get("routes") or []),
+            stops=list(bundle.get("stops") or []),
+            timetable_rows=list(bundle.get("timetable_rows") or []),
+            trip_stop_times=trip_stop_times,
+            stop_timetables=list(bundle.get("stop_timetables") or []),
+            calendar_entries=list(bundle.get("calendar_entries") or []),
+            calendar_date_entries=_normalize_calendar_date_entries(
+                list(bundle.get("calendar_date_entries") or [])
+            ),
+            meta={
+                "catalog_snapshot_key": snapshot_key,
+                "feed_id": (bundle.get("meta") or {}).get("feed_id"),
+                "snapshot_id": (bundle.get("meta") or {}).get("snapshot_id")
+                or (bundle.get("meta") or {}).get("snapshotId"),
+                "dataset_id": (bundle.get("meta") or {}).get("dataset_id"),
+                "feed_path": (bundle.get("meta") or {}).get("feedPath"),
+            },
+        )
+        return None
+    except Exception as exc:
+        _log.exception("transit_db: failed to populate %s DB", operator_id)
+        return _db_warning("TRANSIT_DB_POPULATE_FAILED", exc)
 
 
 def _odpt_snapshot_is_incomplete(bundle: Dict[str, Any]) -> bool:
@@ -1398,7 +1470,7 @@ def refresh_gtfs_snapshot(
     _tt_rows = list(core.get("timetable_rows") or [])
     _st = list(stop_bundle.get("stop_timetables") or [])
     _cal = list(core.get("calendar_entries") or [])
-    _cal_dates = list(core.get("calendar_date_entries") or [])
+    _cal_dates = _normalize_calendar_date_entries(list(core.get("calendar_date_entries") or []))
 
     result = _replace_snapshot(
         snapshot_key=_gtfs_snapshot_key(feed_path),
@@ -1417,26 +1489,30 @@ def refresh_gtfs_snapshot(
         route_payloads=list(route_bundle.get("route_timetables") or []),
     )
 
-    # --- Populate per-operator SQLite DB ---
-    try:
-        _tdb.replace_all(
-            "toei",
-            routes=_routes,
-            stops=_stops,
-            timetable_rows=_tt_rows,
-            trip_stop_times=_trip_stop_times_from_route_payloads(
+    db_warning = _populate_operator_db_from_bundle(
+        operator_id="toei",
+        bundle={
+            "routes": _routes,
+            "stops": _stops,
+            "timetable_rows": _tt_rows,
+            "stop_times": _trip_stop_times_from_route_payloads(
                 list(route_bundle.get("route_timetables") or []),
                 source="gtfs",
             ),
-            stop_timetables=_st,
-            calendar_entries=_cal,
-            calendar_date_entries=_cal_dates,
-            meta={"catalog_snapshot_key": _gtfs_snapshot_key(feed_path)},
-        )
+            "stop_timetables": _st,
+            "calendar_entries": _cal,
+            "calendar_date_entries": _cal_dates,
+        },
+        snapshot_key=_gtfs_snapshot_key(feed_path),
+        source="gtfs",
+    )
+    if db_warning is None:
         _log.info("transit_db: toei DB populated (%d routes, %d stops, %d tt_rows)",
                    len(_routes), len(_stops), len(_tt_rows))
-    except Exception:
-        _log.exception("transit_db: failed to populate toei DB")
+    else:
+        _append_warning_list(meta, db_warning)
+        result["meta"] = meta
+        result["warning"] = db_warning
 
     return result
 
@@ -1455,12 +1531,15 @@ def get_or_refresh_gtfs_snapshot(
         and _has_snapshot_payload(snapshot_key, _GTFS_REQUIRED_ENTITY_TYPES)
     ):
         bundle = load_snapshot_bundle(snapshot_key)
-        _populate_operator_db_from_bundle(
+        db_warning = _populate_operator_db_from_bundle(
             operator_id="toei",
             bundle=bundle,
             snapshot_key=snapshot_key,
             source="gtfs",
         )
+        _append_warning_list(bundle["meta"], db_warning)
+        if db_warning is not None:
+            bundle["warning"] = db_warning
         if progress_callback is not None:
             progress_callback(
                 "gtfs_cached_snapshot",

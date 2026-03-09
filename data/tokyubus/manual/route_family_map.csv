@@ -1,0 +1,22 @@
+pattern_route_id,route_short_name,route_long_name,gtfs_route_family_id,gtfs_route_short_name,gtfs_route_long_name,direction_bucket,pattern_role,include_in_gtfs
+route-aaeeb1f9a236,あ２９,あ２９ (美しが丘西 -> あざみ野駅),tokyu:a29_family,あ２９,あ２９,1,branch,true
+route-f0d0bb5a7f98,た６３,た６３ (たまプラーザ駅 -> あざみ野駅),tokyu:ta63_family,た６３,た６３,0,main,true
+route-b18f374d9367,あ２７,あ２７ (もみの木台 -> あざみ野駅),tokyu:a27_family,あ２７,あ２７,1,short_turn,true
+route-bbf347c55ba4,あ２４,あ２４ (虹が丘営業所 -> あざみ野駅),tokyu:a24_family,あ２４,あ２４,1,depot_in,true
+route-798efa8398d1,あ２９,あ２９ (田園調布学園大学キャンパス -> あざみ野駅),tokyu:a29_family,あ２９,あ２９,1,main,true
+route-99e95a8b3ea6,あ２７,あ２７ (あざみ野駅 -> すすき野団地),tokyu:a27_family,あ２７,あ２７,0,main,true
+route-725cc50dd5ca,あ２７,あ２７ (すすき野団地 -> あざみ野駅),tokyu:a27_family,あ２７,あ２７,1,main,true
+route-de72b720b65d,あ２８,あ２８ (虹が丘営業所 -> あざみ野駅),tokyu:a28_family,あ２８,あ２８,1,depot_in,true
+route-d509f7c96e4b,あ２９,あ２９ (ジェネヒルあざみ野 -> あざみ野駅),tokyu:a29_family,あ２９,あ２９,1,short_turn,true
+route-d35d2bc0f930,た２６,た２６ (すすき野団地 -> たまプラーザ駅),tokyu:ta26_family,た２６,た２６,1,main,true
+route-185fe02c6ed3,反０１,反０１ (五反田駅 -> 荏原営業所),tokyu:han01_family,反０１,反０１,0,depot_out,true
+route-9a3ab4035a26,反０１,反０１ (荏原営業所 -> 川崎駅ラゾーナ広場),tokyu:han01_family,反０１,反０１,0,depot_in,true
+route-e4539bd22d8e,反０１,反０１ (荏原営業所 -> 五反田駅),tokyu:han01_family,反０１,反０１,1,depot_in,true
+route-e3d5e7550380,反０１,反０１ (川崎駅ラゾーナ広場 -> 五反田駅),tokyu:han01_family,反０１,反０１,1,main,true
+route-cbe9359a9cff,反０１,反０１ (川崎駅ラゾーナ広場 -> 荏原営業所),tokyu:han01_family,反０１,反０１,1,depot_out,true
+route-4876bbdcc57b,反０１,反０１ (五反田駅 -> 川崎駅ラゾーナ広場),tokyu:han01_family,反０１,反０１,0,main,true
+route-1ecf78a8bfa4,反０２,反０２ (荏原営業所 -> 池上警察署),tokyu:han02_family,反０２,反０２,0,depot_in,true
+route-d5ba9392888b,反０２,反０２ (池上警察署 -> 五反田駅),tokyu:han02_family,反０２,反０２,1,main,true
+route-0168f3a96b6c,反０２,反０２ (五反田駅 -> 池上警察署),tokyu:han02_family,反０２,反０２,0,main,true
+route-b068e6484fe0,空港,空港 (大井町駅 -> 羽田空港（第３ターミナル）),tokyu:airport_ooimachi_haneda_t3_family,空港,空港 (大井町駅 - 羽田空港第3ターミナル),0,main,true
+route-187fdc295c40,青１１８,青１１８ (奈良北団地折返場 -> 青葉台駅),tokyu:ao118_family,青１１８,青１１８,1,main,true

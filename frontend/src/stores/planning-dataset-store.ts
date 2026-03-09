@@ -25,6 +25,9 @@ function toEntityState<T>(
 }
 
 type PlanningDatasetState = {
+  feedId: string | null;
+  snapshotId: string | null;
+  datasetId: string | null;
   depotsById: EntityMap<Depot>;
   depotIds: string[];
   routesById: EntityMap<Route>;
@@ -38,6 +41,11 @@ type PlanningDatasetState = {
   activeDepotId: string | null;
   selectedRouteId: string | null;
   showAllRoutes: boolean;
+  setFeedContext: (context: {
+    feedId?: string | null;
+    snapshotId?: string | null;
+    datasetId?: string | null;
+  } | null) => void;
   syncDepots: (items: Depot[] | null | undefined) => void;
   syncRoutes: (items: Route[] | null | undefined) => void;
   syncTrips: (items: Trip[] | null | undefined) => void;
@@ -49,6 +57,9 @@ type PlanningDatasetState = {
 };
 
 export const usePlanningDatasetStore = create<PlanningDatasetState>((set) => ({
+  feedId: null,
+  snapshotId: null,
+  datasetId: null,
   depotsById: {},
   depotIds: [],
   routesById: {},
@@ -62,6 +73,12 @@ export const usePlanningDatasetStore = create<PlanningDatasetState>((set) => ({
   activeDepotId: null,
   selectedRouteId: null,
   showAllRoutes: false,
+  setFeedContext: (context) =>
+    set({
+      feedId: context?.feedId ?? null,
+      snapshotId: context?.snapshotId ?? null,
+      datasetId: context?.datasetId ?? null,
+    }),
   syncDepots: (items) => {
     const next = toEntityState(asArray(items), (item) => String(item.id ?? ""));
     set({ depotsById: next.byId, depotIds: next.ids });

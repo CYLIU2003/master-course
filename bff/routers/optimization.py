@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import subprocess
 import traceback
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -176,6 +178,32 @@ def _job_metadata(
     }
 
 
+def _scenario_feed_context(scenario_id: str) -> Dict[str, Any]:
+    return dict(store.get_feed_context(scenario_id) or {})
+
+
+def _scoped_output_dir(
+    *,
+    root: str,
+    feed_context: Dict[str, Any],
+    scenario_id: str,
+    stage: str,
+) -> str:
+    feed_id = str(feed_context.get("feedId") or "unscoped")
+    snapshot_id = str(feed_context.get("snapshotId") or scenario_id)
+    return str(Path(root) / feed_id / snapshot_id / stage / scenario_id)
+
+
+def _persist_json_outputs(output_dir: str, payloads: Dict[str, Dict[str, Any]]) -> None:
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    for name, payload in payloads.items():
+        (output_path / name).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+
 def _cost_breakdown(
     result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None
 ) -> Dict[str, float]:
@@ -253,6 +281,7 @@ def _run_optimization(
             _rebuild_dispatch_artifacts(scenario_id, service_id, depot_id)
 
         scenario = store._load(scenario_id)
+        feed_context = _scenario_feed_context(scenario_id)
         job_store.update_job(
             job_id,
             status="running",
@@ -319,7 +348,18 @@ def _run_optimization(
             time_limit_seconds=time_limit_seconds,
             mip_gap=mip_gap,
             random_seed=random_seed,
-            output_dir="outputs",
+            output_dir=_scoped_output_dir(
+                root="outputs",
+                feed_context=feed_context,
+                scenario_id=scenario_id,
+                stage="optimization",
+            ),
+        )
+        output_dir = _scoped_output_dir(
+            root="outputs",
+            feed_context=feed_context,
+            scenario_id=scenario_id,
+            stage="optimization",
         )
         result_payload = serialize_milp_result(solve_output["result"])
         sim_payload = (
@@ -330,6 +370,7 @@ def _run_optimization(
 
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
+            "feed_context": feed_context,
             "solver_status": result_payload["status"],
             "mode": mode,
             "objective_value": result_payload.get("objective_value"),
@@ -366,6 +407,7 @@ def _run_optimization(
 
         optimization_audit = {
             "scenario_id": scenario_id,
+            "feed_context": feed_context,
             "depot_id": depot_id,
             "service_id": service_id,
             "case_type": scenario.get("experiment_case_type"),
@@ -390,11 +432,19 @@ def _run_optimization(
             "alns_iterations": alns_iterations,
             "git_sha": _git_sha(),
             "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
+            "output_dir": output_dir,
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }
 
         store.set_field(scenario_id, "optimization_result", optimization_result)
         store.set_field(scenario_id, "optimization_audit", optimization_audit)
+        _persist_json_outputs(
+            output_dir,
+            {
+                "optimization_result.json": optimization_result,
+                "optimization_audit.json": optimization_audit,
+            },
+        )
         store.update_scenario(scenario_id, status="optimized")
         job_store.update_job(
             job_id,
@@ -411,6 +461,7 @@ def _run_optimization(
                 extra={
                     "objective_value": optimization_result.get("objective_value"),
                     "solver_status": optimization_result.get("solver_status"),
+                    "feed_context": feed_context,
                 },
             ),
         )

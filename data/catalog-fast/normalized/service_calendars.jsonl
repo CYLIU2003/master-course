@@ -1,0 +1,3 @@
+{"service_id":"WEEKDAY","name":"WEEKDAY","source":"odpt","calendar_raw":"odpt.Calendar:Weekday"}
+{"service_id":"SAT","name":"SAT","source":"odpt","calendar_raw":"odpt.Calendar:Saturday"}
+{"service_id":"SUN_HOL","name":"SUN_HOL","source":"odpt","calendar_raw":"odpt.Calendar:Holiday"}

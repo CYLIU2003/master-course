@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import subprocess
 import traceback
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -87,6 +89,32 @@ def _git_sha() -> str:
         return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     except Exception:
         return ""
+
+
+def _scenario_feed_context(scenario_id: str) -> Dict[str, Any]:
+    return dict(store.get_feed_context(scenario_id) or {})
+
+
+def _scoped_output_dir(
+    *,
+    root: str,
+    feed_context: Dict[str, Any],
+    scenario_id: str,
+    stage: str,
+) -> str:
+    feed_id = str(feed_context.get("feedId") or "unscoped")
+    snapshot_id = str(feed_context.get("snapshotId") or scenario_id)
+    return str(Path(root) / feed_id / snapshot_id / stage / scenario_id)
+
+
+def _persist_json_outputs(output_dir: str, payloads: Dict[str, Dict[str, Any]]) -> None:
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    for name, payload in payloads.items():
+        (output_path / name).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
 
 def _ensure_dispatch_artifacts(
@@ -174,6 +202,13 @@ def _run_simulation(
 
         _ensure_dispatch_artifacts(scenario_id, service_id, depot_id)
         scenario = store._load(scenario_id)
+        feed_context = _scenario_feed_context(scenario_id)
+        output_dir = _scoped_output_dir(
+            root="outputs",
+            feed_context=feed_context,
+            scenario_id=scenario_id,
+            stage="simulation",
+        )
         data, build_report = build_problem_data_from_scenario(
             scenario,
             depot_id=depot_id,
@@ -218,6 +253,7 @@ def _run_simulation(
 
         result: Dict[str, Any] = {
             "scenario_id": scenario_id,
+            "feed_context": feed_context,
             "scope": {"serviceId": service_id, "depotId": depot_id},
             "source": source,
             "soc_trace": milp_result.soc_series,
@@ -231,6 +267,7 @@ def _run_simulation(
 
         simulation_audit = {
             "scenario_id": scenario_id,
+            "feed_context": feed_context,
             "depot_id": depot_id,
             "service_id": service_id,
             "case_type": scenario.get("experiment_case_type"),
@@ -248,11 +285,19 @@ def _run_simulation(
             "source": source,
             "git_sha": _git_sha(),
             "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
+            "output_dir": output_dir,
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }
 
         store.set_field(scenario_id, "simulation_result", result)
         store.set_field(scenario_id, "simulation_audit", simulation_audit)
+        _persist_json_outputs(
+            output_dir,
+            {
+                "simulation_result.json": result,
+                "simulation_audit.json": simulation_audit,
+            },
+        )
         store.update_scenario(scenario_id, status="simulated")
         job_store.update_job(
             job_id,
@@ -307,6 +352,7 @@ def run_simulation(
         job.job_id,
         metadata={
             "scenario_id": scenario_id,
+            "feed_context": store.get_feed_context(scenario_id),
             "service_id": scope.get("serviceId") or "WEEKDAY",
             "depot_id": scope.get("depotId"),
             "stage": "queued",

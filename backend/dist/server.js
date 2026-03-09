@@ -13,15 +13,16 @@ const introspect_1 = require("./odpt/introspect");
 const enrich_1 = require("./odpt/enrich");
 const routeTimetables_1 = require("./odpt/routeTimetables");
 const index_1 = require("./odpt/normalize/index");
+const runtimePaths_1 = require("./runtimePaths");
 dotenv_1.default.config({ path: node_path_1.default.resolve(__dirname, "../.env") });
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 app.use(express_1.default.json({ limit: "10mb" }));
 // ── Token guard ───────────────────────────────────────────────────────────────
-const token = process.env.ODPT_TOKEN;
+const token = process.env.ODPT_TOKEN ?? process.env.ODPT_CONSUMER_KEY;
 if (!token) {
-    console.error("ERROR: ODPT_TOKEN environment variable is missing.\n" +
-        "Copy backend/.env.example to backend/.env and set your token.");
+    console.error("ERROR: ODPT_TOKEN / ODPT_CONSUMER_KEY environment variable is missing.\n" +
+        "Set it in backend/.env, repo .env, or your shell environment.");
     process.exit(1);
 }
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -34,6 +35,20 @@ app.use((_req, res, next) => {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     next();
 });
+function getSnapshotStatus() {
+    const snapshotDir = (0, runtimePaths_1.resolveRuntimePath)("odpt_snapshot_dir");
+    const operationalPath = node_path_1.default.join(snapshotDir, "operational_dataset.json");
+    const routeTimetablesPath = node_path_1.default.join(snapshotDir, "route_timetables_dataset.json");
+    const available = node_fs_1.default.existsSync(operationalPath);
+    return {
+        available,
+        snapshotDir,
+        files: {
+            operational_dataset_json: node_fs_1.default.existsSync(operationalPath),
+            route_timetables_dataset_json: node_fs_1.default.existsSync(routeTimetablesPath),
+        },
+    };
+}
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -579,7 +594,7 @@ app.post("/api/odpt/export/save", async (req, res) => {
         // Write route exports under <project-root>/data/odpt/tokyu/.
         // cwd when running via `npm run dev` from backend/ is backend/,
         // so we go up one level to reach the project root.
-        const outDir = node_path_1.default.resolve(process.cwd(), "..", "data", "odpt", "tokyu");
+        const outDir = (0, runtimePaths_1.resolveRuntimePath)("odpt_snapshot_dir");
         await (0, promises_1.mkdir)(outDir, { recursive: true });
         const normalizedOutPath = node_path_1.default.join(outDir, "normalized_dataset.json");
         const operationalOutPath = node_path_1.default.join(outDir, "operational_dataset.json");
@@ -605,8 +620,32 @@ app.post("/api/odpt/export/save", async (req, res) => {
 app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "odpt-explorer-bff" });
 });
+app.get("/healthz", (_req, res) => {
+    res.json({ ok: true, service: "odpt-explorer-backend", timestamp: new Date().toISOString() });
+});
+app.get("/api/odpt/healthz", (_req, res) => {
+    res.json({ ok: true, service: "odpt-explorer-backend", timestamp: new Date().toISOString() });
+});
 app.get("/api/odpt/health", (_req, res) => {
     res.json({ status: "ok", service: "odpt-explorer-bff" });
+});
+app.get("/api/status/snapshot", (_req, res) => {
+    try {
+        res.json({ ok: true, snapshot: getSnapshotStatus() });
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ ok: false, error: message });
+    }
+});
+app.get("/api/odpt/status/snapshot", (_req, res) => {
+    try {
+        res.json({ ok: true, snapshot: getSnapshotStatus() });
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ ok: false, error: message });
+    }
 });
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT ?? 3001);

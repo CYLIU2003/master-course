@@ -19,6 +19,14 @@ export interface Scenario {
   createdAt: string;
   updatedAt: string;
   status: ScenarioStatus;
+  feedContext?: FeedContext | null;
+}
+
+export interface FeedContext {
+  feedId?: string | null;
+  snapshotId?: string | null;
+  datasetId?: string | null;
+  source?: string | null;
 }
 
 export type ScenarioStatus =

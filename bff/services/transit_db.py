@@ -28,6 +28,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from bff.services.runtime_paths import resolve_runtime_path
+from src.feed_identity import (
+    TOEI_GTFS_FEED_ID,
+    TOKYU_ODPT_GTFS_FEED_ID,
+    build_dataset_id,
+    infer_feed_id,
+)
+
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -66,6 +74,9 @@ CREATE TABLE IF NOT EXISTS metadata (
 
 CREATE TABLE IF NOT EXISTS routes (
     route_id          TEXT PRIMARY KEY,
+    feed_id           TEXT,
+    snapshot_id       TEXT,
+    dataset_id        TEXT,
     route_code        TEXT,
     route_name        TEXT NOT NULL,
     source            TEXT NOT NULL,
@@ -84,6 +95,9 @@ CREATE TABLE IF NOT EXISTS routes (
 
 CREATE TABLE IF NOT EXISTS stops (
     stop_id     TEXT PRIMARY KEY,
+    feed_id     TEXT,
+    snapshot_id TEXT,
+    dataset_id  TEXT,
     stop_name   TEXT NOT NULL,
     stop_name_en TEXT,
     lat         REAL,
@@ -96,6 +110,9 @@ CREATE TABLE IF NOT EXISTS stops (
 CREATE TABLE IF NOT EXISTS timetable_rows (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
     trip_id               TEXT NOT NULL,
+    feed_id               TEXT,
+    snapshot_id           TEXT,
+    dataset_id            TEXT,
     route_id              TEXT NOT NULL,
     service_id            TEXT NOT NULL,
     direction             TEXT,
@@ -114,6 +131,9 @@ CREATE TABLE IF NOT EXISTS timetable_rows (
 CREATE TABLE IF NOT EXISTS stop_timetables (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     stop_id              TEXT NOT NULL,
+    feed_id              TEXT,
+    snapshot_id          TEXT,
+    dataset_id           TEXT,
     route_id             TEXT,
     service_id           TEXT NOT NULL,
     direction            TEXT,
@@ -128,6 +148,9 @@ CREATE TABLE IF NOT EXISTS stop_timetables (
 CREATE TABLE IF NOT EXISTS trip_stop_times (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     trip_id     TEXT NOT NULL,
+    feed_id     TEXT,
+    snapshot_id TEXT,
+    dataset_id  TEXT,
     stop_id     TEXT NOT NULL,
     stop_name   TEXT,
     sequence    INTEGER NOT NULL,
@@ -141,6 +164,9 @@ CREATE TABLE IF NOT EXISTS trip_stop_times (
 CREATE TABLE IF NOT EXISTS stop_timetable_entries (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     timetable_id         TEXT NOT NULL,
+    feed_id              TEXT,
+    snapshot_id          TEXT,
+    dataset_id           TEXT,
     stop_id              TEXT NOT NULL,
     stop_name            TEXT,
     service_id           TEXT NOT NULL,
@@ -160,6 +186,9 @@ CREATE TABLE IF NOT EXISTS stop_timetable_entries (
 
 CREATE TABLE IF NOT EXISTS calendar (
     service_id    TEXT PRIMARY KEY,
+    feed_id       TEXT,
+    snapshot_id   TEXT,
+    dataset_id    TEXT,
     service_name  TEXT NOT NULL,
     monday        INTEGER DEFAULT 0,
     tuesday       INTEGER DEFAULT 0,
@@ -175,6 +204,9 @@ CREATE TABLE IF NOT EXISTS calendar (
 CREATE TABLE IF NOT EXISTS calendar_dates (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     service_id      TEXT NOT NULL,
+    feed_id         TEXT,
+    snapshot_id     TEXT,
+    dataset_id      TEXT,
     date            TEXT NOT NULL,
     exception_type  INTEGER NOT NULL,
     UNIQUE(service_id, date)
@@ -207,7 +239,7 @@ def _db_path(operator_id: str) -> Path:
     if configured:
         p = Path(configured)
         return p if p.is_absolute() else (_REPO_ROOT / p).resolve()
-    return _DATA_DIR / info["db_filename"]
+    return resolve_runtime_path(f"transit_db_{operator_id}", _DATA_DIR / info["db_filename"])
 
 
 def _connect(operator_id: str) -> sqlite3.Connection:
@@ -237,6 +269,22 @@ def _json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
+def _normalize_exception_type(value: Any) -> int:
+    if value is None:
+        return 1
+    if isinstance(value, int):
+        if value in (1, 2):
+            return value
+        raise ValueError(f"Unsupported exception_type int: {value!r}")
+
+    normalized = str(value).strip().upper()
+    if normalized in {"1", "ADD", "ADDED", "SERVICE_ADDED"}:
+        return 1
+    if normalized in {"2", "REMOVE", "REMOVED", "SERVICE_REMOVED"}:
+        return 2
+    raise ValueError(f"Unsupported calendar_dates.exception_type: {value!r}")
+
+
 def _column_names(conn: sqlite3.Connection, table_name: str) -> set[str]:
     rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
     return {str(row["name"]) for row in rows}
@@ -247,6 +295,23 @@ def _ensure_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE timetable_rows ADD COLUMN extra_json TEXT")
     if "extra_json" not in _column_names(conn, "stop_timetables"):
         conn.execute("ALTER TABLE stop_timetables ADD COLUMN extra_json TEXT")
+    for table_name in (
+        "routes",
+        "stops",
+        "timetable_rows",
+        "stop_timetables",
+        "trip_stop_times",
+        "stop_timetable_entries",
+        "calendar",
+        "calendar_dates",
+    ):
+        columns = _column_names(conn, table_name)
+        if "feed_id" not in columns:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN feed_id TEXT")
+        if "snapshot_id" not in columns:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN snapshot_id TEXT")
+        if "dataset_id" not in columns:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN dataset_id TEXT")
 
 
 def _ensure_ready(conn: sqlite3.Connection) -> None:
@@ -307,6 +372,19 @@ def replace_all(
     if info is None:
         raise ValueError(f"Unknown operator_id: {operator_id!r}")
     source = info["source"]
+    meta = dict(meta or {})
+    default_feed_id = (
+        TOKYU_ODPT_GTFS_FEED_ID if operator_id == "tokyu" else TOEI_GTFS_FEED_ID
+    )
+    feed_id = str(
+        meta.get("feed_id")
+        or infer_feed_id(meta.get("feed_path") or meta.get("gtfs_feed_path") or "")
+        or default_feed_id
+    )
+    snapshot_id = str(meta.get("snapshot_id") or "").strip() or None
+    dataset_id = str(meta.get("dataset_id") or "").strip() or build_dataset_id(
+        feed_id, snapshot_id
+    )
 
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
@@ -331,6 +409,9 @@ def replace_all(
             seen_stop_ids.add(sid)
             stop_rows.append((
                 sid,
+                feed_id,
+                snapshot_id,
+                dataset_id,
                 str(s.get("name") or s.get("stop_name") or sid),
                 s.get("name_en") or s.get("stop_name_en"),
                 s.get("lat") or s.get("latitude"),
@@ -344,8 +425,8 @@ def replace_all(
                                           "kind"}}) if True else None,
             ))
         conn.executemany(
-            "INSERT OR IGNORE INTO stops (stop_id, stop_name, stop_name_en, lat, lon, kind, source, extra_json) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO stops (stop_id, feed_id, snapshot_id, dataset_id, stop_name, stop_name_en, lat, lon, kind, source, extra_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             stop_rows,
         )
 
@@ -374,6 +455,9 @@ def replace_all(
                         ])
             route_rows.append((
                 rid,
+                feed_id,
+                snapshot_id,
+                dataset_id,
                 str(r.get("routeCode") or r.get("route_code") or rid),
                 str(r.get("name") or r.get("route_name") or rid),
                 source,
@@ -401,11 +485,11 @@ def replace_all(
             ))
         conn.executemany(
             "INSERT OR IGNORE INTO routes "
-            "(route_id, route_code, route_name, source, direction, "
+            "(route_id, feed_id, snapshot_id, dataset_id, route_code, route_name, source, direction, "
             " origin_stop_id, destination_stop_id, stop_count, trip_count, "
             " distance_km, first_departure, last_arrival, "
             " stop_sequence_json, geometry_json, extra_json) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             route_rows,
         )
 
@@ -431,6 +515,9 @@ def replace_all(
 
             tt_rows.append((
                 trip_id,
+                feed_id,
+                snapshot_id,
+                dataset_id,
                 str(t.get("route_id") or ""),
                 service_id,
                 t.get("direction"),
@@ -450,10 +537,10 @@ def replace_all(
             ))
         conn.executemany(
             "INSERT OR IGNORE INTO timetable_rows "
-            "(trip_id, route_id, service_id, direction, trip_index, "
+            "(trip_id, feed_id, snapshot_id, dataset_id, route_id, service_id, direction, trip_index, "
             " origin, destination, departure, arrival, distance_km, "
             " allowed_vehicle_types, source, extra_json) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             tt_rows,
         )
 
@@ -473,6 +560,9 @@ def replace_all(
             trip_stop_rows.append(
                 (
                     trip_id,
+                    feed_id,
+                    snapshot_id,
+                    dataset_id,
                     stop_id,
                     str(stop_time.get("stop_name") or stop_time.get("stopName") or ""),
                     sequence,
@@ -502,8 +592,8 @@ def replace_all(
             )
         conn.executemany(
             "INSERT OR IGNORE INTO trip_stop_times "
-            "(trip_id, stop_id, stop_name, sequence, departure, arrival, source, extra_json) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "(trip_id, feed_id, snapshot_id, dataset_id, stop_id, stop_name, sequence, departure, arrival, source, extra_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             trip_stop_rows,
         )
 
@@ -538,6 +628,9 @@ def replace_all(
                 seen_st.add(dedup)
                 st_rows.append((
                     stop_id,
+                    feed_id,
+                    snapshot_id,
+                    dataset_id,
                     route_id or None,
                     svc_id,
                     direction or None,
@@ -555,6 +648,9 @@ def replace_all(
                     st_entry_rows.append(
                         (
                             timetable_id,
+                            feed_id,
+                            snapshot_id,
+                            dataset_id,
                             stop_id,
                             stop_name,
                             svc_id,
@@ -577,17 +673,17 @@ def replace_all(
                     )
         conn.executemany(
             "INSERT OR IGNORE INTO stop_timetables "
-            "(stop_id, route_id, service_id, direction, time, "
+            "(stop_id, feed_id, snapshot_id, dataset_id, route_id, service_id, direction, time, "
             " destination_display, trip_id, source, extra_json) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             st_rows,
         )
         conn.executemany(
             "INSERT OR IGNORE INTO stop_timetable_entries "
-            "(timetable_id, stop_id, stop_name, service_id, calendar, entry_index, "
+            "(timetable_id, feed_id, snapshot_id, dataset_id, stop_id, stop_name, service_id, calendar, entry_index, "
             " departure, arrival, destination_stop_id, destination_display, route_id, "
             " trip_id, note, source, extra_json) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             st_entry_rows,
         )
 
@@ -598,11 +694,14 @@ def replace_all(
                 continue
             conn.execute(
                 "INSERT OR REPLACE INTO calendar "
-                "(service_id, service_name, monday, tuesday, wednesday, "
+                "(service_id, feed_id, snapshot_id, dataset_id, service_name, monday, tuesday, wednesday, "
                 " thursday, friday, saturday, sunday, start_date, end_date) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     sid,
+                    feed_id,
+                    snapshot_id,
+                    dataset_id,
                     str(cal.get("service_name") or cal.get("name") or sid),
                     int(cal.get("monday") or 0),
                     int(cal.get("tuesday") or 0),
@@ -623,9 +722,16 @@ def replace_all(
             if not sid or not dt:
                 continue
             conn.execute(
-                "INSERT OR IGNORE INTO calendar_dates (service_id, date, exception_type) "
-                "VALUES (?,?,?)",
-                (sid, dt, int(cd.get("exception_type") or 1)),
+                "INSERT OR IGNORE INTO calendar_dates (service_id, feed_id, snapshot_id, dataset_id, date, exception_type) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    sid,
+                    feed_id,
+                    snapshot_id,
+                    dataset_id,
+                    dt,
+                    _normalize_exception_type(cd.get("exception_type")),
+                ),
             )
 
         # Write metadata ---------------------------------------------------------
@@ -634,6 +740,9 @@ def replace_all(
             "operator_id": operator_id,
             "operator_name": info["name_ja"],
             "source": source,
+            "feed_id": feed_id,
+            "snapshot_id": snapshot_id or "",
+            "dataset_id": dataset_id,
             "last_import_at": now,
             "route_count": str(len(route_rows)),
             "stop_count": str(len(stop_rows)),
@@ -739,7 +848,7 @@ def list_routes(
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
         rows = conn.execute(
-            "SELECT route_id, route_code, route_name, direction, "
+            "SELECT route_id, feed_id, snapshot_id, dataset_id, route_code, route_name, direction, "
             "       stop_count, trip_count, distance_km, "
             "       first_departure, last_arrival, source "
             f"FROM routes WHERE {' AND '.join(clauses)} "
@@ -770,7 +879,7 @@ def get_route(operator_id: str, route_id: str) -> Optional[Dict[str, Any]]:
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
         row = conn.execute(
-            "SELECT route_id, route_code, route_name, source, direction, "
+            "SELECT route_id, feed_id, snapshot_id, dataset_id, route_code, route_name, source, direction, "
             "       origin_stop_id, destination_stop_id, stop_count, trip_count, "
             "       distance_km, first_departure, last_arrival, stop_sequence_json, "
             "       geometry_json, extra_json "
@@ -808,7 +917,7 @@ def list_stops(
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
         rows = conn.execute(
-            "SELECT stop_id, stop_name, stop_name_en, lat, lon, kind, source "
+            "SELECT stop_id, feed_id, snapshot_id, dataset_id, stop_name, stop_name_en, lat, lon, kind, source "
             f"FROM stops WHERE {' AND '.join(clauses)} "
             "ORDER BY stop_name ASC LIMIT ? OFFSET ?",
             params,
@@ -861,7 +970,7 @@ def list_timetable_rows(
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
         rows = conn.execute(
-            f"SELECT trip_id, route_id, service_id, direction, trip_index, "
+            f"SELECT trip_id, feed_id, snapshot_id, dataset_id, route_id, service_id, direction, trip_index, "
             f"       origin, destination, departure, arrival, distance_km, "
             f"       allowed_vehicle_types, source, extra_json "
             f"FROM timetable_rows "
@@ -951,7 +1060,7 @@ def list_stop_timetables(
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
         rows = conn.execute(
-            f"SELECT timetable_id, stop_id, stop_name, service_id, calendar, entry_index, "
+            f"SELECT timetable_id, feed_id, snapshot_id, dataset_id, stop_id, stop_name, service_id, calendar, entry_index, "
             f"       departure, arrival, destination_stop_id, destination_display, "
             f"       route_id, trip_id, note, source, extra_json "
             f"FROM stop_timetable_entries WHERE {where} "
@@ -995,7 +1104,7 @@ def list_trip_stop_times(operator_id: str, trip_id: str) -> List[Dict[str, Any]]
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
         rows = conn.execute(
-            "SELECT trip_id, stop_id, stop_name, sequence, departure, arrival, source, extra_json "
+            "SELECT trip_id, feed_id, snapshot_id, dataset_id, stop_id, stop_name, sequence, departure, arrival, source, extra_json "
             "FROM trip_stop_times WHERE trip_id = ? ORDER BY sequence ASC",
             (trip_id,),
         ).fetchall()
@@ -1016,7 +1125,7 @@ def list_calendar(operator_id: str) -> List[Dict[str, Any]]:
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
         rows = conn.execute(
-            "SELECT service_id, service_name, monday, tuesday, wednesday, "
+            "SELECT service_id, feed_id, snapshot_id, dataset_id, service_name, monday, tuesday, wednesday, "
             "       thursday, friday, saturday, sunday, start_date, end_date "
             "FROM calendar ORDER BY service_id ASC"
         ).fetchall()
@@ -1028,7 +1137,7 @@ def list_calendar_dates(operator_id: str) -> List[Dict[str, Any]]:
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
         rows = conn.execute(
-            "SELECT service_id, date, exception_type "
+            "SELECT service_id, feed_id, snapshot_id, dataset_id, date, exception_type "
             "FROM calendar_dates ORDER BY date ASC, service_id ASC"
         ).fetchall()
     return [dict(r) for r in rows]

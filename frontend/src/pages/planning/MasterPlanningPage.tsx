@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
+import { useScenario } from "@/hooks";
 import { useUIStore } from "@/stores/ui-store";
 import { usePlanningDatasetStore } from "@/stores/planning-dataset-store";
 import { PageSection } from "@/features/common";
@@ -9,10 +10,12 @@ import { DepotListPanel, DepotDetailPanel, RouteTable, VehicleRouteMatrix } from
 export function MasterPlanningPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
+  const { data: scenario } = useScenario(scenarioId ?? "");
   const selectedDepotId = useUIStore((s) => s.selectedDepotId);
   const [showAllRoutes, setShowAllRoutes] = useState(false);
   const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
   const setShowAllRoutesStore = usePlanningDatasetStore((s) => s.setShowAllRoutes);
+  const setFeedContext = usePlanningDatasetStore((s) => s.setFeedContext);
 
   useEffect(() => {
     setActiveDepotId(selectedDepotId);
@@ -21,6 +24,10 @@ export function MasterPlanningPage() {
   useEffect(() => {
     setShowAllRoutesStore(showAllRoutes);
   }, [showAllRoutes, setShowAllRoutesStore]);
+
+  useEffect(() => {
+    setFeedContext(scenario?.feedContext ?? null);
+  }, [scenario?.feedContext, setFeedContext]);
 
   if (!scenarioId) return null;
 
@@ -34,6 +41,16 @@ export function MasterPlanningPage() {
         <p className="text-sm text-slate-500">
           {t("planning.description")}
         </p>
+        {scenario?.feedContext && (
+          <p className="mt-2 text-xs text-slate-500">
+            {scenario.feedContext.feedId ?? "unscoped"}
+            {" / "}
+            {scenario.feedContext.snapshotId ?? "no-snapshot"}
+            {scenario.feedContext.datasetId
+              ? ` / ${scenario.feedContext.datasetId}`
+              : ""}
+          </p>
+        )}
       </div>
 
       {/* Main 2-column layout: depot list + detail */}
