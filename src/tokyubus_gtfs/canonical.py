@@ -14,16 +14,26 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .archive import load_raw_resource
-from .constants import CANONICAL_DIR, ODPT_RESOURCE_TYPES
+from .constants import (
+    CANONICAL_DIR,
+    TOKYU_OPERATOR_ID,
+    TOKYU_OPERATOR_NAME,
+    TOKYU_OPERATOR_NAME_EN,
+    TOKYU_OPERATOR_URL,
+)
 from .models import (
+    CanonicalShapePoint,
     CanonicalRoute,
     CanonicalRouteStop,
     CanonicalService,
     CanonicalStop,
+    CanonicalStopPole,
     CanonicalStopTimetable,
     CanonicalTrip,
     CanonicalTripStopTime,
     NormalizationSummary,
+    Operator,
+    SourceLineage,
 )
 from .normalizers.routes import normalize_busroute_patterns
 from .normalizers.services import build_service_calendars
@@ -66,6 +76,85 @@ def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
             if line:
                 items.append(json.loads(line))
     return items
+
+
+def _build_shape_points(
+    route_stops: List[CanonicalRouteStop],
+    stop_lookup: Dict[str, Dict[str, Any]],
+) -> List[CanonicalShapePoint]:
+    by_route: Dict[str, List[CanonicalRouteStop]] = {}
+    for route_stop in route_stops:
+        by_route.setdefault(route_stop.route_id, []).append(route_stop)
+
+    shape_points: List[CanonicalShapePoint] = []
+    for route_id, items in by_route.items():
+        shape_id = f"shape_{route_id}"
+        for item in sorted(items, key=lambda route_stop: route_stop.stop_sequence):
+            stop_meta = stop_lookup.get(item.stop_id, {})
+            lat = stop_meta.get("lat")
+            lon = stop_meta.get("lon")
+            if lat is None or lon is None:
+                continue
+            shape_points.append(
+                CanonicalShapePoint(
+                    shape_id=shape_id,
+                    shape_pt_sequence=item.stop_sequence,
+                    shape_pt_lat=float(lat),
+                    shape_pt_lon=float(lon),
+                    shape_dist_traveled_km=round(
+                        float(item.distance_from_start_m or 0.0) / 1000.0, 3
+                    ),
+                    route_id=route_id,
+                    stop_id=item.stop_id,
+                )
+            )
+    return shape_points
+
+
+def _build_source_lineage(
+    snapshot_dir: Path,
+    snapshot_name: str,
+    entity_counts: Dict[str, int],
+) -> List[SourceLineage]:
+    manifest_path = snapshot_dir / "manifest.json"
+    generated_at = datetime.now(timezone.utc).isoformat()
+    manifest = {}
+    if manifest_path.exists():
+        with manifest_path.open("r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    files = manifest.get("files") or []
+    file_by_resource = {
+        str(item.get("resource_type") or ""): item
+        for item in files
+        if item.get("resource_type")
+    }
+    table_to_resource = {
+        "stops": "odpt:BusstopPole",
+        "stop_poles": "odpt:BusstopPole",
+        "routes": "odpt:BusroutePattern",
+        "route_stops": "odpt:BusroutePattern",
+        "trips": "odpt:BusTimetable",
+        "stop_times": "odpt:BusTimetable",
+        "services": "odpt:BusTimetable",
+        "stop_timetables": "odpt:BusstopPoleTimetable",
+    }
+    lineage: List[SourceLineage] = []
+    for table_name, resource_type in table_to_resource.items():
+        resource_meta = file_by_resource.get(resource_type, {})
+        source_filename = str(resource_meta.get("filename") or "")
+        lineage.append(
+            SourceLineage(
+                table_name=table_name,
+                source_type="odpt_raw",
+                source_path=str(snapshot_dir / source_filename) if source_filename else "",
+                resource_type=resource_type,
+                snapshot_id=snapshot_name,
+                record_count=int(entity_counts.get(table_name, 0)),
+                sha256=str(resource_meta.get("sha256") or ""),
+                generated_at=generated_at,
+            )
+        )
+    return lineage
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +258,19 @@ def build_canonical(
     stops, stop_lookup, w = normalize_busstop_poles(raw_stops)
     all_warnings.extend(w)
     _write_jsonl(stops, out_dir / "stops.jsonl")
+    stop_poles = [
+        CanonicalStopPole(
+            stop_pole_id=stop.stop_id,
+            stop_id=stop.stop_id,
+            stop_name=stop.stop_name,
+            pole_number=stop.pole_number,
+            lat=stop.lat,
+            lon=stop.lon,
+            odpt_id=stop.odpt_id,
+        )
+        for stop in stops
+    ]
+    _write_jsonl(stop_poles, out_dir / "stop_poles.jsonl")
 
     # -- 2. Routes --
     _log.info("Step 2/6: Normalizing BusroutePattern …")
@@ -229,6 +331,19 @@ def build_canonical(
     all_warnings.extend(w)
     _write_jsonl(stop_timetables, out_dir / "stop_timetables.jsonl")
 
+    operators = [
+        Operator(
+            operator_id=TOKYU_OPERATOR_ID,
+            name=TOKYU_OPERATOR_NAME,
+            name_en=TOKYU_OPERATOR_NAME_EN,
+            url=TOKYU_OPERATOR_URL,
+        )
+    ]
+    _write_jsonl(operators, out_dir / "operators.jsonl")
+
+    shape_points = _build_shape_points(route_stops, stop_lookup)
+    _write_jsonl(shape_points, out_dir / "shapes.jsonl")
+
     # -- 6. Reconcile --
     _log.info("Step 6/6: Reconciling …")
     recon = reconcile(out_dir)
@@ -246,10 +361,12 @@ def build_canonical(
             "routes": len(routes),
             "route_stops": len(route_stops),
             "stops": len(stops),
+            "stop_poles": len(stop_poles),
             "services": len(services),
             "trips": len(trips),
             "stop_times": len(stop_times),
             "stop_timetables": len(stop_timetables),
+            "shapes": len(shape_points),
         },
         reconciliation=recon,
         warnings=list(dict.fromkeys(all_warnings)),
@@ -258,6 +375,13 @@ def build_canonical(
     summary_path = out_dir / "canonical_summary.json"
     with summary_path.open("w", encoding="utf-8") as f:
         json.dump(summary.model_dump(mode="json"), f, ensure_ascii=False, indent=2)
+
+    source_lineage = _build_source_lineage(
+        snapshot_dir,
+        snapshot_name,
+        summary.entity_counts,
+    )
+    _write_jsonl(source_lineage, out_dir / "source_lineage.jsonl")
 
     _log.info(
         "Canonical build complete: %d routes, %d stops, %d trips, %d warnings",

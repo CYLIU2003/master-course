@@ -7,7 +7,7 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
-[![Tests](https://img.shields.io/badge/tests-215%20passed-brightgreen.svg)](#13-テスト状況--test-status)
+[![Tests](https://img.shields.io/badge/tests-245%20passed-brightgreen.svg)](#13-テスト状況--test-status)
 
 ---
 
@@ -53,14 +53,17 @@
 |---------|------|
 | `main` | 現行開発ブランチ（React Frontend + FastAPI BFF + Python Core） |
 | `old` | 旧 Streamlit UI 資産の退避ブランチ（原則更新しない） |
+| `odpt_only` | Tokyu Bus の ODPT 直結実装を保存する legacy ブランチ |
 
 - 新機能開発は `main` で行います。
 - 旧 Streamlit UI は `old` ブランチにアーカイブ済みです（参照が必要な場合: `git checkout old`）。
+- Tokyu Bus の旧 ODPT 直結経路は `odpt_only` に保存し、`main` では layered pipeline を標準とします。
 - 運用者向けデータガバナンス・ブランチ戦略は [`DATA_GOVERNANCE_AND_BRANCH_STRATEGY.md`](DATA_GOVERNANCE_AND_BRANCH_STRATEGY.md) を参照。
 
 EN: Develop new features on `main`. `old` is archival for legacy Streamlit references.
+Tokyu Bus ODPT-direct legacy code is preserved on `odpt_only`.
 
-中文：新功能请在 `main` 开发；`old` 仅用于保留旧版 Streamlit 参考。
+中文：新功能请在 `main` 开发；`old` 仅用于保留旧版 Streamlit 参考。Tokyu Bus 的 ODPT 直连旧实现保存在 `odpt_only`。
 
 ---
 
@@ -690,6 +693,7 @@ Route ──1:N──→ Trip
 .\catalog_update_app.ps1 --help
 .\catalog_update_app.ps1 refresh odpt --force-refresh
 .\catalog_update_app.ps1 refresh gtfs --feed-path GTFS/ToeiBus-GTFS
+.\\catalog_update_app.ps1 refresh gtfs-pipeline --source-dir .\\data\\raw-odpt
 .\catalog_update_app.ps1 sync odpt --scenario latest --refresh --resources all
 .\catalog_update_app.ps1 sync gtfs --scenario latest --refresh --resources routes,stops,timetable,stop-timetables,calendar
 ```
@@ -699,6 +703,7 @@ Route ──1:N──→ Trip
 python catalog_update_app.py --help
 python catalog_update_app.py refresh odpt --force-refresh
 python catalog_update_app.py refresh gtfs --feed-path GTFS/ToeiBus-GTFS
+python catalog_update_app.py refresh gtfs-pipeline --source-dir ./data/raw-odpt
 python catalog_update_app.py sync odpt --scenario latest --refresh --resources all
 python catalog_update_app.py sync gtfs --scenario latest --refresh --resources routes,stops,timetable,stop-timetables,calendar
 python catalog_update_app.py refresh odpt --fast-path --out-dir ./data/catalog-fast --concurrency 64 --resume
@@ -780,7 +785,7 @@ python run_experiment.py \
 ```
 最終実行: 2026-03-08
 コマンド: python -m pytest tests/ -q
-結果:   215 passed ✅
+結果:   245 passed ✅
 ```
 
 ### テストカバレッジ（主要領域）
@@ -840,6 +845,9 @@ python run_experiment.py \
 | データ | 格納先 | 説明 |
 |-------|-------|------|
 | GTFS | `GTFS/ToeiBus-GTFS/` | 都営バス GTFS データ |
+| Tokyu Bus GTFS | `GTFS/TokyuBus-GTFS/` | Tokyu Bus layered pipeline の出力 GTFS |
+| Tokyu Canonical | `data/tokyubus/canonical/` | Tokyu Bus canonical JSONL |
+| Tokyu Features | `data/tokyubus/features/` | Tokyu Bus research feature store |
 | ODPT | `data/odpt_tokyu.db` 等 | 公共交通 Open Data |
 | 車両カタログ | `data/vehicle_catalog.json` | BEV/ICE 車両仕様 |
 | エンジンバス参照 | `data/engine_bus/` + `constant/*.xlsx` | JH25 年式バス性能データ |

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "canonical/stop_timetable_row.schema.json",
+  "title": "CanonicalStopTimetable",
+  "type": "object",
+  "required": ["timetable_id", "stop_id"],
+  "properties": {
+    "timetable_id": { "type": "string" },
+    "stop_id": { "type": "string" },
+    "stop_name": { "type": "string" },
+    "service_id": { "type": "string" },
+    "odpt_calendar_raw": { "type": "string" },
+    "items": { "type": "array", "items": { "type": "object" } }
+  }
+}

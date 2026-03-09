@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "canonical/shape_point.schema.json",
+  "title": "CanonicalShapePoint",
+  "type": "object",
+  "required": ["shape_id", "shape_pt_sequence", "shape_pt_lat", "shape_pt_lon"],
+  "properties": {
+    "shape_id": { "type": "string" },
+    "shape_pt_sequence": { "type": "integer", "minimum": 0 },
+    "shape_pt_lat": { "type": "number" },
+    "shape_pt_lon": { "type": "number" },
+    "shape_dist_traveled_km": { "type": "number", "minimum": 0 },
+    "route_id": { "type": "string" },
+    "stop_id": { "type": "string" }
+  }
+}

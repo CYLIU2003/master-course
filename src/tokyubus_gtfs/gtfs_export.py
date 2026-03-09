@@ -271,12 +271,73 @@ def _export_stop_times(canonical_dir: Path, out_dir: Path) -> int:
     return count
 
 
+def _export_calendar_dates(canonical_dir: Path, out_dir: Path) -> int:
+    """
+    Export ``calendar_dates.txt`` for service exceptions.
+
+    Currently ODPT does not provide per-date exceptions, so this generates
+    a minimal placeholder file.  Future versions may populate it from
+    BusTimetable calendar annotations.
+    """
+    # Placeholder: no exceptions yet — write header-only CSV
+    rows: List[Dict[str, Any]] = []
+    count = _write_csv(
+        rows,
+        out_dir / "calendar_dates.txt",
+        ["service_id", "date", "exception_type"],
+    )
+    _log.info("Exported %d calendar_dates to calendar_dates.txt", count)
+    return count
+
+
+def _export_shapes(canonical_dir: Path, out_dir: Path) -> int:
+    """
+    Export ``shapes.txt`` from route stop sequences.
+
+    Approximates shapes from the ordered stop coordinates of each route.
+    This is a basic stop-to-stop polyline; proper shapes would require
+    GTFS shapes or GPS trace data that ODPT does not provide.
+    """
+    shape_points = _read_jsonl(canonical_dir / "shapes.jsonl")
+    rows: List[Dict[str, Any]] = []
+    for point in sorted(
+        shape_points,
+        key=lambda item: (
+            str(item.get("shape_id") or ""),
+            int(item.get("shape_pt_sequence") or 0),
+        ),
+    ):
+        rows.append(
+            {
+                "shape_id": point.get("shape_id", ""),
+                "shape_pt_lat": point.get("shape_pt_lat", ""),
+                "shape_pt_lon": point.get("shape_pt_lon", ""),
+                "shape_pt_sequence": point.get("shape_pt_sequence", 0),
+                "shape_dist_traveled": point.get("shape_dist_traveled_km", ""),
+            }
+        )
+
+    count = _write_csv(
+        rows,
+        out_dir / "shapes.txt",
+        [
+            "shape_id",
+            "shape_pt_lat",
+            "shape_pt_lon",
+            "shape_pt_sequence",
+            "shape_dist_traveled",
+        ],
+    )
+    _log.info("Exported %d shape points to shapes.txt", count)
+    return count
+
+
 # ---------------------------------------------------------------------------
 # Sidecar files (ODPT metadata GTFS cannot represent)
 # ---------------------------------------------------------------------------
 
 
-def _write_sidecar_route_patterns(canonical_dir: Path, out_dir: Path) -> None:
+def _write_sidecar_route_patterns(canonical_dir: Path, out_dir: Path) -> int:
     """Sidecar: full route pattern / variant metadata."""
     routes = _read_jsonl(canonical_dir / "routes.jsonl")
     route_stops = _read_jsonl(canonical_dir / "route_stops.jsonl")
@@ -316,9 +377,10 @@ def _write_sidecar_route_patterns(canonical_dir: Path, out_dir: Path) -> None:
     with path.open("w", encoding="utf-8") as f:
         json.dump(patterns, f, ensure_ascii=False, indent=2)
     _log.info("Wrote sidecar_route_patterns.json (%d entries)", len(patterns))
+    return len(patterns)
 
 
-def _write_sidecar_stop_metadata(canonical_dir: Path, out_dir: Path) -> None:
+def _write_sidecar_stop_metadata(canonical_dir: Path, out_dir: Path) -> int:
     """Sidecar: stop coordinate provenance and ODPT metadata."""
     stops = _read_jsonl(canonical_dir / "stops.jsonl")
     meta = []
@@ -337,6 +399,70 @@ def _write_sidecar_stop_metadata(canonical_dir: Path, out_dir: Path) -> None:
     with path.open("w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
     _log.info("Wrote sidecar_stop_metadata.json (%d entries)", len(meta))
+    return len(meta)
+
+
+def _write_sidecar_trip_odpt_extra(canonical_dir: Path, out_dir: Path) -> int:
+    trips = _read_jsonl(canonical_dir / "trips.jsonl")
+    payload = []
+    for trip in trips:
+        payload.append(
+            {
+                "trip_id": trip.get("trip_id", ""),
+                "odpt_timetable_id": trip.get("odpt_timetable_id", ""),
+                "odpt_pattern_id": trip.get("odpt_pattern_id", ""),
+                "odpt_calendar_raw": trip.get("odpt_calendar_raw", ""),
+                "allowed_vehicle_types": trip.get("allowed_vehicle_types") or [],
+                "trip_category": trip.get("trip_category", "revenue"),
+            }
+        )
+    path = out_dir / "sidecar_trip_odpt_extra.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _log.info("Wrote sidecar_trip_odpt_extra.json (%d entries)", len(payload))
+    return len(payload)
+
+
+def _write_sidecar_stop_pole_map(canonical_dir: Path, out_dir: Path) -> int:
+    stop_poles = _read_jsonl(canonical_dir / "stop_poles.jsonl")
+    payload = []
+    for stop_pole in stop_poles:
+        payload.append(
+            {
+                "stop_pole_id": stop_pole.get("stop_pole_id", ""),
+                "stop_id": stop_pole.get("stop_id", ""),
+                "stop_name": stop_pole.get("stop_name", ""),
+                "pole_number": stop_pole.get("pole_number"),
+                "odpt_id": stop_pole.get("odpt_id", ""),
+            }
+        )
+    path = out_dir / "sidecar_stop_pole_map.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _log.info("Wrote sidecar_stop_pole_map.json (%d entries)", len(payload))
+    return len(payload)
+
+
+def _write_sidecar_snapshot_manifest(canonical_dir: Path, out_dir: Path) -> int:
+    summary_path = canonical_dir / "canonical_summary.json"
+    payload: Dict[str, Any] = {
+        "canonical_summary": {},
+        "raw_snapshot_manifest": {},
+    }
+    if summary_path.exists():
+        with summary_path.open("r", encoding="utf-8") as f:
+            payload["canonical_summary"] = json.load(f)
+        raw_archive_path = payload["canonical_summary"].get("raw_archive_path")
+        if raw_archive_path:
+            manifest_path = Path(raw_archive_path) / "manifest.json"
+            if manifest_path.exists():
+                with manifest_path.open("r", encoding="utf-8") as f:
+                    payload["raw_snapshot_manifest"] = json.load(f)
+    path = out_dir / "sidecar_snapshot_manifest.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _log.info("Wrote sidecar_snapshot_manifest.json")
+    return 1
 
 
 # ---------------------------------------------------------------------------
@@ -379,17 +505,28 @@ def export_gtfs(
     n_trips = _export_trips(canonical_dir, out_dir)
     n_st = _export_stop_times(canonical_dir, out_dir)
 
+    n_cd = _export_calendar_dates(canonical_dir, out_dir)
+    n_shapes = _export_shapes(canonical_dir, out_dir)
+
     # Sidecar files
-    _write_sidecar_route_patterns(canonical_dir, out_dir)
-    _write_sidecar_stop_metadata(canonical_dir, out_dir)
+    sidecars = {
+        "route_patterns": _write_sidecar_route_patterns(canonical_dir, out_dir),
+        "stop_metadata": _write_sidecar_stop_metadata(canonical_dir, out_dir),
+        "trip_odpt_extra": _write_sidecar_trip_odpt_extra(canonical_dir, out_dir),
+        "stop_pole_map": _write_sidecar_stop_pole_map(canonical_dir, out_dir),
+        "snapshot_manifest": _write_sidecar_snapshot_manifest(canonical_dir, out_dir),
+    }
 
     summary = {
         "gtfs_dir": str(out_dir),
         "stops": n_stops,
         "routes": n_routes,
         "calendars": n_cal,
+        "calendar_dates": n_cd,
         "trips": n_trips,
         "stop_times": n_st,
+        "shapes": n_shapes,
+        "sidecars": sidecars,
     }
     _log.info("GTFS export complete: %s", summary)
     return summary

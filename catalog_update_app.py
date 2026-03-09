@@ -11,12 +11,14 @@ heavy public-data refresh work can be run on demand.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from typing import Any, Dict, List, Optional, Sequence
 
 DEFAULT_OPERATOR = "odpt.Operator:TokyuBus"
 DEFAULT_GTFS_FEED_PATH = "GTFS/ToeiBus-GTFS"
+DEFAULT_TOKYUBUS_PIPELINE_SOURCE_DIR = "./data/raw-odpt"
 ALL_RESOURCES = ("routes", "stops", "timetable", "stop-timetables", "calendar")
 
 
@@ -407,6 +409,22 @@ def _cmd_list_snapshots(_: argparse.Namespace) -> int:
 
 
 def _cmd_refresh(args: argparse.Namespace) -> int:
+    if args.source == "gtfs-pipeline":
+        from pathlib import Path
+
+        from src.tokyubus_gtfs.pipeline import PipelineConfig, run_pipeline
+
+        result = run_pipeline(
+            PipelineConfig(
+                source_dir=Path(args.source_dir).resolve(),
+                snapshot_id=args.snapshot_id,
+                skip_archive=args.skip_archive,
+                skip_gtfs=args.skip_gtfs,
+                skip_features=args.skip_features,
+            )
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        return 0
     if getattr(args, "fast_path", False):
         if args.source != "odpt":
             raise RuntimeError("--fast-path refresh is currently supported for ODPT only")
@@ -532,8 +550,13 @@ def _run_interactive() -> int:
                 source="odpt",
                 operator=DEFAULT_OPERATOR,
                 feed_path=DEFAULT_GTFS_FEED_PATH,
+                source_dir=DEFAULT_TOKYUBUS_PIPELINE_SOURCE_DIR,
+                snapshot_id=None,
                 force_refresh=True,
                 ttl_sec=3600,
+                skip_archive=False,
+                skip_gtfs=False,
+                skip_features=False,
             )
         )
     if choice == "4":
@@ -542,8 +565,13 @@ def _run_interactive() -> int:
                 source="gtfs",
                 operator=DEFAULT_OPERATOR,
                 feed_path=DEFAULT_GTFS_FEED_PATH,
+                source_dir=DEFAULT_TOKYUBUS_PIPELINE_SOURCE_DIR,
+                snapshot_id=None,
                 force_refresh=True,
                 ttl_sec=3600,
+                skip_archive=False,
+                skip_gtfs=False,
+                skip_features=False,
             )
         )
     if choice == "5":
@@ -592,11 +620,16 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("list-snapshots", help="List catalog snapshots")
 
     refresh_parser = subparsers.add_parser("refresh", help="Refresh catalog snapshot only")
-    refresh_parser.add_argument("source", choices=["odpt", "gtfs"])
+    refresh_parser.add_argument("source", choices=["odpt", "gtfs", "gtfs-pipeline"])
     refresh_parser.add_argument("--operator", default=DEFAULT_OPERATOR)
     refresh_parser.add_argument("--feed-path", default=DEFAULT_GTFS_FEED_PATH)
+    refresh_parser.add_argument("--source-dir", default=DEFAULT_TOKYUBUS_PIPELINE_SOURCE_DIR)
+    refresh_parser.add_argument("--snapshot-id")
     refresh_parser.add_argument("--ttl-sec", type=int, default=3600)
     refresh_parser.add_argument("--force-refresh", action="store_true")
+    refresh_parser.add_argument("--skip-archive", action="store_true")
+    refresh_parser.add_argument("--skip-gtfs", action="store_true")
+    refresh_parser.add_argument("--skip-features", action="store_true")
     refresh_parser.add_argument("--fast-path", action="store_true")
     refresh_parser.add_argument("--out-dir", default="./data/catalog-fast")
     refresh_parser.add_argument("--concurrency", type=int, default=32)

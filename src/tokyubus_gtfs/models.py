@@ -223,6 +223,43 @@ class CanonicalStopTimetable(BaseModel):
     items: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class CanonicalStopPole(BaseModel):
+    """Stop pole metadata kept separate from aggregated stop facts."""
+
+    stop_pole_id: str
+    stop_id: str
+    stop_name: str = ""
+    pole_number: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    odpt_id: str = ""
+
+
+class CanonicalShapePoint(BaseModel):
+    """Polyline point approximating a route shape from stop order."""
+
+    shape_id: str
+    shape_pt_sequence: int
+    shape_pt_lat: float
+    shape_pt_lon: float
+    shape_dist_traveled_km: float = 0.0
+    route_id: str = ""
+    stop_id: str = ""
+
+
+class SourceLineage(BaseModel):
+    """Provenance mapping from canonical table to raw source resource."""
+
+    table_name: str
+    source_type: str
+    source_path: str = ""
+    resource_type: str = ""
+    snapshot_id: str = ""
+    record_count: int = 0
+    sha256: str = ""
+    generated_at: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Pipeline result container
 # ---------------------------------------------------------------------------
@@ -236,5 +273,5 @@ class NormalizationSummary(BaseModel):
     canonical_dir: str = ""
     normalised_at: str = ""
     entity_counts: Dict[str, int] = Field(default_factory=dict)
-    reconciliation: Dict[str, int] = Field(default_factory=dict)
+    reconciliation: Dict[str, Any] = Field(default_factory=dict)
     warnings: List[str] = Field(default_factory=list)

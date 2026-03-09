@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "features/depot.schema.json",
+  "title": "Depot",
+  "type": "object",
+  "required": ["depot_id", "stop_id"],
+  "properties": {
+    "depot_id": { "type": "string" },
+    "stop_id": { "type": "string" },
+    "name": { "type": "string" },
+    "lat": { "type": ["number", "null"] },
+    "lon": { "type": ["number", "null"] },
+    "charger_count": { "type": "integer", "minimum": 0 }
+  }
+}

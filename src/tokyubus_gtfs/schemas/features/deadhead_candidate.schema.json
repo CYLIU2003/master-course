@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "features/deadhead_candidate.schema.json",
+  "title": "DeadheadCandidate",
+  "type": "object",
+  "required": ["from_stop_id", "to_stop_id"],
+  "properties": {
+    "from_stop_id": { "type": "string" },
+    "to_stop_id": { "type": "string" },
+    "haversine_km": { "type": "number", "minimum": 0 },
+    "estimated_road_km": { "type": "number", "minimum": 0 },
+    "estimated_time_min": { "type": "number", "minimum": 0 },
+    "speed_kmh": { "type": "number", "minimum": 0 },
+    "method": { "type": "string" }
+  }
+}
