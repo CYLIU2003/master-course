@@ -17,7 +17,10 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
-from bff.mappers.solver_results import serialize_milp_result, serialize_simulation_result
+from bff.mappers.solver_results import (
+    serialize_milp_result,
+    serialize_simulation_result,
+)
 from bff.routers.graph import (
     _build_blocks_payload,
     _build_dispatch_plan_payload,
@@ -27,7 +30,12 @@ from bff.routers.graph import (
 )
 from bff.store import job_store, scenario_store as store
 from src.dispatch.models import hhmm_to_min
-from src.optimization import OptimizationConfig, OptimizationMode, ProblemBuilder, ResultSerializer
+from src.optimization import (
+    OptimizationConfig,
+    OptimizationMode,
+    ProblemBuilder,
+    ResultSerializer,
+)
 from src.optimization.rolling.reoptimizer import RollingReoptimizer
 from src.pipeline.solve import solve_problem_data
 
@@ -38,6 +46,7 @@ class RunOptimizationBody(BaseModel):
     mode: str = "mode_milp_only"
     time_limit_seconds: int = 300
     mip_gap: float = 0.01
+    random_seed: int = 42
     service_id: Optional[str] = None
     depot_id: Optional[str] = None
     rebuild_dispatch: bool = True
@@ -55,6 +64,7 @@ class ReoptimizeBody(BaseModel):
     current_time: str
     time_limit_seconds: int = 180
     mip_gap: float = 0.02
+    random_seed: int = 42
     alns_iterations: int = 300
     service_id: Optional[str] = None
     depot_id: Optional[str] = None
@@ -69,7 +79,14 @@ def _optimization_capabilities() -> Dict[str, Any]:
         "implemented": True,
         "async_job": True,
         "job_persistence": dict(job_store.JOB_PERSISTENCE_INFO),
-        "supported_modes": ["milp", "alns", "hybrid", "mode_milp_only", "mode_alns_only", "mode_alns_milp"],
+        "supported_modes": [
+            "milp",
+            "alns",
+            "hybrid",
+            "mode_milp_only",
+            "mode_alns_only",
+            "mode_alns_milp",
+        ],
         "supports_reoptimization": True,
         "notes": [
             "Optimization runs against canonical ProblemData built from the scenario snapshot.",
@@ -109,13 +126,10 @@ def _resolve_dispatch_scope(
 
 def _git_sha() -> str:
     try:
-        return (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"],
-                text=True,
-            )
-            .strip()
-        )
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
     except Exception:
         return ""
 
@@ -162,7 +176,9 @@ def _job_metadata(
     }
 
 
-def _cost_breakdown(result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None) -> Dict[str, float]:
+def _cost_breakdown(
+    result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None
+) -> Dict[str, float]:
     obj_breakdown = dict(result_payload.get("obj_breakdown") or {})
     return {
         "energy_cost": float(
@@ -188,9 +204,7 @@ def _cost_breakdown(result_payload: Dict[str, Any], sim_payload: Dict[str, Any] 
             )
             or 0.0
         ),
-        "penalty_unserved": float(
-            obj_breakdown.get("unserved_penalty", 0.0) or 0.0
-        ),
+        "penalty_unserved": float(obj_breakdown.get("unserved_penalty", 0.0) or 0.0),
         "total_cost": float(
             result_payload.get("objective_value")
             or (sim_payload or {}).get("total_operating_cost", 0.0)
@@ -205,8 +219,9 @@ def _run_optimization(
     mode: str,
     time_limit_seconds: int,
     mip_gap: float,
+    random_seed: int,
     service_id: str,
-    depot_id: str,
+    depot_id: Optional[str],
     rebuild_dispatch: bool,
     use_existing_duties: bool,
     alns_iterations: int,
@@ -231,7 +246,10 @@ def _run_optimization(
 
         if rebuild_dispatch:
             _rebuild_dispatch_artifacts(scenario_id, service_id, depot_id)
-        elif not (store.get_field(scenario_id, "trips") and store.get_field(scenario_id, "duties")):
+        elif not (
+            store.get_field(scenario_id, "trips")
+            and store.get_field(scenario_id, "duties")
+        ):
             _rebuild_dispatch_artifacts(scenario_id, service_id, depot_id)
 
         scenario = store._load(scenario_id)
@@ -268,6 +286,7 @@ def _run_optimization(
                 mode=_parse_optimization_mode(mode),
                 time_limit_sec=time_limit_seconds,
                 mip_gap=mip_gap,
+                random_seed=random_seed,
                 alns_iterations=alns_iterations,
             ),
         )
@@ -299,6 +318,7 @@ def _run_optimization(
             mode=mode,
             time_limit_seconds=time_limit_seconds,
             mip_gap=mip_gap,
+            random_seed=random_seed,
             output_dir="outputs",
         )
         result_payload = serialize_milp_result(solve_output["result"])
@@ -321,7 +341,9 @@ def _run_optimization(
             "summary": {
                 "vehicle_count_used": sum(
                     1
-                    for _vehicle_id, task_ids in (result_payload.get("assignment") or {}).items()
+                    for _vehicle_id, task_ids in (
+                        result_payload.get("assignment") or {}
+                    ).items()
                     if task_ids
                 ),
                 "trip_count_served": sum(
@@ -353,7 +375,9 @@ def _run_optimization(
                 "travel_connections": build_report.travel_connection_count,
             },
             "output_counts": {
-                "assigned_vehicles": optimization_result["summary"]["vehicle_count_used"],
+                "assigned_vehicles": optimization_result["summary"][
+                    "vehicle_count_used"
+                ],
                 "served_trips": optimization_result["summary"]["trip_count_served"],
                 "unserved_trips": optimization_result["summary"]["trip_count_unserved"],
             },
@@ -362,8 +386,10 @@ def _run_optimization(
             "solver_mode": mode,
             "time_limit": time_limit_seconds,
             "mip_gap": mip_gap,
+            "random_seed": random_seed,
             "alns_iterations": alns_iterations,
             "git_sha": _git_sha(),
+            "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -464,6 +490,7 @@ def _run_reoptimization(
             mode=_parse_optimization_mode(mode),
             time_limit_sec=body.time_limit_seconds,
             mip_gap=body.mip_gap,
+            random_seed=body.random_seed,
             alns_iterations=body.alns_iterations,
             rolling_current_min=hhmm_to_min(body.current_time),
         )
@@ -519,8 +546,10 @@ def _run_reoptimization(
                 "current_time": body.current_time,
                 "delay_count": len(body.delays),
                 "actual_soc_count": len(body.actual_soc),
+                "random_seed": body.random_seed,
                 "executed_at": datetime.now(timezone.utc).isoformat(),
                 "git_sha": _git_sha(),
+                "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
             },
         )
         job_store.update_job(
@@ -605,6 +634,7 @@ def run_optimization(
         request.mode,
         request.time_limit_seconds,
         request.mip_gap,
+        request.random_seed,
         scope.get("serviceId") or "WEEKDAY",
         scope.get("depotId"),
         request.rebuild_dispatch,

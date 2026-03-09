@@ -21,7 +21,11 @@ from bff.mappers.solver_results import (
     deserialize_milp_result,
     serialize_simulation_result,
 )
-from bff.routers.graph import _build_duties_payload, _build_graph_payload, _build_trips_payload
+from bff.routers.graph import (
+    _build_duties_payload,
+    _build_graph_payload,
+    _build_trips_payload,
+)
 from bff.store import job_store, scenario_store as store
 from src.milp_model import MILPResult
 from src.pipeline.simulate import simulate_problem_data
@@ -80,18 +84,26 @@ def _resolve_dispatch_scope(
 
 def _git_sha() -> str:
     try:
-        return (
-            subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        )
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     except Exception:
         return ""
 
 
-def _ensure_dispatch_artifacts(scenario_id: str, service_id: str, depot_id: str) -> None:
+def _ensure_dispatch_artifacts(
+    scenario_id: str, service_id: str, depot_id: str
+) -> None:
     if not store.get_field(scenario_id, "trips"):
-        store.set_field(scenario_id, "trips", _build_trips_payload(scenario_id, service_id, depot_id))
+        store.set_field(
+            scenario_id,
+            "trips",
+            _build_trips_payload(scenario_id, service_id, depot_id),
+        )
     if not store.get_field(scenario_id, "graph"):
-        store.set_field(scenario_id, "graph", _build_graph_payload(scenario_id, service_id, depot_id))
+        store.set_field(
+            scenario_id,
+            "graph",
+            _build_graph_payload(scenario_id, service_id, depot_id),
+        )
     if not store.get_field(scenario_id, "duties"):
         store.set_field(
             scenario_id,
@@ -129,7 +141,9 @@ def _result_from_duties(data, duties_raw: list[dict]) -> MILPResult:
     for vehicle in data.vehicles:
         if vehicle.vehicle_type != "BEV":
             continue
-        current_soc = vehicle.soc_init or vehicle.soc_max or vehicle.battery_capacity or 0.0
+        current_soc = (
+            vehicle.soc_init or vehicle.soc_max or vehicle.battery_capacity or 0.0
+        )
         series = [current_soc for _ in range(data.num_periods + 1)]
         for task_id in result.assignment.get(vehicle.vehicle_id, []):
             task = task_lut.get(task_id)
@@ -148,7 +162,7 @@ def _run_simulation(
     scenario_id: str,
     job_id: str,
     service_id: str,
-    depot_id: str,
+    depot_id: Optional[str],
     source: str,
 ) -> None:
     try:
@@ -170,10 +184,14 @@ def _run_simulation(
         store.set_field(scenario_id, "problemdata_build_audit", build_report.to_dict())
 
         if source == "optimization_result":
-            optimization_result = store.get_field(scenario_id, "optimization_result") or {}
+            optimization_result = (
+                store.get_field(scenario_id, "optimization_result") or {}
+            )
             solver_result = optimization_result.get("solver_result")
             if not solver_result:
-                raise ValueError("No optimization_result found. Run optimization first.")
+                raise ValueError(
+                    "No optimization_result found. Run optimization first."
+                )
             milp_result = deserialize_milp_result(solver_result)
         else:
             duties = store.get_field(scenario_id, "duties") or []
@@ -229,6 +247,7 @@ def _run_simulation(
             "errors": build_report.errors,
             "source": source,
             "git_sha": _git_sha(),
+            "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }
 
