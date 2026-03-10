@@ -3,6 +3,7 @@ import { useBootStore } from "@/stores/boot-store";
 
 export function BootSplashOverlay() {
   const status = useBootStore((state) => state.status);
+  const displayMode = useBootStore((state) => state.displayMode);
   const progress = useBootStore((state) => state.progress);
   const steps = useBootStore((state) => state.steps);
   const errorMessage = useBootStore((state) => state.errorMessage);
@@ -11,6 +12,11 @@ export function BootSplashOverlay() {
 
   useEffect(() => {
     let timeoutId: number | undefined;
+    if (displayMode === "restore" && status !== "error") {
+      setShouldRender(false);
+      setIsClosing(false);
+      return undefined;
+    }
     if (status === "running" || status === "error") {
       setShouldRender(true);
       setIsClosing(false);
@@ -32,7 +38,7 @@ export function BootSplashOverlay() {
       setIsClosing(false);
     }
     return undefined;
-  }, [progress, status]);
+  }, [displayMode, progress, status]);
 
   if (!shouldRender) {
     return null;

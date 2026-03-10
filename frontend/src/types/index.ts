@@ -23,7 +23,9 @@ export type {
   Trip,
   TimetableRow,
   DepotRoutePermission,
+  DepotRouteFamilyPermission,
   VehicleRoutePermission,
+  VehicleRouteFamilyPermission,
   // Rules
   DeadheadRule,
   TurnaroundRule,
@@ -84,6 +86,8 @@ export type {
   UpdateVehicleTemplateRequest,
   // Routes
   RoutesResponse,
+  RouteFamiliesResponse,
+  RouteFamilyDetailResponse,
   RouteDetailResponse,
   CreateRouteRequest,
   UpdateRouteRequest,
@@ -130,9 +134,13 @@ export type {
   UpsertCalendarDateRequest,
   // Permissions
   DepotRoutePermissionsResponse,
+  DepotRouteFamilyPermissionsResponse,
   VehicleRoutePermissionsResponse,
+  VehicleRouteFamilyPermissionsResponse,
   UpdateDepotRoutePermissionsRequest,
+  UpdateDepotRouteFamilyPermissionsRequest,
   UpdateVehicleRoutePermissionsRequest,
+  UpdateVehicleRouteFamilyPermissionsRequest,
   // Rules
   DeadheadRulesResponse,
   TurnaroundRulesResponse,

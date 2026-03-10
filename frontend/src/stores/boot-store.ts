@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 export type BootStepStatus = "pending" | "running" | "success" | "error";
 export type BootStatus = "idle" | "running" | "ready" | "error";
+export type BootDisplayMode = "full" | "restore";
 
 export interface BootStep {
   id: string;
@@ -19,14 +20,25 @@ export interface BootStep {
 interface BootState {
   scenarioId: string | null;
   status: BootStatus;
+  displayMode: BootDisplayMode;
   progress: number;
   steps: BootStep[];
   errorMessage: string | null;
-  start: (scenarioId: string, steps: Array<Pick<BootStep, "id" | "label" | "weight">>) => void;
+  manifestKey: string | null;
+  start: (
+    scenarioId: string,
+    steps: Array<Pick<BootStep, "id" | "label" | "weight">>,
+    options?: {
+      displayMode?: BootDisplayMode;
+      manifestKey?: string | null;
+    },
+  ) => void;
   updateStep: (
     stepId: string,
     patch: Partial<Omit<BootStep, "id" | "label" | "weight">>,
   ) => void;
+  setDisplayMode: (displayMode: BootDisplayMode) => void;
+  setManifestKey: (manifestKey: string | null) => void;
   complete: () => void;
   fail: (message: string) => void;
   reset: () => void;
@@ -47,15 +59,19 @@ function computeWeightedProgress(steps: BootStep[]): number {
 export const useBootStore = create<BootState>((set) => ({
   scenarioId: null,
   status: "idle",
+  displayMode: "full",
   progress: 0,
   steps: [],
   errorMessage: null,
-  start: (scenarioId, steps) =>
+  manifestKey: null,
+  start: (scenarioId, steps, options) =>
     set({
       scenarioId,
       status: "running",
+      displayMode: options?.displayMode ?? "full",
       progress: 0,
       errorMessage: null,
+      manifestKey: options?.manifestKey ?? null,
       steps: steps.map((step) => ({
         ...step,
         status: "pending",
@@ -85,6 +101,8 @@ export const useBootStore = create<BootState>((set) => ({
         progress: computeWeightedProgress(steps),
       };
     }),
+  setDisplayMode: (displayMode) => set({ displayMode }),
+  setManifestKey: (manifestKey) => set({ manifestKey }),
   complete: () =>
     set((state) => {
       const steps = state.steps.map((step) =>
@@ -113,8 +131,10 @@ export const useBootStore = create<BootState>((set) => ({
     set({
       scenarioId: null,
       status: "idle",
+      displayMode: "full",
       progress: 0,
       steps: [],
       errorMessage: null,
+      manifestKey: null,
     }),
 }));

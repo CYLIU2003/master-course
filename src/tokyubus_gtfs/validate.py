@@ -25,6 +25,18 @@ _REQUIRED_FILES = (
     "calendar_dates.txt",
 )
 
+_OPTIONAL_SIDECARS = (
+    "sidecar_route_patterns.json",
+    "sidecar_route_family_map.json",
+    "sidecar_pattern_role_map.json",
+    "sidecar_service_profile.json",
+    "sidecar_stop_metadata.json",
+    "sidecar_trip_odpt_extra.json",
+    "sidecar_stop_pole_map.json",
+    "sidecar_snapshot_manifest.json",
+    "sidecar_depot_candidate_map.json",
+)
+
 
 def _read_json(path: Path) -> Dict[str, Any]:
     if not path.exists():
@@ -58,6 +70,18 @@ def _jsonl_rows(path: Path) -> List[Dict[str, Any]]:
 
 def _row_count(path: Path) -> int:
     return len(_csv_rows(path))
+
+
+def _json_entry_count(path: Path) -> int:
+    payload = _read_json(path)
+    if isinstance(payload, dict):
+        return len(payload)
+    if path.exists():
+        with path.open("r", encoding="utf-8") as fh:
+            raw = json.load(fh)
+        if isinstance(raw, list):
+            return len(raw)
+    return 0
 
 
 def _shape_id_count(rows: Iterable[Dict[str, str]]) -> int:
@@ -132,6 +156,13 @@ def validate_gtfs_feed(
         }
         for name, path in gtfs_files.items()
     }
+    sidecar_checks = {
+        name: {
+            "exists": (gtfs_dir / name).exists(),
+            "entries": _json_entry_count(gtfs_dir / name) if (gtfs_dir / name).exists() else 0,
+        }
+        for name in _OPTIONAL_SIDECARS
+    }
 
     counts = {
         "canonical": dict(canonical_summary.get("entity_counts") or {}),
@@ -152,6 +183,7 @@ def validate_gtfs_feed(
         for row in _jsonl_rows(canonical_dir / "trips.jsonl")
         if row.get("is_public_trip", True)
     ]
+    all_trips = _jsonl_rows(canonical_dir / "trips.jsonl")
     public_trip_ids = {str(trip.get("trip_id") or "") for trip in public_trips}
     counts["canonical"]["public_trips"] = len(public_trips)
     counts["canonical"]["public_stop_times"] = len(
@@ -167,6 +199,12 @@ def validate_gtfs_feed(
             for row in public_trips
             if row.get("shape_id")
         }
+    )
+    counts["canonical"]["deadhead_trips"] = len(
+        [row for row in all_trips if str(row.get("trip_role") or "service") == "deadhead"]
+    )
+    counts["canonical"]["non_public_trips"] = len(
+        [row for row in all_trips if not row.get("is_public_trip", True)]
     )
 
     count_alignment = {
@@ -273,6 +311,31 @@ def validate_gtfs_feed(
     header_only_calendar_dates = file_checks["calendar_dates.txt"]["rows"] == 0
     external_validator = _validate_external_command(gtfs_dir, validator_command)
 
+    service_profile_entries = []
+    service_profile_path = gtfs_dir / "sidecar_service_profile.json"
+    if service_profile_path.exists():
+        with service_profile_path.open("r", encoding="utf-8") as fh:
+            raw_profile = json.load(fh)
+        if isinstance(raw_profile, list):
+            service_profile_entries = [entry for entry in raw_profile if isinstance(entry, dict)]
+
+    service_coverage = []
+    for entry in service_profile_entries:
+        service_id = str(entry.get("service_id") or "")
+        if not service_id:
+            continue
+        service_coverage.append(
+            {
+                "service_id": service_id,
+                "trip_count": int(entry.get("trip_count") or 0),
+                "public_trip_count": int(entry.get("public_trip_count") or 0),
+                "deadhead_trip_count": int(entry.get("deadhead_trip_count") or 0),
+                "route_count": len(entry.get("route_ids") or []),
+                "first_departure": entry.get("first_departure"),
+                "last_arrival": entry.get("last_arrival"),
+            }
+        )
+
     errors: List[str] = []
     for name, result in file_checks.items():
         if not result["exists"]:
@@ -308,6 +371,9 @@ def validate_gtfs_feed(
         warnings.append(f"{missing_coordinates} stop(s) missing coordinates.")
     if external_validator.get("status") == "skipped":
         warnings.append("External MobilityData validation was skipped.")
+    for name, result in sidecar_checks.items():
+        if not result["exists"]:
+            warnings.append(f"Optional sidecar missing: {name}")
 
     snapshot_id = str(canonical_summary.get("snapshot_id") or canonical_dir.name)
     report = {
@@ -320,8 +386,10 @@ def validate_gtfs_feed(
         "errors": errors,
         "warnings": warnings,
         "required_files": file_checks,
+        "sidecars": sidecar_checks,
         "count_alignment": count_alignment,
         "counts": counts,
+        "service_coverage": service_coverage,
         "references": {
             "missing_trip_routes": missing_trip_routes,
             "missing_trip_services": missing_trip_services,

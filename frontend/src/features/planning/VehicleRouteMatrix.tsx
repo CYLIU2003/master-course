@@ -1,17 +1,56 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useVehicles,
-  useRoutes,
-  useVehicleRoutePermissions,
-  useUpdateVehicleRoutePermissions,
+  useRouteFamilies,
+  useDepotRouteFamilyPermissions,
+  useVehicleRouteFamilyPermissions,
+  useUpdateVehicleRouteFamilyPermissions,
 } from "@/hooks";
 import { LoadingBlock, EmptyState } from "@/features/common";
-import type { Vehicle, Route, VehicleRoutePermission } from "@/types";
+import type {
+  Vehicle,
+  RouteFamilySummary,
+  VehicleRouteFamilyPermission,
+} from "@/types";
+import { RouteFamilyInspectorCard } from "./RouteFamilyInspectorCard";
 
 interface VehicleRouteMatrixProps {
   scenarioId: string;
-  /** Optional: scope to vehicles belonging to this depot */
   depotId?: string;
+}
+
+interface FamilyPermissionCheckboxProps {
+  checked: boolean;
+  indeterminate: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+}
+
+function FamilyPermissionCheckbox({
+  checked,
+  indeterminate,
+  disabled,
+  onChange,
+}: FamilyPermissionCheckboxProps) {
+  const ref = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = indeterminate;
+    }
+  }, [indeterminate]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+    />
+  );
 }
 
 export function VehicleRouteMatrix({
@@ -19,60 +58,95 @@ export function VehicleRouteMatrix({
   depotId,
 }: VehicleRouteMatrixProps) {
   const { t } = useTranslation();
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
   const { data: vehiclesData, isLoading: loadingVehicles } = useVehicles(
     scenarioId,
     depotId,
   );
-  const { data: routesData, isLoading: loadingRoutes } = useRoutes(scenarioId);
+  const { data: familiesData, isLoading: loadingFamilies } = useRouteFamilies(scenarioId);
+  const { data: depotFamilyPermsData, isLoading: loadingDepotFamilyPerms } =
+    useDepotRouteFamilyPermissions(scenarioId);
   const { data: permsData, isLoading: loadingPerms } =
-    useVehicleRoutePermissions(scenarioId);
-  const updatePerms = useUpdateVehicleRoutePermissions(scenarioId);
+    useVehicleRouteFamilyPermissions(scenarioId);
+  const updatePerms = useUpdateVehicleRouteFamilyPermissions(scenarioId);
 
-  if (loadingVehicles || loadingRoutes || loadingPerms) {
+  const vehicles: Vehicle[] = vehiclesData?.items ?? [];
+  const families: RouteFamilySummary[] = familiesData?.items ?? [];
+  const depotFamilyPermissions = depotFamilyPermsData?.items ?? [];
+  const permissions: VehicleRouteFamilyPermission[] = permsData?.items ?? [];
+
+  const visibleFamilies = useMemo(() => {
+    if (!depotId) {
+      return families;
+    }
+    const scoped = depotFamilyPermissions.filter((item) => item.depotId === depotId);
+    if (scoped.length === 0) {
+      return families;
+    }
+    const allowedFamilyIds = new Set(
+      scoped
+        .filter((item) => item.allowed || item.partiallyAllowed)
+        .map((item) => item.routeFamilyId),
+    );
+    return families.filter((family) => allowedFamilyIds.has(family.routeFamilyId));
+  }, [depotFamilyPermissions, depotId, families]);
+
+  const permissionMap = useMemo(() => {
+    const map = new Map<string, VehicleRouteFamilyPermission>();
+    for (const item of permissions) {
+      map.set(`${item.vehicleId}:${item.routeFamilyId}`, item);
+    }
+    return map;
+  }, [permissions]);
+
+  useEffect(() => {
+    if (visibleFamilies.length === 0) {
+      setSelectedFamilyId(null);
+      return;
+    }
+    if (
+      selectedFamilyId
+      && visibleFamilies.some((item) => item.routeFamilyId === selectedFamilyId)
+    ) {
+      return;
+    }
+    setSelectedFamilyId(visibleFamilies[0]?.routeFamilyId ?? null);
+  }, [selectedFamilyId, visibleFamilies]);
+
+  if (loadingVehicles || loadingFamilies || loadingDepotFamilyPerms || loadingPerms) {
     return <LoadingBlock message={t("matrix.loading")} />;
   }
 
-  const vehicles: Vehicle[] = vehiclesData?.items ?? [];
-  const routes: Route[] = routesData?.items ?? [];
-  const permissions: VehicleRoutePermission[] = permsData?.items ?? [];
-
-  if (vehicles.length === 0 || routes.length === 0) {
+  if (vehicles.length === 0 || visibleFamilies.length === 0) {
     return (
       <EmptyState
         title={t("matrix.no_data")}
-        description={t("matrix.vehicle_create_first")}
+        description={t(
+          "matrix.vehicle_family_create_first",
+          depotId
+            ? "車両を登録するか、営業所-路線許可で対象 route family を選んでください。"
+            : "車両と route family を先に整備してください。",
+        )}
       />
     );
   }
 
-  // Build lookup
-  const permMap = new Map<string, boolean>();
-  for (const p of permissions) {
-    permMap.set(`${p.vehicleId}:${p.routeId}`, p.allowed);
-  }
+  const getPermission = (vehicleId: string, routeFamilyId: string) =>
+    permissionMap.get(`${vehicleId}:${routeFamilyId}`);
 
-  const isAllowed = (vId: string, rId: string) =>
-    permMap.get(`${vId}:${rId}`) ?? false;
+  const handleToggle = (vehicleId: string, family: RouteFamilySummary) => {
+    const current = getPermission(vehicleId, family.routeFamilyId);
+    const nextAllowed = current?.partiallyAllowed ? true : !(current?.allowed ?? false);
 
-  const handleToggle = (vId: string, rId: string) => {
-    const current = isAllowed(vId, rId);
-    const key = `${vId}:${rId}`;
-
-    const updated = new Map(permMap);
-    updated.set(key, !current);
-
-    // Rebuild full list for the API
-    const allVehicleIds = new Set(vehicles.map((v) => v.id));
-    const newPerms: VehicleRoutePermission[] = [];
-    for (const [k, allowed] of updated) {
-      const [vehicleId, routeId] = k.split(":");
-      // Only include vehicles in current scope
-      if (allVehicleIds.has(vehicleId)) {
-        newPerms.push({ vehicleId, routeId, allowed });
-      }
-    }
-
-    updatePerms.mutate({ permissions: newPerms });
+    updatePerms.mutate({
+      permissions: [
+        {
+          vehicleId,
+          routeFamilyId: family.routeFamilyId,
+          allowed: nextAllowed,
+        },
+      ],
+    });
   };
 
   return (
@@ -81,59 +155,90 @@ export function VehicleRouteMatrix({
         <thead>
           <tr className="border-b border-border bg-slate-50">
             <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">
-              {t("matrix.vehicle_route_header")}
+              {t("matrix.vehicle_route_header", "車両 / route family")}
             </th>
-            {routes.map((r) => (
+            {visibleFamilies.map((family) => (
               <th
-                key={r.id}
+                key={family.routeFamilyId}
                 className="px-2 py-2 text-center text-xs font-medium text-slate-500"
               >
-                <div className="flex flex-col items-center gap-0.5">
-                  {r.color && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedFamilyId(family.routeFamilyId)}
+                  className={`flex w-full flex-col items-center gap-0.5 rounded px-1 py-1 text-center ${
+                    selectedFamilyId === family.routeFamilyId ? "bg-primary-50" : "hover:bg-slate-100"
+                  }`}
+                >
+                  {family.primaryColor && (
                     <span
                       className="inline-block h-2 w-2 rounded-full"
-                      style={{ backgroundColor: r.color }}
+                      style={{ backgroundColor: family.primaryColor }}
                     />
                   )}
-                  <span className="max-w-16 truncate">{r.name}</span>
-                </div>
+                  <span className="max-w-20 truncate font-semibold text-slate-700">
+                    {family.routeFamilyCode}
+                  </span>
+                  <span className="max-w-24 truncate text-[10px] text-slate-500">
+                    {family.variantCount} variants
+                  </span>
+                  <span className="max-w-24 truncate text-[10px] text-slate-400">
+                    {family.hasShortTurn ? "short-turn" : family.hasBranch ? "branch" : family.hasDepotVariant ? "depot" : "main"}
+                  </span>
+                </button>
               </th>
             ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {vehicles.map((v) => (
-            <tr key={v.id} className="hover:bg-slate-50/50">
+          {vehicles.map((vehicle) => (
+            <tr key={vehicle.id} className="hover:bg-slate-50/50">
               <td className="px-3 py-2">
                 <div>
-                  <span className="font-medium text-slate-700">
-                    {v.modelName}
-                  </span>
+                  <span className="font-medium text-slate-700">{vehicle.modelName}</span>
                   <span
                     className={`ml-2 inline-block rounded px-1 py-0.5 text-[10px] font-medium ${
-                      v.type === "BEV"
+                      vehicle.type === "BEV"
                         ? "bg-green-50 text-green-700"
                         : "bg-amber-50 text-amber-700"
                     }`}
                   >
-                    {v.type}
+                    {vehicle.type}
                   </span>
                 </div>
+                <div className="text-xs text-slate-500">route family 単位で一括許可</div>
               </td>
-              {routes.map((r) => (
-                <td key={r.id} className="px-2 py-2 text-center">
-                  <input
-                    type="checkbox"
-                    checked={isAllowed(v.id, r.id)}
-                    onChange={() => handleToggle(v.id, r.id)}
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                  />
-                </td>
-              ))}
+              {visibleFamilies.map((family) => {
+                const permission = getPermission(vehicle.id, family.routeFamilyId);
+                return (
+                  <td key={family.routeFamilyId} className="px-2 py-2 text-center">
+                    <div className="flex flex-col items-center gap-1">
+                      <FamilyPermissionCheckbox
+                        checked={permission?.allowed ?? false}
+                        indeterminate={permission?.partiallyAllowed ?? false}
+                        disabled={updatePerms.isPending}
+                        onChange={() => handleToggle(vehicle.id, family)}
+                      />
+                      <span className="text-[10px] text-slate-400">
+                        {permission?.allowedRouteCount ?? 0}/{permission?.totalRouteCount ?? family.variantCount}
+                      </span>
+                    </div>
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
       </table>
+
+      {selectedFamilyId && (
+        <div className="border-t border-border p-3">
+          <RouteFamilyInspectorCard
+            scenarioId={scenarioId}
+            routeFamilyId={selectedFamilyId}
+            onClose={() => setSelectedFamilyId(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

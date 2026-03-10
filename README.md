@@ -625,7 +625,9 @@ optimization/
 | GET/POST | `/api/scenarios/{id}/routes` | 路線 CRUD |
 | PUT/DELETE | `.../depots/{depotId}` 等 | 個別更新・削除 |
 | GET/PUT | `.../depot-route-permissions` | 営業所→路線 許可 |
+| GET/PUT | `.../depot-route-family-permissions` | 営業所→route family 一括許可 |
 | GET/PUT | `.../vehicle-route-permissions` | 車両→路線 許可 |
+| GET/PUT | `.../vehicle-route-family-permissions` | 車両→route family 一括許可 |
 
 ### Timetable & Calendar
 
@@ -639,6 +641,7 @@ optimization/
 | メソッド | パス | 説明 |
 |---------|------|------|
 | POST | `/api/scenarios/{id}/build-trips` | 便生成 |
+| POST | `/api/scenarios/{id}/subset-export` | 現在の営業所・route family・route scope を研究入力 JSON として保存 |
 | POST | `/api/scenarios/{id}/build-graph` | 接続グラフ構築 |
 | POST | `/api/scenarios/{id}/generate-duties` | 勤務生成 |
 | GET | `/api/scenarios/{id}/duties/validate` | 勤務バリデーション |
@@ -656,6 +659,8 @@ optimization/
 |---------|------|------|
 | POST | `/api/catalog/gtfs/import` | GTFS インポート |
 | GET | `/api/catalog/operators` | 事業者一覧 |
+| GET | `/api/catalog/operators/{operatorId}/route-families` | 事業者別 route family summary |
+| GET | `/api/catalog/operators/{operatorId}/route-families/{routeFamilyId}` | 事業者別 route family detail |
 
 ### Jobs
 
@@ -688,11 +693,12 @@ optimization/
 1. 営業所を作成
 2. 車両を営業所に追加
 3. 路線を作成
-4. 営業所→路線 許可を設定
-5. 車両→路線 許可を設定
+4. route family を確認しながら営業所→route family / route 許可を設定
+5. route family を確認しながら車両→route family / route 許可を設定
 6. シミュレーション環境を設定
-7. Dispatch パイプラインを実行（便生成→グラフ構築→勤務生成）
-8. 結果を確認
+7. 必要なら現在の depot + route family scope を subset export
+8. Dispatch パイプラインを実行（便生成→グラフ構築→勤務生成）
+9. 結果を確認
 ```
 
 ### ドメインモデル
@@ -729,6 +735,7 @@ Route ──1:N──→ Trip
 - Scenario import / Public Data Explorer は保存済み snapshot を優先して読み込みます。snapshot が無い状態では自動 refresh せず、`forceRefresh=true` を明示したときだけ app 側で更新を実行します。
 - 時刻表 UI は summary-first です。`/timetable/summary` と `/stop-timetables/summary` を先に読み、全件本文は `limit/offset` page に遅延します。
 - dispatch UI も summary-first です。`/trips/summary`、`/graph/summary`、`/duties/summary` を先に読み、一覧は page API で取得します。
+- Planning と Public Data Explorer の両方で route family detail panel を開けるようになっており、variant / canonical pair / timetable diagnostics を同じ見た目で確認できます。
 - `TabWarmBoundary` が planning / timetable / public-data / dispatch タブの warm state を扱い、重い tab mount を抑制します。
 - `ImportJobStore`、`ImportProgressPanel`、`ImportLogPanel` が ODPT / GTFS import と public-data sync の進捗・ログを共通方式で表示します。
 - 大きい一覧は `VirtualizedList` に統一し、explorer の depot assignment sort は `assignment-sort.worker.ts`、route family grouping は `route-family-group.worker.ts`、public diff preview は `public-diff-preview.worker.ts` へオフロードしています。
@@ -817,6 +824,7 @@ python -m src.tokyubus_gtfs validate --snapshot <snapshot_id>
 - Manual route-family map: `data/tokyubus/manual/route_family_map.csv`
 
 Tokyu GTFS export now writes `feed_metadata.json` and `validation_report.json` under `GTFS/TokyuBus-GTFS/`.
+Representative sidecars now include `sidecar_route_family_map.json`, `sidecar_pattern_role_map.json`, `sidecar_service_profile.json`, and `sidecar_depot_candidate_map.json`.
 
 東急 GTFS を family ベースの `routes.txt` に切り替える前に、`data/tokyubus/manual/route_family_map.csv` を先に手で整備してください。
 
@@ -831,6 +839,8 @@ GTFS validation checks:
 - required GTFS files
 - count alignment against `canonical_summary.json`
 - route/trip/stop/service/shape referential integrity
+- sidecar presence and entry counts (`service_profile`, `route_family_map`, `pattern_role_map`, `depot_candidate_map`)
+- service coverage summary (`trip_count`, `public_trip_count`, `deadhead_trip_count` by `service_id`)
 - duplicate `stop_sequence`, time regression, `arrival_time > departure_time`
 - optional external validator command output
 
@@ -1001,7 +1011,7 @@ python run_experiment.py \
 | データ | 格納先 | 説明 |
 |-------|-------|------|
 | GTFS | `GTFS/ToeiBus-GTFS/` | 都営バス GTFS データ |
-| Tokyu Bus GTFS | `GTFS/TokyuBus-GTFS/` | Tokyu Bus layered pipeline の出力 GTFS + sidecars + `feed_metadata.json` + `validation_report.json` |
+| Tokyu Bus GTFS | `GTFS/TokyuBus-GTFS/` | Tokyu Bus layered pipeline の出力 GTFS + sidecars (`service_profile` / `route_family_map` / `pattern_role_map` / `depot_candidate_map`) + `feed_metadata.json` + `validation_report.json` |
 | Tokyu Canonical | `data/tokyubus/canonical/` | Tokyu Bus canonical JSONL + `canonical_summary.json` |
 | Tokyu Features | `data/tokyubus/features/` | Tokyu Bus research feature store |
 | ODPT | `data/odpt_tokyu.db` 等 | 公共交通 Open Data |
@@ -1033,7 +1043,7 @@ python run_experiment.py \
 | `*.db`, `*.sqlite3` | インポート時生成 DB |
 | `.venv/`, `.env` | 環境固有設定 |
 
-`GTFS/TokyuBus-GTFS/feed_metadata.json` と `GTFS/TokyuBus-GTFS/validation_report.json` も通常は生成物として扱います。
+`GTFS/TokyuBus-GTFS/feed_metadata.json`、`GTFS/TokyuBus-GTFS/validation_report.json`、`GTFS/TokyuBus-GTFS/sidecar_*.json` も通常は生成物として扱います。
 
 > 明示的にリリースパッケージに含める必要がない限り、生成物をコミットしないでください。
 >

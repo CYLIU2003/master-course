@@ -571,6 +571,182 @@ def _write_sidecar_snapshot_manifest(canonical_dir: Path, out_dir: Path) -> int:
     return 1
 
 
+def _write_sidecar_route_family_map(canonical_dir: Path, out_dir: Path) -> int:
+    routes = _read_jsonl(canonical_dir / "routes.jsonl")
+    route_patterns = _read_jsonl(canonical_dir / "route_patterns.jsonl")
+    patterns_by_route: Dict[str, List[str]] = {}
+    for pattern in route_patterns:
+        route_id = str(pattern.get("route_id") or "")
+        pattern_id = str(pattern.get("pattern_id") or "")
+        if route_id and pattern_id:
+            patterns_by_route.setdefault(route_id, []).append(pattern_id)
+
+    payload = []
+    for route in routes:
+        route_id = str(route.get("route_id") or "")
+        payload.append(
+            {
+                "route_id": route_id,
+                "route_family_code": route.get("route_family_code") or route.get("route_code") or "",
+                "route_family_label": route.get("route_family_label") or route.get("route_name") or "",
+                "route_code": route.get("route_code") or "",
+                "route_name": route.get("route_name") or "",
+                "primary_pattern_id": route.get("primary_pattern_id"),
+                "pattern_ids": sorted(patterns_by_route.get(route_id, [])),
+                "pattern_count": len(patterns_by_route.get(route_id, [])),
+            }
+        )
+
+    path = out_dir / "sidecar_route_family_map.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _log.info("Wrote sidecar_route_family_map.json (%d entries)", len(payload))
+    return len(payload)
+
+
+def _write_sidecar_pattern_role_map(canonical_dir: Path, out_dir: Path) -> int:
+    routes = {
+        str(route.get("route_id") or ""): route
+        for route in _read_jsonl(canonical_dir / "routes.jsonl")
+        if route.get("route_id")
+    }
+    payload = []
+    for pattern in _read_jsonl(canonical_dir / "route_patterns.jsonl"):
+        route_id = str(pattern.get("route_id") or "")
+        route = routes.get(route_id, {})
+        payload.append(
+            {
+                "pattern_id": pattern.get("pattern_id", ""),
+                "route_id": route_id,
+                "route_code": route.get("route_code", ""),
+                "route_family_code": route.get("route_family_code") or route.get("route_code") or "",
+                "route_name": route.get("route_name", ""),
+                "pattern_role": pattern.get("pattern_role", "unknown"),
+                "direction_bucket": pattern.get("direction_bucket"),
+                "include_in_public_gtfs": pattern.get("include_in_public_gtfs", True),
+                "is_passenger_service": pattern.get("is_passenger_service", True),
+                "classification_confidence": pattern.get("classification_confidence", 0.0),
+                "classification_reasons": pattern.get("classification_reasons", []),
+                "odpt_pattern_id": pattern.get("odpt_pattern_id", ""),
+                "odpt_busroute_id": pattern.get("odpt_busroute_id", ""),
+            }
+        )
+
+    path = out_dir / "sidecar_pattern_role_map.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _log.info("Wrote sidecar_pattern_role_map.json (%d entries)", len(payload))
+    return len(payload)
+
+
+def _write_sidecar_service_profile(canonical_dir: Path, out_dir: Path) -> int:
+    services = {
+        str(service.get("service_id") or ""): service
+        for service in _read_jsonl(canonical_dir / "services.jsonl")
+        if service.get("service_id")
+    }
+    routes = {
+        str(route.get("route_id") or ""): route
+        for route in _read_jsonl(canonical_dir / "routes.jsonl")
+        if route.get("route_id")
+    }
+
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for trip in _read_jsonl(canonical_dir / "trips.jsonl"):
+        service_id = str(trip.get("service_id") or "")
+        if not service_id:
+            continue
+        bucket = grouped.setdefault(
+            service_id,
+            {
+                "service_id": service_id,
+                "service_name": services.get(service_id, {}).get("service_name") or service_id,
+                "day_type": service_id,
+                "trip_count": 0,
+                "public_trip_count": 0,
+                "deadhead_trip_count": 0,
+                "first_departure": None,
+                "last_arrival": None,
+                "route_ids": set(),
+                "route_family_codes": set(),
+                "pattern_ids": set(),
+            },
+        )
+        bucket["trip_count"] += 1
+        if trip.get("is_public_trip", True):
+            bucket["public_trip_count"] += 1
+        if str(trip.get("trip_role") or "service") == "deadhead":
+            bucket["deadhead_trip_count"] += 1
+        departure = trip.get("departure_time")
+        arrival = trip.get("arrival_time")
+        if departure and (bucket["first_departure"] is None or str(departure) < str(bucket["first_departure"])):
+            bucket["first_departure"] = departure
+        if arrival and (bucket["last_arrival"] is None or str(arrival) > str(bucket["last_arrival"])):
+            bucket["last_arrival"] = arrival
+        route_id = str(trip.get("route_id") or "")
+        if route_id:
+            bucket["route_ids"].add(route_id)
+            route = routes.get(route_id, {})
+            bucket["route_family_codes"].add(
+                str(route.get("route_family_code") or route.get("route_code") or route_id)
+            )
+        pattern_id = str(trip.get("pattern_id") or "")
+        if pattern_id:
+            bucket["pattern_ids"].add(pattern_id)
+
+    payload = []
+    for service_id in sorted(services.keys() | grouped.keys()):
+        base = services.get(service_id, {})
+        bucket = grouped.get(
+            service_id,
+            {
+                "service_id": service_id,
+                "service_name": base.get("service_name") or service_id,
+                "day_type": service_id,
+                "trip_count": 0,
+                "public_trip_count": 0,
+                "deadhead_trip_count": 0,
+                "first_departure": None,
+                "last_arrival": None,
+                "route_ids": set(),
+                "route_family_codes": set(),
+                "pattern_ids": set(),
+            },
+        )
+        payload.append(
+            {
+                "service_id": service_id,
+                "service_name": bucket.get("service_name") or service_id,
+                "day_type": bucket.get("day_type") or service_id,
+                "calendar": {
+                    "monday": bool(base.get("monday", False)),
+                    "tuesday": bool(base.get("tuesday", False)),
+                    "wednesday": bool(base.get("wednesday", False)),
+                    "thursday": bool(base.get("thursday", False)),
+                    "friday": bool(base.get("friday", False)),
+                    "saturday": bool(base.get("saturday", False)),
+                    "sunday": bool(base.get("sunday", False)),
+                    "start_date": str(base.get("start_date") or ""),
+                    "end_date": str(base.get("end_date") or ""),
+                },
+                "trip_count": bucket.get("trip_count", 0),
+                "public_trip_count": bucket.get("public_trip_count", 0),
+                "deadhead_trip_count": bucket.get("deadhead_trip_count", 0),
+                "first_departure": bucket.get("first_departure"),
+                "last_arrival": bucket.get("last_arrival"),
+                "route_ids": sorted(bucket.get("route_ids") or []),
+                "route_family_codes": sorted(bucket.get("route_family_codes") or []),
+                "pattern_ids": sorted(bucket.get("pattern_ids") or []),
+            }
+        )
+
+    path = out_dir / "sidecar_service_profile.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _log.info("Wrote sidecar_service_profile.json (%d entries)", len(payload))
+    return len(payload)
+
+
 # ---------------------------------------------------------------------------
 # Main export function
 # ---------------------------------------------------------------------------
@@ -618,6 +794,9 @@ def export_gtfs(
     # Sidecar files
     sidecars = {
         "route_patterns": _write_sidecar_route_patterns(canonical_dir, out_dir),
+        "route_family_map": _write_sidecar_route_family_map(canonical_dir, out_dir),
+        "pattern_role_map": _write_sidecar_pattern_role_map(canonical_dir, out_dir),
+        "service_profile": _write_sidecar_service_profile(canonical_dir, out_dir),
         "stop_metadata": _write_sidecar_stop_metadata(canonical_dir, out_dir),
         "trip_odpt_extra": _write_sidecar_trip_odpt_extra(canonical_dir, out_dir),
         "stop_pole_map": _write_sidecar_stop_pole_map(canonical_dir, out_dir),

@@ -823,6 +823,149 @@ def _enrich_explorer_assignments_for_display(
     return enriched
 
 
+def _build_route_family_indexes(
+    scenario_id: str,
+) -> tuple[
+    Dict[str, Dict[str, Any]],
+    Dict[str, List[Dict[str, Any]]],
+]:
+    routes = _enrich_routes_for_display(scenario_id, store.list_routes(scenario_id))
+    summaries = {
+        str(item.get("routeFamilyId")): item
+        for item in build_route_family_summary(routes)
+        if item.get("routeFamilyId")
+    }
+    members: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for route in routes:
+        family_id = route.get("routeFamilyId")
+        if family_id:
+            members[str(family_id)].append(route)
+    for family_id in members:
+        members[family_id] = sorted(
+            members[family_id],
+            key=lambda item: (
+                int(item.get("familySortOrder") or 999),
+                str(item.get("routeLabel") or item.get("name") or ""),
+                str(item.get("id") or ""),
+            ),
+        )
+    return summaries, members
+
+
+def _aggregate_route_family_permissions(
+    *,
+    scenario_id: str,
+    principals: List[Dict[str, Any]],
+    principal_key: str,
+    raw_permissions: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    family_summaries, members_by_family = _build_route_family_indexes(scenario_id)
+    permission_map = {
+        (str(item.get(principal_key)), str(item.get("routeId"))): bool(item.get("allowed"))
+        for item in raw_permissions
+        if item.get(principal_key) is not None and item.get("routeId") is not None
+    }
+    items: List[Dict[str, Any]] = []
+
+    for principal in principals:
+        principal_id = principal.get("id")
+        if principal_id is None:
+            continue
+        principal_id = str(principal_id)
+        for family_id, summary in family_summaries.items():
+            member_route_ids = [
+                str(route.get("id"))
+                for route in members_by_family.get(family_id, [])
+                if route.get("id") is not None
+            ]
+            total_route_count = len(member_route_ids)
+            allowed_route_count = sum(
+                1
+                for route_id in member_route_ids
+                if permission_map.get((principal_id, route_id), False)
+            )
+            items.append(
+                {
+                    principal_key: principal_id,
+                    "routeFamilyId": family_id,
+                    "routeFamilyCode": summary.get("routeFamilyCode"),
+                    "routeFamilyLabel": summary.get("routeFamilyLabel"),
+                    "primaryColor": summary.get("primaryColor"),
+                    "memberRouteIds": member_route_ids,
+                    "totalRouteCount": total_route_count,
+                    "allowedRouteCount": allowed_route_count,
+                    "allowed": total_route_count > 0 and allowed_route_count == total_route_count,
+                    "partiallyAllowed": 0 < allowed_route_count < total_route_count,
+                }
+            )
+
+    items.sort(
+        key=lambda item: (
+            str(item.get(principal_key) or ""),
+            str(item.get("routeFamilyCode") or item.get("routeFamilyLabel") or ""),
+        )
+    )
+    return items
+
+
+def _expand_route_family_permissions(
+    *,
+    scenario_id: str,
+    principal_key: str,
+    requested_permissions: List[Dict[str, Any]],
+    existing_permissions: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    _family_summaries, members_by_family = _build_route_family_indexes(scenario_id)
+
+    requested_by_principal: Dict[str, Dict[str, bool]] = defaultdict(dict)
+    targeted_route_ids: Set[str] = set()
+    targeted_principal_ids: Set[str] = set()
+
+    for item in requested_permissions:
+        principal_id = item.get(principal_key)
+        family_id = item.get("routeFamilyId")
+        if principal_id is None or family_id is None:
+            continue
+        principal_id = str(principal_id)
+        family_id = str(family_id)
+        members = members_by_family.get(family_id)
+        if not members:
+            raise ValueError(f"Unknown route family '{family_id}'")
+        requested_by_principal[principal_id][family_id] = bool(item.get("allowed"))
+        targeted_principal_ids.add(principal_id)
+        targeted_route_ids.update(
+            str(route.get("id"))
+            for route in members
+            if route.get("id") is not None
+        )
+
+    preserved = [
+        item
+        for item in existing_permissions
+        if not (
+            str(item.get(principal_key)) in targeted_principal_ids
+            and str(item.get("routeId")) in targeted_route_ids
+        )
+    ]
+
+    expanded: List[Dict[str, Any]] = []
+    for principal_id, families in requested_by_principal.items():
+        for family_id, allowed in families.items():
+            for route in members_by_family.get(family_id, []):
+                route_id = route.get("id")
+                if route_id is None:
+                    continue
+                expanded.append(
+                    {
+                        principal_key: principal_id,
+                        "routeId": str(route_id),
+                        "allowed": allowed,
+                    }
+                )
+
+    return preserved + expanded
+
+
 @router.post("/scenarios/{scenario_id}/routes", status_code=201)
 def create_route(scenario_id: str, body: CreateRouteBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
@@ -1037,6 +1180,26 @@ class UpdateVehicleRoutePermissionsBody(BaseModel):
     permissions: List[VehicleRoutePermissionItem]
 
 
+class DepotRouteFamilyPermissionItem(BaseModel):
+    depotId: str
+    routeFamilyId: str
+    allowed: bool
+
+
+class UpdateDepotRouteFamilyPermissionsBody(BaseModel):
+    permissions: List[DepotRouteFamilyPermissionItem]
+
+
+class VehicleRouteFamilyPermissionItem(BaseModel):
+    vehicleId: str
+    routeFamilyId: str
+    allowed: bool
+
+
+class UpdateVehicleRouteFamilyPermissionsBody(BaseModel):
+    permissions: List[VehicleRouteFamilyPermissionItem]
+
+
 # ── Permission endpoints ───────────────────────────────────────
 
 
@@ -1044,6 +1207,18 @@ class UpdateVehicleRoutePermissionsBody(BaseModel):
 def get_depot_route_permissions(scenario_id: str) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     items = store.get_depot_route_permissions(scenario_id)
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/scenarios/{scenario_id}/depot-route-family-permissions")
+def get_depot_route_family_permissions(scenario_id: str) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    items = _aggregate_route_family_permissions(
+        scenario_id=scenario_id,
+        principals=store.list_depots(scenario_id),
+        principal_key="depotId",
+        raw_permissions=store.get_depot_route_permissions(scenario_id),
+    )
     return {"items": items, "total": len(items)}
 
 
@@ -1057,10 +1232,48 @@ def update_depot_route_permissions(
     return {"items": perms, "total": len(perms)}
 
 
+@router.put("/scenarios/{scenario_id}/depot-route-family-permissions")
+def update_depot_route_family_permissions(
+    scenario_id: str,
+    body: UpdateDepotRouteFamilyPermissionsBody,
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    requested = [p.model_dump() for p in body.permissions]
+    try:
+        expanded = _expand_route_family_permissions(
+            scenario_id=scenario_id,
+            principal_key="depotId",
+            requested_permissions=requested,
+            existing_permissions=store.get_depot_route_permissions(scenario_id),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    store.set_depot_route_permissions(scenario_id, expanded)
+    items = _aggregate_route_family_permissions(
+        scenario_id=scenario_id,
+        principals=store.list_depots(scenario_id),
+        principal_key="depotId",
+        raw_permissions=expanded,
+    )
+    return {"items": items, "total": len(items)}
+
+
 @router.get("/scenarios/{scenario_id}/vehicle-route-permissions")
 def get_vehicle_route_permissions(scenario_id: str) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     items = store.get_vehicle_route_permissions(scenario_id)
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/scenarios/{scenario_id}/vehicle-route-family-permissions")
+def get_vehicle_route_family_permissions(scenario_id: str) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    items = _aggregate_route_family_permissions(
+        scenario_id=scenario_id,
+        principals=store.list_vehicles(scenario_id),
+        principal_key="vehicleId",
+        raw_permissions=store.get_vehicle_route_permissions(scenario_id),
+    )
     return {"items": items, "total": len(items)}
 
 
@@ -1072,3 +1285,29 @@ def update_vehicle_route_permissions(
     perms = [p.model_dump() for p in body.permissions]
     store.set_vehicle_route_permissions(scenario_id, perms)
     return {"items": perms, "total": len(perms)}
+
+
+@router.put("/scenarios/{scenario_id}/vehicle-route-family-permissions")
+def update_vehicle_route_family_permissions(
+    scenario_id: str,
+    body: UpdateVehicleRouteFamilyPermissionsBody,
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    requested = [p.model_dump() for p in body.permissions]
+    try:
+        expanded = _expand_route_family_permissions(
+            scenario_id=scenario_id,
+            principal_key="vehicleId",
+            requested_permissions=requested,
+            existing_permissions=store.get_vehicle_route_permissions(scenario_id),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    store.set_vehicle_route_permissions(scenario_id, expanded)
+    items = _aggregate_route_family_permissions(
+        scenario_id=scenario_id,
+        principals=store.list_vehicles(scenario_id),
+        principal_key="vehicleId",
+        raw_permissions=expanded,
+    )
+    return {"items": items, "total": len(items)}

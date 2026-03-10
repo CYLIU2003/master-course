@@ -5,13 +5,17 @@ import type {
   Vehicle,
   VehicleTemplate,
   Route,
+  RouteFamilySummary,
+  RouteFamilyDetail,
   Stop,
   Trip,
   TimetableRow,
   ServiceCalendar,
   CalendarDate,
   DepotRoutePermission,
+  DepotRouteFamilyPermission,
   VehicleRoutePermission,
+  VehicleRouteFamilyPermission,
   DeadheadRule,
   TurnaroundRule,
   ConnectionGraph,
@@ -174,6 +178,11 @@ export interface RoutesResponse extends ApiListResponse<Route> {
     imports?: Partial<Record<string, RouteImportMeta>>;
     groupedByFamily?: boolean;
   };
+}
+
+export type RouteFamiliesResponse = ApiListResponse<RouteFamilySummary>;
+export interface RouteFamilyDetailResponse {
+  item: RouteFamilyDetail;
 }
 
 export type RouteDetailResponse = Route;
@@ -552,13 +561,23 @@ export interface UpsertCalendarDateRequest {
 
 export type DepotRoutePermissionsResponse = ApiListResponse<DepotRoutePermission>;
 export type VehicleRoutePermissionsResponse = ApiListResponse<VehicleRoutePermission>;
+export type DepotRouteFamilyPermissionsResponse = ApiListResponse<DepotRouteFamilyPermission>;
+export type VehicleRouteFamilyPermissionsResponse = ApiListResponse<VehicleRouteFamilyPermission>;
 
 export interface UpdateDepotRoutePermissionsRequest {
   permissions: DepotRoutePermission[];
 }
 
+export interface UpdateDepotRouteFamilyPermissionsRequest {
+  permissions: Pick<DepotRouteFamilyPermission, "depotId" | "routeFamilyId" | "allowed">[];
+}
+
 export interface UpdateVehicleRoutePermissionsRequest {
   permissions: VehicleRoutePermission[];
+}
+
+export interface UpdateVehicleRouteFamilyPermissionsRequest {
+  permissions: Pick<VehicleRouteFamilyPermission, "vehicleId" | "routeFamilyId" | "allowed">[];
 }
 
 // ── Rules ─────────────────────────────────────────────────────

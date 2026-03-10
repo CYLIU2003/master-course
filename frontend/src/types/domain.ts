@@ -363,11 +363,37 @@ export interface DepotRoutePermission {
   allowed: boolean;
 }
 
+export interface DepotRouteFamilyPermission {
+  depotId: string;
+  routeFamilyId: string;
+  routeFamilyCode: string;
+  routeFamilyLabel: string;
+  primaryColor?: string;
+  memberRouteIds: string[];
+  totalRouteCount: number;
+  allowedRouteCount: number;
+  allowed: boolean;
+  partiallyAllowed: boolean;
+}
+
 /** Which vehicles can operate on which routes */
 export interface VehicleRoutePermission {
   vehicleId: string;
   routeId: string;
   allowed: boolean;
+}
+
+export interface VehicleRouteFamilyPermission {
+  vehicleId: string;
+  routeFamilyId: string;
+  routeFamilyCode: string;
+  routeFamilyLabel: string;
+  primaryColor?: string;
+  memberRouteIds: string[];
+  totalRouteCount: number;
+  allowedRouteCount: number;
+  allowed: boolean;
+  partiallyAllowed: boolean;
 }
 
 // ── Dispatch Rules ────────────────────────────────────────────

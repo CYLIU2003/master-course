@@ -15,6 +15,8 @@ import type {
   CreateVehicleTemplateRequest,
   UpdateVehicleTemplateRequest,
   RoutesResponse,
+  RouteFamiliesResponse,
+  RouteFamilyDetailResponse,
   RouteDetailResponse,
   CreateRouteRequest,
   UpdateRouteRequest,
@@ -28,9 +30,13 @@ import type {
   ImportGtfsStopsRequest,
   ImportGtfsStopsResponse,
   DepotRoutePermissionsResponse,
+  DepotRouteFamilyPermissionsResponse,
   UpdateDepotRoutePermissionsRequest,
+  UpdateDepotRouteFamilyPermissionsRequest,
   VehicleRoutePermissionsResponse,
+  VehicleRouteFamilyPermissionsResponse,
   UpdateVehicleRoutePermissionsRequest,
+  UpdateVehicleRouteFamilyPermissionsRequest,
 } from "@/types";
 
 // ── Depots ────────────────────────────────────────────────────
@@ -165,6 +171,18 @@ export const routeApi = {
     api.delete<void>(`/scenarios/${scenarioId}/routes/${routeId}`),
 };
 
+export const routeFamilyApi = {
+  list: (scenarioId: string, operator?: string) => {
+    const query = operator ? `?operator=${operator}` : "";
+    return api.get<RouteFamiliesResponse>(`/scenarios/${scenarioId}/route-families${query}`);
+  },
+
+  get: (scenarioId: string, routeFamilyId: string) =>
+    api.get<RouteFamilyDetailResponse>(
+      `/scenarios/${scenarioId}/route-families/${routeFamilyId}`,
+    ),
+};
+
 export const stopApi = {
   list: (scenarioId: string) =>
     api.get<StopsResponse>(`/scenarios/${scenarioId}/stops`),
@@ -199,6 +217,20 @@ export const permissionApi = {
       data,
     ),
 
+  getDepotRouteFamilyPermissions: (scenarioId: string) =>
+    api.get<DepotRouteFamilyPermissionsResponse>(
+      `/scenarios/${scenarioId}/depot-route-family-permissions`,
+    ),
+
+  updateDepotRouteFamilyPermissions: (
+    scenarioId: string,
+    data: UpdateDepotRouteFamilyPermissionsRequest,
+  ) =>
+    api.put<DepotRouteFamilyPermissionsResponse>(
+      `/scenarios/${scenarioId}/depot-route-family-permissions`,
+      data,
+    ),
+
   getVehicleRoutePermissions: (scenarioId: string) =>
     api.get<VehicleRoutePermissionsResponse>(
       `/scenarios/${scenarioId}/vehicle-route-permissions`,
@@ -210,6 +242,20 @@ export const permissionApi = {
   ) =>
     api.put<VehicleRoutePermissionsResponse>(
       `/scenarios/${scenarioId}/vehicle-route-permissions`,
+      data,
+    ),
+
+  getVehicleRouteFamilyPermissions: (scenarioId: string) =>
+    api.get<VehicleRouteFamilyPermissionsResponse>(
+      `/scenarios/${scenarioId}/vehicle-route-family-permissions`,
+    ),
+
+  updateVehicleRouteFamilyPermissions: (
+    scenarioId: string,
+    data: UpdateVehicleRouteFamilyPermissionsRequest,
+  ) =>
+    api.put<VehicleRouteFamilyPermissionsResponse>(
+      `/scenarios/${scenarioId}/vehicle-route-family-permissions`,
       data,
     ),
 };

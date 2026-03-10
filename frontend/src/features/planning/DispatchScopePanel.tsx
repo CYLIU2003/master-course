@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { fetchJson } from "@/api/client";
 import {
   useCalendar,
   useDepots,
@@ -15,11 +16,34 @@ interface DispatchScopePanelProps {
   editableRoutes?: boolean;
 }
 
+type DispatchSubsetExportResponse = {
+  item: {
+    summary: {
+      selectedDepotCount: number;
+      selectedRouteFamilyCount: number;
+      selectedRouteCount: number;
+      timetableRowCount: number;
+      dispatchTripCount: number;
+      vehicleCount: number;
+    };
+    simulationInputPreview: {
+      routeFamilyIds: string[];
+      routeIds: string[];
+      tripIds: string[];
+      vehicleIds: string[];
+    };
+  };
+  savedTo?: string | null;
+};
+
 export function DispatchScopePanel({
   scenarioId,
   editableRoutes = false,
 }: DispatchScopePanelProps) {
   const { t } = useTranslation();
+  const [exportingSubset, setExportingSubset] = useState(false);
+  const [subsetExport, setSubsetExport] = useState<DispatchSubsetExportResponse | null>(null);
+  const [subsetExportError, setSubsetExportError] = useState<string | null>(null);
   const { data: scope, isLoading: loadingScope } = useDispatchScope(scenarioId);
   const { data: depotsData, isLoading: loadingDepots } = useDepots(scenarioId);
   const { data: routesData, isLoading: loadingRoutes } = useRoutes(scenarioId);
@@ -46,6 +70,17 @@ export function DispatchScopePanel({
     ];
   const effectiveRouteIds = new Set(normalizedScope.effectiveRouteIds);
   const candidateRouteIds = new Set(normalizedScope.candidateRouteIds);
+  const effectiveRouteFamilyIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          routes
+            .filter((route) => effectiveRouteIds.has(route.id))
+            .map((route) => route.routeFamilyId ?? route.id),
+        ),
+      ),
+    [effectiveRouteIds, routes],
+  );
 
   const routeRows = useMemo(
     () =>
@@ -187,6 +222,26 @@ export function DispatchScopePanel({
     });
   };
 
+  const handleExportSubset = async () => {
+    setExportingSubset(true);
+    setSubsetExportError(null);
+    try {
+      const body = await fetchJson<DispatchSubsetExportResponse>(
+        `/api/scenarios/${scenarioId}/subset-export`,
+        {
+          method: "POST",
+          body: JSON.stringify({ save: true }),
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+      setSubsetExport(body);
+    } catch (e: unknown) {
+      setSubsetExportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportingSubset(false);
+    }
+  };
+
   return (
     <div className="space-y-4 rounded-lg border border-border bg-surface-raised p-4">
       <div className="grid gap-4 lg:grid-cols-3">
@@ -237,7 +292,7 @@ export function DispatchScopePanel({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-5">
         <ScopeStat
           label={t("dispatch.selected_depot", "対象営業所")}
           value={selectedDepotNames.length > 0 ? selectedDepotNames.join(", ") : t("common.not_configured", "未設定")}
@@ -245,6 +300,10 @@ export function DispatchScopePanel({
         <ScopeStat
           label={t("dispatch.selected_service", "対象サービス")}
           value={selectedServiceLabel}
+        />
+        <ScopeStat
+          label="対象 family"
+          value={`${effectiveRouteFamilyIds.length}`}
         />
         <ScopeStat
           label={t("dispatch.allowed_routes", "対象路線")}
@@ -255,6 +314,43 @@ export function DispatchScopePanel({
           value={`${tripSelection.includeShortTurn ? "短区間含む" : "短区間除外"} / ${tripSelection.includeDepotMoves ? "入出庫含む" : "入出庫除外"}`}
         />
       </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-white px-3 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium text-slate-700">Research subset export</div>
+          <div className="text-xs text-slate-500">
+            現在の営業所 + route family / route 選択を、dispatch/simulation 入力確認用 JSON として保存します。
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleExportSubset()}
+          disabled={exportingSubset || updateScope.isPending}
+          className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {exportingSubset ? "Exporting..." : "Subset Export"}
+        </button>
+      </div>
+
+      {subsetExportError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {subsetExportError}
+        </div>
+      )}
+
+      {subsetExport && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <div className="font-medium">Subset export completed</div>
+          <div className="mt-1 text-xs">
+            family {subsetExport.item.summary.selectedRouteFamilyCount} / route {subsetExport.item.summary.selectedRouteCount} / trip {subsetExport.item.summary.dispatchTripCount} / vehicle {subsetExport.item.summary.vehicleCount}
+          </div>
+          {subsetExport.savedTo && (
+            <div className="mt-1 text-xs text-emerald-800">
+              saved: {subsetExport.savedTo}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="space-y-3 rounded-lg border border-border bg-white p-3">
