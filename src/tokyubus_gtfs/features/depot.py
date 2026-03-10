@@ -112,5 +112,46 @@ def build_depot_candidates(
         for c in candidates:
             f.write(json.dumps(c, ensure_ascii=False, separators=(",", ":")) + "\n")
 
+    candidate_by_stop = {str(candidate.get("stop_id") or ""): candidate for candidate in candidates}
+    route_candidate_map: List[Dict[str, Any]] = []
+    for route in routes:
+        route_id = str(route.get("route_id") or "")
+        if not route_id:
+            continue
+        route_candidates: List[Dict[str, Any]] = []
+        for role, stop_key in (("origin", "origin_stop_id"), ("destination", "destination_stop_id")):
+            stop_id = str(route.get(stop_key) or "")
+            candidate = candidate_by_stop.get(stop_id)
+            if not candidate:
+                continue
+            route_candidates.append(
+                {
+                    "match_role": role,
+                    "stop_id": stop_id,
+                    "stop_name": candidate.get("stop_name"),
+                    "depot_score": candidate.get("depot_score"),
+                    "reasons": candidate.get("reasons") or [],
+                }
+            )
+        route_candidate_map.append(
+            {
+                "route_id": route_id,
+                "route_code": route.get("route_code", ""),
+                "route_name": route.get("route_name", ""),
+                "route_family_code": route.get("route_family_code", route.get("route_code", "")),
+                "origin_stop_id": route.get("origin_stop_id", ""),
+                "destination_stop_id": route.get("destination_stop_id", ""),
+                "depot_candidates": route_candidates,
+            }
+        )
+
+    map_path = out_dir / "depot_candidate_map.json"
+    with map_path.open("w", encoding="utf-8") as f:
+        json.dump(route_candidate_map, f, ensure_ascii=False, indent=2)
+
     _log.info("Identified %d depot candidates", len(candidates))
-    return {"candidate_count": len(candidates), "warnings": warnings}
+    return {
+        "candidate_count": len(candidates),
+        "mapped_route_count": len(route_candidate_map),
+        "warnings": warnings,
+    }

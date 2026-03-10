@@ -18,6 +18,76 @@ const BOOT_STEPS = [
   { id: "tabs", label: "タブ prewarm", weight: 20 },
 ] as const;
 
+const BOOT_CACHE_KEY = "master-course:boot-manifest";
+
+type BootCacheRecord = {
+  scenarioId: string;
+  manifestKey: string;
+  warmedAt: string;
+};
+
+function readBootCache(): BootCacheRecord | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(BOOT_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<BootCacheRecord>;
+    if (
+      typeof parsed.scenarioId !== "string"
+      || typeof parsed.manifestKey !== "string"
+      || typeof parsed.warmedAt !== "string"
+    ) {
+      return null;
+    }
+    return {
+      scenarioId: parsed.scenarioId,
+      manifestKey: parsed.manifestKey,
+      warmedAt: parsed.warmedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeBootCache(record: BootCacheRecord) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(BOOT_CACHE_KEY, JSON.stringify(record));
+}
+
+function clearBootCache() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.removeItem(BOOT_CACHE_KEY);
+}
+
+function buildBootManifestKey(
+  scenarioId: string,
+  scenarioDetail?: {
+    feedContext?: {
+      feedId?: string | null;
+      snapshotId?: string | null;
+      datasetId?: string | null;
+      source?: string | null;
+    } | null;
+  } | null,
+) {
+  const feedContext = scenarioDetail?.feedContext ?? null;
+  return JSON.stringify({
+    scenarioId,
+    feedId: feedContext?.feedId ?? null,
+    snapshotId: feedContext?.snapshotId ?? null,
+    datasetId: feedContext?.datasetId ?? null,
+    source: feedContext?.source ?? null,
+  });
+}
+
 interface Props {
   scenarioId: string | null;
 }
@@ -26,6 +96,8 @@ export function AppBootstrapManager({ scenarioId }: Props) {
   const queryClient = useQueryClient();
   const start = useBootStore((state) => state.start);
   const updateStep = useBootStore((state) => state.updateStep);
+  const setDisplayMode = useBootStore((state) => state.setDisplayMode);
+  const setManifestKey = useBootStore((state) => state.setManifestKey);
   const complete = useBootStore((state) => state.complete);
   const fail = useBootStore((state) => state.fail);
   const reset = useBootStore((state) => state.reset);
@@ -34,16 +106,26 @@ export function AppBootstrapManager({ scenarioId }: Props) {
 
   useEffect(() => {
     if (!scenarioId) {
+      clearBootCache();
       reset();
       resetWarmTabs();
       return;
     }
     const currentScenarioId = scenarioId;
+    const cachedManifest = readBootCache();
+    const restoreCandidate = cachedManifest?.scenarioId === currentScenarioId;
 
     let cancelled = false;
 
     async function run() {
-      start(currentScenarioId, BOOT_STEPS.map((step) => ({ ...step })));
+      start(
+        currentScenarioId,
+        BOOT_STEPS.map((step) => ({ ...step })),
+        {
+          displayMode: restoreCandidate ? "restore" : "full",
+          manifestKey: cachedManifest?.manifestKey ?? null,
+        },
+      );
       resetWarmTabs();
       setTabStatus("planning", "warming", "営業所・車両・路線 summary を準備中");
       setTabStatus("timetable", "warming", "時刻表 summary を準備中");
@@ -80,8 +162,19 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         updateStep("cache", { status: "success", progress: 100 });
         const scenarioDetail = queryClient.getQueryData<{
           operatorId?: "tokyu" | "toei";
+          feedContext?: {
+            feedId?: string | null;
+            snapshotId?: string | null;
+            datasetId?: string | null;
+            source?: string | null;
+          } | null;
         }>(scenarioKeys.detail(currentScenarioId));
         const scenarioOperator = scenarioDetail?.operatorId ?? "tokyu";
+        const manifestKey = buildBootManifestKey(currentScenarioId, scenarioDetail);
+        setManifestKey(manifestKey);
+        if (!restoreCandidate || cachedManifest?.manifestKey !== manifestKey) {
+          setDisplayMode("full");
+        }
         const runMasterStep = async () => {
           updateStep("master", {
             status: "running",
@@ -172,8 +265,14 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         if (cancelled) return;
         updateStep("tabs", { status: "success", progress: 100 });
         complete();
+        writeBootCache({
+          scenarioId: currentScenarioId,
+          manifestKey,
+          warmedAt: new Date().toISOString(),
+        });
       } catch (error) {
         if (!cancelled) {
+          clearBootCache();
           fail(error instanceof Error ? error.message : String(error));
           setTabStatus("planning", "error", "起動時の先読みで失敗");
           setTabStatus("timetable", "error", "起動時の先読みで失敗");
@@ -190,6 +289,8 @@ export function AppBootstrapManager({ scenarioId }: Props) {
   }, [
     complete,
     fail,
+    setDisplayMode,
+    setManifestKey,
     queryClient,
     reset,
     resetWarmTabs,

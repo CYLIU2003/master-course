@@ -1,26 +1,34 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/api/client";
-import { TabWarmBoundary, VirtualizedList } from "@/features/common";
+import { RouteFamilyDetailPanel, TabWarmBoundary, VirtualizedList } from "@/features/common";
 import {
   usePublicDataExplorerStore,
   selectSelectedMapOverview,
   selectComparisonRows,
 } from "@/stores/public-data-explorer-store";
 import type { OperatorId } from "@/api/public-data";
+import type { RouteFamilyDetail } from "@/types";
 
 // ── DB Visualization Types (reused from OdptExplorerPage) ─────────────────
 
-type DbRoute = {
-  route_id: string;
-  route_code: string;
-  route_name: string;
-  direction?: string;
-  stop_count: number;
-  trip_count: number;
-  distance_km?: number;
-  first_departure?: string;
-  last_arrival?: string;
+type DbRouteFamily = {
+  routeFamilyId: string;
+  routeFamilyCode: string;
+  routeFamilyLabel: string;
+  variantCount: number;
+  patternCount: number;
+  directionCount: number;
+  tripCount: number;
+  stopCount: number;
+  firstDeparture?: string;
+  lastArrival?: string;
+  serviceIds: string[];
+  hasShortTurn: boolean;
+  hasBranch: boolean;
+  hasDepotVariant: boolean;
 };
+
+type DbRouteFamilyDetail = RouteFamilyDetail;
 
 type DbStop = {
   stop_id: string;
@@ -378,26 +386,43 @@ function MapOverviewPanel() {
 
 function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
   const pageSize = 200;
-  const [routes, setRoutes] = React.useState<DbRoute[]>([]);
-  const [routesTotal, setRoutesTotal] = React.useState(0);
-  const [routeOffset, setRouteOffset] = React.useState(0);
-  const [routeQuery, setRouteQuery] = React.useState("");
-  const [stops, setStops] = React.useState<DbStop[]>([]);
-  const [stopsTotal, setStopsTotal] = React.useState(0);
-  const [stopOffset, setStopOffset] = React.useState(0);
-  const [stopQuery, setStopQuery] = React.useState("");
-  const [ttSummary, setTtSummary] = React.useState<TimetableSummary | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [detailTab, setDetailTab] = React.useState<"routes" | "stops" | "timetable">("routes");
+  const [routeFamilies, setRouteFamilies] = useState<DbRouteFamily[]>([]);
+  const [routeFamiliesTotal, setRouteFamiliesTotal] = useState(0);
+  const [routeOffset, setRouteOffset] = useState(0);
+  const [routeQuery, setRouteQuery] = useState("");
+  const [selectedRouteFamilyId, setSelectedRouteFamilyId] = useState<string | null>(null);
+  const [routeFamilyDetail, setRouteFamilyDetail] = useState<DbRouteFamilyDetail | null>(null);
+  const [routeDetailLoading, setRouteDetailLoading] = useState(false);
+  const [stops, setStops] = useState<DbStop[]>([]);
+  const [stopsTotal, setStopsTotal] = useState(0);
+  const [stopOffset, setStopOffset] = useState(0);
+  const [stopQuery, setStopQuery] = useState("");
+  const [ttSummary, setTtSummary] = useState<TimetableSummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<"routes" | "stops" | "timetable">("routes");
+
+  const loadRouteFamilyDetail = useCallback(async (routeFamilyId: string) => {
+    setRouteDetailLoading(true);
+    try {
+      const body = await fetchJson<{ item: DbRouteFamilyDetail }>(
+        `/api/catalog/operators/${operatorId}/route-families/${encodeURIComponent(routeFamilyId)}`,
+      );
+      setRouteFamilyDetail(body.item ?? null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRouteDetailLoading(false);
+    }
+  }, [operatorId]);
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [routesRes, stopsRes, summaryRes] = await Promise.all([
-        fetchJson<{ items: DbRoute[]; total: number }>(
-          `/api/catalog/operators/${operatorId}/routes?limit=${pageSize}&offset=0`,
+        fetchJson<{ items: DbRouteFamily[]; total: number }>(
+          `/api/catalog/operators/${operatorId}/route-families?limit=${pageSize}&offset=0`,
         ),
         fetchJson<{ items: DbStop[]; total: number }>(
           `/api/catalog/operators/${operatorId}/stops?limit=${pageSize}&offset=0`,
@@ -406,8 +431,9 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
           `/api/catalog/operators/${operatorId}/timetable/summary`,
         ),
       ]);
-      setRoutes(routesRes.items ?? []);
-      setRoutesTotal(routesRes.total ?? 0);
+      setRouteFamilies(routesRes.items ?? []);
+      setRouteFamiliesTotal(routesRes.total ?? 0);
+      setSelectedRouteFamilyId(routesRes.items?.[0]?.routeFamilyId ?? null);
       setStops(stopsRes.items ?? []);
       setStopsTotal(stopsRes.total ?? 0);
       setTtSummary(summaryRes.item ?? null);
@@ -422,6 +448,14 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
     void loadInitial();
   }, [loadInitial]);
 
+  useEffect(() => {
+    if (!selectedRouteFamilyId) {
+      setRouteFamilyDetail(null);
+      return;
+    }
+    void loadRouteFamilyDetail(selectedRouteFamilyId);
+  }, [loadRouteFamilyDetail, selectedRouteFamilyId]);
+
   async function loadRoutesPage(offset: number, q: string) {
     setLoading(true);
     try {
@@ -429,12 +463,13 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
       params.set("limit", String(pageSize));
       params.set("offset", String(offset));
       if (q.trim()) params.set("q", q.trim());
-      const body = await fetchJson<{ items: DbRoute[]; total: number }>(
-        `/api/catalog/operators/${operatorId}/routes?${params.toString()}`,
+      const body = await fetchJson<{ items: DbRouteFamily[]; total: number }>(
+        `/api/catalog/operators/${operatorId}/route-families?${params.toString()}`,
       );
-      setRoutes(body.items ?? []);
-      setRoutesTotal(body.total ?? 0);
+      setRouteFamilies(body.items ?? []);
+      setRouteFamiliesTotal(body.total ?? 0);
       setRouteOffset(offset);
+      setSelectedRouteFamilyId(body.items?.[0]?.routeFamilyId ?? null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -496,7 +531,7 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
                 : "border-transparent text-slate-500 hover:text-slate-700"
             }`}
           >
-            {tab === "routes" ? `路線 (${formatCount(routesTotal)})` : tab === "stops" ? `停留所 (${formatCount(stopsTotal)})` : `時刻表 (${formatCount(ttSummary?.total ?? 0)})`}
+            {tab === "routes" ? `路線 family (${formatCount(routeFamiliesTotal)})` : tab === "stops" ? `停留所 (${formatCount(stopsTotal)})` : `時刻表 (${formatCount(ttSummary?.total ?? 0)})`}
           </button>
         ))}
       </div>
@@ -531,47 +566,87 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
                 Prev
               </button>
               <span>
-                {routes.length > 0 ? routeOffset + 1 : 0}-
-                {Math.min(routeOffset + routes.length, routesTotal)} / {formatCount(routesTotal)}
+                {routeFamilies.length > 0 ? routeOffset + 1 : 0}-
+                {Math.min(routeOffset + routeFamilies.length, routeFamiliesTotal)} / {formatCount(routeFamiliesTotal)}
               </span>
               <button
                 onClick={() => void loadRoutesPage(routeOffset + pageSize, routeQuery)}
-                disabled={loading || routeOffset + routes.length >= routesTotal}
+                disabled={loading || routeOffset + routeFamilies.length >= routeFamiliesTotal}
                 className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40"
               >
                 Next
               </button>
             </div>
           </div>
-          {routes.length > 0 ? (
-            <div className="rounded-lg border border-slate-200">
-              <div className="grid grid-cols-[1.4fr_1.4fr_0.7fr_0.6fr_0.6fr_0.8fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
-                <span>route_id</span><span>name</span><span>dir</span>
-                <span className="text-right">stops</span><span className="text-right">trips</span>
-                <span>first</span><span>last</span>
+          {routeFamilies.length > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-slate-200">
+              <div className="grid grid-cols-[0.9fr_1.4fr_0.7fr_0.6fr_0.6fr_0.7fr_0.8fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                <span>family</span><span>label</span><span>service</span>
+                <span className="text-right">patterns</span><span className="text-right">trips</span>
+                <span className="text-right">stops</span><span>first</span><span>last</span>
               </div>
               <VirtualizedList
-                items={routes}
-                height={400}
-                itemHeight={40}
+                items={routeFamilies}
+                height={420}
+                itemHeight={54}
                 className="bg-white"
-                getKey={(r) => r.route_id}
-                renderItem={(route) => (
-                  <div className="grid h-full grid-cols-[1.4fr_1.4fr_0.7fr_0.6fr_0.6fr_0.8fr_0.8fr] gap-3 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
-                    <div className="truncate font-mono" title={route.route_id}>{route.route_code || route.route_id}</div>
-                    <div className="truncate" title={route.route_name}>{route.route_name}</div>
-                    <div>{route.direction ?? "-"}</div>
-                    <div className="text-right">{route.stop_count}</div>
-                    <div className="text-right">{route.trip_count}</div>
-                    <div className="font-mono">{route.first_departure ?? "-"}</div>
-                    <div className="font-mono">{route.last_arrival ?? "-"}</div>
-                  </div>
+                getKey={(routeFamily) => routeFamily.routeFamilyId}
+                renderItem={(routeFamily) => (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRouteFamilyId(routeFamily.routeFamilyId)}
+                    className={`grid h-full w-full grid-cols-[0.9fr_1.4fr_0.7fr_0.6fr_0.6fr_0.7fr_0.8fr_0.8fr] gap-3 border-b border-slate-100 px-3 py-2 text-left text-xs hover:bg-slate-50 ${
+                      selectedRouteFamilyId === routeFamily.routeFamilyId ? "bg-primary-50" : "bg-white"
+                    }`}
+                  >
+                    <div className="truncate font-mono" title={routeFamily.routeFamilyCode}>
+                      {routeFamily.routeFamilyCode}
+                    </div>
+                    <div className="truncate" title={routeFamily.routeFamilyLabel}>
+                      <div className="truncate">{routeFamily.routeFamilyLabel}</div>
+                      <div className="truncate text-[10px] text-slate-400">
+                        {[
+                          routeFamily.hasShortTurn ? "short-turn" : null,
+                          routeFamily.hasBranch ? "branch" : null,
+                          routeFamily.hasDepotVariant ? "depot" : null,
+                        ].filter(Boolean).join(" / ") || "main"}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1 py-0.5">
+                      {routeFamily.serviceIds.length > 0 ? routeFamily.serviceIds.slice(0, 3).map((serviceId) => (
+                        <span key={serviceId} className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600">
+                          {serviceId}
+                        </span>
+                      )) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </div>
+                    <div className="text-right">{routeFamily.patternCount}</div>
+                    <div className="text-right">{routeFamily.tripCount}</div>
+                    <div className="text-right">{routeFamily.stopCount}</div>
+                    <div className="font-mono">{routeFamily.firstDeparture ?? "-"}</div>
+                    <div className="font-mono">{routeFamily.lastArrival ?? "-"}</div>
+                  </button>
                 )}
               />
+              </div>
+
+              {routeDetailLoading ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                  route family 詳細を読み込み中...
+                </div>
+              ) : routeFamilyDetail ? (
+                <RouteFamilyDetailPanel
+                  detail={routeFamilyDetail}
+                  onClose={() => setSelectedRouteFamilyId(null)}
+                  contextLabel={meta.label}
+                />
+              ) : null}
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
-              条件に一致する route はありません。
+              条件に一致する route family はありません。
             </div>
           )}
         </div>
@@ -690,8 +765,6 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────
-
-import React from "react";
 
 export function PublicDataExplorerPage() {
   const selectedOperator = usePublicDataExplorerStore(

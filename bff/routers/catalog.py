@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -7,9 +8,15 @@ from pydantic import BaseModel
 
 from bff.services.gtfs_import import DEFAULT_GTFS_FEED_PATH
 from bff.services.odpt_routes import DEFAULT_OPERATOR
+from bff.services.route_family import (
+    build_route_family_detail,
+    build_route_family_summary,
+    enrich_routes_with_family,
+)
 from bff.services import runtime_catalog
 from bff.services import transit_catalog
 from bff.services import transit_db
+from src.dispatch.models import hhmm_to_min
 
 router = APIRouter(tags=["catalog"])
 
@@ -173,6 +180,197 @@ def list_operator_routes(
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
     return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+def _operator_family_enriched_routes(operator_id: str) -> List[Dict[str, Any]]:
+    total_routes = max(transit_db.count_routes(operator_id), 1)
+    raw_routes = transit_db.list_routes(operator_id, limit=total_routes, offset=0)
+    total_timetable_rows = max(transit_db.count_timetable_rows(operator_id), 1)
+    timetable_rows = transit_db.list_timetable_rows(
+        operator_id,
+        limit=total_timetable_rows,
+        offset=0,
+    )
+
+    route_services: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+    for row in timetable_rows:
+        route_id = str(row.get("route_id") or "")
+        service_id = str(row.get("service_id") or "WEEKDAY")
+        if not route_id:
+            continue
+        bucket = route_services[route_id].setdefault(
+            service_id,
+            {
+                "serviceId": service_id,
+                "tripCount": 0,
+                "firstDeparture": None,
+                "lastArrival": None,
+            },
+        )
+        bucket["tripCount"] += 1
+        departure = row.get("departure")
+        arrival = row.get("arrival")
+        if departure and (
+            bucket["firstDeparture"] is None
+            or hhmm_to_min(str(departure)) < hhmm_to_min(str(bucket["firstDeparture"]))
+        ):
+            bucket["firstDeparture"] = departure
+        if arrival and (
+            bucket["lastArrival"] is None
+            or hhmm_to_min(str(arrival)) > hhmm_to_min(str(bucket["lastArrival"]))
+        ):
+            bucket["lastArrival"] = arrival
+
+    enriched_routes: List[Dict[str, Any]] = []
+    for raw in raw_routes:
+        route_id = str(raw.get("route_id") or "")
+        detail: Dict[str, Any] = transit_db.get_route(operator_id, route_id) or {}
+        extra: Dict[str, Any] = (
+            detail.get("extra_json") if isinstance(detail.get("extra_json"), dict) else {}
+        )
+        stop_sequence: Any = detail.get("stop_sequence_json")
+        if not isinstance(stop_sequence, list):
+            stop_sequence = extra.get("stopSequence") if isinstance(extra.get("stopSequence"), list) else []
+        route = {
+            "id": route_id,
+            "name": extra.get("name") or raw.get("route_name") or route_id,
+            "routeCode": extra.get("routeCode") or raw.get("route_code") or route_id,
+            "routeLabel": extra.get("routeLabel") or raw.get("route_name") or route_id,
+            "startStop": extra.get("startStop") or detail.get("origin_stop_id") or "",
+            "endStop": extra.get("endStop") or detail.get("destination_stop_id") or "",
+            "stopSequence": stop_sequence,
+            "distanceKm": raw.get("distance_km"),
+            "durationMin": extra.get("durationMin") or extra.get("duration_min"),
+            "tripCount": raw.get("trip_count") or sum(
+                item["tripCount"] for item in route_services.get(route_id, {}).values()
+            ),
+            "firstDeparture": raw.get("first_departure"),
+            "lastArrival": raw.get("last_arrival"),
+            "source": raw.get("source"),
+            "direction": raw.get("direction"),
+            "serviceSummary": list(route_services.get(route_id, {}).values()),
+        }
+        enriched_routes.append(route)
+
+    return enrich_routes_with_family(enriched_routes)
+
+
+def _operator_route_family_payloads(operator_id: str) -> List[Dict[str, Any]]:
+    enriched_routes = _operator_family_enriched_routes(operator_id)
+    family_summaries = build_route_family_summary(enriched_routes)
+    members_by_family: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for route in enriched_routes:
+        family_id = str(route.get("routeFamilyId") or "")
+        if family_id:
+            members_by_family[family_id].append(route)
+
+    payloads: List[Dict[str, Any]] = []
+    for summary in family_summaries:
+        family_id = str(summary.get("routeFamilyId") or "")
+        members = members_by_family.get(family_id, [])
+        service_ids = sorted(
+            {
+                str(item.get("serviceId"))
+                for route in members
+                for item in (route.get("serviceSummary") or [])
+                if item.get("serviceId")
+            }
+        )
+        departures = [
+            str(route.get("firstDeparture"))
+            for route in members
+            if route.get("firstDeparture")
+        ]
+        arrivals = [
+            str(route.get("lastArrival"))
+            for route in members
+            if route.get("lastArrival")
+        ]
+        payloads.append(
+            {
+                **summary,
+                "tripCount": sum(int(route.get("tripCount") or 0) for route in members),
+                "stopCount": max((len(route.get("stopSequence") or []) for route in members), default=0),
+                "firstDeparture": min(departures, key=hhmm_to_min) if departures else None,
+                "lastArrival": max(arrivals, key=hhmm_to_min) if arrivals else None,
+                "serviceIds": service_ids,
+                "directionCount": len(
+                    {
+                        str(route.get("canonicalDirection") or "")
+                        for route in members
+                        if route.get("canonicalDirection")
+                        and str(route.get("canonicalDirection")) != "unknown"
+                    }
+                ),
+                "patternCount": len(members),
+                "routeIds": [str(route.get("id") or "") for route in members],
+                "routeNames": [str(route.get("name") or "") for route in members],
+            }
+        )
+    return payloads
+
+
+def _operator_route_family_detail_payload(
+    operator_id: str,
+    route_family_id: str,
+) -> Optional[Dict[str, Any]]:
+    enriched_routes = _operator_family_enriched_routes(operator_id)
+    detail = build_route_family_detail(route_family_id, enriched_routes)
+    if not detail:
+        return None
+
+    summary_by_id = {
+        str(item.get("routeFamilyId") or ""): item
+        for item in _operator_route_family_payloads(operator_id)
+        if item.get("routeFamilyId")
+    }
+    payload = dict(detail)
+    payload["summary"] = summary_by_id.get(route_family_id, payload.get("summary") or {})
+    return payload
+
+
+@router.get("/catalog/operators/{operator_id}/route-families")
+def list_operator_route_families(
+    operator_id: str,
+    q: Optional[str] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    try:
+        items = _operator_route_family_payloads(operator_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
+
+    if q:
+        needle = q.strip().lower()
+        items = [
+            item
+            for item in items
+            if needle in str(item.get("routeFamilyCode") or "").lower()
+            or needle in str(item.get("routeFamilyLabel") or "").lower()
+            or any(needle in name.lower() for name in item.get("routeNames") or [])
+        ]
+
+    total = len(items)
+    paged = items[offset: offset + limit]
+    return {"items": paged, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/catalog/operators/{operator_id}/route-families/{route_family_id}")
+def get_operator_route_family(
+    operator_id: str,
+    route_family_id: str,
+) -> Dict[str, Any]:
+    try:
+        item = _operator_route_family_detail_payload(operator_id, route_family_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
+    if item is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Route family '{route_family_id}' not found for operator '{operator_id}'",
+        )
+    return {"item": item}
 
 
 @router.get("/catalog/operators/{operator_id}/routes/{route_id}")

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from bff.routers import graph
 from bff.routers.graph import (
     _build_blocks_payload,
     _build_dispatch_context,
@@ -376,6 +377,138 @@ def test_build_dispatch_context_applies_analysis_scope_route_and_trip_filters(
     context = _build_dispatch_context(scenario_id)
 
     assert [trip.trip_id for trip in context.trips] == ["T_MAIN"]
+
+
+def test_subset_export_groups_effective_routes_by_family(
+    temp_store_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    meta = scenario_store.create_scenario("Subset export", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(scenario_id, {"name": "Depot A", "location": "A"})
+    scenario_store.create_vehicle(
+        scenario_id,
+        {
+            "depotId": depot["id"],
+            "type": "BEV",
+            "modelName": "EV-1",
+            "batteryKwh": 300.0,
+            "energyConsumption": 1.2,
+        },
+    )
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [
+            {
+                "id": "A_OUT",
+                "name": "A01 (X -> Y)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (X -> Y)",
+                "startStop": "X",
+                "endStop": "Y",
+                "stopSequence": ["X", "Y"],
+                "tripCount": 5,
+                "source": "odpt",
+            },
+            {
+                "id": "A_IN",
+                "name": "A01 (Y -> X)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (Y -> X)",
+                "startStop": "Y",
+                "endStop": "X",
+                "stopSequence": ["Y", "X"],
+                "tripCount": 4,
+                "source": "odpt",
+            },
+            {
+                "id": "B_MAIN",
+                "name": "B02 (P -> Q)",
+                "routeCode": "B02",
+                "routeLabel": "B02 (P -> Q)",
+                "startStop": "P",
+                "endStop": "Q",
+                "stopSequence": ["P", "Q"],
+                "tripCount": 3,
+                "source": "odpt",
+            },
+        ],
+    )
+    scenario_store.set_field(
+        scenario_id,
+        "timetable_rows",
+        [
+            {
+                "trip_id": "T1",
+                "route_id": "A_OUT",
+                "service_id": "WEEKDAY",
+                "origin": "X",
+                "destination": "Y",
+                "departure": "06:00",
+                "arrival": "06:20",
+                "distance_km": 5.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+            {
+                "trip_id": "T2",
+                "route_id": "A_IN",
+                "service_id": "WEEKDAY",
+                "origin": "Y",
+                "destination": "X",
+                "departure": "06:30",
+                "arrival": "06:50",
+                "distance_km": 5.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+            {
+                "trip_id": "T3",
+                "route_id": "B_MAIN",
+                "service_id": "WEEKDAY",
+                "origin": "P",
+                "destination": "Q",
+                "departure": "07:00",
+                "arrival": "07:20",
+                "distance_km": 4.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+        ],
+        invalidate_dispatch=True,
+    )
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        "A_OUT",
+        {"depotId": depot["id"], "assignmentType": "manual_override", "confidence": 1.0},
+    )
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        "A_IN",
+        {"depotId": depot["id"], "assignmentType": "manual_override", "confidence": 1.0},
+    )
+    scenario_store.set_dispatch_scope(
+        scenario_id,
+        {
+            "depotSelection": {"depotIds": [depot["id"]], "primaryDepotId": depot["id"]},
+            "routeSelection": {
+                "mode": "refine",
+                "includeRouteIds": [],
+                "excludeRouteIds": ["B_MAIN"],
+            },
+            "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+        },
+    )
+
+    monkeypatch.setattr(graph, "_subset_export_dir", lambda _: tmp_path / "subset-exports")
+
+    body = graph.export_subset(scenario_id, graph.ExportSubsetBody(save=True))
+
+    assert body["item"]["summary"]["selectedRouteFamilyCount"] == 1
+    assert body["item"]["summary"]["selectedRouteCount"] == 2
+    assert body["item"]["summary"]["dispatchTripCount"] == 2
+    assert [item["routeFamilyCode"] for item in body["item"]["routeFamilies"]] == ["A01"]
+    assert body["savedTo"]
 
 
 def test_build_blocks_payload_groups_feasible_chains(temp_store_dir: Path):

@@ -22,7 +22,10 @@ BackgroundTask. Poll GET /jobs/{job_id} for status.
 
 from __future__ import annotations
 
+import json
 import traceback
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
@@ -35,6 +38,8 @@ from bff.mappers.dispatch_mappers import (
     vehicle_duty_to_dict,
     validation_result_to_dict,
 )
+from bff.mappers.scenario_to_problemdata import _collect_trips_for_scope, _filter_rows_for_scope
+from bff.services.route_family import build_route_family_summary, enrich_routes_with_family
 from bff.store import job_store, scenario_store as store
 from src.dispatch.graph_builder import ConnectionGraphBuilder
 from src.dispatch.models import (
@@ -86,6 +91,12 @@ class BuildDispatchPlanBody(BaseModel):
     depot_id: Optional[str] = None
 
 
+class ExportSubsetBody(BaseModel):
+    service_id: Optional[str] = None
+    depot_id: Optional[str] = None
+    save: bool = True
+
+
 # ── Helpers ────────────────────────────────────────────────────
 
 
@@ -122,6 +133,125 @@ def _resolve_dispatch_scope(
     doc = store._load(scenario_id)
     doc["dispatch_scope"] = merged
     return store._normalize_dispatch_scope(doc)
+
+
+def _subset_export_dir(scenario_id: str) -> Path:
+    return Path(__file__).resolve().parents[2] / "outputs" / "subset_exports" / scenario_id
+
+
+def _effective_scope_routes(scenario_id: str, scope: Dict[str, Any]) -> List[Dict[str, Any]]:
+    route_ids = {
+        str(route_id)
+        for route_id in scope.get("effectiveRouteIds") or []
+        if route_id is not None
+    }
+    routes = store.list_routes(scenario_id)
+    if route_ids:
+        routes = [route for route in routes if str(route.get("id") or "") in route_ids]
+    return enrich_routes_with_family([dict(route) for route in routes])
+
+
+def _route_family_subset_summary(routes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    families = build_route_family_summary(routes)
+    members_by_family: Dict[str, List[Dict[str, Any]]] = {}
+    for route in routes:
+        family_id = str(route.get("routeFamilyId") or "")
+        if not family_id:
+            continue
+        members_by_family.setdefault(family_id, []).append(route)
+
+    payload: List[Dict[str, Any]] = []
+    for family in families:
+        family_id = str(family.get("routeFamilyId") or "")
+        members = members_by_family.get(family_id, [])
+        payload.append(
+            {
+                **family,
+                "routeIds": [str(route.get("id") or "") for route in members],
+                "routeNames": [str(route.get("name") or "") for route in members],
+            }
+        )
+    return payload
+
+
+def _build_scope_subset_export(
+    scenario_id: str,
+    scope: Dict[str, Any],
+) -> Dict[str, Any]:
+    depot_id = str(scope.get("depotId") or "")
+    service_id = str(scope.get("serviceId") or "WEEKDAY")
+    if not depot_id:
+        raise ValueError("No depot selected. Configure dispatch scope first.")
+
+    scenario = store._load(scenario_id)
+    timetable_rows = _filter_rows_for_scope(
+        scenario,
+        depot_id=depot_id,
+        service_id=service_id,
+        analysis_scope=scope,
+    )
+    dispatch_trips = _collect_trips_for_scope(
+        scenario,
+        depot_id=depot_id,
+        service_id=service_id,
+        analysis_scope=scope,
+    )
+    routes = _effective_scope_routes(scenario_id, scope)
+    route_families = _route_family_subset_summary(routes)
+
+    selected_depot_ids = {
+        str(depot_key)
+        for depot_key in (scope.get("depotSelection") or {}).get("depotIds") or []
+        if depot_key is not None
+    }
+    if depot_id:
+        selected_depot_ids.add(depot_id)
+    depots = [
+        depot
+        for depot in store.list_depots(scenario_id)
+        if str(depot.get("id") or "") in selected_depot_ids
+    ]
+    vehicles = [
+        vehicle
+        for vehicle in store.list_vehicles(scenario_id)
+        if str(vehicle.get("depotId") or "") == depot_id
+    ]
+
+    trip_ids = [str(item.get("trip_id") or "") for item in dispatch_trips if item.get("trip_id")]
+    route_ids = [str(route.get("id") or "") for route in routes if route.get("id")]
+    route_family_ids = [
+        str(family.get("routeFamilyId") or "")
+        for family in route_families
+        if family.get("routeFamilyId")
+    ]
+
+    return {
+        "scenarioId": scenario_id,
+        "feedContext": (store.get_scenario(scenario_id) or {}).get("feedContext"),
+        "exportedAt": datetime.now(timezone.utc).isoformat(),
+        "scope": scope,
+        "summary": {
+            "selectedDepotCount": len(depots),
+            "selectedRouteFamilyCount": len(route_family_ids),
+            "selectedRouteCount": len(route_ids),
+            "timetableRowCount": len(timetable_rows),
+            "dispatchTripCount": len(dispatch_trips),
+            "vehicleCount": len(vehicles),
+        },
+        "depots": depots,
+        "routeFamilies": route_families,
+        "routes": routes,
+        "timetableRows": timetable_rows,
+        "dispatchTrips": dispatch_trips,
+        "simulationInputPreview": {
+            "primaryDepotId": depot_id,
+            "serviceId": service_id,
+            "routeFamilyIds": route_family_ids,
+            "routeIds": route_ids,
+            "tripIds": trip_ids,
+            "vehicleIds": [str(vehicle.get("id") or "") for vehicle in vehicles if vehicle.get("id")],
+        },
+    }
 
 
 def _allowed_vehicle_types_for_route(
@@ -882,6 +1012,36 @@ def get_trips_summary(scenario_id: str) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     items = store.get_field(scenario_id, "trips") or []
     return {"item": _build_trips_summary(items)}
+
+
+@router.post("/scenarios/{scenario_id}/subset-export")
+def export_subset(
+    scenario_id: str,
+    body: Optional[ExportSubsetBody] = None,
+) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=body.service_id if body else None,
+        depot_id=body.depot_id if body else None,
+        persist=True,
+    )
+    try:
+        payload = _build_scope_subset_export(scenario_id, scope)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    saved_to = None
+    if body is None or body.save:
+        export_dir = _subset_export_dir(scenario_id)
+        export_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        suffix = f"{scope.get('depotId') or 'no-depot'}_{scope.get('serviceId') or 'WEEKDAY'}"
+        out_path = export_dir / f"subset_{suffix}_{timestamp}.json"
+        out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        saved_to = str(out_path)
+
+    return {"item": payload, "savedTo": saved_to}
 
 
 @router.post("/scenarios/{scenario_id}/build-trips")

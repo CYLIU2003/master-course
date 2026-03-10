@@ -5,7 +5,13 @@ import { useScenario } from "@/hooks";
 import { useUIStore } from "@/stores/ui-store";
 import { usePlanningDatasetStore } from "@/stores/planning-dataset-store";
 import { PageSection } from "@/features/common";
-import { DepotListPanel, DepotDetailPanel, RouteTable, VehicleRouteMatrix } from "@/features/planning";
+import {
+  DepotListPanel,
+  DepotDetailPanel,
+  DepotRouteMatrix,
+  RouteTable,
+  VehicleRouteMatrix,
+} from "@/features/planning";
 
 export function MasterPlanningPage() {
   const { t } = useTranslation();
@@ -102,11 +108,24 @@ export function MasterPlanningPage() {
         />
       </PageSection>
 
+      {/* Depot-Route permission matrix */}
+      {selectedDepotId && (
+        <PageSection
+          title="営業所-路線許可"
+          description="選択中の営業所で扱う路線を明示的に切り替えます。配車前処理ではこの許可集合を起点に subset を絞ります。"
+        >
+          <DepotRouteMatrix
+            scenarioId={scenarioId}
+            depotId={selectedDepotId}
+          />
+        </PageSection>
+      )}
+
       {/* Vehicle-Route permission matrix */}
       {selectedDepotId && (
         <PageSection
           title={t("planning.permissions_title")}
-          description={t("planning.permissions_description")}
+          description="営業所で許可された路線のうち、どの車両が担当できるかを制御します。"
         >
           <VehicleRouteMatrix
             scenarioId={scenarioId}

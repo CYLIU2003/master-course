@@ -343,3 +343,207 @@ def test_explorer_depot_assignments_are_grouped_by_route_family(
         "main_inbound",
         "main",
     ]
+
+
+def test_depot_route_family_permissions_aggregate_and_expand(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Depot family permissions", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Meguro Depot", "location": "Meguro"},
+    )
+    other_depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Seta Depot", "location": "Seta"},
+    )
+
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [
+            {
+                "id": "a-out",
+                "name": "A01 (X -> Y)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (X -> Y)",
+                "startStop": "X",
+                "endStop": "Y",
+                "stopSequence": ["S1", "S2"],
+                "tripCount": 6,
+                "source": "odpt",
+            },
+            {
+                "id": "a-in",
+                "name": "A01 (Y -> X)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (Y -> X)",
+                "startStop": "Y",
+                "endStop": "X",
+                "stopSequence": ["S2", "S1"],
+                "tripCount": 5,
+                "source": "odpt",
+            },
+            {
+                "id": "b-main",
+                "name": "B02 (P -> Q)",
+                "routeCode": "B02",
+                "routeLabel": "B02 (P -> Q)",
+                "startStop": "P",
+                "endStop": "Q",
+                "stopSequence": ["S3", "S4"],
+                "tripCount": 4,
+                "source": "odpt",
+            },
+        ],
+    )
+    scenario_store.set_depot_route_permissions(
+        scenario_id,
+        [
+            {"depotId": depot["id"], "routeId": "a-out", "allowed": True},
+            {"depotId": depot["id"], "routeId": "a-in", "allowed": False},
+            {"depotId": depot["id"], "routeId": "b-main", "allowed": True},
+            {"depotId": other_depot["id"], "routeId": "a-out", "allowed": True},
+        ],
+    )
+
+    body = master_data.get_depot_route_family_permissions(scenario_id)
+    items = {
+        (item["depotId"], item["routeFamilyCode"]): item
+        for item in body["items"]
+    }
+
+    partial = items[(depot["id"], "A01")]
+    assert partial["totalRouteCount"] == 2
+    assert partial["allowedRouteCount"] == 1
+    assert partial["allowed"] is False
+    assert partial["partiallyAllowed"] is True
+
+    full = items[(depot["id"], "B02")]
+    assert full["allowed"] is True
+    assert full["partiallyAllowed"] is False
+
+    updated = master_data.update_depot_route_family_permissions(
+        scenario_id,
+        master_data.UpdateDepotRouteFamilyPermissionsBody(
+            permissions=[
+                master_data.DepotRouteFamilyPermissionItem(
+                    depotId=depot["id"],
+                    routeFamilyId=partial["routeFamilyId"],
+                    allowed=True,
+                )
+            ]
+        ),
+    )
+    updated_items = {
+        (item["depotId"], item["routeFamilyCode"]): item
+        for item in updated["items"]
+    }
+    assert updated_items[(depot["id"], "A01")]["allowed"] is True
+    assert updated_items[(depot["id"], "A01")]["allowedRouteCount"] == 2
+
+    raw_permissions = sorted(
+        scenario_store.get_depot_route_permissions(scenario_id),
+        key=lambda item: (item["depotId"], item["routeId"]),
+    )
+    assert raw_permissions == [
+        {"depotId": depot["id"], "routeId": "a-in", "allowed": True},
+        {"depotId": depot["id"], "routeId": "a-out", "allowed": True},
+        {"depotId": depot["id"], "routeId": "b-main", "allowed": True},
+        {"depotId": other_depot["id"], "routeId": "a-out", "allowed": True},
+    ]
+
+
+def test_vehicle_route_family_permissions_aggregate_and_expand(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Vehicle family permissions", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Meguro Depot", "location": "Meguro"},
+    )
+    vehicle = scenario_store.create_vehicle(
+        scenario_id,
+        {
+            "depotId": depot["id"],
+            "type": "BEV",
+            "modelName": "BYD K8",
+            "capacityPassengers": 70,
+            "batteryKwh": 314.0,
+            "fuelTankL": None,
+            "energyConsumption": 1.3,
+            "chargePowerKw": 60.0,
+            "minSoc": 0.2,
+            "maxSoc": 0.95,
+            "acquisitionCost": 0.0,
+            "enabled": True,
+        },
+    )
+
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "gtfs",
+        [
+            {
+                "id": "c-out",
+                "name": "C03 (M -> N)",
+                "routeCode": "C03",
+                "routeLabel": "C03 (M -> N)",
+                "startStop": "M",
+                "endStop": "N",
+                "stopSequence": ["S1", "S2"],
+                "tripCount": 8,
+                "source": "gtfs",
+            },
+            {
+                "id": "c-in",
+                "name": "C03 (N -> M)",
+                "routeCode": "C03",
+                "routeLabel": "C03 (N -> M)",
+                "startStop": "N",
+                "endStop": "M",
+                "stopSequence": ["S2", "S1"],
+                "tripCount": 7,
+                "source": "gtfs",
+            },
+        ],
+    )
+    scenario_store.set_vehicle_route_permissions(
+        scenario_id,
+        [
+            {"vehicleId": vehicle["id"], "routeId": "c-out", "allowed": True},
+            {"vehicleId": vehicle["id"], "routeId": "c-in", "allowed": False},
+        ],
+    )
+
+    body = master_data.get_vehicle_route_family_permissions(scenario_id)
+    item = body["items"][0]
+    assert item["routeFamilyCode"] == "C03"
+    assert item["allowedRouteCount"] == 1
+    assert item["partiallyAllowed"] is True
+
+    updated = master_data.update_vehicle_route_family_permissions(
+        scenario_id,
+        master_data.UpdateVehicleRouteFamilyPermissionsBody(
+            permissions=[
+                master_data.VehicleRouteFamilyPermissionItem(
+                    vehicleId=vehicle["id"],
+                    routeFamilyId=item["routeFamilyId"],
+                    allowed=True,
+                )
+            ]
+        ),
+    )
+    assert updated["items"][0]["allowed"] is True
+    assert updated["items"][0]["allowedRouteCount"] == 2
+    assert sorted(
+        scenario_store.get_vehicle_route_permissions(scenario_id),
+        key=lambda entry: entry["routeId"],
+    ) == [
+        {"vehicleId": vehicle["id"], "routeId": "c-in", "allowed": True},
+        {"vehicleId": vehicle["id"], "routeId": "c-out", "allowed": True},
+    ]

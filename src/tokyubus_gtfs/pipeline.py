@@ -69,6 +69,22 @@ def _copy_tree(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, dirs_exist_ok=True)
 
 
+def _copy_feature_sidecars(features_dir: Path, gtfs_out_dir: Path) -> List[str]:
+    copied: List[str] = []
+    sidecar_map = {
+        "depot_candidate_map.json": "sidecar_depot_candidate_map.json",
+    }
+    for source_name, target_name in sidecar_map.items():
+        source = features_dir / source_name
+        if not source.exists():
+            continue
+        target = gtfs_out_dir / target_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        copied.append(target_name)
+    return copied
+
+
 def run_pipeline(config: PipelineConfig) -> Dict[str, Any]:
     """
     Execute the full 4-layer pipeline.
@@ -193,6 +209,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Any]:
                 "deadhead_candidates": deadhead,
                 "skipped": False,
             }
+
+        if (not config.skip_gtfs) and config.gtfs_out_dir.exists():
+            copied_sidecars = _copy_feature_sidecars(features_dir, config.gtfs_out_dir)
+            if copied_sidecars:
+                results.setdefault("gtfs", {}).setdefault("sidecars", {})["feature_sidecars"] = copied_sidecars
     else:
         _log.info("=== Layer D: Feature build skipped ===")
         results["features"] = {"skipped": True, "reason": "skip_features"}

@@ -4,6 +4,7 @@ import {
   vehicleApi,
   vehicleTemplateApi,
   routeApi,
+  routeFamilyApi,
   stopApi,
   permissionApi,
 } from "@/api/master-data";
@@ -23,7 +24,9 @@ import type {
   ImportOdptStopsRequest,
   ImportGtfsStopsRequest,
   UpdateDepotRoutePermissionsRequest,
+  UpdateDepotRouteFamilyPermissionsRequest,
   UpdateVehicleRoutePermissionsRequest,
+  UpdateVehicleRouteFamilyPermissionsRequest,
 } from "@/types";
 import { scenarioKeys } from "./use-scenario";
 
@@ -48,6 +51,10 @@ export const vehicleKeys = {
 
 export const routeKeys = {
   all: (scenarioId: string) => ["routes", scenarioId] as const,
+  families: (scenarioId: string, operator?: string) =>
+    ["route-families", scenarioId, { operator: operator ?? null }] as const,
+  familyDetail: (scenarioId: string, routeFamilyId: string) =>
+    ["route-families", scenarioId, routeFamilyId] as const,
   filtered: (
     scenarioId: string,
     filters: { depotId?: string; operator?: string; groupByFamily?: boolean },
@@ -63,8 +70,12 @@ export const stopKeys = {
 export const permissionKeys = {
   depotRoute: (scenarioId: string) =>
     ["permissions", scenarioId, "depot-route"] as const,
+  depotRouteFamily: (scenarioId: string) =>
+    ["permissions", scenarioId, "depot-route-family"] as const,
   vehicleRoute: (scenarioId: string) =>
     ["permissions", scenarioId, "vehicle-route"] as const,
+  vehicleRouteFamily: (scenarioId: string) =>
+    ["permissions", scenarioId, "vehicle-route-family"] as const,
 };
 
 function invalidateDispatchOutputs(qc: ReturnType<typeof useQueryClient>, scenarioId: string) {
@@ -104,6 +115,7 @@ export function useCreateDepot(scenarioId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: depotKeys.all(scenarioId) });
       qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -129,6 +141,7 @@ export function useDeleteDepot(scenarioId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: depotKeys.all(scenarioId) });
       qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -162,6 +175,7 @@ export function useCreateVehicle(scenarioId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
       qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -175,6 +189,7 @@ export function useCreateVehicleBatch(scenarioId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
       qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -203,6 +218,7 @@ export function useDeleteVehicle(scenarioId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
       qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -235,6 +251,7 @@ export function useDuplicateVehicleBatch(scenarioId: string, vehicleId: string) 
       qc.invalidateQueries({ queryKey: vehicleKeys.detail(scenarioId, vehicleId) });
       qc.invalidateQueries({ queryKey: vehicleKeys.all(scenarioId) });
       qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -314,6 +331,22 @@ export function useRoute(scenarioId: string, routeId: string) {
   });
 }
 
+export function useRouteFamilies(scenarioId: string, operator?: string) {
+  return useQuery({
+    queryKey: routeKeys.families(scenarioId, operator),
+    queryFn: () => routeFamilyApi.list(scenarioId, operator),
+    enabled: !!scenarioId,
+  });
+}
+
+export function useRouteFamily(scenarioId: string, routeFamilyId: string) {
+  return useQuery({
+    queryKey: routeKeys.familyDetail(scenarioId, routeFamilyId),
+    queryFn: () => routeFamilyApi.get(scenarioId, routeFamilyId),
+    enabled: !!scenarioId && !!routeFamilyId,
+  });
+}
+
 export function useCreateRoute(scenarioId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -321,8 +354,11 @@ export function useCreateRoute(scenarioId: string) {
       routeApi.create(scenarioId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: routeKeys.families(scenarioId), exact: false });
       qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRouteFamily(scenarioId) });
       qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -338,6 +374,9 @@ export function useUpdateRoute(scenarioId: string, routeId: string) {
         queryKey: routeKeys.detail(scenarioId, routeId),
       });
       qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: routeKeys.families(scenarioId), exact: false });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRouteFamily(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -349,8 +388,11 @@ export function useDeleteRoute(scenarioId: string) {
     mutationFn: (routeId: string) => routeApi.delete(scenarioId, routeId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      qc.invalidateQueries({ queryKey: routeKeys.families(scenarioId), exact: false });
       qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.depotRouteFamily(scenarioId) });
       qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      qc.invalidateQueries({ queryKey: permissionKeys.vehicleRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -363,9 +405,12 @@ export function useImportOdptRoutes(scenarioId: string) {
       routeApi.importOdpt(scenarioId, data),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      await qc.invalidateQueries({ queryKey: routeKeys.families(scenarioId), exact: false });
       await qc.refetchQueries({ queryKey: routeKeys.all(scenarioId), exact: true });
       await qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      await qc.invalidateQueries({ queryKey: permissionKeys.depotRouteFamily(scenarioId) });
       await qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      await qc.invalidateQueries({ queryKey: permissionKeys.vehicleRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -378,9 +423,12 @@ export function useImportGtfsRoutes(scenarioId: string) {
       routeApi.importGtfs(scenarioId, data),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: routeKeys.all(scenarioId) });
+      await qc.invalidateQueries({ queryKey: routeKeys.families(scenarioId), exact: false });
       await qc.refetchQueries({ queryKey: routeKeys.all(scenarioId), exact: true });
       await qc.invalidateQueries({ queryKey: permissionKeys.depotRoute(scenarioId) });
+      await qc.invalidateQueries({ queryKey: permissionKeys.depotRouteFamily(scenarioId) });
       await qc.invalidateQueries({ queryKey: permissionKeys.vehicleRoute(scenarioId) });
+      await qc.invalidateQueries({ queryKey: permissionKeys.vehicleRouteFamily(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -439,6 +487,34 @@ export function useUpdateDepotRoutePermissions(scenarioId: string) {
       qc.invalidateQueries({
         queryKey: permissionKeys.depotRoute(scenarioId),
       });
+      qc.invalidateQueries({
+        queryKey: permissionKeys.depotRouteFamily(scenarioId),
+      });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
+  });
+}
+
+export function useDepotRouteFamilyPermissions(scenarioId: string) {
+  return useQuery({
+    queryKey: permissionKeys.depotRouteFamily(scenarioId),
+    queryFn: () => permissionApi.getDepotRouteFamilyPermissions(scenarioId),
+    enabled: !!scenarioId,
+  });
+}
+
+export function useUpdateDepotRouteFamilyPermissions(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateDepotRouteFamilyPermissionsRequest) =>
+      permissionApi.updateDepotRouteFamilyPermissions(scenarioId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: permissionKeys.depotRoute(scenarioId),
+      });
+      qc.invalidateQueries({
+        queryKey: permissionKeys.depotRouteFamily(scenarioId),
+      });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -460,6 +536,34 @@ export function useUpdateVehicleRoutePermissions(scenarioId: string) {
     onSuccess: () => {
       qc.invalidateQueries({
         queryKey: permissionKeys.vehicleRoute(scenarioId),
+      });
+      qc.invalidateQueries({
+        queryKey: permissionKeys.vehicleRouteFamily(scenarioId),
+      });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
+  });
+}
+
+export function useVehicleRouteFamilyPermissions(scenarioId: string) {
+  return useQuery({
+    queryKey: permissionKeys.vehicleRouteFamily(scenarioId),
+    queryFn: () => permissionApi.getVehicleRouteFamilyPermissions(scenarioId),
+    enabled: !!scenarioId,
+  });
+}
+
+export function useUpdateVehicleRouteFamilyPermissions(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateVehicleRouteFamilyPermissionsRequest) =>
+      permissionApi.updateVehicleRouteFamilyPermissions(scenarioId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: permissionKeys.vehicleRoute(scenarioId),
+      });
+      qc.invalidateQueries({
+        queryKey: permissionKeys.vehicleRouteFamily(scenarioId),
       });
       invalidateDispatchOutputs(qc, scenarioId);
     },

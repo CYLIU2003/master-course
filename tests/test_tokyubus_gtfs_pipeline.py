@@ -188,13 +188,20 @@ def test_layered_pipeline_outputs(tmp_path: Path) -> None:
     assert gtfs_result["trips"] == 2
     assert gtfs_result["sidecars"]["trip_odpt_extra"] == 2
     assert gtfs_result["sidecars"]["route_patterns"] == 2
+    assert gtfs_result["sidecars"]["route_family_map"] == 1
+    assert gtfs_result["sidecars"]["pattern_role_map"] == 2
+    assert gtfs_result["sidecars"]["service_profile"] == 1
     assert (gtfs_root / "sidecar_snapshot_manifest.json").exists()
+    assert (gtfs_root / "sidecar_service_profile.json").exists()
+    assert (gtfs_root / "sidecar_pattern_role_map.json").exists()
     assert (gtfs_root / "shapes.txt").exists()
     assert (gtfs_root / "feed_metadata.json").exists()
 
     validation = validate_gtfs_feed(canonical_root / "snap-001", gtfs_dir=gtfs_root)
     assert validation["valid"] is True
     assert validation["feed_id"] == "tokyu_odpt_gtfs"
+    assert validation["sidecars"]["sidecar_service_profile.json"]["exists"] is True
+    assert validation["service_coverage"][0]["service_id"] == "WEEKDAY"
     assert (gtfs_root / "validation_report.json").exists()
 
     chains = build_trip_chains(canonical_root / "snap-001", features_root)
@@ -207,6 +214,7 @@ def test_layered_pipeline_outputs(tmp_path: Path) -> None:
     assert chains["chain_count"] >= 1
     assert energy["estimate_count"] == 2
     assert depot["candidate_count"] == 1
+    assert (features_root / "depot_candidate_map.json").exists()
     assert distances["pair_count"] == 1
     assert deadhead["candidate_count"] == 2
     assert charging["window_count"] >= 1
@@ -394,6 +402,7 @@ def test_pipeline_reuses_downstream_outputs_when_only_stop_timetable_changes(tmp
     assert second["features"]["skipped"] is True
     assert second["features"]["reused_from_snapshot"] == "20260309T010000Z"
     assert (features_root / "20260309T020000Z" / "trip_chains.json").exists()
+    assert (gtfs_root / "sidecar_depot_candidate_map.json").exists()
 
 
 def test_pipeline_fast_profile_skips_heavy_features(tmp_path: Path) -> None:
