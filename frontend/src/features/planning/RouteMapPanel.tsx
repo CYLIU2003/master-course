@@ -8,10 +8,8 @@
 // Free tile style: https://demotiles.maplibre.org/style.json
 // No API key required.
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import maplibregl from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
 import { useMasterUiStore } from "@/stores/master-ui-store";
 import { useDepots, useRoute, useRoutes, useStops } from "@/hooks";
 import type { Depot, Route, Stop } from "@/types";
@@ -33,8 +31,10 @@ export function RouteMapPanel({ scenarioId }: Props) {
   const selectedRouteId = useMasterUiStore((s) => s.selectedRouteId);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
+  const mapLibRef = useRef<any>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   const { data: depotsData } = useDepots(scenarioId);
   const { data: routesData } = useRoutes(scenarioId, {
@@ -91,20 +91,38 @@ export function RouteMapPanel({ scenarioId }: Props) {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: FREE_STYLE,
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
-      attributionControl: { compact: true },
-    });
+    let disposed = false;
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
-    mapRef.current = map;
+    const init = async () => {
+      const [{ default: maplibregl }] = await Promise.all([
+        import("maplibre-gl"),
+        import("maplibre-gl/dist/maplibre-gl.css"),
+      ]);
+      if (disposed || !containerRef.current) return;
+      mapLibRef.current = maplibregl;
+      const map = new maplibregl.Map({
+        container: containerRef.current,
+        style: FREE_STYLE,
+        center: DEFAULT_CENTER,
+        zoom: DEFAULT_ZOOM,
+        attributionControl: { compact: true },
+      });
+      map.addControl(new maplibregl.NavigationControl(), "top-right");
+      mapRef.current = map;
+      setMapReady(true);
+    };
+
+    void init();
 
     return () => {
+      disposed = true;
+      setMapReady(false);
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
+      const map = mapRef.current;
+      if (!map) {
+        return;
+      }
       if (map.getLayer(ROUTE_LAYER_ID)) {
         map.removeLayer(ROUTE_LAYER_ID);
       }
@@ -120,7 +138,8 @@ export function RouteMapPanel({ scenarioId }: Props) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    const maplibregl = mapLibRef.current;
+    if (!map || !maplibregl || !mapReady) return;
 
     // Remove old markers
     markersRef.current.forEach((m) => m.remove());
@@ -256,7 +275,7 @@ export function RouteMapPanel({ scenarioId }: Props) {
       for (const d of geoDepots) bounds.extend([d.lon, d.lat]);
       map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
     }
-  }, [depots, activeTab, routeCoordinates, selectedDepotId, stopByName, visibleRoute]);
+  }, [depots, activeTab, mapReady, routeCoordinates, selectedDepotId, stopByName, visibleRoute]);
 
   // ── Routes tab: clear depot markers ────────────────────────
   useEffect(() => {
@@ -297,6 +316,11 @@ export function RouteMapPanel({ scenarioId }: Props) {
 
       {/* Map container */}
       <div ref={containerRef} className="flex-1" />
+      {!mapReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-sm text-slate-500">
+          地図ライブラリを読み込んでいます...
+        </div>
+      )}
     </div>
   );
 }

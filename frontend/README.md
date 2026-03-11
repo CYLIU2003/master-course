@@ -205,3 +205,4 @@ Route ──1:N──> Trip
 - Public Data Explorer only loads overview on entry; route/stops/timetable details are fetched per tab.
 - Route / stop / dispatch detail lists use pagination and virtualization.
 - Depot selection is required before loading heavy dispatch trip / graph / duty detail.
+- Scenario persistence is refs-based on the backend; large dispatch artifacts live outside the lightweight scenario meta JSON.

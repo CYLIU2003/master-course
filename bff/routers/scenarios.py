@@ -848,6 +848,35 @@ def get_timetable(
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     try:
+        if limit is not None:
+            paged_rows = (
+                store.page_timetable_rows(
+                    scenario_id,
+                    offset=offset,
+                    limit=limit,
+                    service_id=service_id,
+                )
+                if service_id is not None
+                else store.page_field_rows(
+                scenario_id,
+                "timetable_rows",
+                offset=offset,
+                limit=limit,
+                )
+            )
+            total = (
+                store.count_timetable_rows(scenario_id, service_id=service_id)
+                if service_id is not None
+                else store.count_field_rows(scenario_id, "timetable_rows")
+            )
+            page_limit = limit
+            return {
+                "items": paged_rows,
+                "total": total,
+                "limit": page_limit,
+                "offset": offset,
+                "meta": {"imports": store.get_timetable_import_meta(scenario_id)},
+            }
         rows = store.get_field(scenario_id, "timetable_rows")
     except KeyError:
         raise _not_found(scenario_id)
@@ -855,9 +884,10 @@ def get_timetable(
     if service_id:
         rows = [r for r in rows if r.get("service_id", "WEEKDAY") == service_id]
     paged_rows, page_limit = _paginate_items(rows, limit, offset)
+    total = len(rows)
     return {
         "items": paged_rows,
-        "total": len(rows),
+        "total": total,
         "limit": page_limit,
         "offset": offset,
         "meta": {"imports": store.get_timetable_import_meta(scenario_id)},
@@ -867,9 +897,12 @@ def get_timetable(
 @router.get("/scenarios/{scenario_id}/timetable/summary")
 def get_timetable_summary(scenario_id: str) -> Dict[str, Any]:
     try:
-        rows = store.get_field(scenario_id, "timetable_rows") or []
+        summary = store.get_field_summary(scenario_id, "timetable_rows")
     except KeyError:
         raise _not_found(scenario_id)
+    if summary is not None:
+        return {"item": summary}
+    rows = store.get_field(scenario_id, "timetable_rows") or []
     imports = store.get_timetable_import_meta(scenario_id)
     return {"item": _build_timetable_summary(rows, imports)}
 
