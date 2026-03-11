@@ -122,4 +122,6 @@ def service_id_from_odpt(calendar_short: Optional[str]) -> str:
     """Map ODPT calendar short key to GTFS service_id."""
     from ..constants import CALENDAR_MAP
 
-    return CALENDAR_MAP.get((calendar_short or "unknown").lower(), "WEEKDAY")
+    key = (calendar_short or "unknown").lower()
+    compact = "".join(ch for ch in key if ch.isalnum())
+    return CALENDAR_MAP.get(compact, CALENDAR_MAP.get(key, "WEEKDAY"))

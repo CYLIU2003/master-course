@@ -587,6 +587,46 @@ python catalog_update_app.py refresh gtfs-pipeline --source-dir ./data/raw-odpt
 - 詳細一覧は pagination / virtualization を必須とする
 - 地図は cluster / simplified shape を優先する
 
+---
+
+## Performance and Data Loading Rules
+
+### Frontend
+
+- Do not eagerly import heavy pages such as ODPT explorer, compare, or detailed result viewers.
+- Use route-level lazy loading with Suspense.
+- Any list expected to exceed 100 rows must use virtualization.
+- Do not fetch route lists, stop lists, timetable details, and summary all at once on operator selection.
+- Public data explorer must be isolated from the main planning workflow.
+
+### BFF API
+
+- All catalog APIs must be summary-first.
+- Initial endpoints should return counts, stats, and lightweight metadata only.
+- Detailed rows must always be paginated or cursor-based.
+- Do not return full timetable rows unless route/service scope is explicitly provided.
+
+### Scenario Storage
+
+- Scenario metadata must be stored separately from heavy master/trip/graph/result data.
+- Avoid single huge JSON files as the main persistence format.
+- Use SQLite/DuckDB/Parquet for large tabular data where practical.
+- Scenario JSON should contain refs or split payload files, not a single monolithic body.
+
+### Planning Scope
+
+- Depot scope must be selected before loading full route/trip/graph details.
+- Avoid rendering or loading all routes/trips across all depots by default.
+
+### Performance Validation
+
+- Every PR touching frontend/BFF should include before/after metrics for:
+  - initial app load
+  - overview fetch latency
+  - route list fetch latency
+  - timetable detail fetch latency
+  - scenario save/load time
+
 ### Research Integrity Rules
 
 - 修論・実験で使う dataset は必ず operator, source_type, dataset_version を明記する

@@ -15,7 +15,11 @@ Or use the helper script:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
+from contextlib import asynccontextmanager
+from time import perf_counter
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -56,7 +60,7 @@ _load_dotenv()
 if "ODPT_CONSUMER_KEY" not in os.environ and "ODPT_TOKEN" in os.environ:
     os.environ["ODPT_CONSUMER_KEY"] = os.environ["ODPT_TOKEN"]
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
@@ -71,12 +75,44 @@ from bff.routers import (
     simulation,
     timetable,
 )
+from bff.services import app_cache
+
+_log = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    warmup_task = asyncio.create_task(asyncio.to_thread(app_cache.warm_startup_cache))
+    app.state.cache_warmup_task = warmup_task
+    try:
+        yield
+    finally:
+        if not warmup_task.done():
+            warmup_task.cancel()
 
 app = FastAPI(
     title="EV Bus Scheduling BFF",
     description="Backend For Frontend — bridges the React UI to the Python dispatch pipeline.",
     version="0.1.0",
+    lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def log_request_metrics(request: Request, call_next):
+    started = perf_counter()
+    response = await call_next(request)
+    duration_ms = (perf_counter() - started) * 1000.0
+    payload_size = response.headers.get("content-length", "unknown")
+    _log.info(
+        "%s %s -> %s in %.1fms (payload=%s)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+        payload_size,
+    )
+    return response
 
 # ── CORS ───────────────────────────────────────────────────────
 # Allow the Vite dev server (localhost:5173) to call the BFF.

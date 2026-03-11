@@ -159,6 +159,7 @@ export function TimetableGeneratorDrawer({
             >
               <option value="WEEKDAY">WEEKDAY</option>
               <option value="SAT">SAT</option>
+              <option value="SAT_HOL">SAT_HOL</option>
               <option value="SUN_HOL">SUN_HOL</option>
             </select>
           </label>

@@ -448,12 +448,16 @@ def test_depot_route_family_permissions_aggregate_and_expand(
         scenario_store.get_depot_route_permissions(scenario_id),
         key=lambda item: (item["depotId"], item["routeId"]),
     )
-    assert raw_permissions == [
-        {"depotId": depot["id"], "routeId": "a-in", "allowed": True},
-        {"depotId": depot["id"], "routeId": "a-out", "allowed": True},
-        {"depotId": depot["id"], "routeId": "b-main", "allowed": True},
-        {"depotId": other_depot["id"], "routeId": "a-out", "allowed": True},
-    ]
+    expected_permissions = sorted(
+        [
+            {"depotId": depot["id"], "routeId": "a-in", "allowed": True},
+            {"depotId": depot["id"], "routeId": "a-out", "allowed": True},
+            {"depotId": depot["id"], "routeId": "b-main", "allowed": True},
+            {"depotId": other_depot["id"], "routeId": "a-out", "allowed": True},
+        ],
+        key=lambda item: (item["depotId"], item["routeId"]),
+    )
+    assert raw_permissions == expected_permissions
 
 
 def test_vehicle_route_family_permissions_aggregate_and_expand(

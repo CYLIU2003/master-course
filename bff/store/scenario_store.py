@@ -57,14 +57,61 @@ Each file stores the complete scenario document:
 from __future__ import annotations
 
 import json
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from bff.services.service_ids import canonical_service_id
+from bff.store import master_data_store, scenario_meta_store, trip_store
+
 _STORE_DIR = Path(__file__).parent.parent.parent / "outputs" / "scenarios"
 _APP_CONTEXT_PATH = Path(__file__).parent.parent.parent / "outputs" / "app_context.json"
 _VALID_OPERATOR_IDS = {"tokyu", "toei"}
+_MASTER_DATA_KEYS = (
+    "depots",
+    "vehicles",
+    "vehicle_templates",
+    "routes",
+    "stops",
+    "route_depot_assignments",
+    "depot_route_permissions",
+    "vehicle_route_permissions",
+    "route_import_meta",
+    "stop_import_meta",
+    "timetable_import_meta",
+    "stop_timetable_import_meta",
+    "calendar",
+    "calendar_dates",
+    "dispatch_scope",
+    "public_data",
+    "feed_context",
+    "simulation_config",
+    "deadhead_rules",
+    "turnaround_rules",
+    "charger_sites",
+    "chargers",
+    "pv_profiles",
+    "energy_price_profiles",
+    "experiment_case_type",
+    "problemdata_build_audit",
+    "optimization_audit",
+    "simulation_audit",
+    "source_snapshot",
+    "runtime_features",
+)
+_ARTIFACT_REF_KEYS = {
+    "timetable_rows": "timetableRows",
+    "stop_timetables": "stopTimetables",
+    "trips": "tripSet",
+    "graph": "graph",
+    "blocks": "blocks",
+    "duties": "duties",
+    "dispatch_plan": "dispatchPlan",
+    "simulation_result": "simulationResult",
+    "optimization_result": "optimizationResult",
+}
 
 
 def _default_dispatch_scope() -> Dict[str, Any]:
@@ -139,37 +186,150 @@ def _ensure_dir() -> None:
 
 
 def _path(scenario_id: str) -> Path:
-    return _STORE_DIR / f"{scenario_id}.json"
+    return scenario_meta_store.scenario_path(_STORE_DIR, scenario_id)
+
+
+def _timetable_path(scenario_id: str) -> Path:
+    return scenario_meta_store.artifact_dir(_STORE_DIR, scenario_id) / "timetable_rows.json"
+
+
+def _stop_timetables_path(scenario_id: str) -> Path:
+    return scenario_meta_store.artifact_dir(_STORE_DIR, scenario_id) / "stop_timetables.json"
+
+
+def _legacy_timetable_path(scenario_id: str) -> Path:
+    return _STORE_DIR / f"{scenario_id}_timetable.json"
+
+
+def _legacy_stop_timetables_path(scenario_id: str) -> Path:
+    return _STORE_DIR / f"{scenario_id}_stop_timetables.json"
+
+
+def _refs_for_scenario(scenario_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    refs = scenario_meta_store.default_refs(_STORE_DIR, scenario_id)
+    if isinstance(payload, dict):
+        refs.update({k: str(v) for k, v in (payload.get("refs") or {}).items() if v})
+    return refs
+
+
+def _is_auxiliary_path(path: Path) -> bool:
+    name = path.name
+    return name.endswith("_timetable.json") or name.endswith("_stop_timetables.json")
+
+
+def _load_json_list(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    payload = trip_store.load_json(path, [])
+    if not isinstance(payload, list):
+        return []
+    return [dict(item) for item in payload if isinstance(item, dict)]
+
+
+def _save_json_list(path: Path, items: List[Dict[str, Any]]) -> None:
+    trip_store.save_json(path, items)
+
+
+def _load_split_or_inline(path: Path, inline_value: Any) -> List[Dict[str, Any]]:
+    if path.exists():
+        return _load_json_list(path)
+    return [dict(item) for item in list(inline_value or []) if isinstance(item, dict)]
+
+
+def _artifact_default(key: str) -> Any:
+    return [] if key in {"timetable_rows", "stop_timetables"} else None
+
+
+def _scenario_stats(doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "routeCount": len(list(doc.get("routes") or [])),
+        "stopCount": len(list(doc.get("stops") or [])),
+        "timetableRowCount": len(list(doc.get("timetable_rows") or [])),
+        "tripCount": len(list(doc.get("trips") or [])) if doc.get("trips") is not None else 0,
+        "dutyCount": len(list(doc.get("duties") or [])) if doc.get("duties") is not None else 0,
+    }
+
+
+def _scope_summary(scope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    normalized = scope if isinstance(scope, dict) else _default_dispatch_scope()
+    depot_selection = dict(normalized.get("depotSelection") or {})
+    route_selection = dict(normalized.get("routeSelection") or {})
+    service_selection = dict(normalized.get("serviceSelection") or {})
+    return {
+        "selectedDepotIds": list(depot_selection.get("depotIds") or []),
+        "selectedRouteIds": list(route_selection.get("includeRouteIds") or []),
+        "serviceIds": list(service_selection.get("serviceIds") or []),
+    }
 
 
 def _load(scenario_id: str) -> Dict[str, Any]:
-    p = _path(scenario_id)
-    if not p.exists():
-        raise KeyError(scenario_id)
-    doc = json.loads(p.read_text(encoding="utf-8"))
+    doc = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, doc)
+    if "refs" not in doc:
+        doc["refs"] = refs
+    else:
+        doc["refs"] = refs
+
+    has_inline_master = any(
+        key in doc
+        for key in (
+            "depots",
+            "vehicles",
+            "routes",
+            "stops",
+            "dispatch_scope",
+            "public_data",
+            "calendar",
+        )
+    )
+    if not has_inline_master:
+        master_payload = master_data_store.load_master_data(Path(refs["masterData"]))
+        doc.update(master_payload)
+
     doc.setdefault("meta", {})
     doc["meta"].setdefault("operatorId", "tokyu")
+    doc.setdefault("depots", [])
+    doc.setdefault("vehicles", [])
     doc.setdefault("vehicle_templates", [])
+    doc.setdefault("routes", [])
     doc.setdefault("route_depot_assignments", [])
+    doc.setdefault("depot_route_permissions", [])
+    doc.setdefault("vehicle_route_permissions", [])
     doc.setdefault("route_import_meta", {})
     doc.setdefault("stop_import_meta", {})
     doc.setdefault("timetable_import_meta", {})
     doc.setdefault("stop_timetable_import_meta", {})
     doc.setdefault("stops", [])
-    doc.setdefault("timetable_rows", [])
-    doc.setdefault("stop_timetables", [])
+
+    for field, ref_key in _ARTIFACT_REF_KEYS.items():
+        artifact_path = Path(refs[ref_key])
+        if field == "timetable_rows":
+            if artifact_path.exists():
+                doc[field] = _load_json_list(artifact_path)
+            elif _legacy_timetable_path(scenario_id).exists():
+                doc[field] = _load_json_list(_legacy_timetable_path(scenario_id))
+            else:
+                doc[field] = _load_split_or_inline(artifact_path, doc.get(field))
+            continue
+        if field == "stop_timetables":
+            if artifact_path.exists():
+                doc[field] = _load_json_list(artifact_path)
+            elif _legacy_stop_timetables_path(scenario_id).exists():
+                doc[field] = _load_json_list(_legacy_stop_timetables_path(scenario_id))
+            else:
+                doc[field] = _load_split_or_inline(artifact_path, doc.get(field))
+            continue
+        if artifact_path.exists():
+            doc[field] = trip_store.load_json(artifact_path, _artifact_default(field))
+        else:
+            doc.setdefault(field, _artifact_default(field))
+
     doc.setdefault("calendar", _default_calendar())
     doc.setdefault("calendar_dates", [])
     doc.setdefault("simulation_config", None)
-    doc.setdefault("trips", None)
-    doc.setdefault("graph", None)
-    doc.setdefault("blocks", None)
-    doc.setdefault("duties", None)
-    doc.setdefault("dispatch_plan", None)
-    doc.setdefault("simulation_result", None)
-    doc.setdefault("optimization_result", None)
     doc.setdefault("dispatch_scope", _default_dispatch_scope())
     doc.setdefault("public_data", _default_public_data_state())
+    doc.setdefault("stats", _scenario_stats(doc))
     for key, value in _default_v1_2_fields().items():
         doc.setdefault(key, value)
     return doc
@@ -178,9 +338,37 @@ def _load(scenario_id: str) -> Dict[str, Any]:
 def _save(doc: Dict[str, Any]) -> None:
     _ensure_dir()
     scenario_id = doc["meta"]["id"]
-    _path(scenario_id).write_text(
-        json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    refs = _refs_for_scenario(scenario_id, doc)
+
+    master_payload = {key: doc.get(key) for key in _MASTER_DATA_KEYS}
+    master_data_store.save_master_data(Path(refs["masterData"]), master_payload)
+
+    preserved_artifacts: Dict[str, Any] = {}
+    for field, ref_key in _ARTIFACT_REF_KEYS.items():
+        preserved_artifacts[field] = doc.get(field)
+        target_path = Path(refs[ref_key])
+        if field in {"timetable_rows", "stop_timetables"}:
+            _save_json_list(target_path, list(doc.get(field) or []))
+        else:
+            trip_store.save_json(target_path, doc.get(field))
+
+    slim_doc = {
+        "scenarioId": scenario_id,
+        "name": doc.get("meta", {}).get("name"),
+        "meta": {
+            **dict(doc.get("meta") or {}),
+            **_scope_summary(doc.get("dispatch_scope")),
+        },
+        "feed_context": doc.get("feed_context"),
+        "refs": refs,
+        "stats": _scenario_stats(doc),
+    }
+    scenario_meta_store.save_meta(_STORE_DIR, scenario_id, slim_doc)
+
+    doc["refs"] = refs
+    doc["stats"] = slim_doc["stats"]
+    for field, value in preserved_artifacts.items():
+        doc[field] = value
 
 
 def _load_app_context() -> Dict[str, Any]:
@@ -230,6 +418,10 @@ def _meta_payload(doc: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(doc["meta"])
     payload.setdefault("operatorId", "tokyu")
     payload["feedContext"] = _normalize_feed_context(doc.get("feed_context"))
+    if "refs" in doc:
+        payload["refs"] = dict(doc.get("refs") or {})
+    if "stats" in doc:
+        payload["stats"] = dict(doc.get("stats") or {})
     return payload
 
 
@@ -289,7 +481,7 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
     assignment_map = _route_assignment_map(doc)
 
     legacy_depot_id = scope.get("depotId")
-    legacy_service_id = str(scope.get("serviceId") or "WEEKDAY")
+    legacy_service_id = canonical_service_id(scope.get("serviceId"))
 
     depot_selection = scope.get("depotSelection")
     if not isinstance(depot_selection, dict):
@@ -335,7 +527,7 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
         service_selection = {}
     selected_service_ids = []
     for service_id in service_selection.get("serviceIds") or []:
-        service_id = str(service_id)
+        service_id = canonical_service_id(service_id)
         if service_id in service_ids and service_id not in selected_service_ids:
             selected_service_ids.append(service_id)
     if not selected_service_ids:
@@ -582,6 +774,8 @@ def list_scenarios() -> List[Dict[str, Any]]:
     _ensure_dir()
     results = []
     for p in sorted(_STORE_DIR.glob("*.json")):
+        if _is_auxiliary_path(p) or p == _APP_CONTEXT_PATH:
+            continue
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
             results.append(_meta_payload(doc))
@@ -683,6 +877,15 @@ def delete_scenario(scenario_id: str) -> None:
     if not p.exists():
         raise KeyError(scenario_id)
     p.unlink()
+    artifact_dir = scenario_meta_store.artifact_dir(_STORE_DIR, scenario_id)
+    if artifact_dir.exists():
+        shutil.rmtree(artifact_dir)
+    for extra_path in (
+        _legacy_timetable_path(scenario_id),
+        _legacy_stop_timetables_path(scenario_id),
+    ):
+        if extra_path.exists():
+            extra_path.unlink()
     context = _load_app_context()
     if context.get("activeScenarioId") == scenario_id:
         context["activeScenarioId"] = None
@@ -759,7 +962,7 @@ def _get_item(
 def _create_item(scenario_id: str, field: str, data: Dict[str, Any]) -> Dict[str, Any]:
     doc = _load(scenario_id)
     item = dict(data)
-    item["id"] = _new_id()
+    item["id"] = item.get("id") or _new_id()
     doc[field].append(item)
     if field in {"depots", "vehicles", "routes"}:
         _invalidate_dispatch_artifacts(doc)
@@ -1246,7 +1449,6 @@ def replace_routes_from_source(
     if import_meta is not None:
         route_import_meta[source] = import_meta
 
-    # Prune permissions referencing route IDs that no longer exist.
     doc["depot_route_permissions"] = [
         perm
         for perm in doc.get("depot_route_permissions") or []
@@ -1336,11 +1538,23 @@ def upsert_route_depot_assignment(
     data: Dict[str, Any],
 ) -> Dict[str, Any]:
     doc = _load(scenario_id)
-    route_exists = any(
-        str(route.get("id")) == route_id for route in doc.get("routes") or []
-    )
-    if not route_exists:
+    resolved_route_id = None
+    for route in doc.get("routes") or []:
+        route_keys = {
+            str(value)
+            for value in (
+                route.get("id"),
+                route.get("odptPatternId"),
+                route.get("odptBusrouteId"),
+            )
+            if value is not None
+        }
+        if route_id in route_keys:
+            resolved_route_id = str(route.get("id"))
+            break
+    if resolved_route_id is None:
         raise KeyError(route_id)
+    route_id = resolved_route_id
 
     depot_id = data.get("depotId")
     if depot_id is not None:

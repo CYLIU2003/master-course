@@ -13,9 +13,10 @@ import hashlib
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlencode
 
 import httpx
@@ -72,13 +73,144 @@ def build_odpt_url(
     resource_name: str,
     consumer_key: str,
     operator_id: str = ODPT_OPERATOR_TOKYU,
+    extra_params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Build an ODPT API endpoint URL for a given resource."""
     params = {
         "odpt:operator": operator_id,
         "acl:consumerKey": consumer_key,
     }
+    if extra_params:
+        for key, value in extra_params.items():
+            if value is None:
+                continue
+            params[str(key)] = str(value)
     return f"{ODPT_API_BASE}/{resource_name}?{urlencode(params)}"
+
+
+def _safe_log_url(url: str) -> str:
+    return url.split("acl:consumerKey=")[0] + "acl:consumerKey=***"
+
+
+def _record_id(record: Any, fallback_index: int) -> str:
+    if isinstance(record, dict):
+        value = record.get("owl:sameAs") or record.get("@id")
+        if value:
+            return str(value)
+    return f"__index__:{fallback_index}"
+
+
+def _load_json_array(path: Path) -> List[Any]:
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if isinstance(data, list):
+        return list(data)
+    if data is None:
+        return []
+    return [data]
+
+
+def _write_json_array(path: Path, records: Iterable[Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(list(records), f, ensure_ascii=False, indent=2)
+
+
+def _file_metadata(path: Path) -> Dict[str, Any]:
+    sha256 = hashlib.sha256()
+    size = 0
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            if not chunk:
+                continue
+            sha256.update(chunk)
+            size += len(chunk)
+    return {
+        "path": str(path),
+        "size_bytes": size,
+        "sha256": sha256.hexdigest(),
+    }
+
+
+def _load_chunk_keys(snapshot_dir: Path, filename: str, field_name: str) -> List[str]:
+    path = snapshot_dir / filename
+    if not path.exists():
+        return []
+    keys: List[str] = []
+    seen = set()
+    for item in _load_json_array(path):
+        if not isinstance(item, dict):
+            continue
+        value = item.get("owl:sameAs") or item.get("@id") or item.get(field_name)
+        if not value:
+            continue
+        value_str = str(value)
+        if value_str in seen:
+            continue
+        seen.add(value_str)
+        keys.append(value_str)
+    return keys
+
+
+def _chunk_query_params(resource_name: str, snapshot_dir: Path) -> List[Dict[str, str]]:
+    if resource_name == "odpt:BusTimetable":
+        pattern_ids = _load_chunk_keys(snapshot_dir, "busroute_pattern.json", "odpt:busroutePattern")
+        return [{"odpt:busroutePattern": pattern_id} for pattern_id in pattern_ids]
+    if resource_name == "odpt:BusstopPoleTimetable":
+        stop_ids = _load_chunk_keys(snapshot_dir, "busstop_pole.json", "odpt:busstopPole")
+        return [{"odpt:busstopPole": stop_id} for stop_id in stop_ids]
+    return []
+
+
+def fetch_odpt_records(url: str, timeout: float = 300.0) -> List[Any]:
+    safe_url = _safe_log_url(url)
+    _log.info("Fetching ODPT chunk from %s", safe_url)
+    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        payload = response.json()
+    if isinstance(payload, list):
+        return payload
+    if payload is None:
+        return []
+    return [payload]
+
+
+def download_odpt_resource_chunked(
+    resource_name: str,
+    out_path: Path,
+    *,
+    consumer_key: str,
+    operator_id: str,
+    snapshot_dir: Path,
+    timeout: float = 300.0,
+    delay_sec: float = 0.0,
+) -> Dict[str, Any]:
+    chunk_params = _chunk_query_params(resource_name, snapshot_dir)
+    if not chunk_params:
+        url = build_odpt_url(resource_name, consumer_key, operator_id)
+        result = download_odpt_resource(url, out_path, timeout=timeout)
+        return {"chunk_count": 1, "truncated_chunk_count": 0, **result}
+
+    merged: Dict[str, Any] = {}
+    truncated_chunk_count = 0
+    for index, params in enumerate(chunk_params):
+        url = build_odpt_url(resource_name, consumer_key, operator_id, extra_params=params)
+        records = fetch_odpt_records(url, timeout=timeout)
+        if len(records) >= 1000:
+            truncated_chunk_count += 1
+        for item_index, record in enumerate(records):
+            merged[_record_id(record, item_index)] = record
+        if delay_sec > 0 and index + 1 < len(chunk_params):
+            time.sleep(delay_sec)
+
+    _write_json_array(out_path, merged.values())
+    result = _file_metadata(out_path)
+    return {
+        "chunk_count": len(chunk_params),
+        "truncated_chunk_count": truncated_chunk_count,
+        **result,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +230,7 @@ def download_odpt_resource(url: str, out_path: Path, timeout: float = 300.0) -> 
     size = 0
 
     # Mask the consumer key from the logged URL
-    safe_url = url.split("acl:consumerKey=")[0] + "acl:consumerKey=***"
+    safe_url = _safe_log_url(url)
     _log.info("Downloading ODPT resource to %s from %s", out_path, safe_url)
 
     with httpx.stream("GET", url, timeout=timeout, follow_redirects=True) as response:
@@ -210,7 +342,21 @@ def fetch_tokyu_odpt_bundle(
         out_path = snapshot_dir / filename
 
         try:
-            result = download_odpt_resource(url, out_path)
+            if resource_name in {"odpt:BusTimetable", "odpt:BusstopPoleTimetable"}:
+                result = download_odpt_resource_chunked(
+                    resource_name,
+                    out_path,
+                    consumer_key=consumer_key,
+                    operator_id=operator_id,
+                    snapshot_dir=snapshot_dir,
+                    delay_sec=0.02,
+                )
+                if int(result.get("truncated_chunk_count") or 0) > 0:
+                    warnings.append(
+                        f"{resource_name} still hit ODPT cap in {result.get('truncated_chunk_count')} chunk(s)"
+                    )
+            else:
+                result = download_odpt_resource(url, out_path)
             item_count = count_json_array_items(out_path)
             resource_results.append(
                 {

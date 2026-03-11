@@ -7,17 +7,20 @@ import importlib.util
 import json
 import math
 import os
+import sqlite3
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, cast
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import httpx
+
+from bff.services.service_ids import canonical_service_id
 
 try:
     from tools._config_runtime import get_runtime_secret
@@ -33,7 +36,7 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution fallba
     _config_runtime_spec.loader.exec_module(_config_runtime_module)
     get_runtime_secret = _config_runtime_module.get_runtime_secret
 
-from bff.services.odpt_fetch import build_odpt_url
+from bff.services.odpt_fetch import _chunk_query_params, build_odpt_url
 from bff.services.odpt_normalize import normalize_odpt_snapshot
 from bff.services.odpt_routes import DEFAULT_OPERATOR
 
@@ -103,6 +106,14 @@ def _json_load(path: Path) -> Any:
     return json.loads(data.decode("utf-8"))
 
 
+def _record_id(record: Any, fallback_index: int) -> str:
+    if isinstance(record, dict):
+        value = record.get("owl:sameAs") or record.get("@id")
+        if value:
+            return str(value)
+    return f"__index__:{fallback_index}"
+
+
 def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     if not path.exists():
@@ -141,7 +152,12 @@ def _iso_now() -> str:
 def _max_rss_mb() -> Optional[float]:
     if resource is None:
         return None
-    usage = resource.getrusage(resource.RUSAGE_SELF)
+    resource_module = cast(Any, resource)
+    getrusage = getattr(resource_module, "getrusage", None)
+    rusage_self = getattr(resource_module, "RUSAGE_SELF", None)
+    if getrusage is None or rusage_self is None:
+        return None
+    usage = getrusage(rusage_self)
     rss = float(usage.ru_maxrss)
     if os.name == "posix" and rss > 1024 * 1024:
         return round(rss / 1024.0 / 1024.0, 2)
@@ -244,12 +260,6 @@ def _group_by(items: Iterable[Dict[str, Any]], key: str) -> Dict[str, List[Dict[
         grouped.setdefault(value, []).append(item)
     return grouped
 
-
-def _service_id_from_odpt(value: str | None) -> str:
-    mapping = {"weekday": "WEEKDAY", "saturday": "SAT", "holiday": "SUN_HOL", "unknown": "WEEKDAY"}
-    return mapping.get((value or "unknown").lower(), "WEEKDAY")
-
-
 def _safe_time(value: Any) -> Optional[str]:
     if not isinstance(value, str) or ":" not in value:
         return None
@@ -340,7 +350,7 @@ def build_odpt_route_payloads_from_raw(raw_dir: Path) -> List[Dict[str, Any]]:
         if pattern is None:
             continue
         busroute_id = str(pattern["busroute"])
-        service_id = _service_id_from_odpt(str(timetable.get("odpt:calendar") or "").split(":")[-1])
+        service_id = canonical_service_id(timetable.get("odpt:calendar"))
         objects = sorted(
             [obj for obj in list(timetable.get("odpt:busTimetableObject") or []) if isinstance(obj, dict)],
             key=lambda obj: int(obj.get("odpt:index") or 0),
@@ -547,6 +557,165 @@ def build_operational_dataset(raw_dir: Path, normalized_dir: Path) -> Dict[str, 
     }
 
 
+def _build_canonical_catalog_sqlite(
+    out_dir: Path,
+    *,
+    operator: str,
+    bundle: Dict[str, Any],
+    operational_dataset: Dict[str, Any],
+) -> Path:
+    canonical_dir = out_dir / "canonical"
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+    db_path = canonical_dir / "catalog.sqlite"
+    if db_path.exists():
+        db_path.unlink()
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("CREATE TABLE operators(operator_id TEXT PRIMARY KEY, source_type TEXT)")
+        conn.execute(
+            "CREATE TABLE routes(route_id TEXT PRIMARY KEY, route_code TEXT, route_label TEXT, trip_count INTEGER, first_departure TEXT, last_arrival TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE route_patterns(pattern_id TEXT PRIMARY KEY, route_id TEXT, title TEXT, direction TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE stops(stop_id TEXT PRIMARY KEY, stop_name TEXT, lat REAL, lon REAL, pole_number TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE services(service_id TEXT PRIMARY KEY, trip_count INTEGER)"
+        )
+        conn.execute(
+            "CREATE TABLE trips(trip_id TEXT PRIMARY KEY, pattern_id TEXT, service_id TEXT, departure TEXT, arrival TEXT, origin_stop_id TEXT, destination_stop_id TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE stop_times(trip_id TEXT, stop_id TEXT, sequence INTEGER, arrival TEXT, departure TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE stop_timetable_index(stop_id TEXT, service_id TEXT, entry_count INTEGER, PRIMARY KEY(stop_id, service_id))"
+        )
+
+        conn.execute(
+            "INSERT INTO operators(operator_id, source_type) VALUES (?, ?)",
+            (operator, str((bundle.get("meta") or {}).get("source") or "odpt")),
+        )
+
+        conn.executemany(
+            "INSERT INTO routes(route_id, route_code, route_label, trip_count, first_departure, last_arrival) VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    str(item.get("route_id") or item.get("id") or ""),
+                    str(item.get("route_code") or item.get("routeCode") or ""),
+                    str(item.get("route_name") or item.get("routeLabel") or item.get("name") or ""),
+                    int(item.get("trip_count") or item.get("tripCount") or 0),
+                    item.get("first_departure") or item.get("firstDeparture"),
+                    item.get("last_arrival") or item.get("lastArrival"),
+                )
+                for item in list(bundle.get("routes") or [])
+                if item.get("route_id") or item.get("id")
+            ],
+        )
+
+        conn.executemany(
+            "INSERT INTO route_patterns(pattern_id, route_id, title, direction) VALUES (?, ?, ?, ?)",
+            [
+                (
+                    str(pattern_id),
+                    str(pattern.get("busroute") or ""),
+                    str(pattern.get("title") or ""),
+                    str(pattern.get("direction") or "unknown"),
+                )
+                for pattern_id, pattern in dict(operational_dataset.get("routePatterns") or {}).items()
+            ],
+        )
+
+        conn.executemany(
+            "INSERT INTO stops(stop_id, stop_name, lat, lon, pole_number) VALUES (?, ?, ?, ?, ?)",
+            [
+                (
+                    str(stop_id),
+                    str(stop.get("name") or ""),
+                    stop.get("lat"),
+                    stop.get("lon"),
+                    stop.get("poleNumber"),
+                )
+                for stop_id, stop in dict(operational_dataset.get("stops") or {}).items()
+            ],
+        )
+
+        services: Dict[str, int] = {}
+        trip_rows = []
+        stop_time_rows = []
+        for trip_id, trip in dict(operational_dataset.get("trips") or {}).items():
+            stop_times = list(trip.get("stop_times") or [])
+            services[str(trip.get("service_id") or "unknown")] = services.get(str(trip.get("service_id") or "unknown"), 0) + 1
+            trip_rows.append(
+                (
+                    str(trip_id),
+                    str(trip.get("pattern_id") or ""),
+                    str(trip.get("service_id") or "unknown"),
+                    stop_times[0].get("departure") if stop_times else None,
+                    stop_times[-1].get("arrival") if stop_times else None,
+                    stop_times[0].get("stop_id") if stop_times else None,
+                    stop_times[-1].get("stop_id") if stop_times else None,
+                )
+            )
+            for stop_time in stop_times:
+                stop_time_rows.append(
+                    (
+                        str(trip_id),
+                        str(stop_time.get("stop_id") or ""),
+                        int(stop_time.get("index") or 0),
+                        stop_time.get("arrival"),
+                        stop_time.get("departure"),
+                    )
+                )
+
+        conn.executemany(
+            "INSERT INTO services(service_id, trip_count) VALUES (?, ?)",
+            [(service_id, trip_count) for service_id, trip_count in services.items()],
+        )
+        conn.executemany(
+            "INSERT INTO trips(trip_id, pattern_id, service_id, departure, arrival, origin_stop_id, destination_stop_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            trip_rows,
+        )
+        conn.executemany(
+            "INSERT INTO stop_times(trip_id, stop_id, sequence, arrival, departure) VALUES (?, ?, ?, ?, ?)",
+            stop_time_rows,
+        )
+
+        conn.executemany(
+            "INSERT INTO stop_timetable_index(stop_id, service_id, entry_count) VALUES (?, ?, ?)",
+            [
+                (
+                    str(item.get("stopId") or item.get("stop_id") or ""),
+                    str(item.get("service_id") or item.get("calendar") or "unknown"),
+                    len(list(item.get("items") or [])),
+                )
+                for item in list(bundle.get("stop_timetables") or [])
+                if item.get("stopId") or item.get("stop_id")
+            ],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    _json_dump(
+        {
+            "operator": operator,
+            "tables": {
+                "routes": len(list(bundle.get("routes") or [])),
+                "stops": len(list(bundle.get("stops") or [])),
+                "trips": len(dict(operational_dataset.get("trips") or {})),
+                "stop_timetable_index": len(list(bundle.get("stop_timetables") or [])),
+            },
+            "dbPath": str(db_path),
+        },
+        canonical_dir / "summary.json",
+    )
+    return db_path
+
+
 def build_bundle_artifacts(out_dir: Path, operator: str) -> Dict[str, Any]:
     raw_dir = out_dir / "raw"
     normalized_dir = out_dir / "normalized"
@@ -560,6 +729,17 @@ def build_bundle_artifacts(out_dir: Path, operator: str) -> Dict[str, Any]:
     stop_times = _read_jsonl(normalized_dir / "stop_times.jsonl")
     route_payloads = build_odpt_route_payloads_from_raw(raw_dir)
     operational_dataset = build_operational_dataset(raw_dir, normalized_dir)
+    canonical_catalog_path = _build_canonical_catalog_sqlite(
+        out_dir,
+        operator=operator,
+        bundle={
+            "meta": {"source": "odpt"},
+            "routes": routes,
+            "stops": stops,
+            "stop_timetables": stop_timetables,
+        },
+        operational_dataset=operational_dataset,
+    )
 
     bundle = {
         "meta": {
@@ -574,6 +754,10 @@ def build_bundle_artifacts(out_dir: Path, operator: str) -> Dict[str, Any]:
                 "timetableRows": len(timetable_rows),
                 "stopTimetables": len(stop_timetables),
                 "routePayloads": len(route_payloads),
+            },
+            "artifacts": {
+                "canonicalCatalog": str(canonical_catalog_path),
+                "canonicalSummary": str(out_dir / "canonical" / "summary.json"),
             },
         },
         "snapshot": {"snapshotKey": f"fast-odpt::{operator}"},
@@ -645,7 +829,80 @@ async def _download_odpt_resource(
             sha256=str(resource_state.get("sha256") or ""),
         )
 
-    url = build_odpt_url(spec["resource"], _consumer_key(), operator)
+    consumer_key = _consumer_key()
+    url = build_odpt_url(spec["resource"], consumer_key, operator)
+    chunk_params = _chunk_query_params(spec["resource"], raw_dir)
+
+    if chunk_params:
+        merged: Dict[str, Any] = {}
+        retries = 0
+
+        async def fetch_chunk(params: Dict[str, str]) -> List[Any]:
+            nonlocal retries
+            chunk_url = build_odpt_url(spec["resource"], consumer_key, operator, extra_params=params)
+            for attempt in range(max_retries + 1):
+                try:
+                    async with semaphore:
+                        response = await client.get(chunk_url, timeout=timeout_sec)
+                        response.raise_for_status()
+                    payload = response.json()
+                    if isinstance(payload, list):
+                        return payload
+                    if payload is None:
+                        return []
+                    return [payload]
+                except Exception:
+                    retries += 1
+                    if attempt >= max_retries:
+                        raise
+                    backoff = min(5.0, 0.5 * math.pow(2, attempt))
+                    await asyncio.sleep(backoff)
+            return []
+
+        started = _now()
+        batch_size = max(1, min(128, max(1, int(math.sqrt(len(chunk_params) or 1)) * 4)))
+        for offset in range(0, len(chunk_params), batch_size):
+            batch = chunk_params[offset : offset + batch_size]
+            records_by_chunk = await asyncio.gather(*(fetch_chunk(params) for params in batch))
+            for records in records_by_chunk:
+                for item_index, record in enumerate(records):
+                    merged[_record_id(record, item_index)] = record
+
+        _json_dump(list(merged.values()), json_path)
+        item_count = _convert_json_array_to_ndjson(json_path, ndjson_path)
+        elapsed = max(_now() - started, 1e-6)
+        size_bytes = json_path.stat().st_size if json_path.exists() else 0
+        sha256 = hashlib.sha256(json_path.read_bytes()).hexdigest() if json_path.exists() else ""
+        resource_state = {
+            "status": "complete",
+            "jsonPath": str(json_path),
+            "ndjsonPath": str(ndjson_path),
+            "itemCount": item_count,
+            "sizeBytes": size_bytes,
+            "elapsedSec": round(elapsed, 3),
+            "retries": retries,
+            "sha256": sha256,
+            "chunkCount": len(chunk_params),
+            "completedAt": _iso_now(),
+        }
+        state.setdefault("resources", {})[name] = resource_state
+        _save_state(state_path, state)
+        rate = item_count / elapsed if item_count else 0.0
+        print(
+            f"[fast-ingest] {name} {len(chunk_params)}/{len(chunk_params)} ok={item_count} retry={retries} fail=0 "
+            f"rate={rate:.1f} rec/s size={size_bytes}B"
+        )
+        return DownloadResult(
+            name=name,
+            json_path=json_path,
+            ndjson_path=ndjson_path,
+            item_count=item_count,
+            size_bytes=size_bytes,
+            elapsed_sec=elapsed,
+            retries=retries,
+            sha256=sha256,
+        )
+
     retries = 0
     for attempt in range(max_retries + 1):
         started = _now()
@@ -736,6 +993,9 @@ async def run_fetch_odpt(args: argparse.Namespace) -> int:
         print("[fast-ingest] Optional package 'h2' is not installed; falling back to HTTP/1.1")
 
     async with _build_async_client(http2=http2_enabled, limits=limits) as client:
+        stage_one_names = [name for name in ["routePatterns", "stops"] if name in selected]
+        stage_two_names = [name for name in sorted(selected) if name not in stage_one_names]
+
         tasks = [
             _download_odpt_resource(
                 client=client,
@@ -750,9 +1010,28 @@ async def run_fetch_odpt(args: argparse.Namespace) -> int:
                 timeout_sec=args.timeout_sec,
                 max_retries=args.max_retries,
             )
-            for name in sorted(selected)
+            for name in stage_one_names
         ]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks) if tasks else []
+
+        tasks = [
+            _download_odpt_resource(
+                client=client,
+                semaphore=semaphore,
+                state_path=state_path,
+                state=state,
+                out_dir=out_dir,
+                operator=args.operator,
+                name=name,
+                spec=ODPT_RESOURCE_SPECS[name],
+                resume=args.resume,
+                timeout_sec=args.timeout_sec,
+                max_retries=args.max_retries,
+            )
+            for name in stage_two_names
+        ]
+        if tasks:
+            results.extend(await asyncio.gather(*tasks))
     fetch_elapsed = _now() - started
 
     bundle_counts = None

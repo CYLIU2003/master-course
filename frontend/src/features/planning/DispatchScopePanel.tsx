@@ -46,7 +46,15 @@ export function DispatchScopePanel({
   const [subsetExportError, setSubsetExportError] = useState<string | null>(null);
   const { data: scope, isLoading: loadingScope } = useDispatchScope(scenarioId);
   const { data: depotsData, isLoading: loadingDepots } = useDepots(scenarioId);
-  const { data: routesData, isLoading: loadingRoutes } = useRoutes(scenarioId);
+  const scopeDepotIds =
+    scope?.depotSelection?.depotIds && scope.depotSelection.depotIds.length > 0
+      ? scope.depotSelection.depotIds
+      : scope?.depotId
+        ? [scope.depotId]
+        : [];
+  const { data: routesData, isLoading: loadingRoutes } = useRoutes(scenarioId, {
+    enabled: scopeDepotIds.length > 0,
+  });
   const { data: calendarData, isLoading: loadingCalendar } = useCalendar(scenarioId);
   const updateScope = useUpdateDispatchScope(scenarioId);
 
@@ -66,6 +74,7 @@ export function DispatchScopePanel({
     })) ?? [
       { value: "WEEKDAY", label: t("timetable.filter_weekday", "平日") },
       { value: "SAT", label: t("timetable.filter_sat", "土曜") },
+      { value: "SAT_HOL", label: "土曜・休日" },
       { value: "SUN_HOL", label: t("timetable.filter_sun_hol", "日曜・休日") },
     ];
   const effectiveRouteIds = new Set(normalizedScope.effectiveRouteIds);

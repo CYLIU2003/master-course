@@ -459,6 +459,7 @@ def _load_gtfs_core_bundle_cached(
     finalized_trip_ids: set[str] = set()
     trip_summaries: Dict[str, Dict[str, Any]] = {}
     stop_timetable_keys: set[tuple[str, str]] = set()
+    stop_times_by_trip: DefaultDict[str, List[Dict[str, Any]]] = defaultdict(list)
 
     def _start_trip_state(basic: Dict[str, str]) -> Dict[str, Any]:
         return {
@@ -563,6 +564,13 @@ def _load_gtfs_core_bundle_cached(
 
         arrival = _normalize_time(row.get("arrival_time"))
         departure = _normalize_time(row.get("departure_time"))
+        stop_time_entry = {
+            "stop_id": stop_id,
+            "arrival": arrival,
+            "departure": departure,
+            "stop_name": stop_name,
+        }
+        stop_times_by_trip[trip_id].append(stop_time_entry)
         if current_state["first_stop_id"] is None:
             current_state["first_stop_id"] = stop_id
             current_state["first_stop_name"] = stop_name
@@ -760,6 +768,7 @@ def _load_gtfs_core_bundle_cached(
         "service_id_by_trip": service_id_by_trip,
         "headsign_by_trip": headsign_by_trip,
         "stop_name_by_id": stop_name_by_id,
+        "stop_times_by_trip": dict(stop_times_by_trip),
         "calendar_entries": calendar_entries,
         "calendar_date_entries": calendar_date_entries,
     }
@@ -769,33 +778,31 @@ def build_gtfs_stop_timetables(
     feed_path: str | Path = DEFAULT_GTFS_FEED_PATH,
 ) -> Dict[str, Any]:
     core = load_gtfs_core_bundle(feed_path)
-    feed_root = _resolve_feed_path(feed_path)
     grouped_entries: DefaultDict[tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
 
     route_id_by_trip = core.get("route_id_by_trip") or {}
     service_id_by_trip = core.get("service_id_by_trip") or {}
     headsign_by_trip = core.get("headsign_by_trip") or {}
     stop_name_by_id = core.get("stop_name_by_id") or {}
+    stop_times_by_trip = core.get("stop_times_by_trip") or {}
 
-    for row in _stream_rows(feed_root / "stop_times.txt"):
-        trip_id = str(row.get("trip_id") or "").strip()
-        stop_id = str(row.get("stop_id") or "").strip()
-        if not trip_id or not stop_id:
-            continue
-
-        service_id = service_id_by_trip.get(trip_id)
+    for trip_id, stop_times in stop_times_by_trip.items():
+        service_id = service_id_by_trip.get(str(trip_id))
         if not service_id:
             continue
-
-        grouped_entries[(stop_id, service_id)].append(
-            {
-                "trip_id": trip_id,
-                "arrival": _normalize_time(row.get("arrival_time")),
-                "departure": _normalize_time(row.get("departure_time")),
-                "destinationSign": headsign_by_trip.get(trip_id) or "",
-                "busroutePattern": route_id_by_trip.get(trip_id) or "",
-            }
-        )
+        for stop_time in stop_times:
+            stop_id = str(stop_time.get("stop_id") or "").strip()
+            if not stop_id:
+                continue
+            grouped_entries[(stop_id, service_id)].append(
+                {
+                    "trip_id": str(trip_id),
+                    "arrival": stop_time.get("arrival"),
+                    "departure": stop_time.get("departure"),
+                    "destinationSign": headsign_by_trip.get(str(trip_id)) or "",
+                    "busroutePattern": route_id_by_trip.get(str(trip_id)) or "",
+                }
+            )
 
     items: list[dict[str, Any]] = []
     for (stop_id, service_id), entries in sorted(grouped_entries.items()):
@@ -852,7 +859,6 @@ def build_gtfs_route_timetables(
     feed_path: str | Path = DEFAULT_GTFS_FEED_PATH,
 ) -> Dict[str, Any]:
     core = load_gtfs_core_bundle(feed_path)
-    feed_root = _resolve_feed_path(feed_path)
     route_by_id = {
         str(route.get("id") or ""): route for route in list(core.get("routes") or [])
     }
@@ -862,10 +868,8 @@ def build_gtfs_route_timetables(
         if row.get("trip_id")
     }
     stop_name_by_id = dict(core.get("stop_name_by_id") or {})
+    stop_times_by_trip = core.get("stop_times_by_trip") or {}
     route_trips: DefaultDict[str, List[Dict[str, Any]]] = defaultdict(list)
-
-    current_trip_id: Optional[str] = None
-    current_stop_times: List[Dict[str, Any]] = []
 
     def _finalize_trip(trip_id: Optional[str], stop_times: List[Dict[str, Any]]) -> None:
         if not trip_id or not stop_times:
@@ -895,37 +899,28 @@ def build_gtfs_route_timetables(
             }
         )
 
-    for row in _stream_rows(feed_root / "stop_times.txt"):
-        trip_id = str(row.get("trip_id") or "").strip()
-        if not trip_id:
-            continue
-
-        if trip_id != current_trip_id:
-            _finalize_trip(current_trip_id, current_stop_times)
-            current_trip_id = trip_id
-            current_stop_times = []
-
+    for trip_id, raw_stop_times in stop_times_by_trip.items():
+        trip_id = str(trip_id)
         if trip_id not in trip_by_id:
             continue
-
-        stop_id = str(row.get("stop_id") or "").strip()
-        if not stop_id:
-            continue
-
-        arrival = _normalize_time(row.get("arrival_time"))
-        departure = _normalize_time(row.get("departure_time"))
-        current_stop_times.append(
+        current_stop_times: List[Dict[str, Any]] = []
+        for index, stop_time in enumerate(raw_stop_times):
+            stop_id = str(stop_time.get("stop_id") or "").strip()
+            if not stop_id:
+                continue
+            arrival = stop_time.get("arrival")
+            departure = stop_time.get("departure")
+            current_stop_times.append(
             {
-                "index": len(current_stop_times),
+                "index": index,
                 "stop_id": stop_id,
-                "stop_name": str(stop_name_by_id.get(stop_id) or stop_id),
+                "stop_name": str(stop_time.get("stop_name") or stop_name_by_id.get(stop_id) or stop_id),
                 "arrival": arrival,
                 "departure": departure,
                 "time": departure or arrival,
             }
         )
-
-    _finalize_trip(current_trip_id, current_stop_times)
+        _finalize_trip(trip_id, current_stop_times)
 
     route_timetables: List[Dict[str, Any]] = []
     for route_id, route in sorted(route_by_id.items()):

@@ -176,7 +176,11 @@ def _refresh_bundle(
         )
     snapshot_key = str(bundle.get("snapshotKey") or bundle.get("snapshot_key") or "")
     print(f"snapshot: {snapshot_key or '-'}")
-    return transit_catalog.load_snapshot_bundle(snapshot_key) if snapshot_key else bundle
+    loaded = transit_catalog.load_snapshot_bundle(snapshot_key) if snapshot_key else bundle
+    artifacts = dict((loaded.get("meta") or {}).get("artifacts") or {})
+    if artifacts:
+        print(f"artifacts: {json.dumps(artifacts, ensure_ascii=False)}")
+    return loaded
 
 
 def _get_or_load_bundle(
@@ -457,6 +461,7 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
             )
         )
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        print("note: research runtime uses bff/ as the official backend; backend/ is legacy")
         return 0
     if getattr(args, "fast_path", False):
         if args.source != "odpt":

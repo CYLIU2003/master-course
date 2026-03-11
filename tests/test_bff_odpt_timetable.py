@@ -85,3 +85,36 @@ def test_summarize_timetable_import_reports_stop_timetable_count():
         "stopTimetableCount": 3,
         "warningCount": 1,
     }
+
+
+def test_build_timetable_rows_from_operational_uses_raw_calendar_when_present():
+    dataset = {
+        "stops": {
+            "S1": {"name": "Start"},
+            "S2": {"name": "End"},
+        },
+        "routePatterns": {
+            "odpt.BusroutePattern:TokyuBus.A24.out": {
+                "busroute": "odpt.Busroute:TokyuBus.A24",
+                "stop_sequence": ["S1", "S2"],
+                "total_distance_km": 4.2,
+            },
+        },
+        "trips": {
+            "trip-1": {
+                "pattern_id": "odpt.BusroutePattern:TokyuBus.A24.out",
+                "calendar": "odpt.Calendar:SaturdayHoliday",
+                "service_id": "saturday",
+                "estimated_distance_km": 4.2,
+                "stop_times": [
+                    {"stop_id": "S1", "departure": "08:00"},
+                    {"stop_id": "S2", "arrival": "08:15"},
+                ],
+            },
+        },
+    }
+
+    rows = build_timetable_rows_from_operational(dataset)
+
+    assert len(rows) == 1
+    assert rows[0]["service_id"] == "SAT_HOL"

@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from bff.services.service_ids import build_service_calendar_entry, canonical_service_id
+
 _log = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -67,17 +69,6 @@ def _route_color(seed: str) -> str:
     g = 64 + (int(digest[2:4], 16) % 128)
     b = 64 + (int(digest[4:6], 16) % 128)
     return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def _service_id_from_odpt(value: Optional[str]) -> str:
-    mapping = {
-        "weekday": "WEEKDAY",
-        "saturday": "SAT",
-        "holiday": "SUN_HOL",
-        "unknown": "WEEKDAY",
-    }
-    return mapping.get((value or "unknown").lower(), "WEEKDAY")
-
 
 def _data_hash(obj: Any) -> str:
     payload = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -325,16 +316,14 @@ def normalize_bus_timetable(
         route_id = str(pattern.get("route_id") or _route_id_from_pattern(pattern_id))
 
         # Determine service
-        service_key = _short_id(calendar_raw, "unknown")
-        service_id = _service_id_from_odpt(service_key)
+        service_id = canonical_service_id(calendar_raw or "unknown")
 
         if service_id not in service_calendars:
-            service_calendars[service_id] = {
-                "service_id": service_id,
-                "name": service_id,
-                "source": "odpt",
-                "calendar_raw": calendar_raw,
-            }
+            service_calendars[service_id] = build_service_calendar_entry(
+                service_id,
+                calendar_raw=calendar_raw,
+                source="odpt",
+            )
 
         trip_id = str(
             timetable.get("owl:sameAs")
@@ -430,6 +419,8 @@ def normalize_busstop_pole_timetable(
     raw_data: list,
     out_dir: Path,
     stop_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+    route_patterns_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+    raw_bus_timetable: Optional[list] = None,
 ) -> Dict[str, Any]:
     """
     Normalize odpt:BusstopPoleTimetable for stop-level timetable
@@ -438,6 +429,8 @@ def normalize_busstop_pole_timetable(
     stop_timetables: List[Dict[str, Any]] = []
     warnings: List[str] = []
     stops = stop_lookup or {}
+    patterns = route_patterns_lookup or {}
+    bus_timetables = raw_bus_timetable or []
 
     def _stop_label(stop_id: Optional[str]) -> str:
         if not stop_id:
@@ -445,25 +438,30 @@ def normalize_busstop_pole_timetable(
         info = stops.get(stop_id, {})
         return str(info.get("name", "")) or _short_id(stop_id, stop_id or "")
 
+    covered_pattern_services: set[Tuple[str, str]] = set()
+    synthetic_groups: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+
     for item in raw_data:
         if not isinstance(item, dict):
             continue
         timetable_id = str(item.get("owl:sameAs") or item.get("@id") or "")
         stop_id = str(item.get("odpt:busstopPole") or "")
         calendar_raw = str(item.get("odpt:calendar") or "")
-        service_key = _short_id(calendar_raw, "unknown")
-        service_id = _service_id_from_odpt(service_key)
+        service_id = canonical_service_id(calendar_raw or "unknown")
 
         tt_objects = item.get("odpt:busstopPoleTimetableObject") or []
         entries: List[Dict[str, Any]] = []
         for obj in tt_objects:
             if not isinstance(obj, dict):
                 continue
+            pattern_id = str(obj.get("odpt:busroutePattern") or "")
+            if pattern_id:
+                covered_pattern_services.add((pattern_id, service_id))
             entries.append(
                 {
                     "departure": _safe_time(obj.get("odpt:departureTime")),
                     "destination": str(obj.get("odpt:destinationBusstopPole") or ""),
-                    "busroutePattern": str(obj.get("odpt:busroutePattern") or ""),
+                    "busroutePattern": pattern_id,
                     "busroute": str(obj.get("odpt:busroute") or ""),
                     "isMidnight": bool(obj.get("odpt:isMidnight")),
                     "note": str(obj.get("odpt:note") or ""),
@@ -482,11 +480,86 @@ def normalize_busstop_pole_timetable(
             }
         )
 
+    synthetic_entry_count = 0
+    synthetic_group_count = 0
+    for timetable in bus_timetables:
+        if not isinstance(timetable, dict):
+            continue
+        pattern_id = str(timetable.get("odpt:busroutePattern") or "")
+        calendar_raw = str(timetable.get("odpt:calendar") or "")
+        service_id = canonical_service_id(calendar_raw or "unknown")
+        coverage_key = (pattern_id, service_id)
+        if not pattern_id or coverage_key in covered_pattern_services:
+            continue
+
+        timetable_id = str(timetable.get("owl:sameAs") or timetable.get("@id") or "")
+        pattern = patterns.get(pattern_id, {})
+        busroute_id = str(pattern.get("busroute_id") or "")
+        objects = sorted(
+            [obj for obj in (timetable.get("odpt:busTimetableObject") or []) if isinstance(obj, dict)],
+            key=lambda obj: int(obj.get("odpt:index") or 0),
+        )
+        if not objects:
+            continue
+        destination_stop_id = str(objects[-1].get("odpt:busstopPole") or "")
+        added_any = False
+        for obj in objects:
+            stop_id = str(obj.get("odpt:busstopPole") or "")
+            departure = _safe_time(obj.get("odpt:departureTime"))
+            if not stop_id or not departure:
+                continue
+            group_key = (stop_id, service_id, pattern_id)
+            group = synthetic_groups.get(group_key)
+            if group is None:
+                synthetic_group_count += 1
+                group = {
+                    "id": f"synthetic:{pattern_id}:{service_id}:{stop_id}",
+                    "source": "odpt_synthesized_from_bus_timetable",
+                    "stopId": stop_id,
+                    "stopName": _stop_label(stop_id),
+                    "calendar": calendar_raw,
+                    "service_id": service_id,
+                    "items": [],
+                }
+                synthetic_groups[group_key] = group
+            group["items"].append(
+                {
+                    "departure": departure,
+                    "destination": destination_stop_id,
+                    "busroutePattern": pattern_id,
+                    "busroute": busroute_id,
+                    "isMidnight": False,
+                    "note": f"synthetic from {timetable_id}" if timetable_id else "synthetic from bus timetable",
+                }
+            )
+            synthetic_entry_count += 1
+            added_any = True
+        if added_any:
+            covered_pattern_services.add(coverage_key)
+
+    for group in synthetic_groups.values():
+        group["items"] = sorted(
+            group.get("items") or [],
+            key=lambda item: (
+                str(item.get("departure") or ""),
+                str(item.get("destination") or ""),
+                str(item.get("busroutePattern") or ""),
+            ),
+        )
+        stop_timetables.append(group)
+
+    if synthetic_group_count > 0:
+        warnings.append(
+            f"Synthesized {synthetic_group_count} stop timetable group(s) from BusTimetable for missing ODPT stop timetable coverage"
+        )
+
     _write_jsonl(stop_timetables, out_dir / "busstop_pole_timetables.jsonl")
 
     return {
         "stop_timetable_count": len(stop_timetables),
         "total_entries": sum(len(st.get("items", [])) for st in stop_timetables),
+        "synthetic_group_count": synthetic_group_count,
+        "synthetic_entry_count": synthetic_entry_count,
         "warnings": warnings,
     }
 
@@ -632,7 +705,13 @@ def normalize_odpt_snapshot(
         raw_stt = []
         all_warnings.append("BusstopPoleTimetable raw file not found")
 
-    stt_result = normalize_busstop_pole_timetable(raw_stt, out_dir, stop_lookup)
+    stt_result = normalize_busstop_pole_timetable(
+        raw_stt,
+        out_dir,
+        stop_lookup,
+        pattern_lookup,
+        raw_timetable,
+    )
     all_warnings.extend(stt_result.get("warnings", []))
 
     # -- 5. Reconcile --

@@ -97,6 +97,33 @@ class TransitCatalogTest(unittest.TestCase):
         second_bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=feed_dir)
         self.assertEqual(second_bundle["meta"]["snapshotMode"], "catalog")
 
+    def test_gtfs_cached_snapshot_skips_db_repopulate_when_snapshot_matches(self) -> None:
+        feed_dir = self.tmp_path / "mini_gtfs_cached"
+        self._write_minimal_gtfs_feed(feed_dir)
+
+        first_bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=feed_dir)
+        snapshot_key = first_bundle["snapshot"]["snapshotKey"]
+
+        with patch(
+            "bff.services.transit_catalog._populate_operator_db_from_bundle",
+            side_effect=AssertionError("db repopulate should be skipped"),
+        ):
+            second_bundle = transit_catalog.get_or_refresh_gtfs_snapshot(feed_path=feed_dir)
+
+        self.assertEqual(second_bundle["meta"]["snapshotMode"], "catalog")
+        self.assertEqual(second_bundle["snapshot"]["snapshotKey"], snapshot_key)
+
+    def test_load_snapshot_bundle_slim_excludes_timetable_rows(self) -> None:
+        feed_dir = self.tmp_path / "mini_gtfs_slim"
+        self._write_minimal_gtfs_feed(feed_dir)
+
+        bundle = transit_catalog.refresh_gtfs_snapshot(feed_path=feed_dir)
+        slim_bundle = transit_catalog.load_snapshot_bundle_slim(bundle["snapshotKey"])
+
+        self.assertIn("routes", slim_bundle)
+        self.assertIn("stops", slim_bundle)
+        self.assertNotIn("timetable_rows", slim_bundle)
+
     def test_gtfs_snapshot_normalizes_add_remove_calendar_dates(self) -> None:
         feed_dir = self.tmp_path / "mini_gtfs_calendar_dates"
         self._write_minimal_gtfs_feed(feed_dir, include_calendar_dates=True)

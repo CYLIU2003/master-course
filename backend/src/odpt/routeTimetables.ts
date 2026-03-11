@@ -77,8 +77,9 @@ type RouteTimetableGroupBuilder = {
 const SERVICE_ORDER: Record<NormalizedService, number> = {
   weekday: 0,
   saturday: 1,
-  holiday: 2,
-  unknown: 3,
+  saturdayholiday: 2,
+  holiday: 3,
+  unknown: 4,
 };
 
 function compareOptionalTime(a?: string, b?: string): number {

@@ -24,11 +24,13 @@ export function DutiesPage() {
   const [pageOffset, setPageOffset] = useState(0);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const { data: scope } = useDispatchScope(scenarioId!);
+  const scopeReady = Boolean(scope?.depotId);
   const { data, isLoading, error } = useDuties(scenarioId!, {
     limit: PAGE_SIZE,
     offset: pageOffset,
+    enabled: scopeReady,
   });
-  const { data: summary } = useDutiesSummary(scenarioId!);
+  const { data: summary } = useDutiesSummary(scenarioId!, scopeReady);
   const { data: validation } = useDutyValidation(scenarioId!);
   const generateMutation = useGenerateDuties(scenarioId!);
   const { data: activeJob } = useJob(activeJobId);
@@ -61,14 +63,16 @@ export function DutiesPage() {
         actions={
           <button
             onClick={handleGenerate}
-            disabled={generateMutation.isPending}
+            disabled={generateMutation.isPending || !scopeReady}
             className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
             {generateMutation.isPending ? t("duties.generating") : t("duties.generate")}
           </button>
         }
       >
-        {isLoading ? (
+        {!scopeReady ? (
+          <EmptyState title="営業所を選択してください" description="車両 duty を生成する前に、対象営業所を 1 つ選択してください。" />
+        ) : isLoading ? (
           <LoadingBlock message={t("duties.loading")} />
         ) : error ? (
           <ErrorBlock message={error.message} />

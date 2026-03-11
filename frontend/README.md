@@ -32,7 +32,7 @@ npm run dev:open # ローカル利用時のみブラウザ自動起動
 npm run build    # production build -> dist/
 ```
 
-Frontend は `/api` を BFF にプロキシします。別ターミナルで backend を起動してください。
+Frontend は `/api` を BFF にプロキシします。別ターミナルで `bff.main:app` を起動してください。
 
 ```bash
 # repository root
@@ -54,6 +54,8 @@ VITE_API_BASE_URL=/api
 VITE_API_PROXY_TARGET=http://127.0.0.1:8000
 VITE_ODPT_PROXY_TARGET=http://127.0.0.1:3001
 ```
+
+`VITE_ODPT_PROXY_TARGET` は legacy ODPT proxy を併用する場合のみ必要です。通常の研究 UI 開発では不要です。
 
 frontend から別ホストの BFF を直接呼ぶ場合:
 
@@ -195,4 +197,11 @@ Route ──1:N──> Trip
 - Editor drawers (inline edit for depot/vehicle/route)
 - SimulationEnvironmentPage wired to real data
 - Full simulation/optimization engine integration in BFF
-- Lazy loading of page components
+- Lazy loading of heavy page components
+
+## Performance Rules
+
+- Heavy pages (`public-data`, `compare`, detailed results) are route-level lazy loaded.
+- Public Data Explorer only loads overview on entry; route/stops/timetable details are fetched per tab.
+- Route / stop / dispatch detail lists use pagination and virtualization.
+- Depot selection is required before loading heavy dispatch trip / graph / duty detail.

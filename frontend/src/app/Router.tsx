@@ -100,9 +100,9 @@ const ComparePage = lazy(() =>
     default: module.ComparePage,
   })),
 );
-const OdptExplorerPage = lazy(() =>
-  import("@/pages/odpt/OdptExplorerPage").then((module) => ({
-    default: module.OdptExplorerPage,
+const PublicDataExplorerPage = lazy(() =>
+  import("@/pages/odpt/PublicDataExplorerPage").then((module) => ({
+    default: module.PublicDataExplorerPage,
   })),
 );
 
@@ -164,7 +164,7 @@ const router = createBrowserRouter([
       { path: "planning-legacy", element: <Navigate to="../planning" replace /> },
       {
         path: "public-data",
-        element: <LazyPage><OdptExplorerPage /></LazyPage>,
+        element: <LazyPage><PublicDataExplorerPage /></LazyPage>,
       },
       { path: "vehicle-templates", element: <LazyPage><VehicleTemplatesPage /></LazyPage> },
       { path: "timetable", element: <LazyPage><TimetablePage /></LazyPage> },
@@ -205,8 +205,29 @@ export function AppRouter() {
 
 function LazyPage({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-slate-400">Loading...</div>}>
+    <Suspense fallback={<RouteSkeleton />}>
       {children}
     </Suspense>
+  );
+}
+
+function RouteSkeleton() {
+  return (
+    <div className="space-y-4 p-6">
+      <div className="h-7 w-48 animate-pulse rounded bg-slate-200" />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
+            <div className="mt-3 h-3 w-40 animate-pulse rounded bg-slate-100" />
+            <div className="mt-6 space-y-2">
+              <div className="h-3 animate-pulse rounded bg-slate-100" />
+              <div className="h-3 animate-pulse rounded bg-slate-100" />
+              <div className="h-3 w-2/3 animate-pulse rounded bg-slate-100" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

@@ -87,7 +87,7 @@ export function MasterPlanningPage() {
         description={
           selectedDepotId && !showAllRoutes
             ? "Explorer で最後に確定した営業所に関係する route を優先表示しています。"
-            : t("planning.routes_description")
+            : "営業所を確定してから route 一覧を読み込みます。未選択時は重い route 明細を取得しません。"
         }
         actions={
           selectedDepotId ? (
@@ -102,10 +102,16 @@ export function MasterPlanningPage() {
           ) : undefined
         }
       >
-        <RouteTable
-          scenarioId={scenarioId}
-          depotId={selectedDepotId && !showAllRoutes ? selectedDepotId : undefined}
-        />
+        {selectedDepotId ? (
+          <RouteTable
+            scenarioId={scenarioId}
+            depotId={selectedDepotId && !showAllRoutes ? selectedDepotId : undefined}
+          />
+        ) : (
+          <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
+            営業所を選択すると、対象 route 一覧を遅延読み込みします。
+          </div>
+        )}
       </PageSection>
 
       {/* Depot-Route permission matrix */}

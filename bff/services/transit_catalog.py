@@ -878,19 +878,6 @@ def load_snapshot_bundle(snapshot_key: str) -> Dict[str, Any]:
     snapshot = get_snapshot(snapshot_key)
     if snapshot is None:
         raise KeyError(snapshot_key)
-    route_payloads: List[Dict[str, Any]] = []
-    with closing(_connect()) as conn:
-        _ensure_schema(conn)
-        rows = conn.execute(
-            """
-            SELECT payload_json
-            FROM catalog_route_payloads
-            WHERE snapshot_key = ?
-            ORDER BY route_code ASC, route_label ASC, route_id ASC
-            """,
-            (snapshot_key,),
-        ).fetchall()
-    route_payloads = [dict(_deserialize(row["payload_json"]) or {}) for row in rows]
     meta = dict(snapshot.get("meta") or {})
     return {
         "snapshot": snapshot,
@@ -908,8 +895,44 @@ def load_snapshot_bundle(snapshot_key: str) -> Dict[str, Any]:
         "stop_timetables": _load_entities(snapshot_key, "stop_timetables"),
         "calendar_entries": _load_entities(snapshot_key, "calendar_entries"),
         "calendar_date_entries": _load_entities(snapshot_key, "calendar_date_entries"),
-        "route_payloads": route_payloads,
+        "route_payloads": _load_route_payloads(snapshot_key),
     }
+
+
+def load_snapshot_bundle_slim(snapshot_key: str) -> Dict[str, Any]:
+    snapshot = get_snapshot(snapshot_key)
+    if snapshot is None:
+        raise KeyError(snapshot_key)
+    meta = dict(snapshot.get("meta") or {})
+    return {
+        "snapshot": snapshot,
+        "meta": {
+            **meta,
+            **_snapshot_identity(
+                str(snapshot.get("source") or ""),
+                str(snapshot.get("datasetRef") or ""),
+                meta,
+            ),
+        },
+        "stops": _load_entities(snapshot_key, "stops"),
+        "routes": _load_entities(snapshot_key, "routes"),
+        "route_payloads": _load_route_payloads(snapshot_key),
+    }
+
+
+def _load_route_payloads(snapshot_key: str) -> List[Dict[str, Any]]:
+    with closing(_connect()) as conn:
+        _ensure_schema(conn)
+        rows = conn.execute(
+            """
+            SELECT payload_json
+            FROM catalog_route_payloads
+            WHERE snapshot_key = ?
+            ORDER BY route_code ASC, route_label ASC, route_id ASC
+            """,
+            (snapshot_key,),
+        ).fetchall()
+    return [dict(_deserialize(row["payload_json"]) or {}) for row in rows]
 
 
 def load_existing_odpt_snapshot(operator: str = DEFAULT_OPERATOR) -> Optional[Dict[str, Any]]:
@@ -1029,6 +1052,17 @@ def _populate_operator_db_from_bundle(
         )
 
     try:
+        meta_payload: Dict[str, str] = {
+            "catalog_snapshot_key": str(snapshot_key),
+            "feed_id": str((bundle.get("meta") or {}).get("feed_id") or ""),
+            "snapshot_id": str(
+                (bundle.get("meta") or {}).get("snapshot_id")
+                or (bundle.get("meta") or {}).get("snapshotId")
+                or ""
+            ),
+            "dataset_id": str((bundle.get("meta") or {}).get("dataset_id") or ""),
+            "feed_path": str((bundle.get("meta") or {}).get("feedPath") or ""),
+        }
         _tdb.replace_all(
             operator_id,
             routes=list(bundle.get("routes") or []),
@@ -1040,14 +1074,7 @@ def _populate_operator_db_from_bundle(
             calendar_date_entries=_normalize_calendar_date_entries(
                 list(bundle.get("calendar_date_entries") or [])
             ),
-            meta={
-                "catalog_snapshot_key": snapshot_key,
-                "feed_id": (bundle.get("meta") or {}).get("feed_id"),
-                "snapshot_id": (bundle.get("meta") or {}).get("snapshot_id")
-                or (bundle.get("meta") or {}).get("snapshotId"),
-                "dataset_id": (bundle.get("meta") or {}).get("dataset_id"),
-                "feed_path": (bundle.get("meta") or {}).get("feedPath"),
-            },
+            meta=meta_payload,
         )
         return None
     except Exception as exc:
@@ -1062,6 +1089,12 @@ def _odpt_snapshot_is_incomplete(bundle: Dict[str, Any]) -> bool:
     if not routes:
         return False
     return len(timetable_rows) == 0 and len(stop_timetables) > 0
+
+
+def _operator_db_matches_snapshot(operator_id: str, snapshot_key: str) -> bool:
+    if not _tdb.db_exists(operator_id):
+        return False
+    return _tdb.get_metadata(operator_id, "catalog_snapshot_key") == snapshot_key
 
 
 def _store_odpt_snapshot(
@@ -1359,12 +1392,13 @@ def get_or_refresh_odpt_snapshot(
                 len(bundle.get("stop_timetables") or []),
             )
         else:
-            _populate_operator_db_from_bundle(
-                operator_id="tokyu",
-                bundle=bundle,
-                snapshot_key=snapshot_key,
-                source="odpt",
-            )
+            if not _operator_db_matches_snapshot("tokyu", snapshot_key):
+                _populate_operator_db_from_bundle(
+                    operator_id="tokyu",
+                    bundle=bundle,
+                    snapshot_key=snapshot_key,
+                    source="odpt",
+                )
             if progress_callback is not None:
                 progress_callback(
                     "odpt_cached_snapshot",
@@ -1531,12 +1565,14 @@ def get_or_refresh_gtfs_snapshot(
         and _has_snapshot_payload(snapshot_key, _GTFS_REQUIRED_ENTITY_TYPES)
     ):
         bundle = load_snapshot_bundle(snapshot_key)
-        db_warning = _populate_operator_db_from_bundle(
-            operator_id="toei",
-            bundle=bundle,
-            snapshot_key=snapshot_key,
-            source="gtfs",
-        )
+        db_warning = None
+        if not _operator_db_matches_snapshot("toei", snapshot_key):
+            db_warning = _populate_operator_db_from_bundle(
+                operator_id="toei",
+                bundle=bundle,
+                snapshot_key=snapshot_key,
+                source="gtfs",
+            )
         _append_warning_list(bundle["meta"], db_warning)
         if db_warning is not None:
             bundle["warning"] = db_warning

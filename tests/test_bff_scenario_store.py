@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,104 @@ def test_replace_routes_from_source_preserves_manual_routes_and_tracks_meta(
 
     import_meta = scenario_store.get_route_import_meta(scenario_id, "odpt")
     assert import_meta == {"source": "odpt", "quality": {"routeCount": 1}}
+
+
+def test_scenario_save_uses_refs_and_split_artifacts(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Split scenario", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    scenario_store.set_field(
+        scenario_id,
+        "timetable_rows",
+        [{"trip_id": "T1", "route_id": "R1", "service_id": "WEEKDAY", "source": "manual"}],
+    )
+
+    saved_doc = json.loads((temp_store_dir / f"{scenario_id}.json").read_text(encoding="utf-8"))
+    assert "refs" in saved_doc
+    assert "stats" in saved_doc
+    assert "timetable_rows" not in saved_doc
+    assert Path(saved_doc["refs"]["masterData"]).exists()
+    assert Path(saved_doc["refs"]["timetableRows"]).exists()
+
+
+def test_replace_routes_from_source_prunes_stale_permissions(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("ODPT route sync", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Depot A", "location": "A"},
+    )
+    vehicle = scenario_store.create_vehicle(
+        scenario_id,
+        {
+            "depotId": depot["id"],
+            "type": "BEV",
+            "modelName": "K8",
+            "capacityPassengers": 70,
+            "batteryKwh": 300.0,
+            "fuelTankL": None,
+            "energyConsumption": 1.2,
+            "chargePowerKw": 60.0,
+            "minSoc": 0.2,
+            "maxSoc": 0.95,
+            "acquisitionCost": 0.0,
+            "enabled": True,
+        },
+    )
+
+    scenario_store.replace_routes_from_source(scenario_id, "odpt", [{"id": "r-old", "name": "Old", "source": "odpt"}])
+    scenario_store.set_depot_route_permissions(
+        scenario_id,
+        [{"depotId": depot["id"], "routeId": "r-old", "allowed": True}],
+    )
+    scenario_store.set_vehicle_route_permissions(
+        scenario_id,
+        [{"vehicleId": vehicle["id"], "routeId": "r-old", "allowed": True}],
+    )
+
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [{"id": "r-new", "name": "New", "source": "odpt"}],
+    )
+
+    assert scenario_store.get_depot_route_permissions(scenario_id) == []
+    assert scenario_store.get_vehicle_route_permissions(scenario_id) == []
+
+
+def test_upsert_route_depot_assignment_accepts_odpt_alias_ids(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Route alias", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Depot A", "location": "A"},
+    )
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [
+            {
+                "id": "odpt-route-123",
+                "name": "A24 outbound",
+                "source": "odpt",
+                "odptPatternId": "odpt.BusroutePattern:TokyuBus.A24.out",
+                "odptBusrouteId": "odpt.Busroute:TokyuBus.A24",
+            }
+        ],
+    )
+
+    item = scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        "odpt.BusroutePattern:TokyuBus.A24.out",
+        {"depotId": depot["id"], "assignmentType": "manual_override", "confidence": 1.0},
+    )
+
+    assert item["routeId"] == "odpt-route-123"
+    assert item["depotId"] == depot["id"]
 
 
 def test_create_vehicle_batch_duplicate_and_template_flow(temp_store_dir: Path):

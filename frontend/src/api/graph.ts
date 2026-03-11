@@ -34,11 +34,14 @@ export const graphApi = {
   // ── Trips ───────────────────────────────────────────────────
   getTrips: async (
     scenarioId: string,
-    params?: { limit?: number; offset?: number },
+    params?: { limit?: number; offset?: number; enabled?: boolean },
   ) =>
     tripsListResponseSchema.parse(
       await api.get<TripsResponse>(
-        `/scenarios/${scenarioId}/trips${buildQuery(params)}`,
+        `/scenarios/${scenarioId}/trips${buildQuery({
+          limit: params?.limit,
+          offset: params?.offset,
+        })}`,
       ),
     ),
 
@@ -63,7 +66,7 @@ export const graphApi = {
 
   getGraphArcs: async (
     scenarioId: string,
-    params?: { reasonCode?: string; limit?: number; offset?: number },
+    params?: { reasonCode?: string; limit?: number; offset?: number; enabled?: boolean },
   ) =>
     graphArcsResponseSchema.parse(
       await api.get<GraphArcsResponse>(
@@ -89,11 +92,14 @@ export const graphApi = {
 
   getDuties: async (
     scenarioId: string,
-    params?: { limit?: number; offset?: number },
+    params?: { limit?: number; offset?: number; enabled?: boolean },
   ) =>
     dutiesResponseSchema.parse(
       await api.get<DutiesResponse>(
-        `/scenarios/${scenarioId}/duties${buildQuery(params)}`,
+        `/scenarios/${scenarioId}/duties${buildQuery({
+          limit: params?.limit,
+          offset: params?.offset,
+        })}`,
       ),
     ),
 
@@ -121,7 +127,7 @@ export const graphApi = {
     api.post<JobResponse>(`/scenarios/${scenarioId}/build-dispatch-plan`, data),
 };
 
-function buildQuery(params?: Record<string, string | number | undefined>) {
+function buildQuery(params?: Record<string, string | number | boolean | undefined>) {
   if (!params) {
     return "";
   }

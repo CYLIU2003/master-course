@@ -35,6 +35,7 @@ from bff.services.odpt_routes import (
     DEFAULT_OPERATOR,
     summarize_routes_import,
 )
+from bff.services.service_ids import canonical_service_id
 from bff.services.odpt_stops import summarize_stop_import
 from bff.services import transit_catalog
 from bff.services.route_family import (
@@ -461,11 +462,22 @@ class ImportGtfsRoutesBody(BaseModel):
 
 
 def _build_explorer_overview(scenario_id: str, operator: Optional[str]) -> Dict[str, Any]:
-    routes = store.list_routes(scenario_id, operator=operator)
-    assignments = store.list_route_depot_assignments(scenario_id, operator=operator)
-    unresolved_assignments = sum(1 for item in assignments if not item.get("depotId"))
-    routes_with_stops = sum(1 for route in routes if len(route.get("stopSequence") or []) > 0)
-    routes_with_timetable = sum(1 for route in routes if int(route.get("tripCount") or 0) > 0)
+    routes = _enrich_routes_for_display(
+        scenario_id,
+        store.list_routes(scenario_id, operator=operator),
+    )
+    unresolved_assignments = sum(1 for route in routes if not route.get("depotId"))
+    routes_with_stops = sum(
+        1
+        for route in routes
+        if int((route.get("linkStatus") or {}).get("stopsResolved") or 0) > 0
+        or len(route.get("stopSequence") or []) > 0
+    )
+    routes_with_timetable = sum(
+        1
+        for route in routes
+        if int((route.get("linkStatus") or {}).get("tripsLinked") or 0) > 0
+    )
     import_sources = (
         store.get_route_import_meta(scenario_id),
         store.get_stop_import_meta(scenario_id),
@@ -668,7 +680,7 @@ def _route_service_summary(timetable_rows: List[Dict[str, Any]]) -> List[Dict[st
         }
     )
     for row in timetable_rows:
-        service_id = str(row.get("service_id") or "WEEKDAY")
+        service_id = canonical_service_id(row.get("service_id"))
         summary = grouped[service_id]
         summary["serviceId"] = service_id
         summary["tripCount"] += 1

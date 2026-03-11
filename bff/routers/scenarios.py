@@ -44,6 +44,7 @@ from bff.services.odpt_routes import DEFAULT_OPERATOR
 from bff.services.odpt_stop_timetables import (
     summarize_stop_timetable_import,
 )
+from bff.services.service_ids import canonical_service_id
 from bff.services.odpt_timetable import (
     normalize_timetable_row_indexes,
     summarize_timetable_import,
@@ -122,7 +123,7 @@ def _build_timetable_summary(
     stop_counts: Dict[str, int] = {}
 
     for row in rows:
-        service_id = str(row.get("service_id") or "WEEKDAY")
+        service_id = canonical_service_id(row.get("service_id"))
         route_id = str(row.get("route_id") or "")
         departure = str(row.get("departure") or "")
         arrival = str(row.get("arrival") or "")
@@ -239,7 +240,7 @@ def _build_stop_timetable_summary(
     total_entries = 0
 
     for item in items:
-        service_id = str(item.get("service_id") or "WEEKDAY")
+        service_id = canonical_service_id(item.get("service_id"))
         stop_id = str(item.get("stopId") or item.get("stop_id") or "")
         stop_name = str(item.get("stopName") or item.get("stop_name") or stop_id)
         entry_count = len(item.get("items") or [])
@@ -720,6 +721,53 @@ def update_dispatch_scope(
         raise _not_found(scenario_id)
 
 
+@router.get("/planning/depot-scope/{depot_id}/trips")
+def get_depot_scope_trips(
+    depot_id: str,
+    scenario_id: str = Query(..., alias="scenarioId"),
+    service_id: Optional[str] = Query(default=None, alias="serviceId"),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    try:
+        current_scope = store.get_dispatch_scope(scenario_id)
+        scoped_scope = {
+            **current_scope,
+            "depotId": depot_id,
+            "depotSelection": {
+                **dict(current_scope.get("depotSelection") or {}),
+                "mode": "include",
+                "depotIds": [depot_id],
+                "primaryDepotId": depot_id,
+            },
+        }
+        if service_id:
+            scoped_scope["serviceId"] = service_id
+            scoped_scope["serviceSelection"] = {"serviceIds": [service_id]}
+        route_ids = set(store.effective_route_ids_for_scope(scenario_id, scoped_scope))
+        rows = list(store.get_field(scenario_id, "timetable_rows") or [])
+    except KeyError:
+        raise _not_found(scenario_id)
+
+    filtered = [
+        row
+        for row in rows
+        if (not route_ids or str(row.get("route_id") or "") in route_ids)
+        and (not service_id or str(row.get("service_id") or "") == service_id)
+    ]
+    paged = filtered[offset: offset + limit]
+    return {
+        "items": paged,
+        "total": len(filtered),
+        "limit": limit,
+        "offset": offset,
+        "meta": {
+            "depotId": depot_id,
+            "routeCount": len(route_ids),
+        },
+    }
+
+
 @router.delete("/scenarios/{scenario_id}", status_code=204)
 def delete_scenario(scenario_id: str) -> Response:
     try:
@@ -932,6 +980,8 @@ def _import_odpt_timetable_data(
             "stopTimetables": list(bundle.get("stop_timetables") or []),
         },
     )
+    for entry in list(bundle.get("calendar_entries") or []):
+        store.upsert_calendar_entry(scenario_id, entry)
     import_meta = _build_odpt_import_meta(
         dataset=bundle,
         operator=body.operator,
@@ -1049,6 +1099,8 @@ def _import_odpt_stop_timetables_data(
         odpt_items,
         {"meta": bundle.get("meta") or {}},
     )
+    for entry in list(bundle.get("calendar_entries") or []):
+        store.upsert_calendar_entry(scenario_id, entry)
     import_meta = _build_odpt_import_meta(
         dataset=bundle,
         operator=body.operator,

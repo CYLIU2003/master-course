@@ -49,6 +49,7 @@ ODPT_RESOURCE_TYPES = (
 CALENDAR_MAP: dict[str, str] = {
     "weekday": "WEEKDAY",
     "saturday": "SAT",
+    "saturdayholiday": "SAT_HOL",
     "holiday": "SUN_HOL",
     "sunday": "SUN_HOL",
     "unknown": "WEEKDAY",
