@@ -17,6 +17,7 @@ def default_refs(store_dir: Path, scenario_id: str) -> Dict[str, str]:
     base = artifact_dir(store_dir, scenario_id)
     return {
         "masterData": str(base / "master_data.sqlite"),
+        "artifactStore": str(base / "artifacts.sqlite"),
         "timetableRows": str(base / "timetable_rows.json"),
         "stopTimetables": str(base / "stop_timetables.json"),
         "tripSet": str(base / "trip_set.json"),

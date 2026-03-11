@@ -112,6 +112,13 @@ _ARTIFACT_REF_KEYS = {
     "simulation_result": "simulationResult",
     "optimization_result": "optimizationResult",
 }
+_SQLITE_ROW_ARTIFACT_FIELDS = {"timetable_rows", "stop_timetables", "trips", "blocks", "duties"}
+_SQLITE_SCALAR_ARTIFACT_FIELDS = {"dispatch_plan", "simulation_result", "optimization_result"}
+_SUMMARY_SCALAR_NAMES = {
+    "timetable_rows": "timetable_summary",
+    "trips": "trips_summary",
+    "duties": "duties_summary",
+}
 
 
 def _default_dispatch_scope() -> Dict[str, Any]:
@@ -212,6 +219,10 @@ def _refs_for_scenario(scenario_id: str, payload: Optional[Dict[str, Any]] = Non
     return refs
 
 
+def _artifact_store_path(refs: Dict[str, str]) -> Path:
+    return Path(refs["artifactStore"])
+
+
 def _is_auxiliary_path(path: Path) -> bool:
     name = path.name
     return name.endswith("_timetable.json") or name.endswith("_stop_timetables.json")
@@ -240,6 +251,32 @@ def _artifact_default(key: str) -> Any:
     return [] if key in {"timetable_rows", "stop_timetables"} else None
 
 
+def _graph_meta_name() -> str:
+    return "graph_meta"
+
+
+def _load_graph_artifact(artifact_db_path: Path, fallback_path: Path) -> Any:
+    graph_meta = trip_store.load_scalar(artifact_db_path, _graph_meta_name(), None)
+    if graph_meta is not None:
+        graph = dict(graph_meta)
+        graph["arcs"] = trip_store.load_graph_arcs(artifact_db_path)
+        return graph
+    if fallback_path.exists():
+        return trip_store.load_json(fallback_path, None)
+    return None
+
+
+def _save_graph_artifact(artifact_db_path: Path, graph: Any) -> None:
+    if graph is None:
+        trip_store.save_scalar(artifact_db_path, _graph_meta_name(), None)
+        trip_store.save_graph_arcs(artifact_db_path, [])
+        return
+    graph_dict = dict(graph)
+    arcs = list(graph_dict.pop("arcs", []) or [])
+    trip_store.save_scalar(artifact_db_path, _graph_meta_name(), graph_dict)
+    trip_store.save_graph_arcs(artifact_db_path, arcs)
+
+
 def _scenario_stats(doc: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "routeCount": len(list(doc.get("routes") or [])),
@@ -259,6 +296,117 @@ def _scope_summary(scope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "selectedDepotIds": list(depot_selection.get("depotIds") or []),
         "selectedRouteIds": list(route_selection.get("includeRouteIds") or []),
         "serviceIds": list(service_selection.get("serviceIds") or []),
+    }
+
+
+def _updated_at_from_imports(imports: Dict[str, Any]) -> Optional[str]:
+    timestamps = [
+        str(item.get("generatedAt") or "")
+        for item in dict(imports or {}).values()
+        if isinstance(item, dict) and item.get("generatedAt")
+    ]
+    if not timestamps:
+        return None
+    return max(timestamps)
+
+
+def _build_timetable_summary_artifact(rows: List[Dict[str, Any]], imports: Dict[str, Any]) -> Dict[str, Any]:
+    total_distance_km = 0.0
+    first_departure: Optional[str] = None
+    last_arrival: Optional[str] = None
+    by_service: Dict[str, Dict[str, Any]] = {}
+    by_route: Dict[str, int] = {}
+    for row in rows:
+        service_id = str(row.get("service_id") or "WEEKDAY")
+        route_id = str(row.get("route_id") or "")
+        departure = row.get("departure")
+        arrival = row.get("arrival")
+        total_distance_km += float(row.get("distance_km") or 0.0)
+        if isinstance(departure, str) and departure:
+            first_departure = departure if first_departure is None or departure < first_departure else first_departure
+        if isinstance(arrival, str) and arrival:
+            last_arrival = arrival if last_arrival is None or arrival > last_arrival else last_arrival
+        if route_id:
+            by_route[route_id] = by_route.get(route_id, 0) + 1
+        bucket = by_service.setdefault(
+            service_id,
+            {
+                "serviceId": service_id,
+                "rowCount": 0,
+                "routeIds": set(),
+                "firstDeparture": None,
+                "lastArrival": None,
+            },
+        )
+        bucket["rowCount"] += 1
+        if route_id:
+            bucket["routeIds"].add(route_id)
+        if isinstance(departure, str) and departure:
+            bucket["firstDeparture"] = departure if bucket["firstDeparture"] is None or departure < bucket["firstDeparture"] else bucket["firstDeparture"]
+        if isinstance(arrival, str) and arrival:
+            bucket["lastArrival"] = arrival if bucket["lastArrival"] is None or arrival > bucket["lastArrival"] else bucket["lastArrival"]
+    return {
+        "totalRows": len(rows),
+        "routeCount": len(by_route),
+        "totalDistanceKm": round(total_distance_km, 3),
+        "firstDeparture": first_departure,
+        "lastArrival": last_arrival,
+        "updatedAt": _updated_at_from_imports(imports),
+        "byService": [
+            {
+                "serviceId": item["serviceId"],
+                "rowCount": item["rowCount"],
+                "routeCount": len(item["routeIds"]),
+                "firstDeparture": item["firstDeparture"],
+                "lastArrival": item["lastArrival"],
+            }
+            for item in sorted(by_service.values(), key=lambda value: value["serviceId"])
+        ],
+        "imports": imports,
+    }
+
+
+def _build_trips_summary_artifact(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    route_counts: Dict[str, int] = {}
+    earliest_departure: Optional[str] = None
+    latest_arrival: Optional[str] = None
+    for item in items:
+        route_id = str(item.get("route_id") or "")
+        if route_id:
+            route_counts[route_id] = route_counts.get(route_id, 0) + 1
+        departure = item.get("departure")
+        arrival = item.get("arrival")
+        if isinstance(departure, str) and departure:
+            earliest_departure = departure if earliest_departure is None or departure < earliest_departure else earliest_departure
+        if isinstance(arrival, str) and arrival:
+            latest_arrival = arrival if latest_arrival is None or arrival > latest_arrival else latest_arrival
+    return {
+        "totalTrips": len(items),
+        "routeCount": len(route_counts),
+        "firstDeparture": earliest_departure,
+        "lastArrival": latest_arrival,
+        "byRoute": [
+            {"route_id": route_id, "trip_count": count}
+            for route_id, count in sorted(route_counts.items(), key=lambda pair: (-pair[1], pair[0]))[:50]
+        ],
+    }
+
+
+def _build_duties_summary_artifact(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    vehicle_type_counts: Dict[str, int] = {}
+    total_legs = 0
+    total_distance_km = 0.0
+    for item in items:
+        vehicle_type = str(item.get("vehicle_type") or "unknown")
+        vehicle_type_counts[vehicle_type] = vehicle_type_counts.get(vehicle_type, 0) + 1
+        total_legs += len(item.get("legs") or [])
+        total_distance_km += float(item.get("total_distance_km") or 0.0)
+    return {
+        "totalDuties": len(items),
+        "totalLegs": total_legs,
+        "averageLegsPerDuty": round(total_legs / len(items), 2) if items else 0.0,
+        "totalDistanceKm": round(total_distance_km, 3),
+        "vehicleTypeCounts": vehicle_type_counts,
     }
 
 
@@ -303,8 +451,17 @@ def _load(scenario_id: str) -> Dict[str, Any]:
 
     for field, ref_key in _ARTIFACT_REF_KEYS.items():
         artifact_path = Path(refs[ref_key])
+        artifact_db_path = _artifact_store_path(refs)
+        if field == "graph":
+            graph_value = _load_graph_artifact(artifact_db_path, artifact_path)
+            doc[field] = graph_value
+            continue
         if field == "timetable_rows":
-            if artifact_path.exists():
+            if trip_store.count_timetable_rows(artifact_db_path) > 0:
+                doc[field] = trip_store.page_timetable_rows(artifact_db_path, offset=0, limit=None)
+            elif trip_store.count_rows(artifact_db_path, field) > 0:
+                doc[field] = trip_store.load_rows(artifact_db_path, field)
+            elif artifact_path.exists():
                 doc[field] = _load_json_list(artifact_path)
             elif _legacy_timetable_path(scenario_id).exists():
                 doc[field] = _load_json_list(_legacy_timetable_path(scenario_id))
@@ -312,14 +469,20 @@ def _load(scenario_id: str) -> Dict[str, Any]:
                 doc[field] = _load_split_or_inline(artifact_path, doc.get(field))
             continue
         if field == "stop_timetables":
-            if artifact_path.exists():
+            if trip_store.count_rows(artifact_db_path, field) > 0:
+                doc[field] = trip_store.load_rows(artifact_db_path, field)
+            elif artifact_path.exists():
                 doc[field] = _load_json_list(artifact_path)
             elif _legacy_stop_timetables_path(scenario_id).exists():
                 doc[field] = _load_json_list(_legacy_stop_timetables_path(scenario_id))
             else:
                 doc[field] = _load_split_or_inline(artifact_path, doc.get(field))
             continue
-        if artifact_path.exists():
+        if field in _SQLITE_ROW_ARTIFACT_FIELDS and trip_store.count_rows(artifact_db_path, field) > 0:
+            doc[field] = trip_store.load_rows(artifact_db_path, field)
+        elif field in _SQLITE_SCALAR_ARTIFACT_FIELDS and artifact_db_path.exists():
+            doc[field] = trip_store.load_scalar(artifact_db_path, field, _artifact_default(field))
+        elif artifact_path.exists():
             doc[field] = trip_store.load_json(artifact_path, _artifact_default(field))
         else:
             doc.setdefault(field, _artifact_default(field))
@@ -339,6 +502,7 @@ def _save(doc: Dict[str, Any]) -> None:
     _ensure_dir()
     scenario_id = doc["meta"]["id"]
     refs = _refs_for_scenario(scenario_id, doc)
+    artifact_db_path = _artifact_store_path(refs)
 
     master_payload = {key: doc.get(key) for key in _MASTER_DATA_KEYS}
     master_data_store.save_master_data(Path(refs["masterData"]), master_payload)
@@ -347,10 +511,33 @@ def _save(doc: Dict[str, Any]) -> None:
     for field, ref_key in _ARTIFACT_REF_KEYS.items():
         preserved_artifacts[field] = doc.get(field)
         target_path = Path(refs[ref_key])
-        if field in {"timetable_rows", "stop_timetables"}:
-            _save_json_list(target_path, list(doc.get(field) or []))
-        else:
-            trip_store.save_json(target_path, doc.get(field))
+        if field == "graph":
+            _save_graph_artifact(artifact_db_path, doc.get(field))
+        elif field == "timetable_rows":
+            rows = list(doc.get(field) or [])
+            trip_store.save_timetable_rows(artifact_db_path, rows)
+            trip_store.save_rows(artifact_db_path, field, rows)
+            trip_store.save_scalar(
+                artifact_db_path,
+                _SUMMARY_SCALAR_NAMES[field],
+                _build_timetable_summary_artifact(rows, doc.get("timetable_import_meta") or {}),
+            )
+        elif field in _SQLITE_ROW_ARTIFACT_FIELDS:
+            rows = list(doc.get(field) or [])
+            trip_store.save_rows(artifact_db_path, field, rows)
+            if field in _SUMMARY_SCALAR_NAMES:
+                summary_builder = (
+                    _build_trips_summary_artifact if field == "trips" else _build_duties_summary_artifact
+                )
+                trip_store.save_scalar(
+                    artifact_db_path,
+                    _SUMMARY_SCALAR_NAMES[field],
+                    summary_builder(rows),
+                )
+        elif field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
+            trip_store.save_scalar(artifact_db_path, field, doc.get(field))
+        if target_path.exists():
+            target_path.unlink()
 
     slim_doc = {
         "scenarioId": scenario_id,
@@ -914,6 +1101,168 @@ def duplicate_scenario(
 
 def get_field(scenario_id: str, field: str) -> Any:
     return _load(scenario_id)[field]
+
+
+def count_field_rows(scenario_id: str, field: str) -> int:
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    if field == "timetable_rows":
+        db_count = trip_store.count_timetable_rows(_artifact_store_path(refs))
+        if db_count > 0:
+            return db_count
+    if field in _SQLITE_ROW_ARTIFACT_FIELDS:
+        db_count = trip_store.count_rows(_artifact_store_path(refs), field)
+        if db_count > 0:
+            return db_count
+    value = _load(scenario_id)[field]
+    return len(list(value or [])) if isinstance(value, list) else 0
+
+
+def page_field_rows(
+    scenario_id: str,
+    field: str,
+    *,
+    offset: int = 0,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    if field == "timetable_rows":
+        db_path = _artifact_store_path(refs)
+        db_count = trip_store.count_timetable_rows(db_path)
+        if db_count > 0:
+            return [
+                dict(item)
+                for item in trip_store.page_timetable_rows(db_path, offset=offset, limit=limit)
+            ]
+    if field in _SQLITE_ROW_ARTIFACT_FIELDS:
+        db_path = _artifact_store_path(refs)
+        db_count = trip_store.count_rows(db_path, field)
+        if db_count > 0:
+            return [dict(item) for item in trip_store.page_rows(db_path, field, offset=offset, limit=limit)]
+    value = _load(scenario_id)[field] or []
+    items = list(value)
+    if limit is None:
+        return [dict(item) for item in items[offset:]]
+    return [dict(item) for item in items[offset: offset + limit]]
+
+
+def page_timetable_rows(
+    scenario_id: str,
+    *,
+    offset: int = 0,
+    limit: Optional[int] = None,
+    service_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    db_path = _artifact_store_path(refs)
+    db_count = trip_store.count_timetable_rows(db_path, service_id=service_id)
+    if db_count > 0 or service_id is not None:
+        return [
+            dict(item)
+            for item in trip_store.page_timetable_rows(
+                db_path,
+                offset=offset,
+                limit=limit,
+                service_id=service_id,
+            )
+        ]
+    rows = _load(scenario_id).get("timetable_rows") or []
+    if service_id:
+        rows = [row for row in rows if str(row.get("service_id") or "WEEKDAY") == service_id]
+    if limit is None:
+        return [dict(item) for item in rows[offset:]]
+    return [dict(item) for item in rows[offset: offset + limit]]
+
+
+def count_timetable_rows(scenario_id: str, *, service_id: Optional[str] = None) -> int:
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    db_path = _artifact_store_path(refs)
+    db_count = trip_store.count_timetable_rows(db_path, service_id=service_id)
+    if db_count > 0 or service_id is not None:
+        return db_count
+    rows = _load(scenario_id).get("timetable_rows") or []
+    if service_id:
+        rows = [row for row in rows if str(row.get("service_id") or "WEEKDAY") == service_id]
+    return len(rows)
+
+
+def get_field_summary(scenario_id: str, field: str) -> Optional[Dict[str, Any]]:
+    scalar_name = _SUMMARY_SCALAR_NAMES.get(field)
+    if not scalar_name:
+        return None
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    summary = trip_store.load_scalar(_artifact_store_path(refs), scalar_name, None)
+    if summary is not None:
+        return dict(summary)
+    items = _load(scenario_id).get(field) or []
+    if field == "timetable_rows":
+        return _build_timetable_summary_artifact(items, _load(scenario_id).get("timetable_import_meta") or {})
+    if field == "trips":
+        return _build_trips_summary_artifact(items)
+    if field == "duties":
+        return _build_duties_summary_artifact(items)
+    return None
+
+
+def get_graph_meta(scenario_id: str) -> Optional[Dict[str, Any]]:
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    artifact_db = _artifact_store_path(refs)
+    graph_meta = trip_store.load_scalar(artifact_db, _graph_meta_name(), None)
+    if graph_meta is not None:
+        return dict(graph_meta)
+    graph = _load(scenario_id).get("graph")
+    if graph is None:
+        return None
+    graph_dict = dict(graph)
+    graph_dict.pop("arcs", None)
+    return graph_dict
+
+
+def count_graph_arcs(scenario_id: str, *, reason_code: Optional[str] = None) -> int:
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    artifact_db = _artifact_store_path(refs)
+    db_count = trip_store.count_graph_arcs(artifact_db, reason_code=reason_code)
+    if db_count > 0 or reason_code is not None:
+        return db_count
+    graph = _load(scenario_id).get("graph") or {}
+    arcs = list(graph.get("arcs") or [])
+    return len(arcs)
+
+
+def page_graph_arcs(
+    scenario_id: str,
+    *,
+    offset: int = 0,
+    limit: Optional[int] = None,
+    reason_code: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    artifact_db = _artifact_store_path(refs)
+    db_count = trip_store.count_graph_arcs(artifact_db, reason_code=reason_code)
+    if db_count > 0 or reason_code is not None:
+        return [
+            dict(item)
+            for item in trip_store.page_graph_arcs(
+                artifact_db,
+                offset=offset,
+                limit=limit,
+                reason_code=reason_code,
+            )
+        ]
+    graph = _load(scenario_id).get("graph") or {}
+    arcs = list(graph.get("arcs") or [])
+    if reason_code:
+        arcs = [item for item in arcs if item.get("reason_code") == reason_code]
+    if limit is None:
+        return [dict(item) for item in arcs[offset:]]
+    return [dict(item) for item in arcs[offset: offset + limit]]
 
 
 def set_field(

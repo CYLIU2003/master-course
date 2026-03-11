@@ -100,6 +100,7 @@ Tokyu Bus ODPT-direct legacy code is preserved on `odpt_only`.
 - **`bff/` が正式な研究本体 API**。`backend/` は legacy / 補助用途に限定し、新規機能は追加しない
 - **公開情報 Explorer は補助導線**。Planning / Dispatch / Results の初回表示では explorer 詳細を先読みしない
 - **Scenario 保存は分割保存優先**。重い timetable / stop_timetable / dispatch artifacts は別ファイル化して本体 JSON を軽量に保つ
+- **Scenario artifact は refs ベース**。`scenario.json` は軽量メタのみを保持し、`master_data.sqlite` / `artifacts.sqlite` を参照する
 
 EN: Frontend only calls `/api`. BFF orchestrates APIs/jobs. Core research logic stays in `src/`.
 
@@ -261,6 +262,7 @@ python catalog_update_app.py --help
 python catalog_update_app.py refresh odpt --force-refresh
 python catalog_update_app.py sync gtfs --scenario latest --refresh --resources all
 python -m tools.fast_catalog_ingest fetch-odpt --out-dir ./data/catalog-fast --concurrency 64 --build-bundle
+# canonical catalog output: ./data/catalog-fast/canonical/catalog.sqlite
 
 # Frontend Lint
 cd frontend && npm run lint

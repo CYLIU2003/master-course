@@ -92,7 +92,60 @@ def test_scenario_save_uses_refs_and_split_artifacts(temp_store_dir: Path):
     assert "stats" in saved_doc
     assert "timetable_rows" not in saved_doc
     assert Path(saved_doc["refs"]["masterData"]).exists()
-    assert Path(saved_doc["refs"]["timetableRows"]).exists()
+    assert Path(saved_doc["refs"]["artifactStore"]).exists()
+    assert not Path(saved_doc["refs"]["timetableRows"]).exists()
+
+
+def test_graph_artifact_is_split_into_meta_and_arcs(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Graph split", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    scenario_store.set_field(
+        scenario_id,
+        "graph",
+        {
+            "trips": [{"trip_id": "T1"}],
+            "arcs": [
+                {"from_trip_id": "T1", "to_trip_id": "T2", "reason_code": "feasible"},
+                {"from_trip_id": "T2", "to_trip_id": "T3", "reason_code": "turnaround"},
+            ],
+            "total_arcs": 2,
+            "feasible_arcs": 1,
+            "infeasible_arcs": 1,
+            "reason_counts": {"feasible": 1, "turnaround": 1},
+        },
+    )
+
+    graph_meta = scenario_store.get_graph_meta(scenario_id)
+    graph_arcs = scenario_store.page_graph_arcs(scenario_id, limit=1, offset=0)
+
+    assert graph_meta is not None
+    assert "arcs" not in graph_meta
+    assert graph_meta["total_arcs"] == 2
+    assert len(graph_arcs) == 1
+    assert scenario_store.count_graph_arcs(scenario_id) == 2
+    assert scenario_store.count_graph_arcs(scenario_id, reason_code="feasible") == 1
+
+
+def test_timetable_rows_use_sqlite_paging_and_summary(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Timetable split", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    rows = [
+        {"trip_id": "T1", "route_id": "R1", "service_id": "WEEKDAY", "departure": "06:00", "arrival": "06:20", "distance_km": 5.0},
+        {"trip_id": "T2", "route_id": "R1", "service_id": "WEEKDAY", "departure": "07:00", "arrival": "07:20", "distance_km": 5.0},
+        {"trip_id": "T3", "route_id": "R2", "service_id": "SAT", "departure": "08:00", "arrival": "08:35", "distance_km": 8.0},
+    ]
+    scenario_store.set_field(scenario_id, "timetable_rows", rows)
+
+    weekday_rows = scenario_store.page_timetable_rows(scenario_id, service_id="WEEKDAY", limit=10, offset=0)
+    summary = scenario_store.get_field_summary(scenario_id, "timetable_rows")
+
+    assert len(weekday_rows) == 2
+    assert scenario_store.count_timetable_rows(scenario_id, service_id="SAT") == 1
+    assert summary is not None
+    assert summary["totalRows"] == 3
+    assert len(summary["byService"]) == 2
 
 
 def test_replace_routes_from_source_prunes_stale_permissions(

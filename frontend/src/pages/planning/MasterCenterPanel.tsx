@@ -28,7 +28,11 @@ export function MasterCenterPanel({ scenarioId }: Props) {
   const activeTab = useMasterUiStore((s) => s.activeTab);
   const viewMode = useMasterUiStore((s) => s.viewMode);
   const selectedDepotId = useMasterUiStore((s) => s.selectedDepotId);
+  const selectedRouteId = useMasterUiStore((s) => s.selectedRouteId);
   useTabSwitchTrace("master-center", `${activeTab}:${viewMode}`);
+  const shouldLoadMapPanel =
+    (activeTab === "routes" && !!selectedRouteId) ||
+    ((activeTab === "depots" || activeTab === "vehicles") && !!selectedDepotId);
 
   // Node graph mode — routes tab only
   if (viewMode === "node" && activeTab === "routes") {
@@ -42,9 +46,13 @@ export function MasterCenterPanel({ scenarioId }: Props) {
   // Map mode — all tabs
   if (viewMode === "map" && activeTab !== "stops") {
     return (
-      <Suspense fallback={<PanelFallback />}>
-        <RouteMapPanel scenarioId={scenarioId} />
-      </Suspense>
+      shouldLoadMapPanel ? (
+        <Suspense fallback={<PanelFallback />}>
+          <RouteMapPanel scenarioId={scenarioId} />
+        </Suspense>
+      ) : (
+        <MapGatePlaceholder activeTab={activeTab} />
+      )
     );
   }
 
@@ -70,9 +78,13 @@ export function MasterCenterPanel({ scenarioId }: Props) {
           {activeTab === "routes" && <RouteTableNew scenarioId={scenarioId} />}
         </div>
         <div className="flex-1">
-          <Suspense fallback={<PanelFallback />}>
-            <RouteMapPanel scenarioId={scenarioId} />
-          </Suspense>
+          {shouldLoadMapPanel ? (
+            <Suspense fallback={<PanelFallback />}>
+              <RouteMapPanel scenarioId={scenarioId} />
+            </Suspense>
+          ) : (
+            <MapGatePlaceholder activeTab={activeTab} />
+          )}
         </div>
       </div>
     );
@@ -114,6 +126,18 @@ function PanelFallback() {
   return (
     <div className="flex h-full items-center justify-center text-sm text-slate-400">
       Loading panel...
+    </div>
+  );
+}
+
+function MapGatePlaceholder({ activeTab }: { activeTab: "depots" | "vehicles" | "routes" | "stops" }) {
+  const message =
+    activeTab === "routes"
+      ? "route を選択すると地図を遅延読み込みします。"
+      : "営業所を選択すると地図を遅延読み込みします。";
+  return (
+    <div className="flex h-full items-center justify-center border border-dashed border-border bg-slate-50 text-sm text-slate-500">
+      {message}
     </div>
   );
 }

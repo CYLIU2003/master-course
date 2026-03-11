@@ -1002,14 +1002,24 @@ def get_trips(
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    items = store.get_field(scenario_id, "trips") or []
-    paged_items, page_limit = _paginate_items(items, limit, offset)
-    return {"items": paged_items, "total": len(items), "limit": page_limit, "offset": offset}
+    if limit is None:
+        items = store.get_field(scenario_id, "trips") or []
+        page_limit = len(items)
+        total = len(items)
+        paged_items = items[offset:]
+    else:
+        paged_items = store.page_field_rows(scenario_id, "trips", offset=offset, limit=limit)
+        page_limit = limit
+        total = store.count_field_rows(scenario_id, "trips")
+    return {"items": paged_items, "total": total, "limit": page_limit, "offset": offset}
 
 
 @router.get("/scenarios/{scenario_id}/trips/summary")
 def get_trips_summary(scenario_id: str) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    summary = store.get_field_summary(scenario_id, "trips")
+    if summary is not None:
+        return {"item": summary}
     items = store.get_field(scenario_id, "trips") or []
     return {"item": _build_trips_summary(items)}
 
@@ -1086,7 +1096,7 @@ def get_graph(scenario_id: str) -> Dict[str, Any]:
 @router.get("/scenarios/{scenario_id}/graph/summary")
 def get_graph_summary(scenario_id: str) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    graph = store.get_field(scenario_id, "graph")
+    graph = store.get_graph_meta(scenario_id)
     if graph is None:
         raise HTTPException(
             status_code=404,
@@ -1108,17 +1118,21 @@ def get_graph_arcs(
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    graph = store.get_field(scenario_id, "graph")
+    graph = store.get_graph_meta(scenario_id)
     if graph is None:
         raise HTTPException(
             status_code=404,
             detail="Graph has not been built yet. POST to /build-graph first.",
         )
-    arcs = list(graph.get("arcs") or [])
-    if reason_code:
-        arcs = [item for item in arcs if item.get("reason_code") == reason_code]
-    paged_items, page_limit = _paginate_items(arcs, limit, offset)
-    return {"items": paged_items, "total": len(arcs), "limit": page_limit, "offset": offset}
+    if limit is None:
+        arcs = store.page_graph_arcs(scenario_id, offset=offset, limit=None, reason_code=reason_code)
+        page_limit = None
+        total = store.count_graph_arcs(scenario_id, reason_code=reason_code)
+    else:
+        arcs = store.page_graph_arcs(scenario_id, offset=offset, limit=limit, reason_code=reason_code)
+        page_limit = limit
+        total = store.count_graph_arcs(scenario_id, reason_code=reason_code)
+    return {"items": arcs, "total": total, "limit": page_limit, "offset": offset}
 
 
 @router.post("/scenarios/{scenario_id}/build-graph")
@@ -1160,14 +1174,24 @@ def get_duties(
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    items = store.get_field(scenario_id, "duties") or []
-    paged_items, page_limit = _paginate_items(items, limit, offset)
-    return {"items": paged_items, "total": len(items), "limit": page_limit, "offset": offset}
+    if limit is None:
+        items = store.get_field(scenario_id, "duties") or []
+        page_limit = len(items)
+        total = len(items)
+        paged_items = items[offset:]
+    else:
+        paged_items = store.page_field_rows(scenario_id, "duties", offset=offset, limit=limit)
+        page_limit = limit
+        total = store.count_field_rows(scenario_id, "duties")
+    return {"items": paged_items, "total": total, "limit": page_limit, "offset": offset}
 
 
 @router.get("/scenarios/{scenario_id}/duties/summary")
 def get_duties_summary(scenario_id: str) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    summary = store.get_field_summary(scenario_id, "duties")
+    if summary is not None:
+        return {"item": summary}
     items = store.get_field(scenario_id, "duties") or []
     return {"item": _build_duties_summary(items)}
 
@@ -1184,9 +1208,16 @@ def get_blocks(
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    items = store.get_field(scenario_id, "blocks") or []
-    paged_items, page_limit = _paginate_items(items, limit, offset)
-    return {"items": paged_items, "total": len(items), "limit": page_limit, "offset": offset}
+    if limit is None:
+        items = store.get_field(scenario_id, "blocks") or []
+        page_limit = len(items)
+        total = len(items)
+        paged_items = items[offset:]
+    else:
+        paged_items = store.page_field_rows(scenario_id, "blocks", offset=offset, limit=limit)
+        page_limit = limit
+        total = store.count_field_rows(scenario_id, "blocks")
+    return {"items": paged_items, "total": total, "limit": page_limit, "offset": offset}
 
 
 @router.get("/scenarios/{scenario_id}/dispatch-plan")
