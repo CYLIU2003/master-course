@@ -8,7 +8,6 @@ import { useScenario } from "@/hooks";
 import { usePreparedPublicDiffItems } from "@/hooks/usePreparedPublicDiffItems";
 import { useSortedAssignments } from "@/hooks/useSortedAssignments";
 import { normalizeRouteCode } from "@/lib/route-code";
-import { useMasterUiStore } from "@/stores/master-ui-store";
 import { useImportJobStore } from "@/stores/import-job-store";
 import { useUIStore } from "@/stores/ui-store";
 import { measureAsyncStep } from "@/utils/perf/measureAsyncStep";
@@ -253,10 +252,19 @@ const SERVICE_LABELS: Record<string, string> = {
   weekday: "平日",
   saturday: "土曜",
   holiday: "日祝",
+  sunday: "日祝",
+  saturdayholiday: "土曜・休日",
   unknown: "不明",
   WEEKDAY: "平日",
   SAT: "土曜",
   SUN_HOL: "日祝",
+  SAT_HOL: "土曜・休日",
+  "odpt.Calendar:Weekday": "平日",
+  "odpt.Calendar:Saturday": "土曜",
+  "odpt.Calendar:Holiday": "日祝",
+  "odpt.Calendar:Sunday": "日祝",
+  "odpt.Calendar:SundayHoliday": "日祝",
+  "odpt.Calendar:SaturdayHoliday": "土曜・休日",
 };
 
 function serviceLabel(serviceId: string): string {
@@ -837,8 +845,6 @@ export function OdptExplorerPage() {
   const [tabMode, setTabMode] = useState<"db" | "api">("db");
   useTabSwitchTrace("explorer-tab", tabMode);
   const storeScenarioId = useUIStore((s) => s.activeScenarioId);
-  const setSelectedDepotId = useUIStore((s) => s.setSelectedDepotId);
-  const selectMasterDepot = useMasterUiStore((s) => s.selectDepot);
   const startJob = useImportJobStore((state) => state.startJob);
   const updateStage = useImportJobStore((state) => state.updateStage);
   const appendLog = useImportJobStore((state) => state.appendLog);
@@ -1295,8 +1301,6 @@ export function OdptExplorerPage() {
           reason: depotId ? "Assigned from Public Data Collection Explorer." : "Cleared from Public Data Collection Explorer.",
         }),
       });
-      setSelectedDepotId(depotId || null);
-      selectMasterDepot(depotId || null);
       await loadScenarioExplorerData();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));

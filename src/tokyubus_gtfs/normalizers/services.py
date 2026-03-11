@@ -84,6 +84,21 @@ def build_service_calendars(
                 end_date=ed,
                 odpt_calendar_raw=raw_key,
             )
+        elif sid == ServiceDayType.saturday_holiday.value:
+            svc = CanonicalService(
+                service_id=sid,
+                service_name="Saturday / Holiday",
+                monday=False,
+                tuesday=False,
+                wednesday=False,
+                thursday=False,
+                friday=False,
+                saturday=True,
+                sunday=True,
+                start_date=sd,
+                end_date=ed,
+                odpt_calendar_raw=raw_key,
+            )
         elif sid == ServiceDayType.sunday_holiday.value:
             svc = CanonicalService(
                 service_id=sid,

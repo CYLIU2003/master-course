@@ -136,7 +136,7 @@ export const vehicleTemplateApi = {
 export const routeApi = {
   list: (
     scenarioId: string,
-    params?: { depotId?: string; operator?: string; groupByFamily?: boolean },
+    params?: { depotId?: string; operator?: string; groupByFamily?: boolean; enabled?: boolean },
   ) => {
     const query = new URLSearchParams();
     if (params?.depotId) query.set("depotId", params.depotId);

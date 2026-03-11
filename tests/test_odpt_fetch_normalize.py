@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 from unittest import mock
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -67,6 +68,96 @@ def test_count_json_dict_items(tmp_path):
     p = tmp_path / "test.json"
     p.write_text(json.dumps(data), encoding="utf-8")
     assert count_json_array_items(p) == 2
+
+
+def test_chunk_query_params_from_snapshot_files(tmp_path):
+    from bff.services.odpt_fetch import _chunk_query_params
+
+    (tmp_path / "busroute_pattern.json").write_text(
+        json.dumps(
+            [
+                {"owl:sameAs": "odpt.BusroutePattern:A"},
+                {"@id": "odpt.BusroutePattern:B"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "busstop_pole.json").write_text(
+        json.dumps(
+            [
+                {"owl:sameAs": "odpt.BusstopPole:S1"},
+                {"@id": "odpt.BusstopPole:S2"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert _chunk_query_params("odpt:BusTimetable", tmp_path) == [
+        {"odpt:busroutePattern": "odpt.BusroutePattern:A"},
+        {"odpt:busroutePattern": "odpt.BusroutePattern:B"},
+    ]
+    assert _chunk_query_params("odpt:BusstopPoleTimetable", tmp_path) == [
+        {"odpt:busstopPole": "odpt.BusstopPole:S1"},
+        {"odpt:busstopPole": "odpt.BusstopPole:S2"},
+    ]
+
+
+def test_fetch_tokyu_odpt_bundle_chunks_timetable_resources(tmp_path):
+    from bff.services import odpt_fetch
+
+    def fake_download(url: str, out_path: Path, timeout: float = 300.0):
+        if out_path.name == "busroute_pattern.json":
+            payload = [
+                {"owl:sameAs": "odpt.BusroutePattern:A"},
+                {"owl:sameAs": "odpt.BusroutePattern:B"},
+            ]
+        elif out_path.name == "busstop_pole.json":
+            payload = [
+                {"owl:sameAs": "odpt.BusstopPole:S1"},
+                {"owl:sameAs": "odpt.BusstopPole:S2"},
+            ]
+        else:
+            raise AssertionError(f"unexpected direct download target: {out_path.name}")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload), encoding="utf-8")
+        return {"path": str(out_path), "size_bytes": out_path.stat().st_size, "sha256": "abc"}
+
+    def fake_fetch_records(url: str, timeout: float = 300.0):
+        query = parse_qs(urlparse(url).query)
+        if "odpt:busroutePattern" in query:
+            pattern_id = query["odpt:busroutePattern"][0]
+            if pattern_id.endswith(":A"):
+                return [
+                    {"owl:sameAs": "trip:A:1"},
+                    {"owl:sameAs": "trip:A:2"},
+                ]
+            if pattern_id.endswith(":B"):
+                return [{"owl:sameAs": "trip:B:1"}]
+        if "odpt:busstopPole" in query:
+            stop_id = query["odpt:busstopPole"][0]
+            if stop_id.endswith(":S1"):
+                return [{"owl:sameAs": "st:S1:weekday"}]
+            if stop_id.endswith(":S2"):
+                return [{"owl:sameAs": "st:S2:weekday"}]
+        raise AssertionError(f"unexpected chunk query: {url}")
+
+    with mock.patch.object(odpt_fetch, "_consumer_key", return_value="token"), mock.patch.object(
+        odpt_fetch, "_cache_base_dir", return_value=tmp_path
+    ), mock.patch.object(odpt_fetch, "download_odpt_resource", side_effect=fake_download), mock.patch.object(
+        odpt_fetch, "fetch_odpt_records", side_effect=fake_fetch_records
+    ):
+        manifest = odpt_fetch.fetch_tokyu_odpt_bundle()
+
+    assert manifest["fetched_counts"]["odpt:BusroutePattern"] == 2
+    assert manifest["fetched_counts"]["odpt:BusstopPole"] == 2
+    assert manifest["fetched_counts"]["odpt:BusTimetable"] == 3
+    assert manifest["fetched_counts"]["odpt:BusstopPoleTimetable"] == 2
+
+    snapshot_dir = Path(manifest["snapshot_dir"])
+    assert len(json.loads((snapshot_dir / "bus_timetable.json").read_text(encoding="utf-8"))) == 3
+    assert len(
+        json.loads((snapshot_dir / "busstop_pole_timetable.json").read_text(encoding="utf-8"))
+    ) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +225,56 @@ def test_normalize_busroute_pattern(tmp_path):
     routes = json.loads((tmp_path / "routes.jsonl").read_text(encoding="utf-8").strip())
     assert "渋01" in routes["name"]
     assert routes["source"] == "odpt"
+
+
+def test_normalize_busstop_pole_timetable_synthesizes_missing_pattern_coverage(tmp_path):
+    from bff.services.odpt_normalize import normalize_busstop_pole_timetable
+
+    stop_lookup = {
+        "odpt.BusstopPole:StopA": {"name": "Stop A"},
+        "odpt.BusstopPole:StopB": {"name": "Stop B"},
+    }
+    route_patterns_lookup = {
+        "odpt.BusroutePattern:T98.Out": {
+            "pattern_id": "odpt.BusroutePattern:T98.Out",
+            "busroute_id": "odpt.Busroute:TokyuBus.T98",
+        }
+    }
+    raw_bus_timetable = [
+        {
+            "owl:sameAs": "odpt.BusTimetable:T98.Weekday.001",
+            "odpt:busroutePattern": "odpt.BusroutePattern:T98.Out",
+            "odpt:calendar": "odpt.Calendar:Weekday",
+            "odpt:busTimetableObject": [
+                {
+                    "odpt:index": 0,
+                    "odpt:busstopPole": "odpt.BusstopPole:StopA",
+                    "odpt:departureTime": "06:00",
+                },
+                {
+                    "odpt:index": 1,
+                    "odpt:busstopPole": "odpt.BusstopPole:StopB",
+                    "odpt:arrivalTime": "06:25",
+                },
+            ],
+        }
+    ]
+
+    result = normalize_busstop_pole_timetable(
+        [],
+        tmp_path,
+        stop_lookup,
+        route_patterns_lookup,
+        raw_bus_timetable,
+    )
+
+    assert result["synthetic_group_count"] == 1
+    rows = (tmp_path / "busstop_pole_timetables.jsonl").read_text(encoding="utf-8").strip().split("\n")
+    synthesized = json.loads(rows[0])
+    assert synthesized["source"] == "odpt_synthesized_from_bus_timetable"
+    assert synthesized["stopId"] == "odpt.BusstopPole:StopA"
+    assert synthesized["service_id"] == "WEEKDAY"
+    assert synthesized["items"][0]["busroutePattern"] == "odpt.BusroutePattern:T98.Out"
 
 
 def test_reconcile_normalized_entities(tmp_path):

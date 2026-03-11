@@ -1,7 +1,7 @@
 {
   "name": "odpt-explorer-bff",
   "version": "1.0.0",
-  "description": "ODPT API Explorer BFF — Node/TypeScript Express server",
+  "description": "Legacy ODPT proxy workspace (research app uses bff/ as the official backend)",
   "private": true,
   "scripts": {
     "dev": "tsx watch src/server.ts",

@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from bff.services.runtime_paths import resolve_runtime_path
+from bff.services.service_ids import canonical_service_id
 from src.feed_identity import (
     TOEI_GTFS_FEED_ID,
     TOKYU_ODPT_GTFS_FEED_ID,
@@ -498,7 +499,7 @@ def replace_all(
         tt_rows: list[tuple] = []
         for idx, t in enumerate(timetable_rows):
             trip_id = str(t.get("trip_id") or f"{t.get('route_id','?')}_{t.get('direction','?')}_{t.get('departure','?')}_{idx}")
-            service_id = str(t.get("service_id") or "WEEKDAY")
+            service_id = canonical_service_id(t.get("service_id"))
             dedup_key = f"{trip_id}|{service_id}"
             if dedup_key in seen_trips:
                 continue
@@ -608,7 +609,7 @@ def replace_all(
             if not stop_id:
                 continue
             entries = st.get("items") or st.get("entries") or []
-            svc_id = str(st.get("service_id") or "WEEKDAY")
+            svc_id = canonical_service_id(st.get("service_id"))
             stop_name = str(st.get("stopName") or "")
             calendar = st.get("calendar")
             for entry_index, entry in enumerate(entries):
@@ -941,6 +942,17 @@ def count_stops(operator_id: str, *, q: Optional[str] = None) -> int:
     return int(row["n"])
 
 
+def count_depot_candidates(operator_id: str) -> int:
+    with closing(_connect(operator_id)) as conn:
+        _ensure_ready(conn)
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM stops "
+            "WHERE (stop_name LIKE '%営業所%' OR stop_name LIKE '%車庫%' OR stop_name LIKE '%操車所%') "
+            "AND lat IS NOT NULL AND lon IS NOT NULL"
+        ).fetchone()
+    return int(row["n"] or 0)
+
+
 def list_timetable_rows(
     operator_id: str,
     *,
@@ -1022,8 +1034,22 @@ def count_timetable_rows(
     return int(row["n"])
 
 
-def timetable_summary(operator_id: str) -> Dict[str, Any]:
+def timetable_summary(
+    operator_id: str,
+    *,
+    route_id: Optional[str] = None,
+    service_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Return aggregated timetable statistics per service_id."""
+    clauses: list[str] = []
+    params: list[Any] = []
+    if route_id:
+        clauses.append("route_id = ?")
+        params.append(route_id)
+    if service_id:
+        clauses.append("service_id = ?")
+        params.append(service_id)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with closing(_connect(operator_id)) as conn:
         _ensure_ready(conn)
         rows = conn.execute(
@@ -1032,8 +1058,10 @@ def timetable_summary(operator_id: str) -> Dict[str, Any]:
             "       MIN(departure) AS earliest_departure, "
             "       MAX(arrival) AS latest_arrival "
             "FROM timetable_rows "
+            f"{where} "
             "GROUP BY service_id "
-            "ORDER BY service_id ASC"
+            "ORDER BY service_id ASC",
+            params,
         ).fetchall()
     return {
         "by_service": [dict(r) for r in rows],

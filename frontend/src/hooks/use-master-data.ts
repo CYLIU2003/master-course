@@ -314,12 +314,20 @@ export function useDeleteVehicleTemplate(scenarioId: string) {
 
 export function useRoutes(
   scenarioId: string,
-  filters?: { depotId?: string; operator?: string; groupByFamily?: boolean },
+  filters?: { depotId?: string; operator?: string; groupByFamily?: boolean; enabled?: boolean },
 ) {
+  const enabled = filters?.enabled ?? true;
+  const queryFilters = filters
+    ? {
+        depotId: filters.depotId,
+        operator: filters.operator,
+        groupByFamily: filters.groupByFamily,
+      }
+    : undefined;
   return useQuery({
-    queryKey: filters ? routeKeys.filtered(scenarioId, filters) : routeKeys.all(scenarioId),
-    queryFn: () => routeApi.list(scenarioId, filters),
-    enabled: !!scenarioId,
+    queryKey: queryFilters ? routeKeys.filtered(scenarioId, queryFilters) : routeKeys.all(scenarioId),
+    queryFn: () => routeApi.list(scenarioId, queryFilters),
+    enabled: !!scenarioId && enabled,
   });
 }
 

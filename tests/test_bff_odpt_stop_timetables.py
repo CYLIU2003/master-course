@@ -26,7 +26,7 @@ def test_build_stop_timetables_from_normalized_uses_stop_names():
             "stopId": "S1",
             "stopName": "Azamino",
             "calendar": "odpt.Calendar:Weekday",
-            "service_id": "weekday",
+            "service_id": "WEEKDAY",
             "items": [{"index": 1, "departure": "08:00"}],
         }
     ]
@@ -44,6 +44,24 @@ def test_summarize_stop_timetable_import_counts_entries():
     assert summary == {
         "stopTimetableCount": 2,
         "entryCount": 3,
-        "serviceCounts": {"saturday": 1, "weekday": 1},
+        "serviceCounts": {"SAT": 1, "WEEKDAY": 1},
         "warningCount": 2,
     }
+
+
+def test_build_stop_timetables_from_normalized_uses_calendar_when_service_is_collapsed():
+    dataset = {
+        "stops": {"S1": {"name": "Azamino"}},
+        "stopTimetables": {
+            "tt-1": {
+                "stop_id": "S1",
+                "calendar": "odpt.Calendar:SaturdayHoliday",
+                "service_id": "saturday",
+                "items": [{"index": 1, "departure": "08:00"}],
+            }
+        },
+    }
+
+    items = build_stop_timetables_from_normalized(dataset)
+
+    assert items[0]["service_id"] == "SAT_HOL"

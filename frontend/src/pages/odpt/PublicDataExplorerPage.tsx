@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/api/client";
+import { publicDataApi } from "@/api/public-data";
 import { RouteFamilyDetailPanel, TabWarmBoundary, VirtualizedList } from "@/features/common";
 import {
   usePublicDataExplorerStore,
@@ -49,6 +50,18 @@ type TimetableSummary = {
     latest_arrival?: string;
   }>;
   total: number;
+};
+
+type TimetableRow = {
+  trip_id: string;
+  route_id: string;
+  service_id: string;
+  origin: string;
+  destination: string;
+  departure: string;
+  arrival: string;
+  direction?: string;
+  distance_km?: number;
 };
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -393,11 +406,19 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
   const [selectedRouteFamilyId, setSelectedRouteFamilyId] = useState<string | null>(null);
   const [routeFamilyDetail, setRouteFamilyDetail] = useState<DbRouteFamilyDetail | null>(null);
   const [routeDetailLoading, setRouteDetailLoading] = useState(false);
+  const [routesLoaded, setRoutesLoaded] = useState(false);
   const [stops, setStops] = useState<DbStop[]>([]);
   const [stopsTotal, setStopsTotal] = useState(0);
+  const [stopsLoaded, setStopsLoaded] = useState(false);
   const [stopOffset, setStopOffset] = useState(0);
   const [stopQuery, setStopQuery] = useState("");
   const [ttSummary, setTtSummary] = useState<TimetableSummary | null>(null);
+  const [summaryLoaded, setSummaryLoaded] = useState(false);
+  const [timetableRows, setTimetableRows] = useState<TimetableRow[]>([]);
+  const [timetableRowsTotal, setTimetableRowsTotal] = useState(0);
+  const [timetableRowsLoaded, setTimetableRowsLoaded] = useState(false);
+  const [timetableOffset, setTimetableOffset] = useState(0);
+  const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<"routes" | "stops" | "timetable">("routes");
@@ -416,38 +437,6 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
     }
   }, [operatorId]);
 
-  const loadInitial = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [routesRes, stopsRes, summaryRes] = await Promise.all([
-        fetchJson<{ items: DbRouteFamily[]; total: number }>(
-          `/api/catalog/operators/${operatorId}/route-families?limit=${pageSize}&offset=0`,
-        ),
-        fetchJson<{ items: DbStop[]; total: number }>(
-          `/api/catalog/operators/${operatorId}/stops?limit=${pageSize}&offset=0`,
-        ),
-        fetchJson<{ item: TimetableSummary }>(
-          `/api/catalog/operators/${operatorId}/timetable/summary`,
-        ),
-      ]);
-      setRouteFamilies(routesRes.items ?? []);
-      setRouteFamiliesTotal(routesRes.total ?? 0);
-      setSelectedRouteFamilyId(routesRes.items?.[0]?.routeFamilyId ?? null);
-      setStops(stopsRes.items ?? []);
-      setStopsTotal(stopsRes.total ?? 0);
-      setTtSummary(summaryRes.item ?? null);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [operatorId]);
-
-  useEffect(() => {
-    void loadInitial();
-  }, [loadInitial]);
-
   useEffect(() => {
     if (!selectedRouteFamilyId) {
       setRouteFamilyDetail(null);
@@ -456,46 +445,128 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
     void loadRouteFamilyDetail(selectedRouteFamilyId);
   }, [loadRouteFamilyDetail, selectedRouteFamilyId]);
 
-  async function loadRoutesPage(offset: number, q: string) {
+  const loadRoutesPage = useCallback(async (offset: number, q: string) => {
     setLoading(true);
+    setError(null);
     try {
-      const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(offset));
-      if (q.trim()) params.set("q", q.trim());
-      const body = await fetchJson<{ items: DbRouteFamily[]; total: number }>(
-        `/api/catalog/operators/${operatorId}/route-families?${params.toString()}`,
-      );
+      const body = await publicDataApi.listRouteFamilies(operatorId, {
+        q: q.trim() || undefined,
+        limit: pageSize,
+        offset,
+      });
       setRouteFamilies(body.items ?? []);
       setRouteFamiliesTotal(body.total ?? 0);
       setRouteOffset(offset);
       setSelectedRouteFamilyId(body.items?.[0]?.routeFamilyId ?? null);
+      setRoutesLoaded(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }
+  }, [operatorId, pageSize]);
 
-  async function loadStopsPage(offset: number, q: string) {
+  const loadStopsPage = useCallback(async (offset: number, q: string) => {
     setLoading(true);
+    setError(null);
     try {
-      const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(offset));
-      if (q.trim()) params.set("q", q.trim());
-      const body = await fetchJson<{ items: DbStop[]; total: number }>(
-        `/api/catalog/operators/${operatorId}/stops?${params.toString()}`,
-      );
+      const body = await publicDataApi.listStops(operatorId, {
+        q: q.trim() || undefined,
+        limit: pageSize,
+        offset,
+      });
       setStops(body.items ?? []);
       setStopsTotal(body.total ?? 0);
       setStopOffset(offset);
+      setStopsLoaded(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }
+  }, [operatorId, pageSize]);
+
+  const loadTimetableSummary = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const body = await publicDataApi.getTimetableSummary(operatorId);
+      setTtSummary(body.item ?? null);
+      setSummaryLoaded(true);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [operatorId]);
+
+  const loadTimetableRows = useCallback(async (offset: number, serviceId?: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const body = await publicDataApi.listTimetableRows(operatorId, {
+        serviceId: serviceId || undefined,
+        limit: 100,
+        offset,
+      });
+      setTimetableRows(body.items ?? []);
+      setTimetableRowsTotal(body.total ?? 0);
+      setTimetableOffset(offset);
+      setTimetableRowsLoaded(true);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [operatorId]);
+
+  useEffect(() => {
+    setRouteFamilies([]);
+    setRouteFamiliesTotal(0);
+    setRouteOffset(0);
+    setRouteQuery("");
+    setRoutesLoaded(false);
+    setSelectedRouteFamilyId(null);
+    setRouteFamilyDetail(null);
+    setStops([]);
+    setStopsTotal(0);
+    setStopOffset(0);
+    setStopQuery("");
+    setStopsLoaded(false);
+    setTtSummary(null);
+    setSummaryLoaded(false);
+    setTimetableRows([]);
+    setTimetableRowsTotal(0);
+    setTimetableRowsLoaded(false);
+    setTimetableOffset(0);
+    setSelectedServiceId("");
+    setError(null);
+    setDetailTab("routes");
+  }, [operatorId]);
+
+  useEffect(() => {
+    if (detailTab === "routes" && !routesLoaded && !loading) {
+      void loadRoutesPage(0, routeQuery);
+    }
+  }, [detailTab, loadRoutesPage, loading, routeQuery, routesLoaded]);
+
+  useEffect(() => {
+    if (detailTab === "stops" && !stopsLoaded && !loading) {
+      void loadStopsPage(0, stopQuery);
+    }
+  }, [detailTab, loadStopsPage, loading, stopQuery, stopsLoaded]);
+
+  useEffect(() => {
+    if (detailTab === "timetable" && !summaryLoaded && !loading) {
+      void loadTimetableSummary();
+    }
+  }, [detailTab, loadTimetableSummary, loading, summaryLoaded]);
+
+  useEffect(() => {
+    if (detailTab === "timetable" && summaryLoaded && !timetableRowsLoaded && !loading) {
+      void loadTimetableRows(0, selectedServiceId || undefined);
+    }
+  }, [detailTab, loadTimetableRows, loading, selectedServiceId, summaryLoaded, timetableRowsLoaded]);
 
   const meta = OPERATOR_META[operatorId];
 
@@ -757,6 +828,77 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
             </div>
           ) : (
             <p className="text-sm text-slate-500">時刻表データなし</p>
+          )}
+
+          {ttSummary.by_service.length > 0 && (
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="space-y-1">
+                <span className="block text-xs font-medium text-slate-500">service filter</span>
+                <select
+                  value={selectedServiceId}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setSelectedServiceId(next);
+                    setTimetableRowsLoaded(false);
+                    void loadTimetableRows(0, next || undefined);
+                  }}
+                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm"
+                >
+                  <option value="">all services</option>
+                  {ttSummary.by_service.map((service) => (
+                    <option key={service.service_id} value={service.service_id}>
+                      {service.service_id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
+                <button
+                  onClick={() => void loadTimetableRows(Math.max(0, timetableOffset - 100), selectedServiceId || undefined)}
+                  disabled={loading || timetableOffset === 0}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                <span>
+                  {timetableRows.length > 0 ? timetableOffset + 1 : 0}-
+                  {Math.min(timetableOffset + timetableRows.length, timetableRowsTotal)} / {formatCount(timetableRowsTotal)}
+                </span>
+                <button
+                  onClick={() => void loadTimetableRows(timetableOffset + 100, selectedServiceId || undefined)}
+                  disabled={loading || timetableOffset + timetableRows.length >= timetableRowsTotal}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+
+          {timetableRows.length > 0 && (
+            <div className="rounded-lg border border-slate-200">
+              <div className="grid grid-cols-[1.1fr_0.8fr_1fr_1fr_0.7fr_0.7fr_0.5fr] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                <span>trip_id</span><span>route</span><span>origin</span><span>dest</span><span>dep</span><span>arr</span><span>km</span>
+              </div>
+              <VirtualizedList
+                items={timetableRows}
+                height={360}
+                itemHeight={38}
+                className="bg-white"
+                getKey={(row) => row.trip_id}
+                renderItem={(row) => (
+                  <div className="grid h-full grid-cols-[1.1fr_0.8fr_1fr_1fr_0.7fr_0.7fr_0.5fr] gap-3 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
+                    <div className="truncate font-mono" title={row.trip_id}>{row.trip_id}</div>
+                    <div className="truncate">{row.route_id}</div>
+                    <div className="truncate">{row.origin}</div>
+                    <div className="truncate">{row.destination}</div>
+                    <div className="font-mono">{row.departure}</div>
+                    <div className="font-mono">{row.arrival}</div>
+                    <div>{row.distance_km ?? "-"}</div>
+                  </div>
+                )}
+              />
+            </div>
           )}
         </div>
       )}

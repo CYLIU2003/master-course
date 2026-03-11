@@ -97,6 +97,9 @@ Tokyu Bus ODPT-direct legacy code is preserved on `odpt_only`.
 - **BFF は UI 向け DTO とジョブ制御** を提供する薄いオーケストレーション層
 - **コア計算は `src/` に集約**。dispatch / pipeline / optimization / simulator 等
 - **Timetable first, dispatch second**: 配車計画は常に時刻表制約から生成
+- **`bff/` が正式な研究本体 API**。`backend/` は legacy / 補助用途に限定し、新規機能は追加しない
+- **公開情報 Explorer は補助導線**。Planning / Dispatch / Results の初回表示では explorer 詳細を先読みしない
+- **Scenario 保存は分割保存優先**。重い timetable / stop_timetable / dispatch artifacts は別ファイル化して本体 JSON を軽量に保つ
 
 EN: Frontend only calls `/api`. BFF orchestrates APIs/jobs. Core research logic stays in `src/`.
 
@@ -181,7 +184,7 @@ npm -v
 npm install
 ```
 
-Remote SSH / 別ホストで frontend と backend を分けて動かす場合は、
+Remote SSH / 別ホストで frontend と BFF を分けて動かす場合は、
 `frontend/.env.example` を元に `frontend/.env.development.local` を作成し、
 接続先を明示してください。
 
@@ -200,9 +203,13 @@ VITE_API_PROXY_TARGET=http://127.0.0.1:8000
 VITE_ODPT_PROXY_TARGET=http://127.0.0.1:3001
 ```
 
+`VITE_ODPT_PROXY_TARGET` は legacy ODPT proxy を併用する場合のみ必要です。標準の研究 UI では `bff.main:app` を正式バックエンドとします。
+
 frontend から別ホストの BFF を直接叩く場合は、`VITE_API_BASE_URL` に
 `http://<backend-host>:8000/api` を設定してください。その場合は BFF 側でも
 `BFF_CORS_ALLOW_ORIGINS` または `BFF_CORS_ALLOW_ORIGIN_REGEX` を合わせて設定します。
+
+標準構成では `backend/` の起動は不要です。研究本体は `bff.main:app` と `frontend/` のみを起動してください。
 
 ### 4.3 起動 / Run / 启动
 

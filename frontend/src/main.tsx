@@ -6,7 +6,9 @@ import { initPerfObservers } from "@/utils/perf/perf-store";
 import "./i18n";
 import "./index.css";
 
-initPerfObservers();
+if (import.meta.env.DEV) {
+  initPerfObservers();
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

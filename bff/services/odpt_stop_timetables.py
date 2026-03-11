@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from bff.services.odpt_routes import _stop_label
+from bff.services.service_ids import canonical_service_id
 
 
 def build_stop_timetables_from_normalized(
@@ -23,7 +24,9 @@ def build_stop_timetables_from_normalized(
                 "stopId": stop_id,
                 "stopName": _stop_label(stops, stop_id),
                 "calendar": timetable.get("calendar"),
-                "service_id": timetable.get("service_id") or "unknown",
+                "service_id": canonical_service_id(
+                    timetable.get("calendar") or timetable.get("service_id")
+                ),
                 "items": list(timetable.get("items") or []),
             }
         )
@@ -37,7 +40,7 @@ def summarize_stop_timetable_import(
     service_counts: Dict[str, int] = {}
     total_entries = 0
     for item in items:
-        service_id = str(item.get("service_id") or "unknown")
+        service_id = canonical_service_id(item.get("service_id"))
         service_counts[service_id] = service_counts.get(service_id, 0) + 1
         total_entries += len(item.get("items") or [])
 

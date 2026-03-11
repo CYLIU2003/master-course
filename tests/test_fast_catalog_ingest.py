@@ -111,6 +111,11 @@ class FastCatalogIngestTest(unittest.TestCase):
             self.assertEqual(len(bundle["timetable_rows"]), 1)
             self.assertEqual(len(bundle["stop_timetables"]), 1)
             self.assertEqual(len(bundle["route_payloads"]), 1)
+            self.assertTrue((base / "canonical" / "catalog.sqlite").exists())
+            self.assertEqual(
+                bundle["meta"]["artifacts"]["canonicalCatalog"],
+                str(base / "canonical" / "catalog.sqlite"),
+            )
             operational = json.loads((base / "operational_dataset.json").read_text(encoding="utf-8"))
             self.assertEqual(len(operational["routeTimetables"]), 1)
             self.assertIn("odpt.BusTimetable:T98.Weekday.001", operational["trips"])

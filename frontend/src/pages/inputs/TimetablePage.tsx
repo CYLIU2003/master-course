@@ -38,6 +38,7 @@ const SERVICE_TABS = [
   { key: undefined, labelKey: "timetable.filter_all" },
   { key: "WEEKDAY",  labelKey: "timetable.filter_weekday" },
   { key: "SAT",      labelKey: "timetable.filter_sat" },
+  { key: "SAT_HOL",  labelKey: "土曜・休日" },
   { key: "SUN_HOL",  labelKey: "timetable.filter_sun_hol" },
 ] as const;
 
@@ -858,7 +859,7 @@ export function TimetablePage() {
                   : "text-slate-500 hover:text-slate-700",
               ].join(" ")}
             >
-              {t(tab.labelKey)}
+              {t(tab.labelKey, String(tab.labelKey))}
             </button>
           ))}
           {/* Row count badge */}
@@ -893,6 +894,7 @@ export function TimetablePage() {
                 >
                   <option value="WEEKDAY">WEEKDAY</option>
                   <option value="SAT">SAT</option>
+                  <option value="SAT_HOL">SAT_HOL</option>
                   <option value="SUN_HOL">SUN_HOL</option>
                 </select>
               </label>

@@ -13,6 +13,7 @@ from bff.services.route_family import (
     build_route_family_summary,
     enrich_routes_with_family,
 )
+from bff.services.service_ids import canonical_service_id
 from bff.services import runtime_catalog
 from bff.services import transit_catalog
 from bff.services import transit_db
@@ -34,6 +35,16 @@ class RefreshGtfsSnapshotBody(BaseModel):
 
 class RefreshRuntimeSnapshotBody(BaseModel):
     snapshotId: Optional[str] = None
+
+
+class OperatorOverviewItem(BaseModel):
+    operatorId: str
+    routeCount: int
+    stopCount: int
+    serviceCount: int
+    tripCount: int
+    depotCount: int
+    updatedAt: Optional[str] = None
 
 
 @router.get("/catalog/snapshots")
@@ -169,11 +180,13 @@ def get_operator_schema(operator_id: str) -> Dict[str, Any]:
 @router.get("/catalog/operators/{operator_id}/routes")
 def list_operator_routes(
     operator_id: str,
+    depot_id: Optional[str] = Query(default=None, alias="depotId"),
     q: Optional[str] = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=5000),
+    limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     """Return paginated routes from an operator's per-operator DB."""
+    del depot_id
     try:
         items = transit_db.list_routes(operator_id, q=q, limit=limit, offset=offset)
         total = transit_db.count_routes(operator_id, q=q)
@@ -195,7 +208,7 @@ def _operator_family_enriched_routes(operator_id: str) -> List[Dict[str, Any]]:
     route_services: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
     for row in timetable_rows:
         route_id = str(row.get("route_id") or "")
-        service_id = str(row.get("service_id") or "WEEKDAY")
+        service_id = canonical_service_id(row.get("service_id"))
         if not route_id:
             continue
         bucket = route_services[route_id].setdefault(
@@ -224,10 +237,14 @@ def _operator_family_enriched_routes(operator_id: str) -> List[Dict[str, Any]]:
     enriched_routes: List[Dict[str, Any]] = []
     for raw in raw_routes:
         route_id = str(raw.get("route_id") or "")
-        detail: Dict[str, Any] = transit_db.get_route(operator_id, route_id) or {}
-        extra: Dict[str, Any] = (
-            detail.get("extra_json") if isinstance(detail.get("extra_json"), dict) else {}
-        )
+        detail_raw = transit_db.get_route(operator_id, route_id)
+        detail: Dict[str, Any] = {}
+        if isinstance(detail_raw, dict):
+            detail = detail_raw
+        extra_raw = detail.get("extra_json")
+        extra: Dict[str, Any] = {}
+        if isinstance(extra_raw, dict):
+            extra = extra_raw
         stop_sequence: Any = detail.get("stop_sequence_json")
         if not isinstance(stop_sequence, list):
             stop_sequence = extra.get("stopSequence") if isinstance(extra.get("stopSequence"), list) else []
@@ -333,7 +350,7 @@ def _operator_route_family_detail_payload(
 def list_operator_route_families(
     operator_id: str,
     q: Optional[str] = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=5000),
+    limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     try:
@@ -391,7 +408,7 @@ def get_operator_route(operator_id: str, route_id: str) -> Dict[str, Any]:
 def list_operator_stops(
     operator_id: str,
     q: Optional[str] = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=5000),
+    limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     """Return paginated stops from an operator's per-operator DB."""
@@ -408,7 +425,7 @@ def list_operator_timetable(
     operator_id: str,
     service_id: Optional[str] = Query(None, alias="serviceId"),
     route_id: Optional[str] = Query(None, alias="routeId"),
-    limit: int = Query(5000, ge=1, le=100000),
+    limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> Dict[str, Any]:
     """Return timetable rows from an operator's per-operator DB."""
@@ -431,13 +448,71 @@ def list_operator_timetable(
 
 
 @router.get("/catalog/operators/{operator_id}/timetable/summary")
-def operator_timetable_summary(operator_id: str) -> Dict[str, Any]:
+def operator_timetable_summary(
+    operator_id: str,
+    route_id: Optional[str] = Query(default=None, alias="routeId"),
+    service_id: Optional[str] = Query(default=None, alias="serviceId"),
+) -> Dict[str, Any]:
     """Return aggregated timetable statistics per service_id."""
     try:
-        summary = transit_db.timetable_summary(operator_id)
+        summary = transit_db.timetable_summary(
+            operator_id,
+            route_id=route_id,
+            service_id=service_id,
+        )
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Unknown operator: {operator_id}")
     return {"item": summary}
+
+
+@router.get("/catalog/operators/{operator_id}/overview")
+def get_operator_overview(operator_id: str) -> Dict[str, Any]:
+    operator_id = _require_operator_id(operator_id)
+    summary = _build_operator_summary(operator_id)
+    item = OperatorOverviewItem(
+        operatorId=operator_id,
+        routeCount=int((summary.get("counts") or {}).get("routes") or 0),
+        stopCount=int((summary.get("counts") or {}).get("stops") or 0),
+        serviceCount=len(transit_db.list_calendar(operator_id)),
+        tripCount=int((summary.get("counts") or {}).get("timetableRows") or 0),
+        depotCount=transit_db.count_depot_candidates(operator_id),
+        updatedAt=summary.get("updatedAt"),
+    )
+    return {"item": item.model_dump()}
+
+
+@router.get("/catalog/operators/{operator_id}/timetable-summary")
+def get_operator_timetable_summary_alias(
+    operator_id: str,
+    route_id: Optional[str] = Query(default=None, alias="routeId"),
+    service_id: Optional[str] = Query(default=None, alias="serviceId"),
+    depot_id: Optional[str] = Query(default=None, alias="depotId"),
+) -> Dict[str, Any]:
+    del depot_id
+    return operator_timetable_summary(
+        operator_id=operator_id,
+        route_id=route_id,
+        service_id=service_id,
+    )
+
+
+@router.get("/catalog/operators/{operator_id}/timetable-rows")
+def list_operator_timetable_rows(
+    operator_id: str,
+    route_id: Optional[str] = Query(default=None, alias="routeId"),
+    service_id: Optional[str] = Query(default=None, alias="serviceId"),
+    depot_id: Optional[str] = Query(default=None, alias="depotId"),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    del depot_id
+    return list_operator_timetable(
+        operator_id=operator_id,
+        route_id=route_id,
+        service_id=service_id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/catalog/operators/{operator_id}/timetable/{trip_id}/stop-times")
@@ -595,8 +670,6 @@ def get_catalog_map_overview(
     Returns bounds, stop clusters, and depot points from the operator DB.
     """
     operator_id = _require_operator_id(operator_id)
-
-    info = transit_db.OPERATORS[operator_id]
     db_info = transit_db.get_db_info(operator_id)
     if not db_info.get("exists"):
         return {
@@ -606,68 +679,61 @@ def get_catalog_map_overview(
             "depotPoints": [],
             "updatedAt": None,
         }
-
-    # Compute bounds and basic stop cluster data from DB
-    from contextlib import closing as _closing
-    from bff.services.transit_db import _connect, _ensure_ready
-
-    with _closing(_connect(operator_id)) as conn:
-        _ensure_ready(conn)
-
-        # Bounds from stops with coordinates
-        bounds_row = conn.execute(
-            "SELECT MIN(lat) AS min_lat, MAX(lat) AS max_lat, "
-            "       MIN(lon) AS min_lon, MAX(lon) AS max_lon "
-            "FROM stops WHERE lat IS NOT NULL AND lon IS NOT NULL"
-        ).fetchone()
-
-        bounds = None
-        if bounds_row and bounds_row["min_lat"] is not None:
-            bounds = {
-                "minLat": bounds_row["min_lat"],
-                "maxLat": bounds_row["max_lat"],
-                "minLon": bounds_row["min_lon"],
-                "maxLon": bounds_row["max_lon"],
-            }
-
-        # Simple stop clusters: group by rounded (lat, lon) at ~0.01 degree (~1km)
-        cluster_rows = conn.execute(
-            "SELECT ROUND(lat, 2) AS clat, ROUND(lon, 2) AS clon, COUNT(*) AS cnt "
-            "FROM stops WHERE lat IS NOT NULL AND lon IS NOT NULL "
-            "GROUP BY ROUND(lat, 2), ROUND(lon, 2) "
-            "ORDER BY cnt DESC "
-            "LIMIT 500"
-        ).fetchall()
-
-        stop_clusters = [
-            {
-                "id": f"{operator_id}:c:{i}",
-                "lat": row["clat"],
-                "lon": row["clon"],
-                "count": row["cnt"],
-            }
-            for i, row in enumerate(cluster_rows)
-        ]
-
-        # Depot candidate points: stops whose name contains depot-like keywords
-        depot_rows = conn.execute(
-            "SELECT stop_id, stop_name, lat, lon FROM stops "
-            "WHERE (stop_name LIKE '%営業所%' OR stop_name LIKE '%車庫%' "
-            "       OR stop_name LIKE '%操車所%') "
-            "  AND lat IS NOT NULL AND lon IS NOT NULL"
-        ).fetchall()
-
-        depot_points = [
-            {
-                "id": f"{operator_id}:depot:{row['stop_id']}",
-                "label": row["stop_name"],
-                "lat": row["lat"],
-                "lon": row["lon"],
-            }
-            for row in depot_rows
-        ]
-
     metadata = db_info.get("metadata") or {}
+    snapshot_key = str(metadata.get("catalog_snapshot_key") or "")
+    stops: List[Dict[str, Any]] = []
+    if snapshot_key:
+        try:
+            slim_bundle = transit_catalog.load_snapshot_bundle_slim(snapshot_key)
+            stops = list(slim_bundle.get("stops") or [])
+        except KeyError:
+            stops = []
+
+    if not stops:
+        total_stops = max(transit_db.count_stops(operator_id), 1)
+        stops = transit_db.list_stops(operator_id, limit=total_stops, offset=0)
+
+    geo_stops = [
+        stop for stop in stops if stop.get("lat") is not None and stop.get("lon") is not None
+    ]
+    bounds = None
+    if geo_stops:
+        latitudes = [float(stop["lat"]) for stop in geo_stops]
+        longitudes = [float(stop["lon"]) for stop in geo_stops]
+        bounds = {
+            "minLat": min(latitudes),
+            "maxLat": max(latitudes),
+            "minLon": min(longitudes),
+            "maxLon": max(longitudes),
+        }
+
+    cluster_counts: Dict[tuple[float, float], int] = defaultdict(int)
+    for stop in geo_stops:
+        cluster_counts[(round(float(stop["lat"]), 2), round(float(stop["lon"]), 2))] += 1
+    stop_clusters = [
+        {
+            "id": f"{operator_id}:c:{index}",
+            "lat": lat,
+            "lon": lon,
+            "count": count,
+        }
+        for index, ((lat, lon), count) in enumerate(
+            sorted(cluster_counts.items(), key=lambda item: item[1], reverse=True)[:500]
+        )
+    ]
+    depot_points = [
+        {
+            "id": f"{operator_id}:depot:{stop.get('stop_id') or stop.get('id')}",
+            "label": str(stop.get("stop_name") or stop.get("name") or ""),
+            "lat": stop.get("lat"),
+            "lon": stop.get("lon"),
+        }
+        for stop in geo_stops
+        if any(
+            keyword in str(stop.get("stop_name") or stop.get("name") or "")
+            for keyword in ("営業所", "車庫", "操車所")
+        )
+    ]
     return {
         "operatorId": operator_id,
         "bounds": bounds,

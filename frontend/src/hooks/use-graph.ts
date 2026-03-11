@@ -30,19 +30,22 @@ export const graphKeys = {
 
 // ── Queries ───────────────────────────────────────────────────
 
-export function useTrips(scenarioId: string, params?: { limit?: number; offset?: number }) {
+export function useTrips(
+  scenarioId: string,
+  params?: { limit?: number; offset?: number; enabled?: boolean },
+) {
   return useQuery({
     queryKey: graphKeys.trips(scenarioId, params?.limit, params?.offset),
     queryFn: () => graphApi.getTrips(scenarioId, params),
-    enabled: !!scenarioId,
+    enabled: !!scenarioId && (params?.enabled ?? true),
   });
 }
 
-export function useTripsSummary(scenarioId: string) {
+export function useTripsSummary(scenarioId: string, enabled: boolean = true) {
   return useQuery({
     queryKey: graphKeys.tripsSummary(scenarioId),
     queryFn: () => graphApi.getTripsSummary(scenarioId),
-    enabled: !!scenarioId,
+    enabled: !!scenarioId && enabled,
   });
 }
 
@@ -54,17 +57,17 @@ export function useGraph(scenarioId: string) {
   });
 }
 
-export function useGraphSummary(scenarioId: string) {
+export function useGraphSummary(scenarioId: string, enabled: boolean = true) {
   return useQuery({
     queryKey: graphKeys.graphSummary(scenarioId),
     queryFn: () => graphApi.getGraphSummary(scenarioId),
-    enabled: !!scenarioId,
+    enabled: !!scenarioId && enabled,
   });
 }
 
 export function useGraphArcs(
   scenarioId: string,
-  params?: { reasonCode?: string; limit?: number; offset?: number },
+  params?: { reasonCode?: string; limit?: number; offset?: number; enabled?: boolean },
 ) {
   return useQuery({
     queryKey: graphKeys.graphArcs(
@@ -74,23 +77,26 @@ export function useGraphArcs(
       params?.offset,
     ),
     queryFn: () => graphApi.getGraphArcs(scenarioId, params),
-    enabled: !!scenarioId,
+    enabled: !!scenarioId && (params?.enabled ?? true),
   });
 }
 
-export function useDuties(scenarioId: string, params?: { limit?: number; offset?: number }) {
+export function useDuties(
+  scenarioId: string,
+  params?: { limit?: number; offset?: number; enabled?: boolean },
+) {
   return useQuery({
     queryKey: graphKeys.duties(scenarioId, params?.limit, params?.offset),
     queryFn: () => graphApi.getDuties(scenarioId, params),
-    enabled: !!scenarioId,
+    enabled: !!scenarioId && (params?.enabled ?? true),
   });
 }
 
-export function useDutiesSummary(scenarioId: string) {
+export function useDutiesSummary(scenarioId: string, enabled: boolean = true) {
   return useQuery({
     queryKey: graphKeys.dutiesSummary(scenarioId),
     queryFn: () => graphApi.getDutiesSummary(scenarioId),
-    enabled: !!scenarioId,
+    enabled: !!scenarioId && enabled,
   });
 }
 

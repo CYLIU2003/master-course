@@ -4,16 +4,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 
 from bff.services.odpt_routes import _route_id_from_pattern, _stop_label
-
-
-def _service_id_from_odpt(value: str | None) -> str:
-    mapping = {
-        "weekday": "WEEKDAY",
-        "saturday": "SAT",
-        "holiday": "SUN_HOL",
-        "unknown": "WEEKDAY",
-    }
-    return mapping.get((value or "unknown").lower(), "WEEKDAY")
+from bff.services.service_ids import canonical_service_id
 
 
 def _safe_time(value: Any) -> str | None:
@@ -85,7 +76,7 @@ def build_timetable_rows_from_operational(
         if not pattern_id:
             continue
         route_id = _route_id_from_pattern(pattern_id)
-        service_id = _service_id_from_odpt(trip.get("service_id"))
+        service_id = canonical_service_id(trip.get("calendar") or trip.get("service_id"))
         direction = direction_by_pattern.get(pattern_id, "outbound")
         pattern = route_patterns.get(pattern_id) or {}
         grouped[(route_id, service_id, direction)].append(
@@ -142,7 +133,7 @@ def normalize_timetable_row_indexes(rows: List[Dict[str, Any]]) -> List[Dict[str
         grouped[
             (
                 str(row.get("route_id") or ""),
-                str(row.get("service_id") or "WEEKDAY"),
+                canonical_service_id(row.get("service_id")),
                 str(row.get("direction") or "outbound"),
             )
         ].append(dict(row))
@@ -160,6 +151,7 @@ def normalize_timetable_row_indexes(rows: List[Dict[str, Any]]) -> List[Dict[str
             ),
         )
         for trip_index, row in enumerate(items):
+            row["service_id"] = canonical_service_id(row.get("service_id"))
             row["trip_index"] = trip_index
             normalized.append(row)
 
@@ -172,7 +164,7 @@ def summarize_timetable_import(
     service_counts: Dict[str, int] = defaultdict(int)
     route_ids = set()
     for row in rows:
-        service_counts[str(row.get("service_id") or "WEEKDAY")] += 1
+        service_counts[canonical_service_id(row.get("service_id"))] += 1
         route_ids.add(str(row.get("route_id") or ""))
 
     stop_timetables = dataset.get("stopTimetables") or {}

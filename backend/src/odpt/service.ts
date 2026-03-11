@@ -1,6 +1,7 @@
 export type NormalizedService =
   | "weekday"
   | "saturday"
+  | "saturdayholiday"
   | "holiday"
   | "unknown";
 
@@ -11,6 +12,12 @@ export function normalizeService(calendarRaw?: string): NormalizedService {
 
   const normalized = calendarRaw.toLowerCase();
 
+  if (
+    normalized.includes("saturdayholiday") ||
+    (normalized.includes("saturday") && normalized.includes("holiday"))
+  ) {
+    return "saturdayholiday";
+  }
   if (normalized.includes("weekday")) {
     return "weekday";
   }

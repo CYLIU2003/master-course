@@ -60,6 +60,7 @@ class CanonicalDirection(str, Enum):
 class ServiceDayType(str, Enum):
     weekday = "WEEKDAY"
     saturday = "SAT"
+    saturday_holiday = "SAT_HOL"
     sunday_holiday = "SUN_HOL"
 
 
