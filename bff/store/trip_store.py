@@ -4,7 +4,14 @@ import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
+
+try:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+except Exception:  # pragma: no cover - optional dependency
+    pa = None
+    pq = None
 
 
 def _connect(path: Path) -> sqlite3.Connection:
@@ -81,6 +88,72 @@ def save_json(path: Path, value: Any) -> None:
         json.dumps(value, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
+
+
+def parquet_available() -> bool:
+    return pa is not None and pq is not None
+
+
+def save_parquet_rows(path: Path, rows: List[Any]) -> None:
+    if not parquet_available():
+        save_json(path, rows)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pa_module = cast(Any, pa)
+    pq_module = cast(Any, pq)
+    table = pa_module.table(
+        {
+            "row_index": list(range(len(rows))),
+            "payload_json": [json.dumps(row, ensure_ascii=False, separators=(",", ":")) for row in rows],
+        }
+    )
+    pq_module.write_table(table, path)
+
+
+def count_parquet_rows(path: Path) -> int:
+    if not path.exists():
+        return 0
+    if not parquet_available():
+        payload = load_json(path, [])
+        return len(payload) if isinstance(payload, list) else 0
+    pq_module = cast(Any, pq)
+    parquet_file = pq_module.ParquetFile(path)
+    return int(parquet_file.metadata.num_rows or 0)
+
+
+def page_parquet_rows(path: Path, *, offset: int = 0, limit: Optional[int] = None) -> List[Any]:
+    if not path.exists():
+        return []
+    if not parquet_available():
+        payload = load_json(path, [])
+        if not isinstance(payload, list):
+            return []
+        items = payload[offset:] if limit is None else payload[offset : offset + limit]
+        return [item for item in items]
+
+    pq_module = cast(Any, pq)
+    parquet_file = pq_module.ParquetFile(path)
+    target_end = None if limit is None else offset + limit
+    current_index = 0
+    results: List[Any] = []
+    for batch in parquet_file.iter_batches(columns=["payload_json"], batch_size=1024):
+        batch_size = batch.num_rows
+        batch_start = current_index
+        batch_end = current_index + batch_size
+        current_index = batch_end
+        if batch_end <= offset:
+            continue
+        start_in_batch = max(offset - batch_start, 0)
+        end_in_batch = batch_size if target_end is None else min(target_end - batch_start, batch_size)
+        payloads = batch.column(0).to_pylist()[start_in_batch:end_in_batch]
+        results.extend(json.loads(str(payload)) for payload in payloads)
+        if target_end is not None and limit is not None and len(results) >= limit:
+            break
+    return results
+
+
+def load_parquet_rows(path: Path) -> List[Any]:
+    return page_parquet_rows(path, offset=0, limit=None)
 
 
 def save_scalar(db_path: Path, name: str, value: Any) -> None:

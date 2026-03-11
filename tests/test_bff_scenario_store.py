@@ -96,6 +96,20 @@ def test_scenario_save_uses_refs_and_split_artifacts(temp_store_dir: Path):
     assert not Path(saved_doc["refs"]["timetableRows"]).exists()
 
 
+def test_trip_and_duty_artifacts_write_parquet(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Parquet scenario", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    scenario_store.set_field(scenario_id, "trips", [{"trip_id": "T1", "route_id": "R1"}, {"trip_id": "T2", "route_id": "R2"}])
+    scenario_store.set_field(scenario_id, "duties", [{"duty_id": "D1", "legs": []}])
+
+    saved_doc = json.loads((temp_store_dir / f"{scenario_id}.json").read_text(encoding="utf-8"))
+    assert Path(saved_doc["refs"]["tripSet"]).exists()
+    assert Path(saved_doc["refs"]["duties"]).exists()
+    assert scenario_store.count_field_rows(scenario_id, "trips") == 2
+    assert len(scenario_store.page_field_rows(scenario_id, "duties", limit=10, offset=0)) == 1
+
+
 def test_graph_artifact_is_split_into_meta_and_arcs(temp_store_dir: Path):
     meta = scenario_store.create_scenario("Graph split", "", "thesis_mode")
     scenario_id = meta["id"]
