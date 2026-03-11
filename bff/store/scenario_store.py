@@ -112,13 +112,14 @@ _ARTIFACT_REF_KEYS = {
     "simulation_result": "simulationResult",
     "optimization_result": "optimizationResult",
 }
-_SQLITE_ROW_ARTIFACT_FIELDS = {"timetable_rows", "stop_timetables", "trips", "blocks", "duties"}
+_SQLITE_ROW_ARTIFACT_FIELDS = {"timetable_rows", "stop_timetables"}
 _SQLITE_SCALAR_ARTIFACT_FIELDS = {"dispatch_plan", "simulation_result", "optimization_result"}
 _SUMMARY_SCALAR_NAMES = {
     "timetable_rows": "timetable_summary",
     "trips": "trips_summary",
     "duties": "duties_summary",
 }
+_PARQUET_ROW_ARTIFACT_FIELDS = {"trips", "blocks", "duties"}
 
 
 def _default_dispatch_scope() -> Dict[str, Any]:
@@ -468,6 +469,14 @@ def _load(scenario_id: str) -> Dict[str, Any]:
             else:
                 doc[field] = _load_split_or_inline(artifact_path, doc.get(field))
             continue
+        if field in _PARQUET_ROW_ARTIFACT_FIELDS:
+            if artifact_path.exists():
+                doc[field] = trip_store.load_parquet_rows(artifact_path)
+            elif trip_store.count_rows(artifact_db_path, field) > 0:
+                doc[field] = trip_store.load_rows(artifact_db_path, field)
+            else:
+                doc.setdefault(field, _artifact_default(field))
+            continue
         if field == "stop_timetables":
             if trip_store.count_rows(artifact_db_path, field) > 0:
                 doc[field] = trip_store.load_rows(artifact_db_path, field)
@@ -522,6 +531,29 @@ def _save(doc: Dict[str, Any]) -> None:
                 _SUMMARY_SCALAR_NAMES[field],
                 _build_timetable_summary_artifact(rows, doc.get("timetable_import_meta") or {}),
             )
+        elif field in _PARQUET_ROW_ARTIFACT_FIELDS:
+            value = doc.get(field)
+            if value is None:
+                if target_path.exists():
+                    target_path.unlink()
+                if field in _SUMMARY_SCALAR_NAMES:
+                    trip_store.save_scalar(
+                        artifact_db_path,
+                        _SUMMARY_SCALAR_NAMES[field],
+                        None,
+                    )
+            else:
+                rows = list(value or [])
+                trip_store.save_parquet_rows(target_path, rows)
+                if field in _SUMMARY_SCALAR_NAMES:
+                    summary_builder = (
+                        _build_trips_summary_artifact if field == "trips" else _build_duties_summary_artifact
+                    )
+                    trip_store.save_scalar(
+                        artifact_db_path,
+                        _SUMMARY_SCALAR_NAMES[field],
+                        summary_builder(rows),
+                    )
         elif field in _SQLITE_ROW_ARTIFACT_FIELDS:
             rows = list(doc.get(field) or [])
             trip_store.save_rows(artifact_db_path, field, rows)
@@ -536,7 +568,7 @@ def _save(doc: Dict[str, Any]) -> None:
                 )
         elif field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
             trip_store.save_scalar(artifact_db_path, field, doc.get(field))
-        if target_path.exists():
+        if field not in _PARQUET_ROW_ARTIFACT_FIELDS and target_path.exists():
             target_path.unlink()
 
     slim_doc = {
@@ -1110,6 +1142,10 @@ def count_field_rows(scenario_id: str, field: str) -> int:
         db_count = trip_store.count_timetable_rows(_artifact_store_path(refs))
         if db_count > 0:
             return db_count
+    if field in _PARQUET_ROW_ARTIFACT_FIELDS:
+        parquet_count = trip_store.count_parquet_rows(Path(refs[_ARTIFACT_REF_KEYS[field]]))
+        if parquet_count > 0:
+            return parquet_count
     if field in _SQLITE_ROW_ARTIFACT_FIELDS:
         db_count = trip_store.count_rows(_artifact_store_path(refs), field)
         if db_count > 0:
@@ -1134,6 +1170,14 @@ def page_field_rows(
             return [
                 dict(item)
                 for item in trip_store.page_timetable_rows(db_path, offset=offset, limit=limit)
+            ]
+    if field in _PARQUET_ROW_ARTIFACT_FIELDS:
+        parquet_path = Path(refs[_ARTIFACT_REF_KEYS[field]])
+        parquet_count = trip_store.count_parquet_rows(parquet_path)
+        if parquet_count > 0:
+            return [
+                dict(item)
+                for item in trip_store.page_parquet_rows(parquet_path, offset=offset, limit=limit)
             ]
     if field in _SQLITE_ROW_ARTIFACT_FIELDS:
         db_path = _artifact_store_path(refs)
