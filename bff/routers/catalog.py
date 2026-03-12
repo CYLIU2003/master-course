@@ -611,6 +611,32 @@ def _build_operator_summary(operator_id: str) -> Dict[str, Any]:
     db_info = transit_db.get_db_info(operator_id)
     tables = db_info.get("tables") or {}
     metadata = db_info.get("metadata") or {}
+    snapshot_key = str(metadata.get("catalog_snapshot_key") or "")
+    artifact_summary = (
+        transit_catalog.load_snapshot_operator_summary(snapshot_key) if snapshot_key else None
+    )
+
+    if artifact_summary is not None:
+        counts = dict(artifact_summary.get("counts") or {})
+        return {
+            "operatorId": operator_id,
+            "operatorLabel": info.get("name_ja", operator_id),
+            "sourceType": info.get("source", artifact_summary.get("sourceType") or "unknown"),
+            "datasetVersion": metadata.get("dataset_id") or metadata.get("snapshot_id") or "",
+            "counts": {
+                "routes": counts.get("routes", tables.get("routes", 0)),
+                "stops": counts.get("stops", tables.get("stops", 0)),
+                "timetableRows": counts.get("timetableRows", tables.get("timetable_rows", 0)),
+                "stopTimetables": counts.get("stopTimetables", tables.get("stop_timetables", 0)),
+                "stopTimetableEntries": tables.get("stop_timetable_entries", 0),
+                "tripStopTimes": tables.get("trip_stop_times", 0),
+                "calendar": tables.get("calendar", 0),
+                "calendarDates": tables.get("calendar_dates", 0),
+            },
+            "quality": dict(artifact_summary.get("quality") or {}),
+            "dbExists": db_info.get("exists", False),
+            "updatedAt": artifact_summary.get("updatedAt") or metadata.get("last_import_at"),
+        }
 
     return {
         "operatorId": operator_id,
@@ -627,6 +653,7 @@ def _build_operator_summary(operator_id: str) -> Dict[str, Any]:
             "calendar": tables.get("calendar", 0),
             "calendarDates": tables.get("calendar_dates", 0),
         },
+        "quality": {},
         "dbExists": db_info.get("exists", False),
         "updatedAt": metadata.get("last_import_at"),
     }
@@ -681,6 +708,18 @@ def get_catalog_map_overview(
         }
     metadata = db_info.get("metadata") or {}
     snapshot_key = str(metadata.get("catalog_snapshot_key") or "")
+    artifact_summary = (
+        transit_catalog.load_snapshot_operator_summary(snapshot_key) if snapshot_key else None
+    )
+    if artifact_summary is not None:
+        return {
+            "operatorId": operator_id,
+            "bounds": artifact_summary.get("bounds"),
+            "stopClusters": list(artifact_summary.get("stopClusters") or []),
+            "depotPoints": list(artifact_summary.get("depotPoints") or []),
+            "updatedAt": artifact_summary.get("updatedAt"),
+        }
+
     stops: List[Dict[str, Any]] = []
     if snapshot_key:
         try:

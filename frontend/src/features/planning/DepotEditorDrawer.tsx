@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import { EditorDrawer } from "@/features/common/EditorDrawer";
 import { DrawerTabs } from "@/features/common/DrawerTabs";
 import { useMasterUiStore } from "@/stores/master-ui-store";
@@ -51,6 +52,52 @@ const EMPTY_FORM: FormData = {
   notes: "",
 };
 
+const depotFormSchema = z
+  .object({
+    name: z.string().trim().min(1, "営業所名は必須です"),
+    location: z.string().trim(),
+    lat: z.string().trim(),
+    lon: z.string().trim(),
+    normalChargerCount: z.string().trim(),
+    normalChargerPowerKw: z.string().trim(),
+    fastChargerCount: z.string().trim(),
+    fastChargerPowerKw: z.string().trim(),
+    hasFuelFacility: z.boolean(),
+    parkingCapacity: z.string().trim(),
+    overnightCharging: z.boolean(),
+    notes: z.string(),
+  })
+  .superRefine((value, ctx) => {
+    const numericField = (
+      key: keyof Pick<FormData, "normalChargerCount" | "normalChargerPowerKw" | "fastChargerCount" | "fastChargerPowerKw" | "parkingCapacity">,
+      label: string,
+      integer: boolean = false,
+    ) => {
+      const raw = value[key].trim();
+      const parsed = Number(raw || "0");
+      if (!Number.isFinite(parsed) || parsed < 0 || (integer && !Number.isInteger(parsed))) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${label}は0以上の${integer ? "整数" : "数値"}で入力してください` });
+      }
+    };
+    numericField("normalChargerCount", "普通充電器数", true);
+    numericField("normalChargerPowerKw", "普通充電出力");
+    numericField("fastChargerCount", "急速充電器数", true);
+    numericField("fastChargerPowerKw", "急速充電出力");
+    numericField("parkingCapacity", "駐車台数", true);
+    if (value.lat.trim()) {
+      const lat = Number(value.lat);
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lat"], message: "緯度は -90 から 90 の範囲で入力してください" });
+      }
+    }
+    if (value.lon.trim()) {
+      const lon = Number(value.lon);
+      if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lon"], message: "経度は -180 から 180 の範囲で入力してください" });
+      }
+    }
+  });
+
 function depotToForm(depot: Depot): FormData {
   return {
     name: depot.name,
@@ -87,6 +134,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
 
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [activeTab, setActiveTab] = useState("basic");
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
   // Populate form when depot data loads
   useEffect(() => {
@@ -100,16 +148,29 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
   const updateField = useCallback(
     <K extends keyof FormData>(key: K, value: FormData[K]) => {
       setForm((prev) => ({ ...prev, [key]: value }));
+      setErrors((prev) => ({ ...prev, [key]: undefined }));
       setDirty(true);
     },
     [setDirty],
   );
 
   const handleSave = () => {
+    const parsed = depotFormSchema.safeParse(form);
+    if (!parsed.success) {
+      const nextErrors: Partial<Record<keyof FormData, string>> = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0] as keyof FormData | undefined;
+        if (field && nextErrors[field] == null) {
+          nextErrors[field] = issue.message;
+        }
+      }
+      setErrors(nextErrors);
+      return;
+    }
     if (isCreate) {
       const req: CreateDepotRequest = {
-        name: form.name || "新規営業所",
-        location: form.location,
+        name: parsed.data.name,
+        location: parsed.data.location,
         lat: form.lat ? Number(form.lat) : undefined,
         lon: form.lon ? Number(form.lon) : undefined,
         normalChargerCount: Number(form.normalChargerCount) || 0,
@@ -126,8 +187,8 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
       });
     } else if (depotId) {
       const req: UpdateDepotRequest = {
-        name: form.name,
-        location: form.location,
+        name: parsed.data.name,
+        location: parsed.data.location,
         lat: form.lat ? Number(form.lat) : undefined,
         lon: form.lon ? Number(form.lon) : undefined,
         normalChargerCount: Number(form.normalChargerCount) || 0,
@@ -180,6 +241,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
               className="field-input"
               placeholder="営業所名"
             />
+            <FieldError message={errors.name} />
           </Field>
           <Field label={t("depots.field_location", "住所")}>
             <input
@@ -200,6 +262,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
                 className="field-input"
                 placeholder="35.6812"
               />
+              <FieldError message={errors.lat} />
             </Field>
             <Field label={t("depots.field_lon", "経度")}>
               <input
@@ -210,6 +273,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
                 className="field-input"
                 placeholder="139.7671"
               />
+              <FieldError message={errors.lon} />
             </Field>
           </div>
           <Field label={t("depots.field_parking", "駐車台数")}>
@@ -220,6 +284,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
               onChange={(e) => updateField("parkingCapacity", e.target.value)}
               className="field-input"
             />
+            <FieldError message={errors.parkingCapacity} />
           </Field>
           <CheckboxField
             label={t("depots.field_fuel", "燃料設備あり")}
@@ -240,6 +305,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
                 onChange={(e) => updateField("normalChargerCount", e.target.value)}
                 className="field-input"
               />
+              <FieldError message={errors.normalChargerCount} />
             </Field>
             <Field label={t("depots.field_normal_power", "普通充電出力 (kW)")}>
               <input
@@ -250,6 +316,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
                 onChange={(e) => updateField("normalChargerPowerKw", e.target.value)}
                 className="field-input"
               />
+              <FieldError message={errors.normalChargerPowerKw} />
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -261,6 +328,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
                 onChange={(e) => updateField("fastChargerCount", e.target.value)}
                 className="field-input"
               />
+              <FieldError message={errors.fastChargerCount} />
             </Field>
             <Field label={t("depots.field_fast_power", "急速充電出力 (kW)")}>
               <input
@@ -271,6 +339,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
                 onChange={(e) => updateField("fastChargerPowerKw", e.target.value)}
                 className="field-input"
               />
+              <FieldError message={errors.fastChargerPowerKw} />
             </Field>
           </div>
           <CheckboxField
@@ -309,6 +378,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="mt-1 text-xs text-red-600">{message}</p>;
 }
 
 function CheckboxField({

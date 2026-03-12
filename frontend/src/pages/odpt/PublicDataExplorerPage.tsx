@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/api/client";
-import { publicDataApi } from "@/api/public-data";
+import { publicDataApi, type PublicDataSummary } from "@/api/public-data";
 import { RouteFamilyDetailPanel, TabWarmBoundary, VirtualizedList } from "@/features/common";
 import {
   usePublicDataExplorerStore,
   selectSelectedMapOverview,
   selectComparisonRows,
 } from "@/stores/public-data-explorer-store";
+import type { ExplorerDetailTab } from "@/stores/public-data-explorer-store";
 import type { OperatorId } from "@/api/public-data";
 import type { RouteFamilyDetail } from "@/types";
 
@@ -92,6 +93,23 @@ function formatCount(n: number): string {
   return n.toLocaleString();
 }
 
+function buildQualityWarnings(summary: PublicDataSummary) {
+  const warnings: Array<{ label: string; tone: "warn" | "danger"; detailTab: ExplorerDetailTab }> = [];
+  if ((summary.quality?.routeWithTripsRatio ?? 1) < 0.9) {
+    warnings.push({ label: "route-trip coverage low", detailTab: "routes", tone: (summary.quality?.routeWithTripsRatio ?? 1) < 0.75 ? "danger" : "warn" });
+  }
+  if ((summary.quality?.geoStopRatio ?? 1) < 0.9) {
+    warnings.push({ label: "geo stop coverage low", detailTab: "stops", tone: (summary.quality?.geoStopRatio ?? 1) < 0.75 ? "danger" : "warn" });
+  }
+  if ((summary.quality?.stopTimetableStopRatio ?? 1) < 0.8) {
+    warnings.push({ label: "stop timetable coverage low", detailTab: "timetable", tone: (summary.quality?.stopTimetableStopRatio ?? 1) < 0.5 ? "danger" : "warn" });
+  }
+  if ((summary.quality?.lowConfidenceRouteCount ?? 0) > 0) {
+    warnings.push({ label: "low-confidence variants", detailTab: "routes", tone: (summary.quality?.lowConfidenceRouteCount ?? 0) > 10 ? "danger" : "warn" });
+  }
+  return warnings;
+}
+
 // ── Operator Summary Card ─────────────────────────────────────
 
 function OperatorCard({ operatorId }: { operatorId: OperatorId }) {
@@ -106,6 +124,9 @@ function OperatorCard({ operatorId }: { operatorId: OperatorId }) {
   );
   const loadMapOverview = usePublicDataExplorerStore(
     (s) => s.loadMapOverview,
+  );
+  const focusOperatorDetail = usePublicDataExplorerStore(
+    (s) => s.focusOperatorDetail,
   );
   const meta = OPERATOR_META[operatorId];
   const isSelected = selectedOperator === operatorId;
@@ -131,6 +152,8 @@ function OperatorCard({ operatorId }: { operatorId: OperatorId }) {
       </div>
     );
   }
+
+  const qualityWarnings = buildQualityWarnings(summary);
 
   return (
     <div
@@ -170,10 +193,58 @@ function OperatorCard({ operatorId }: { operatorId: OperatorId }) {
         <CountItem label="calendar" value={summary.counts.calendar} />
       </div>
 
+      {summary.quality && (
+        <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+          <QualityChip
+            label="route-trip coverage"
+            value={`${Math.round((summary.quality.routeWithTripsRatio ?? 0) * 100)}%`}
+            detail={`${formatCount(summary.quality.routeWithTripsCount ?? 0)} / ${formatCount(summary.counts.routes)}`}
+          />
+          <QualityChip
+            label="geo stop coverage"
+            value={`${Math.round((summary.quality.geoStopRatio ?? 0) * 100)}%`}
+            detail={`${formatCount(summary.quality.geoStopCount ?? 0)} / ${formatCount(summary.counts.stops)}`}
+          />
+          <QualityChip
+            label="stop timetable coverage"
+            value={`${Math.round((summary.quality.stopTimetableStopRatio ?? 0) * 100)}%`}
+            detail={`${formatCount(summary.quality.stopTimetableStopCount ?? 0)} / ${formatCount(summary.counts.stops)}`}
+          />
+          <QualityChip
+            label="low-confidence variants"
+            value={formatCount(summary.quality.lowConfidenceRouteCount ?? 0)}
+            detail={`classified ${formatCount(summary.quality.classifiedRouteCount ?? 0)}`}
+          />
+        </div>
+      )}
+
       {summary.updatedAt && (
         <p className="mt-3 text-[10px] text-slate-400">
           最終更新: {new Date(summary.updatedAt).toLocaleString("ja-JP")}
         </p>
+      )}
+
+      {qualityWarnings.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {qualityWarnings.map((warning) => (
+            <button
+              key={warning.label}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                focusOperatorDetail(operatorId, warning.detailTab);
+                void loadMapOverview(operatorId);
+              }}
+              className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+                warning.tone === "danger"
+                  ? "bg-rose-100 text-rose-700"
+                  : "bg-amber-100 text-amber-700"
+              }`}
+            >
+              {warning.label}
+            </button>
+          ))}
+        </div>
       )}
 
       <button
@@ -200,6 +271,16 @@ function CountItem({ label, value }: { label: string; value: number }) {
         {formatCount(value)}
       </div>
       <div className="text-[10px] text-slate-500">{label}</div>
+    </div>
+  );
+}
+
+function QualityChip({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-slate-800">{value}</div>
+      <div className="text-[10px] text-slate-500">{detail}</div>
     </div>
   );
 }
@@ -264,6 +345,72 @@ function ComparisonSection() {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function QualityComparisonSection() {
+  const summaries = usePublicDataExplorerStore(
+    (s) => Object.values(s.summaries.itemsByOperator).filter(Boolean) as PublicDataSummary[],
+  );
+
+  if (summaries.length === 0) return null;
+
+  const metrics = [
+    {
+      key: "routeWithTripsRatio",
+      label: "route-trip coverage",
+      getValue: (summary: PublicDataSummary) => (summary.quality?.routeWithTripsRatio ?? 0) * 100,
+      getDetail: (summary: PublicDataSummary) => `${formatCount(summary.quality?.routeWithTripsCount ?? 0)} / ${formatCount(summary.counts.routes)}`,
+    },
+    {
+      key: "geoStopRatio",
+      label: "geo stop coverage",
+      getValue: (summary: PublicDataSummary) => (summary.quality?.geoStopRatio ?? 0) * 100,
+      getDetail: (summary: PublicDataSummary) => `${formatCount(summary.quality?.geoStopCount ?? 0)} / ${formatCount(summary.counts.stops)}`,
+    },
+    {
+      key: "stopTimetableStopRatio",
+      label: "stop timetable coverage",
+      getValue: (summary: PublicDataSummary) => (summary.quality?.stopTimetableStopRatio ?? 0) * 100,
+      getDetail: (summary: PublicDataSummary) => `${formatCount(summary.quality?.stopTimetableStopCount ?? 0)} / ${formatCount(summary.counts.stops)}`,
+    },
+  ] as const;
+
+  return (
+    <div className="rounded-xl border border-border bg-surface-raised p-6">
+      <h2 className="text-sm font-semibold text-slate-700 mb-1">データ品質比較</h2>
+      <p className="text-xs text-slate-400 mb-4">
+        operator ごとの公開データ coverage を summary artifact から比較します。
+      </p>
+      <div className="space-y-5">
+        {metrics.map((metric) => (
+          <div key={metric.key}>
+            <div className="text-xs font-medium text-slate-600 mb-1.5">{metric.label}</div>
+            <div className="space-y-2">
+              {summaries.map((summary) => {
+                const value = metric.getValue(summary);
+                const meta = OPERATOR_META[summary.operatorId];
+                return (
+                  <div key={`${metric.key}-${summary.operatorId}`} className="flex items-center gap-3">
+                    <span className="w-16 text-[11px] text-slate-500 text-right shrink-0">{meta.label}</span>
+                    <div className="flex-1">
+                      <div className="h-5 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${summary.operatorId === "tokyu" ? "bg-red-400" : "bg-blue-400"}`}
+                          style={{ width: `${Math.max(value, 2)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="w-16 text-xs font-mono text-slate-700 text-right">{value.toFixed(1)}%</span>
+                    <span className="w-24 text-[11px] text-slate-500 text-right">{metric.getDetail(summary)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -398,6 +545,8 @@ function MapOverviewPanel() {
 // ── Detail Panel (loaded only when operator selected) ──────────
 
 function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
+  const consumePreferredDetailTab = usePublicDataExplorerStore((s) => s.consumePreferredDetailTab);
+  const preferredDetailTab = usePublicDataExplorerStore((s) => s.preferredDetailTab);
   const pageSize = 200;
   const [routeFamilies, setRouteFamilies] = useState<DbRouteFamily[]>([]);
   const [routeFamiliesTotal, setRouteFamiliesTotal] = useState(0);
@@ -541,8 +690,16 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
     setTimetableOffset(0);
     setSelectedServiceId("");
     setError(null);
-    setDetailTab("routes");
-  }, [operatorId]);
+    setDetailTab(preferredDetailTab ?? consumePreferredDetailTab() ?? "routes");
+  }, [consumePreferredDetailTab, operatorId]);
+
+  useEffect(() => {
+    if (!preferredDetailTab) {
+      return;
+    }
+    setDetailTab(preferredDetailTab);
+    consumePreferredDetailTab();
+  }, [consumePreferredDetailTab, preferredDetailTab]);
 
   useEffect(() => {
     if (detailTab === "routes" && !routesLoaded && !loading) {
@@ -956,6 +1113,7 @@ export function PublicDataExplorerPage() {
 
         {/* 3段目: Comparison (all mode) */}
         {selectedOperator === "all" && <ComparisonSection />}
+        {selectedOperator === "all" && <QualityComparisonSection />}
 
         {/* 4段目: Detail (operator fixed) */}
         {selectedOperator !== "all" && (

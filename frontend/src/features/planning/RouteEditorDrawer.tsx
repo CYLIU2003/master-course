@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import { EditorDrawer } from "@/features/common/EditorDrawer";
 import { DrawerTabs } from "@/features/common/DrawerTabs";
 import { useMasterUiStore } from "@/stores/master-ui-store";
@@ -46,6 +47,28 @@ const EMPTY_FORM: FormData = {
   routeVariantTypeManual: "",
 };
 
+const routeFormSchema = z
+  .object({
+    name: z.string().trim().min(1, "路線名は必須です"),
+    startStop: z.string().trim().min(1, "始点は必須です"),
+    endStop: z.string().trim().min(1, "終点は必須です"),
+    distanceKm: z.string().trim(),
+    durationMin: z.string().trim(),
+    color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, "色は #RRGGBB 形式で入力してください"),
+    enabled: z.boolean(),
+    routeVariantTypeManual: z.string(),
+  })
+  .superRefine((value, ctx) => {
+    const distance = Number(value.distanceKm || "0");
+    if (!Number.isFinite(distance) || distance < 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["distanceKm"], message: "距離は0以上の数値で入力してください" });
+    }
+    const duration = Number(value.durationMin || "0");
+    if (!Number.isFinite(duration) || duration < 0 || !Number.isInteger(duration)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["durationMin"], message: "所要時間は0以上の整数で入力してください" });
+    }
+  });
+
 function routeToForm(r: Route): FormData {
   return {
     name: r.name,
@@ -79,6 +102,7 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
 
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [activeTab, setActiveTab] = useState("basic");
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
   useEffect(() => {
     if (isCreate) {
@@ -91,20 +115,34 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
   const updateField = useCallback(
     <K extends keyof FormData>(key: K, value: FormData[K]) => {
       setForm((prev) => ({ ...prev, [key]: value }));
+      setErrors((prev) => ({ ...prev, [key]: undefined }));
       setDirty(true);
     },
     [setDirty],
   );
 
   const handleSave = () => {
+    const parsed = routeFormSchema.safeParse(form);
+    if (!parsed.success) {
+      const nextErrors: Partial<Record<keyof FormData, string>> = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0] as keyof FormData | undefined;
+        if (field && nextErrors[field] == null) {
+          nextErrors[field] = issue.message;
+        }
+      }
+      setErrors(nextErrors);
+      setActiveTab("basic");
+      return;
+    }
     if (isCreate) {
       const req: CreateRouteRequest = {
-        name: form.name || "新規路線",
-        startStop: form.startStop,
-        endStop: form.endStop,
+        name: parsed.data.name,
+        startStop: parsed.data.startStop,
+        endStop: parsed.data.endStop,
         distanceKm: Number(form.distanceKm) || 0,
         durationMin: Number(form.durationMin) || 0,
-        color: form.color,
+        color: parsed.data.color,
         enabled: form.enabled,
       };
       createRoute.mutate(req, {
@@ -112,12 +150,12 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
       });
     } else if (routeId) {
       const req: UpdateRouteRequest = {
-        name: form.name,
-        startStop: form.startStop,
-        endStop: form.endStop,
+        name: parsed.data.name,
+        startStop: parsed.data.startStop,
+        endStop: parsed.data.endStop,
         distanceKm: Number(form.distanceKm) || 0,
         durationMin: Number(form.durationMin) || 0,
-        color: form.color,
+        color: parsed.data.color,
         enabled: form.enabled,
         routeVariantTypeManual: form.routeVariantTypeManual || null,
         canonicalDirectionManual: null,
@@ -164,6 +202,7 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
               className="field-input"
               placeholder="例: 鶴見線"
             />
+            <FieldError message={errors.name} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t("routes.field_start", "始点")}>
@@ -174,6 +213,7 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
                 className="field-input"
                 placeholder="始点停留所"
               />
+              <FieldError message={errors.startStop} />
             </Field>
             <Field label={t("routes.field_end", "終点")}>
               <input
@@ -183,6 +223,7 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
                 className="field-input"
                 placeholder="終点停留所"
               />
+              <FieldError message={errors.endStop} />
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -195,6 +236,7 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
                 onChange={(e) => updateField("distanceKm", e.target.value)}
                 className="field-input"
               />
+              <FieldError message={errors.distanceKm} />
             </Field>
             <Field label={t("routes.field_duration", "所要時間 (分)")}>
               <input
@@ -204,6 +246,7 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
                 onChange={(e) => updateField("durationMin", e.target.value)}
                 className="field-input"
               />
+              <FieldError message={errors.durationMin} />
             </Field>
           </div>
           <Field label={t("routes.field_color", "表示色")}>
@@ -222,6 +265,7 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
                 placeholder="#3b82f6"
               />
             </div>
+            <FieldError message={errors.color} />
           </Field>
           <CheckboxField
             label={t("routes.field_enabled", "有効")}
@@ -984,6 +1028,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="mt-1 text-xs text-red-600">{message}</p>;
 }
 
 function CheckboxField({

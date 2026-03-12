@@ -22,6 +22,16 @@ export type PublicDataSummary = {
   sourceType: SourceType;
   datasetVersion: string;
   counts: PublicDataCounts;
+  quality?: {
+    routeWithTripsCount?: number;
+    routeWithTripsRatio?: number;
+    geoStopCount?: number;
+    geoStopRatio?: number;
+    stopTimetableStopCount?: number;
+    stopTimetableStopRatio?: number;
+    classifiedRouteCount?: number;
+    lowConfidenceRouteCount?: number;
+  };
   dbExists: boolean;
   updatedAt: string | null;
 };

@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useJob,
   useRunSimulation,
@@ -10,17 +11,25 @@ import {
 } from "@/hooks";
 import { BackendJobPanel, PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { DispatchScopePanel } from "@/features/planning";
+import { runKeys } from "@/hooks/use-run";
 
 export function SimulationRunPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const { data: scope } = useDispatchScope(scenarioId!);
   const scopeReady = Boolean(scope?.depotId);
   const { data: result, isLoading, error } = useSimulationResult(scenarioId!);
   const { data: capabilities } = useSimulationCapabilities(scenarioId!);
   const runMutation = useRunSimulation(scenarioId!);
   const { data: activeJob } = useJob(activeJobId);
+
+  useEffect(() => {
+    if (activeJob?.status === "completed") {
+      void queryClient.invalidateQueries({ queryKey: runKeys.simulation(scenarioId!) });
+    }
+  }, [activeJob?.status, queryClient, scenarioId]);
 
   const handleRun = async () => {
     const job = await runMutation.mutateAsync({
@@ -65,6 +74,11 @@ export function SimulationRunPage() {
           <EmptyState title={t("simulation.no_results")} description={t("simulation.no_results_description")} />
         ) : (
           <div className="space-y-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <div>source: {result.source}</div>
+              <div>depot: {result.scope?.depotId ?? "-"}</div>
+              <div>service: {result.scope?.serviceId ?? "-"}</div>
+            </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="rounded-lg border border-border bg-surface-raised p-3 text-center">
                 <p className="text-[10px] font-semibold uppercase text-slate-400">{t("simulation.total_energy")}</p>

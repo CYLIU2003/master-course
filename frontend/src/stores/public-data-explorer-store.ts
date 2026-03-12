@@ -6,6 +6,8 @@ import {
   type MapOverviewResponse,
 } from "@/api/public-data";
 
+export type ExplorerDetailTab = "routes" | "stops" | "timetable";
+
 // ── State ────────────────────────────────────────────────────
 
 interface PublicDataExplorerState {
@@ -22,10 +24,13 @@ interface PublicDataExplorerState {
   /** Per-operator map overview (bounds, clusters, depots) */
   mapOverviewByOperator: Partial<Record<OperatorId, MapOverviewResponse>>;
   mapOverviewLoading: Partial<Record<OperatorId, boolean>>;
+  preferredDetailTab: ExplorerDetailTab | null;
 
   // ── Actions ──────────────────────────────────────────────
 
   setSelectedOperator: (operator: OperatorId | "all") => void;
+  focusOperatorDetail: (operator: OperatorId, detailTab: ExplorerDetailTab) => void;
+  consumePreferredDetailTab: () => ExplorerDetailTab | null;
 
   /** Load all operator summaries (lightweight, called on mount) */
   loadSummaries: () => Promise<void>;
@@ -51,8 +56,19 @@ export const usePublicDataExplorerStore = create<PublicDataExplorerState>(
 
     mapOverviewByOperator: {},
     mapOverviewLoading: {},
+    preferredDetailTab: null,
 
     setSelectedOperator: (operator) => set({ selectedOperator: operator }),
+    focusOperatorDetail: (operator, detailTab) =>
+      set({ selectedOperator: operator, preferredDetailTab: detailTab }),
+    consumePreferredDetailTab: () => {
+      let nextTab: ExplorerDetailTab | null = null;
+      set((state) => {
+        nextTab = state.preferredDetailTab;
+        return { preferredDetailTab: null };
+      });
+      return nextTab;
+    },
 
     loadSummaries: async () => {
       set((s) => ({

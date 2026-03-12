@@ -377,6 +377,7 @@ def _run_optimization(
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
             "feed_context": feed_context,
+            "scope": {"serviceId": service_id, "depotId": depot_id},
             "solver_status": result_payload["status"],
             "mode": mode,
             "objective_value": result_payload.get("objective_value"),
@@ -441,6 +442,7 @@ def _run_optimization(
             "output_dir": output_dir,
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }
+        optimization_result["audit"] = optimization_audit
 
         store.set_field(scenario_id, "optimization_result", optimization_result)
         store.set_field(scenario_id, "optimization_audit", optimization_audit)
@@ -649,6 +651,10 @@ def get_optimization_result(scenario_id: str) -> Dict[str, Any]:
             status_code=404,
             detail="Optimization has not been run yet. POST to /run-optimization first.",
         )
+    if isinstance(result, dict) and "audit" not in result:
+        audit = store.get_field(scenario_id, "optimization_audit")
+        if audit is not None:
+            result = {**result, "audit": audit}
     return result
 
 
