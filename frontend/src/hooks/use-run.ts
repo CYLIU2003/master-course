@@ -59,7 +59,6 @@ export function useRunSimulation(scenarioId: string) {
     mutationFn: (data?: RunSimulationRequest) =>
       simulationApi.run(scenarioId, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: runKeys.simulation(scenarioId) });
       qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });
@@ -71,7 +70,6 @@ export function useRunOptimization(scenarioId: string) {
     mutationFn: (data: RunOptimizationRequest) =>
       optimizationApi.run(scenarioId, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: runKeys.optimization(scenarioId) });
       qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
   });

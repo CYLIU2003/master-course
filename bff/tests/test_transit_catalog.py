@@ -124,6 +124,21 @@ class TransitCatalogTest(unittest.TestCase):
         self.assertIn("stops", slim_bundle)
         self.assertNotIn("timetable_rows", slim_bundle)
 
+    def test_snapshot_writes_operator_summary_artifact(self) -> None:
+        feed_dir = self.tmp_path / "mini_gtfs_summary"
+        self._write_minimal_gtfs_feed(feed_dir)
+
+        bundle = transit_catalog.refresh_gtfs_snapshot(feed_path=feed_dir)
+        summary = transit_catalog.load_snapshot_operator_summary(bundle["snapshotKey"])
+
+        self.assertIsNotNone(summary)
+        assert summary is not None
+        self.assertEqual(summary["operatorId"], "toei")
+        self.assertEqual(summary["counts"]["routes"], 1)
+        self.assertEqual(summary["counts"]["stops"], 2)
+        self.assertIn("quality", summary)
+        self.assertIn("geoStopRatio", summary["quality"])
+
     def test_gtfs_snapshot_normalizes_add_remove_calendar_dates(self) -> None:
         feed_dir = self.tmp_path / "mini_gtfs_calendar_dates"
         self._write_minimal_gtfs_feed(feed_dir, include_calendar_dates=True)

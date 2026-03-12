@@ -563,6 +563,9 @@ export interface TouPriceSlot {
 export interface SimulationResult {
   scenario_id: string;
   scope?: DispatchScope;
+  source?: string;
+  audit?: Record<string, unknown>;
+  feed_context?: FeedContext | null;
   duties: VehicleDuty[];
   energy_consumption: EnergyRecord[];
   soc_trace: SocTracePoint[];
@@ -588,6 +591,10 @@ export interface SocTracePoint {
 
 export interface OptimizationResult {
   scenario_id: string;
+  scope?: DispatchScope;
+  mode?: string;
+  audit?: Record<string, unknown>;
+  feed_context?: FeedContext | null;
   solver_status: string;
   objective_value: number;
   solve_time_seconds: number;

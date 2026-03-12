@@ -294,6 +294,7 @@ def _run_simulation(
             "output_dir": output_dir,
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }
+        result["audit"] = simulation_audit
 
         store.set_field(scenario_id, "simulation_result", result)
         store.set_field(scenario_id, "simulation_audit", simulation_audit)
@@ -330,6 +331,10 @@ def get_simulation_result(scenario_id: str) -> Dict[str, Any]:
             status_code=404,
             detail="Simulation has not been run yet. POST to /run-simulation first.",
         )
+    if isinstance(result, dict) and "audit" not in result:
+        audit = store.get_field(scenario_id, "simulation_audit")
+        if audit is not None:
+            result = {**result, "audit": audit}
     return result
 
 

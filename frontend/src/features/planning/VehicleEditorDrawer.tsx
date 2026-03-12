@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import { EditorDrawer } from "@/features/common/EditorDrawer";
 import { DrawerTabs } from "@/features/common/DrawerTabs";
 import { useMasterUiStore } from "@/stores/master-ui-store";
@@ -69,6 +70,33 @@ const EMPTY_FORM: FormData = {
   acquisitionCost: "0",
   enabled: true,
 };
+
+const vehicleFormSchema = z
+  .object({
+    quantity: z.string().trim(),
+    modelName: z.string().trim().min(1, "車両名/モデル名は必須です"),
+    capacityPassengers: z.string().trim(),
+    batteryKwh: z.string().trim(),
+    energyConsumptionEv: z.string().trim(),
+    chargePowerKw: z.string().trim(),
+    minSoc: z.string().trim(),
+    maxSoc: z.string().trim(),
+    fuelTankL: z.string().trim(),
+    energyConsumptionIce: z.string().trim(),
+    acquisitionCost: z.string().trim(),
+    enabled: z.boolean(),
+  })
+  .superRefine((value, ctx) => {
+    const nonNegative = (raw: string, path: keyof FormData, label: string, integer: boolean = false) => {
+      const parsed = Number(raw || "0");
+      if (!Number.isFinite(parsed) || parsed < 0 || (integer && !Number.isInteger(parsed))) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message: `${label}は0以上の${integer ? "整数" : "数値"}で入力してください` });
+      }
+    };
+    nonNegative(value.quantity, "quantity", "導入台数", true);
+    nonNegative(value.capacityPassengers, "capacityPassengers", "乗客定員", true);
+    nonNegative(value.acquisitionCost, "acquisitionCost", "取得費用");
+  });
 
 function vehicleToForm(v: Vehicle): FormData {
   return {
@@ -151,6 +179,7 @@ export function VehicleEditorDrawer({
   const [selectedTemplateId, setSelectedTemplateId] = useState(templateId ?? "");
   const [duplicateQuantity, setDuplicateQuantity] = useState("1");
   const [duplicateTargetDepotId, setDuplicateTargetDepotId] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const templates = templatesData?.items ?? [];
   const depots = depotsData?.items ?? [];
@@ -233,6 +262,7 @@ export function VehicleEditorDrawer({
   const updateField = useCallback(
     <K extends keyof FormData>(key: K, value: FormData[K]) => {
       setForm((prev) => ({ ...prev, [key]: value }));
+      setValidationError(null);
       setDirty(true);
     },
     [setDirty],
@@ -270,6 +300,38 @@ export function VehicleEditorDrawer({
   };
 
   const handleSave = () => {
+    const parsed = vehicleFormSchema.safeParse(form);
+    if (!parsed.success) {
+      setValidationError(parsed.error.issues[0]?.message ?? "入力内容を確認してください");
+      setActiveTab("basic");
+      return;
+    }
+    if (!depotId && isCreate) {
+      setValidationError("営業所を選択してから車両を追加してください");
+      return;
+    }
+    if (isEv) {
+      const battery = Number(form.batteryKwh || "0");
+      const chargePower = Number(form.chargePowerKw || "0");
+      if (!Number.isFinite(battery) || battery <= 0) {
+        setValidationError("EV バスは battery_kwh を正の数で入力してください");
+        setActiveTab("ev");
+        return;
+      }
+      if (!Number.isFinite(chargePower) || chargePower <= 0) {
+        setValidationError("EV バスは charge_power_kw を正の数で入力してください");
+        setActiveTab("ev");
+        return;
+      }
+    } else {
+      const fuelTank = Number(form.fuelTankL || "0");
+      if (!Number.isFinite(fuelTank) || fuelTank <= 0) {
+        setValidationError("エンジンバスは fuel_tank_l を正の数で入力してください");
+        setActiveTab("engine");
+        return;
+      }
+    }
+
     const baseReq = buildCreateVehicleRequest();
 
     if (isCreate) {
@@ -376,6 +438,12 @@ export function VehicleEditorDrawer({
       isSaving={isSaving}
     >
       <DrawerTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
+
+      {validationError && (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {validationError}
+        </div>
+      )}
 
       {activeTab === "basic" && (
         <div className="space-y-4">

@@ -49,6 +49,7 @@ _log = _logging.getLogger(__name__)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CATALOG_DB_PATH_DEFAULT = resolve_runtime_path("transit_catalog_db_path", "./outputs/transit_catalog.sqlite")
 _ODPT_SAVED_SNAPSHOT_DIR_DEFAULT = resolve_runtime_path("odpt_snapshot_dir", "./data/odpt/tokyu")
+_CATALOG_SUMMARY_DIR_DEFAULT = resolve_runtime_path("catalog_summary_dir", "./outputs/catalog_summaries")
 
 _ENTITY_TYPES = (
     "stops",
@@ -77,6 +78,160 @@ ProgressCallback = Callable[[str, Dict[str, Any]], None]
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _catalog_summary_dir() -> Path:
+    return Path(_CATALOG_SUMMARY_DIR_DEFAULT)
+
+
+def _summary_artifact_path(snapshot_key: str) -> Path:
+    safe_name = snapshot_key.replace(":", "_").replace("/", "_")
+    return _catalog_summary_dir() / f"{safe_name}.summary.json"
+
+
+def _build_operator_summary_artifact(
+    *,
+    snapshot_key: str,
+    operator_id: str,
+    source_type: str,
+    routes: List[Dict[str, Any]],
+    stops: List[Dict[str, Any]],
+    timetable_rows: List[Dict[str, Any]],
+    stop_timetables: List[Dict[str, Any]],
+    updated_at: Optional[str],
+) -> Dict[str, Any]:
+    geo_stops = [
+        stop for stop in stops if stop.get("lat") is not None and stop.get("lon") is not None
+    ]
+    bounds = None
+    if geo_stops:
+        latitudes = [float(stop["lat"]) for stop in geo_stops]
+        longitudes = [float(stop["lon"]) for stop in geo_stops]
+        bounds = {
+            "minLat": min(latitudes),
+            "maxLat": max(latitudes),
+            "minLon": min(longitudes),
+            "maxLon": max(longitudes),
+        }
+
+    cluster_counts: Dict[tuple[float, float], int] = {}
+    for stop in geo_stops:
+        key = (round(float(stop["lat"]), 2), round(float(stop["lon"]), 2))
+        cluster_counts[key] = cluster_counts.get(key, 0) + 1
+
+    stop_clusters = [
+        {
+            "id": f"{operator_id}:c:{index}",
+            "lat": lat,
+            "lon": lon,
+            "count": count,
+        }
+        for index, ((lat, lon), count) in enumerate(
+            sorted(cluster_counts.items(), key=lambda item: item[1], reverse=True)[:500]
+        )
+    ]
+
+    depot_points = [
+        {
+            "id": f"{operator_id}:depot:{stop.get('stop_id') or stop.get('id')}",
+            "label": str(stop.get("stop_name") or stop.get("name") or ""),
+            "lat": stop.get("lat"),
+            "lon": stop.get("lon"),
+        }
+        for stop in geo_stops
+        if any(
+            keyword in str(stop.get("stop_name") or stop.get("name") or "")
+            for keyword in ("営業所", "車庫", "操車所")
+        )
+    ]
+
+    route_with_trips_count = sum(
+        1 for route in routes if int(route.get("trip_count") or route.get("tripCount") or 0) > 0
+    )
+    geo_stop_count = len(geo_stops)
+    stop_timetable_stop_ids = {
+        str(item.get("stopId") or item.get("stop_id") or "")
+        for item in stop_timetables
+        if item.get("stopId") or item.get("stop_id")
+    }
+    classified_route_count = sum(
+        1 for route in routes if route.get("classificationConfidence") is not None
+    )
+    low_confidence_route_count = sum(
+        1
+        for route in routes
+        if route.get("classificationConfidence") is not None
+        and float(route.get("classificationConfidence") or 0.0) < 0.6
+    )
+
+    return {
+        "snapshotKey": snapshot_key,
+        "operatorId": operator_id,
+        "sourceType": source_type,
+        "counts": {
+            "routes": len(routes),
+            "stops": len(stops),
+            "timetableRows": len(timetable_rows),
+            "stopTimetables": len(stop_timetables),
+            "depotCount": len(depot_points),
+        },
+        "bounds": bounds,
+        "stopClusters": stop_clusters,
+        "depotPoints": depot_points,
+        "quality": {
+            "routeWithTripsCount": route_with_trips_count,
+            "routeWithTripsRatio": round(route_with_trips_count / len(routes), 4) if routes else 0.0,
+            "geoStopCount": geo_stop_count,
+            "geoStopRatio": round(geo_stop_count / len(stops), 4) if stops else 0.0,
+            "stopTimetableStopCount": len(stop_timetable_stop_ids),
+            "stopTimetableStopRatio": round(len(stop_timetable_stop_ids) / len(stops), 4) if stops else 0.0,
+            "classifiedRouteCount": classified_route_count,
+            "lowConfidenceRouteCount": low_confidence_route_count,
+        },
+        "updatedAt": updated_at,
+    }
+
+
+def _write_operator_summary_artifact(
+    *,
+    snapshot_key: str,
+    operator_id: str,
+    source_type: str,
+    routes: List[Dict[str, Any]],
+    stops: List[Dict[str, Any]],
+    timetable_rows: List[Dict[str, Any]],
+    stop_timetables: List[Dict[str, Any]],
+    updated_at: Optional[str],
+) -> str:
+    payload = _build_operator_summary_artifact(
+        snapshot_key=snapshot_key,
+        operator_id=operator_id,
+        source_type=source_type,
+        routes=routes,
+        stops=stops,
+        timetable_rows=timetable_rows,
+        stop_timetables=stop_timetables,
+        updated_at=updated_at,
+    )
+    path = _summary_artifact_path(snapshot_key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(path)
+
+
+def load_snapshot_operator_summary(snapshot_key: str) -> Optional[Dict[str, Any]]:
+    snapshot = get_snapshot(snapshot_key)
+    if snapshot is None:
+        return None
+    meta = dict(snapshot.get("meta") or {})
+    artifacts = dict(meta.get("artifacts") or {})
+    summary_path = artifacts.get("operatorSummary")
+    if not summary_path:
+        return None
+    path = Path(str(summary_path))
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _resolve_repo_path(value: str | Path) -> Path:
@@ -1141,6 +1296,18 @@ def _store_odpt_snapshot(
             "routePayloads": len(canonical_route_payloads),
         },
     }
+    meta["artifacts"] = {
+        "operatorSummary": _write_operator_summary_artifact(
+            snapshot_key=_odpt_snapshot_key(operator),
+            operator_id=operator,
+            source_type="odpt",
+            routes=routes,
+            stops=stops,
+            timetable_rows=timetable_rows,
+            stop_timetables=stop_timetables,
+            updated_at=meta.get("refreshedAt"),
+        )
+    }
     meta.update(merged_meta)
 
     result = _replace_snapshot(
@@ -1324,6 +1491,18 @@ def refresh_odpt_snapshot(
             "routePayloads": 0,
         },
     }
+    meta["artifacts"] = {
+        "operatorSummary": _write_operator_summary_artifact(
+            snapshot_key=_odpt_snapshot_key(operator),
+            operator_id=operator,
+            source_type="odpt",
+            routes=routes,
+            stops=stops,
+            timetable_rows=trips,
+            stop_timetables=stop_timetables,
+            updated_at=meta.get("refreshedAt"),
+        )
+    }
 
     result = _replace_snapshot(
         snapshot_key=_odpt_snapshot_key(operator),
@@ -1505,6 +1684,18 @@ def refresh_gtfs_snapshot(
     _st = list(stop_bundle.get("stop_timetables") or [])
     _cal = list(core.get("calendar_entries") or [])
     _cal_dates = _normalize_calendar_date_entries(list(core.get("calendar_date_entries") or []))
+    meta["artifacts"] = {
+        "operatorSummary": _write_operator_summary_artifact(
+            snapshot_key=_gtfs_snapshot_key(feed_path),
+            operator_id="toei",
+            source_type="gtfs",
+            routes=_routes,
+            stops=_stops,
+            timetable_rows=_tt_rows,
+            stop_timetables=_st,
+            updated_at=meta.get("refreshedAt"),
+        )
+    }
 
     result = _replace_snapshot(
         snapshot_key=_gtfs_snapshot_key(feed_path),
