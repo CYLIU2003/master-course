@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/use-memo, react-hooks/exhaustive-deps */
 import { useMemo, type DependencyList } from "react";
 import { pushPerfEntry } from "./perf-store";
 

@@ -162,6 +162,48 @@ def test_timetable_rows_use_sqlite_paging_and_summary(temp_store_dir: Path):
     assert len(summary["byService"]) == 2
 
 
+def test_artifacts_sqlite_roundtrip_for_simulation_and_optimization_results(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Artifact roundtrip", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    simulation_result = {
+        "scenario_id": scenario_id,
+        "total_energy_kwh": 120.5,
+        "total_distance_km": 87.2,
+        "feasibility_violations": [],
+        "audit": {"dataset_fingerprint": "tokyu:2026-03-15", "input_counts": {"tasks": 12}},
+    }
+    optimization_result = {
+        "scenario_id": scenario_id,
+        "solver_status": "OPTIMAL",
+        "objective_value": 12345.6,
+        "cost_breakdown": {"total_cost": 12345.6},
+        "audit": {"dataset_fingerprint": "tokyu:2026-03-15", "input_counts": {"trips": 12}},
+    }
+
+    scenario_store.set_field(scenario_id, "simulation_result", simulation_result)
+    scenario_store.set_field(scenario_id, "optimization_result", optimization_result)
+
+    loaded_simulation = scenario_store.get_field(scenario_id, "simulation_result")
+    loaded_optimization = scenario_store.get_field(scenario_id, "optimization_result")
+
+    assert loaded_simulation["total_energy_kwh"] == 120.5
+    assert loaded_simulation["audit"]["dataset_fingerprint"] == "tokyu:2026-03-15"
+    assert loaded_optimization["objective_value"] == 12345.6
+    assert loaded_optimization["audit"]["input_counts"]["trips"] == 12
+
+
+def test_scenario_save_writes_complete_marker(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Complete marker", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    scenario_store.set_field(scenario_id, "timetable_rows", [{"trip_id": "T1", "service_id": "WEEKDAY"}])
+
+    artifact_dir = temp_store_dir / scenario_id
+    assert (artifact_dir / "_COMPLETE").exists()
+    assert not (artifact_dir / "_INCOMPLETE").exists()
+
+
 def test_replace_routes_from_source_prunes_stale_permissions(
     temp_store_dir: Path,
 ):

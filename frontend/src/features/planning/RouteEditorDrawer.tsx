@@ -105,11 +105,14 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
   useEffect(() => {
-    if (isCreate) {
-      setForm(EMPTY_FORM);
-    } else if (route) {
-      setForm(routeToForm(route));
-    }
+    const frame = window.requestAnimationFrame(() => {
+      if (isCreate) {
+        setForm(EMPTY_FORM);
+      } else if (route) {
+        setForm(routeToForm(route));
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [route, isCreate]);
 
   const updateField = useCallback(

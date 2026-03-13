@@ -3,12 +3,12 @@ import { pushPerfEntry } from "./perf-store";
 
 export function useRenderTrace(label: string) {
   const renderCount = useRef(0);
-  renderCount.current += 1;
 
   useEffect(() => {
     if (!import.meta.env.DEV) {
       return;
     }
+    renderCount.current += 1;
     pushPerfEntry({
       kind: "render",
       label: `${label} render #${renderCount.current}`,

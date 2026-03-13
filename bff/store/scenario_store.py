@@ -224,6 +224,18 @@ def _artifact_store_path(refs: Dict[str, str]) -> Path:
     return Path(refs["artifactStore"])
 
 
+def _artifact_dir_for_scenario(scenario_id: str) -> Path:
+    return scenario_meta_store.artifact_dir(_STORE_DIR, scenario_id)
+
+
+def _complete_marker_path(scenario_id: str) -> Path:
+    return _artifact_dir_for_scenario(scenario_id) / "_COMPLETE"
+
+
+def _incomplete_marker_path(scenario_id: str) -> Path:
+    return _artifact_dir_for_scenario(scenario_id) / "_INCOMPLETE"
+
+
 def _is_auxiliary_path(path: Path) -> bool:
     name = path.name
     return name.endswith("_timetable.json") or name.endswith("_stop_timetables.json")
@@ -412,6 +424,10 @@ def _build_duties_summary_artifact(items: List[Dict[str, Any]]) -> Dict[str, Any
 
 
 def _load(scenario_id: str) -> Dict[str, Any]:
+    if _incomplete_marker_path(scenario_id).exists() and not _complete_marker_path(scenario_id).exists():
+        raise RuntimeError(
+            f"Scenario '{scenario_id}' artifacts are incomplete. The previous save may have been interrupted."
+        )
     doc = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
     refs = _refs_for_scenario(scenario_id, doc)
     if "refs" not in doc:
@@ -512,39 +528,59 @@ def _save(doc: Dict[str, Any]) -> None:
     scenario_id = doc["meta"]["id"]
     refs = _refs_for_scenario(scenario_id, doc)
     artifact_db_path = _artifact_store_path(refs)
+    artifact_dir = _artifact_dir_for_scenario(scenario_id)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    complete_marker = _complete_marker_path(scenario_id)
+    incomplete_marker = _incomplete_marker_path(scenario_id)
+    if complete_marker.exists():
+        complete_marker.unlink()
+    incomplete_marker.write_text(_now_iso(), encoding="utf-8")
 
-    master_payload = {key: doc.get(key) for key in _MASTER_DATA_KEYS}
-    master_data_store.save_master_data(Path(refs["masterData"]), master_payload)
+    try:
+        master_payload = {key: doc.get(key) for key in _MASTER_DATA_KEYS}
+        master_data_store.save_master_data(Path(refs["masterData"]), master_payload)
 
-    preserved_artifacts: Dict[str, Any] = {}
-    for field, ref_key in _ARTIFACT_REF_KEYS.items():
-        preserved_artifacts[field] = doc.get(field)
-        target_path = Path(refs[ref_key])
-        if field == "graph":
-            _save_graph_artifact(artifact_db_path, doc.get(field))
-        elif field == "timetable_rows":
-            rows = list(doc.get(field) or [])
-            trip_store.save_timetable_rows(artifact_db_path, rows)
-            trip_store.save_rows(artifact_db_path, field, rows)
-            trip_store.save_scalar(
-                artifact_db_path,
-                _SUMMARY_SCALAR_NAMES[field],
-                _build_timetable_summary_artifact(rows, doc.get("timetable_import_meta") or {}),
-            )
-        elif field in _PARQUET_ROW_ARTIFACT_FIELDS:
-            value = doc.get(field)
-            if value is None:
-                if target_path.exists():
-                    target_path.unlink()
-                if field in _SUMMARY_SCALAR_NAMES:
-                    trip_store.save_scalar(
-                        artifact_db_path,
-                        _SUMMARY_SCALAR_NAMES[field],
-                        None,
-                    )
-            else:
-                rows = list(value or [])
-                trip_store.save_parquet_rows(target_path, rows)
+        preserved_artifacts: Dict[str, Any] = {}
+        for field, ref_key in _ARTIFACT_REF_KEYS.items():
+            preserved_artifacts[field] = doc.get(field)
+            target_path = Path(refs[ref_key])
+            if field == "graph":
+                _save_graph_artifact(artifact_db_path, doc.get(field))
+            elif field == "timetable_rows":
+                rows = list(doc.get(field) or [])
+                trip_store.save_timetable_rows(artifact_db_path, rows)
+                trip_store.save_rows(artifact_db_path, field, rows)
+                trip_store.save_scalar(
+                    artifact_db_path,
+                    _SUMMARY_SCALAR_NAMES[field],
+                    _build_timetable_summary_artifact(rows, doc.get("timetable_import_meta") or {}),
+                )
+            elif field in _PARQUET_ROW_ARTIFACT_FIELDS:
+                value = doc.get(field)
+                if value is None:
+                    if target_path.exists():
+                        target_path.unlink()
+                    if field in _SUMMARY_SCALAR_NAMES:
+                        trip_store.save_scalar(
+                            artifact_db_path,
+                            _SUMMARY_SCALAR_NAMES[field],
+                            None,
+                        )
+                else:
+                    rows = list(value or [])
+                    trip_store.save_parquet_rows(target_path, rows)
+                    if field in _SUMMARY_SCALAR_NAMES:
+                        summary_builder = (
+                            _build_trips_summary_artifact if field == "trips" else _build_duties_summary_artifact
+                        )
+                        trip_store.save_scalar(
+                            artifact_db_path,
+                            _SUMMARY_SCALAR_NAMES[field],
+                            summary_builder(rows),
+                        )
+            elif field in _SQLITE_ROW_ARTIFACT_FIELDS:
+                rows = list(doc.get(field) or [])
+                trip_store.save_rows(artifact_db_path, field, rows)
                 if field in _SUMMARY_SCALAR_NAMES:
                     summary_builder = (
                         _build_trips_summary_artifact if field == "trips" else _build_duties_summary_artifact
@@ -554,40 +590,34 @@ def _save(doc: Dict[str, Any]) -> None:
                         _SUMMARY_SCALAR_NAMES[field],
                         summary_builder(rows),
                     )
-        elif field in _SQLITE_ROW_ARTIFACT_FIELDS:
-            rows = list(doc.get(field) or [])
-            trip_store.save_rows(artifact_db_path, field, rows)
-            if field in _SUMMARY_SCALAR_NAMES:
-                summary_builder = (
-                    _build_trips_summary_artifact if field == "trips" else _build_duties_summary_artifact
-                )
-                trip_store.save_scalar(
-                    artifact_db_path,
-                    _SUMMARY_SCALAR_NAMES[field],
-                    summary_builder(rows),
-                )
-        elif field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
-            trip_store.save_scalar(artifact_db_path, field, doc.get(field))
-        if field not in _PARQUET_ROW_ARTIFACT_FIELDS and target_path.exists():
-            target_path.unlink()
+            elif field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
+                trip_store.save_scalar(artifact_db_path, field, doc.get(field))
+            if field not in _PARQUET_ROW_ARTIFACT_FIELDS and target_path.exists():
+                target_path.unlink()
 
-    slim_doc = {
-        "scenarioId": scenario_id,
-        "name": doc.get("meta", {}).get("name"),
-        "meta": {
-            **dict(doc.get("meta") or {}),
-            **_scope_summary(doc.get("dispatch_scope")),
-        },
-        "feed_context": doc.get("feed_context"),
-        "refs": refs,
-        "stats": _scenario_stats(doc),
-    }
-    scenario_meta_store.save_meta(_STORE_DIR, scenario_id, slim_doc)
+        slim_doc = {
+            "scenarioId": scenario_id,
+            "name": doc.get("meta", {}).get("name"),
+            "meta": {
+                **dict(doc.get("meta") or {}),
+                **_scope_summary(doc.get("dispatch_scope")),
+            },
+            "feed_context": doc.get("feed_context"),
+            "refs": refs,
+            "stats": _scenario_stats(doc),
+        }
+        scenario_meta_store.save_meta(_STORE_DIR, scenario_id, slim_doc)
 
-    doc["refs"] = refs
-    doc["stats"] = slim_doc["stats"]
-    for field, value in preserved_artifacts.items():
-        doc[field] = value
+        complete_marker.write_text(scenario_id, encoding="utf-8")
+        if incomplete_marker.exists():
+            incomplete_marker.unlink()
+
+        doc["refs"] = refs
+        doc["stats"] = slim_doc["stats"]
+        for field, value in preserved_artifacts.items():
+            doc[field] = value
+    except Exception:
+        raise
 
 
 def _load_app_context() -> Dict[str, Any]:

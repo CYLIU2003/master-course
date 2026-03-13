@@ -3,7 +3,7 @@ import { isPerfDebugEnabled, subscribePerfEntries, type PerfEntry } from "./perf
 
 export function DebugPerfOverlay() {
   const [entries, setEntries] = useState<PerfEntry[]>([]);
-  const [enabled, setEnabled] = useState(false);
+  const enabled = import.meta.env.DEV && isPerfDebugEnabled();
 
   useEffect(() => {
     const unsubscribe = subscribePerfEntries(setEntries);
@@ -12,11 +12,7 @@ export function DebugPerfOverlay() {
     };
   }, []);
 
-  useEffect(() => {
-    setEnabled(isPerfDebugEnabled());
-  }, []);
-
-  if (!import.meta.env.DEV || !enabled || entries.length === 0) {
+  if (!enabled || entries.length === 0) {
     return null;
   }
 

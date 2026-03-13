@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -89,10 +89,6 @@ export function TimetablePage() {
   // Filter state
   const [activeFilter, setActiveFilter] = useState<ServiceFilter>(undefined);
   const [pageOffset, setPageOffset] = useState(0);
-
-  useEffect(() => {
-    setPageOffset(0);
-  }, [activeFilter]);
 
   // Data
   const {
@@ -851,7 +847,10 @@ export function TimetablePage() {
           {SERVICE_TABS.map((tab) => (
             <button
               key={String(tab.key)}
-              onClick={() => setActiveFilter(tab.key)}
+              onClick={() => {
+                setActiveFilter(tab.key);
+                setPageOffset(0);
+              }}
               className={[
                 "px-3 py-1.5 text-xs font-medium transition-colors",
                 activeFilter === tab.key

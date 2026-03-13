@@ -147,6 +147,11 @@ def update_job(
         job.error = error
     if metadata is not None:
         job.metadata = {**job.metadata, **dict(metadata)}
+    job.metadata = {
+        **job.metadata,
+        "pid": os.getpid(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
     _persist_job(job)
     return job
 

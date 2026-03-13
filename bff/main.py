@@ -89,6 +89,8 @@ async def lifespan(app: FastAPI):
     finally:
         if not warmup_task.done():
             warmup_task.cancel()
+        simulation.shutdown_simulation_executor()
+        optimization.shutdown_optimization_executor()
 
 app = FastAPI(
     title="EV Bus Scheduling BFF",

@@ -56,13 +56,12 @@ function prepare(items: PublicDiffItem[]): PreparedPublicDiffItem[] {
 
 export function usePreparedPublicDiffItems(items: PublicDiffItem[]) {
   const fallbackItems = useMeasuredMemo("selector:public-diff-preview-fallback", () => prepare(items), [items]);
-  const [workerItems, setWorkerItems] = useState<PreparedPublicDiffItem[]>(fallbackItems);
+  const [workerItems, setWorkerItems] = useState<PreparedPublicDiffItem[]>([]);
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
     if (typeof Worker === "undefined" || items.length < 40) {
-      setWorkerItems(fallbackItems);
       return;
     }
     if (!workerRef.current) {
@@ -94,7 +93,7 @@ export function usePreparedPublicDiffItems(items: PublicDiffItem[]) {
     return () => {
       worker.removeEventListener("message", handleMessage);
     };
-  }, [fallbackItems, items]);
+  }, [items]);
 
   useEffect(() => {
     return () => {
@@ -104,7 +103,7 @@ export function usePreparedPublicDiffItems(items: PublicDiffItem[]) {
   }, []);
 
   return useMemo(
-    () => (items.length < 40 ? fallbackItems : workerItems),
+    () => (items.length < 40 || workerItems.length === 0 ? fallbackItems : workerItems),
     [fallbackItems, items.length, workerItems],
   );
 }
