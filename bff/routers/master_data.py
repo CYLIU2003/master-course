@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Set
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
+from bff.services import transit_catalog
 from bff.services.gtfs_import import (
     DEFAULT_GTFS_FEED_PATH,
     summarize_gtfs_routes_import,
@@ -35,14 +36,13 @@ from bff.services.odpt_routes import (
     DEFAULT_OPERATOR,
     summarize_routes_import,
 )
-from bff.services.service_ids import canonical_service_id
 from bff.services.odpt_stops import summarize_stop_import
-from bff.services import transit_catalog
 from bff.services.route_family import (
-    enrich_routes_with_family,
-    build_route_family_summary,
     build_route_family_detail,
+    build_route_family_summary,
+    enrich_routes_with_family,
 )
+from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 
 router = APIRouter(tags=["master-data"])
@@ -65,10 +65,7 @@ def _check_scenario(scenario_id: str) -> None:
         if "artifacts are incomplete" in str(e):
             raise HTTPException(
                 status_code=409,
-                detail={
-                    "code": "INCOMPLETE_ARTIFACT",
-                    "message": str(e)
-                }
+                detail={"code": "INCOMPLETE_ARTIFACT", "message": str(e)},
             )
         raise
 
@@ -143,23 +140,147 @@ class UpdateDepotBody(BaseModel):
 
 # ── Depot endpoints ────────────────────────────────────────────
 
-from bff.services.depot_assignment import calculate_assignment_scores
+
+class AutoAssignDepotsBody(BaseModel):
+    minScore: int = Field(
+        default=1,
+        ge=0,
+        le=6,
+        description=(
+            "Minimum additive score for a depot to be considered. "
+            "0=all, 1=operator match or better (default), "
+            "2=sidecar_map or better, 3=geographic or better."
+        ),
+    )
+    applyNow: bool = Field(
+        default=False,
+        description=(
+            "If true, the best-scoring depot for each route is immediately "
+            "persisted as a depot_route_permission (allowed=True)."
+        ),
+    )
+    operatorId: Optional[str] = Field(
+        default=None,
+        description="Filter routes to a specific operator.",
+    )
+    sidecarDepotCandidateMap: Optional[Dict[str, List[str]]] = Field(
+        default=None,
+        description=(
+            "route_family_id → [depot_id, ...] map from GTFS sidecar / "
+            "Layer-D feature data. Enables the sidecar_map scoring tier."
+        ),
+    )
+
 
 @router.post("/scenarios/{scenario_id}/auto-assign-depots")
-def auto_assign_depots(
+def auto_assign_depots_endpoint(
     scenario_id: str,
-    operator: Optional[str] = Query(None),
+    body: Optional[AutoAssignDepotsBody] = None,
 ) -> Dict[str, Any]:
+    """Compute score-based depot-route assignment suggestions.
+
+    Scoring tiers (additive):
+      3 pts  geographic  – route terminal stop IDs intersect depot stop IDs
+      2 pts  sidecar_map – depot listed in sidecarDepotCandidateMap for this route family
+      1 pt   operator    – depot.operatorId == route.operatorId
+
+    Returns a ranked candidate list per route.
+    If body.applyNow=true, also persists the top-scoring assignment for each route
+    as a depot_route_permission entry (allowed=True).
+    """
+    from collections import defaultdict as _defaultdict
+
+    from bff.services.depot_assignment import compute_depot_route_scores
+
     _check_scenario(scenario_id)
-    routes = store.list_routes(scenario_id, operator=operator)
-    enriched_routes = _enrich_routes_for_display(scenario_id, routes)
+    body = body or AutoAssignDepotsBody()
+
+    operator_filter = body.operatorId or None
+    routes = store.list_routes(scenario_id, operator=operator_filter)
     depots = store.list_depots(scenario_id)
-    
-    suggestions = calculate_assignment_scores(enriched_routes, depots)
-    
+    sidecar_map: Dict[str, List[str]] = body.sidecarDepotCandidateMap or {}
+
+    raw_scores = compute_depot_route_scores(depots, routes, sidecar_map)
+
+    # Group by route, keeping only candidates that meet the score threshold
+    by_route: Dict[str, list] = _defaultdict(list)
+    for s in raw_scores:
+        if s.score >= body.minScore:
+            by_route[s.route_id].append(s)
+
+    route_by_id = {str(r.get("id") or ""): r for r in routes}
+    depot_by_id = {str(d.get("id") or ""): d for d in depots}
+
+    suggestions = []
+    apply_pairs: List[tuple] = []  # (route_id, depot_id)
+
+    for route_id, candidates in by_route.items():
+        candidates.sort(key=lambda x: -x.score)
+        best = candidates[0]
+        route = route_by_id.get(route_id, {})
+        suggestions.append(
+            {
+                "routeId": route_id,
+                "routeCode": route.get("routeCode") or route.get("routeFamilyCode"),
+                "routeName": (
+                    route.get("name") or route.get("routeFamilyLabel") or route_id
+                ),
+                "suggestedDepotId": best.depot_id,
+                "suggestedDepotName": (
+                    (depot_by_id.get(best.depot_id) or {}).get("name") or best.depot_id
+                ),
+                "score": best.score,
+                "tier": best.tier,
+                "reasons": best.reasons,
+                "candidates": [
+                    {
+                        "depotId": c.depot_id,
+                        "depotName": (
+                            (depot_by_id.get(c.depot_id) or {}).get("name")
+                            or c.depot_id
+                        ),
+                        "score": c.score,
+                        "tier": c.tier,
+                        "reasons": c.reasons,
+                    }
+                    for c in candidates
+                ],
+            }
+        )
+        if body.applyNow:
+            apply_pairs.append((route_id, best.depot_id))
+
+    # Persist assignments if requested
+    applied_count = 0
+    if body.applyNow and apply_pairs:
+        existing_perms = store.get_depot_route_permissions(scenario_id) or []
+        perm_map: Dict[tuple, Dict[str, Any]] = {
+            (p["depotId"], p["routeId"]): p
+            for p in existing_perms
+            if "depotId" in p and "routeId" in p
+        }
+        for route_id, depot_id in apply_pairs:
+            perm_map[(depot_id, route_id)] = {
+                "depotId": depot_id,
+                "routeId": route_id,
+                "allowed": True,
+            }
+        store.set_depot_route_permissions(scenario_id, list(perm_map.values()))
+        applied_count = len(apply_pairs)
+
+    # Sort suggestions: geographic first, then sidecar_map, then operator_match
+    suggestions.sort(key=lambda x: -x["score"])
+
     return {
-        "items": suggestions,
+        "suggestions": suggestions,
         "total": len(suggestions),
+        "appliedCount": applied_count,
+        "meta": {
+            "minScore": body.minScore,
+            "applyNow": body.applyNow,
+            "depotCount": len(depots),
+            "routeCount": len(routes),
+        },
     }
 
 
@@ -490,7 +611,9 @@ class ImportGtfsRoutesBody(BaseModel):
     forceRefresh: bool = False
 
 
-def _build_explorer_overview(scenario_id: str, operator: Optional[str]) -> Dict[str, Any]:
+def _build_explorer_overview(
+    scenario_id: str, operator: Optional[str]
+) -> Dict[str, Any]:
     routes = _enrich_routes_for_display(
         scenario_id,
         store.list_routes(scenario_id, operator=operator),
@@ -642,7 +765,12 @@ def list_routes(
         items = sorted(
             items,
             key=lambda route: (
-                str(route.get("routeFamilyCode") or route.get("routeCode") or route.get("name") or ""),
+                str(
+                    route.get("routeFamilyCode")
+                    or route.get("routeCode")
+                    or route.get("name")
+                    or ""
+                ),
                 int(route.get("familySortOrder") or 999),
                 str(route.get("routeLabel") or route.get("name") or ""),
                 str(route.get("id") or ""),
@@ -682,7 +810,9 @@ def _route_stop_timetable_entry_count(
 
     count = 0
     for stop_timetable in stop_timetables:
-        direct_route_id = stop_timetable.get("route_id") or stop_timetable.get("routeId")
+        direct_route_id = stop_timetable.get("route_id") or stop_timetable.get(
+            "routeId"
+        )
         if direct_route_id and str(direct_route_id) in route_keys:
             count += len(stop_timetable.get("items") or [])
             continue
@@ -690,16 +820,17 @@ def _route_stop_timetable_entry_count(
         for entry in stop_timetable.get("items") or []:
             busroute_pattern = entry.get("busroutePattern") or entry.get("route_id")
             bus_timetable = entry.get("busTimetable") or entry.get("trip_id")
-            if (
-                (busroute_pattern and str(busroute_pattern) in route_keys)
-                or (bus_timetable and str(bus_timetable) in trip_ids)
+            if (busroute_pattern and str(busroute_pattern) in route_keys) or (
+                bus_timetable and str(bus_timetable) in trip_ids
             ):
                 count += 1
 
     return count
 
 
-def _route_service_summary(timetable_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _route_service_summary(
+    timetable_rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     grouped: Dict[str, Dict[str, Any]] = defaultdict(
         lambda: {
             "serviceId": "",
@@ -735,7 +866,9 @@ def _build_route_link_data(
     stop_timetables: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     stop_sequence = list(route.get("stopSequence") or [])
-    stop_index = {str(stop.get("id")): stop for stop in stops if stop.get("id") is not None}
+    stop_index = {
+        str(stop.get("id")): stop for stop in stops if stop.get("id") is not None
+    }
 
     resolved_stops: List[Dict[str, Any]] = []
     missing_stop_ids: List[str] = []
@@ -758,9 +891,7 @@ def _build_route_link_data(
 
     route_keys = _route_match_keys(route)
     matching_rows = [
-        row
-        for row in timetable_rows
-        if str(row.get("route_id") or "") in route_keys
+        row for row in timetable_rows if str(row.get("route_id") or "") in route_keys
     ]
     trip_ids = {str(row.get("trip_id")) for row in matching_rows if row.get("trip_id")}
     stop_tt_linked = _route_stop_timetable_entry_count(route, stop_timetables, trip_ids)
@@ -833,9 +964,7 @@ def _enrich_explorer_assignments_for_display(
         store.list_routes(scenario_id, operator=operator),
     )
     route_meta = {
-        str(route.get("id")): route
-        for route in routes
-        if route.get("id") is not None
+        str(route.get("id")): route for route in routes if route.get("id") is not None
     }
     enriched: List[Dict[str, Any]] = []
     for assignment in assignments:
@@ -853,7 +982,12 @@ def _enrich_explorer_assignments_for_display(
         enriched.append(item)
     enriched.sort(
         key=lambda item: (
-            str(item.get("routeFamilyCode") or item.get("routeCode") or item.get("routeName") or ""),
+            str(
+                item.get("routeFamilyCode")
+                or item.get("routeCode")
+                or item.get("routeName")
+                or ""
+            ),
             int(item.get("familySortOrder") or 999),
             str(item.get("routeCode") or ""),
             str(item.get("routeName") or ""),
@@ -902,7 +1036,9 @@ def _aggregate_route_family_permissions(
 ) -> List[Dict[str, Any]]:
     family_summaries, members_by_family = _build_route_family_indexes(scenario_id)
     permission_map = {
-        (str(item.get(principal_key)), str(item.get("routeId"))): bool(item.get("allowed"))
+        (str(item.get(principal_key)), str(item.get("routeId"))): bool(
+            item.get("allowed")
+        )
         for item in raw_permissions
         if item.get(principal_key) is not None and item.get("routeId") is not None
     }
@@ -935,7 +1071,8 @@ def _aggregate_route_family_permissions(
                     "memberRouteIds": member_route_ids,
                     "totalRouteCount": total_route_count,
                     "allowedRouteCount": allowed_route_count,
-                    "allowed": total_route_count > 0 and allowed_route_count == total_route_count,
+                    "allowed": total_route_count > 0
+                    and allowed_route_count == total_route_count,
                     "partiallyAllowed": 0 < allowed_route_count < total_route_count,
                 }
             )
@@ -975,9 +1112,7 @@ def _expand_route_family_permissions(
         requested_by_principal[principal_id][family_id] = bool(item.get("allowed"))
         targeted_principal_ids.add(principal_id)
         targeted_route_ids.update(
-            str(route.get("id"))
-            for route in members
-            if route.get("id") is not None
+            str(route.get("id")) for route in members if route.get("id") is not None
         )
 
     preserved = [
@@ -1190,7 +1325,9 @@ def patch_explorer_depot_assignment(
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        item = store.upsert_route_depot_assignment(scenario_id, route_id, body.model_dump())
+        item = store.upsert_route_depot_assignment(
+            scenario_id, route_id, body.model_dump()
+        )
     except KeyError:
         raise _not_found("Route", route_id)
     except ValueError as exc:
