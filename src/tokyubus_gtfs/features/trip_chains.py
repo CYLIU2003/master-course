@@ -126,11 +126,16 @@ def build_trip_chains(
                 }
                 chains.append(chain)
 
-    # Write
+    # Write canonical JSONL and compatibility JSON array.
     out_path = out_dir / "trip_chains.jsonl"
     with out_path.open("w", encoding="utf-8") as f:
         for c in chains:
             f.write(json.dumps(c, ensure_ascii=False, separators=(",", ":")) + "\n")
+    compatibility_path = out_dir / "trip_chains.json"
+    compatibility_path.write_text(
+        json.dumps(chains, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     _log.info("Built %d candidate trip chains", len(chains))
     return {"chain_count": len(chains), "warnings": warnings}

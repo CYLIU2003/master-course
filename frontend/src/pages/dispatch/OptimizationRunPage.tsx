@@ -33,7 +33,7 @@ export function OptimizationRunPage() {
   }, [activeJob?.status, queryClient, scenarioId]);
 
   if (isLoading) return <LoadingBlock message={t("optimization.loading")} />;
-  if (error && !error.message.includes("404")) return <ErrorBlock message={error.message} />;
+  if (error) return <ErrorBlock message={error.message} />;
 
   return (
     <div className="space-y-6">

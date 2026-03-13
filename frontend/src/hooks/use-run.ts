@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { simulationApi } from "@/api/simulation";
 import { optimizationApi } from "@/api/optimization";
+import { isApiErrorStatus } from "@/api/client";
 import type { RunSimulationRequest, RunOptimizationRequest } from "@/types";
 import { scenarioKeys } from "./use-scenario";
 
@@ -22,8 +23,20 @@ export const runKeys = {
 export function useSimulationResult(scenarioId: string) {
   return useQuery({
     queryKey: runKeys.simulation(scenarioId),
-    queryFn: () => simulationApi.getResult(scenarioId),
+    queryFn: async () => {
+      try {
+        return await simulationApi.getResult(scenarioId);
+      } catch (error) {
+        if (isApiErrorStatus(error, 404)) {
+          return null;
+        }
+        throw error;
+      }
+    },
     enabled: !!scenarioId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: false,
   });
 }
 
@@ -38,8 +51,20 @@ export function useSimulationCapabilities(scenarioId: string) {
 export function useOptimizationResult(scenarioId: string) {
   return useQuery({
     queryKey: runKeys.optimization(scenarioId),
-    queryFn: () => optimizationApi.getResult(scenarioId),
+    queryFn: async () => {
+      try {
+        return await optimizationApi.getResult(scenarioId);
+      } catch (error) {
+        if (isApiErrorStatus(error, 404)) {
+          return null;
+        }
+        throw error;
+      }
+    },
     enabled: !!scenarioId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: false,
   });
 }
 

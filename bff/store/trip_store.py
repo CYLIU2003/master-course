@@ -18,6 +18,9 @@ def _connect(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
 
@@ -107,7 +110,11 @@ def save_parquet_rows(path: Path, rows: List[Any]) -> None:
             "payload_json": [json.dumps(row, ensure_ascii=False, separators=(",", ":")) for row in rows],
         }
     )
-    pq_module.write_table(table, path)
+    metadata = {
+        b"schema_version": b"1",
+        b"payload_format": b"json_row_envelope",
+    }
+    pq_module.write_table(table.replace_schema_metadata(metadata), path)
 
 
 def count_parquet_rows(path: Path) -> int:

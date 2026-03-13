@@ -1201,8 +1201,8 @@ def page_timetable_rows(
     meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
     refs = _refs_for_scenario(scenario_id, meta)
     db_path = _artifact_store_path(refs)
-    db_count = trip_store.count_timetable_rows(db_path, service_id=service_id)
-    if db_count > 0 or service_id is not None:
+    total_db_rows = trip_store.count_timetable_rows(db_path)
+    if total_db_rows > 0:
         return [
             dict(item)
             for item in trip_store.page_timetable_rows(
@@ -1224,9 +1224,9 @@ def count_timetable_rows(scenario_id: str, *, service_id: Optional[str] = None) 
     meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
     refs = _refs_for_scenario(scenario_id, meta)
     db_path = _artifact_store_path(refs)
-    db_count = trip_store.count_timetable_rows(db_path, service_id=service_id)
-    if db_count > 0 or service_id is not None:
-        return db_count
+    total_db_rows = trip_store.count_timetable_rows(db_path)
+    if total_db_rows > 0:
+        return trip_store.count_timetable_rows(db_path, service_id=service_id)
     rows = _load(scenario_id).get("timetable_rows") or []
     if service_id:
         rows = [row for row in rows if str(row.get("service_id") or "WEEKDAY") == service_id]
@@ -1271,11 +1271,13 @@ def count_graph_arcs(scenario_id: str, *, reason_code: Optional[str] = None) -> 
     meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
     refs = _refs_for_scenario(scenario_id, meta)
     artifact_db = _artifact_store_path(refs)
-    db_count = trip_store.count_graph_arcs(artifact_db, reason_code=reason_code)
-    if db_count > 0 or reason_code is not None:
-        return db_count
+    total_db_rows = trip_store.count_graph_arcs(artifact_db)
+    if total_db_rows > 0:
+        return trip_store.count_graph_arcs(artifact_db, reason_code=reason_code)
     graph = _load(scenario_id).get("graph") or {}
     arcs = list(graph.get("arcs") or [])
+    if reason_code:
+        arcs = [item for item in arcs if item.get("reason_code") == reason_code]
     return len(arcs)
 
 
@@ -1289,8 +1291,8 @@ def page_graph_arcs(
     meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
     refs = _refs_for_scenario(scenario_id, meta)
     artifact_db = _artifact_store_path(refs)
-    db_count = trip_store.count_graph_arcs(artifact_db, reason_code=reason_code)
-    if db_count > 0 or reason_code is not None:
+    total_db_rows = trip_store.count_graph_arcs(artifact_db)
+    if total_db_rows > 0:
         return [
             dict(item)
             for item in trip_store.page_graph_arcs(
