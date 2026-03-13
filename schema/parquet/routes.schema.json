@@ -1,0 +1,9 @@
+{
+  "table": "routes",
+  "required_columns": {
+    "id": "string",
+    "routeCode": "string",
+    "routeLabel": "string",
+    "name": "string"
+  }
+}

@@ -23,7 +23,7 @@ const token = process.env.ODPT_TOKEN ?? process.env.ODPT_CONSUMER_KEY;
 if (!token) {
   console.error(
     "ERROR: ODPT_TOKEN / ODPT_CONSUMER_KEY environment variable is missing.\n" +
-      "Set it in backend/.env, repo .env, or your shell environment."
+      "Set it in backend_legacy/.env, repo .env, or your shell environment."
   );
   process.exit(1);
 }
@@ -762,7 +762,7 @@ app.post(
       };
 
       // Write route exports under <project-root>/data/odpt/tokyu/.
-      // cwd when running via `npm run dev` from backend/ is backend/,
+      // cwd when running via `npm run dev` from backend_legacy/ is backend_legacy/,
       // so we go up one level to reach the project root.
       const outDir = resolveRuntimePath("odpt_snapshot_dir");
       await mkdir(outDir, { recursive: true });

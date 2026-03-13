@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 
+from src.dataset_integrity import evaluate_dataset_integrity, validate_rows_against_schema
 from src.scenario_overlay import default_scenario_overlay
 
 
@@ -36,6 +37,16 @@ def _read_parquet_rows(path: Path) -> List[Dict[str, Any]]:
     frame = pd.read_parquet(path)
     frame = frame.where(pd.notnull(frame), None)
     return [dict(item) for item in frame.to_dict(orient="records")]
+
+
+def _read_parquet_rows_validated(path: Path, *, schema_name: str) -> List[Dict[str, Any]]:
+    rows = _read_parquet_rows(path)
+    errors = validate_rows_against_schema(rows, schema_name=schema_name)
+    if errors:
+        raise RuntimeError(
+            f"Parquet schema validation failed for '{path}': {'; '.join(errors)}"
+        )
+    return rows
 
 
 def _seed_dataset_path(dataset_id: str) -> Path:
@@ -325,14 +336,15 @@ def _derive_calendar_entries(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, A
 
 def get_dataset_status(dataset_id: str) -> Dict[str, Any]:
     definition = load_dataset_definition(dataset_id)
-    manifest = get_built_manifest(dataset_id)
+    integrity = evaluate_dataset_integrity(dataset_id)
+    manifest = integrity.get("manifest") or get_built_manifest(dataset_id)
     built_dir = _built_dataset_dir(dataset_id)
     required_files = {
         "routes": built_dir / "routes.parquet",
         "trips": built_dir / "trips.parquet",
         "timetables": built_dir / "timetables.parquet",
     }
-    built_available = bool(manifest) and all(path.exists() for path in required_files.values())
+    built_available = bool(integrity.get("built_ready"))
     dataset_version = str(
         (manifest or {}).get("dataset_version")
         or load_seed_version().get("dataset_version")
@@ -346,8 +358,12 @@ def get_dataset_status(dataset_id: str) -> Dict[str, Any]:
         "includedRoutes": definition.get("included_routes"),
         "seedVersion": load_seed_version().get("seed_version"),
         "datasetVersion": dataset_version,
+        "seedReady": bool(integrity.get("seed_ready")),
+        "builtReady": bool(integrity.get("built_ready")),
         "builtAvailable": built_available,
         "warning": None if built_available else MISSING_BUILT_DATA_MESSAGE,
+        "missingArtifacts": list(integrity.get("missing_artifacts") or []),
+        "integrityError": integrity.get("integrity_error"),
         "manifest": manifest,
         "paths": {key: str(path) for key, path in required_files.items()},
     }
@@ -381,16 +397,31 @@ def build_dataset_bootstrap(
         built_dir = _built_dataset_dir(dataset_id)
         routes = _filter_built_routes(
             definition,
-            _read_parquet_rows(built_dir / "routes.parquet"),
+            _read_parquet_rows_validated(
+                built_dir / "routes.parquet",
+                schema_name="routes",
+            ),
             route_rows,
         )
         route_ids = {str(item.get("id") or "") for item in routes}
         timetable_rows = _filter_rows_by_route_ids(
-            [_normalize_timetable_row(item) for item in _read_parquet_rows(built_dir / "timetables.parquet")],
+            [
+                _normalize_timetable_row(item)
+                for item in _read_parquet_rows_validated(
+                    built_dir / "timetables.parquet",
+                    schema_name="timetables",
+                )
+            ],
             route_ids,
         )
         trips = _filter_rows_by_route_ids(
-            [_normalize_trip_row(item) for item in _read_parquet_rows(built_dir / "trips.parquet")],
+            [
+                _normalize_trip_row(item)
+                for item in _read_parquet_rows_validated(
+                    built_dir / "trips.parquet",
+                    schema_name="trips",
+                )
+            ],
             route_ids,
         )
         source = "built_dataset"

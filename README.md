@@ -92,7 +92,7 @@ master-course/
 - **main は file-coupled consumer**。`data/seed/` と `data/built/` のみ読む
 - **data-prep は独立 producer**。ODPT / GTFS / catalog / explorer は main と分離する
 - **Timetable first, dispatch second**: 配車計画は常に時刻表制約から生成
-- **`bff/` が正式な研究本体 API**。`backend/` は frozen legacy として扱う
+- **`bff/` が正式な研究本体 API**。`backend_legacy/` は frozen legacy として扱う
 - **Scenario 保存は分割保存優先**。重い timetable / stop_timetable / dispatch artifacts は別ファイル化して本体 JSON を軽量に保つ
 - **Scenario artifact は refs ベース**。`scenario.json` は軽量メタのみを保持し、`master_data.sqlite` / `artifacts.sqlite` を参照する
 
@@ -203,7 +203,7 @@ frontend から別ホストの BFF を直接叩く場合は、`VITE_API_BASE_URL
 `http://<backend-host>:8000/api` を設定してください。その場合は BFF 側でも
 `BFF_CORS_ALLOW_ORIGINS` または `BFF_CORS_ALLOW_ORIGIN_REGEX` を合わせて設定します。
 
-標準構成では `backend/` の起動は不要です。研究本体は `bff.main:app` と `frontend/` のみを起動してください。`data/built/` が無い場合でも app は起動しますが、timetable / simulation / optimization は無効になります。
+標準構成では `backend_legacy/` の起動は不要です。研究本体は `bff.main:app` と `frontend/` のみを起動してください。`data/built/` が無い場合でも app は起動しますが、timetable / simulation / optimization は無効になります。
 
 ### 4.3 起動 / Run / 启动
 

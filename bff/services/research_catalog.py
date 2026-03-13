@@ -8,6 +8,7 @@ from src.research_dataset_loader import (
     get_dataset_status,
     list_dataset_statuses,
 )
+from bff.errors import AppErrorCode, make_error
 
 
 def default_dataset_id() -> str:
@@ -36,4 +37,15 @@ def bootstrap_scenario(
         dataset_id,
         scenario_id=scenario_id,
         random_seed=random_seed,
+    )
+
+
+def built_readiness_error(dataset_status: Dict[str, Any]) -> Dict[str, Any]:
+    return make_error(
+        AppErrorCode.BUILT_DATASET_REQUIRED,
+        "Built dataset artifacts are required for this operation.",
+        datasetId=dataset_status.get("datasetId"),
+        datasetVersion=dataset_status.get("datasetVersion"),
+        missingArtifacts=list(dataset_status.get("missingArtifacts") or []),
+        integrityError=dataset_status.get("integrityError"),
     )

@@ -8,6 +8,7 @@ import {
   useRunSimulation,
   useSimulationResult,
   useSimulationCapabilities,
+  useScenarioRunReadiness,
   useDispatchScope,
 } from "@/hooks";
 import { BackendJobPanel, PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
@@ -24,8 +25,10 @@ export function SimulationRunPage() {
   const dispatchScopePending = useIsMutating({ mutationKey: ["scenarios", scenarioId, "dispatch-scope", "mutation"] }) > 0;
   const { data: result, isLoading, error } = useSimulationResult(scenarioId!);
   const { data: capabilities } = useSimulationCapabilities(scenarioId!);
+  const { canRun, reason } = useScenarioRunReadiness();
   const runMutation = useRunSimulation(scenarioId!);
   const { data: activeJob } = useJob(activeJobId);
+  const runDisabled = runMutation.isPending || dispatchScopePending || !scopeReady || !canRun;
 
   useEffect(() => {
     if (activeJob?.status === "completed") {
@@ -52,13 +55,19 @@ export function SimulationRunPage() {
         actions={
           <button
             onClick={handleRun}
-            disabled={runMutation.isPending || dispatchScopePending || !scopeReady}
+            disabled={runDisabled}
             className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
             {runMutation.isPending ? t("simulation.running") : t("simulation.run")}
           </button>
         }
       >
+        {!canRun && (
+          <div className="mb-4 rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900">
+            <p className="font-semibold">Seed-only mode</p>
+            <p className="mt-1">{reason ?? "Simulation is disabled until built artifacts are generated in data-prep."}</p>
+          </div>
+        )}
         {capabilities && (
           <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
             <p className="font-semibold">Operational boundary</p>

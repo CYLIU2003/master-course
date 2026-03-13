@@ -461,7 +461,7 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
             )
         )
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-        print("note: research runtime uses bff/ as the official backend; backend/ is legacy")
+        print("note: research runtime uses bff/ as the official backend; backend_legacy/ is legacy")
         return 0
     if getattr(args, "fast_path", False):
         if args.source != "odpt":

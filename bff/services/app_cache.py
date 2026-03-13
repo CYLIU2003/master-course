@@ -4,13 +4,9 @@ import logging
 import os
 import threading
 import time
-from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from bff.services import research_catalog
-from bff.services import transit_catalog
-from bff.services.gtfs_import import DEFAULT_GTFS_FEED_PATH
-from bff.services.odpt_routes import DEFAULT_OPERATOR
 
 _log = logging.getLogger(__name__)
 _LOCK = threading.RLock()
@@ -60,65 +56,6 @@ def invalidate(*, key: Optional[str] = None, prefix: Optional[str] = None) -> No
                 _CACHE.pop(cache_key, None)
 
 
-def get_odpt_bundle(
-    *,
-    operator: str = DEFAULT_OPERATOR,
-    dump: bool = True,
-    force_refresh: bool = False,
-    ttl_sec: int = 3600,
-    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
-) -> Dict[str, Any]:
-    cache_key = f"bundle:odpt:{operator}"
-    if force_refresh:
-        bundle = transit_catalog.refresh_odpt_snapshot(
-            operator=operator,
-            dump=dump,
-            force_refresh=True,
-            ttl_sec=ttl_sec,
-            progress_callback=progress_callback,
-        )
-        set_cached(cache_key, bundle)
-        invalidate(prefix="catalog:")
-        return bundle
-
-    return get_cached(
-        cache_key,
-        lambda: transit_catalog.get_or_refresh_odpt_snapshot(
-            operator=operator,
-            dump=dump,
-            force_refresh=False,
-            ttl_sec=ttl_sec,
-            progress_callback=progress_callback,
-        ),
-        ttl_sec=ttl_sec,
-    )
-
-
-def get_gtfs_bundle(
-    *,
-    feed_path: str | Path = DEFAULT_GTFS_FEED_PATH,
-    force_refresh: bool = False,
-    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
-) -> Dict[str, Any]:
-    cache_key = f"bundle:gtfs:{feed_path}"
-    if force_refresh:
-        bundle = transit_catalog.refresh_gtfs_snapshot(
-            feed_path=feed_path,
-            progress_callback=progress_callback,
-        )
-        set_cached(cache_key, bundle)
-        invalidate(prefix="catalog:")
-        return bundle
-
-    return get_cached(
-        cache_key,
-        lambda: transit_catalog.get_or_refresh_gtfs_snapshot(
-            feed_path=feed_path,
-            progress_callback=progress_callback,
-        ),
-    )
-
-
 def warm_startup_cache() -> None:
     _log.info("Warming runtime cache")
 
@@ -138,3 +75,16 @@ def warm_startup_cache() -> None:
         )
     except Exception:
         _log.exception("Default research dataset warm-up failed")
+
+
+def get_app_state(dataset_id: str | None = None) -> Dict[str, Any]:
+    target_dataset_id = dataset_id or research_catalog.default_dataset_id()
+    status = research_catalog.get_dataset(target_dataset_id)
+    return {
+        "dataset_id": status.get("datasetId") or target_dataset_id,
+        "dataset_version": status.get("datasetVersion"),
+        "seed_ready": bool(status.get("seedReady")),
+        "built_ready": bool(status.get("builtReady")),
+        "missing_artifacts": list(status.get("missingArtifacts") or []),
+        "integrity_error": status.get("integrityError"),
+    }

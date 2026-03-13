@@ -18,9 +18,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from bff.dependencies import require_built
+from bff.errors import AppErrorCode, make_error
 from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
 from bff.mappers.solver_results import (
     deserialize_milp_result,
@@ -455,6 +457,7 @@ def get_simulation_capabilities(scenario_id: str) -> Dict[str, Any]:
 def run_simulation(
     scenario_id: str,
     body: Optional[RunSimulationBody] = None,
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     request = body or RunSimulationBody()
@@ -501,6 +504,9 @@ def run_simulation(
         )
         raise HTTPException(
             status_code=503,
-            detail="A simulation job is already running. Please retry after it completes.",
+            detail=make_error(
+                AppErrorCode.EXECUTION_IN_PROGRESS,
+                "A simulation job is already running. Please retry after it completes.",
+            ),
         )
     return job_store.job_to_dict(job)

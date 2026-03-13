@@ -1,0 +1,23 @@
+from __future__ import annotations
+
+from enum import StrEnum
+from typing import Any
+
+
+class AppErrorCode(StrEnum):
+    SEED_DATASET_REQUIRED = "SEED_DATASET_REQUIRED"
+    BUILT_DATASET_REQUIRED = "BUILT_DATASET_REQUIRED"
+    DATASET_INTEGRITY_ERROR = "DATASET_INTEGRITY_ERROR"
+    MISSING_ARTIFACT = "MISSING_ARTIFACT"
+    SCHEMA_VALIDATION_ERROR = "SCHEMA_VALIDATION_ERROR"
+
+    SCENARIO_NOT_FOUND = "SCENARIO_NOT_FOUND"
+    SCENARIO_INCOMPLETE = "SCENARIO_INCOMPLETE"
+    SCENARIO_VERSION_MISMATCH = "SCENARIO_VERSION_MISMATCH"
+
+    SOLVER_NOT_AVAILABLE = "SOLVER_NOT_AVAILABLE"
+    EXECUTION_IN_PROGRESS = "EXECUTION_IN_PROGRESS"
+
+
+def make_error(code: AppErrorCode, message: str, **extra: Any) -> dict[str, Any]:
+    return {"error": str(code), "message": message, **extra}

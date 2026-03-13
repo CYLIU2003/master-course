@@ -1,0 +1,10 @@
+{
+  "table": "trips",
+  "required_columns": {
+    "trip_id": "string",
+    "route_id": "string",
+    "service_id": "string",
+    "departure": "string",
+    "arrival": "string"
+  }
+}

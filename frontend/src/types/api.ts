@@ -76,6 +76,19 @@ export interface ResearchDatasetsResponse {
 
 export interface AppDataStatusResponse {
   item: ResearchDatasetStatus;
+  seed_ready?: boolean;
+  built_ready?: boolean;
+  missing_artifacts?: string[];
+  integrity_error?: string | null;
+}
+
+export interface AppStateResponse {
+  dataset_id: string;
+  dataset_version?: string | null;
+  seed_ready: boolean;
+  built_ready: boolean;
+  missing_artifacts: string[];
+  integrity_error?: string | null;
 }
 
 // ── Depots ────────────────────────────────────────────────────

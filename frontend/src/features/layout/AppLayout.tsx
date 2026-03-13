@@ -6,6 +6,7 @@ import { useUIStore } from "@/stores/ui-store";
 import { fetchMaybeJson } from "@/api/client";
 import { AppBootstrapManager } from "@/app/AppBootstrapManager";
 import { BootSplashOverlay } from "@/app/BootSplashOverlay";
+import { DataReadinessBanner } from "@/components/DataReadinessBanner";
 import { DebugPerfOverlay } from "@/utils/perf/debugPerfOverlay";
 import { useRenderTrace } from "@/utils/perf/useRenderTrace";
 
@@ -30,6 +31,7 @@ export function AppLayout() {
       <AppBootstrapManager scenarioId={scenarioId ?? null} />
       <BootSplashOverlay />
       <Header />
+      <DataReadinessBanner />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar open={sidebarOpen} scenarioId={scenarioId ?? ""} />
         <main className="min-h-0 flex-1 overflow-y-auto bg-surface p-6">

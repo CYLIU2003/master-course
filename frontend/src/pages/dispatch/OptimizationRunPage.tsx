@@ -8,6 +8,7 @@ import {
   useRunOptimization,
   useOptimizationResult,
   useOptimizationCapabilities,
+  useScenarioRunReadiness,
   useDispatchScope,
 } from "@/hooks";
 import { BackendJobPanel, PageSection, LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
@@ -25,8 +26,10 @@ export function OptimizationRunPage() {
   const dispatchScopePending = useIsMutating({ mutationKey: ["scenarios", scenarioId, "dispatch-scope", "mutation"] }) > 0;
   const { data: result, isLoading, error } = useOptimizationResult(scenarioId!);
   const { data: capabilities } = useOptimizationCapabilities(scenarioId!);
+  const { canRun, reason } = useScenarioRunReadiness();
   const runMutation = useRunOptimization(scenarioId!);
   const { data: activeJob } = useJob(activeJobId);
+  const runDisabled = runMutation.isPending || dispatchScopePending || !scopeReady || !canRun;
 
   useEffect(() => {
     if (activeJob?.status === "completed") {
@@ -52,13 +55,19 @@ export function OptimizationRunPage() {
               });
               setActiveJobId(job.job_id);
             }}
-            disabled={runMutation.isPending || dispatchScopePending || !scopeReady}
+            disabled={runDisabled}
             className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
             {runMutation.isPending ? t("optimization.solving") : t("optimization.run")}
           </button>
         }
       >
+        {!canRun && (
+          <div className="mb-4 rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900">
+            <p className="font-semibold">Seed-only mode</p>
+            <p className="mt-1">{reason ?? "Optimization is disabled until built artifacts are generated in data-prep."}</p>
+          </div>
+        )}
         <BackendJobPanel job={activeJob} className="mb-4" />
         {capabilities && (
           <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">

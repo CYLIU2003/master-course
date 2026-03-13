@@ -89,8 +89,12 @@ export interface ResearchDatasetStatus {
   includedRoutes: string[] | "ALL";
   seedVersion?: string | null;
   datasetVersion: string;
+  seedReady?: boolean;
+  builtReady?: boolean;
   builtAvailable: boolean;
   warning?: string | null;
+  missingArtifacts?: string[];
+  integrityError?: string | null;
   manifest?: Record<string, unknown> | null;
   paths?: Record<string, string>;
 }

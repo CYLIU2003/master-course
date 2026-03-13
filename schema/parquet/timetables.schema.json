@@ -1,0 +1,12 @@
+{
+  "table": "timetables",
+  "required_columns": {
+    "trip_id": "string",
+    "route_id": "string",
+    "service_id": "string",
+    "origin": "string",
+    "destination": "string",
+    "departure": "string",
+    "arrival": "string"
+  }
+}

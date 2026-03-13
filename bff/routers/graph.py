@@ -28,9 +28,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from bff.dependencies import require_built
 from bff.mappers.dispatch_mappers import (
     build_graph_response,
     dict_to_trip,
@@ -1010,6 +1011,7 @@ def get_trips(
         description="Optional page size. Omit to return all trips.",
     ),
     offset: int = Query(default=0, ge=0),
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     if limit is None:
@@ -1069,6 +1071,7 @@ def build_trips(
     scenario_id: str,
     background_tasks: BackgroundTasks,
     body: Optional[BuildTripsBody] = None,
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     scope = _resolve_dispatch_scope(
@@ -1092,7 +1095,10 @@ def build_trips(
 
 
 @router.get("/scenarios/{scenario_id}/graph")
-def get_graph(scenario_id: str) -> Dict[str, Any]:
+def get_graph(
+    scenario_id: str,
+    _app_state: dict = Depends(require_built),
+) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     graph = store.get_field(scenario_id, "graph")
     if graph is None:
@@ -1104,7 +1110,10 @@ def get_graph(scenario_id: str) -> Dict[str, Any]:
 
 
 @router.get("/scenarios/{scenario_id}/graph/summary")
-def get_graph_summary(scenario_id: str) -> Dict[str, Any]:
+def get_graph_summary(
+    scenario_id: str,
+    _app_state: dict = Depends(require_built),
+) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     graph = store.get_graph_meta(scenario_id)
     if graph is None:
@@ -1126,6 +1135,7 @@ def get_graph_arcs(
         description="Optional page size. Omit to return all arcs.",
     ),
     offset: int = Query(default=0, ge=0),
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     graph = store.get_graph_meta(scenario_id)
@@ -1150,6 +1160,7 @@ def build_graph(
     scenario_id: str,
     background_tasks: BackgroundTasks,
     body: Optional[BuildGraphBody] = None,
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     scope = _resolve_dispatch_scope(
@@ -1182,6 +1193,7 @@ def get_duties(
         description="Optional page size. Omit to return all duties.",
     ),
     offset: int = Query(default=0, ge=0),
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     if limit is None:
@@ -1197,7 +1209,10 @@ def get_duties(
 
 
 @router.get("/scenarios/{scenario_id}/duties/summary")
-def get_duties_summary(scenario_id: str) -> Dict[str, Any]:
+def get_duties_summary(
+    scenario_id: str,
+    _app_state: dict = Depends(require_built),
+) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     summary = store.get_field_summary(scenario_id, "duties")
     if summary is not None:
@@ -1216,6 +1231,7 @@ def get_blocks(
         description="Optional page size. Omit to return all blocks.",
     ),
     offset: int = Query(default=0, ge=0),
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     if limit is None:
@@ -1231,7 +1247,10 @@ def get_blocks(
 
 
 @router.get("/scenarios/{scenario_id}/dispatch-plan")
-def get_dispatch_plan(scenario_id: str) -> Dict[str, Any]:
+def get_dispatch_plan(
+    scenario_id: str,
+    _app_state: dict = Depends(require_built),
+) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     plan = store.get_field(scenario_id, "dispatch_plan")
     if plan is None:
@@ -1247,6 +1266,7 @@ def build_blocks(
     scenario_id: str,
     background_tasks: BackgroundTasks,
     body: Optional[BuildBlocksBody] = None,
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     vt = body.vehicle_type if body else None
@@ -1275,6 +1295,7 @@ def build_dispatch_plan(
     scenario_id: str,
     background_tasks: BackgroundTasks,
     body: Optional[BuildDispatchPlanBody] = None,
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     vt = body.vehicle_type if body else None
@@ -1303,6 +1324,7 @@ def generate_duties(
     scenario_id: str,
     background_tasks: BackgroundTasks,
     body: Optional[GenerateDutiesBody] = None,
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     vt = body.vehicle_type if body else None
@@ -1327,7 +1349,10 @@ def generate_duties(
 
 
 @router.get("/scenarios/{scenario_id}/duties/validate")
-def validate_duties(scenario_id: str) -> Dict[str, Any]:
+def validate_duties(
+    scenario_id: str,
+    _app_state: dict = Depends(require_built),
+) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     from src.dispatch.validator import DutyValidator
     from bff.mappers.dispatch_mappers import dict_to_trip

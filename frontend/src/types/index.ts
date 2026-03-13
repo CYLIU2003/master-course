@@ -66,6 +66,9 @@ export type {
   RouteSummary,
 } from "./domain";
 
+export type { ApiError as AppApiError, AppErrorCode } from "./errors";
+export { AppErrorCode as APP_ERROR_CODE } from "./errors";
+
 // ── API DTO re-exports ────────────────────────────────────────
 export type {
   ApiListResponse,
@@ -77,6 +80,7 @@ export type {
   UpdateScenarioRequest,
   ResearchDatasetsResponse,
   AppDataStatusResponse,
+  AppStateResponse,
   // Depots
   DepotsResponse,
   DepotDetailResponse,

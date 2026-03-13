@@ -18,9 +18,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from bff.dependencies import require_built
+from bff.errors import AppErrorCode, make_error
 from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
 from bff.mappers.solver_results import (
     serialize_milp_result,
@@ -792,6 +794,7 @@ def get_optimization_capabilities(scenario_id: str) -> Dict[str, Any]:
 def run_optimization(
     scenario_id: str,
     body: Optional[RunOptimizationBody] = None,
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     request = body or RunOptimizationBody()
@@ -846,7 +849,10 @@ def run_optimization(
             )
             raise HTTPException(
                 status_code=503,
-                detail="An optimization job is already running. Please retry after it completes.",
+                detail=make_error(
+                    AppErrorCode.EXECUTION_IN_PROGRESS,
+                    "An optimization job is already running. Please retry after it completes.",
+                ),
             )
         return job_store.job_to_dict(job)
     except Exception:
@@ -857,6 +863,7 @@ def run_optimization(
 def reoptimize(
     scenario_id: str,
     body: ReoptimizeBody,
+    _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     scope = _resolve_dispatch_scope(
@@ -904,7 +911,10 @@ def reoptimize(
             )
             raise HTTPException(
                 status_code=503,
-                detail="An optimization job is already running. Please retry after it completes.",
+                detail=make_error(
+                    AppErrorCode.EXECUTION_IN_PROGRESS,
+                    "An optimization job is already running. Please retry after it completes.",
+                ),
             )
         return job_store.job_to_dict(job)
     except Exception:
