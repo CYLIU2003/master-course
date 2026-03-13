@@ -27,6 +27,8 @@ export interface FeedContext {
   feedId?: string | null;
   snapshotId?: string | null;
   datasetId?: string | null;
+  datasetFingerprint?: string | null;
+  manualRouteFamilyMapHash?: string | null;
   source?: string | null;
 }
 

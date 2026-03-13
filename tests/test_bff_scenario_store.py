@@ -84,10 +84,19 @@ def test_scenario_save_uses_refs_and_split_artifacts(temp_store_dir: Path):
     scenario_store.set_field(
         scenario_id,
         "timetable_rows",
-        [{"trip_id": "T1", "route_id": "R1", "service_id": "WEEKDAY", "source": "manual"}],
+        [
+            {
+                "trip_id": "T1",
+                "route_id": "R1",
+                "service_id": "WEEKDAY",
+                "source": "manual",
+            }
+        ],
     )
 
-    saved_doc = json.loads((temp_store_dir / f"{scenario_id}.json").read_text(encoding="utf-8"))
+    saved_doc = json.loads(
+        (temp_store_dir / f"{scenario_id}.json").read_text(encoding="utf-8")
+    )
     assert "refs" in saved_doc
     assert "stats" in saved_doc
     assert "timetable_rows" not in saved_doc
@@ -100,14 +109,23 @@ def test_trip_and_duty_artifacts_write_parquet(temp_store_dir: Path):
     meta = scenario_store.create_scenario("Parquet scenario", "", "thesis_mode")
     scenario_id = meta["id"]
 
-    scenario_store.set_field(scenario_id, "trips", [{"trip_id": "T1", "route_id": "R1"}, {"trip_id": "T2", "route_id": "R2"}])
+    scenario_store.set_field(
+        scenario_id,
+        "trips",
+        [{"trip_id": "T1", "route_id": "R1"}, {"trip_id": "T2", "route_id": "R2"}],
+    )
     scenario_store.set_field(scenario_id, "duties", [{"duty_id": "D1", "legs": []}])
 
-    saved_doc = json.loads((temp_store_dir / f"{scenario_id}.json").read_text(encoding="utf-8"))
+    saved_doc = json.loads(
+        (temp_store_dir / f"{scenario_id}.json").read_text(encoding="utf-8")
+    )
     assert Path(saved_doc["refs"]["tripSet"]).exists()
     assert Path(saved_doc["refs"]["duties"]).exists()
     assert scenario_store.count_field_rows(scenario_id, "trips") == 2
-    assert len(scenario_store.page_field_rows(scenario_id, "duties", limit=10, offset=0)) == 1
+    assert (
+        len(scenario_store.page_field_rows(scenario_id, "duties", limit=10, offset=0))
+        == 1
+    )
 
 
 def test_graph_artifact_is_split_into_meta_and_arcs(temp_store_dir: Path):
@@ -146,13 +164,36 @@ def test_timetable_rows_use_sqlite_paging_and_summary(temp_store_dir: Path):
     scenario_id = meta["id"]
 
     rows = [
-        {"trip_id": "T1", "route_id": "R1", "service_id": "WEEKDAY", "departure": "06:00", "arrival": "06:20", "distance_km": 5.0},
-        {"trip_id": "T2", "route_id": "R1", "service_id": "WEEKDAY", "departure": "07:00", "arrival": "07:20", "distance_km": 5.0},
-        {"trip_id": "T3", "route_id": "R2", "service_id": "SAT", "departure": "08:00", "arrival": "08:35", "distance_km": 8.0},
+        {
+            "trip_id": "T1",
+            "route_id": "R1",
+            "service_id": "WEEKDAY",
+            "departure": "06:00",
+            "arrival": "06:20",
+            "distance_km": 5.0,
+        },
+        {
+            "trip_id": "T2",
+            "route_id": "R1",
+            "service_id": "WEEKDAY",
+            "departure": "07:00",
+            "arrival": "07:20",
+            "distance_km": 5.0,
+        },
+        {
+            "trip_id": "T3",
+            "route_id": "R2",
+            "service_id": "SAT",
+            "departure": "08:00",
+            "arrival": "08:35",
+            "distance_km": 8.0,
+        },
     ]
     scenario_store.set_field(scenario_id, "timetable_rows", rows)
 
-    weekday_rows = scenario_store.page_timetable_rows(scenario_id, service_id="WEEKDAY", limit=10, offset=0)
+    weekday_rows = scenario_store.page_timetable_rows(
+        scenario_id, service_id="WEEKDAY", limit=10, offset=0
+    )
     summary = scenario_store.get_field_summary(scenario_id, "timetable_rows")
 
     assert len(weekday_rows) == 2
@@ -162,7 +203,9 @@ def test_timetable_rows_use_sqlite_paging_and_summary(temp_store_dir: Path):
     assert len(summary["byService"]) == 2
 
 
-def test_artifacts_sqlite_roundtrip_for_simulation_and_optimization_results(temp_store_dir: Path):
+def test_artifacts_sqlite_roundtrip_for_simulation_and_optimization_results(
+    temp_store_dir: Path,
+):
     meta = scenario_store.create_scenario("Artifact roundtrip", "", "thesis_mode")
     scenario_id = meta["id"]
 
@@ -171,14 +214,20 @@ def test_artifacts_sqlite_roundtrip_for_simulation_and_optimization_results(temp
         "total_energy_kwh": 120.5,
         "total_distance_km": 87.2,
         "feasibility_violations": [],
-        "audit": {"dataset_fingerprint": "tokyu:2026-03-15", "input_counts": {"tasks": 12}},
+        "audit": {
+            "dataset_fingerprint": "tokyu:2026-03-15",
+            "input_counts": {"tasks": 12},
+        },
     }
     optimization_result = {
         "scenario_id": scenario_id,
         "solver_status": "OPTIMAL",
         "objective_value": 12345.6,
         "cost_breakdown": {"total_cost": 12345.6},
-        "audit": {"dataset_fingerprint": "tokyu:2026-03-15", "input_counts": {"trips": 12}},
+        "audit": {
+            "dataset_fingerprint": "tokyu:2026-03-15",
+            "input_counts": {"trips": 12},
+        },
     }
 
     scenario_store.set_field(scenario_id, "simulation_result", simulation_result)
@@ -197,7 +246,9 @@ def test_scenario_save_writes_complete_marker(temp_store_dir: Path):
     meta = scenario_store.create_scenario("Complete marker", "", "thesis_mode")
     scenario_id = meta["id"]
 
-    scenario_store.set_field(scenario_id, "timetable_rows", [{"trip_id": "T1", "service_id": "WEEKDAY"}])
+    scenario_store.set_field(
+        scenario_id, "timetable_rows", [{"trip_id": "T1", "service_id": "WEEKDAY"}]
+    )
 
     artifact_dir = temp_store_dir / scenario_id
     assert (artifact_dir / "_COMPLETE").exists()
@@ -232,7 +283,9 @@ def test_replace_routes_from_source_prunes_stale_permissions(
         },
     )
 
-    scenario_store.replace_routes_from_source(scenario_id, "odpt", [{"id": "r-old", "name": "Old", "source": "odpt"}])
+    scenario_store.replace_routes_from_source(
+        scenario_id, "odpt", [{"id": "r-old", "name": "Old", "source": "odpt"}]
+    )
     scenario_store.set_depot_route_permissions(
         scenario_id,
         [{"depotId": depot["id"], "routeId": "r-old", "allowed": True}],
@@ -277,7 +330,11 @@ def test_upsert_route_depot_assignment_accepts_odpt_alias_ids(temp_store_dir: Pa
     item = scenario_store.upsert_route_depot_assignment(
         scenario_id,
         "odpt.BusroutePattern:TokyuBus.A24.out",
-        {"depotId": depot["id"], "assignmentType": "manual_override", "confidence": 1.0},
+        {
+            "depotId": depot["id"],
+            "assignmentType": "manual_override",
+            "confidence": 1.0,
+        },
     )
 
     assert item["routeId"] == "odpt-route-123"
@@ -513,6 +570,8 @@ def test_feed_context_roundtrip_is_exposed_in_scenario_meta(temp_store_dir: Path
         "feedId": "tokyu_odpt_gtfs",
         "snapshotId": "2026-03-09T180500Z",
         "datasetId": "tokyu_odpt_gtfs:2026-03-09T180500Z",
+        "datasetFingerprint": None,
+        "manualRouteFamilyMapHash": None,
         "source": "gtfs_runtime",
     }
     assert listed[0]["feedContext"]["feedId"] == "tokyu_odpt_gtfs"
@@ -707,12 +766,18 @@ def test_import_meta_helpers_preserve_progress_and_resource_type(temp_store_dir:
     )
 
 
-def test_route_depot_assignments_filter_routes_and_preserve_unresolved(temp_store_dir: Path):
+def test_route_depot_assignments_filter_routes_and_preserve_unresolved(
+    temp_store_dir: Path,
+):
     meta = scenario_store.create_scenario("Route assignments", "", "thesis_mode")
     scenario_id = meta["id"]
 
-    depot_a = scenario_store.create_depot(scenario_id, {"name": "Depot A", "location": "A"})
-    depot_b = scenario_store.create_depot(scenario_id, {"name": "Depot B", "location": "B"})
+    depot_a = scenario_store.create_depot(
+        scenario_id, {"name": "Depot A", "location": "A"}
+    )
+    depot_b = scenario_store.create_depot(
+        scenario_id, {"name": "Depot B", "location": "B"}
+    )
     route_a = scenario_store.create_route(
         scenario_id,
         {
@@ -761,20 +826,20 @@ def test_route_depot_assignments_filter_routes_and_preserve_unresolved(temp_stor
         scenario_id,
         route_a["id"],
         {
-          "depotId": depot_a["id"],
-          "assignmentType": "manual_override",
-          "confidence": 1.0,
-          "reason": "Assigned in test",
+            "depotId": depot_a["id"],
+            "assignmentType": "manual_override",
+            "confidence": 1.0,
+            "reason": "Assigned in test",
         },
     )
     scenario_store.upsert_route_depot_assignment(
         scenario_id,
         route_b["id"],
         {
-          "depotId": depot_b["id"],
-          "assignmentType": "official",
-          "confidence": 0.9,
-          "reason": "Official feed",
+            "depotId": depot_b["id"],
+            "assignmentType": "official",
+            "confidence": 0.9,
+            "reason": "Official feed",
         },
     )
 
@@ -799,8 +864,12 @@ def test_dispatch_scope_supports_depot_route_and_trip_filters(temp_store_dir: Pa
     meta = scenario_store.create_scenario("Analysis scope", "", "thesis_mode")
     scenario_id = meta["id"]
 
-    depot_a = scenario_store.create_depot(scenario_id, {"name": "Depot A", "location": "A"})
-    depot_b = scenario_store.create_depot(scenario_id, {"name": "Depot B", "location": "B"})
+    depot_a = scenario_store.create_depot(
+        scenario_id, {"name": "Depot A", "location": "A"}
+    )
+    depot_b = scenario_store.create_depot(
+        scenario_id, {"name": "Depot B", "location": "B"}
+    )
     route_main = scenario_store.create_route(
         scenario_id,
         {
@@ -847,17 +916,29 @@ def test_dispatch_scope_supports_depot_route_and_trip_filters(temp_store_dir: Pa
     scenario_store.upsert_route_depot_assignment(
         scenario_id,
         "R_MAIN",
-        {"depotId": depot_a["id"], "assignmentType": "manual_override", "confidence": 1.0},
+        {
+            "depotId": depot_a["id"],
+            "assignmentType": "manual_override",
+            "confidence": 1.0,
+        },
     )
     scenario_store.upsert_route_depot_assignment(
         scenario_id,
         "R_SHORT",
-        {"depotId": depot_a["id"], "assignmentType": "manual_override", "confidence": 1.0},
+        {
+            "depotId": depot_a["id"],
+            "assignmentType": "manual_override",
+            "confidence": 1.0,
+        },
     )
     scenario_store.upsert_route_depot_assignment(
         scenario_id,
         "R_REMOTE",
-        {"depotId": depot_b["id"], "assignmentType": "manual_override", "confidence": 1.0},
+        {
+            "depotId": depot_b["id"],
+            "assignmentType": "manual_override",
+            "confidence": 1.0,
+        },
     )
 
     scope = scenario_store.set_dispatch_scope(

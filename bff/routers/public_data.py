@@ -39,6 +39,16 @@ def _ensure_scenario(scenario_id: str) -> None:
         store.get_scenario(scenario_id)
     except KeyError:
         raise _not_found("Scenario", scenario_id)
+    except RuntimeError as e:
+        if "artifacts are incomplete" in str(e):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "INCOMPLETE_ARTIFACT",
+                    "message": str(e)
+                }
+            )
+        raise
 
 
 def _hash_payload(value: Any) -> str:

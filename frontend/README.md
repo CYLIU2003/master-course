@@ -68,8 +68,8 @@ VITE_API_BASE_URL=http://<backend-host>:8000/api
 
 起動後は `http://localhost:5173/` または VS Code の port forwarding URL からアクセスします。
 
-- 既存シナリオがある場合: 最新シナリオの `/planning` へ
-- シナリオがない場合: `Default Scenario` を自動作成して `/planning` へ
+- 初期表示は `/scenarios` のシナリオ一覧
+- 既存シナリオを選択して開く（シナリオがない場合は新規作成）
 
 ## Architecture
 

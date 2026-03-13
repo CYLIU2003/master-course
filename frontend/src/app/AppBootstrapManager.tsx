@@ -73,6 +73,7 @@ function buildBootManifestKey(
       feedId?: string | null;
       snapshotId?: string | null;
       datasetId?: string | null;
+      datasetFingerprint?: string | null;
       source?: string | null;
     } | null;
   } | null,
@@ -83,6 +84,7 @@ function buildBootManifestKey(
     feedId: feedContext?.feedId ?? null,
     snapshotId: feedContext?.snapshotId ?? null,
     datasetId: feedContext?.datasetId ?? null,
+    datasetFingerprint: feedContext?.datasetFingerprint ?? null,
     source: feedContext?.source ?? null,
   });
 }
@@ -228,6 +230,7 @@ export function AppBootstrapManager({ scenarioId }: Props) {
           totalCount: 2,
         });
         setTabStatus("dispatch", "ready", "dispatch scope の準備が完了");
+        setTabStatus("explorer", "ready", "Explorer は開いた時だけ読込");
         if (cancelled) return;
         updateStep("tabs", { status: "success", progress: 100 });
         complete();

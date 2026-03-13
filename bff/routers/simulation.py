@@ -157,6 +157,16 @@ def _require_scenario(scenario_id: str) -> None:
         store.get_scenario(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        if "artifacts are incomplete" in str(e):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "INCOMPLETE_ARTIFACT",
+                    "message": str(e)
+                }
+            )
+        raise
 
 
 def _resolve_dispatch_scope(
@@ -179,7 +189,6 @@ def _resolve_dispatch_scope(
     doc = store._load(scenario_id)
     doc["dispatch_scope"] = {**current, **scope}
     return store._normalize_dispatch_scope(doc)
-
 
 def _git_sha() -> str:
     try:

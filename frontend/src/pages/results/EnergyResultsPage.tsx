@@ -31,6 +31,7 @@ export function EnergyResultsPage() {
   const auditInputCounts = audit?.["input_counts"] as Record<string, unknown> | undefined;
   const auditOutputCounts = audit?.["output_counts"] as Record<string, unknown> | undefined;
   const datasetFingerprint =
+    result.feed_context?.datasetFingerprint ||
     result.feed_context?.datasetId ||
     [result.feed_context?.feedId, result.feed_context?.snapshotId].filter(Boolean).join(":") ||
     null;

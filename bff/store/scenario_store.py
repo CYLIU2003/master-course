@@ -527,23 +527,32 @@ def _save(doc: Dict[str, Any]) -> None:
     _ensure_dir()
     scenario_id = doc["meta"]["id"]
     refs = _refs_for_scenario(scenario_id, doc)
-    artifact_db_path = _artifact_store_path(refs)
-    artifact_dir = _artifact_dir_for_scenario(scenario_id)
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    complete_marker = _complete_marker_path(scenario_id)
-    incomplete_marker = _incomplete_marker_path(scenario_id)
-    if complete_marker.exists():
-        complete_marker.unlink()
+    
+    staging_dir = _STORE_DIR / f"{scenario_id}.staging"
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    
+    staging_refs = {}
+    for k, v in refs.items():
+        staging_refs[k] = str(staging_dir / Path(v).name)
+
+    artifact_db_path = Path(staging_refs["artifactStore"])
+    
+    complete_marker = staging_dir / "_COMPLETE"
+    incomplete_marker = staging_dir / "_INCOMPLETE"
     incomplete_marker.write_text(_now_iso(), encoding="utf-8")
+
+    staging_json = _STORE_DIR / f"{scenario_id}.json.staging"
 
     try:
         master_payload = {key: doc.get(key) for key in _MASTER_DATA_KEYS}
-        master_data_store.save_master_data(Path(refs["masterData"]), master_payload)
+        master_data_store.save_master_data(Path(staging_refs["masterData"]), master_payload)
 
         preserved_artifacts: Dict[str, Any] = {}
         for field, ref_key in _ARTIFACT_REF_KEYS.items():
             preserved_artifacts[field] = doc.get(field)
-            target_path = Path(refs[ref_key])
+            target_path = Path(staging_refs[ref_key])
             if field == "graph":
                 _save_graph_artifact(artifact_db_path, doc.get(field))
             elif field == "timetable_rows":
@@ -606,17 +615,52 @@ def _save(doc: Dict[str, Any]) -> None:
             "refs": refs,
             "stats": _scenario_stats(doc),
         }
-        scenario_meta_store.save_meta(_STORE_DIR, scenario_id, slim_doc)
 
+        staging_json.write_text(
+            json.dumps(slim_doc, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+
+        manifest = staging_dir / "manifest.json"
+        manifest.write_text(json.dumps({"committedAt": _now_iso()}), encoding="utf-8")
         complete_marker.write_text(scenario_id, encoding="utf-8")
         if incomplete_marker.exists():
             incomplete_marker.unlink()
+
+        # Atomic commit
+        active_dir = _artifact_dir_for_scenario(scenario_id)
+        old_dir = _STORE_DIR / f"{scenario_id}.old"
+        active_json = scenario_meta_store.scenario_path(_STORE_DIR, scenario_id)
+        old_json = _STORE_DIR / f"{scenario_id}.json.old"
+
+        if old_dir.exists():
+            shutil.rmtree(old_dir, ignore_errors=True)
+        if old_json.exists():
+            old_json.unlink(missing_ok=True)
+
+        if active_dir.exists():
+            active_dir.rename(old_dir)
+        staging_dir.rename(active_dir)
+
+        if active_json.exists():
+            active_json.rename(old_json)
+        staging_json.rename(active_json)
+
+        # Cleanup
+        if old_dir.exists():
+            shutil.rmtree(old_dir, ignore_errors=True)
+        if old_json.exists():
+            old_json.unlink(missing_ok=True)
 
         doc["refs"] = refs
         doc["stats"] = slim_doc["stats"]
         for field, value in preserved_artifacts.items():
             doc[field] = value
     except Exception:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+        if staging_json.exists():
+            staging_json.unlink(missing_ok=True)
         raise
 
 
@@ -652,13 +696,21 @@ def _normalize_feed_context(
     dataset_id = str(
         feed_context.get("dataset_id") or feed_context.get("datasetId") or ""
     ).strip()
+    dataset_fingerprint = str(
+        feed_context.get("dataset_fingerprint") or feed_context.get("datasetFingerprint") or ""
+    ).strip()
+    manual_route_family_map_hash = str(
+        feed_context.get("manual_route_family_map_hash") or feed_context.get("manualRouteFamilyMapHash") or ""
+    ).strip()
     source = str(feed_context.get("source") or "").strip()
-    if not any((feed_id, snapshot_id, dataset_id, source)):
+    if not any((feed_id, snapshot_id, dataset_id, dataset_fingerprint, source)):
         return None
     return {
         "feedId": feed_id or None,
         "snapshotId": snapshot_id or None,
         "datasetId": dataset_id or None,
+        "datasetFingerprint": dataset_fingerprint or None,
+        "manualRouteFamilyMapHash": manual_route_family_map_hash or None,
         "source": source or None,
     }
 

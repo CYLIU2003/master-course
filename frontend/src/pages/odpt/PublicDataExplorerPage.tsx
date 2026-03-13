@@ -565,7 +565,6 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
   const [summaryLoaded, setSummaryLoaded] = useState(false);
   const [timetableRows, setTimetableRows] = useState<TimetableRow[]>([]);
   const [timetableRowsTotal, setTimetableRowsTotal] = useState(0);
-  const [timetableRowsLoaded, setTimetableRowsLoaded] = useState(false);
   const [timetableOffset, setTimetableOffset] = useState(0);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -635,13 +634,23 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
     }
   }, [operatorId, pageSize]);
 
-  const loadTimetableSummary = useCallback(async () => {
+  const loadTimetableTab = useCallback(async (offset: number, serviceId?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const body = await publicDataApi.getTimetableSummary(operatorId);
-      setTtSummary(body.item ?? null);
+      const [summaryRes, rowsRes] = await Promise.all([
+        publicDataApi.getTimetableSummary(operatorId),
+        publicDataApi.listTimetableRows(operatorId, {
+          serviceId: serviceId || undefined,
+          limit: 100,
+          offset,
+        }),
+      ]);
+      setTtSummary(summaryRes.item ?? null);
       setSummaryLoaded(true);
+      setTimetableRows(rowsRes.items ?? []);
+      setTimetableRowsTotal(rowsRes.total ?? 0);
+      setTimetableOffset(offset);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -649,19 +658,18 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
     }
   }, [operatorId]);
 
-  const loadTimetableRows = useCallback(async (offset: number, serviceId?: string) => {
+  const changeTimetablePage = useCallback(async (offset: number, serviceId?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const body = await publicDataApi.listTimetableRows(operatorId, {
+      const rowsRes = await publicDataApi.listTimetableRows(operatorId, {
         serviceId: serviceId || undefined,
         limit: 100,
         offset,
       });
-      setTimetableRows(body.items ?? []);
-      setTimetableRowsTotal(body.total ?? 0);
+      setTimetableRows(rowsRes.items ?? []);
+      setTimetableRowsTotal(rowsRes.total ?? 0);
       setTimetableOffset(offset);
-      setTimetableRowsLoaded(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -686,7 +694,6 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
     setSummaryLoaded(false);
     setTimetableRows([]);
     setTimetableRowsTotal(0);
-    setTimetableRowsLoaded(false);
     setTimetableOffset(0);
     setSelectedServiceId("");
     setError(null);
@@ -715,15 +722,9 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
 
   useEffect(() => {
     if (detailTab === "timetable" && !summaryLoaded && !loading) {
-      void loadTimetableSummary();
+      void loadTimetableTab(0, selectedServiceId || undefined);
     }
-  }, [detailTab, loadTimetableSummary, loading, summaryLoaded]);
-
-  useEffect(() => {
-    if (detailTab === "timetable" && summaryLoaded && !timetableRowsLoaded && !loading) {
-      void loadTimetableRows(0, selectedServiceId || undefined);
-    }
-  }, [detailTab, loadTimetableRows, loading, selectedServiceId, summaryLoaded, timetableRowsLoaded]);
+  }, [detailTab, loadTimetableTab, loading, selectedServiceId, summaryLoaded]);
 
   const meta = OPERATOR_META[operatorId];
 
@@ -996,8 +997,7 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
                   onChange={(event) => {
                     const next = event.target.value;
                     setSelectedServiceId(next);
-                    setTimetableRowsLoaded(false);
-                    void loadTimetableRows(0, next || undefined);
+                    void changeTimetablePage(0, next || undefined);
                   }}
                   className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm"
                 >
@@ -1011,7 +1011,7 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
               </label>
               <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
                 <button
-                  onClick={() => void loadTimetableRows(Math.max(0, timetableOffset - 100), selectedServiceId || undefined)}
+                  onClick={() => void changeTimetablePage(Math.max(0, timetableOffset - 100), selectedServiceId || undefined)}
                   disabled={loading || timetableOffset === 0}
                   className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40"
                 >
@@ -1022,7 +1022,7 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
                   {Math.min(timetableOffset + timetableRows.length, timetableRowsTotal)} / {formatCount(timetableRowsTotal)}
                 </span>
                 <button
-                  onClick={() => void loadTimetableRows(timetableOffset + 100, selectedServiceId || undefined)}
+                  onClick={() => void changeTimetablePage(timetableOffset + 100, selectedServiceId || undefined)}
                   disabled={loading || timetableOffset + timetableRows.length >= timetableRowsTotal}
                   className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40"
                 >
