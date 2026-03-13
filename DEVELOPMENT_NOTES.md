@@ -39,6 +39,89 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-14] Incomplete artifact 500エラー修正 / Explorer ローディング修正 / Depot assignment 改善
+
+- **問題①: Incomplete artifact が全 API で 500 を返す**
+  - `bff/store/scenario_store.py` の `_load()` が `_INCOMPLETE` マーカーを検出して `RuntimeError` を上げるが、
+    複数の router が `RuntimeError` を `HTTPException` に変換していなかったため HTTP 500 が返っていた。
+  - `graph.py`・`master_data.py`・`optimization.py`・`public_data.py` の既存 `_require_scenario` は対応済みだったが、
+    `scenarios.py` の `update_scenario` / `get_dispatch_scope` / `update_dispatch_scope` /
+    `get_depot_scope_trips` / `duplicate_scenario` / `activate_scenario` /
+    `get_timetable` / `get_timetable_summary` / `update_timetable` が未対応だった。
+
+- **対応①**:
+  - `bff/routers/scenarios.py` に `_runtime_err_to_http(e)` ヘルパーを追加。
+    `"artifacts are incomplete"` を含む RuntimeError → HTTP 409 `INCOMPLETE_ARTIFACT`、
+    それ以外の RuntimeError → re-raise (FastAPI が 500 扱い) に統一。
+  - 上記の全 9 エンドポイントに `except RuntimeError as e: raise _runtime_err_to_http(e)` を追加。
+  - `get_app_context` は `except (KeyError, RuntimeError):` に統合し、incomplete な active scenario を
+    静かに deactivate する（500 にしない）。
+
+- **対応①-frontend**:
+  - `frontend/src/api/client.ts`
+    - `extractErrorMessage` が `{"detail": {"code": "INCOMPLETE_ARTIFACT", "message": "..."}}` 形式の
+      object detail を正しく取り出せるよう修正。
+    - `isIncompleteArtifactError(error)` 関数を export 追加。
+  - `frontend/src/types/api.ts`
+    - `ApiError.detail` を `string | Record<string, unknown>` に拡張。
+  - `frontend/src/hooks/use-scenario.ts`
+    - `useScenarioIsIncomplete(id)` 便利フックを追加。
+  - `frontend/src/hooks/index.ts`
+    - `useScenarioIsIncomplete` を export に追加。
+  - `frontend/src/pages/scenario/ScenarioOverviewPage.tsx`
+    - `IncompleteArtifactBanner` コンポーネントを追加。
+      409 INCOMPLETE_ARTIFACT を受け取った場合に「削除して一覧に戻る」バナーを表示。
+
+- **問題②: orphan legacy ファイルの残留**
+  - `outputs/scenarios/74aa5521-..._timetable.json` と `_stop_timetables.json` が残留していた。
+
+- **対応②**:
+  - `outputs/scenarios/74aa5521-5492-495f-9421-c35d0a5fb0e6_timetable.json` を削除。
+  - `outputs/scenarios/74aa5521-5492-495f-9421-c35d0a5fb0e6_stop_timetables.json` を削除。
+
+- **問題③: Public Data Explorer が「準備しています」から進まない**
+  - `AppBootstrapManager` が `explorer` タブの warm status を `"idle"` のまま残す 2 パターンがあった:
+    1. `scenarioId` が null/undefined のとき `resetWarmTabs()` 後に return するが、
+       `explorer` を `"ready"` にセットしないため永遠に `"idle"` のまま。
+    2. bootstrap が失敗（catch ブロック）したとき `planning/timetable/dispatch` は `"error"` にセットされるが
+       `explorer` は `"idle"` のまま残る。
+  - `explorer` タブは active scenario に依存しないのに、scenario lifecycle に連動していた。
+
+- **対応③**:
+  - `frontend/src/app/AppBootstrapManager.tsx`
+    - `!scenarioId` の early-return パスで `setTabStatus("explorer", "ready", "Explorer はいつでも利用可能")` を追加。
+    - catch ブロックにも `setTabStatus("explorer", "ready", "Explorer はいつでも利用可能")` を追加。
+
+- **問題④: depot assignment が name string 比較のみで精度が低い**
+  - `bff/services/depot_assignment.py` の `calculate_assignment_scores()` は
+    depot 名が terminal stop 文字列に含まれるかどうかの heuristic のみだった。
+  - stop ID レベルの geographic マッチングや sidecar depot_candidate_map が活用されていなかった。
+
+- **対応④**:
+  - `bff/services/depot_assignment.py` を全面改修:
+    - `DepotAssignmentScore` dataclass を追加（depot_id, route_id, score, reasons, tier プロパティ）。
+    - `compute_depot_route_scores(depots, routes, sidecar_depot_candidate_map)` を新規追加。
+      スコアリング: geographic(3pt) + sidecar_map(2pt) + operator_match(1pt) の加算式。
+    - `auto_assign_depots(depots, routes, sidecar_map, min_score, allow_multi_depot)` を新規追加。
+    - 既存 `calculate_assignment_scores()` は legacy wrapper として維持（後方互換）。
+  - `bff/routers/master_data.py`
+    - `AutoAssignDepotsBody` (minScore / applyNow / operatorId / sidecarDepotCandidateMap) を追加。
+    - `POST /scenarios/{id}/auto-assign-depots` を `compute_depot_route_scores` ベースに刷新:
+      - tier / reasons / candidates を含むレスポンスを返す。
+      - `applyNow=true` の場合は depot_route_permissions に即時保存。
+      - `appliedCount` / `meta` を含む構造化レスポンスに変更。
+
+- **テスト修正**:
+  - `tests/test_bff_scenario_store.py`
+    - `test_feed_context_roundtrip_is_exposed_in_scenario_meta` を修正:
+      `_normalize_feed_context` に追加された `datasetFingerprint` / `manualRouteFamilyMapHash` フィールドを
+      期待値に追加（既存の store 変更により生じた pre-existing failure を解消）。
+
+- **確認結果**:
+  - Python tests: `tests/test_bff_scenario_store.py` 他主要テスト群 pass（20 + 59 tests）。
+  - TypeScript: `npx tsc --noEmit` → 0 errors。
+  - orphan ファイル削除確認済み。
+
 ### [DEV-2026-03-13] 起動画面で既存シナリオを選択できない問題を修正
 
 - **問題**:

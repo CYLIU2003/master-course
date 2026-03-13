@@ -36,9 +36,9 @@ function readBootCache(): BootCacheRecord | null {
     }
     const parsed = JSON.parse(raw) as Partial<BootCacheRecord>;
     if (
-      typeof parsed.scenarioId !== "string"
-      || typeof parsed.manifestKey !== "string"
-      || typeof parsed.warmedAt !== "string"
+      typeof parsed.scenarioId !== "string" ||
+      typeof parsed.manifestKey !== "string" ||
+      typeof parsed.warmedAt !== "string"
     ) {
       return null;
     }
@@ -110,6 +110,7 @@ export function AppBootstrapManager({ scenarioId }: Props) {
       clearBootCache();
       reset();
       resetWarmTabs();
+      setTabStatus("explorer", "ready", "Explorer はいつでも利用可能");
       return;
     }
     const currentScenarioId = scenarioId;
@@ -138,7 +139,9 @@ export function AppBootstrapManager({ scenarioId }: Props) {
           progress: 20,
           detailMessage: "app/context を読込中",
         });
-        await measureAsyncStep("boot:context", () => fetchMaybeJson("/api/app/context"));
+        await measureAsyncStep("boot:context", () =>
+          fetchMaybeJson("/api/app/context"),
+        );
         if (cancelled) return;
         updateStep("context", { status: "success", progress: 100 });
 
@@ -155,7 +158,8 @@ export function AppBootstrapManager({ scenarioId }: Props) {
             }),
             queryClient.ensureQueryData({
               queryKey: scenarioKeys.dispatchScope(currentScenarioId),
-              queryFn: async () => scenarioApi.getDispatchScope(currentScenarioId),
+              queryFn: async () =>
+                scenarioApi.getDispatchScope(currentScenarioId),
             }),
           ]);
         });
@@ -170,7 +174,10 @@ export function AppBootstrapManager({ scenarioId }: Props) {
             source?: string | null;
           } | null;
         }>(scenarioKeys.detail(currentScenarioId));
-        const manifestKey = buildBootManifestKey(currentScenarioId, scenarioDetail);
+        const manifestKey = buildBootManifestKey(
+          currentScenarioId,
+          scenarioDetail,
+        );
         setManifestKey(manifestKey);
         if (!restoreCandidate || cachedManifest?.manifestKey !== manifestKey) {
           setDisplayMode("full");
@@ -204,11 +211,13 @@ export function AppBootstrapManager({ scenarioId }: Props) {
             await Promise.all([
               queryClient.ensureQueryData({
                 queryKey: scenarioKeys.timetableSummary(currentScenarioId),
-                queryFn: () => scenarioApi.getTimetableSummary(currentScenarioId),
+                queryFn: () =>
+                  scenarioApi.getTimetableSummary(currentScenarioId),
               }),
               queryClient.ensureQueryData({
                 queryKey: scenarioKeys.stopTimetablesSummary(currentScenarioId),
-                queryFn: () => scenarioApi.getStopTimetablesSummary(currentScenarioId),
+                queryFn: () =>
+                  scenarioApi.getStopTimetablesSummary(currentScenarioId),
               }),
             ]);
           });
@@ -246,6 +255,7 @@ export function AppBootstrapManager({ scenarioId }: Props) {
           setTabStatus("planning", "error", "起動時の先読みで失敗");
           setTabStatus("timetable", "error", "起動時の先読みで失敗");
           setTabStatus("dispatch", "error", "起動時の先読みで失敗");
+          setTabStatus("explorer", "ready", "Explorer はいつでも利用可能");
         }
       }
     }
