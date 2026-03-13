@@ -121,11 +121,14 @@ export function ComparePage() {
   const queryResults = useQueries({
     queries: selectedIds.map((id) => ({
       queryKey: ["compare", id],
-      queryFn: async () => ({
-        scenario: await scenarioApi.get(id),
-        simulation: await safeSimulation(id),
-        optimization: await safeOptimization(id),
-      }),
+      queryFn: async () => {
+        const [scenario, simulation, optimization] = await Promise.all([
+          scenarioApi.get(id),
+          safeSimulation(id),
+          safeOptimization(id),
+        ]);
+        return { scenario, simulation, optimization };
+      },
       enabled: selectedIds.length >= 2,
       staleTime: 60_000,
     })),
@@ -195,6 +198,13 @@ export function ComparePage() {
       },
     ];
   });
+  const datasetFingerprints = Array.from(
+    new Set(
+      rows
+        .map((row) => row.scenario.feedContext?.datasetId || row.scenario.feedContext?.snapshotId || "")
+        .filter(Boolean),
+    ),
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -272,6 +282,17 @@ export function ComparePage() {
           <ErrorBlock message={firstError instanceof Error ? firstError.message : String(firstError)} />
         ) : (
           <div className="space-y-4">
+            {datasetFingerprints.length > 1 && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="font-semibold">Dataset mismatch warning</div>
+                <div className="mt-1 text-xs">
+                  比較対象の scenario は異なる dataset fingerprint / snapshot を使っています。KPI 差分がアルゴリズム差だけを表さない可能性があります。
+                </div>
+                <div className="mt-2 text-[11px] text-amber-800">
+                  {datasetFingerprints.join(" / ")}
+                </div>
+              </div>
+            )}
             <KpiDiffTable rows={sortedRows} />
             <div className="grid gap-4 xl:grid-cols-2">
               {sortedRows.map(({ scenario, simulation, optimization }) => (

@@ -228,6 +228,7 @@ export function useUpdateScenario(id: string) {
 export function useUpdateDispatchScope(scenarioId: string) {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["scenarios", scenarioId, "dispatch-scope", "mutation"],
     mutationFn: (data: UpdateDispatchScopeRequest) =>
       scenarioApi.updateDispatchScope(scenarioId, data),
     onSuccess: () => {

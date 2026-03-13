@@ -1,4 +1,8 @@
+from pathlib import Path
+from unittest.mock import patch
+
 from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
+from bff.store import scenario_store
 
 
 def test_build_problem_data_from_scenario_uses_scope_rules_and_profiles():
@@ -174,3 +178,87 @@ def test_build_problem_data_from_scenario_applies_analysis_scope_filters():
 
     assert report.trip_count == 1
     assert [task.task_id for task in data.tasks] == ["T1"]
+
+
+def test_split_artifact_scenario_roundtrip_builds_equivalent_problem_data(tmp_path: Path):
+    store_dir = tmp_path / "scenarios"
+    app_context_path = tmp_path / "app_context.json"
+
+    with patch.object(scenario_store, "_STORE_DIR", store_dir), patch.object(
+        scenario_store, "_APP_CONTEXT_PATH", app_context_path
+    ):
+        meta = scenario_store.create_scenario("roundtrip", "", "thesis_mode")
+        scenario_id = meta["id"]
+        scenario_store.set_field(scenario_id, "depots", [{"id": "D1"}])
+        scenario_store.set_field(
+            scenario_id,
+            "vehicles",
+            [
+                {
+                    "id": "V1",
+                    "depotId": "D1",
+                    "type": "BEV",
+                    "batteryKwh": 320.0,
+                    "energyConsumption": 1.4,
+                    "minSoc": 0.2,
+                    "maxSoc": 0.9,
+                    "targetEndSoc": 0.6,
+                    "chargePowerKw": 120.0,
+                }
+            ],
+        )
+        scenario_store.set_field(
+            scenario_id,
+            "timetable_rows",
+            [
+                {
+                    "trip_id": "T1",
+                    "route_id": "R1",
+                    "service_id": "WEEKDAY",
+                    "origin": "A",
+                    "destination": "B",
+                    "departure": "24:15",
+                    "arrival": "24:45",
+                    "distance_km": 12.0,
+                    "allowed_vehicle_types": ["BEV"],
+                }
+            ],
+        )
+        scenario_store.set_field(
+            scenario_id,
+            "charger_sites",
+            [{"id": "D1", "site_type": "depot", "grid_import_limit_kw": 500.0}],
+        )
+        scenario_store.set_field(
+            scenario_id,
+            "chargers",
+            [{"id": "C1", "siteId": "D1", "powerKw": 120.0}],
+        )
+        scenario_store.set_field(
+            scenario_id,
+            "pv_profiles",
+            [{"site_id": "D1", "values": [0.0, 10.0, 5.0]}],
+        )
+        scenario_store.set_field(
+            scenario_id,
+            "energy_price_profiles",
+            [{"site_id": "D1", "values": [20.0, 22.0, 25.0]}],
+        )
+
+        scenario = scenario_store._load(scenario_id)
+        data, report = build_problem_data_from_scenario(
+            scenario,
+            depot_id="D1",
+            service_id="WEEKDAY",
+            mode="mode_milp_only",
+        )
+
+    assert report.trip_count == 1
+    assert report.vehicle_count == 1
+    assert len(data.tasks) == 1
+    assert data.tasks[0].task_id == "T1"
+    assert data.tasks[0].start_time_idx > 0
+    assert len(data.chargers) == 1
+    assert len(data.pv_profiles) == 3
+    assert len(data.electricity_prices) == 3
+    assert data.vehicles[0].battery_capacity == 320.0

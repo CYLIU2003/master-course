@@ -41,6 +41,7 @@ def run_milp(
     mip_gap: float = 0.01,
     threads: int = 0,
     presolve: int = -1,
+    gurobi_seed: Optional[int] = 42,
     verbose: bool = False,
     flags: Optional[Dict[str, bool]] = None,
 ) -> MILPResult:
@@ -85,7 +86,7 @@ def run_milp(
         data=data, ms=ms, dp=dp,
         time_limit_sec=time_limit_sec,
         mip_gap=mip_gap, threads=threads,
-        presolve=presolve, verbose=verbose,
+        presolve=presolve, gurobi_seed=gurobi_seed, verbose=verbose,
         flags=flags,
     )
 
@@ -98,6 +99,7 @@ def run_milp_from_data(
     mip_gap: float = 0.01,
     threads: int = 0,
     presolve: int = -1,
+    gurobi_seed: Optional[int] = 42,
     verbose: bool = False,
     flags: Optional[Dict[str, bool]] = None,
 ) -> MILPResult:
@@ -122,6 +124,8 @@ def run_milp_from_data(
     model.Params.OutputFlag = 1 if verbose else 0
     model.Params.TimeLimit  = time_limit_sec
     model.Params.MIPGap     = mip_gap
+    if gurobi_seed is not None:
+        model.Params.Seed = int(gurobi_seed)
     if threads > 0:
         model.Params.Threads = threads
     if presolve >= 0:

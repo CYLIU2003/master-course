@@ -11,6 +11,7 @@ from __future__ import annotations
 import subprocess
 import traceback
 import json
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -42,6 +43,7 @@ from src.optimization.rolling.reoptimizer import RollingReoptimizer
 from src.pipeline.solve import solve_problem_data
 
 router = APIRouter(tags=["optimization"])
+_OPTIMIZATION_JOB_LOCK = threading.Lock()
 
 
 class RunOptimizationBody(BaseModel):
@@ -90,12 +92,23 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "mode_alns_milp",
         ],
         "supports_reoptimization": True,
+        "max_concurrent_jobs": 1,
         "notes": [
             "Optimization runs against canonical ProblemData built from the scenario snapshot.",
             "Dispatch artifacts can be rebuilt before solve when requested.",
             "Results are persisted to the scenario snapshot; job state is not.",
+            "Only one optimization/re-optimization job is allowed at a time in this BFF process.",
         ],
     }
+
+
+def _reserve_optimization_slot() -> bool:
+    return _OPTIMIZATION_JOB_LOCK.acquire(blocking=False)
+
+
+def _release_optimization_slot() -> None:
+    if _OPTIMIZATION_JOB_LOCK.locked():
+        _OPTIMIZATION_JOB_LOCK.release()
 
 
 def _not_found(scenario_id: str) -> HTTPException:
@@ -495,6 +508,8 @@ def _run_optimization(
                 mode=mode,
             ),
         )
+    finally:
+        _release_optimization_slot()
 
 
 def _parse_optimization_mode(mode: str) -> OptimizationMode:
@@ -648,6 +663,8 @@ def _run_reoptimization(
                 mode=mode,
             ),
         )
+    finally:
+        _release_optimization_slot()
 
 
 @router.get("/scenarios/{scenario_id}/optimization")
@@ -679,40 +696,49 @@ def run_optimization(
     body: Optional[RunOptimizationBody] = None,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    if not _reserve_optimization_slot():
+        raise HTTPException(
+            status_code=503,
+            detail="An optimization job is already running. Please retry after it completes.",
+        )
     request = body or RunOptimizationBody()
-    scope = _resolve_dispatch_scope(
-        scenario_id,
-        service_id=request.service_id,
-        depot_id=request.depot_id,
-        persist=True,
-    )
-    job = job_store.create_job()
-    job_store.update_job(
-        job.job_id,
-        metadata=_job_metadata(
-            scenario_id=scenario_id,
-            service_id=scope.get("serviceId") or "WEEKDAY",
-            depot_id=scope.get("depotId"),
-            stage="queued",
-            mode=request.mode,
-            extra={"persistence": dict(job_store.JOB_PERSISTENCE_INFO)},
-        ),
-    )
-    background_tasks.add_task(
-        _run_optimization,
-        scenario_id,
-        job.job_id,
-        request.mode,
-        request.time_limit_seconds,
-        request.mip_gap,
-        request.random_seed,
-        scope.get("serviceId") or "WEEKDAY",
-        scope.get("depotId"),
-        request.rebuild_dispatch,
-        request.use_existing_duties,
-        request.alns_iterations,
-    )
-    return job_store.job_to_dict(job)
+    try:
+        scope = _resolve_dispatch_scope(
+            scenario_id,
+            service_id=request.service_id,
+            depot_id=request.depot_id,
+            persist=True,
+        )
+        job = job_store.create_job()
+        job_store.update_job(
+            job.job_id,
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=scope.get("serviceId") or "WEEKDAY",
+                depot_id=scope.get("depotId"),
+                stage="queued",
+                mode=request.mode,
+                extra={"persistence": dict(job_store.JOB_PERSISTENCE_INFO)},
+            ),
+        )
+        background_tasks.add_task(
+            _run_optimization,
+            scenario_id,
+            job.job_id,
+            request.mode,
+            request.time_limit_seconds,
+            request.mip_gap,
+            request.random_seed,
+            scope.get("serviceId") or "WEEKDAY",
+            scope.get("depotId"),
+            request.rebuild_dispatch,
+            request.use_existing_duties,
+            request.alns_iterations,
+        )
+        return job_store.job_to_dict(job)
+    except Exception:
+        _release_optimization_slot()
+        raise
 
 
 @router.post("/scenarios/{scenario_id}/reoptimize")
@@ -722,30 +748,39 @@ def reoptimize(
     body: ReoptimizeBody,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    if not _reserve_optimization_slot():
+        raise HTTPException(
+            status_code=503,
+            detail="An optimization job is already running. Please retry after it completes.",
+        )
     scope = _resolve_dispatch_scope(
         scenario_id,
         service_id=body.service_id,
         depot_id=body.depot_id,
         persist=True,
     )
-    job = job_store.create_job()
-    job_store.update_job(
-        job.job_id,
-        metadata=_job_metadata(
-            scenario_id=scenario_id,
-            service_id=scope.get("serviceId") or "WEEKDAY",
-            depot_id=scope.get("depotId"),
-            stage="queued",
-            mode=body.mode,
-            extra={"persistence": dict(job_store.JOB_PERSISTENCE_INFO)},
-        ),
-    )
-    background_tasks.add_task(
-        _run_reoptimization,
-        scenario_id,
-        job.job_id,
-        body,
-        scope.get("serviceId") or "WEEKDAY",
-        scope.get("depotId"),
-    )
-    return job_store.job_to_dict(job)
+    try:
+        job = job_store.create_job()
+        job_store.update_job(
+            job.job_id,
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=scope.get("serviceId") or "WEEKDAY",
+                depot_id=scope.get("depotId"),
+                stage="queued",
+                mode=body.mode,
+                extra={"persistence": dict(job_store.JOB_PERSISTENCE_INFO)},
+            ),
+        )
+        background_tasks.add_task(
+            _run_reoptimization,
+            scenario_id,
+            job.job_id,
+            body,
+            scope.get("serviceId") or "WEEKDAY",
+            scope.get("depotId"),
+        )
+        return job_store.job_to_dict(job)
+    except Exception:
+        _release_optimization_slot()
+        raise

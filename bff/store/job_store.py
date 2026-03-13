@@ -8,7 +8,9 @@ Jobs survive BFF restarts; in-flight jobs are marked orphaned/failed on reload.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from datetime import datetime, timezone
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
@@ -47,7 +49,7 @@ def _persist_job(job: Job) -> None:
 
 
 def _job_from_payload(payload: Dict[str, Any]) -> Job:
-    metadata = dict(payload.get("metadata") or {})
+    metadata = {"persistence": dict(JOB_PERSISTENCE_INFO), **dict(payload.get("metadata") or {})}
     return Job(
         job_id=str(payload.get("job_id") or payload.get("jobId") or ""),
         status=str(payload.get("status") or "pending"),
@@ -59,6 +61,18 @@ def _job_from_payload(payload: Dict[str, Any]) -> Job:
     )
 
 
+def _pid_exists(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 def _load_jobs_from_disk() -> Dict[str, Job]:
     jobs: Dict[str, Job] = {}
     if not _JOB_DIR.exists():
@@ -68,13 +82,19 @@ def _load_jobs_from_disk() -> Dict[str, Job]:
             payload = json.loads(path.read_text(encoding="utf-8"))
             job = _job_from_payload(payload)
             if job.status in {"pending", "running"}:
-                job.status = "failed"
-                job.message = "BFF restarted before the background job completed. Please retry the job."
-                job.error = job.error or "job_orphaned_after_restart"
-                job.metadata = {**job.metadata, "orphaned": True}
-                _persist_job(job)
+                pid = int(job.metadata.get("pid") or 0)
+                if not _pid_exists(pid):
+                    job.status = "failed"
+                    job.message = "BFF restarted before the background job completed. Please retry the job."
+                    job.error = job.error or "job_orphaned_after_restart"
+                    job.metadata = {**job.metadata, "orphaned": True}
+                    _persist_job(job)
             jobs[job.job_id] = job
         except Exception:
+            try:
+                path.unlink(missing_ok=True)
+            except Exception:
+                pass
             continue
     return jobs
 
@@ -85,7 +105,14 @@ _jobs: Dict[str, Job] = _load_jobs_from_disk()
 
 def create_job() -> Job:
     job_id = str(uuid.uuid4())
-    job = Job(job_id=job_id, metadata={"persistence": dict(JOB_PERSISTENCE_INFO)})
+    job = Job(
+        job_id=job_id,
+        metadata={
+            "persistence": dict(JOB_PERSISTENCE_INFO),
+            "pid": os.getpid(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
     _jobs[job_id] = job
     _persist_job(job)
     return job
@@ -119,7 +146,7 @@ def update_job(
     if error is not None:
         job.error = error
     if metadata is not None:
-        job.metadata = dict(metadata)
+        job.metadata = {**job.metadata, **dict(metadata)}
     _persist_job(job)
     return job
 

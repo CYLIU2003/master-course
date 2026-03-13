@@ -7,7 +7,7 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
-[![Tests](https://img.shields.io/badge/tests-245%20passed-brightgreen.svg)](#13-テスト状況--test-status)
+[![Tests](https://img.shields.io/badge/tests-284%20passed-brightgreen.svg)](#13-テスト状況--test-status)
 
 ---
 
@@ -73,7 +73,7 @@ Tokyu Bus ODPT-direct legacy code is preserved on `odpt_only`.
 ┌───────────────────────────────────────────────────┐
 │              React Frontend (frontend/)            │
 │  React 19 + TypeScript + Vite 7 + Tailwind CSS v4 │
-│  MapLibre GL · TanStack Query · Zustand · Zod     │
+│  TanStack Query · Zustand · Zod · SVG preview map │
 └──────────────────────┬────────────────────────────┘
                        │  HTTP /api (Vite proxy)
 ┌──────────────────────▼────────────────────────────┐
@@ -133,7 +133,7 @@ EN: Frontend only calls `/api`. BFF orchestrates APIs/jobs. Core research logic 
 | Zustand | 5 | クライアント状態管理 |
 | Zod | 4 | スキーマバリデーション |
 | Tailwind CSS | v4 | スタイリング |
-| MapLibre GL | 5 | 地図表示 |
+| SVG Preview Map | custom | 軽量地図プレビュー |
 | React Hook Form | 7 | フォーム管理 |
 | i18next | 25 | 国際化 (i18n) |
 
@@ -336,7 +336,7 @@ master-course/
 │   │   ├── odpt_stop_timetables.py # ODPT 停留所時刻表
 │   │   ├── transit_catalog.py      # Transit カタログ管理
 │   │   └── transit_db.py           # Transit DB 操作
-│   ├── store/                      # メモリストア (Scenario JSON 永続化)
+│   ├── store/                      # Scenario / Job split storage
 │   └── mappers/                    # DTO マッパー
 │
 ├── src/                            # 研究コア (Research Core)
@@ -677,7 +677,7 @@ optimization/
 |---------|------|------|
 | GET | `/api/jobs/{job_id}` | ジョブステータス取得 |
 
-> **永続化**: シナリオデータは `outputs/scenarios/` に JSON で保存。ジョブステータスはインメモリ（サーバー再起動で消失）。
+> **永続化**: シナリオデータは `outputs/scenarios/` の split artifact (`scenario.json` + `master_data.sqlite` + `artifacts.sqlite` + parquet) として保存されます。ジョブステータスは `outputs/jobs/*.json` に永続化され、再起動時の in-progress job は orphaned failed として可視化されます。
 >
 > EN: Scenario documents are persisted as JSON files under `outputs/scenarios/`. Job status is stored in-memory (ephemeral).
 >
@@ -748,7 +748,7 @@ Route ──1:N──→ Trip
 - `TabWarmBoundary` が planning / timetable / public-data / dispatch タブの warm state を扱い、重い tab mount を抑制します。
 - `ImportJobStore`、`ImportProgressPanel`、`ImportLogPanel` が ODPT / GTFS import と public-data sync の進捗・ログを共通方式で表示します。
 - 大きい一覧は `VirtualizedList` に統一し、explorer の depot assignment sort は `assignment-sort.worker.ts`、route family grouping は `route-family-group.worker.ts`、public diff preview は `public-diff-preview.worker.ts` へオフロードしています。
-- Router は route-level lazy loading を採用し、Vite build の main chunk は縮小済みです。現状の build warning は主に `MapLibre GL` 由来の地図 chunk です。
+- Router は route-level lazy loading を採用し、Vite build の main chunk は縮小済みです。Planning 地図は lightweight SVG preview を使い、重い map runtime を初期 bundle に含めません。
 - `/jobs/{job_id}` poll により、Trips / Graph / Duties / Simulation / Optimization の backend job progress を画面側で確認できます。
 - 開発モードの `DebugPerfOverlay` は常時表示ではありません。`?debugPerf=1` を URL に付けるか、`localStorage["debug-perf"]="1"` を設定したときだけ render count、selector time、import time、tab switch time、long task、heap 使用量を右下に表示します。
 
@@ -960,7 +960,7 @@ python run_experiment.py \
 ```
 最終実行: 2026-03-08
 コマンド: python -m pytest tests/ -q
-結果:   245 passed ✅
+結果:   284 passed ✅
 ```
 
 ### テストカバレッジ（主要領域）
@@ -1081,12 +1081,12 @@ python run_experiment.py \
 
 ### 未完了の主要タスク
 
-1. **BFF `run-simulation` の本結合** — `src/pipeline/simulate.py` と接続
-2. **BFF `run-optimization` の本結合** — `src/pipeline/solve.py` と接続
-3. **Simulation 設定画面** — 実データ接続
-4. **Zod バリデーション** — 編集 UX 改善
-5. **Editor Drawer** — インライン編集 UI
-6. **ページ遅延読み込み** — パフォーマンス改善
+1. **シナリオ保存の原子性向上** — split artifact を temp dir → rename で丸ごと切り替える
+2. **Frontend lint backlog の解消** — hook / setState-in-effect / perf utility の整理
+3. **Catalog quality dashboard の拡充** — linkage / warning trend / low-confidence breakdown の可視化
+4. **Experiment reproducibility の明示** — dataset fingerprint / snapshot / seed を compare/export UI でさらに強調
+5. **Simulation 設定画面** — 実データ接続の細部改善
+6. **Editor Drawer / compare / results の磨き込み** — 導線と比較UXの最終調整
 
 ### 前提のある機能
 

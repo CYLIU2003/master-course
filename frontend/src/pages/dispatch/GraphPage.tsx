@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useIsMutating } from "@tanstack/react-query";
 import { useGraphArcs, useGraphSummary, useBuildGraph, useDispatchScope, useJob } from "@/hooks";
 import { BackendJobPanel, PageSection, LoadingBlock, ErrorBlock, EmptyState, TabWarmBoundary, VirtualizedList } from "@/features/common";
 import { DispatchScopePanel } from "@/features/planning";
@@ -15,6 +16,7 @@ export function GraphPage() {
   useRenderTrace("GraphPage");
   const { data: scope } = useDispatchScope(scenarioId!);
   const scopeReady = Boolean(scope?.depotId);
+  const dispatchScopePending = useIsMutating({ mutationKey: ["scenarios", scenarioId, "dispatch-scope", "mutation"] }) > 0;
   const buildMutation = useBuildGraph(scenarioId!);
   const [reasonFilter, setReasonFilter] = useState<FeasibilityReason | "all">("all");
   const [pageOffset, setPageOffset] = useState(0);
@@ -56,7 +58,7 @@ export function GraphPage() {
         actions={
           <button
             onClick={handleBuild}
-            disabled={buildMutation.isPending || !scopeReady}
+            disabled={buildMutation.isPending || dispatchScopePending || !scopeReady}
             className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
             {buildMutation.isPending ? t("graph.building") : t("graph.build")}

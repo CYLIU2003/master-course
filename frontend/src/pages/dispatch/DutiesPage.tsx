@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useIsMutating } from "@tanstack/react-query";
 import { useDuties, useDutiesSummary, useGenerateDuties, useDutyValidation, useDispatchScope, useJob } from "@/hooks";
 import {
   BackendJobPanel,
@@ -25,6 +26,7 @@ export function DutiesPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const { data: scope } = useDispatchScope(scenarioId!);
   const scopeReady = Boolean(scope?.depotId);
+  const dispatchScopePending = useIsMutating({ mutationKey: ["scenarios", scenarioId, "dispatch-scope", "mutation"] }) > 0;
   const { data, isLoading, error } = useDuties(scenarioId!, {
     limit: PAGE_SIZE,
     offset: pageOffset,
@@ -63,7 +65,7 @@ export function DutiesPage() {
         actions={
           <button
             onClick={handleGenerate}
-            disabled={generateMutation.isPending || !scopeReady}
+            disabled={generateMutation.isPending || dispatchScopePending || !scopeReady}
             className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
             {generateMutation.isPending ? t("duties.generating") : t("duties.generate")}
