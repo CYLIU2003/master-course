@@ -157,6 +157,7 @@ export function ComparePage() {
   }, [rows, sortDirection, sortMetric]);
   const auditEnvelopes: AuditExportEnvelope[] = rows.flatMap(({ scenario, simulation, optimization }) => {
     const datasetFingerprint =
+      scenario.feedContext?.datasetFingerprint ||
       scenario.feedContext?.datasetId ||
       [scenario.feedContext?.feedId, scenario.feedContext?.snapshotId].filter(Boolean).join(":") ||
       null;
@@ -201,7 +202,13 @@ export function ComparePage() {
   const datasetFingerprints = Array.from(
     new Set(
       rows
-        .map((row) => row.scenario.feedContext?.datasetId || row.scenario.feedContext?.snapshotId || "")
+        .map(
+          (row) =>
+            row.scenario.feedContext?.datasetFingerprint
+            || row.scenario.feedContext?.datasetId
+            || row.scenario.feedContext?.snapshotId
+            || "",
+        )
         .filter(Boolean),
     ),
   );
@@ -305,7 +312,7 @@ export function ComparePage() {
                       </p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-600">
-                      {scenario.feedContext?.datasetId ?? scenario.feedContext?.snapshotId ?? "no dataset"}
+                      {scenario.feedContext?.datasetFingerprint ?? scenario.feedContext?.datasetId ?? scenario.feedContext?.snapshotId ?? "no dataset"}
                     </span>
                   </div>
 

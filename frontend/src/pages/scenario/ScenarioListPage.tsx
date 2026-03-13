@@ -74,26 +74,31 @@ export function ScenarioListPage() {
               key={s.id}
               className="flex items-center justify-between rounded-lg border border-border bg-surface-raised px-4 py-3 hover:border-primary-200"
             >
-              <button
-                type="button"
-                onClick={() => void activateAndOpen(s.id)}
-                className="flex-1 text-left"
-              >
+              <div className="flex-1 text-left">
                 <p className="text-sm font-medium text-slate-800">{s.name}</p>
                 <p className="text-xs text-slate-400">
                   {s.operatorId} &middot; {s.mode} &middot; {s.status} &middot; {formatDate(s.updatedAt)}
                 </p>
-              </button>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (confirm(t("scenarios.delete_confirm", { name: s.name })))
-                    deleteMutation.mutate(s.id);
-                }}
-                className="ml-3 text-xs text-red-400 hover:text-red-600"
-              >
-                {t("common.delete")}
-              </button>
+              </div>
+              <div className="ml-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void activateAndOpen(s.id)}
+                  className="rounded-md border border-primary-200 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50"
+                >
+                  {t("common.open", "開く")}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (confirm(t("scenarios.delete_confirm", { name: s.name })))
+                      deleteMutation.mutate(s.id);
+                  }}
+                  className="text-xs text-red-400 hover:text-red-600"
+                >
+                  {t("common.delete")}
+                </button>
+              </div>
             </li>
           ))}
         </ul>

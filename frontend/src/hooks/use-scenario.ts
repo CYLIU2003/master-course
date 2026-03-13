@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { scenarioApi } from "@/api/scenario";
+import { isIncompleteArtifactError } from "@/api/client";
 import type {
   CreateScenarioRequest,
   UpdateScenarioRequest,
@@ -29,12 +30,28 @@ export const scenarioKeys = {
     serviceId: string | undefined,
     limit: number,
     offset: number,
-  ) => ["scenarios", id, "timetable", "page", serviceId ?? "all", limit, offset] as const,
-  timetableSummary: (id: string) => ["scenarios", id, "timetable", "summary"] as const,
+  ) =>
+    [
+      "scenarios",
+      id,
+      "timetable",
+      "page",
+      serviceId ?? "all",
+      limit,
+      offset,
+    ] as const,
+  timetableSummary: (id: string) =>
+    ["scenarios", id, "timetable", "summary"] as const,
   calendar: (id: string) => ["scenarios", id, "calendar"] as const,
   calendarDates: (id: string) => ["scenarios", id, "calendar-dates"] as const,
   stopTimetables: (id: string, stopId?: string, serviceId?: string) =>
-    ["scenarios", id, "stop-timetables", stopId ?? "all", serviceId ?? "all"] as const,
+    [
+      "scenarios",
+      id,
+      "stop-timetables",
+      stopId ?? "all",
+      serviceId ?? "all",
+    ] as const,
   stopTimetablesPage: (
     id: string,
     stopId: string | undefined,
@@ -55,15 +72,34 @@ export const scenarioKeys = {
   stopTimetablesSummary: (id: string) =>
     ["scenarios", id, "stop-timetables", "summary"] as const,
   deadheadRules: (id: string) => ["scenarios", id, "deadhead-rules"] as const,
-  turnaroundRules: (id: string) => ["scenarios", id, "turnaround-rules"] as const,
+  turnaroundRules: (id: string) =>
+    ["scenarios", id, "turnaround-rules"] as const,
 };
 
-function invalidateDispatchOutputs(qc: ReturnType<typeof useQueryClient>, scenarioId: string) {
-  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "trips"], exact: false });
-  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "graph"], exact: false });
-  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "duties"], exact: false });
-  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "simulation"], exact: false });
-  qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "optimization"], exact: false });
+function invalidateDispatchOutputs(
+  qc: ReturnType<typeof useQueryClient>,
+  scenarioId: string,
+) {
+  qc.invalidateQueries({
+    queryKey: ["scenarios", scenarioId, "trips"],
+    exact: false,
+  });
+  qc.invalidateQueries({
+    queryKey: ["scenarios", scenarioId, "graph"],
+    exact: false,
+  });
+  qc.invalidateQueries({
+    queryKey: ["scenarios", scenarioId, "duties"],
+    exact: false,
+  });
+  qc.invalidateQueries({
+    queryKey: ["scenarios", scenarioId, "simulation"],
+    exact: false,
+  });
+  qc.invalidateQueries({
+    queryKey: ["scenarios", scenarioId, "optimization"],
+    exact: false,
+  });
 }
 
 // ── Queries ───────────────────────────────────────────────────
@@ -81,6 +117,15 @@ export function useScenario(id: string) {
     queryFn: () => scenarioApi.get(id),
     enabled: !!id,
   });
+}
+
+/**
+ * Returns true when the scenario fetch failed with INCOMPLETE_ARTIFACT (HTTP 409).
+ * Use this to conditionally render the recovery banner without prop-drilling the error.
+ */
+export function useScenarioIsIncomplete(id: string): boolean {
+  const { error } = useScenario(id);
+  return isIncompleteArtifactError(error);
 }
 
 export function useDispatchScope(scenarioId: string) {
@@ -112,7 +157,8 @@ export function useTimetablePage(
   const serviceId = options?.serviceId;
   return useQuery({
     queryKey: scenarioKeys.timetablePage(scenarioId, serviceId, limit, offset),
-    queryFn: () => scenarioApi.getTimetable(scenarioId, serviceId, { limit, offset }),
+    queryFn: () =>
+      scenarioApi.getTimetable(scenarioId, serviceId, { limit, offset }),
     enabled: !!scenarioId,
   });
 }
@@ -175,7 +221,10 @@ export function useStopTimetablesPage(
       offset,
     ),
     queryFn: () =>
-      scenarioApi.getStopTimetables(scenarioId, stopId, serviceId, { limit, offset }),
+      scenarioApi.getStopTimetables(scenarioId, stopId, serviceId, {
+        limit,
+        offset,
+      }),
     enabled: !!scenarioId,
   });
 }
@@ -232,7 +281,9 @@ export function useUpdateDispatchScope(scenarioId: string) {
     mutationFn: (data: UpdateDispatchScopeRequest) =>
       scenarioApi.updateDispatchScope(scenarioId, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: scenarioKeys.dispatchScope(scenarioId) });
+      qc.invalidateQueries({
+        queryKey: scenarioKeys.dispatchScope(scenarioId),
+      });
       qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
@@ -258,7 +309,9 @@ export function useUpdateTimetable(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
-      qc.invalidateQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId) });
+      qc.invalidateQueries({
+        queryKey: scenarioKeys.timetableSummary(scenarioId),
+      });
       invalidateDispatchOutputs(qc, scenarioId);
       qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
@@ -275,7 +328,9 @@ export function useImportTimetableCsv(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
-      qc.invalidateQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId) });
+      qc.invalidateQueries({
+        queryKey: scenarioKeys.timetableSummary(scenarioId),
+      });
       invalidateDispatchOutputs(qc, scenarioId);
       qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
@@ -292,8 +347,13 @@ export function useImportOdptTimetable(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
-      await qc.invalidateQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId) });
-      await qc.refetchQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId), exact: true });
+      await qc.invalidateQueries({
+        queryKey: scenarioKeys.timetableSummary(scenarioId),
+      });
+      await qc.refetchQueries({
+        queryKey: scenarioKeys.timetableSummary(scenarioId),
+        exact: true,
+      });
       invalidateDispatchOutputs(qc, scenarioId);
       await qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
@@ -310,11 +370,20 @@ export function useImportGtfsTimetable(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "timetable"],
         exact: false,
       });
-      await qc.invalidateQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId) });
-      await qc.refetchQueries({ queryKey: scenarioKeys.timetableSummary(scenarioId), exact: true });
+      await qc.invalidateQueries({
+        queryKey: scenarioKeys.timetableSummary(scenarioId),
+      });
+      await qc.refetchQueries({
+        queryKey: scenarioKeys.timetableSummary(scenarioId),
+        exact: true,
+      });
       // GTFS timetable import also syncs calendar data
-      await qc.invalidateQueries({ queryKey: scenarioKeys.calendar(scenarioId) });
-      await qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
+      await qc.invalidateQueries({
+        queryKey: scenarioKeys.calendar(scenarioId),
+      });
+      await qc.invalidateQueries({
+        queryKey: scenarioKeys.calendarDates(scenarioId),
+      });
       invalidateDispatchOutputs(qc, scenarioId);
       await qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
     },
@@ -331,7 +400,9 @@ export function useImportOdptStopTimetables(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "stop-timetables"],
         exact: false,
       });
-      await qc.invalidateQueries({ queryKey: scenarioKeys.stopTimetablesSummary(scenarioId) });
+      await qc.invalidateQueries({
+        queryKey: scenarioKeys.stopTimetablesSummary(scenarioId),
+      });
       await qc.refetchQueries({
         queryKey: scenarioKeys.stopTimetablesSummary(scenarioId),
         exact: true,
@@ -352,7 +423,9 @@ export function useImportGtfsStopTimetables(scenarioId: string) {
         queryKey: ["scenarios", scenarioId, "stop-timetables"],
         exact: false,
       });
-      await qc.invalidateQueries({ queryKey: scenarioKeys.stopTimetablesSummary(scenarioId) });
+      await qc.invalidateQueries({
+        queryKey: scenarioKeys.stopTimetablesSummary(scenarioId),
+      });
       await qc.refetchQueries({
         queryKey: scenarioKeys.stopTimetablesSummary(scenarioId),
         exact: true,
@@ -419,7 +492,9 @@ export function useUpdateCalendarDates(scenarioId: string) {
     mutationFn: (data: UpdateCalendarDatesRequest) =>
       scenarioApi.updateCalendarDates(scenarioId, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
+      qc.invalidateQueries({
+        queryKey: scenarioKeys.calendarDates(scenarioId),
+      });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -436,7 +511,9 @@ export function useUpsertCalendarDate(scenarioId: string) {
       data: UpsertCalendarDateRequest;
     }) => scenarioApi.upsertCalendarDate(scenarioId, date, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
+      qc.invalidateQueries({
+        queryKey: scenarioKeys.calendarDates(scenarioId),
+      });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });
@@ -448,7 +525,9 @@ export function useDeleteCalendarDate(scenarioId: string) {
     mutationFn: (date: string) =>
       scenarioApi.deleteCalendarDate(scenarioId, date),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: scenarioKeys.calendarDates(scenarioId) });
+      qc.invalidateQueries({
+        queryKey: scenarioKeys.calendarDates(scenarioId),
+      });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });

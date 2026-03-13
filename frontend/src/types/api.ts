@@ -42,7 +42,7 @@ export interface ApiListResponse<T> {
 }
 
 export interface ApiError {
-  detail: string;
+  detail: string | Record<string, unknown>;
   status: number;
 }
 
@@ -135,7 +135,8 @@ export interface CreateVehicleTemplateRequest {
   enabled?: boolean;
 }
 
-export type UpdateVehicleTemplateRequest = Partial<CreateVehicleTemplateRequest>;
+export type UpdateVehicleTemplateRequest =
+  Partial<CreateVehicleTemplateRequest>;
 
 // ── Routes ────────────────────────────────────────────────────
 
@@ -488,8 +489,7 @@ export interface ImportOdptStopTimetableRequest {
   reset?: boolean;
 }
 
-export interface ImportOdptStopTimetableResponse
-  extends ApiListResponse<StopTimetable> {
+export interface ImportOdptStopTimetableResponse extends ApiListResponse<StopTimetable> {
   meta: StopTimetableImportMeta;
 }
 
@@ -499,8 +499,7 @@ export interface ImportGtfsStopTimetableRequest {
   reset?: boolean;
 }
 
-export interface ImportGtfsStopTimetableResponse
-  extends ApiListResponse<StopTimetable> {
+export interface ImportGtfsStopTimetableResponse extends ApiListResponse<StopTimetable> {
   meta: StopTimetableImportMeta;
 }
 
@@ -559,17 +558,24 @@ export interface UpsertCalendarDateRequest {
 
 // ── Permissions ───────────────────────────────────────────────
 
-export type DepotRoutePermissionsResponse = ApiListResponse<DepotRoutePermission>;
-export type VehicleRoutePermissionsResponse = ApiListResponse<VehicleRoutePermission>;
-export type DepotRouteFamilyPermissionsResponse = ApiListResponse<DepotRouteFamilyPermission>;
-export type VehicleRouteFamilyPermissionsResponse = ApiListResponse<VehicleRouteFamilyPermission>;
+export type DepotRoutePermissionsResponse =
+  ApiListResponse<DepotRoutePermission>;
+export type VehicleRoutePermissionsResponse =
+  ApiListResponse<VehicleRoutePermission>;
+export type DepotRouteFamilyPermissionsResponse =
+  ApiListResponse<DepotRouteFamilyPermission>;
+export type VehicleRouteFamilyPermissionsResponse =
+  ApiListResponse<VehicleRouteFamilyPermission>;
 
 export interface UpdateDepotRoutePermissionsRequest {
   permissions: DepotRoutePermission[];
 }
 
 export interface UpdateDepotRouteFamilyPermissionsRequest {
-  permissions: Pick<DepotRouteFamilyPermission, "depotId" | "routeFamilyId" | "allowed">[];
+  permissions: Pick<
+    DepotRouteFamilyPermission,
+    "depotId" | "routeFamilyId" | "allowed"
+  >[];
 }
 
 export interface UpdateVehicleRoutePermissionsRequest {
@@ -577,7 +583,10 @@ export interface UpdateVehicleRoutePermissionsRequest {
 }
 
 export interface UpdateVehicleRouteFamilyPermissionsRequest {
-  permissions: Pick<VehicleRouteFamilyPermission, "vehicleId" | "routeFamilyId" | "allowed">[];
+  permissions: Pick<
+    VehicleRouteFamilyPermission,
+    "vehicleId" | "routeFamilyId" | "allowed"
+  >[];
 }
 
 // ── Rules ─────────────────────────────────────────────────────

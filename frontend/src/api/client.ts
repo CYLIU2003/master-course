@@ -18,6 +18,13 @@ function extractErrorMessage(body: unknown): string | null {
   if (typeof candidate.detail === "string" && candidate.detail.trim()) {
     return candidate.detail;
   }
+  // Handle object detail (e.g. INCOMPLETE_ARTIFACT: {code, message})
+  if (candidate.detail !== null && typeof candidate.detail === "object") {
+    const d = candidate.detail as Record<string, unknown>;
+    if (typeof d.message === "string" && d.message.trim()) {
+      return d.message;
+    }
+  }
   if (typeof candidate.error === "string" && candidate.error.trim()) {
     return candidate.error;
   }
@@ -47,7 +54,8 @@ async function parseResponseBody<T>(
       if (contentType.includes("application/json") || looksLikeJson(text)) {
         try {
           const body = JSON.parse(text) as ApiError | Record<string, unknown>;
-          errorMessage = extractErrorMessage(body) ?? `${errorMessage} - ${text}`;
+          errorMessage =
+            extractErrorMessage(body) ?? `${errorMessage} - ${text}`;
         } catch {
           errorMessage = `${errorMessage} - ${text}`;
         }
@@ -68,10 +76,7 @@ async function parseResponseBody<T>(
     throw new Error("API returned empty body where JSON was expected");
   }
 
-  if (
-    !contentType.includes("application/json") &&
-    !looksLikeJson(text)
-  ) {
+  if (!contentType.includes("application/json") && !looksLikeJson(text)) {
     throw new Error(
       `Expected application/json but got "${contentType || "unknown"}" with body: ${text.slice(0, 200)}`,
     );
@@ -134,11 +139,32 @@ async function request<T>(
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+    request<T>(path, {
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
   patch: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
+    request<T>(path, {
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
   put: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
+    request<T>(path, {
+      method: "PUT",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
   delete: <T>(path: string) =>
     request<T>(path, { method: "DELETE" }, { allowEmptyBody: true }),
 };
+
+/**
+ * Returns true when the error is an HTTP 409 INCOMPLETE_ARTIFACT response.
+ * Used to show recovery UI when a scenario's save was interrupted.
+ */
+export function isIncompleteArtifactError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.startsWith("HTTP 409 ") &&
+    error.message.includes("INCOMPLETE_ARTIFACT")
+  );
+}

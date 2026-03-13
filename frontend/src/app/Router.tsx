@@ -106,22 +106,8 @@ const PublicDataExplorerPage = lazy(() =>
   })),
 );
 
-async function startupLoader() {
-  try {
-    const context = await fetchMaybeJson<{
-      activeScenarioId?: string | null;
-      lastOpenedPage?: string | null;
-    }>(
-      "/api/app/context",
-    );
-    if (!context?.activeScenarioId) {
-      return redirect("/scenarios");
-    }
-    const nextPath = context.lastOpenedPage || "planning";
-    return redirect(`/scenarios/${context.activeScenarioId}/${nextPath}`);
-  } catch {
-    return redirect("/scenarios");
-  }
+function startupLoader() {
+  return redirect("/scenarios");
 }
 
 async function activeScenarioRedirectLoader(targetPath: string) {

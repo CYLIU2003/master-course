@@ -37,6 +37,7 @@ export function CostResultsPage() {
   const audit = result.audit as Record<string, unknown> | undefined;
   const auditInputCounts = audit?.["input_counts"] as Record<string, unknown> | undefined;
   const datasetFingerprint =
+    result.feed_context?.datasetFingerprint ||
     result.feed_context?.datasetId ||
     [result.feed_context?.feedId, result.feed_context?.snapshotId].filter(Boolean).join(":") ||
     null;

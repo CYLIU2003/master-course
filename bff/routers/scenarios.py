@@ -27,6 +27,7 @@ Routes:
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 from threading import Lock
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -35,6 +36,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from bff.services import runtime_catalog, transit_catalog
 from bff.services.gtfs_import import (
     DEFAULT_GTFS_FEED_PATH,
     summarize_gtfs_stop_timetable_import,
@@ -44,17 +46,15 @@ from bff.services.odpt_routes import DEFAULT_OPERATOR
 from bff.services.odpt_stop_timetables import (
     summarize_stop_timetable_import,
 )
-from bff.services.service_ids import canonical_service_id
 from bff.services.odpt_timetable import (
     normalize_timetable_row_indexes,
     summarize_timetable_import,
 )
-from bff.services import runtime_catalog
-from bff.services import transit_catalog
+from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
 from src.feed_identity import TOKYU_ODPT_GTFS_FEED_ID, build_dataset_id, infer_feed_id
-from src.tokyubus_gtfs.constants import DEFAULT_TURNAROUND_SEC
+from src.tokyubus_gtfs.constants import DEFAULT_TURNAROUND_SEC, ROUTE_FAMILY_MAP_PATH
 
 router = APIRouter(tags=["scenarios"])
 _default_scenario_lock = Lock()
@@ -411,6 +411,21 @@ def _not_found(scenario_id: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
 
 
+def _runtime_err_to_http(e: RuntimeError) -> HTTPException:
+    """Convert a store RuntimeError into an HTTPException.
+
+    RuntimeError with 'artifacts are incomplete' → 409 INCOMPLETE_ARTIFACT.
+    Other RuntimeErrors → re-raise as-is (FastAPI will 500 them).
+    """
+    msg = str(e)
+    if "artifacts are incomplete" in msg:
+        return HTTPException(
+            status_code=409,
+            detail={"code": "INCOMPLETE_ARTIFACT", "message": msg},
+        )
+    raise e
+
+
 def _load_odpt_bundle(
     *,
     operator: str,
@@ -513,7 +528,9 @@ def _build_gtfs_import_meta(
     resource_type: str,
 ) -> Dict[str, Any]:
     meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
-    feed_id = str(meta.get("feed_id") or infer_feed_id(meta.get("feedPath") or "") or "")
+    feed_id = str(
+        meta.get("feed_id") or infer_feed_id(meta.get("feedPath") or "") or ""
+    )
     snapshot_id = str(meta.get("snapshot_id") or "") or None
     dataset_id = str(meta.get("dataset_id") or "") or (
         build_dataset_id(feed_id, snapshot_id) if feed_id else ""
@@ -595,37 +612,78 @@ def _runtime_turnaround_rules(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
 
-def _bundle_feed_context(source: str, bundle: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _bundle_feed_context(
+    source: str, bundle: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
     meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
     feed_id = str(
         meta.get("feed_id")
         or infer_feed_id(meta.get("feedPath") or "")
         or (TOKYU_ODPT_GTFS_FEED_ID if source in {"odpt", "gtfs_runtime"} else "")
     ).strip()
-    snapshot_id = str(
-        meta.get("snapshot_id") or meta.get("snapshotId") or ""
-    ).strip()
+    snapshot_id = str(meta.get("snapshot_id") or meta.get("snapshotId") or "").strip()
     dataset_id = str(meta.get("dataset_id") or "").strip()
     if feed_id and not dataset_id:
         dataset_id = build_dataset_id(feed_id, snapshot_id or None)
+    manual_hash = str(
+        meta.get("manualRouteFamilyMapHash") or _manual_route_family_map_hash() or ""
+    ).strip()
+    dataset_fingerprint = dataset_id or build_dataset_id(
+        feed_id or source, snapshot_id or None
+    )
+    if manual_hash:
+        dataset_fingerprint = (
+            f"{dataset_fingerprint}::route_family_map:{manual_hash[:12]}"
+        )
     if not any((feed_id, snapshot_id, dataset_id)):
         return None
     return {
         "feed_id": feed_id or None,
         "snapshot_id": snapshot_id or None,
         "dataset_id": dataset_id or None,
+        "dataset_fingerprint": dataset_fingerprint or None,
+        "manual_route_family_map_hash": manual_hash or None,
         "source": source,
     }
 
 
+def _manual_route_family_map_hash() -> Optional[str]:
+    try:
+        if not ROUTE_FAMILY_MAP_PATH.exists():
+            return None
+        return hashlib.sha256(ROUTE_FAMILY_MAP_PATH.read_bytes()).hexdigest()
+    except Exception:
+        return None
+
+
 def _source_snapshot_from_bundle(source: str, bundle: Dict[str, Any]) -> Dict[str, Any]:
     meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
+    feed_id = meta.get("feed_id") or infer_feed_id(meta.get("feedPath") or "")
+    snapshot_id = meta.get("snapshot_id") or meta.get("snapshotId")
+    dataset_id = meta.get("dataset_id")
+    manual_hash = (
+        str(
+            meta.get("manualRouteFamilyMapHash")
+            or _manual_route_family_map_hash()
+            or ""
+        ).strip()
+        or None
+    )
+    dataset_fingerprint = dataset_id or build_dataset_id(
+        str(feed_id or source), str(snapshot_id or "") or None
+    )
+    if manual_hash:
+        dataset_fingerprint = (
+            f"{dataset_fingerprint}::route_family_map:{manual_hash[:12]}"
+        )
     snapshot = {
         "source": source,
-        "snapshotId": meta.get("snapshot_id") or meta.get("snapshotId"),
+        "snapshotId": snapshot_id,
         "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
-        "feedId": meta.get("feed_id") or infer_feed_id(meta.get("feedPath") or ""),
-        "datasetId": meta.get("dataset_id"),
+        "feedId": feed_id,
+        "datasetId": dataset_id,
+        "datasetFingerprint": dataset_fingerprint,
+        "manualRouteFamilyMapHash": manual_hash,
     }
     if source == "gtfs_runtime":
         snapshot.update(
@@ -679,6 +737,8 @@ def duplicate_scenario(
         return store.duplicate_scenario(scenario_id, name=body.name if body else None)
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
 
 
 @router.get("/scenarios/{scenario_id}")
@@ -687,6 +747,13 @@ def get_scenario(scenario_id: str) -> Dict[str, Any]:
         return store.get_scenario(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        if "artifacts are incomplete" in str(e):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "INCOMPLETE_ARTIFACT", "message": str(e)},
+            )
+        raise
 
 
 @router.put("/scenarios/{scenario_id}")
@@ -701,6 +768,8 @@ def update_scenario(scenario_id: str, body: UpdateScenarioBody) -> Dict[str, Any
         )
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
 
 
 @router.get("/scenarios/{scenario_id}/dispatch-scope")
@@ -709,6 +778,8 @@ def get_dispatch_scope(scenario_id: str) -> Dict[str, Any]:
         return store.get_dispatch_scope(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
 
 
 @router.put("/scenarios/{scenario_id}/dispatch-scope")
@@ -719,6 +790,8 @@ def update_dispatch_scope(
         return store.set_dispatch_scope(scenario_id, body.model_dump())
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
 
 
 @router.get("/planning/depot-scope/{depot_id}/trips")
@@ -748,6 +821,8 @@ def get_depot_scope_trips(
         rows = list(store.get_field(scenario_id, "timetable_rows") or [])
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
 
     filtered = [
         row
@@ -755,7 +830,7 @@ def get_depot_scope_trips(
         if (not route_ids or str(row.get("route_id") or "") in route_ids)
         and (not service_id or str(row.get("service_id") or "") == service_id)
     ]
-    paged = filtered[offset: offset + limit]
+    paged = filtered[offset : offset + limit]
     return {
         "items": paged,
         "total": len(filtered),
@@ -783,6 +858,8 @@ def activate_scenario(scenario_id: str) -> Dict[str, Any]:
         scenario = store.get_scenario(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
     context = store.set_active_scenario(scenario_id)
     return {
         "activeScenarioId": scenario_id,
@@ -808,7 +885,7 @@ def get_app_context() -> Dict[str, Any]:
     if isinstance(scenario_id, str):
         try:
             scenario = store.get_scenario(scenario_id)
-        except KeyError:
+        except (KeyError, RuntimeError):
             context = store.set_active_scenario(
                 None,
                 last_opened_page=context.get("lastOpenedPage"),
@@ -817,7 +894,8 @@ def get_app_context() -> Dict[str, Any]:
     return {
         "activeScenarioId": scenario_id,
         "scenarioName": scenario.get("name") if scenario else None,
-        "selectedOperatorId": context.get("selectedOperatorId") or (scenario.get("operatorId") if scenario else None),
+        "selectedOperatorId": context.get("selectedOperatorId")
+        or (scenario.get("operatorId") if scenario else None),
         "availableModules": [
             "planning",
             "simulation",
@@ -858,10 +936,10 @@ def get_timetable(
                 )
                 if service_id is not None
                 else store.page_field_rows(
-                scenario_id,
-                "timetable_rows",
-                offset=offset,
-                limit=limit,
+                    scenario_id,
+                    "timetable_rows",
+                    offset=offset,
+                    limit=limit,
                 )
             )
             total = (
@@ -880,6 +958,8 @@ def get_timetable(
         rows = store.get_field(scenario_id, "timetable_rows")
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
     rows = rows or []
     if service_id:
         rows = [r for r in rows if r.get("service_id", "WEEKDAY") == service_id]
@@ -900,6 +980,8 @@ def get_timetable_summary(scenario_id: str) -> Dict[str, Any]:
         summary = store.get_field_summary(scenario_id, "timetable_rows")
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
     if summary is not None:
         return {"item": summary}
     rows = store.get_field(scenario_id, "timetable_rows") or []
@@ -915,6 +997,8 @@ def update_timetable(scenario_id: str, body: UpdateTimetableBody) -> Dict[str, A
         return {"items": rows, "total": len(rows)}
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
 
 
 @router.post("/scenarios/{scenario_id}/timetable/import-csv")

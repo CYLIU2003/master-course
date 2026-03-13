@@ -61,6 +61,16 @@ def _check_scenario(scenario_id: str) -> None:
         store.get_scenario(scenario_id)
     except KeyError:
         raise _scenario_not_found(scenario_id)
+    except RuntimeError as e:
+        if "artifacts are incomplete" in str(e):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "INCOMPLETE_ARTIFACT",
+                    "message": str(e)
+                }
+            )
+        raise
 
 
 def _load_odpt_bundle(
@@ -132,6 +142,25 @@ class UpdateDepotBody(BaseModel):
 
 
 # ── Depot endpoints ────────────────────────────────────────────
+
+from bff.services.depot_assignment import calculate_assignment_scores
+
+@router.post("/scenarios/{scenario_id}/auto-assign-depots")
+def auto_assign_depots(
+    scenario_id: str,
+    operator: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    routes = store.list_routes(scenario_id, operator=operator)
+    enriched_routes = _enrich_routes_for_display(scenario_id, routes)
+    depots = store.list_depots(scenario_id)
+    
+    suggestions = calculate_assignment_scores(enriched_routes, depots)
+    
+    return {
+        "items": suggestions,
+        "total": len(suggestions),
+    }
 
 
 @router.get("/scenarios/{scenario_id}/depots")
