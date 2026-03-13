@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isApiErrorStatus } from "@/api/client";
 import { useCompareStore } from "@/stores/compare-store";
 import { PageSection, EmptyState, LoadingBlock, ErrorBlock } from "@/features/common";
 import { scenarioApi } from "@/api/scenario";
@@ -93,7 +94,7 @@ async function safeSimulation(id: string): Promise<SimulationResult | null> {
   try {
     return await simulationApi.getResult(id);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("404")) {
+    if (isApiErrorStatus(error, 404)) {
       return null;
     }
     throw error;
@@ -104,7 +105,7 @@ async function safeOptimization(id: string): Promise<OptimizationResult | null> 
   try {
     return await optimizationApi.getResult(id);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("404")) {
+    if (isApiErrorStatus(error, 404)) {
       return null;
     }
     throw error;

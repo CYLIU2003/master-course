@@ -68,7 +68,7 @@ export function SimulationRunPage() {
           <EmptyState title="営業所を選択してください" description="Simulation 実行前に、対象営業所を 1 つ選択してください。" />
         ) : isLoading ? (
           <LoadingBlock message={t("simulation.loading")} />
-        ) : error && !error.message.includes("404") ? (
+        ) : error ? (
           <ErrorBlock message={error.message} />
         ) : !result ? (
           <EmptyState title={t("simulation.no_results")} description={t("simulation.no_results_description")} />

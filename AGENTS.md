@@ -633,3 +633,8 @@ python catalog_update_app.py refresh gtfs-pipeline --source-dir ./data/raw-odpt
 - 研究出力の KPI は operator ごとに区別して保存する
 - mixed-operator input での実験は禁止
 
+### Important Memo
+かならず問題を自分で上げて、つぶしてください
+説明資料(readmeやdevelopment_note)にはかならず変更があれば記入すること
+claude codeや開発担当の役員様にもレビューしてもらいます
+

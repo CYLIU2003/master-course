@@ -1,21 +1,25 @@
 """
 bff/store/job_store.py
 
-In-memory job store for background pipeline tasks.
-Jobs are ephemeral — they do not survive server restarts.
+Disk-backed job store for background pipeline tasks.
+Jobs survive BFF restarts; in-flight jobs are marked orphaned/failed on reload.
 """
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 
+_JOB_DIR = Path(__file__).resolve().parents[2] / "outputs" / "jobs"
+
 JOB_PERSISTENCE_INFO: Dict[str, Any] = {
-    "store": "process_memory",
-    "survives_restart": False,
-    "warning": "Background jobs are stored in process memory and are lost if the BFF restarts.",
+    "store": "json_files",
+    "survives_restart": True,
+    "warning": "Background jobs are persisted to outputs/jobs; in-progress jobs are marked failed if the BFF restarts.",
 }
 
 
@@ -30,14 +34,60 @@ class Job:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-# Module-level store — single instance per process
-_jobs: Dict[str, Job] = {}
+def _job_path(job_id: str) -> Path:
+    return _JOB_DIR / f"{job_id}.json"
+
+
+def _persist_job(job: Job) -> None:
+    _JOB_DIR.mkdir(parents=True, exist_ok=True)
+    path = _job_path(job.job_id)
+    temp_path = path.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(job_to_dict(job), ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path.replace(path)
+
+
+def _job_from_payload(payload: Dict[str, Any]) -> Job:
+    metadata = dict(payload.get("metadata") or {})
+    return Job(
+        job_id=str(payload.get("job_id") or payload.get("jobId") or ""),
+        status=str(payload.get("status") or "pending"),
+        progress=int(payload.get("progress") or 0),
+        message=str(payload.get("message") or ""),
+        result_key=payload.get("result_key"),
+        error=payload.get("error"),
+        metadata=metadata,
+    )
+
+
+def _load_jobs_from_disk() -> Dict[str, Job]:
+    jobs: Dict[str, Job] = {}
+    if not _JOB_DIR.exists():
+        return jobs
+    for path in _JOB_DIR.glob("*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            job = _job_from_payload(payload)
+            if job.status in {"pending", "running"}:
+                job.status = "failed"
+                job.message = "BFF restarted before the background job completed. Please retry the job."
+                job.error = job.error or "job_orphaned_after_restart"
+                job.metadata = {**job.metadata, "orphaned": True}
+                _persist_job(job)
+            jobs[job.job_id] = job
+        except Exception:
+            continue
+    return jobs
+
+
+# Module-level store — hydrated from disk on process start
+_jobs: Dict[str, Job] = _load_jobs_from_disk()
 
 
 def create_job() -> Job:
     job_id = str(uuid.uuid4())
     job = Job(job_id=job_id, metadata={"persistence": dict(JOB_PERSISTENCE_INFO)})
     _jobs[job_id] = job
+    _persist_job(job)
     return job
 
 
@@ -70,6 +120,7 @@ def update_job(
         job.error = error
     if metadata is not None:
         job.metadata = dict(metadata)
+    _persist_job(job)
     return job
 
 

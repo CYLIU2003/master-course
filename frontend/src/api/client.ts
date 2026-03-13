@@ -104,6 +104,13 @@ export async function fetchMaybeJson<T>(
   return parseResponseBody<T>(res, true);
 }
 
+export function isApiErrorStatus(error: unknown, status: number): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.message.startsWith(`HTTP ${status} `);
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,

@@ -419,10 +419,19 @@ interface StopsEdgeEditorProps {
 
 function StopsEdgeEditor({ routeId, importedStops, resolvedStops }: StopsEdgeEditorProps) {
   const { t } = useTranslation();
-  const { nodes, edges, updateNode, updateEdge, removeNode, removeEdge, addNode, addEdge, clearGraph } =
+  const { nodes, edges, updateNode, updateEdge, removeNode, removeEdge, addNode, addEdge, clearGraph, loadRoute, unloadRoute } =
     useRouteGraphStore();
 
   const [nodeSubTab, setNodeSubTab] = useState<"resolved" | "nodes" | "edges">("resolved");
+
+  useEffect(() => {
+    if (!routeId) {
+      unloadRoute();
+      return;
+    }
+    loadRoute(routeId);
+    return () => unloadRoute();
+  }, [loadRoute, routeId, unloadRoute]);
 
   if (!routeId) {
     return (

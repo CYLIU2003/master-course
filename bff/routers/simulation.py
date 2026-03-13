@@ -106,10 +106,14 @@ def _scoped_output_dir(
     feed_context: Dict[str, Any],
     scenario_id: str,
     stage: str,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
 ) -> str:
     feed_id = str(feed_context.get("feedId") or "unscoped")
     snapshot_id = str(feed_context.get("snapshotId") or scenario_id)
-    return str(Path(root) / feed_id / snapshot_id / stage / scenario_id)
+    service_scope = str(service_id or "all_services")
+    depot_scope = str(depot_id or "all_depots")
+    return str(Path(root) / feed_id / snapshot_id / stage / scenario_id / depot_scope / service_scope)
 
 
 def _persist_json_outputs(output_dir: str, payloads: Dict[str, Dict[str, Any]]) -> None:
@@ -213,6 +217,8 @@ def _run_simulation(
             feed_context=feed_context,
             scenario_id=scenario_id,
             stage="simulation",
+            service_id=service_id,
+            depot_id=depot_id,
         )
         data, build_report = build_problem_data_from_scenario(
             scenario,

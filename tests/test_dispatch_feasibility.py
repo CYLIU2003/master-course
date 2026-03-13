@@ -21,6 +21,7 @@ from src.dispatch.models import (
     Trip,
     TurnaroundRule,
     VehicleProfile,
+    hhmm_to_min,
 )
 
 
@@ -277,3 +278,8 @@ class TestFeasibilityEngineTurnaroundRule:
 
         assert result.feasible is True
         assert result.slack_min == 5
+
+
+def test_hhmm_to_min_supports_after_midnight_gtfs_style_times():
+    assert hhmm_to_min("24:15") == 24 * 60 + 15
+    assert hhmm_to_min("25:30") == 25 * 60 + 30
