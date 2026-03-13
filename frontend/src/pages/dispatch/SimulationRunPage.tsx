@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating } from "@tanstack/react-query";
 import {
   useJob,
   useRunSimulation,
@@ -20,6 +21,7 @@ export function SimulationRunPage() {
   const queryClient = useQueryClient();
   const { data: scope } = useDispatchScope(scenarioId!);
   const scopeReady = Boolean(scope?.depotId);
+  const dispatchScopePending = useIsMutating({ mutationKey: ["scenarios", scenarioId, "dispatch-scope", "mutation"] }) > 0;
   const { data: result, isLoading, error } = useSimulationResult(scenarioId!);
   const { data: capabilities } = useSimulationCapabilities(scenarioId!);
   const runMutation = useRunSimulation(scenarioId!);
@@ -50,7 +52,7 @@ export function SimulationRunPage() {
         actions={
           <button
             onClick={handleRun}
-            disabled={runMutation.isPending || !scopeReady}
+            disabled={runMutation.isPending || dispatchScopePending || !scopeReady}
             className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
             {runMutation.isPending ? t("simulation.running") : t("simulation.run")}

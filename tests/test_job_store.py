@@ -18,7 +18,10 @@ def test_job_store_metadata_roundtrip():
 
     assert payload["status"] == "running"
     assert payload["progress"] == 42
-    assert payload["metadata"] == {"stage": "solve", "trip_count": 12}
+    assert payload["metadata"]["stage"] == "solve"
+    assert payload["metadata"]["trip_count"] == 12
+    assert payload["metadata"]["pid"]
+    assert payload["metadata"]["started_at"]
 
 
 def test_job_store_exposes_ephemeral_persistence_contract():
@@ -33,7 +36,7 @@ def test_job_store_exposes_ephemeral_persistence_contract():
 
 
 def test_job_store_persists_and_marks_running_jobs_orphaned(tmp_path: Path):
-    with patch.object(job_store, "_JOB_DIR", tmp_path), patch.object(job_store, "_jobs", {}):
+    with patch.object(job_store, "_JOB_DIR", tmp_path), patch.object(job_store, "_jobs", {}), patch.object(job_store, "_pid_exists", return_value=False):
         job = job_store.create_job()
         job_store.update_job(job.job_id, status="running", progress=50, message="Working")
 
@@ -43,3 +46,13 @@ def test_job_store_persists_and_marks_running_jobs_orphaned(tmp_path: Path):
         reloaded = job_store._load_jobs_from_disk()
         assert reloaded[job.job_id].status == "failed"
         assert reloaded[job.job_id].metadata["orphaned"] is True
+
+
+def test_job_store_keeps_running_job_when_pid_still_exists(tmp_path: Path):
+    with patch.object(job_store, "_JOB_DIR", tmp_path), patch.object(job_store, "_jobs", {}):
+        job = job_store.create_job()
+        job_store.update_job(job.job_id, status="running", progress=10, message="Working")
+
+        reloaded = job_store._load_jobs_from_disk()
+        assert reloaded[job.job_id].status == "running"
+        assert reloaded[job.job_id].metadata.get("orphaned") is None

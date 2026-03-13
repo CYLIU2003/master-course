@@ -83,6 +83,9 @@ def _solve_milp_core(
     )
     mip_gap = cfg.get("mip_gap", cfg.get("solver", {}).get("mip_gap", 0.01))
     model.Params.MIPGap = mip_gap
+    seed = cfg.get("random_seed", cfg.get("solver", {}).get("seed"))
+    if seed is not None:
+        model.Params.Seed = int(seed)
 
     t0 = _time.perf_counter()
     model.optimize()
@@ -176,6 +179,9 @@ def _solve_alns_milp(cfg, data, ms, dp, flag_overrides=None):
         )
         mip_gap = cfg.get("mip_gap", cfg.get("solver", {}).get("mip_gap", 0.01))
         model.Params.MIPGap = mip_gap
+        seed = cfg.get("random_seed", cfg.get("solver", {}).get("seed"))
+        if seed is not None:
+            model.Params.Seed = int(seed)
 
         t1 = _time.perf_counter()
         model.optimize()
@@ -476,6 +482,7 @@ def solve_problem_data(
     cfg: Dict[str, Any] = {
         "time_limit_sec": time_limit_seconds,
         "mip_gap": mip_gap,
+        "random_seed": random_seed,
         "output_dir": output_dir,
         "alns": {"seed": random_seed},
     }

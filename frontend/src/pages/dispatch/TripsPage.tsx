@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useIsMutating } from "@tanstack/react-query";
 import { useTrips, useTripsSummary, useBuildTrips, useDispatchScope, useJob } from "@/hooks";
 import {
   BackendJobPanel,
@@ -24,6 +25,7 @@ export function TripsPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const { data: scope } = useDispatchScope(scenarioId!);
   const scopeReady = Boolean(scope?.depotId);
+  const dispatchScopePending = useIsMutating({ mutationKey: ["scenarios", scenarioId, "dispatch-scope", "mutation"] }) > 0;
   const { data, isLoading, error } = useTrips(scenarioId!, {
     limit: PAGE_SIZE,
     offset: pageOffset,
@@ -57,7 +59,7 @@ export function TripsPage() {
         actions={
           <button
             onClick={handleBuild}
-            disabled={buildMutation.isPending || !scopeReady}
+            disabled={buildMutation.isPending || dispatchScopePending || !scopeReady}
             className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
             {buildMutation.isPending ? t("trips.building") : t("trips.build")}
