@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useIsMutating } from "@tanstack/react-query";
@@ -29,10 +29,6 @@ export function GraphPage() {
     enabled: scopeReady,
   });
   const { data: activeJob } = useJob(activeJobId);
-
-  useEffect(() => {
-    setPageOffset(0);
-  }, [reasonFilter]);
 
   const handleBuild = async () => {
     const job = await buildMutation.mutateAsync({
@@ -87,9 +83,10 @@ export function GraphPage() {
                   <h3 className="text-sm font-semibold text-slate-800">Reason breakdown</h3>
                   <select
                     value={reasonFilter}
-                    onChange={(event) =>
-                      setReasonFilter(event.target.value as FeasibilityReason | "all")
-                    }
+                    onChange={(event) => {
+                      setReasonFilter(event.target.value as FeasibilityReason | "all");
+                      setPageOffset(0);
+                    }}
                     className="rounded border border-border bg-white px-2 py-1 text-xs"
                   >
                     <option value="all">all</option>

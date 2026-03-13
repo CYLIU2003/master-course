@@ -12,11 +12,13 @@ import subprocess
 import traceback
 import json
 import threading
+import multiprocessing
+from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
@@ -43,7 +45,9 @@ from src.optimization.rolling.reoptimizer import RollingReoptimizer
 from src.pipeline.solve import solve_problem_data
 
 router = APIRouter(tags=["optimization"])
-_OPTIMIZATION_JOB_LOCK = threading.Lock()
+_OPTIMIZATION_EXECUTOR: Optional[ProcessPoolExecutor] = None
+_OPTIMIZATION_FUTURE: Optional[Future[Any]] = None
+_OPTIMIZATION_FUTURE_LOCK = threading.Lock()
 
 
 class RunOptimizationBody(BaseModel):
@@ -93,22 +97,104 @@ def _optimization_capabilities() -> Dict[str, Any]:
         ],
         "supports_reoptimization": True,
         "max_concurrent_jobs": 1,
+        "execution_model": "process_pool",
         "notes": [
             "Optimization runs against canonical ProblemData built from the scenario snapshot.",
             "Dispatch artifacts can be rebuilt before solve when requested.",
             "Results are persisted to the scenario snapshot; job state is not.",
+            "Optimization/re-optimization runs in a dedicated process pool so API polling stays responsive.",
             "Only one optimization/re-optimization job is allowed at a time in this BFF process.",
         ],
     }
 
 
-def _reserve_optimization_slot() -> bool:
-    return _OPTIMIZATION_JOB_LOCK.acquire(blocking=False)
+def _get_optimization_executor() -> ProcessPoolExecutor:
+    global _OPTIMIZATION_EXECUTOR
+    with _OPTIMIZATION_FUTURE_LOCK:
+        if _OPTIMIZATION_EXECUTOR is None:
+            _OPTIMIZATION_EXECUTOR = ProcessPoolExecutor(
+                max_workers=1,
+                mp_context=multiprocessing.get_context("spawn"),
+            )
+    return _OPTIMIZATION_EXECUTOR
 
 
-def _release_optimization_slot() -> None:
-    if _OPTIMIZATION_JOB_LOCK.locked():
-        _OPTIMIZATION_JOB_LOCK.release()
+def shutdown_optimization_executor() -> None:
+    global _OPTIMIZATION_EXECUTOR, _OPTIMIZATION_FUTURE
+    with _OPTIMIZATION_FUTURE_LOCK:
+        executor = _OPTIMIZATION_EXECUTOR
+        _OPTIMIZATION_EXECUTOR = None
+        _OPTIMIZATION_FUTURE = None
+    if executor is not None:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _register_optimization_future(
+    future: Future[Any],
+    *,
+    job_id: str,
+    scenario_id: str,
+    service_id: str,
+    depot_id: Optional[str],
+    mode: str,
+    stage: str,
+) -> None:
+    def _handle_completion(done: Future[Any]) -> None:
+        try:
+            exc = done.exception()
+        except Exception as callback_exc:  # pragma: no cover - defensive
+            exc = callback_exc
+        if exc is None:
+            return
+        try:
+            job_store.update_job(
+                job_id,
+                status="failed",
+                progress=100,
+                message="Optimization worker crashed.",
+                error=str(exc),
+                metadata=_job_metadata(
+                    scenario_id=scenario_id,
+                    service_id=service_id,
+                    depot_id=depot_id,
+                    stage=stage,
+                    mode=mode,
+                    extra={"worker_failure": True},
+                ),
+            )
+        except KeyError:
+            return
+
+    future.add_done_callback(_handle_completion)
+
+
+def _submit_optimization_job(
+    *,
+    fn,
+    args: tuple[Any, ...],
+    job_id: str,
+    scenario_id: str,
+    service_id: str,
+    depot_id: Optional[str],
+    mode: str,
+    stage: str,
+) -> bool:
+    global _OPTIMIZATION_FUTURE
+    with _OPTIMIZATION_FUTURE_LOCK:
+        if _OPTIMIZATION_FUTURE is not None and not _OPTIMIZATION_FUTURE.done():
+            return False
+        future = _get_optimization_executor().submit(fn, *args)
+        _OPTIMIZATION_FUTURE = future
+        _register_optimization_future(
+            future,
+            job_id=job_id,
+            scenario_id=scenario_id,
+            service_id=service_id,
+            depot_id=depot_id,
+            mode=mode,
+            stage=stage,
+        )
+        return True
 
 
 def _not_found(scenario_id: str) -> HTTPException:
@@ -457,6 +543,7 @@ def _run_optimization(
             "time_limit": time_limit_seconds,
             "mip_gap": mip_gap,
             "random_seed": random_seed,
+            "gurobi_seed": random_seed,
             "alns_iterations": alns_iterations,
             "git_sha": _git_sha(),
             "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
@@ -509,7 +596,7 @@ def _run_optimization(
             ),
         )
     finally:
-        _release_optimization_slot()
+        pass
 
 
 def _parse_optimization_mode(mode: str) -> OptimizationMode:
@@ -544,10 +631,11 @@ def _apply_reoptimization_inputs(
 def _run_reoptimization(
     scenario_id: str,
     job_id: str,
-    body: ReoptimizeBody,
+    body_payload: Dict[str, Any],
     service_id: str,
     depot_id: Optional[str],
 ) -> None:
+    body = ReoptimizeBody(**body_payload)
     mode = body.mode
     try:
         if not depot_id:
@@ -629,6 +717,7 @@ def _run_reoptimization(
                 "delay_count": len(body.delays),
                 "actual_soc_count": len(body.actual_soc),
                 "random_seed": body.random_seed,
+                "gurobi_seed": body.random_seed,
                 "executed_at": datetime.now(timezone.utc).isoformat(),
                 "git_sha": _git_sha(),
                 "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
@@ -664,7 +753,7 @@ def _run_reoptimization(
             ),
         )
     finally:
-        _release_optimization_slot()
+        pass
 
 
 @router.get("/scenarios/{scenario_id}/optimization")
@@ -692,15 +781,9 @@ def get_optimization_capabilities(scenario_id: str) -> Dict[str, Any]:
 @router.post("/scenarios/{scenario_id}/run-optimization")
 def run_optimization(
     scenario_id: str,
-    background_tasks: BackgroundTasks,
     body: Optional[RunOptimizationBody] = None,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    if not _reserve_optimization_slot():
-        raise HTTPException(
-            status_code=503,
-            detail="An optimization job is already running. Please retry after it completes.",
-        )
     request = body or RunOptimizationBody()
     try:
         scope = _resolve_dispatch_scope(
@@ -721,38 +804,51 @@ def run_optimization(
                 extra={"persistence": dict(job_store.JOB_PERSISTENCE_INFO)},
             ),
         )
-        background_tasks.add_task(
-            _run_optimization,
-            scenario_id,
-            job.job_id,
-            request.mode,
-            request.time_limit_seconds,
-            request.mip_gap,
-            request.random_seed,
-            scope.get("serviceId") or "WEEKDAY",
-            scope.get("depotId"),
-            request.rebuild_dispatch,
-            request.use_existing_duties,
-            request.alns_iterations,
+        submitted = _submit_optimization_job(
+            fn=_run_optimization,
+            args=(
+                scenario_id,
+                job.job_id,
+                request.mode,
+                request.time_limit_seconds,
+                request.mip_gap,
+                request.random_seed,
+                scope.get("serviceId") or "WEEKDAY",
+                scope.get("depotId"),
+                request.rebuild_dispatch,
+                request.use_existing_duties,
+                request.alns_iterations,
+            ),
+            job_id=job.job_id,
+            scenario_id=scenario_id,
+            service_id=scope.get("serviceId") or "WEEKDAY",
+            depot_id=scope.get("depotId"),
+            mode=request.mode,
+            stage="worker_crashed",
         )
+        if not submitted:
+            job_store.update_job(
+                job.job_id,
+                status="failed",
+                progress=100,
+                message="Rejected because another optimization job is already running.",
+                error="job_already_running",
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="An optimization job is already running. Please retry after it completes.",
+            )
         return job_store.job_to_dict(job)
     except Exception:
-        _release_optimization_slot()
         raise
 
 
 @router.post("/scenarios/{scenario_id}/reoptimize")
 def reoptimize(
     scenario_id: str,
-    background_tasks: BackgroundTasks,
     body: ReoptimizeBody,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    if not _reserve_optimization_slot():
-        raise HTTPException(
-            status_code=503,
-            detail="An optimization job is already running. Please retry after it completes.",
-        )
     scope = _resolve_dispatch_scope(
         scenario_id,
         service_id=body.service_id,
@@ -772,15 +868,34 @@ def reoptimize(
                 extra={"persistence": dict(job_store.JOB_PERSISTENCE_INFO)},
             ),
         )
-        background_tasks.add_task(
-            _run_reoptimization,
-            scenario_id,
-            job.job_id,
-            body,
-            scope.get("serviceId") or "WEEKDAY",
-            scope.get("depotId"),
+        submitted = _submit_optimization_job(
+            fn=_run_reoptimization,
+            args=(
+                scenario_id,
+                job.job_id,
+                body.model_dump(),
+                scope.get("serviceId") or "WEEKDAY",
+                scope.get("depotId"),
+            ),
+            job_id=job.job_id,
+            scenario_id=scenario_id,
+            service_id=scope.get("serviceId") or "WEEKDAY",
+            depot_id=scope.get("depotId"),
+            mode=body.mode,
+            stage="reopt_worker_crashed",
         )
+        if not submitted:
+            job_store.update_job(
+                job.job_id,
+                status="failed",
+                progress=100,
+                message="Rejected because another optimization job is already running.",
+                error="job_already_running",
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="An optimization job is already running. Please retry after it completes.",
+            )
         return job_store.job_to_dict(job)
     except Exception:
-        _release_optimization_slot()
         raise

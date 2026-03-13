@@ -43,13 +43,12 @@ function sortRows<T extends AssignmentRow>(rows: T[]): T[] {
 
 export function useSortedAssignments<T extends AssignmentRow>(rows: T[]): T[] {
   const fallbackSorted = useMeasuredMemo("selector:assignment-sort-fallback", () => sortRows(rows), [rows]);
-  const [workerSorted, setWorkerSorted] = useState<T[]>(fallbackSorted);
+  const [workerSorted, setWorkerSorted] = useState<T[]>([]);
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
     if (typeof Worker === "undefined" || rows.length < 150) {
-      setWorkerSorted(fallbackSorted);
       return;
     }
     if (!workerRef.current) {
@@ -81,7 +80,7 @@ export function useSortedAssignments<T extends AssignmentRow>(rows: T[]): T[] {
     return () => {
       worker.removeEventListener("message", handleMessage);
     };
-  }, [fallbackSorted, rows]);
+  }, [rows]);
 
   useEffect(() => {
     return () => {
@@ -90,5 +89,8 @@ export function useSortedAssignments<T extends AssignmentRow>(rows: T[]): T[] {
     };
   }, []);
 
-  return useMemo(() => (rows.length < 150 ? fallbackSorted : workerSorted), [fallbackSorted, rows.length, workerSorted]);
+  return useMemo(
+    () => (rows.length < 150 || workerSorted.length === 0 ? fallbackSorted : workerSorted),
+    [fallbackSorted, rows.length, workerSorted],
+  );
 }

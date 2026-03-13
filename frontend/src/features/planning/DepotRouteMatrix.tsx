@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useDepots,
@@ -62,7 +62,7 @@ export function DepotRouteMatrix({
 
   const depots: Depot[] = depotsData?.items ?? [];
   const families: RouteFamilySummary[] = familiesData?.items ?? [];
-  const permissions: DepotRouteFamilyPermission[] = permsData?.items ?? [];
+  const permissions = useMemo<DepotRouteFamilyPermission[]>(() => permsData?.items ?? [], [permsData?.items]);
 
   const displayDepots = useMemo(
     () => (depotId ? depots.filter((item) => item.id === depotId) : depots),
@@ -77,16 +77,10 @@ export function DepotRouteMatrix({
     return map;
   }, [permissions]);
 
-  useEffect(() => {
-    if (families.length === 0) {
-      setSelectedFamilyId(null);
-      return;
-    }
-    if (selectedFamilyId && families.some((item) => item.routeFamilyId === selectedFamilyId)) {
-      return;
-    }
-    setSelectedFamilyId(families[0]?.routeFamilyId ?? null);
-  }, [families, selectedFamilyId]);
+  const effectiveSelectedFamilyId =
+    selectedFamilyId && families.some((item) => item.routeFamilyId === selectedFamilyId)
+      ? selectedFamilyId
+      : families[0]?.routeFamilyId ?? null;
 
   if (loadingDepots || loadingFamilies || loadingPerms) {
     return <LoadingBlock message={t("matrix.loading")} />;
@@ -139,7 +133,7 @@ export function DepotRouteMatrix({
                   type="button"
                   onClick={() => setSelectedFamilyId(family.routeFamilyId)}
                   className={`flex w-full flex-col items-center gap-0.5 rounded px-1 py-1 text-center ${
-                    selectedFamilyId === family.routeFamilyId ? "bg-primary-50" : "hover:bg-slate-100"
+                    effectiveSelectedFamilyId === family.routeFamilyId ? "bg-primary-50" : "hover:bg-slate-100"
                   }`}
                 >
                   {family.primaryColor && (
@@ -197,11 +191,11 @@ export function DepotRouteMatrix({
         </tbody>
       </table>
 
-      {selectedFamilyId && (
+      {effectiveSelectedFamilyId && (
         <div className="border-t border-border p-3">
           <RouteFamilyInspectorCard
             scenarioId={scenarioId}
-            routeFamilyId={selectedFamilyId}
+            routeFamilyId={effectiveSelectedFamilyId}
             onClose={() => setSelectedFamilyId(null)}
           />
         </div>

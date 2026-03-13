@@ -138,11 +138,14 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
 
   // Populate form when depot data loads
   useEffect(() => {
-    if (isCreate) {
-      setForm(EMPTY_FORM);
-    } else if (depot) {
-      setForm(depotToForm(depot));
-    }
+    const frame = window.requestAnimationFrame(() => {
+      if (isCreate) {
+        setForm(EMPTY_FORM);
+      } else if (depot) {
+        setForm(depotToForm(depot));
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [depot, isCreate]);
 
   const updateField = useCallback(

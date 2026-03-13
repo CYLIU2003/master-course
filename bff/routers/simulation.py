@@ -11,11 +11,14 @@ from __future__ import annotations
 import subprocess
 import traceback
 import json
+import multiprocessing
+import threading
+from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
@@ -33,6 +36,9 @@ from src.milp_model import MILPResult
 from src.pipeline.simulate import simulate_problem_data
 
 router = APIRouter(tags=["simulation"])
+_SIMULATION_EXECUTOR: Optional[ProcessPoolExecutor] = None
+_SIMULATION_FUTURE: Optional[Future[Any]] = None
+_SIMULATION_FUTURE_LOCK = threading.Lock()
 
 
 class RunSimulationBody(BaseModel):
@@ -48,12 +54,98 @@ def _simulation_capabilities() -> Dict[str, Any]:
         "job_persistence": dict(job_store.JOB_PERSISTENCE_INFO),
         "primary_inputs": ["scenario", "dispatch_scope", "problem_data"],
         "supported_sources": ["duties", "optimization_result"],
+        "execution_model": "process_pool",
         "notes": [
             "Simulation runs against scenario-derived ProblemData.",
             "Dispatch artifacts are auto-built when missing.",
             "Results are persisted to the scenario snapshot; job state is not.",
+            "Simulation runs in a dedicated process pool so API polling stays responsive.",
         ],
     }
+
+
+def _get_simulation_executor() -> ProcessPoolExecutor:
+    global _SIMULATION_EXECUTOR
+    with _SIMULATION_FUTURE_LOCK:
+        if _SIMULATION_EXECUTOR is None:
+            _SIMULATION_EXECUTOR = ProcessPoolExecutor(
+                max_workers=1,
+                mp_context=multiprocessing.get_context("spawn"),
+            )
+    return _SIMULATION_EXECUTOR
+
+
+def shutdown_simulation_executor() -> None:
+    global _SIMULATION_EXECUTOR, _SIMULATION_FUTURE
+    with _SIMULATION_FUTURE_LOCK:
+        executor = _SIMULATION_EXECUTOR
+        _SIMULATION_EXECUTOR = None
+        _SIMULATION_FUTURE = None
+    if executor is not None:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _register_simulation_future(
+    future: Future[Any],
+    *,
+    job_id: str,
+    scenario_id: str,
+    service_id: str,
+    depot_id: Optional[str],
+    source: str,
+) -> None:
+    def _handle_completion(done: Future[Any]) -> None:
+        try:
+            exc = done.exception()
+        except Exception as callback_exc:  # pragma: no cover - defensive
+            exc = callback_exc
+        if exc is None:
+            return
+        try:
+            job_store.update_job(
+                job_id,
+                status="failed",
+                progress=100,
+                message="Simulation worker crashed.",
+                error=str(exc),
+                metadata={
+                    "scenario_id": scenario_id,
+                    "service_id": service_id,
+                    "depot_id": depot_id,
+                    "source": source,
+                    "worker_failure": True,
+                },
+            )
+        except KeyError:
+            return
+
+    future.add_done_callback(_handle_completion)
+
+
+def _submit_simulation_job(
+    *,
+    args: tuple[Any, ...],
+    job_id: str,
+    scenario_id: str,
+    service_id: str,
+    depot_id: Optional[str],
+    source: str,
+) -> bool:
+    global _SIMULATION_FUTURE
+    with _SIMULATION_FUTURE_LOCK:
+        if _SIMULATION_FUTURE is not None and not _SIMULATION_FUTURE.done():
+            return False
+        future = _get_simulation_executor().submit(_run_simulation, *args)
+        _SIMULATION_FUTURE = future
+        _register_simulation_future(
+            future,
+            job_id=job_id,
+            scenario_id=scenario_id,
+            service_id=service_id,
+            depot_id=depot_id,
+            source=source,
+        )
+        return True
 
 
 def _not_found(scenario_id: str) -> HTTPException:
@@ -353,7 +445,6 @@ def get_simulation_capabilities(scenario_id: str) -> Dict[str, Any]:
 @router.post("/scenarios/{scenario_id}/run-simulation")
 def run_simulation(
     scenario_id: str,
-    background_tasks: BackgroundTasks,
     body: Optional[RunSimulationBody] = None,
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
@@ -377,12 +468,30 @@ def run_simulation(
             "persistence": dict(job_store.JOB_PERSISTENCE_INFO),
         },
     )
-    background_tasks.add_task(
-        _run_simulation,
-        scenario_id,
-        job.job_id,
-        scope.get("serviceId") or "WEEKDAY",
-        scope.get("depotId"),
-        request.source,
+    submitted = _submit_simulation_job(
+        args=(
+            scenario_id,
+            job.job_id,
+            scope.get("serviceId") or "WEEKDAY",
+            scope.get("depotId"),
+            request.source,
+        ),
+        job_id=job.job_id,
+        scenario_id=scenario_id,
+        service_id=scope.get("serviceId") or "WEEKDAY",
+        depot_id=scope.get("depotId"),
+        source=request.source,
     )
+    if not submitted:
+        job_store.update_job(
+            job.job_id,
+            status="failed",
+            progress=100,
+            message="Rejected because another simulation job is already running.",
+            error="job_already_running",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="A simulation job is already running. Please retry after it completes.",
+        )
     return job_store.job_to_dict(job)

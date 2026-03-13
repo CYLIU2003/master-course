@@ -115,26 +115,35 @@ export function VehicleTemplatesPage() {
     if (!depots.length || targetDepotId) {
       return;
     }
-    setTargetDepotId(depots[0].id);
+    const frame = window.requestAnimationFrame(() => {
+      setTargetDepotId(depots[0].id);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [depots, targetDepotId]);
 
   useEffect(() => {
-    if (!templates.length) {
-      setSelectedTemplateId(null);
-      setForm(EMPTY_FORM);
-      return;
-    }
-    if (selectedTemplateId && templates.some((item) => item.id === selectedTemplateId)) {
-      return;
-    }
-    setSelectedTemplateId(templates[0].id);
+    const frame = window.requestAnimationFrame(() => {
+      if (!templates.length) {
+        setSelectedTemplateId(null);
+        setForm(EMPTY_FORM);
+        return;
+      }
+      if (selectedTemplateId && templates.some((item) => item.id === selectedTemplateId)) {
+        return;
+      }
+      setSelectedTemplateId(templates[0].id);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [selectedTemplateId, templates]);
 
   useEffect(() => {
     if (!selectedTemplate) {
-      return;
+      return undefined;
     }
-    setForm(templateToForm(selectedTemplate));
+    const frame = window.requestAnimationFrame(() => {
+      setForm(templateToForm(selectedTemplate));
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [selectedTemplate]);
 
   if (isLoading) {

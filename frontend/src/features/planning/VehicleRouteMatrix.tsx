@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useVehicles,
@@ -72,8 +72,8 @@ export function VehicleRouteMatrix({
 
   const vehicles: Vehicle[] = vehiclesData?.items ?? [];
   const families: RouteFamilySummary[] = familiesData?.items ?? [];
-  const depotFamilyPermissions = depotFamilyPermsData?.items ?? [];
-  const permissions: VehicleRouteFamilyPermission[] = permsData?.items ?? [];
+  const depotFamilyPermissions = useMemo(() => depotFamilyPermsData?.items ?? [], [depotFamilyPermsData?.items]);
+  const permissions = useMemo<VehicleRouteFamilyPermission[]>(() => permsData?.items ?? [], [permsData?.items]);
 
   const visibleFamilies = useMemo(() => {
     if (!depotId) {
@@ -99,19 +99,10 @@ export function VehicleRouteMatrix({
     return map;
   }, [permissions]);
 
-  useEffect(() => {
-    if (visibleFamilies.length === 0) {
-      setSelectedFamilyId(null);
-      return;
-    }
-    if (
-      selectedFamilyId
-      && visibleFamilies.some((item) => item.routeFamilyId === selectedFamilyId)
-    ) {
-      return;
-    }
-    setSelectedFamilyId(visibleFamilies[0]?.routeFamilyId ?? null);
-  }, [selectedFamilyId, visibleFamilies]);
+  const effectiveSelectedFamilyId =
+    selectedFamilyId && visibleFamilies.some((item) => item.routeFamilyId === selectedFamilyId)
+      ? selectedFamilyId
+      : visibleFamilies[0]?.routeFamilyId ?? null;
 
   if (loadingVehicles || loadingFamilies || loadingDepotFamilyPerms || loadingPerms) {
     return <LoadingBlock message={t("matrix.loading")} />;
@@ -166,7 +157,7 @@ export function VehicleRouteMatrix({
                   type="button"
                   onClick={() => setSelectedFamilyId(family.routeFamilyId)}
                   className={`flex w-full flex-col items-center gap-0.5 rounded px-1 py-1 text-center ${
-                    selectedFamilyId === family.routeFamilyId ? "bg-primary-50" : "hover:bg-slate-100"
+                    effectiveSelectedFamilyId === family.routeFamilyId ? "bg-primary-50" : "hover:bg-slate-100"
                   }`}
                 >
                   {family.primaryColor && (
@@ -230,11 +221,11 @@ export function VehicleRouteMatrix({
         </tbody>
       </table>
 
-      {selectedFamilyId && (
+      {effectiveSelectedFamilyId && (
         <div className="border-t border-border p-3">
           <RouteFamilyInspectorCard
             scenarioId={scenarioId}
-            routeFamilyId={selectedFamilyId}
+            routeFamilyId={effectiveSelectedFamilyId}
             onClose={() => setSelectedFamilyId(null)}
           />
         </div>

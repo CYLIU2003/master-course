@@ -275,6 +275,7 @@ def _evaluate_with_gurobi(
     model = gp.Model("alns_inner")
     model.Params.OutputFlag = 0
     model.Params.TimeLimit = 30.0
+    model.Params.Seed = params.seed
 
     # ---------- 変数 ----------
     # SOC: BEV のみ, t=0..num_periods
@@ -677,6 +678,7 @@ def solve_alns(
     if params is None:
         params = ALNSParams()
 
+    random.seed(params.seed)
     rng = random.Random(params.seed)
     t_start = time.perf_counter()
 

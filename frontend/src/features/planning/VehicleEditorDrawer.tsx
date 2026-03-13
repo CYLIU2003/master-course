@@ -235,28 +235,40 @@ export function VehicleEditorDrawer({
   }, [routeNameById, sourceVehicleRouteIds, targetDepotAllowedRouteIds, targetDepotHasRouteRules]);
 
   useEffect(() => {
-    setSelectedTemplateId(templateId ?? "");
+    const frame = window.requestAnimationFrame(() => {
+      setSelectedTemplateId(templateId ?? "");
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [templateId]);
 
   useEffect(() => {
-    setDuplicateQuantity("1");
-    setDuplicateTargetDepotId(vehicle?.depotId ?? depotId ?? "");
+    const frame = window.requestAnimationFrame(() => {
+      setDuplicateQuantity("1");
+      setDuplicateTargetDepotId(vehicle?.depotId ?? depotId ?? "");
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [vehicle?.depotId, vehicleId, depotId]);
 
   useEffect(() => {
-    if (!isCreate && vehicle) {
-      setForm(vehicleToForm(vehicle));
-    }
+    const frame = window.requestAnimationFrame(() => {
+      if (!isCreate && vehicle) {
+        setForm(vehicleToForm(vehicle));
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [vehicle, isCreate]);
 
   useEffect(() => {
-    if (!isCreate) return;
-    if (!templateId) {
-      setForm(EMPTY_FORM);
-      return;
-    }
-    if (!initialTemplate) return;
-    setForm(templateToForm(initialTemplate));
+    if (!isCreate) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      if (!templateId) {
+        setForm(EMPTY_FORM);
+        return;
+      }
+      if (!initialTemplate) return;
+      setForm(templateToForm(initialTemplate));
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [isCreate, templateId, initialTemplate]);
 
   const updateField = useCallback(

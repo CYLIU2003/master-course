@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useBootStore } from "@/stores/boot-store";
 
 export function BootSplashOverlay() {
@@ -7,38 +6,10 @@ export function BootSplashOverlay() {
   const progress = useBootStore((state) => state.progress);
   const steps = useBootStore((state) => state.steps);
   const errorMessage = useBootStore((state) => state.errorMessage);
-  const [shouldRender, setShouldRender] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
-
-  useEffect(() => {
-    let timeoutId: number | undefined;
-    if (displayMode === "restore" && status !== "error") {
-      setShouldRender(false);
-      setIsClosing(false);
-      return undefined;
-    }
-    if (status === "running" || status === "error") {
-      setShouldRender(true);
-      setIsClosing(false);
-      return;
-    }
-    if (status === "ready" && progress >= 100) {
-      setShouldRender(true);
-      setIsClosing(true);
-      timeoutId = window.setTimeout(() => {
-        setShouldRender(false);
-        setIsClosing(false);
-      }, 420);
-      return () => {
-        window.clearTimeout(timeoutId);
-      };
-    }
-    if (status === "idle") {
-      setShouldRender(false);
-      setIsClosing(false);
-    }
-    return undefined;
-  }, [displayMode, progress, status]);
+  const shouldRender = !(
+    displayMode === "restore" && status !== "error"
+  ) && (status === "running" || status === "error");
+  const isClosing = false;
 
   if (!shouldRender) {
     return null;

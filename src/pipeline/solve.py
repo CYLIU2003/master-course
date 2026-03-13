@@ -18,9 +18,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import time as _time
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - optional dependency
+    np = None
+
+
+def _seed_random_generators(seed: Optional[int]) -> None:
+    if seed is None:
+        return
+    random.seed(int(seed))
+    if np is not None:
+        np.random.seed(int(seed))
 
 
 def _load_duty_data(cfg: dict, data: Any, run_mode: str) -> None:
@@ -230,6 +244,8 @@ def solve(
     cfg_path = Path(config_path)
     with open(cfg_path, encoding="utf-8") as f:
         cfg = json.load(f)
+
+    _seed_random_generators(cfg.get("random_seed", cfg.get("solver", {}).get("seed", 42)))
 
     run_mode = mode or cfg.get("mode", "thesis_mode")
     print(f"[solve] mode={run_mode}")
@@ -488,6 +504,8 @@ def solve_problem_data(
     }
     run_mode = mode or "mode_milp_only"
     dispatch_report = getattr(data, "_dispatch_preprocess_report", None)
+
+    _seed_random_generators(random_seed)
 
     ms = build_model_sets(data)
     dp = build_derived_params(data, ms)

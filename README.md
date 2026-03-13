@@ -7,7 +7,7 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
-[![Tests](https://img.shields.io/badge/tests-284%20passed-brightgreen.svg)](#13-テスト状況--test-status)
+[![Tests](https://img.shields.io/badge/tests-287%20passed-brightgreen.svg)](#13-テスト状況--test-status)
 
 ---
 
@@ -960,7 +960,7 @@ python run_experiment.py \
 ```
 最終実行: 2026-03-08
 コマンド: python -m pytest tests/ -q
-結果:   284 passed ✅
+結果:   287 passed ✅
 ```
 
 ### テストカバレッジ（主要領域）

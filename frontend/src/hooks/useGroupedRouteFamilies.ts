@@ -55,13 +55,12 @@ function groupRoutes(routes: Route[]): RouteFamilyGroup[] {
 
 export function useGroupedRouteFamilies(routes: Route[]) {
   const fallbackGroups = useMeasuredMemo("selector:route-family-group-fallback", () => groupRoutes(routes), [routes]);
-  const [workerGroups, setWorkerGroups] = useState<RouteFamilyGroup[]>(fallbackGroups);
+  const [workerGroups, setWorkerGroups] = useState<RouteFamilyGroup[]>([]);
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
     if (typeof Worker === "undefined" || routes.length < 100) {
-      setWorkerGroups(fallbackGroups);
       return;
     }
     if (!workerRef.current) {
@@ -93,7 +92,7 @@ export function useGroupedRouteFamilies(routes: Route[]) {
     return () => {
       worker.removeEventListener("message", handleMessage);
     };
-  }, [fallbackGroups, routes]);
+  }, [routes]);
 
   useEffect(() => {
     return () => {
@@ -103,7 +102,7 @@ export function useGroupedRouteFamilies(routes: Route[]) {
   }, []);
 
   return useMemo(
-    () => (routes.length < 100 ? fallbackGroups : workerGroups),
+    () => (routes.length < 100 || workerGroups.length === 0 ? fallbackGroups : workerGroups),
     [fallbackGroups, routes.length, workerGroups],
   );
 }
