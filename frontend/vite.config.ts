@@ -16,7 +16,6 @@ export default defineConfig(({ mode }) => {
   const devHost = env.VITE_DEV_HOST || "0.0.0.0";
   const devPort = parsePort(env.VITE_DEV_PORT, 5173);
   const apiProxyTarget = env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000";
-  const odptProxyTarget = env.VITE_ODPT_PROXY_TARGET || "http://127.0.0.1:3001";
 
   return {
     plugins: [react(), tailwindcss()],
@@ -73,12 +72,7 @@ export default defineConfig(({ mode }) => {
       host: devHost,
       port: devPort,
       proxy: {
-        // ODPT Explorer BFF (Node/Express :3001) — must be listed BEFORE "/api"
-        "/api/odpt": {
-          target: odptProxyTarget,
-          changeOrigin: true,
-        },
-        // Existing FastAPI BFF (:8000)
+        // Tokyu research BFF (:8000)
         "/api": {
           target: apiProxyTarget,
           changeOrigin: true,

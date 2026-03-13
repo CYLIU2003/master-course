@@ -84,18 +84,12 @@ export function MasterDataHeader({ scenarioId }: Props) {
           <p className="text-xs text-slate-500">
             {t(
               "master.description",
-              "確定済みの運行モデルを編集します。公開データ取込・所属補正・品質確認は Explorer で行います。",
+              "事前構築済みの Tokyu データセットを前提に、営業所・車両・路線設定を調整します。",
             )}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <Link
-            to="/odpt-explorer"
-            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-          >
-            {t("nav.odpt_explorer", "公開情報収集エクスプローラー")}
-          </Link>
           <Link
             to={`/scenarios/${scenarioId}/timetable`}
             className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
@@ -135,7 +129,7 @@ export function MasterDataHeader({ scenarioId }: Props) {
             <span>
               {t(
                 "master.explorer_note",
-                "公開データの取込、warning、完全性、所属営業所割当は Explorer と各タブから実行できます。",
+                "main app は seed + built dataset の consumer です。raw ODPT / GTFS 更新は data-prep 側で実行してください。",
               )}
             </span>
             <span className="font-mono text-slate-500">{scenarioId}</span>
@@ -172,24 +166,18 @@ export function MasterDataHeader({ scenarioId }: Props) {
 
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
-            {t("master.snapshot_sync", "GTFS / Snapshot 同期")}
+            {t("master.snapshot_sync", "Dataset readiness")}
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Link
-              to="/odpt-explorer"
-              className="rounded-md border border-sky-300 bg-white px-3 py-1.5 text-xs font-medium text-sky-700"
-            >
-              {t("master.open_snapshot_explorer", "Public Feed Snapshot を確認")}
-            </Link>
             <Link
               to={`/scenarios/${scenarioId}/timetable`}
               className="rounded-md border border-sky-300 bg-white px-3 py-1.5 text-xs font-medium text-sky-700"
             >
-              {t("master.open_timetable_imports", "時刻表 / GTFS 取込へ")}
+              {t("master.open_timetable_imports", "時刻表データを確認")}
             </Link>
           </div>
           <p className="mt-2 text-[11px] text-sky-900/80">
-            通常起動では保存済み snapshot を優先し、重い raw ODPT 更新は `python3 catalog_update_app.py` または pipeline CLI 側で実行します。
+            `data/built/` が空の場合は timetable / optimization が無効になります。dataset 生成は data-prep CLI で実行してください。
           </p>
         </div>
       </div>

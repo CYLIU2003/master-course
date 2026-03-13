@@ -15,6 +15,97 @@
       },
       "additionalProperties": false
     },
+    "TimeOfUseBand": {
+      "type": "object",
+      "required": ["start_hour", "end_hour", "price_per_kwh"],
+      "properties": {
+        "start_hour": { "type": "integer", "minimum": 0, "maximum": 47 },
+        "end_hour": { "type": "integer", "minimum": 1, "maximum": 48 },
+        "price_per_kwh": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "FleetConfig": {
+      "type": "object",
+      "required": ["n_bev", "n_ice"],
+      "properties": {
+        "n_bev": { "type": "integer", "minimum": 0 },
+        "n_ice": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "ChargingConfig": {
+      "type": "object",
+      "properties": {
+        "max_simultaneous_sessions": { "type": ["integer", "null"], "minimum": 0 },
+        "overnight_window_start": { "type": ["string", "null"] },
+        "overnight_window_end": { "type": ["string", "null"] },
+        "depot_power_limit_kw": { "type": ["number", "null"], "minimum": 0 },
+        "charger_power_limit_kw": { "type": ["number", "null"], "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "CostConfig": {
+      "type": "object",
+      "properties": {
+        "tou_pricing": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/TimeOfUseBand" }
+        },
+        "demand_charge_cost_per_kw": { "type": "number", "minimum": 0 },
+        "pv_enabled": { "type": "boolean" },
+        "pv_scale": { "type": "number", "minimum": 0 },
+        "diesel_price_per_l": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "SolverConfig": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["milp", "alns", "hybrid", "mode_milp_only", "mode_alns_only", "mode_alns_milp"]
+        },
+        "time_limit_seconds": { "type": "integer", "minimum": 1 },
+        "mip_gap": { "type": "number", "minimum": 0 },
+        "alns_iterations": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "ScenarioOverlay": {
+      "type": "object",
+      "required": [
+        "scenario_id",
+        "dataset_id",
+        "dataset_version",
+        "random_seed",
+        "depot_ids",
+        "route_ids",
+        "fleet",
+        "charging_constraints",
+        "cost_coefficients",
+        "solver_config"
+      ],
+      "properties": {
+        "scenario_id": { "type": "string" },
+        "dataset_id": { "type": "string" },
+        "dataset_version": { "type": "string" },
+        "random_seed": { "type": "integer" },
+        "depot_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "route_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "fleet": { "$ref": "#/definitions/FleetConfig" },
+        "charging_constraints": { "$ref": "#/definitions/ChargingConfig" },
+        "cost_coefficients": { "$ref": "#/definitions/CostConfig" },
+        "solver_config": { "$ref": "#/definitions/SolverConfig" }
+      },
+      "additionalProperties": false
+    },
     "LockedOperation": {
       "type": "object",
       "required": ["trip_id"],

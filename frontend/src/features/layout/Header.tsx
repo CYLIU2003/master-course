@@ -63,10 +63,10 @@ export function Header() {
       <div className="flex items-center gap-3">
         <LanguageSwitcher />
         <Link
-          to={scenarioId ? `/scenarios/${scenarioId}/public-data` : "/scenarios"}
+          to="/scenarios"
           className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
         >
-          {t("nav.odpt_explorer")}
+          Cases
         </Link>
         <Link
           to="/compare"

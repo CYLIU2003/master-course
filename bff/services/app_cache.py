@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+from bff.services import research_catalog
 from bff.services import transit_catalog
 from bff.services.gtfs_import import DEFAULT_GTFS_FEED_PATH
 from bff.services.odpt_routes import DEFAULT_OPERATOR
@@ -122,18 +123,18 @@ def warm_startup_cache() -> None:
     _log.info("Warming runtime cache")
 
     try:
-        get_odpt_bundle(
-            operator=DEFAULT_OPERATOR,
-            dump=False,
-            force_refresh=False,
-            ttl_sec=default_ttl_sec(),
-        )
-        _log.info("ODPT bundle cached for %s", DEFAULT_OPERATOR)
+        datasets = research_catalog.list_datasets()
+        set_cached("app:datasets", datasets)
+        _log.info("Research dataset catalog cached (%s datasets)", len(datasets))
     except Exception:
-        _log.exception("ODPT startup warm-up failed")
+        _log.exception("Research dataset catalog warm-up failed")
 
     try:
-        get_gtfs_bundle(feed_path=DEFAULT_GTFS_FEED_PATH, force_refresh=False)
-        _log.info("GTFS bundle cached for %s", DEFAULT_GTFS_FEED_PATH)
+        default_status = research_catalog.get_default_dataset_status()
+        set_cached("app:data-status:default", default_status)
+        _log.info(
+            "Default research dataset status cached for %s",
+            default_status.get("datasetId"),
+        )
     except Exception:
-        _log.exception("GTFS startup warm-up failed")
+        _log.exception("Default research dataset warm-up failed")

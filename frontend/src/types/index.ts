@@ -1,8 +1,15 @@
 // ── Domain re-exports ─────────────────────────────────────────
 export type {
   Scenario,
+  ScenarioOverlay,
   ScenarioStatus,
   SolverMode,
+  FleetConfig,
+  ChargingConfig,
+  CostConfig,
+  SolverConfig,
+  TimeOfUseBand,
+  ResearchDatasetStatus,
   HHMMTime,
   MinutesFromMidnight,
   // Master data
@@ -68,6 +75,8 @@ export type {
   ScenarioDetailResponse,
   CreateScenarioRequest,
   UpdateScenarioRequest,
+  ResearchDatasetsResponse,
+  AppDataStatusResponse,
   // Depots
   DepotsResponse,
   DepotDetailResponse,

@@ -31,6 +31,9 @@ data/*.db
 # ODPT raw/normalized cache (large downloaded files)
 data/cache/
 
+# Research app built datasets (regenerable)
+data/built/
+
 # tokyubus-gtfs pipeline data (generated, large)
 data/tokyubus/raw/
 data/tokyubus/canonical/

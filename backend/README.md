@@ -1,8 +1,9 @@
 # backend/ (Legacy)
 
-`backend/` is a legacy ODPT proxy workspace.
+`backend/` is a frozen legacy ODPT proxy workspace.
 
-- The research application officially runs on `bff/` + `frontend/`
+- The Tokyu research application officially runs on `bff/` + `frontend/`
+- Producer-side catalog / explorer responsibilities now live under `data-prep/`
 - Do not add new planning / dispatch / simulation APIs here
 - Use this directory only when maintaining the old ODPT proxy flow
 

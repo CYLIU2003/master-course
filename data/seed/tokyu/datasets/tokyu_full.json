@@ -1,0 +1,19 @@
+{
+  "dataset_id": "tokyu_full",
+  "description": "Full Tokyu Bus dataset covering all 12 depots and all routes.",
+  "included_depots": [
+    "awashima",
+    "shimouma",
+    "tsurumaki",
+    "seta",
+    "meguro",
+    "ebara",
+    "ikegami",
+    "takatsu",
+    "nippa",
+    "aobadai",
+    "nijigaoka",
+    "higashiyamata"
+  ],
+  "included_routes": "ALL"
+}

@@ -31,7 +31,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _ENV_CANDIDATES = [
     _REPO_ROOT / ".env",            # project-root .env
     _REPO_ROOT / "bff" / ".env",    # bff-specific .env
-    _REPO_ROOT / "backend" / ".env",  # legacy backend .env
 ]
 
 
@@ -65,12 +64,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 
 from bff.routers import (
-    catalog,
+    app_state,
     graph,
     jobs,
     master_data,
     optimization,
-    public_data,
     scenarios,
     simulation,
     timetable,
@@ -94,7 +92,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="EV Bus Scheduling BFF",
-    description="Backend For Frontend — bridges the React UI to the Python dispatch pipeline.",
+    description="Tokyu Bus research BFF consuming prebuilt seed and dataset files.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -150,10 +148,9 @@ app.add_middleware(
 PREFIX = "/api"
 
 app.include_router(scenarios.router, prefix=PREFIX)
+app.include_router(app_state.router, prefix=PREFIX)
 app.include_router(timetable.router, prefix=PREFIX)
 app.include_router(master_data.router, prefix=PREFIX)
-app.include_router(public_data.router, prefix=PREFIX)
-app.include_router(catalog.router, prefix=PREFIX)
 app.include_router(graph.router, prefix=PREFIX)
 app.include_router(simulation.router, prefix=PREFIX)
 app.include_router(optimization.router, prefix=PREFIX)

@@ -87,11 +87,6 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
   const planningNavItems: NavItem[] = [
     { labelKey: "sidebar.depots_vehicles_routes", to: "planning" },
     {
-      labelKey: "nav.odpt_explorer",
-      to: "public-data",
-      fallbackLabel: "公開情報",
-    },
-    {
       labelKey: "sidebar.vehicle_templates",
       to: "vehicle-templates",
       fallbackLabel: "車両テンプレート",
@@ -165,7 +160,7 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
       <div className="flex-1 overflow-y-auto py-3">
         {activeTab === "planning" && (
           <NavSection
-            title={t("nav.master_data")}
+            title="Step 2 Setup"
             items={resolve(planningNavItems)}
             scenarioId={scenarioId}
           />
@@ -173,7 +168,7 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
 
         {activeTab === "simulation" && (
           <NavSection
-            title={t("nav.configuration")}
+            title="Step 2 Config"
             items={resolve(simulationNavItems)}
             scenarioId={scenarioId}
           />
@@ -181,12 +176,12 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
 
         {/* Dispatch & Results always visible */}
         <NavSection
-          title={t("nav.dispatch")}
+          title="Step 3 Execute"
           items={resolve(dispatchNavItems)}
           scenarioId={scenarioId}
         />
         <NavSection
-          title={t("nav.results")}
+          title="Step 4 Results"
           items={resolve(resultsNavItems)}
           scenarioId={scenarioId}
         />

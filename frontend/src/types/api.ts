@@ -1,6 +1,7 @@
 // ── API response / request DTOs ───────────────────────────────
 import type {
   Scenario,
+  ResearchDatasetStatus,
   Depot,
   Vehicle,
   VehicleTemplate,
@@ -55,7 +56,9 @@ export interface CreateScenarioRequest {
   name: string;
   description: string;
   mode: Scenario["mode"];
-  operatorId: Scenario["operatorId"];
+  operatorId?: Scenario["operatorId"];
+  datasetId?: string;
+  randomSeed?: number;
 }
 
 export interface UpdateScenarioRequest {
@@ -63,6 +66,16 @@ export interface UpdateScenarioRequest {
   description?: string;
   mode?: Scenario["mode"];
   operatorId?: Scenario["operatorId"];
+}
+
+export interface ResearchDatasetsResponse {
+  items: ResearchDatasetStatus[];
+  total: number;
+  defaultDatasetId?: string | null;
+}
+
+export interface AppDataStatusResponse {
+  item: ResearchDatasetStatus;
 }
 
 // ── Depots ────────────────────────────────────────────────────

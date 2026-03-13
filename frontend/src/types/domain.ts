@@ -20,7 +20,79 @@ export interface Scenario {
   createdAt: string;
   updatedAt: string;
   status: ScenarioStatus;
+  datasetId?: string;
+  datasetVersion?: string;
+  randomSeed?: number;
+  scenarioOverlay?: ScenarioOverlay | null;
+  datasetStatus?: ResearchDatasetStatus | null;
   feedContext?: FeedContext | null;
+}
+
+export interface FleetConfig {
+  n_bev: number;
+  n_ice: number;
+}
+
+export interface ChargingConfig {
+  max_simultaneous_sessions?: number | null;
+  overnight_window_start?: string | null;
+  overnight_window_end?: string | null;
+  depot_power_limit_kw?: number | null;
+  charger_power_limit_kw?: number | null;
+}
+
+export interface TimeOfUseBand {
+  start_hour: number;
+  end_hour: number;
+  price_per_kwh: number;
+}
+
+export interface CostConfig {
+  tou_pricing: TimeOfUseBand[];
+  demand_charge_cost_per_kw: number;
+  pv_enabled: boolean;
+  pv_scale: number;
+  diesel_price_per_l: number;
+}
+
+export interface SolverConfig {
+  mode:
+    | "milp"
+    | "alns"
+    | "hybrid"
+    | "mode_milp_only"
+    | "mode_alns_only"
+    | "mode_alns_milp";
+  time_limit_seconds: number;
+  mip_gap: number;
+  alns_iterations: number;
+}
+
+export interface ScenarioOverlay {
+  scenario_id: string;
+  dataset_id: string;
+  dataset_version: string;
+  random_seed: number;
+  depot_ids: string[];
+  route_ids: string[];
+  fleet: FleetConfig;
+  charging_constraints: ChargingConfig;
+  cost_coefficients: CostConfig;
+  solver_config: SolverConfig;
+}
+
+export interface ResearchDatasetStatus {
+  datasetId: string;
+  description: string;
+  note?: string | null;
+  includedDepots: string[];
+  includedRoutes: string[] | "ALL";
+  seedVersion?: string | null;
+  datasetVersion: string;
+  builtAvailable: boolean;
+  warning?: string | null;
+  manifest?: Record<string, unknown> | null;
+  paths?: Record<string, string>;
 }
 
 export interface FeedContext {

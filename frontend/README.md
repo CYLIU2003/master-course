@@ -52,10 +52,9 @@ VITE_DEV_HOST=0.0.0.0
 VITE_DEV_PORT=5173
 VITE_API_BASE_URL=/api
 VITE_API_PROXY_TARGET=http://127.0.0.1:8000
-VITE_ODPT_PROXY_TARGET=http://127.0.0.1:3001
 ```
 
-`VITE_ODPT_PROXY_TARGET` は legacy ODPT proxy を併用する場合のみ必要です。通常の研究 UI 開発では不要です。
+main app の標準構成では `VITE_API_PROXY_TARGET` のみ設定してください。catalog / explorer を別プロセスで動かす場合は `data-prep/api` を独立ポートで起動します。
 
 frontend から別ホストの BFF を直接呼ぶ場合:
 

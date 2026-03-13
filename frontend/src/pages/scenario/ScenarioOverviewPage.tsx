@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useScenario, useDeleteScenario } from "@/hooks";
 import { PageSection, LoadingBlock, ErrorBlock } from "@/features/common";
@@ -28,19 +28,41 @@ export function ScenarioOverviewPage() {
       <PageSection title={scenario.name} description={scenario.description}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <InfoCard label="Operator" value={scenario.operatorId} />
+          <InfoCard label="Dataset" value={scenario.datasetId ?? "tokyu_core"} />
+          <InfoCard label="Dataset Version" value={scenario.datasetVersion ?? "unknown"} />
+          <InfoCard label="Random Seed" value={String(scenario.randomSeed ?? 42)} />
           <InfoCard label={t("scenarios.mode")} value={scenario.mode} />
           <InfoCard label={t("scenarios.status")} value={scenario.status} />
           <InfoCard label={t("scenarios.created")} value={scenario.createdAt} />
           <InfoCard label={t("scenarios.updated")} value={scenario.updatedAt} />
         </div>
+        {scenario.datasetStatus?.warning ? (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {scenario.datasetStatus.warning}
+          </div>
+        ) : null}
       </PageSection>
 
       <PageSection
         title={t("scenarios.pipeline_progress")}
         description={t("scenarios.pipeline_description")}
       >
-        <div className="rounded-lg border border-border bg-surface-sunken p-4 text-center text-sm text-slate-400">
-          {t("scenarios.pipeline_placeholder")}
+        <div className="grid gap-3 md:grid-cols-3">
+          <QuickLinkCard
+            title="Step 2 Setup"
+            description="Depots, routes, fleet, charging, and solver parameters."
+            to={`/scenarios/${scenario.id}/planning`}
+          />
+          <QuickLinkCard
+            title="Step 3 Execute"
+            description="Build dispatch artifacts, run simulation, and launch optimization."
+            to={`/scenarios/${scenario.id}/simulation`}
+          />
+          <QuickLinkCard
+            title="Step 4 Results"
+            description="Review duties, KPI, and reproducibility metadata."
+            to={`/scenarios/${scenario.id}/results/dispatch`}
+          />
         </div>
       </PageSection>
     </div>
@@ -59,6 +81,26 @@ function InfoCard({ label, value }: { label: string; value: string }) {
         {value}
       </p>
     </div>
+  );
+}
+
+function QuickLinkCard({
+  title,
+  description,
+  to,
+}: {
+  title: string;
+  description: string;
+  to: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="rounded-lg border border-border bg-surface-raised p-4 text-left transition hover:border-primary-200 hover:bg-primary-50/40"
+    >
+      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      <p className="mt-1 text-xs text-slate-500">{description}</p>
+    </Link>
   );
 }
 

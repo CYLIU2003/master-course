@@ -122,6 +122,7 @@ export function TimetablePage() {
   const gtfsImportMeta = summaryData?.item.imports?.gtfs;
   const odptStopTimetableImportMeta = stopTimetablesData?.item.imports?.odpt;
   const gtfsStopTimetableImportMeta = stopTimetablesData?.item.imports?.gtfs;
+  const runtimeImportsLocked = true;
 
   // Calendar sync counts
   const calendarCount = calendarData?.total ?? 0;
@@ -616,7 +617,7 @@ export function TimetablePage() {
         }
       >
         <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          起動時に ODPT / GTFS の更新は走りません。重い更新は通常 `python3 catalog_update_app.py refresh odpt|gtfs` を先に実行し、この画面では保存済み snapshot をシナリオへ反映します。
+          main app は prebuilt dataset consumer です。raw ODPT / GTFS 更新は data-prep 側で実行し、この画面では seed / built データを確認します。
         </div>
         <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <ImportProgressPanel />
@@ -624,6 +625,11 @@ export function TimetablePage() {
         </div>
 
         {/* ── Operator import sections ───────────────────── */}
+        {runtimeImportsLocked ? (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            Runtime ETL is disabled in the Tokyu research app. Generate or refresh `data/built/*` from the separate data-prep workflow first.
+          </div>
+        ) : (
         <div className="mb-4 grid gap-3 md:grid-cols-2">
           {/* ── 東急バス（ODPT）取込 ──────────── */}
           <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
@@ -841,6 +847,7 @@ export function TimetablePage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Service-ID filter tabs */}
         <div className="mb-3 flex gap-1 border-b border-border">

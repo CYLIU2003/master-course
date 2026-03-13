@@ -5,7 +5,6 @@ import {
   redirect,
 } from "react-router-dom";
 import { lazy, Suspense, type ReactNode } from "react";
-import { fetchMaybeJson } from "@/api/client";
 import { AppLayout } from "@/features/layout/AppLayout";
 import { ErrorBoundary, RouteErrorPage } from "@/features/common";
 
@@ -100,28 +99,8 @@ const ComparePage = lazy(() =>
     default: module.ComparePage,
   })),
 );
-const PublicDataExplorerPage = lazy(() =>
-  import("@/pages/odpt/PublicDataExplorerPage").then((module) => ({
-    default: module.PublicDataExplorerPage,
-  })),
-);
-
 function startupLoader() {
   return redirect("/scenarios");
-}
-
-async function activeScenarioRedirectLoader(targetPath: string) {
-  try {
-    const context = await fetchMaybeJson<{ activeScenarioId?: string | null }>(
-      "/api/app/context",
-    );
-    if (!context?.activeScenarioId) {
-      return redirect("/scenarios");
-    }
-    return redirect(`/scenarios/${context.activeScenarioId}/${targetPath}`);
-  } catch {
-    return redirect("/scenarios");
-  }
 }
 
 const router = createBrowserRouter([
@@ -148,10 +127,6 @@ const router = createBrowserRouter([
       // ── Tab 1: Planning (master data) ─────────────────────
       { path: "planning", element: <LazyPage><MasterDataPage /></LazyPage> },
       { path: "planning-legacy", element: <Navigate to="../planning" replace /> },
-      {
-        path: "public-data",
-        element: <LazyPage><PublicDataExplorerPage /></LazyPage>,
-      },
       { path: "vehicle-templates", element: <LazyPage><VehicleTemplatesPage /></LazyPage> },
       { path: "timetable", element: <LazyPage><TimetablePage /></LazyPage> },
       { path: "deadhead", element: <LazyPage><DeadheadPage /></LazyPage> },
@@ -177,11 +152,6 @@ const router = createBrowserRouter([
   {
     path: "/compare",
     element: <LazyPage><ComparePage /></LazyPage>,
-  },
-  {
-    path: "/odpt-explorer",
-    loader: () => activeScenarioRedirectLoader("public-data"),
-    element: <Navigate to="/scenarios" replace />,
   },
 ]);
 

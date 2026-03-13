@@ -87,6 +87,7 @@ _MASTER_DATA_KEYS = (
     "dispatch_scope",
     "public_data",
     "feed_context",
+    "scenario_overlay",
     "simulation_config",
     "deadhead_rules",
     "turnaround_rules",
@@ -515,6 +516,7 @@ def _load(scenario_id: str) -> Dict[str, Any]:
     doc.setdefault("calendar", _default_calendar())
     doc.setdefault("calendar_dates", [])
     doc.setdefault("simulation_config", None)
+    doc.setdefault("scenario_overlay", None)
     doc.setdefault("dispatch_scope", _default_dispatch_scope())
     doc.setdefault("public_data", _default_public_data_state())
     doc.setdefault("stats", _scenario_stats(doc))
@@ -719,6 +721,20 @@ def _meta_payload(doc: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(doc["meta"])
     payload.setdefault("operatorId", "tokyu")
     payload["feedContext"] = _normalize_feed_context(doc.get("feed_context"))
+    overlay = doc.get("scenario_overlay")
+    if isinstance(overlay, dict):
+        payload["datasetId"] = overlay.get("dataset_id")
+        payload["datasetVersion"] = overlay.get("dataset_version")
+        payload["randomSeed"] = overlay.get("random_seed")
+        payload["scenarioOverlay"] = dict(overlay)
+        dataset_id = overlay.get("dataset_id")
+        if dataset_id:
+            try:
+                from src.research_dataset_loader import get_dataset_status
+
+                payload["datasetStatus"] = get_dataset_status(str(dataset_id))
+            except Exception:
+                payload["datasetStatus"] = None
     if "refs" in doc:
         payload["refs"] = dict(doc.get("refs") or {})
     if "stats" in doc:
@@ -1406,6 +1422,69 @@ def set_field(
 
 def get_feed_context(scenario_id: str) -> Optional[Dict[str, Any]]:
     return _normalize_feed_context(_load(scenario_id).get("feed_context"))
+
+
+def get_scenario_overlay(scenario_id: str) -> Optional[Dict[str, Any]]:
+    overlay = _load(scenario_id).get("scenario_overlay")
+    if not isinstance(overlay, dict):
+        return None
+    return dict(overlay)
+
+
+def set_scenario_overlay(
+    scenario_id: str,
+    overlay: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    doc = _load(scenario_id)
+    doc["scenario_overlay"] = dict(overlay) if isinstance(overlay, dict) else None
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return get_scenario_overlay(scenario_id)
+
+
+def apply_dataset_bootstrap(scenario_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    doc = _load(scenario_id)
+    invalidate_fields = {
+        "depots",
+        "routes",
+        "route_depot_assignments",
+        "depot_route_permissions",
+        "dispatch_scope",
+        "timetable_rows",
+        "stop_timetables",
+        "calendar",
+        "calendar_dates",
+    }
+    if any(field in payload for field in invalidate_fields):
+        _invalidate_dispatch_artifacts(doc)
+
+    for field in (
+        "depots",
+        "routes",
+        "route_depot_assignments",
+        "depot_route_permissions",
+        "dispatch_scope",
+        "timetable_rows",
+        "trips",
+        "stop_timetables",
+        "calendar",
+        "calendar_dates",
+        "feed_context",
+        "scenario_overlay",
+    ):
+        if field not in payload:
+            continue
+        value = payload[field]
+        if isinstance(value, list):
+            doc[field] = [dict(item) if isinstance(item, dict) else item for item in value]
+        elif isinstance(value, dict):
+            doc[field] = dict(value)
+        else:
+            doc[field] = value
+
+    doc["meta"]["updatedAt"] = _now_iso()
+    _save(doc)
+    return _meta_payload(doc)
 
 
 def set_feed_context(

@@ -1,4 +1,5 @@
 export { api } from "./client";
+export { appApi } from "./app";
 export { scenarioApi } from "./scenario";
 export {
   depotApi,

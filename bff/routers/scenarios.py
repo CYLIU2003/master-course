@@ -36,7 +36,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from bff.services import runtime_catalog, transit_catalog
+from bff.services import research_catalog, runtime_catalog, transit_catalog
 from bff.services.gtfs_import import (
     DEFAULT_GTFS_FEED_PATH,
     summarize_gtfs_stop_timetable_import,
@@ -317,14 +317,16 @@ class CreateScenarioBody(BaseModel):
     name: str
     description: str = ""
     mode: str = "thesis_mode"
-    operatorId: Literal["tokyu", "toei"]
+    operatorId: Literal["tokyu"] = "tokyu"
+    datasetId: str = research_catalog.default_dataset_id()
+    randomSeed: int = 42
 
 
 class UpdateScenarioBody(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     mode: Optional[str] = None
-    operatorId: Optional[Literal["tokyu", "toei"]] = None
+    operatorId: Optional[Literal["tokyu"]] = None
 
 
 class DuplicateScenarioBody(BaseModel):
@@ -721,12 +723,21 @@ def get_or_create_default_scenario() -> Dict[str, Any]:
 
 @router.post("/scenarios", status_code=201)
 def create_scenario(body: CreateScenarioBody) -> Dict[str, Any]:
-    return store.create_scenario(
+    meta = store.create_scenario(
         name=body.name,
         description=body.description,
         mode=body.mode,
         operator_id=body.operatorId,
     )
+    try:
+        bootstrap = research_catalog.bootstrap_scenario(
+            scenario_id=meta["id"],
+            dataset_id=body.datasetId,
+            random_seed=body.randomSeed,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Dataset '{body.datasetId}' not found")
+    return store.apply_dataset_bootstrap(meta["id"], bootstrap)
 
 
 @router.post("/scenarios/{scenario_id}/duplicate", status_code=201)
