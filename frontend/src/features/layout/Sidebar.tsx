@@ -97,6 +97,11 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
   ];
 
   const simulationNavItems: NavItem[] = [
+    {
+      labelKey: "sidebar.simulation_builder",
+      to: "simulation-builder",
+      fallbackLabel: "シミュレーション設定",
+    },
     { labelKey: "sidebar.environment_config", to: "simulation-env" },
   ];
 

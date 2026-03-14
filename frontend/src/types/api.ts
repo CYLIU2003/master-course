@@ -788,6 +788,10 @@ export interface PrepareSimulationRequest {
     service_date?: string | null;
     start_time?: string | null;
     planning_horizon_hours?: number | null;
+    alns_iterations: number;
+    random_seed?: number | null;
+    experiment_method?: string | null;
+    experiment_notes?: string | null;
   };
 }
 

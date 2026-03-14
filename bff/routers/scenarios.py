@@ -684,8 +684,32 @@ def _builder_defaults(
         "fleetTemplates": fleet_templates,
         "timeLimitSeconds": int(overlay_solver.get("time_limit_seconds") or 300),
         "mipGap": float(overlay_solver.get("mip_gap") or 0.01),
+        "alnsIterations": int(
+            overlay_solver.get("alns_iterations")
+            or simulation_config.get("alns_iterations")
+            or 500
+        ),
+        "randomSeed": next(
+            (
+                value
+                for value in (
+                    simulation_config.get("random_seed"),
+                    overlay.get("random_seed"),
+                    (doc.get("meta") or {}).get("randomSeed"),
+                    42,
+                )
+                if value is not None
+            ),
+            42,
+        ),
+        "experimentMethod": simulation_config.get("experiment_method"),
+        "experimentNotes": simulation_config.get("experiment_notes"),
         "includeDeadhead": bool(
             (dispatch_scope.get("tripSelection") or {}).get("includeDeadhead", True)
+        ),
+        "startTime": simulation_config.get("start_time") or "05:00",
+        "planningHorizonHours": float(
+            simulation_config.get("planning_horizon_hours") or 20.0
         ),
     }
 

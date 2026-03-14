@@ -31,10 +31,14 @@ function defaultsFromBootstrap(
     touPricing: defaults.touPricing ?? [],
     timeLimitSeconds: defaults.timeLimitSeconds,
     mipGap: defaults.mipGap,
+    alnsIterations: defaults.alnsIterations,
+    randomSeed: defaults.randomSeed ?? null,
+    experimentMethod: defaults.experimentMethod ?? null,
+    experimentNotes: defaults.experimentNotes ?? null,
     includeDeadhead: defaults.includeDeadhead,
     serviceDate: defaults.serviceDate ?? null,
-    startTime: "05:00",
-    planningHorizonHours: 20,
+    startTime: defaults.startTime ?? "05:00",
+    planningHorizonHours: defaults.planningHorizonHours ?? 20,
   };
 }
 
@@ -81,6 +85,10 @@ const emptySettings: SimulationBuilderSettings = {
   touPricing: [],
   timeLimitSeconds: 300,
   mipGap: 0.01,
+  alnsIterations: 500,
+  randomSeed: null,
+  experimentMethod: null,
+  experimentNotes: null,
   includeDeadhead: true,
   serviceDate: null,
   startTime: "05:00",

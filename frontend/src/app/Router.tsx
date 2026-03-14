@@ -123,6 +123,7 @@ const router = createBrowserRouter([
     errorElement: <RouteErrorPage />,
     children: [
       { index: true, element: <LazyPage><ScenarioOverviewPage /></LazyPage> },
+      { path: "simulation-builder", element: <LazyPage><ScenarioOverviewPage /></LazyPage> },
 
       // ── Tab 1: Planning (master data) ─────────────────────
       { path: "planning", element: <LazyPage><MasterDataPage /></LazyPage> },

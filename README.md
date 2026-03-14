@@ -205,6 +205,22 @@ simulation builder / optimization overlay の既定値は
 `total_cost` / `co2` を切り替えた optimization の両方を
 full timetable preload なしで実行できます。
 
+frontend が使えない場合でも、scenario ごとの simulation profile を
+JSON として export / 手編集 / apply できます。
+
+```bash
+python -m scripts.simulation_profile_cli export --scenario <scenario_id>
+python -m scripts.simulation_profile_cli show --scenario <scenario_id>
+python -m scripts.simulation_profile_cli apply --scenario <scenario_id> --input outputs/scenario_profiles/<scenario_id>.json
+```
+
+export された JSON には `_meta.depots`, `_meta.routes_by_depot`,
+`_meta.vehicle_templates` を含めているため、営業所・路線・車両条件を
+メイン frontend なしで切り替えられます。`show` は raw JSON ではなく、
+選択営業所・対象路線・fleet・料金・solver・experiment metadata を
+ターミナルに要約表示します。`apply` は BFF HTTP を必須にせず、
+runtime と同じ builder service を Python から直接呼ぶ fallback です。
+
 ---
 
 ## データセット定義 / Dataset Definitions / 数据集定义
@@ -297,7 +313,8 @@ http://localhost:5173
 
 1. dataset を選択して scenario を開く
 2. `GET /api/scenarios/{id}/editor-bootstrap` で軽量 index / summary だけ読む
-3. depot / routes / day type / vehicle / charger / solver 条件を builder で確定する
+3. `Scenario Overview` または `/scenarios/{id}/simulation-builder` で、
+   depot / routes / day type / vehicle / charger / cost / solver / experiment 条件を builder で確定する
 4. `POST /api/scenarios/{id}/simulation/prepare` で selected scope の built parquet または Tokyu shard を canonical prepared input に変換する
 5. `POST /api/scenarios/{id}/simulation/run` で prepared input から simulation job を起動する
 6. results / KPI を確認する
@@ -308,6 +325,51 @@ http://localhost:5173
 * 初期表示で許可するのは scenario metadata / depots / routes / depot-route index / summary / available day types / readiness のみ
 * heavy timetable / dispatch artifact は `prepare` または対象タブ open 時に遅延読込する
 * frontend store は巨大閲覧キャッシュではなく、selected depots / routes / service / simulation settings / prepared result を持つ
+
+### Simulation Builder で編集できる主な条件
+
+* 対象営業所、対象路線、day type、service date
+* 単一 template fleet または mixed fleet（template ごとの台数、初期 SOC、battery、charge power）
+* charger count / charger power / depot power limit
+* objective（`total_cost` / `co2`）、solver mode（MILP / ALNS / hybrid）
+* time limit / mip gap / ALNS iterations / random seed / allow partial service
+* grid flat price / sell price / demand charge / diesel / grid CO2 / CO2 price
+* TOU pricing bands（add / remove）
+* experiment method / experiment notes
+
+`prepare` 実行時に上記は `dispatch_scope`, `scenario_overlay`, `simulation_config`,
+`vehicles`, `chargers`, `charger_sites` に反映され、その後の simulation / optimization /
+experiment logging が同じ条件を参照します。
+
+### Experiment logging
+
+simulation / optimization 完了時には、条件と結果の再現用レポートを
+`outputs/experiments/<scenario_id>/` に JSON と Markdown で保存します。
+
+```text
+outputs/experiments/<scenario_id>/
+  optimization/
+    exp_<timestamp>_<depot>_<objective>_<hash>.json
+    exp_<timestamp>_<depot>_<objective>_<hash>.md
+  simulation/
+    exp_<timestamp>_<depot>_<objective>_<hash>.json
+    exp_<timestamp>_<depot>_<objective>_<hash>.md
+```
+
+simulation report は API からも取得できます。
+
+```bash
+curl http://localhost:8000/api/scenarios/<scenario_id>/simulation/experiment-log
+```
+
+report には少なくとも次を含めます。
+
+* 対象営業所、対象路線、目的関数、手法名
+* fleet 構成、TOU、diesel、demand、depot power limit
+* solver 名、time limit、mip gap、seed
+* total cost / electricity / diesel / demand / CO2
+* BEV / ICE / total trip counts
+* git commit, timestamp, scenario hash
 
 ### Check readiness
 

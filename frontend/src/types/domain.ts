@@ -160,7 +160,13 @@ export interface SimulationBuilderDefaults {
   touPricing?: TimeOfUseBand[];
   timeLimitSeconds: number;
   mipGap: number;
+  alnsIterations: number;
+  randomSeed?: number | null;
+  experimentMethod?: string | null;
+  experimentNotes?: string | null;
   includeDeadhead: boolean;
+  startTime?: string | null;
+  planningHorizonHours?: number | null;
 }
 
 export interface SimulationBuilderSettings {
@@ -185,6 +191,10 @@ export interface SimulationBuilderSettings {
   touPricing?: TimeOfUseBand[];
   timeLimitSeconds: number;
   mipGap: number;
+  alnsIterations: number;
+  randomSeed?: number | null;
+  experimentMethod?: string | null;
+  experimentNotes?: string | null;
   includeDeadhead: boolean;
   serviceDate?: string | null;
   startTime?: string | null;

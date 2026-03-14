@@ -39,6 +39,19 @@ const OBJECTIVE_MODES: Array<{
   { value: "co2", label: "CO2" },
 ];
 
+const EXPERIMENT_METHOD_SUGGESTIONS = [
+  "MILP",
+  "ALNS",
+  "MILP+ALNS",
+  "ABC",
+  "GA",
+];
+
+function formatTouHour(value: number) {
+  const hour = Math.max(0, Math.min(24, Number.isFinite(value) ? value : 0));
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
 export function ScenarioOverviewPage() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const queryClient = useQueryClient();
@@ -139,6 +152,90 @@ export function ScenarioOverviewPage() {
     return null;
   }
 
+  const templateOptions = bootstrap.vehicleTemplates ?? [];
+  const usingMixedFleet = Boolean(settings.fleetTemplates?.length);
+
+  function updateFleetTemplateRow(
+    index: number,
+    patch: Partial<NonNullable<SimulationBuilderSettings["fleetTemplates"]>[number]>,
+  ) {
+    const next = [...(settings.fleetTemplates ?? [])];
+    next[index] = { ...next[index], ...patch };
+    updateSettings({ fleetTemplates: next });
+  }
+
+  function addFleetTemplateRow() {
+    const fallbackTemplateId =
+      settings.vehicleTemplateId ?? templateOptions[0]?.id ?? "";
+    if (!fallbackTemplateId) {
+      return;
+    }
+    updateSettings({
+      fleetTemplates: [
+        ...(settings.fleetTemplates ?? []),
+        {
+          vehicleTemplateId: fallbackTemplateId,
+          vehicleCount: 1,
+          initialSoc: settings.initialSoc,
+          batteryKwh: settings.batteryKwh ?? null,
+          chargePowerKw: settings.chargerPowerKw ?? null,
+        },
+      ],
+    });
+  }
+
+  function removeFleetTemplateRow(index: number) {
+    const next = [...(settings.fleetTemplates ?? [])];
+    next.splice(index, 1);
+    updateSettings({ fleetTemplates: next });
+  }
+
+  function enableMixedFleetMode() {
+    if (usingMixedFleet) {
+      return;
+    }
+    const fallbackTemplateId =
+      settings.vehicleTemplateId ?? templateOptions[0]?.id ?? "";
+    if (!fallbackTemplateId) {
+      return;
+    }
+    updateSettings({
+      fleetTemplates: [
+        {
+          vehicleTemplateId: fallbackTemplateId,
+          vehicleCount: settings.vehicleCount,
+          initialSoc: settings.initialSoc,
+          batteryKwh: settings.batteryKwh ?? null,
+          chargePowerKw: settings.chargerPowerKw ?? null,
+        },
+      ],
+    });
+  }
+
+  function addTouBand() {
+    updateSettings({
+      touPricing: [
+        ...(settings.touPricing ?? []),
+        { start_hour: 0, end_hour: 24, price_per_kwh: 0 },
+      ],
+    });
+  }
+
+  function updateTouBand(
+    index: number,
+    patch: Partial<NonNullable<SimulationBuilderSettings["touPricing"]>[number]>,
+  ) {
+    const next = [...(settings.touPricing ?? [])];
+    next[index] = { ...next[index], ...patch };
+    updateSettings({ touPricing: next });
+  }
+
+  function removeTouBand(index: number) {
+    const next = [...(settings.touPricing ?? [])];
+    next.splice(index, 1);
+    updateSettings({ touPricing: next });
+  }
+
   const scenario = bootstrap.scenario;
   const selectedRouteCount = selectedRouteIds.length;
   const selectedTripCount = selectedRouteIds.reduce((sum, routeId) => {
@@ -198,6 +295,10 @@ export function ScenarioOverviewPage() {
         service_date: serviceDate || undefined,
         start_time: settings.startTime ?? undefined,
         planning_horizon_hours: settings.planningHorizonHours ?? undefined,
+        alns_iterations: settings.alnsIterations,
+        random_seed: settings.randomSeed ?? undefined,
+        experiment_method: settings.experimentMethod ?? undefined,
+        experiment_notes: settings.experimentNotes ?? undefined,
       },
     });
     setPreparedResult(result);
@@ -345,7 +446,7 @@ export function ScenarioOverviewPage() {
 
       <PageSection
         title="Step 2 Simulation Settings"
-        description="solver に必要な車両・充電・day type 条件だけをここで確定します。"
+        description="営業所・路線に対して、車両構成、料金、solver、実験メタデータをここで確定します。prepare に渡る値はこの画面の入力だけです。"
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Day Type">
@@ -475,6 +576,29 @@ export function ScenarioOverviewPage() {
               onChange={(value) => updateSettings({ mipGap: value })}
             />
           </Field>
+          <Field label="ALNS Iterations">
+            <NumberInput
+              value={settings.alnsIterations}
+              min={1}
+              step={50}
+              onChange={(value) => updateSettings({ alnsIterations: value })}
+            />
+          </Field>
+          <Field label="Random Seed">
+            <input
+              type="number"
+              value={settings.randomSeed ?? ""}
+              onChange={(event) =>
+                updateSettings({
+                  randomSeed:
+                    event.target.value === ""
+                      ? null
+                      : Number(event.target.value),
+                })
+              }
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </Field>
           <Field label="Unserved Penalty">
             <NumberInput
               value={settings.unservedPenalty ?? 10000}
@@ -504,8 +628,40 @@ export function ScenarioOverviewPage() {
                   updateSettings({ allowPartialService: event.target.checked })
                 }
               />
-              enable unserved penalty
-            </label>
+                enable unserved penalty
+              </label>
+            </Field>
+          <Field label="Start Time">
+            <input
+              type="time"
+              value={settings.startTime ?? "05:00"}
+              onChange={(event) => updateSettings({ startTime: event.target.value })}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </Field>
+          <Field label="Planning Horizon (h)">
+            <NumberInput
+              value={settings.planningHorizonHours ?? 20}
+              min={1}
+              step={1}
+              onChange={(value) => updateSettings({ planningHorizonHours: value })}
+            />
+          </Field>
+          <Field label="Grid Flat Price (JPY/kWh)">
+            <NumberInput
+              value={settings.gridFlatPricePerKwh ?? 0}
+              min={0}
+              step={0.1}
+              onChange={(value) => updateSettings({ gridFlatPricePerKwh: value })}
+            />
+          </Field>
+          <Field label="Grid Sell Price (JPY/kWh)">
+            <NumberInput
+              value={settings.gridSellPricePerKwh ?? 0}
+              min={0}
+              step={0.1}
+              onChange={(value) => updateSettings({ gridSellPricePerKwh: value })}
+            />
           </Field>
           <Field label="Demand Charge (JPY/kW)">
             <NumberInput
@@ -549,50 +705,262 @@ export function ScenarioOverviewPage() {
               onChange={(value) => updateSettings({ co2PricePerKg: value })}
             />
           </Field>
+          <Field label="Experiment Method">
+            <div className="space-y-2">
+              <input
+                type="text"
+                list="experiment-method-options"
+                value={settings.experimentMethod ?? ""}
+                onChange={(event) =>
+                  updateSettings({ experimentMethod: event.target.value || null })
+                }
+                placeholder="MILP / ALNS / MILP+ALNS / ABC / GA"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+              <datalist id="experiment-method-options">
+                {EXPERIMENT_METHOD_SUGGESTIONS.map((method) => (
+                  <option key={method} value={method} />
+                ))}
+              </datalist>
+            </div>
+          </Field>
         </div>
         <div className="mt-4 grid gap-4 xl:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Fleet Templates
-            </p>
-            <div className="mt-3 space-y-2 text-sm text-slate-700">
-              {(settings.fleetTemplates ?? []).length === 0 ? (
-                <p>single-template mode</p>
-              ) : (
-                (settings.fleetTemplates ?? []).map((item) => (
-                  <div
-                    key={item.vehicleTemplateId}
-                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
-                  >
-                    <span className="truncate pr-3">{item.vehicleTemplateId}</span>
-                    <span>{item.vehicleCount}</span>
-                  </div>
-                ))
-              )}
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Fleet Templates
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  単一テンプレートでも混成 fleet でも同じ prepare API に渡します。
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateSettings({ fleetTemplates: [] })}
+                  className={`rounded border px-3 py-1.5 text-xs ${
+                    !usingMixedFleet
+                      ? "border-primary-300 bg-primary-50 text-primary-700"
+                      : "border-slate-200 bg-white text-slate-600"
+                  }`}
+                >
+                  Single
+                </button>
+                <button
+                  type="button"
+                  onClick={() => enableMixedFleetMode()}
+                  className={`rounded border px-3 py-1.5 text-xs ${
+                    usingMixedFleet
+                      ? "border-primary-300 bg-primary-50 text-primary-700"
+                      : "border-slate-200 bg-white text-slate-600"
+                  }`}
+                >
+                  Mixed
+                </button>
+              </div>
             </div>
+
+            {!usingMixedFleet ? (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                <p>
+                  {templateOptions.find((item) => item.id === settings.vehicleTemplateId)?.name ??
+                    settings.vehicleTemplateId ??
+                    "template not selected"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  count {settings.vehicleCount} / initial SOC {settings.initialSoc}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                {(settings.fleetTemplates ?? []).map((item, index) => (
+                  <div
+                    key={`${item.vehicleTemplateId}-${index}`}
+                    className="rounded-lg border border-slate-200 bg-white p-3"
+                  >
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                      <Field label="Template">
+                        <select
+                          value={item.vehicleTemplateId}
+                          onChange={(event) =>
+                            updateFleetTemplateRow(index, {
+                              vehicleTemplateId: event.target.value,
+                            })
+                          }
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        >
+                          {templateOptions.map((template) => (
+                            <option key={template.id} value={template.id}>
+                              {template.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Count">
+                        <NumberInput
+                          value={item.vehicleCount}
+                          min={0}
+                          onChange={(value) =>
+                            updateFleetTemplateRow(index, { vehicleCount: value })
+                          }
+                        />
+                      </Field>
+                      <Field label="Initial SOC">
+                        <NumberInput
+                          value={item.initialSoc ?? settings.initialSoc}
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          onChange={(value) =>
+                            updateFleetTemplateRow(index, { initialSoc: value })
+                          }
+                        />
+                      </Field>
+                      <Field label="Battery kWh">
+                        <NumberInput
+                          value={item.batteryKwh ?? 0}
+                          min={0}
+                          step={1}
+                          onChange={(value) =>
+                            updateFleetTemplateRow(index, {
+                              batteryKwh: value > 0 ? value : null,
+                            })
+                          }
+                        />
+                      </Field>
+                      <Field label="Charge Power kW">
+                        <div className="flex gap-2">
+                          <NumberInput
+                            value={item.chargePowerKw ?? 0}
+                            min={0}
+                            step={5}
+                            onChange={(value) =>
+                              updateFleetTemplateRow(index, {
+                                chargePowerKw: value > 0 ? value : null,
+                              })
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeFleetTemplateRow(index)}
+                            className="rounded border border-rose-200 px-3 py-2 text-xs text-rose-700 hover:bg-rose-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </Field>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addFleetTemplateRow()}
+                  className="rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  Add vehicle template row
+                </button>
+              </div>
+            )}
           </div>
+
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              TOU Pricing
-            </p>
-            <div className="mt-3 space-y-2 text-sm text-slate-700">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  TOU Pricing
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  空なら flat price を使います。時刻は 0-24 時の整数で扱います。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => addTouBand()}
+                className="rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
+              >
+                Add band
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-3 text-sm text-slate-700">
               {(settings.touPricing ?? []).length === 0 ? (
-                <p>flat/default pricing</p>
+                <p className="rounded-lg border border-slate-200 bg-white p-3 text-slate-600">
+                  flat/default pricing
+                </p>
               ) : (
-                (settings.touPricing ?? []).map((item) => (
+                (settings.touPricing ?? []).map((item, index) => (
                   <div
-                    key={`${item.start_hour}-${item.end_hour}-${item.price_per_kwh}`}
-                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    key={`${item.start_hour}-${item.end_hour}-${item.price_per_kwh}-${index}`}
+                    className="rounded-lg border border-slate-200 bg-white p-3"
                   >
-                    <span>
-                      {item.start_hour / 2}:00 - {item.end_hour / 2}:00
-                    </span>
-                    <span>{item.price_per_kwh} JPY/kWh</span>
+                    <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+                      <Field label="Start Hour">
+                        <NumberInput
+                          value={item.start_hour}
+                          min={0}
+                          max={24}
+                          step={1}
+                          onChange={(value) =>
+                            updateTouBand(index, { start_hour: value })
+                          }
+                        />
+                      </Field>
+                      <Field label="End Hour">
+                        <NumberInput
+                          value={item.end_hour}
+                          min={0}
+                          max={24}
+                          step={1}
+                          onChange={(value) =>
+                            updateTouBand(index, { end_hour: value })
+                          }
+                        />
+                      </Field>
+                      <Field label="Price JPY/kWh">
+                        <NumberInput
+                          value={item.price_per_kwh}
+                          min={0}
+                          step={0.1}
+                          onChange={(value) =>
+                            updateTouBand(index, { price_per_kwh: value })
+                          }
+                        />
+                      </Field>
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={() => removeTouBand(index)}
+                          className="rounded border border-rose-200 px-3 py-2 text-xs text-rose-700 hover:bg-rose-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {formatTouHour(item.start_hour)} - {formatTouHour(item.end_hour)} /{" "}
+                      {item.price_per_kwh} JPY/kWh
+                    </p>
                   </div>
                 ))
               )}
             </div>
           </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <Field label="Experiment Notes">
+            <textarea
+              value={settings.experimentNotes ?? ""}
+              onChange={(event) =>
+                updateSettings({ experimentNotes: event.target.value || null })
+              }
+              rows={4}
+              placeholder="論文・報告用に、仮説、比較条件、備考を記録します。"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </Field>
         </div>
       </PageSection>
 

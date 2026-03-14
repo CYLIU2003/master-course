@@ -39,6 +39,88 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-14] Simulation builder / experiment logger の実装実態を再整列
+
+- **確認した問題**:
+  - 共有された完了報告と実ワークツリーに差分があり、専用 `SimulationBuilderPage` は存在しなかった。
+  - simulation 側は `experiment_reports.py` があるにもかかわらず、
+    `bff/routers/simulation.py` で実験ログ出力と取得 endpoint が未配線だった。
+  - frontend builder defaults と TypeScript 型に
+    `alnsIterations`, `randomSeed`, `experimentMethod`, `experimentNotes`
+    が無く、backend に保存済みでも UI 側が保持できなかった。
+  - `simulation_profile_cli show` は raw JSON をそのまま出すだけで、
+    frontend fallback としては条件確認性が弱かった。
+  - builder UI の TOU 表示は hour を `/2` しており、0-24 時間帯の表示として誤っていた。
+
+- **対応**:
+  - `bff/routers/scenarios.py`
+    - builder defaults に `alnsIterations`, `randomSeed`,
+      `experimentMethod`, `experimentNotes`, `startTime`,
+      `planningHorizonHours` を追加。
+  - `bff/routers/simulation.py`
+    - simulation 完了時に `log_simulation_experiment()` を呼び、
+      `simulation_result.experiment_report` と
+      `simulation_audit.experiment_report` を保存するようにした。
+    - `GET /api/scenarios/{id}/simulation/experiment-log` を追加。
+    - simulation result に `vehicle_count_by_type`, `trip_count_by_type`,
+      `trip_count_served` summary を付与した。
+  - `bff/services/experiment_reports.py`
+    - simulation report に BEV / ICE / total trip counts を含めるよう修正。
+  - `frontend/src/pages/scenario/ScenarioOverviewPage.tsx`
+    - 既存 builder UI を拡張し、
+      mixed fleet 編集、TOU band add/remove、grid flat/sell、
+      ALNS iterations、random seed、experiment method、
+      experiment notes、start time、planning horizon を編集可能にした。
+    - TOU 表示を 0-24 hour 表記に修正した。
+  - `frontend/src/app/Router.tsx`, `frontend/src/features/layout/Sidebar.tsx`
+    - `/scenarios/:id/simulation-builder` alias と
+      「シミュレーション設定」サイドバー導線を追加。
+  - `frontend/src/types/domain.ts`, `frontend/src/types/api.ts`,
+    `frontend/src/stores/simulation-builder-store.ts`
+    - 上記 builder パラメータの型・store hydrate を追加。
+  - `scripts/simulation_profile_cli.py`
+    - `show` を人間向け summary 表示へ変更し、
+      depots / routes / fleet / charging / solver / costs / experiment を
+      一目で確認できるようにした。
+  - `README.md`
+    - builder で編集できる条件、experiment logging、CLI fallback の実態を追記。
+
+- **メモ**:
+  - この worktree では専用新規 page を別実装するのではなく、
+    既存 `ScenarioOverviewPage` を simulation builder 本体として拡張し、
+    `simulation-builder` route alias を追加する方針で整えた。
+  - full test / build はこのターンでは実施していない。ユーザー指示に合わせ、
+    実装整合と説明資料の整備を優先した。
+
+### [DEV-2026-03-14] frontend fallback 用 simulation profile CLI を追加
+
+- **問題**:
+  - main frontend が起動できない場合、営業所・路線・車両・料金・solver 条件を
+    安全に差し替える手段が scenario JSON 直編集しか無かった。
+  - 直編集対象が `dispatch_scope` / `scenario_overlay` / `simulation_config` に分散しており、
+    手作業では壊しやすかった。
+  - builder 内の charger 生成で `charger_power_kw=0` 分岐時に
+    未定義 `template` を参照する latent bug があった。
+
+- **対応**:
+  - `bff/services/simulation_builder.py`
+    - builder apply ロジックを router から切り出し、CLI からも共通利用可能にした。
+    - `random_seed`, `alns_iterations`, `experiment_method`, `experiment_notes`
+      を simulation profile から反映可能にした。
+    - charger 生成の未定義参照 bug を解消した。
+  - `scripts/simulation_profile_cli.py`
+    - `export`, `show`, `apply` を追加。
+    - export JSON に `_meta.depots`, `_meta.routes_by_depot`,
+      `_meta.vehicle_templates` を埋め、frontend 不在でも選択可能にした。
+  - `README.md`
+    - fallback CLI の使い方を追記。
+
+- **最小確認**:
+  - `python -m py_compile ...` で関連 Python 変更の構文確認を実施。
+  - `python -m scripts.simulation_profile_cli --help` を確認。
+  - smoke として新規 scenario で `export -> JSON 編集 -> apply` を実行し、
+    `experiment_method`, `experiment_notes`, `dispatch_scope` が保存されることを確認。
+
 ### [DEV-2026-03-14] Meguro 3-route shard runtime / Gurobi 実走確認と cost parameter surfaced
 
 - **実施条件**:

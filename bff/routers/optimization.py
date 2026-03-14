@@ -35,6 +35,7 @@ from bff.routers.graph import (
     _build_graph_payload,
     _build_trips_payload,
 )
+from bff.services.experiment_reports import log_optimization_experiment
 from bff.services.run_preparation import get_or_build_run_preparation
 from bff.store import job_store, scenario_store as store
 from src.dispatch.models import hhmm_to_min
@@ -507,11 +508,13 @@ def _run_optimization(
             for vehicle in data.vehicles
         }
         vehicle_count_by_type: Dict[str, int] = {}
+        trip_count_by_type: Dict[str, int] = {}
         for vehicle_id, task_ids in (result_payload.get("assignment") or {}).items():
             if not task_ids:
                 continue
             vehicle_type = str(vehicle_type_by_id.get(vehicle_id) or "UNKNOWN")
             vehicle_count_by_type[vehicle_type] = vehicle_count_by_type.get(vehicle_type, 0) + 1
+            trip_count_by_type[vehicle_type] = trip_count_by_type.get(vehicle_type, 0) + len(task_ids)
         objective_mode = str(
             (
                 ((scenario.get("scenario_overlay") or {}).get("solver_config") or {}).get("objective_mode")
@@ -542,6 +545,7 @@ def _run_optimization(
                     if task_ids
                 ),
                 "vehicle_count_by_type": vehicle_count_by_type,
+                "trip_count_by_type": trip_count_by_type,
                 "trip_count_served": sum(
                     len(task_ids)
                     for task_ids in (result_payload.get("assignment") or {}).values()
@@ -591,6 +595,22 @@ def _run_optimization(
             "output_dir": output_dir,
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }
+        try:
+            experiment_report = log_optimization_experiment(
+                scenario_id=scenario_id,
+                scenario_doc=scenario,
+                optimization_result=optimization_result,
+            )
+            optimization_result["experiment_report"] = experiment_report
+            optimization_audit["experiment_report"] = {
+                "experiment_id": experiment_report.get("experiment_id"),
+                "json_path": experiment_report.get("json_path"),
+                "md_path": experiment_report.get("md_path"),
+            }
+        except Exception as exc:
+            warnings = list(optimization_audit.get("warnings") or [])
+            warnings.append(f"Experiment report generation failed: {exc}")
+            optimization_audit["warnings"] = warnings
         optimization_result["audit"] = optimization_audit
 
         store.set_field(scenario_id, "optimization_result", optimization_result)
