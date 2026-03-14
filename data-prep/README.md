@@ -1,20 +1,60 @@
 # data-prep
 
-Producer app for Tokyu Bus research datasets.
+This is the producer application. It is independent of the main research app.
 
-- Fetches and refreshes public-data snapshots.
-- Runs normalization / GTFS-style preprocessing.
-- Publishes seed metadata under `data/seed/`.
-- Publishes built research datasets under `data/built/`.
+## What lives here
 
-Current entrypoints:
+- `lib/tokyubus_gtfs/` - GTFS parsing and canonicalization (offline only)
+- `lib/catalog_builder/` - ODPT/GTFS fetch and catalog build helpers (offline only)
+- `pipeline/` - ETL scripts: fetch -> normalize -> export built artifacts
+- `api/main.py` - optional FastAPI explorer for build validation
+
+## What this app produces
+
+Output goes to `data/built/<dataset_id>/`:
+
+- `manifest.json`
+- `routes.parquet`
+- `trips.parquet`
+- `timetables.parquet`
+
+## What this app does NOT do
+
+- It does not serve the research frontend
+- It does not run the optimizer
+- It does not share a live database with the main app
+- It does not need to be running when the main app runs
+
+## Quick build
 
 ```bash
-# catalog / explorer API
-uvicorn main:app --app-dir data-prep/api --reload --port 8100
+# Full build (fetch + build all + write manifest + validate)
+python -m data_prep.pipeline.build_all --dataset tokyu_core
 
-# dataset build / refresh CLI
-python catalog_update_app.py --help
+# Skip ODPT fetch (use existing raw cache)
+python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch
+
+# Build full dataset
+python -m data_prep.pipeline.build_all --dataset tokyu_full --no-fetch
 ```
 
-The main research app must consume files from `data/` only and does not call this API at runtime.
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success - manifest written and contract validated |
+| 1 | Stage failure - build aborted, manifest NOT written |
+| 2 | Artifacts written but contract validation failed |
+
+## Build guarantees
+
+- Manifest is written only after all three Parquet files succeed
+- Any stale manifest from a previous run is removed at build start
+- The runtime contract check is run immediately after manifest write
+- A build that exits non-zero will not produce a manifest that tricks the runtime into `built_ready=True`
+
+## If a build fails partway
+
+- Exit code `1`: inspect the failing stage log, fix the producer-side issue, then rerun `python -m data_prep.pipeline.build_all --dataset <dataset_id>`
+- Exit code `2`: artifacts were written but the runtime contract check failed; inspect `data/built/<dataset_id>/manifest.json`, rebuild, and confirm the runtime accepts the dataset
+- If a previous manifest existed, it is removed at build start, so the runtime will stay in `built_ready=false` until a successful build writes a new manifest

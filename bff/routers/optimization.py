@@ -35,6 +35,7 @@ from bff.routers.graph import (
     _build_graph_payload,
     _build_trips_payload,
 )
+from bff.services.run_preparation import get_or_build_run_preparation
 from bff.store import job_store, scenario_store as store
 from src.dispatch.models import hhmm_to_min
 from src.optimization import (
@@ -797,6 +798,21 @@ def run_optimization(
     _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    scenario = store.get_scenario(scenario_id)
+    prep = get_or_build_run_preparation(
+        scenario=scenario,
+        built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
+        scenarios_dir=Path(__file__).resolve().parents[2] / "app" / "scenarios",
+        routes_df=_app_state.get("routes_df"),
+    )
+    if not prep.is_valid:
+        raise HTTPException(
+            status_code=500,
+            detail=make_error(
+                AppErrorCode.SCENARIO_INCOMPLETE,
+                f"Run preparation failed: {prep.error}",
+            ),
+        )
     request = body or RunOptimizationBody()
     try:
         scope = _resolve_dispatch_scope(
@@ -866,6 +882,21 @@ def reoptimize(
     _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    scenario = store.get_scenario(scenario_id)
+    prep = get_or_build_run_preparation(
+        scenario=scenario,
+        built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
+        scenarios_dir=Path(__file__).resolve().parents[2] / "app" / "scenarios",
+        routes_df=_app_state.get("routes_df"),
+    )
+    if not prep.is_valid:
+        raise HTTPException(
+            status_code=500,
+            detail=make_error(
+                AppErrorCode.SCENARIO_INCOMPLETE,
+                f"Run preparation failed: {prep.error}",
+            ),
+        )
     scope = _resolve_dispatch_scope(
         scenario_id,
         service_id=body.service_id,

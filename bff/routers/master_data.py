@@ -9,10 +9,7 @@ Routes:
   GET/POST        /scenarios/{id}/vehicles          (optional ?depotId=)
   GET/PUT/DELETE  /scenarios/{id}/vehicles/{vehicle_id}
   GET             /scenarios/{id}/stops
-  POST            /scenarios/{id}/stops/import-odpt
-  POST            /scenarios/{id}/stops/import-gtfs
   GET/POST        /scenarios/{id}/routes
-  POST            /scenarios/{id}/routes/import-gtfs
   GET/PUT/DELETE  /scenarios/{id}/routes/{route_id}
   GET/PUT         /scenarios/{id}/depot-route-permissions
   GET/PUT         /scenarios/{id}/vehicle-route-permissions
@@ -26,17 +23,6 @@ from typing import Any, Dict, List, Optional, Set
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from bff.services import transit_catalog
-from bff.services.gtfs_import import (
-    DEFAULT_GTFS_FEED_PATH,
-    summarize_gtfs_routes_import,
-    summarize_gtfs_stop_import,
-)
-from bff.services.odpt_routes import (
-    DEFAULT_OPERATOR,
-    summarize_routes_import,
-)
-from bff.services.odpt_stops import summarize_stop_import
 from bff.services.route_family import (
     build_route_family_detail,
     build_route_family_summary,
@@ -70,39 +56,43 @@ def _check_scenario(scenario_id: str) -> None:
         raise
 
 
-def _load_odpt_bundle(
-    *,
-    operator: str,
-    dump: bool,
-    force_refresh: bool,
-    ttl_sec: int,
-) -> Dict[str, Any]:
-    if force_refresh:
-        return transit_catalog.refresh_odpt_snapshot(
-            operator=operator,
-            dump=dump,
-            force_refresh=True,
-            ttl_sec=ttl_sec,
-        )
-    bundle = transit_catalog.load_existing_odpt_snapshot(operator=operator)
-    if bundle is not None:
-        return bundle
-    raise RuntimeError(
-        "No saved ODPT snapshot is available. Run `python3 catalog_update_app.py refresh odpt` "
-        "or retry with forceRefresh=true."
-    )
+def _depot_summary(scenario_id: str, depot: Dict[str, Any]) -> Dict[str, Any]:
+    route_count = len(store.list_routes(scenario_id, depot_id=str(depot.get("id") or "")))
+    return {
+        "id": depot.get("id"),
+        "name": depot.get("name"),
+        "location": depot.get("location"),
+        "lat": depot.get("lat"),
+        "lon": depot.get("lon"),
+        "routeCount": route_count,
+    }
 
 
-def _load_gtfs_bundle(*, feed_path: str, force_refresh: bool) -> Dict[str, Any]:
-    if force_refresh:
-        return transit_catalog.refresh_gtfs_snapshot(feed_path=feed_path)
-    bundle = transit_catalog.load_existing_gtfs_snapshot(feed_path=feed_path)
-    if bundle is not None:
-        return bundle
-    raise RuntimeError(
-        "No saved GTFS snapshot is available. Run `python3 catalog_update_app.py refresh gtfs` "
-        "or retry with forceRefresh=true."
+def _route_summary(route: Dict[str, Any], timetable_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    route_id = str(route.get("id") or "")
+    relevant_rows = [
+        row for row in timetable_rows if str(row.get("route_id") or row.get("routeId") or "") == route_id
+    ]
+    service_types = sorted(
+        {
+            canonical_service_id(row.get("service_id") or row.get("serviceId"))
+            for row in relevant_rows
+        }
     )
+    return {
+        "id": route.get("id"),
+        "name": route.get("name"),
+        "routeCode": route.get("routeCode"),
+        "routeLabel": route.get("routeLabel"),
+        "depotId": route.get("depotId"),
+        "tripCount": route.get("tripCount") or len(relevant_rows),
+        "serviceTypes": service_types,
+        "routeFamilyId": route.get("routeFamilyId"),
+        "routeFamilyCode": route.get("routeFamilyCode"),
+        "routeFamilyLabel": route.get("routeFamilyLabel"),
+        "routeVariantType": route.get("routeVariantType"),
+        "canonicalDirection": route.get("canonicalDirection"),
+    }
 
 
 # ── Depot Pydantic models ──────────────────────────────────────
@@ -287,7 +277,7 @@ def auto_assign_depots_endpoint(
 @router.get("/scenarios/{scenario_id}/depots")
 def list_depots(scenario_id: str) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    items = store.list_depots(scenario_id)
+    items = [_depot_summary(scenario_id, depot) for depot in store.list_depots(scenario_id)]
     return {"items": items, "total": len(items)}
 
 
@@ -405,18 +395,6 @@ class UpdateVehicleTemplateBody(BaseModel):
 
 
 # ── Stop Pydantic models ────────────────────────────────────────
-
-
-class ImportOdptStopsBody(BaseModel):
-    operator: str = DEFAULT_OPERATOR
-    dump: bool = True
-    forceRefresh: bool = False
-    ttlSec: int = 3600
-
-
-class ImportGtfsStopsBody(BaseModel):
-    feedPath: str = DEFAULT_GTFS_FEED_PATH
-    forceRefresh: bool = False
 
 
 # ── Vehicle endpoints ──────────────────────────────────────────
@@ -599,18 +577,6 @@ class UpsertRouteDepotAssignmentBody(BaseModel):
     sourceRefs: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class ImportOdptRoutesBody(BaseModel):
-    operator: str = DEFAULT_OPERATOR
-    dump: bool = True
-    forceRefresh: bool = False
-    ttlSec: int = 3600
-
-
-class ImportGtfsRoutesBody(BaseModel):
-    feedPath: str = DEFAULT_GTFS_FEED_PATH
-    forceRefresh: bool = False
-
-
 def _build_explorer_overview(
     scenario_id: str, operator: Optional[str]
 ) -> Dict[str, Any]:
@@ -672,82 +638,6 @@ def list_stops(scenario_id: str) -> Dict[str, Any]:
     }
 
 
-@router.post("/scenarios/{scenario_id}/stops/import-odpt")
-def import_odpt_stops(scenario_id: str, body: ImportOdptStopsBody) -> Dict[str, Any]:
-    _check_scenario(scenario_id)
-    try:
-        bundle = _load_odpt_bundle(
-            operator=body.operator,
-            dump=body.dump,
-            force_refresh=body.forceRefresh,
-            ttl_sec=body.ttlSec,
-        )
-        imported_stops = list(bundle.get("stops") or [])
-        meta = bundle.get("meta") or {}
-        quality = summarize_stop_import(imported_stops, {"meta": meta})
-        import_meta = {
-            "operator": body.operator,
-            "dump": meta.get("effectiveDump", meta.get("dump", body.dump)),
-            "requestedDump": body.dump,
-            "source": "odpt",
-            "resourceType": "BusstopPole",
-            "generatedAt": meta.get("generatedAt"),
-            "warnings": meta.get("warnings", []),
-            "cache": meta.get("cache", {}),
-            "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
-            "snapshotMode": meta.get("snapshotMode"),
-            "quality": quality,
-        }
-        all_stops = store.replace_stops_from_source(
-            scenario_id, "odpt", imported_stops, import_meta=import_meta
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-    return {
-        "items": imported_stops,
-        "total": len(imported_stops),
-        "allStopsTotal": len(all_stops),
-        "meta": import_meta,
-    }
-
-
-@router.post("/scenarios/{scenario_id}/stops/import-gtfs")
-def import_gtfs_stops(scenario_id: str, body: ImportGtfsStopsBody) -> Dict[str, Any]:
-    _check_scenario(scenario_id)
-    try:
-        bundle = _load_gtfs_bundle(
-            feed_path=body.feedPath,
-            force_refresh=body.forceRefresh,
-        )
-        imported_stops = list(bundle.get("stops") or [])
-        meta = bundle.get("meta") or {}
-        quality = summarize_gtfs_stop_import(imported_stops, {"meta": meta})
-        import_meta = {
-            "source": "gtfs",
-            "feedPath": meta.get("feedPath") or body.feedPath,
-            "agencyName": meta.get("agencyName"),
-            "resourceType": "GTFSStop",
-            "generatedAt": meta.get("generatedAt"),
-            "warnings": meta.get("warnings", []),
-            "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
-            "snapshotMode": meta.get("snapshotMode"),
-            "quality": quality,
-        }
-        all_stops = store.replace_stops_from_source(
-            scenario_id, "gtfs", imported_stops, import_meta=import_meta
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    return {
-        "items": imported_stops,
-        "total": len(imported_stops),
-        "allStopsTotal": len(all_stops),
-        "meta": import_meta,
-    }
-
-
 # ── Route endpoints ────────────────────────────────────────────
 
 
@@ -761,6 +651,7 @@ def list_routes(
     _check_scenario(scenario_id)
     items = store.list_routes(scenario_id, depot_id=depot_id, operator=operator)
     items = _enrich_routes_for_display(scenario_id, items)
+    timetable_rows = list(store.get_field(scenario_id, "timetable_rows") or [])
     if group_by_family:
         items = sorted(
             items,
@@ -777,9 +668,11 @@ def list_routes(
             ),
         )
 
+    summarized_items = [_route_summary(route, timetable_rows) for route in items]
+
     return {
-        "items": items,
-        "total": len(items),
+        "items": summarized_items,
+        "total": len(summarized_items),
         "meta": {
             "imports": store.get_route_import_meta(scenario_id),
             "groupedByFamily": group_by_family,
@@ -792,8 +685,7 @@ def _route_match_keys(route: Dict[str, Any]) -> Set[str]:
         str(value)
         for value in (
             route.get("id"),
-            route.get("odptPatternId"),
-            route.get("odptBusrouteId"),
+            route.get("routeCode"),
         )
         if value
     }
@@ -1211,81 +1103,6 @@ def delete_route(scenario_id: str, route_id: str) -> Response:
     except KeyError:
         raise _not_found("Route", route_id)
     return Response(status_code=204)
-
-
-@router.post("/scenarios/{scenario_id}/routes/import-odpt")
-def import_odpt_routes(scenario_id: str, body: ImportOdptRoutesBody) -> Dict[str, Any]:
-    _check_scenario(scenario_id)
-    try:
-        bundle = _load_odpt_bundle(
-            operator=body.operator,
-            dump=body.dump,
-            force_refresh=body.forceRefresh,
-            ttl_sec=body.ttlSec,
-        )
-        imported_routes = list(bundle.get("routes") or [])
-        meta = bundle.get("meta") or {}
-        quality = summarize_routes_import(imported_routes, {"meta": meta})
-        import_meta = {
-            "operator": body.operator,
-            "dump": meta.get("effectiveDump", meta.get("dump", body.dump)),
-            "requestedDump": body.dump,
-            "source": "odpt",
-            "generatedAt": meta.get("generatedAt"),
-            "warnings": meta.get("warnings", []),
-            "cache": meta.get("cache", {}),
-            "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
-            "snapshotMode": meta.get("snapshotMode"),
-            "quality": quality,
-        }
-        all_routes = store.replace_routes_from_source(
-            scenario_id, "odpt", imported_routes, import_meta=import_meta
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-    return {
-        "items": imported_routes,
-        "total": len(imported_routes),
-        "allRoutesTotal": len(all_routes),
-        "meta": import_meta,
-    }
-
-
-@router.post("/scenarios/{scenario_id}/routes/import-gtfs")
-def import_gtfs_routes(scenario_id: str, body: ImportGtfsRoutesBody) -> Dict[str, Any]:
-    _check_scenario(scenario_id)
-    try:
-        bundle = _load_gtfs_bundle(
-            feed_path=body.feedPath,
-            force_refresh=body.forceRefresh,
-        )
-        imported_routes = list(bundle.get("routes") or [])
-        meta = bundle.get("meta") or {}
-        quality = summarize_gtfs_routes_import(imported_routes, {"meta": meta})
-        import_meta = {
-            "source": "gtfs",
-            "feedPath": meta.get("feedPath") or body.feedPath,
-            "agencyName": meta.get("agencyName"),
-            "resourceType": "GTFSRoutePattern",
-            "generatedAt": meta.get("generatedAt"),
-            "warnings": meta.get("warnings", []),
-            "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
-            "snapshotMode": meta.get("snapshotMode"),
-            "quality": quality,
-        }
-        all_routes = store.replace_routes_from_source(
-            scenario_id, "gtfs", imported_routes, import_meta=import_meta
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    return {
-        "items": imported_routes,
-        "total": len(imported_routes),
-        "allRoutesTotal": len(all_routes),
-        "meta": import_meta,
-    }
 
 
 @router.get("/scenarios/{scenario_id}/explorer/overview")

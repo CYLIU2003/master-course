@@ -95,6 +95,10 @@ export interface ResearchDatasetStatus {
   warning?: string | null;
   missingArtifacts?: string[];
   integrityError?: string | null;
+  producerVersion?: string | null;
+  schemaVersion?: string | null;
+  runtimeVersion?: string | null;
+  contractErrorCode?: string | null;
   manifest?: Record<string, unknown> | null;
   paths?: Record<string, string>;
 }

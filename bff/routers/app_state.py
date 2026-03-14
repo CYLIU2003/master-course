@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from bff.errors import AppErrorCode, make_error
+from bff.services import app_cache
 from bff.services import research_catalog
 
 router = APIRouter(tags=["app-state"])
@@ -42,6 +43,10 @@ def get_app_data_status(
         "built_ready": bool(item.get("builtReady")),
         "missing_artifacts": list(item.get("missingArtifacts") or []),
         "integrity_error": item.get("integrityError"),
+        "producer_version": item.get("producerVersion"),
+        "schema_version": item.get("schemaVersion"),
+        "runtime_version": item.get("runtimeVersion"),
+        "contract_error_code": item.get("contractErrorCode"),
     }
 
 
@@ -53,7 +58,7 @@ def get_app_state(
     ),
 ) -> dict:
     try:
-        item = research_catalog.get_dataset(dataset_id)
+        item = app_cache.get_app_state(dataset_id)
     except KeyError:
         raise HTTPException(
             status_code=404,
@@ -64,10 +69,14 @@ def get_app_state(
             ),
         )
     return {
-        "dataset_id": item.get("datasetId") or dataset_id,
-        "dataset_version": item.get("datasetVersion"),
-        "seed_ready": bool(item.get("seedReady")),
-        "built_ready": bool(item.get("builtReady")),
-        "missing_artifacts": list(item.get("missingArtifacts") or []),
-        "integrity_error": item.get("integrityError"),
+        "dataset_id": item.get("dataset_id") or dataset_id,
+        "dataset_version": item.get("dataset_version"),
+        "producer_version": item.get("producer_version"),
+        "schema_version": item.get("schema_version"),
+        "runtime_version": item.get("runtime_version"),
+        "seed_ready": bool(item.get("seed_ready")),
+        "built_ready": bool(item.get("built_ready")),
+        "missing_artifacts": list(item.get("missing_artifacts") or []),
+        "integrity_error": item.get("integrity_error"),
+        "contract_error_code": item.get("contract_error_code"),
     }

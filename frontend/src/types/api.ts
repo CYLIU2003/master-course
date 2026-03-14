@@ -80,15 +80,23 @@ export interface AppDataStatusResponse {
   built_ready?: boolean;
   missing_artifacts?: string[];
   integrity_error?: string | null;
+  producer_version?: string | null;
+  schema_version?: string | null;
+  runtime_version?: string | null;
+  contract_error_code?: string | null;
 }
 
 export interface AppStateResponse {
   dataset_id: string;
   dataset_version?: string | null;
+  producer_version?: string | null;
+  schema_version?: string | null;
+  runtime_version?: string | null;
   seed_ready: boolean;
   built_ready: boolean;
   missing_artifacts: string[];
   integrity_error?: string | null;
+  contract_error_code?: string | null;
 }
 
 // ── Depots ────────────────────────────────────────────────────

@@ -50,8 +50,8 @@ class RawRoute:
     distance_km: Optional[float] = None
     duration_min: Optional[int] = None
     trip_count: Optional[int] = None
-    odpt_pattern_id: Optional[str] = None
-    odpt_busroute_id: Optional[str] = None
+    external_pattern_id: Optional[str] = None
+    external_route_id: Optional[str] = None
     source: str = "unknown"
 
     @classmethod
@@ -67,8 +67,8 @@ class RawRoute:
             distance_km=d.get("distanceKm"),
             duration_min=d.get("durationMin"),
             trip_count=d.get("tripCount"),
-            odpt_pattern_id=d.get("odptPatternId"),
-            odpt_busroute_id=d.get("odptBusrouteId"),
+            external_pattern_id=d.get("patternId"),
+            external_route_id=d.get("routeExternalId"),
             source=d.get("source") or "unknown",
         )
 

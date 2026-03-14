@@ -28,10 +28,6 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - optional dependency (pandas)
     load_dispatch_context_from_csv = None
 
-try:
-    from .odpt_adapter import supplement_context_from_odpt
-except ModuleNotFoundError:  # pragma: no cover - optional dependency stack
-    supplement_context_from_odpt = None
 from .problemdata_adapter import (
     DispatchTravelBuildReport,
     build_travel_connections_via_dispatch,
@@ -57,7 +53,6 @@ __all__ = [
     "DispatchGenerator",
     "DutyValidator",
     "load_dispatch_context_from_csv",
-    "supplement_context_from_odpt",
     "DispatchTravelBuildReport",
     "build_travel_connections_via_dispatch",
     # pipeline

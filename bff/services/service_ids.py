@@ -85,7 +85,7 @@ def build_service_calendar_entry(
     service_id: Any,
     *,
     calendar_raw: Optional[str] = None,
-    source: str = "odpt",
+    source: str = "seed",
 ) -> Dict[str, Any]:
     canonical = canonical_service_id(service_id)
     definition = _SERVICE_DEFINITIONS.get(canonical)

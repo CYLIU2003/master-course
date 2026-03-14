@@ -70,10 +70,10 @@ FORBIDDEN_IMPORT_TOKENS = {
 def test_no_legacy_etl_imports(directory: str):
     imports = collect_imports(directory)
     violations = [m for m in imports if any(t in m for t in FORBIDDEN_IMPORT_TOKENS)]
-    if violations:
-        pytest.xfail(
-            f"Forbidden ETL imports found in {directory}/: {violations[:20]}"
-        )
+    assert not violations, (
+        f"Forbidden ETL imports found in {directory}/: {violations}\n"
+        "ETL/ODPT/GTFS code must live only in data-prep/."
+    )
 
 
 def test_bff_routers_do_not_access_raw_odpt_data():
@@ -92,10 +92,10 @@ def test_bff_routers_do_not_access_raw_odpt_data():
         for pattern in raw_access_patterns:
             if pattern in text:
                 violations.append(f"{file}: contains '{pattern}'")
-    if violations:
-        pytest.xfail(
-            "BFF routers still contain runtime fetch patterns: " + ", ".join(violations[:10])
-        )
+    assert not violations, (
+        "BFF routers must not access raw feed data or make HTTP requests at runtime.\n"
+        + "\n".join(violations)
+    )
 
 
 def test_frontend_does_not_bypass_run_readiness():
@@ -187,8 +187,10 @@ def test_bff_routers_contain_no_legacy_runtime_tokens():
                     continue
                 if token in stripped:
                     violations.append(f"{file}:{i}: '{token}'")
-    if violations:
-        pytest.xfail("bff/routers legacy tokens still present")
+    assert not violations, (
+        "bff/routers must not reference legacy runtime tokens.\n"
+        + "\n".join(violations)
+    )
 
 
 HTTP_CLIENT_TOKENS = [
@@ -276,3 +278,254 @@ def test_app_state_machine_has_required_states():
     text = candidates[0].read_text(encoding="utf-8")
     for state in REQUIRED_READINESS_STATES:
         assert state in text
+
+
+DATA_PREP_NAMESPACES = [
+    "data_prep",
+    "odpt_client",
+    "gtfs_import",
+    "catalog_import",
+    "tokyubus_gtfs",
+    "build_pipeline",
+    "fetch_odpt",
+    "canonical_builder",
+]
+
+
+@pytest.mark.parametrize("active_dir", ["bff", "src"])
+def test_runtime_does_not_import_from_data_prep_namespaces(active_dir: str):
+    if not pathlib.Path(active_dir).exists():
+        pytest.skip(f"{active_dir} not present")
+
+    violations = []
+    for file in pathlib.Path(active_dir).rglob("*.py"):
+        try:
+            tree = ast.parse(file.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            modules = []
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                modules = [node.module]
+            for mod in modules:
+                if any(ns in mod for ns in DATA_PREP_NAMESPACES):
+                    violations.append(
+                        f"{file}:{getattr(node, 'lineno', 0)}: imports '{mod}'"
+                    )
+
+    assert not violations, (
+        f"Runtime code in {active_dir}/ must not import from data-prep namespaces.\n"
+        "Move build logic to data-prep/lib or replace with artifact-reader.\n"
+        + "\n".join(f"  {item}" for item in violations)
+    )
+
+
+RUNTIME_BUILD_PATTERNS = [
+    "fetch_odpt",
+    "reconstruct_canonical",
+    "rebuild_artifact",
+    "import_gtfs",
+    "parse_odpt",
+]
+
+
+def test_bff_does_not_reconstruct_artifacts_at_runtime():
+    violations = []
+    for file in pathlib.Path("bff").rglob("*.py"):
+        text = file.read_text(encoding="utf-8")
+        for pattern in RUNTIME_BUILD_PATTERNS:
+            if pattern in text:
+                for line_no, line in enumerate(text.splitlines(), 1):
+                    if pattern in line and not line.strip().startswith("#"):
+                        violations.append(f"{file}:{line_no}: '{pattern}'")
+    assert not violations, (
+        "BFF must not reconstruct artifacts at runtime.\n"
+        "Move build logic to data-prep/pipeline/.\n"
+        + "\n".join(f"  {item}" for item in violations)
+    )
+
+
+def test_artifact_contract_module_importable():
+    from src.artifact_contract import (
+        ArtifactContractError,
+        ContractErrorCode,
+        RUNTIME_VERSION,
+        check_artifact_contract,
+    )
+
+    assert callable(check_artifact_contract)
+    assert issubclass(ArtifactContractError, Exception)
+    assert isinstance(RUNTIME_VERSION, str)
+    assert str(ContractErrorCode.MANIFEST_MISSING) == "ARTIFACT_MANIFEST_MISSING"
+
+
+def test_app_cache_references_artifact_contract():
+    source = pathlib.Path("bff/services/app_cache.py").read_text(encoding="utf-8")
+    assert "check_artifact_contract" in source or "artifact_contract" in source
+
+
+def test_bff_errors_includes_contract_codes():
+    source = pathlib.Path("bff/errors.py").read_text(encoding="utf-8")
+    required = [
+        "ARTIFACT_MANIFEST_MISSING",
+        "ARTIFACT_MANIFEST_INVALID",
+        "ARTIFACT_MISSING",
+        "ARTIFACT_HASH_MISMATCH",
+        "RUNTIME_VERSION_TOO_OLD",
+    ]
+    for code in required:
+        assert code in source, f"bff/errors.py must define '{code}'"
+
+
+def test_runtime_refuses_manifest_less_built():
+    import tempfile
+
+    import pandas as pd
+
+    from src.artifact_contract import (
+        ArtifactContractError,
+        ContractErrorCode,
+        check_artifact_contract,
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        built_dir = pathlib.Path(tmp)
+        pd.DataFrame(
+            [{"id": "x", "routeCode": "x", "routeLabel": "x", "name": "x"}]
+        ).to_parquet(built_dir / "routes.parquet")
+        pd.DataFrame(
+            [
+                {
+                    "trip_id": "x",
+                    "route_id": "x",
+                    "service_id": "weekday",
+                    "departure": "00:00:00",
+                    "arrival": "00:00:00",
+                }
+            ]
+        ).to_parquet(built_dir / "trips.parquet")
+        pd.DataFrame(
+            [
+                {
+                    "trip_id": "x",
+                    "route_id": "x",
+                    "service_id": "weekday",
+                    "origin": "x",
+                    "destination": "y",
+                    "departure": "00:00:00",
+                    "arrival": "00:00:00",
+                }
+            ]
+        ).to_parquet(built_dir / "timetables.parquet")
+
+        with pytest.raises(ArtifactContractError) as exc:
+            check_artifact_contract(built_dir, verify_hashes=False)
+        assert exc.value.code == ContractErrorCode.MANIFEST_MISSING
+
+
+def test_build_all_pipeline_exists():
+    path = pathlib.Path("data-prep/pipeline/build_all.py")
+    assert path.exists()
+    text = path.read_text(encoding="utf-8")
+    assert "manifest_writer" in text or "write_manifest" in text
+    assert "remove_stale_manifest" in text or "manifest.json" in text
+    assert "return 1" in text or "sys.exit(1)" in text
+
+
+def test_producer_version_module_exists():
+    path = pathlib.Path("data-prep/lib/producer_version.py")
+    assert path.exists()
+    text = path.read_text(encoding="utf-8")
+    assert "get_producer_version" in text
+    assert "get_min_runtime_version" in text
+
+
+def test_app_cache_is_testable():
+    source = pathlib.Path("bff/services/app_cache.py").read_text(encoding="utf-8")
+    assert "BUILT_ROOT" in source
+    assert "reload_state" in source
+
+
+def test_timing_middleware_is_registered():
+    source = pathlib.Path("bff/main.py").read_text(encoding="utf-8")
+    assert "TimingMiddleware" in source
+    assert "app.add_middleware(TimingMiddleware)" in source
+
+
+def test_metrics_service_exists():
+    path = pathlib.Path("bff/services/metrics.py")
+    assert path.exists()
+    text = path.read_text(encoding="utf-8")
+    assert "def timed(" in text
+
+
+def test_contract_judgment_is_only_in_artifact_contract():
+    targets = [
+        pathlib.Path("src/research_dataset_loader.py"),
+        pathlib.Path("bff/services/app_cache.py"),
+        pathlib.Path("bff/routers/app_state.py"),
+    ]
+    forbidden_tokens = ["sha256", "hashlib", "ContractErrorCode"]
+    violations = []
+    for file in targets:
+        text = file.read_text(encoding="utf-8")
+        for token in forbidden_tokens:
+            if token in text:
+                violations.append(f"{file}: '{token}'")
+    assert not violations, (
+        "Duplicate contract judgment found outside src/artifact_contract.py: "
+        + ", ".join(violations)
+    )
+
+
+def test_run_preparation_service_exists():
+    path = pathlib.Path("bff/services/run_preparation.py")
+    assert path.exists(), "bff/services/run_preparation.py must exist"
+    source = path.read_text(encoding="utf-8")
+    assert "get_or_build_run_preparation" in source
+    assert "_prep_cache" in source
+    assert "invalidate_scenario" in source
+
+
+def test_runtime_scope_module_exists():
+    path = pathlib.Path("src/runtime_scope.py")
+    assert path.exists(), "src/runtime_scope.py must exist"
+    source = path.read_text(encoding="utf-8")
+    assert "resolve_scope" in source
+    assert "load_scoped_trips" in source
+    assert "load_scoped_timetables" in source
+
+
+SUMMARY_FORBIDDEN_FIELDS = [
+    "stop_times",
+    "all_trips",
+    "stopSequence",
+]
+
+
+def test_master_data_route_list_is_summary_oriented():
+    source = pathlib.Path("bff/routers/master_data.py").read_text(encoding="utf-8")
+    route_list_block = source.split('@router.get("/scenarios/{scenario_id}/routes")', 1)[1].split(
+        "def _route_match_keys",
+        1,
+    )[0]
+    for field in SUMMARY_FORBIDDEN_FIELDS:
+        assert field not in route_list_block, (
+            f"bff/routers/master_data.py must not return '{field}' in summary endpoints"
+        )
+
+
+def test_heavy_list_endpoints_have_pagination():
+    for router_file in ["bff/routers/scenarios.py", "bff/routers/graph.py"]:
+        source = pathlib.Path(router_file).read_text(encoding="utf-8")
+        has_pagination = "limit" in source or "offset" in source or "cursor" in source
+        assert has_pagination, f"{router_file} must implement pagination for heavy list endpoints"
+
+
+def test_scenario_list_endpoint_does_not_embed_full_overlay():
+    source = pathlib.Path("bff/routers/scenarios.py").read_text(encoding="utf-8")
+    assert "scenarioOverlay" not in source.split("def get_scenario", 1)[0], (
+        "Scenario list/default endpoints must not serialize full ScenarioOverlay payloads"
+    )

@@ -14,8 +14,12 @@ export interface AppStateResult {
   builtReady: boolean;
   datasetId: string | null;
   datasetVersion: string | null;
+  producerVersion: string | null;
+  schemaVersion: string | null;
+  runtimeVersion: string | null;
   missingArtifacts: string[];
   integrityError: string | null;
+  contractErrorCode: string | null;
   isLoading: boolean;
 }
 
@@ -47,8 +51,12 @@ export function useAppState(): AppStateResult {
       builtReady: false,
       datasetId: null,
       datasetVersion: null,
+      producerVersion: null,
+      schemaVersion: null,
+      runtimeVersion: null,
       missingArtifacts: [],
       integrityError: null,
+      contractErrorCode: null,
       isLoading: true,
     };
   }
@@ -64,8 +72,12 @@ export function useAppState(): AppStateResult {
     builtReady: Boolean(data.built_ready),
     datasetId: data.dataset_id ?? null,
     datasetVersion: data.dataset_version ?? null,
+    producerVersion: data.producer_version ?? null,
+    schemaVersion: data.schema_version ?? null,
+    runtimeVersion: data.runtime_version ?? null,
     missingArtifacts: [...(data.missing_artifacts ?? [])],
     integrityError: (data.integrity_error ?? null) as string | null,
+    contractErrorCode: data.contract_error_code ?? null,
     isLoading: false,
   };
 }

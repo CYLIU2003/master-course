@@ -305,7 +305,7 @@ def test_replace_routes_from_source_prunes_stale_permissions(
     assert scenario_store.get_vehicle_route_permissions(scenario_id) == []
 
 
-def test_upsert_route_depot_assignment_accepts_odpt_alias_ids(temp_store_dir: Path):
+def test_upsert_route_depot_assignment_accepts_external_alias_ids(temp_store_dir: Path):
     meta = scenario_store.create_scenario("Route alias", "", "thesis_mode")
     scenario_id = meta["id"]
 
@@ -315,21 +315,21 @@ def test_upsert_route_depot_assignment_accepts_odpt_alias_ids(temp_store_dir: Pa
     )
     scenario_store.replace_routes_from_source(
         scenario_id,
-        "odpt",
+        "seed",
         [
             {
-                "id": "odpt-route-123",
+                "id": "seed-route-123",
                 "name": "A24 outbound",
-                "source": "odpt",
-                "odptPatternId": "odpt.BusroutePattern:TokyuBus.A24.out",
-                "odptBusrouteId": "odpt.Busroute:TokyuBus.A24",
+                "source": "seed",
+                "patternId": "route-pattern:A24.out",
+                "routeExternalId": "route:A24",
             }
         ],
     )
 
     item = scenario_store.upsert_route_depot_assignment(
         scenario_id,
-        "odpt.BusroutePattern:TokyuBus.A24.out",
+        "route-pattern:A24.out",
         {
             "depotId": depot["id"],
             "assignmentType": "manual_override",
@@ -337,7 +337,7 @@ def test_upsert_route_depot_assignment_accepts_odpt_alias_ids(temp_store_dir: Pa
         },
     )
 
-    assert item["routeId"] == "odpt-route-123"
+    assert item["routeId"] == "seed-route-123"
     assert item["depotId"] == depot["id"]
 
 
@@ -788,7 +788,7 @@ def test_route_depot_assignments_filter_routes_and_preserve_unresolved(
             "durationMin": 5,
             "color": "#111111",
             "enabled": True,
-            "source": "odpt",
+            "source": "seed",
             "tripCount": 4,
             "stopSequence": ["S1", "S2"],
         },
@@ -803,7 +803,7 @@ def test_route_depot_assignments_filter_routes_and_preserve_unresolved(
             "durationMin": 8,
             "color": "#222222",
             "enabled": True,
-            "source": "gtfs",
+            "source": "external",
             "tripCount": 6,
             "stopSequence": ["T1", "T2", "T3"],
         },
@@ -818,7 +818,7 @@ def test_route_depot_assignments_filter_routes_and_preserve_unresolved(
             "durationMin": 9,
             "color": "#333333",
             "enabled": True,
-            "source": "odpt",
+            "source": "seed",
         },
     )
 

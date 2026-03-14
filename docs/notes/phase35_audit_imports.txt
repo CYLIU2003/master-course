@@ -1,0 +1,261 @@
+bff/routers/catalog.py:9:from bff.services.gtfs_import import DEFAULT_GTFS_FEED_PATH
+bff/routers/catalog.py:10:from bff.services.odpt_routes import DEFAULT_OPERATOR
+bff/routers/catalog.py:16:from bff.services.service_ids import canonical_service_id
+bff/routers/master_data.py:30:from bff.services.gtfs_import import (
+bff/routers/master_data.py:35:from bff.services.odpt_routes import (
+bff/routers/master_data.py:39:from bff.services.odpt_stops import summarize_stop_import
+bff/routers/master_data.py:45:from bff.services.service_ids import canonical_service_id
+bff/routers/public_data.py:13:from bff.services.gtfs_import import DEFAULT_GTFS_FEED_PATH
+bff/routers/public_data.py:14:from bff.services.odpt_routes import DEFAULT_OPERATOR
+bff/routers/scenarios.py:40:from bff.services.gtfs_import import (
+bff/routers/scenarios.py:45:from bff.services.odpt_routes import DEFAULT_OPERATOR
+bff/routers/scenarios.py:46:from bff.services.odpt_stop_timetables import (
+bff/routers/scenarios.py:49:from bff.services.odpt_timetable import (
+bff/routers/scenarios.py:53:from bff.services.service_ids import canonical_service_id
+bff/routers/scenarios.py:57:from src.tokyubus_gtfs.constants import DEFAULT_TURNAROUND_SEC, ROUTE_FAMILY_MAP_PATH
+bff/services/gtfs_import.py:1:from __future__ import annotations
+bff/services/gtfs_import.py:3:import csv
+bff/services/gtfs_import.py:4:import hashlib
+bff/services/gtfs_import.py:5:import math
+bff/services/gtfs_import.py:6:from collections import defaultdict
+bff/services/gtfs_import.py:7:from datetime import datetime, timezone
+bff/services/gtfs_import.py:8:from functools import lru_cache
+bff/services/gtfs_import.py:9:from pathlib import Path
+bff/services/gtfs_import.py:10:from statistics import median
+bff/services/gtfs_import.py:11:from string import hexdigits
+bff/services/gtfs_import.py:12:from typing import Any, DefaultDict, Dict, Iterable, List, Optional, Tuple, cast
+bff/services/gtfs_import.py:14:from src.feed_identity import build_dataset_id, build_scoped_id, load_feed_metadata
+bff/services/odpt_fetch.py:10:from __future__ import annotations
+bff/services/odpt_fetch.py:12:import hashlib
+bff/services/odpt_fetch.py:13:import json
+bff/services/odpt_fetch.py:14:import logging
+bff/services/odpt_fetch.py:15:import os
+bff/services/odpt_fetch.py:16:import time
+bff/services/odpt_fetch.py:17:from datetime import datetime, timezone
+bff/services/odpt_fetch.py:18:from pathlib import Path
+bff/services/odpt_fetch.py:19:from typing import Any, Dict, Iterable, List, Optional
+bff/services/odpt_fetch.py:20:from urllib.parse import urlencode
+bff/services/odpt_fetch.py:22:import httpx
+bff/services/odpt_normalize.py:11:from __future__ import annotations
+bff/services/odpt_normalize.py:13:import hashlib
+bff/services/odpt_normalize.py:14:import json
+bff/services/odpt_normalize.py:15:import logging
+bff/services/odpt_normalize.py:16:import os
+bff/services/odpt_normalize.py:17:import re
+bff/services/odpt_normalize.py:18:import statistics
+bff/services/odpt_normalize.py:19:from datetime import datetime, timezone
+bff/services/odpt_normalize.py:20:from pathlib import Path
+bff/services/odpt_normalize.py:21:from typing import Any, Dict, List, Optional, Tuple
+bff/services/odpt_normalize.py:23:from bff.services.service_ids import build_service_calendar_entry, canonical_service_id
+bff/services/odpt_routes.py:1:from __future__ import annotations
+bff/services/odpt_routes.py:3:import hashlib
+bff/services/odpt_routes.py:4:import json
+bff/services/odpt_routes.py:5:import os
+bff/services/odpt_routes.py:6:import statistics
+bff/services/odpt_routes.py:7:import urllib.error
+bff/services/odpt_routes.py:8:import urllib.request
+bff/services/odpt_routes.py:9:from typing import Any, Dict, Iterable, List, Optional
+bff/services/odpt_stops.py:1:from __future__ import annotations
+bff/services/odpt_stops.py:3:from typing import Any, Dict, List
+bff/services/odpt_stop_timetables.py:1:from __future__ import annotations
+bff/services/odpt_stop_timetables.py:3:from typing import Any, Dict, List
+bff/services/odpt_stop_timetables.py:5:from bff.services.odpt_routes import _stop_label
+bff/services/odpt_stop_timetables.py:6:from bff.services.service_ids import canonical_service_id
+bff/services/odpt_timetable.py:1:from __future__ import annotations
+bff/services/odpt_timetable.py:3:from collections import defaultdict
+bff/services/odpt_timetable.py:4:from typing import Any, Dict, List, Tuple
+bff/services/odpt_timetable.py:6:from bff.services.odpt_routes import _route_id_from_pattern, _stop_label
+bff/services/odpt_timetable.py:7:from bff.services.service_ids import canonical_service_id
+bff/services/runtime_catalog.py:5:from src.gtfs_runtime import (
+bff/services/transit_catalog.py:13:from bff.services.gtfs_import import (
+bff/services/transit_catalog.py:21:from bff.services.odpt_routes import (
+bff/services/transit_catalog.py:28:from bff.services.odpt_fetch import (
+bff/services/transit_catalog.py:33:from bff.services.odpt_normalize import (
+bff/services/transit_catalog.py:37:from bff.services.odpt_stop_timetables import build_stop_timetables_from_normalized
+bff/services/transit_catalog.py:38:from bff.services.odpt_stops import build_stops_from_normalized
+bff/services/transit_catalog.py:39:from bff.services.odpt_timetable import (
+bff/services/transit_db.py:32:from bff.services.service_ids import canonical_service_id
+bff/store/scenario_store.py:66:from bff.services.service_ids import canonical_service_id
+bff/tests/test_transit_catalog.py:11:from bff.services.odpt_routes import DEFAULT_OPERATOR
+src/dispatch/odpt_adapter.py:19:from __future__ import annotations
+src/dispatch/odpt_adapter.py:21:import json
+src/dispatch/odpt_adapter.py:22:import warnings
+src/dispatch/odpt_adapter.py:23:from collections import defaultdict
+src/dispatch/odpt_adapter.py:24:from pathlib import Path
+src/dispatch/odpt_adapter.py:25:from typing import Any
+src/dispatch/odpt_adapter.py:27:from .models import DeadheadRule, DispatchContext, Trip
+src/gtfs_runtime/loader.py:1:from __future__ import annotations
+src/gtfs_runtime/loader.py:3:import json
+src/gtfs_runtime/loader.py:4:from collections import defaultdict
+src/gtfs_runtime/loader.py:5:from pathlib import Path
+src/gtfs_runtime/loader.py:6:from typing import Any, DefaultDict, Dict, List, Optional
+src/gtfs_runtime/loader.py:8:from src.feed_identity import (
+src/gtfs_runtime/loader.py:13:from src.gtfs_runtime.snapshot_registry import get_latest_tokyubus_snapshot_id
+src/gtfs_runtime/loader.py:14:from src.tokyubus_gtfs.constants import CANONICAL_DIR, FEATURES_DIR
+src/gtfs_runtime/snapshot_registry.py:1:from __future__ import annotations
+src/gtfs_runtime/snapshot_registry.py:3:import json
+src/gtfs_runtime/snapshot_registry.py:4:from pathlib import Path
+src/gtfs_runtime/snapshot_registry.py:5:from typing import Any, Dict, List, Optional
+src/gtfs_runtime/snapshot_registry.py:7:from src.feed_identity import TOKYU_ODPT_GTFS_FEED_ID, build_dataset_id
+src/gtfs_runtime/snapshot_registry.py:8:from src.tokyubus_gtfs.constants import CANONICAL_DIR, FEATURES_DIR, GTFS_OUTPUT_DIR
+src/gtfs_runtime/__init__.py:1:from .loader import load_tokyubus_snapshot_bundle
+src/gtfs_runtime/__init__.py:2:from .snapshot_registry import get_latest_tokyubus_snapshot_id, list_tokyubus_snapshots
+src/tokyubus_gtfs/archive.py:18:from __future__ import annotations
+src/tokyubus_gtfs/archive.py:20:import hashlib
+src/tokyubus_gtfs/archive.py:21:import json
+src/tokyubus_gtfs/archive.py:22:import logging
+src/tokyubus_gtfs/archive.py:23:import shutil
+src/tokyubus_gtfs/archive.py:24:from datetime import datetime, timezone
+src/tokyubus_gtfs/archive.py:25:from pathlib import Path
+src/tokyubus_gtfs/archive.py:26:from typing import Any, Dict, List, Optional
+src/tokyubus_gtfs/archive.py:28:from .constants import ODPT_RESOURCE_TYPES, RAW_ARCHIVE_DIR
+src/tokyubus_gtfs/canonical.py:8:from __future__ import annotations
+src/tokyubus_gtfs/canonical.py:10:import json
+src/tokyubus_gtfs/canonical.py:11:import logging
+src/tokyubus_gtfs/canonical.py:12:import shutil
+src/tokyubus_gtfs/canonical.py:13:from datetime import datetime, timezone
+src/tokyubus_gtfs/canonical.py:14:from pathlib import Path
+src/tokyubus_gtfs/canonical.py:15:from typing import Any, Dict, List, Optional, Set
+src/tokyubus_gtfs/canonical.py:17:from .archive import load_raw_resource
+src/tokyubus_gtfs/canonical.py:18:from src.feed_identity import TOKYU_ODPT_GTFS_FEED_ID, build_dataset_id
+src/tokyubus_gtfs/canonical.py:19:from .constants import (
+src/tokyubus_gtfs/canonical.py:26:from .models import (
+src/tokyubus_gtfs/canonical.py:41:from .normalizers.routes import normalize_busroute_patterns
+src/tokyubus_gtfs/canonical.py:42:from .normalizers.services import build_service_calendars
+src/tokyubus_gtfs/canonical.py:43:from .normalizers.stop_timetables import normalize_busstop_pole_timetables
+src/tokyubus_gtfs/canonical.py:44:from .normalizers.stops import normalize_busstop_poles
+src/tokyubus_gtfs/canonical.py:45:from .normalizers.trips import normalize_bus_timetables
+src/tokyubus_gtfs/cli.py:13:from __future__ import annotations
+src/tokyubus_gtfs/cli.py:15:import argparse
+src/tokyubus_gtfs/cli.py:16:import json
+src/tokyubus_gtfs/cli.py:17:import logging
+src/tokyubus_gtfs/cli.py:18:import sys
+src/tokyubus_gtfs/cli.py:19:from pathlib import Path
+src/tokyubus_gtfs/config.py:5:from __future__ import annotations
+src/tokyubus_gtfs/config.py:7:from dataclasses import dataclass, field
+src/tokyubus_gtfs/config.py:8:from pathlib import Path
+src/tokyubus_gtfs/config.py:10:from .constants import CANONICAL_DIR, FEATURES_DIR, GTFS_OUTPUT_DIR, RAW_ARCHIVE_DIR
+src/tokyubus_gtfs/constants.py:7:from __future__ import annotations
+src/tokyubus_gtfs/constants.py:9:from pathlib import Path
+src/tokyubus_gtfs/features/charging_windows.py:9:from __future__ import annotations
+src/tokyubus_gtfs/features/charging_windows.py:11:import json
+src/tokyubus_gtfs/features/charging_windows.py:12:import logging
+src/tokyubus_gtfs/features/charging_windows.py:13:from pathlib import Path
+src/tokyubus_gtfs/features/charging_windows.py:14:from typing import Any, Dict, List
+src/tokyubus_gtfs/features/charging_windows.py:16:from ..constants import DEFAULT_TURNAROUND_SEC
+src/tokyubus_gtfs/features/deadhead_candidates.py:9:from __future__ import annotations
+src/tokyubus_gtfs/features/deadhead_candidates.py:11:import json
+src/tokyubus_gtfs/features/deadhead_candidates.py:12:import logging
+src/tokyubus_gtfs/features/deadhead_candidates.py:13:import math
+src/tokyubus_gtfs/features/deadhead_candidates.py:14:from pathlib import Path
+src/tokyubus_gtfs/features/deadhead_candidates.py:15:from typing import Any, Dict, List, Set, Tuple
+src/tokyubus_gtfs/features/deadhead_candidates.py:17:from ..constants import DEFAULT_DEADHEAD_SPEED_KMH
+src/tokyubus_gtfs/features/depot.py:8:from __future__ import annotations
+src/tokyubus_gtfs/features/depot.py:10:import json
+src/tokyubus_gtfs/features/depot.py:11:import logging
+src/tokyubus_gtfs/features/depot.py:12:import re
+src/tokyubus_gtfs/features/depot.py:13:from pathlib import Path
+src/tokyubus_gtfs/features/depot.py:14:from typing import Any, Dict, List
+src/tokyubus_gtfs/features/energy.py:9:from __future__ import annotations
+src/tokyubus_gtfs/features/energy.py:11:import json
+src/tokyubus_gtfs/features/energy.py:12:import logging
+src/tokyubus_gtfs/features/energy.py:13:from pathlib import Path
+src/tokyubus_gtfs/features/energy.py:14:from typing import Any, Dict, List
+src/tokyubus_gtfs/features/stop_distances.py:8:from __future__ import annotations
+src/tokyubus_gtfs/features/stop_distances.py:10:import json
+src/tokyubus_gtfs/features/stop_distances.py:11:import logging
+src/tokyubus_gtfs/features/stop_distances.py:12:import math
+src/tokyubus_gtfs/features/stop_distances.py:13:from pathlib import Path
+src/tokyubus_gtfs/features/stop_distances.py:14:from typing import Any, Dict, List, Set, Tuple
+src/tokyubus_gtfs/features/trip_chains.py:11:from __future__ import annotations
+src/tokyubus_gtfs/features/trip_chains.py:13:import json
+src/tokyubus_gtfs/features/trip_chains.py:14:import logging
+src/tokyubus_gtfs/features/trip_chains.py:15:from pathlib import Path
+src/tokyubus_gtfs/features/trip_chains.py:16:from typing import Any, Dict, List, Optional
+src/tokyubus_gtfs/features/trip_chains.py:18:from ..constants import DEFAULT_DEADHEAD_SPEED_KMH, DEFAULT_TURNAROUND_SEC
+src/tokyubus_gtfs/gtfs_export.py:23:from __future__ import annotations
+src/tokyubus_gtfs/gtfs_export.py:25:import csv
+src/tokyubus_gtfs/gtfs_export.py:26:import json
+src/tokyubus_gtfs/gtfs_export.py:27:import logging
+src/tokyubus_gtfs/gtfs_export.py:28:from datetime import datetime, timezone
+src/tokyubus_gtfs/gtfs_export.py:29:from pathlib import Path
+src/tokyubus_gtfs/gtfs_export.py:30:from typing import Any, Dict, List, Optional
+src/tokyubus_gtfs/gtfs_export.py:32:from src.feed_identity import (
+src/tokyubus_gtfs/gtfs_export.py:38:from .constants import (
+src/tokyubus_gtfs/models.py:17:from __future__ import annotations
+src/tokyubus_gtfs/models.py:19:from datetime import date
+src/tokyubus_gtfs/models.py:20:from enum import Enum
+src/tokyubus_gtfs/models.py:21:from typing import Any, Dict, List, Optional
+src/tokyubus_gtfs/models.py:23:from pydantic import BaseModel, Field
+src/tokyubus_gtfs/normalizers/helpers.py:7:from __future__ import annotations
+src/tokyubus_gtfs/normalizers/helpers.py:9:import hashlib
+src/tokyubus_gtfs/normalizers/helpers.py:10:import re
+src/tokyubus_gtfs/normalizers/helpers.py:11:import unicodedata
+src/tokyubus_gtfs/normalizers/helpers.py:12:from typing import Any, Optional
+src/tokyubus_gtfs/normalizers/routes.py:5:from __future__ import annotations
+src/tokyubus_gtfs/normalizers/routes.py:7:import csv
+src/tokyubus_gtfs/normalizers/routes.py:8:import logging
+src/tokyubus_gtfs/normalizers/routes.py:9:import re
+src/tokyubus_gtfs/normalizers/routes.py:10:from pathlib import Path
+src/tokyubus_gtfs/normalizers/routes.py:11:from typing import Any, Dict, List, Optional, Tuple
+src/tokyubus_gtfs/normalizers/routes.py:13:from ..constants import ROUTE_FAMILY_MAP_PATH, TOKYU_OPERATOR_ID
+src/tokyubus_gtfs/normalizers/routes.py:14:from ..models import CanonicalRoute, CanonicalRoutePattern, CanonicalRouteStop, RouteVariantType
+src/tokyubus_gtfs/normalizers/routes.py:15:from .helpers import extract_route_family_code, nfkc_normalize, route_color_from_seed, short_id, stable_id
+src/tokyubus_gtfs/normalizers/services.py:5:from __future__ import annotations
+src/tokyubus_gtfs/normalizers/services.py:7:import logging
+src/tokyubus_gtfs/normalizers/services.py:8:from datetime import date, timedelta
+src/tokyubus_gtfs/normalizers/services.py:9:from typing import Dict, List, Tuple
+src/tokyubus_gtfs/normalizers/services.py:11:from ..models import CanonicalService, ServiceDayType
+src/tokyubus_gtfs/normalizers/services.py:12:from .helpers import service_id_from_odpt, short_id
+src/tokyubus_gtfs/normalizers/stops.py:5:from __future__ import annotations
+src/tokyubus_gtfs/normalizers/stops.py:7:import logging
+src/tokyubus_gtfs/normalizers/stops.py:8:from typing import Any, Dict, List, Optional, Tuple
+src/tokyubus_gtfs/normalizers/stops.py:10:from ..constants import TOKYO_LAT_RANGE, TOKYO_LON_RANGE
+src/tokyubus_gtfs/normalizers/stops.py:11:from ..models import CanonicalStop, CoordSourceType
+src/tokyubus_gtfs/normalizers/stops.py:12:from .helpers import data_hash, short_id
+src/tokyubus_gtfs/normalizers/stop_timetables.py:5:from __future__ import annotations
+src/tokyubus_gtfs/normalizers/stop_timetables.py:7:import logging
+src/tokyubus_gtfs/normalizers/stop_timetables.py:8:from typing import Any, Dict, List, Optional, Tuple
+src/tokyubus_gtfs/normalizers/stop_timetables.py:10:from ..models import CanonicalStopTimetable
+src/tokyubus_gtfs/normalizers/stop_timetables.py:11:from .helpers import safe_time_hhmm, service_id_from_odpt, short_id
+src/tokyubus_gtfs/normalizers/trips.py:5:from __future__ import annotations
+src/tokyubus_gtfs/normalizers/trips.py:7:import hashlib
+src/tokyubus_gtfs/normalizers/trips.py:8:import logging
+src/tokyubus_gtfs/normalizers/trips.py:9:from typing import Any, Dict, List, Optional, Tuple
+src/tokyubus_gtfs/normalizers/trips.py:11:from ..models import CanonicalDirection, CanonicalTrip, CanonicalTripStopTime
+src/tokyubus_gtfs/normalizers/trips.py:12:from .helpers import (
+src/tokyubus_gtfs/odpt_client.py:20:from __future__ import annotations
+src/tokyubus_gtfs/odpt_client.py:22:import json
+src/tokyubus_gtfs/odpt_client.py:23:import logging
+src/tokyubus_gtfs/odpt_client.py:24:from pathlib import Path
+src/tokyubus_gtfs/odpt_client.py:25:from typing import Any, Dict, List, Optional
+src/tokyubus_gtfs/odpt_client.py:27:from .constants import ODPT_RESOURCE_TYPES, TOKYU_OPERATOR_ID
+src/tokyubus_gtfs/odpt_client.py:28:from .archive import _candidate_paths
+src/tokyubus_gtfs/pipeline.py:11:from __future__ import annotations
+src/tokyubus_gtfs/pipeline.py:13:import logging
+src/tokyubus_gtfs/pipeline.py:14:import shutil
+src/tokyubus_gtfs/pipeline.py:15:from dataclasses import dataclass, field
+src/tokyubus_gtfs/pipeline.py:16:from pathlib import Path
+src/tokyubus_gtfs/pipeline.py:17:from typing import Any, Dict, List, Optional
+src/tokyubus_gtfs/pipeline.py:19:from .archive import (
+src/tokyubus_gtfs/pipeline.py:24:from .canonical import build_canonical
+src/tokyubus_gtfs/pipeline.py:25:from .config import PipelinePaths
+src/tokyubus_gtfs/pipeline.py:26:from .constants import CANONICAL_DIR, FEATURES_DIR, GTFS_OUTPUT_DIR, RAW_ARCHIVE_DIR
+src/tokyubus_gtfs/pipeline.py:27:from .features.depot import build_depot_candidates
+src/tokyubus_gtfs/pipeline.py:28:from .features.energy import build_energy_features
+src/tokyubus_gtfs/pipeline.py:29:from .features.trip_chains import build_trip_chains
+src/tokyubus_gtfs/pipeline.py:30:from .features.stop_distances import build_stop_distance_matrix
+src/tokyubus_gtfs/pipeline.py:31:from .features.charging_windows import build_charging_windows
+src/tokyubus_gtfs/pipeline.py:32:from .features.deadhead_candidates import build_deadhead_candidates
+src/tokyubus_gtfs/pipeline.py:33:from .gtfs_export import export_gtfs
+src/tokyubus_gtfs/validate.py:1:from __future__ import annotations
+src/tokyubus_gtfs/validate.py:3:import csv
+src/tokyubus_gtfs/validate.py:4:import json
+src/tokyubus_gtfs/validate.py:5:import subprocess
+src/tokyubus_gtfs/validate.py:6:import tempfile
+src/tokyubus_gtfs/validate.py:7:import zipfile
+src/tokyubus_gtfs/validate.py:8:from pathlib import Path
+src/tokyubus_gtfs/validate.py:9:from typing import Any, Dict, Iterable, List, Optional
+src/tokyubus_gtfs/validate.py:11:from src.feed_identity import (
+src/tokyubus_gtfs/validate.py:16:from .constants import GTFS_OUTPUT_DIR
+src/tokyubus_gtfs/__main__.py:5:from .cli import main

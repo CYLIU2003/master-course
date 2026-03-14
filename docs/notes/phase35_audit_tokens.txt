@@ -1,0 +1,475 @@
+bff/routers/catalog.py:9:from bff.services.gtfs_import import DEFAULT_GTFS_FEED_PATH
+bff/routers/catalog.py:10:from bff.services.odpt_routes import DEFAULT_OPERATOR
+bff/routers/catalog.py:56:@router.post("/catalog/refresh/odpt")
+bff/routers/catalog.py:57:def refresh_catalog_odpt(body: RefreshOdptSnapshotBody) -> Dict[str, Any]:
+bff/routers/catalog.py:58:    snapshot = transit_catalog.refresh_odpt_snapshot(
+bff/routers/master_data.py:12:  POST            /scenarios/{id}/stops/import-odpt
+bff/routers/master_data.py:30:from bff.services.gtfs_import import (
+bff/routers/master_data.py:35:from bff.services.odpt_routes import (
+bff/routers/master_data.py:39:from bff.services.odpt_stops import summarize_stop_import
+bff/routers/master_data.py:73:def _load_odpt_bundle(
+bff/routers/master_data.py:81:        return transit_catalog.refresh_odpt_snapshot(
+bff/routers/master_data.py:87:    bundle = transit_catalog.load_existing_odpt_snapshot(operator=operator)
+bff/routers/master_data.py:91:        "No saved ODPT snapshot is available. Run `python3 catalog_update_app.py refresh odpt` "
+bff/routers/master_data.py:675:@router.post("/scenarios/{scenario_id}/stops/import-odpt")
+bff/routers/master_data.py:676:def import_odpt_stops(scenario_id: str, body: ImportOdptStopsBody) -> Dict[str, Any]:
+bff/routers/master_data.py:679:        bundle = _load_odpt_bundle(
+bff/routers/master_data.py:692:            "source": "odpt",
+bff/routers/master_data.py:702:            scenario_id, "odpt", imported_stops, import_meta=import_meta
+bff/routers/master_data.py:795:            route.get("odptPatternId"),
+bff/routers/master_data.py:796:            route.get("odptBusrouteId"),
+bff/routers/master_data.py:1216:@router.post("/scenarios/{scenario_id}/routes/import-odpt")
+bff/routers/master_data.py:1217:def import_odpt_routes(scenario_id: str, body: ImportOdptRoutesBody) -> Dict[str, Any]:
+bff/routers/master_data.py:1220:        bundle = _load_odpt_bundle(
+bff/routers/master_data.py:1233:            "source": "odpt",
+bff/routers/master_data.py:1242:            scenario_id, "odpt", imported_routes, import_meta=import_meta
+bff/routers/public_data.py:13:from bff.services.gtfs_import import DEFAULT_GTFS_FEED_PATH
+bff/routers/public_data.py:14:from bff.services.odpt_routes import DEFAULT_OPERATOR
+bff/routers/public_data.py:19:PublicSourceType = Literal["odpt", "gtfs"]
+bff/routers/public_data.py:167:    return "odpt" if source_type == "odpt" else "gtfs"
+bff/routers/public_data.py:176:    if source_type == "odpt":
+bff/routers/public_data.py:178:            return transit_catalog.refresh_odpt_snapshot(
+bff/routers/public_data.py:184:        bundle = transit_catalog.load_existing_odpt_snapshot(operator=dataset_ref)
+bff/routers/public_data.py:188:            "No saved ODPT snapshot is available. Run `python3 catalog_update_app.py refresh odpt` "
+bff/routers/public_data.py:247:        if body.source_type == "odpt":
+bff/routers/public_data.py:378:    source_type = str(normalized_snapshot.get("source_type") or "odpt")
+bff/routers/public_data.py:752:    source_type = str(normalized_snapshot.get("source_type") or "odpt")
+bff/routers/scenarios.py:40:from bff.services.gtfs_import import (
+bff/routers/scenarios.py:45:from bff.services.odpt_routes import DEFAULT_OPERATOR
+bff/routers/scenarios.py:46:from bff.services.odpt_stop_timetables import (
+bff/routers/scenarios.py:49:from bff.services.odpt_timetable import (
+bff/routers/scenarios.py:431:def _load_odpt_bundle(
+bff/routers/scenarios.py:440:        return transit_catalog.refresh_odpt_snapshot(
+bff/routers/scenarios.py:447:    bundle = transit_catalog.load_existing_odpt_snapshot(operator=operator)
+bff/routers/scenarios.py:451:        "No saved ODPT snapshot is available. Run `python3 catalog_update_app.py refresh odpt` "
+bff/routers/scenarios.py:490:def _build_odpt_import_meta(
+bff/routers/scenarios.py:505:        "source": "odpt",
+bff/routers/scenarios.py:526:def _build_gtfs_import_meta(
+bff/routers/scenarios.py:624:        or (TOKYU_ODPT_GTFS_FEED_ID if source in {"odpt", "gtfs_runtime"} else "")
+bff/routers/scenarios.py:1072:def _import_odpt_timetable_data(
+bff/routers/scenarios.py:1082:    bundle = _load_odpt_bundle(
+bff/routers/scenarios.py:1092:        "odpt",
+bff/routers/scenarios.py:1103:    odpt_rows = [row for row in normalized_rows if row.get("source") == "odpt"]
+bff/routers/scenarios.py:1105:        odpt_rows,
+bff/routers/scenarios.py:1113:    import_meta = _build_odpt_import_meta(
+bff/routers/scenarios.py:1121:    store.set_timetable_import_meta(scenario_id, "odpt", import_meta)
+bff/routers/scenarios.py:1125:        _source_snapshot_from_bundle("odpt", bundle),
+bff/routers/scenarios.py:1127:    store.set_feed_context(scenario_id, _bundle_feed_context("odpt", bundle))
+bff/routers/scenarios.py:1129:        "items": odpt_rows,
+bff/routers/scenarios.py:1130:        "total": len(odpt_rows),
+bff/routers/scenarios.py:1182:    import_meta = _build_gtfs_import_meta(
+bff/routers/scenarios.py:1201:def _import_odpt_stop_timetables_data(
+bff/routers/scenarios.py:1211:    bundle = _load_odpt_bundle(
+bff/routers/scenarios.py:1221:        "odpt",
+bff/routers/scenarios.py:1225:    odpt_items = [item for item in merged_items if item.get("source") == "odpt"]
+bff/routers/scenarios.py:1227:        odpt_items,
+bff/routers/scenarios.py:1232:    import_meta = _build_odpt_import_meta(
+bff/routers/scenarios.py:1240:    store.set_stop_timetable_import_meta(scenario_id, "odpt", import_meta)
+bff/routers/scenarios.py:1244:        _source_snapshot_from_bundle("odpt", bundle),
+bff/routers/scenarios.py:1246:    store.set_feed_context(scenario_id, _bundle_feed_context("odpt", bundle))
+bff/routers/scenarios.py:1274:    import_meta = _build_gtfs_import_meta(
+bff/routers/scenarios.py:1289:@router.post("/scenarios/{scenario_id}/timetable/import-odpt")
+bff/routers/scenarios.py:1290:def import_timetable_odpt(
+bff/routers/scenarios.py:1294:        return _import_odpt_timetable_data(scenario_id, body)
+bff/routers/scenarios.py:1474:@router.post("/scenarios/{scenario_id}/stop-timetables/import-odpt")
+bff/routers/scenarios.py:1475:def import_stop_timetables_odpt(
+bff/routers/scenarios.py:1479:        return _import_odpt_stop_timetables_data(scenario_id, body)
+bff/services/odpt_fetch.py:2:bff/services/odpt_fetch.py
+bff/services/odpt_fetch.py:4:Streaming download of ODPT resources directly from api.odpt.org.
+bff/services/odpt_fetch.py:30:ODPT_API_BASE = "https://api.odpt.org/api/v4"
+bff/services/odpt_fetch.py:31:ODPT_OPERATOR_TOKYU = "odpt.Operator:TokyuBus"
+bff/services/odpt_fetch.py:35:    "odpt:BusroutePattern": "busroute_pattern.json",
+bff/services/odpt_fetch.py:36:    "odpt:BusstopPole": "busstop_pole.json",
+bff/services/odpt_fetch.py:37:    "odpt:BusTimetable": "bus_timetable.json",
+bff/services/odpt_fetch.py:38:    "odpt:BusstopPoleTimetable": "busstop_pole_timetable.json",
+bff/services/odpt_fetch.py:44:_DEFAULT_CACHE_DIR = _REPO_ROOT / "data" / "cache" / "odpt" / "raw"
+bff/services/odpt_fetch.py:72:def build_odpt_url(
+bff/services/odpt_fetch.py:80:        "odpt:operator": operator_id,
+bff/services/odpt_fetch.py:156:    if resource_name == "odpt:BusTimetable":
+bff/services/odpt_fetch.py:157:        pattern_ids = _load_chunk_keys(snapshot_dir, "busroute_pattern.json", "odpt:busroutePattern")
+bff/services/odpt_fetch.py:158:        return [{"odpt:busroutePattern": pattern_id} for pattern_id in pattern_ids]
+bff/services/odpt_fetch.py:159:    if resource_name == "odpt:BusstopPoleTimetable":
+bff/services/odpt_fetch.py:160:        stop_ids = _load_chunk_keys(snapshot_dir, "busstop_pole.json", "odpt:busstopPole")
+bff/services/odpt_fetch.py:161:        return [{"odpt:busstopPole": stop_id} for stop_id in stop_ids]
+bff/services/odpt_fetch.py:165:def fetch_odpt_records(url: str, timeout: float = 300.0) -> List[Any]:
+bff/services/odpt_fetch.py:179:def download_odpt_resource_chunked(
+bff/services/odpt_fetch.py:191:        url = build_odpt_url(resource_name, consumer_key, operator_id)
+bff/services/odpt_fetch.py:192:        result = download_odpt_resource(url, out_path, timeout=timeout)
+bff/services/odpt_fetch.py:198:        url = build_odpt_url(resource_name, consumer_key, operator_id, extra_params=params)
+bff/services/odpt_fetch.py:199:        records = fetch_odpt_records(url, timeout=timeout)
+bff/services/odpt_fetch.py:221:def download_odpt_resource(url: str, out_path: Path, timeout: float = 300.0) -> Dict[str, Any]:
+bff/services/odpt_fetch.py:308:def fetch_tokyu_odpt_bundle(
+bff/services/odpt_fetch.py:323:    snapshot_id = f"odpt-tokyu-{now.strftime('%Y%m%d-%H%M%S')}"
+bff/services/odpt_fetch.py:341:        url = build_odpt_url(resource_name, consumer_key, operator_id)
+bff/services/odpt_fetch.py:345:            if resource_name in {"odpt:BusTimetable", "odpt:BusstopPoleTimetable"}:
+bff/services/odpt_fetch.py:346:                result = download_odpt_resource_chunked(
+bff/services/odpt_fetch.py:359:                result = download_odpt_resource(url, out_path)
+bff/services/odpt_fetch.py:441:        "source_type": "odpt",
+bff/services/odpt_fetch.py:443:        "operator_odpt_id": operator_id,
+bff/services/odpt_normalize.py:2:bff/services/odpt_normalize.py
+bff/services/odpt_normalize.py:28:_DEFAULT_NORMALIZED_DIR = _REPO_ROOT / "data" / "cache" / "odpt" / "normalized"
+bff/services/odpt_normalize.py:53:    return f"odpt-route-{digest}"
+bff/services/odpt_normalize.py:113:    Normalize odpt:BusroutePattern into routes, route_stops, and
+bff/services/odpt_normalize.py:137:        busstop_order = item.get("odpt:busstopPoleOrder") or []
+bff/services/odpt_normalize.py:141:                pole = bs.get("odpt:busstopPole")
+bff/services/odpt_normalize.py:160:                dist = bs.get("odpt:distance")
+bff/services/odpt_normalize.py:178:            "source": "odpt",
+bff/services/odpt_normalize.py:179:            "odptPatternId": pattern_id,
+bff/services/odpt_normalize.py:180:            "odptBusrouteId": str(item.get("odpt:busroute") or ""),
+bff/services/odpt_normalize.py:195:                "busroute": str(item.get("odpt:busroute") or ""),
+bff/services/odpt_normalize.py:230:    """Normalize odpt:BusstopPole into stops JSONL."""
+bff/services/odpt_normalize.py:254:        pole_number = item.get("odpt:busstopPoleNumber")
+bff/services/odpt_normalize.py:264:            "source": "odpt",
+bff/services/odpt_normalize.py:286:    """Normalize odpt:BusTimetable into trips and stop_times JSONL."""
+bff/services/odpt_normalize.py:308:        pattern_id = str(timetable.get("odpt:busroutePattern") or "")
+bff/services/odpt_normalize.py:309:        calendar_raw = str(timetable.get("odpt:calendar") or "")
+bff/services/odpt_normalize.py:310:        timetable_objects = timetable.get("odpt:busTimetableObject") or []
+bff/services/odpt_normalize.py:325:                source="odpt",
+bff/services/odpt_normalize.py:331:            or f"odpt-trip-{hashlib.sha1(_data_hash(timetable).encode()).hexdigest()[:12]}"
+bff/services/odpt_normalize.py:337:            key=lambda obj: int(obj.get("odpt:index") or 0),
+bff/services/odpt_normalize.py:340:            stop_id = str(st.get("odpt:busstopPole") or "")
+bff/services/odpt_normalize.py:341:            departure = _safe_time(st.get("odpt:departureTime"))
+bff/services/odpt_normalize.py:342:            arrival = _safe_time(st.get("odpt:arrivalTime"))
+bff/services/odpt_normalize.py:355:                "source": "odpt",
+bff/services/odpt_normalize.py:383:            "source": "odpt",
+bff/services/odpt_normalize.py:426:    Normalize odpt:BusstopPoleTimetable for stop-level timetable
+bff/services/odpt_normalize.py:448:        stop_id = str(item.get("odpt:busstopPole") or "")
+bff/services/odpt_normalize.py:449:        calendar_raw = str(item.get("odpt:calendar") or "")
+bff/services/odpt_normalize.py:452:        tt_objects = item.get("odpt:busstopPoleTimetableObject") or []
+bff/services/odpt_normalize.py:457:            pattern_id = str(obj.get("odpt:busroutePattern") or "")
+bff/services/odpt_normalize.py:462:                    "departure": _safe_time(obj.get("odpt:departureTime")),
+bff/services/odpt_normalize.py:463:                    "destination": str(obj.get("odpt:destinationBusstopPole") or ""),
+bff/services/odpt_normalize.py:465:                    "busroute": str(obj.get("odpt:busroute") or ""),
+bff/services/odpt_normalize.py:466:                    "isMidnight": bool(obj.get("odpt:isMidnight")),
+bff/services/odpt_normalize.py:467:                    "note": str(obj.get("odpt:note") or ""),
+bff/services/odpt_normalize.py:474:                "source": "odpt",
+bff/services/odpt_normalize.py:488:        pattern_id = str(timetable.get("odpt:busroutePattern") or "")
+bff/services/odpt_normalize.py:489:        calendar_raw = str(timetable.get("odpt:calendar") or "")
+bff/services/odpt_normalize.py:499:            [obj for obj in (timetable.get("odpt:busTimetableObject") or []) if isinstance(obj, dict)],
+bff/services/odpt_normalize.py:500:            key=lambda obj: int(obj.get("odpt:index") or 0),
+bff/services/odpt_normalize.py:504:        destination_stop_id = str(objects[-1].get("odpt:busstopPole") or "")
+bff/services/odpt_normalize.py:507:            stop_id = str(obj.get("odpt:busstopPole") or "")
+bff/services/odpt_normalize.py:508:            departure = _safe_time(obj.get("odpt:departureTime"))
+bff/services/odpt_normalize.py:517:                    "source": "odpt_synthesized_from_bus_timetable",
+bff/services/odpt_normalize.py:622:def normalize_odpt_snapshot(
+bff/services/odpt_normalize.py:647:        from bff.services.odpt_fetch import load_raw_resource
+bff/services/odpt_normalize.py:648:        raw_stops = load_raw_resource(raw_snapshot_dir, "odpt:BusstopPole")
+bff/services/odpt_normalize.py:660:        from bff.services.odpt_fetch import load_raw_resource
+bff/services/odpt_normalize.py:661:        raw_patterns = load_raw_resource(raw_snapshot_dir, "odpt:BusroutePattern")
+bff/services/odpt_normalize.py:676:        from bff.services.odpt_fetch import load_raw_resource
+bff/services/odpt_normalize.py:677:        raw_timetable = load_raw_resource(raw_snapshot_dir, "odpt:BusTimetable")
+bff/services/odpt_normalize.py:702:        from bff.services.odpt_fetch import load_raw_resource
+bff/services/odpt_normalize.py:703:        raw_stt = load_raw_resource(raw_snapshot_dir, "odpt:BusstopPoleTimetable")
+bff/services/odpt_routes.py:12:DEFAULT_OPERATOR = "odpt.Operator:TokyuBus"
+bff/services/odpt_routes.py:15:def _odpt_bff_url() -> str:
+bff/services/odpt_routes.py:45:            f"ODPT BFF is unreachable at {_odpt_bff_url()}: {exc.reason}"
+bff/services/odpt_routes.py:64:    url = f"{_odpt_bff_url()}/api/odpt/export/operational"
+bff/services/odpt_routes.py:100:    url = f"{_odpt_bff_url()}/api/odpt/export/normalized"
+bff/services/odpt_routes.py:130:    url = f"{_odpt_bff_url()}/api/odpt/export/operational-stage"
+bff/services/odpt_routes.py:157:    url = f"{_odpt_bff_url()}/api/odpt/export/stop-timetables-stage"
+bff/services/odpt_routes.py:235:    return f"odpt-route-{digest}"
+bff/services/odpt_routes.py:322:                "source": "odpt",
+bff/services/odpt_routes.py:323:                "odptPatternId": pattern_id,
+bff/services/odpt_routes.py:324:                "odptBusrouteId": pattern_value.get("busroute"),
+bff/services/odpt_stops.py:30:                "source": "odpt",
+bff/services/odpt_stop_timetables.py:5:from bff.services.odpt_routes import _stop_label
+bff/services/odpt_stop_timetables.py:23:                "source": "odpt",
+bff/services/odpt_timetable.py:6:from bff.services.odpt_routes import _route_id_from_pattern, _stop_label
+bff/services/odpt_timetable.py:98:                "source": "odpt",
+bff/services/odpt_timetable.py:122:                    "source": row.get("source") or "odpt",
+bff/services/route_family.py:53:    odpt_pattern_id: Optional[str] = None
+bff/services/route_family.py:54:    odpt_busroute_id: Optional[str] = None
+bff/services/route_family.py:70:            odpt_pattern_id=d.get("odptPatternId"),
+bff/services/route_family.py:71:            odpt_busroute_id=d.get("odptBusrouteId"),
+bff/services/runtime_paths.py:16:        "odpt_snapshot_dir": "./data/odpt/tokyu",
+bff/services/runtime_paths.py:18:        "transit_db_tokyu": "./data/odpt_tokyu.db",
+bff/services/service_ids.py:88:    source: str = "odpt",
+bff/services/transit_catalog.py:13:from bff.services.gtfs_import import (
+bff/services/transit_catalog.py:21:from bff.services.odpt_routes import (
+bff/services/transit_catalog.py:28:from bff.services.odpt_fetch import (
+bff/services/transit_catalog.py:29:    fetch_tokyu_odpt_bundle,
+bff/services/transit_catalog.py:33:from bff.services.odpt_normalize import (
+bff/services/transit_catalog.py:34:    normalize_odpt_snapshot,
+bff/services/transit_catalog.py:37:from bff.services.odpt_stop_timetables import build_stop_timetables_from_normalized
+bff/services/transit_catalog.py:38:from bff.services.odpt_stops import build_stops_from_normalized
+bff/services/transit_catalog.py:39:from bff.services.odpt_timetable import (
+bff/services/transit_catalog.py:51:_ODPT_SAVED_SNAPSHOT_DIR_DEFAULT = resolve_runtime_path("odpt_snapshot_dir", "./data/odpt/tokyu")
+bff/services/transit_catalog.py:251:def _odpt_saved_snapshot_dir(operator: str) -> Optional[Path]:
+bff/services/transit_catalog.py:256:        return resolve_runtime_path("odpt_snapshot_dir", _ODPT_SAVED_SNAPSHOT_DIR_DEFAULT)
+bff/services/transit_catalog.py:493:def _canonicalize_odpt_route_payloads(
+bff/services/transit_catalog.py:512:                "source": "odpt",
+bff/services/transit_catalog.py:518:def _merge_odpt_route_payloads(
+bff/services/transit_catalog.py:608:                "source": "odpt",
+bff/services/transit_catalog.py:643:def _refresh_odpt_snapshot_via_stage_bff(
+bff/services/transit_catalog.py:682:                    "odpt_bus_timetables",
+bff/services/transit_catalog.py:728:                    "odpt_stop_timetables",
+bff/services/transit_catalog.py:766:    return _store_odpt_snapshot(
+bff/services/transit_catalog.py:769:        route_payloads=_merge_odpt_route_payloads(route_payloads),
+bff/services/transit_catalog.py:1094:def load_existing_odpt_snapshot(operator: str = DEFAULT_OPERATOR) -> Optional[Dict[str, Any]]:
+bff/services/transit_catalog.py:1095:    snapshot = find_snapshot("odpt", operator)
+bff/services/transit_catalog.py:1153:def _odpt_snapshot_key(operator: str) -> str:
+bff/services/transit_catalog.py:1154:    return _normalize_snapshot_key("odpt", operator)
+bff/services/transit_catalog.py:1169:def _load_saved_odpt_snapshot(operator: str) -> Optional[Dict[str, Any]]:
+bff/services/transit_catalog.py:1170:    snapshot_dir = _odpt_saved_snapshot_dir(operator)
+bff/services/transit_catalog.py:1241:def _odpt_snapshot_is_incomplete(bundle: Dict[str, Any]) -> bool:
+bff/services/transit_catalog.py:1256:def _store_odpt_snapshot(
+bff/services/transit_catalog.py:1274:    canonical_route_payloads = _canonicalize_odpt_route_payloads(route_payloads)
+bff/services/transit_catalog.py:1281:        "source": "odpt",
+bff/services/transit_catalog.py:1302:            snapshot_key=_odpt_snapshot_key(operator),
+bff/services/transit_catalog.py:1304:            source_type="odpt",
+bff/services/transit_catalog.py:1315:        snapshot_key=_odpt_snapshot_key(operator),
+bff/services/transit_catalog.py:1316:        source="odpt",
+bff/services/transit_catalog.py:1340:                source="odpt",
+bff/services/transit_catalog.py:1345:            meta={"catalog_snapshot_key": _odpt_snapshot_key(operator)},
+bff/services/transit_catalog.py:1355:def bootstrap_odpt_snapshot_from_saved(
+bff/services/transit_catalog.py:1359:    saved = _load_saved_odpt_snapshot(operator)
+bff/services/transit_catalog.py:1363:    return _store_odpt_snapshot(
+bff/services/transit_catalog.py:1380:def refresh_odpt_snapshot(
+bff/services/transit_catalog.py:1395:        _log.info("refresh_odpt_snapshot: trying staged BFF pipeline")
+bff/services/transit_catalog.py:1396:        return _refresh_odpt_snapshot_via_stage_bff(
+bff/services/transit_catalog.py:1404:        _log.exception("refresh_odpt_snapshot: staged BFF pipeline failed; falling back")
+bff/services/transit_catalog.py:1406:    _log.info("refresh_odpt_snapshot: starting streaming file-based fallback pipeline")
+bff/services/transit_catalog.py:1409:    manifest = fetch_tokyu_odpt_bundle(operator_id=operator)
+bff/services/transit_catalog.py:1415:        "refresh_odpt_snapshot: raw fetch complete, snapshot_id=%s, dir=%s",
+bff/services/transit_catalog.py:1421:            "odpt_raw_fetch_complete",
+bff/services/transit_catalog.py:1426:    normalize_summary = normalize_odpt_snapshot(snapshot_dir)
+bff/services/transit_catalog.py:1431:        "refresh_odpt_snapshot: normalization complete, dir=%s",
+bff/services/transit_catalog.py:1436:            "odpt_normalize_complete",
+bff/services/transit_catalog.py:1448:            "odpt_bundle_loaded",
+bff/services/transit_catalog.py:1474:        "source": "odpt",
+bff/services/transit_catalog.py:1497:            snapshot_key=_odpt_snapshot_key(operator),
+bff/services/transit_catalog.py:1499:            source_type="odpt",
+bff/services/transit_catalog.py:1509:        snapshot_key=_odpt_snapshot_key(operator),
+bff/services/transit_catalog.py:1510:        source="odpt",
+bff/services/transit_catalog.py:1536:            meta={"catalog_snapshot_key": _odpt_snapshot_key(operator)},
+bff/services/transit_catalog.py:1550:def get_or_refresh_odpt_snapshot(
+bff/services/transit_catalog.py:1558:    snapshot_key = _odpt_snapshot_key(operator)
+bff/services/transit_catalog.py:1566:        if _odpt_snapshot_is_incomplete(bundle):
+bff/services/transit_catalog.py:1580:                    source="odpt",
+bff/services/transit_catalog.py:1584:                    "odpt_cached_snapshot",
+bff/services/transit_catalog.py:1599:        bootstrapped = bootstrap_odpt_snapshot_from_saved(operator=operator)
+bff/services/transit_catalog.py:1606:                source="odpt",
+bff/services/transit_catalog.py:1610:                    "odpt_saved_snapshot",
+bff/services/transit_catalog.py:1624:    refreshed = refresh_odpt_snapshot(
+bff/services/transit_db.py:5:  - ``data/odpt_tokyu.db``   (東急バス – ODPT source)
+bff/services/transit_db.py:51:        "source": "odpt",
+bff/services/transit_db.py:52:        "db_filename": "odpt_tokyu.db",
+bff/services/transit_db.py:53:        "odpt_operator": "odpt.Operator:TokyuBus",
+bff/store/scenario_store.py:16:    "route_import_meta": { "odpt": { ... } },
+bff/store/scenario_store.py:17:    "stop_import_meta": { "odpt": { ... } },
+bff/store/scenario_store.py:18:    "timetable_import_meta": { "odpt": { ... } },
+bff/store/scenario_store.py:19:    "stop_timetable_import_meta": { "odpt": { ... } },
+bff/store/scenario_store.py:1877:        return source in {"", "manual", "odpt"}
+bff/store/scenario_store.py:2103:                route.get("odptPatternId"),
+bff/store/scenario_store.py:2104:                route.get("odptBusrouteId"),
+bff/tests/test_transit_catalog.py:11:from bff.services.odpt_routes import DEFAULT_OPERATOR
+bff/tests/test_transit_catalog.py:29:                "ODPT_SNAPSHOT_DIR": str(self.tmp_path / "odpt_saved"),
+bff/tests/test_transit_catalog.py:36:    def test_odpt_uses_saved_snapshot_before_remote_refresh(self) -> None:
+bff/tests/test_transit_catalog.py:37:        saved_dir = self.tmp_path / "odpt_saved"
+bff/tests/test_transit_catalog.py:38:        _write_json(saved_dir / "operational_dataset.json", self._sample_odpt_operational())
+bff/tests/test_transit_catalog.py:44:            first_bundle = transit_catalog.get_or_refresh_odpt_snapshot(
+bff/tests/test_transit_catalog.py:64:        second_bundle = transit_catalog.get_or_refresh_odpt_snapshot(
+bff/tests/test_transit_catalog.py:72:            "odpt.Busroute:TokyuBus.T98",
+bff/tests/test_transit_catalog.py:164:    def _sample_odpt_operational(self) -> dict:
+bff/tests/test_transit_catalog.py:178:                "odpt.BusstopPole:StopA": {
+bff/tests/test_transit_catalog.py:179:                    "stop_id": "odpt.BusstopPole:StopA",
+bff/tests/test_transit_catalog.py:185:                "odpt.BusstopPole:StopB": {
+bff/tests/test_transit_catalog.py:186:                    "stop_id": "odpt.BusstopPole:StopB",
+bff/tests/test_transit_catalog.py:194:                "odpt.BusroutePattern:T98.Out": {
+bff/tests/test_transit_catalog.py:195:                    "pattern_id": "odpt.BusroutePattern:T98.Out",
+bff/tests/test_transit_catalog.py:197:                    "busroute": "odpt.Busroute:TokyuBus.T98",
+bff/tests/test_transit_catalog.py:199:                        "odpt.BusstopPole:StopA",
+bff/tests/test_transit_catalog.py:200:                        "odpt.BusstopPole:StopB",
+bff/tests/test_transit_catalog.py:204:                            "from_stop_id": "odpt.BusstopPole:StopA",
+bff/tests/test_transit_catalog.py:205:                            "to_stop_id": "odpt.BusstopPole:StopB",
+bff/tests/test_transit_catalog.py:214:                "odpt.BusTimetable:T98.Weekday.001": {
+bff/tests/test_transit_catalog.py:215:                    "trip_id": "odpt.BusTimetable:T98.Weekday.001",
+bff/tests/test_transit_catalog.py:216:                    "pattern_id": "odpt.BusroutePattern:T98.Out",
+bff/tests/test_transit_catalog.py:217:                    "calendar": "odpt.Calendar:Weekday",
+bff/tests/test_transit_catalog.py:222:                            "stop_id": "odpt.BusstopPole:StopA",
+bff/tests/test_transit_catalog.py:227:                            "stop_id": "odpt.BusstopPole:StopB",
+bff/tests/test_transit_catalog.py:237:                "odpt.BusstopPoleTimetable:StopA:weekday": {
+bff/tests/test_transit_catalog.py:238:                    "stop_id": "odpt.BusstopPole:StopA",
+bff/tests/test_transit_catalog.py:239:                    "calendar": "odpt.Calendar:Weekday",
+bff/tests/test_transit_catalog.py:245:                            "busroutePattern": "odpt.BusroutePattern:T98.Out",
+bff/tests/test_transit_catalog.py:246:                            "busTimetable": "odpt.BusTimetable:T98.Weekday.001",
+bff/tests/test_transit_catalog.py:253:                    "weekday": ["odpt.BusTimetable:T98.Weekday.001"],
+bff/tests/test_transit_catalog.py:259:                    "odpt.BusroutePattern:T98.Out": ["odpt.BusTimetable:T98.Weekday.001"]
+bff/tests/test_transit_catalog.py:264:                    "busroute_id": "odpt.Busroute:TokyuBus.T98",
+bff/tests/test_transit_catalog.py:272:                            "pattern_id": "odpt.BusroutePattern:T98.Out",
+bff/tests/test_transit_catalog.py:277:                                    "stop_id": "odpt.BusstopPole:StopA",
+bff/tests/test_transit_catalog.py:281:                                    "stop_id": "odpt.BusstopPole:StopB",
+bff/tests/test_transit_catalog.py:297:                            "trip_id": "odpt.BusTimetable:T98.Weekday.001",
+bff/tests/test_transit_catalog.py:298:                            "pattern_id": "odpt.BusroutePattern:T98.Out",
+bff/tests/test_transit_catalog.py:301:                            "origin_stop_id": "odpt.BusstopPole:StopA",
+bff/tests/test_transit_catalog.py:303:                            "destination_stop_id": "odpt.BusstopPole:StopB",
+bff/tests/test_transit_catalog.py:312:                                    "stop_id": "odpt.BusstopPole:StopA",
+bff/tests/test_transit_catalog.py:319:                                    "stop_id": "odpt.BusstopPole:StopB",
+src/dispatch/odpt_adapter.py:2:src/dispatch/odpt_adapter.py
+src/dispatch/odpt_adapter.py:6:data/odpt/tokyu/normalized_dataset.json).
+src/dispatch/odpt_adapter.py:52:    ``"Weekday"`` and ``"odpt.Calendar:TokyuBus.Weekday"`` work when the
+src/dispatch/odpt_adapter.py:63:def _build_odpt_deadhead_rules(
+src/dispatch/odpt_adapter.py:104:def supplement_context_from_odpt(
+src/dispatch/odpt_adapter.py:123:        Path to ``data/odpt/tokyu/normalized_dataset.json``.
+src/dispatch/odpt_adapter.py:157:    # Pattern → route_id lookup (prefer odpt:busroute; fall back to pattern_id)
+src/dispatch/odpt_adapter.py:204:        route_id = pattern_to_route.get(pattern_id, pattern_id or "odpt_unknown")
+src/dispatch/odpt_adapter.py:220:    odpt_deadhead = _build_odpt_deadhead_rules(stops_data)
+src/dispatch/odpt_adapter.py:224:        **odpt_deadhead,
+src/dispatch/odpt_adapter.py:230:            f"supplement_context_from_odpt: skipped {skipped_dup} ODPT trip(s) "
+src/dispatch/odpt_adapter.py:236:            f"supplement_context_from_odpt: dropped {skipped_bad} ODPT trip(s) "
+src/dispatch/__init__.py:32:    from .odpt_adapter import supplement_context_from_odpt
+src/dispatch/__init__.py:34:    supplement_context_from_odpt = None
+src/dispatch/__init__.py:60:    "supplement_context_from_odpt",
+src/feed_identity.py:8:TOKYU_ODPT_GTFS_FEED_ID = "tokyu_odpt_gtfs"
+src/feed_identity.py:22:    TOKYU_ODPT_GTFS_FEED_ID: "odpt_json",
+src/gtfs_runtime/loader.py:76:            "odptId": stop.get("odpt_id"),
+src/gtfs_runtime/loader.py:138:                "odptPatternId": route.get("odpt_pattern_id"),
+src/gtfs_runtime/loader.py:139:                "odptBusrouteId": route.get("odpt_busroute_id"),
+src/tokyubus_gtfs/archive.py:12:            odpt_BusstopPole.json
+src/tokyubus_gtfs/archive.py:13:            odpt_BusroutePattern.json
+src/tokyubus_gtfs/archive.py:14:            odpt_BusTimetable.json
+src/tokyubus_gtfs/archive.py:15:            odpt_BusstopPoleTimetable.json
+src/tokyubus_gtfs/archive.py:43:    """Convert 'odpt:BusstopPole' → 'odpt_BusstopPole.json'."""
+src/tokyubus_gtfs/canonical.py:49:_RESOURCE_STOPS = "odpt:BusstopPole"
+src/tokyubus_gtfs/canonical.py:50:_RESOURCE_PATTERNS = "odpt:BusroutePattern"
+src/tokyubus_gtfs/canonical.py:51:_RESOURCE_TIMETABLES = "odpt:BusTimetable"
+src/tokyubus_gtfs/canonical.py:52:_RESOURCE_STOP_TIMETABLES = "odpt:BusstopPoleTimetable"
+src/tokyubus_gtfs/canonical.py:140:        "stops": "odpt:BusstopPole",
+src/tokyubus_gtfs/canonical.py:141:        "stop_poles": "odpt:BusstopPole",
+src/tokyubus_gtfs/canonical.py:142:        "routes": "odpt:BusroutePattern",
+src/tokyubus_gtfs/canonical.py:143:        "route_patterns": "odpt:BusroutePattern",
+src/tokyubus_gtfs/canonical.py:144:        "route_stops": "odpt:BusroutePattern",
+src/tokyubus_gtfs/canonical.py:145:        "trips": "odpt:BusTimetable",
+src/tokyubus_gtfs/canonical.py:146:        "stop_times": "odpt:BusTimetable",
+src/tokyubus_gtfs/canonical.py:147:        "services": "odpt:BusTimetable",
+src/tokyubus_gtfs/canonical.py:148:        "stop_timetables": "odpt:BusstopPoleTimetable",
+src/tokyubus_gtfs/canonical.py:157:                source_type="odpt_raw",
+src/tokyubus_gtfs/canonical.py:214:        odpt_pattern_id = str(item.get("odpt_pattern_id") or "")
+src/tokyubus_gtfs/canonical.py:215:        if not odpt_pattern_id:
+src/tokyubus_gtfs/canonical.py:217:        lookup[odpt_pattern_id] = {
+src/tokyubus_gtfs/canonical.py:390:                odpt_id=stop.odpt_id,
+src/tokyubus_gtfs/canonical.py:475:            if trip.odpt_calendar_raw:
+src/tokyubus_gtfs/canonical.py:476:                calendar_keys.add(trip.odpt_calendar_raw)
+src/tokyubus_gtfs/cli.py:6:    python -m src.tokyubus_gtfs archive --source-dir ./data/raw-odpt [--snapshot-id ID]
+src/tokyubus_gtfs/cli.py:10:    python -m src.tokyubus_gtfs run --source-dir ./data/raw-odpt [--snapshot-id ID] [options]
+src/tokyubus_gtfs/constants.py:29:TOKYU_OPERATOR_ID = "odpt.Operator:TokyuBus"
+src/tokyubus_gtfs/constants.py:39:    "odpt:BusstopPole",
+src/tokyubus_gtfs/constants.py:40:    "odpt:BusroutePattern",
+src/tokyubus_gtfs/constants.py:41:    "odpt:BusTimetable",
+src/tokyubus_gtfs/constants.py:42:    "odpt:BusstopPoleTimetable",
+src/tokyubus_gtfs/gtfs_export.py:20:        sidecar_odpt_provenance.json
+src/tokyubus_gtfs/gtfs_export.py:179:        source_type="odpt_json",
+src/tokyubus_gtfs/gtfs_export.py:459:                "odpt_pattern_id": r.get("odpt_pattern_id", ""),
+src/tokyubus_gtfs/gtfs_export.py:460:                "odpt_busroute_id": r.get("odpt_busroute_id", ""),
+src/tokyubus_gtfs/gtfs_export.py:494:                "odpt_id": s.get("odpt_id", ""),
+src/tokyubus_gtfs/gtfs_export.py:508:def _write_sidecar_trip_odpt_extra(canonical_dir: Path, out_dir: Path) -> int:
+src/tokyubus_gtfs/gtfs_export.py:516:                "odpt_timetable_id": trip.get("odpt_timetable_id", ""),
+src/tokyubus_gtfs/gtfs_export.py:517:                "odpt_pattern_id": trip.get("odpt_pattern_id", ""),
+src/tokyubus_gtfs/gtfs_export.py:518:                "odpt_calendar_raw": trip.get("odpt_calendar_raw", ""),
+src/tokyubus_gtfs/gtfs_export.py:525:    path = out_dir / "sidecar_trip_odpt_extra.json"
+src/tokyubus_gtfs/gtfs_export.py:528:    _log.info("Wrote sidecar_trip_odpt_extra.json (%d entries)", len(payload))
+src/tokyubus_gtfs/gtfs_export.py:542:                "odpt_id": stop_pole.get("odpt_id", ""),
+src/tokyubus_gtfs/gtfs_export.py:630:                "odpt_pattern_id": pattern.get("odpt_pattern_id", ""),
+src/tokyubus_gtfs/gtfs_export.py:631:                "odpt_busroute_id": pattern.get("odpt_busroute_id", ""),
+src/tokyubus_gtfs/gtfs_export.py:801:        "trip_odpt_extra": _write_sidecar_trip_odpt_extra(canonical_dir, out_dir),
+src/tokyubus_gtfs/models.py:34:    odpt_direct = "odpt_direct"  # from ODPT geo:lat / geo:long
+src/tokyubus_gtfs/models.py:35:    gtfs_import = "gtfs_import"  # from GTFS stops.txt
+src/tokyubus_gtfs/models.py:99:    odpt_id: str = ""
+src/tokyubus_gtfs/models.py:100:    odpt_raw: Dict[str, Any] = Field(default_factory=dict)
+src/tokyubus_gtfs/models.py:149:    odpt_pattern_id: str = ""
+src/tokyubus_gtfs/models.py:150:    odpt_busroute_id: str = ""
+src/tokyubus_gtfs/models.py:151:    odpt_raw_title: str = ""
+src/tokyubus_gtfs/models.py:165:    odpt_pattern_id: str = ""
+src/tokyubus_gtfs/models.py:184:    odpt_calendar_raw: str = ""
+src/tokyubus_gtfs/models.py:218:    odpt_timetable_id: str = ""
+src/tokyubus_gtfs/models.py:219:    odpt_pattern_id: str = ""
+src/tokyubus_gtfs/models.py:220:    odpt_calendar_raw: str = ""
+src/tokyubus_gtfs/models.py:235:    odpt_raw_arrival: Optional[str] = None
+src/tokyubus_gtfs/models.py:236:    odpt_raw_departure: Optional[str] = None
+src/tokyubus_gtfs/models.py:249:    odpt_calendar_raw: str = ""
+src/tokyubus_gtfs/models.py:262:    odpt_id: str = ""
+src/tokyubus_gtfs/normalizers/helpers.py:121:def service_id_from_odpt(calendar_short: Optional[str]) -> str:
+src/tokyubus_gtfs/normalizers/routes.py:93:    Normalize ``odpt:BusroutePattern`` into public route families and raw patterns.
+src/tokyubus_gtfs/normalizers/routes.py:114:        odpt_pattern_id = str(item.get("owl:sameAs") or item.get("@id") or "")
+src/tokyubus_gtfs/normalizers/routes.py:115:        if not odpt_pattern_id:
+src/tokyubus_gtfs/normalizers/routes.py:118:        pattern_id = stable_id("route", odpt_pattern_id)
+src/tokyubus_gtfs/normalizers/routes.py:121:        busstop_order = item.get("odpt:busstopPoleOrder") or []
+src/tokyubus_gtfs/normalizers/routes.py:128:            pole = bs.get("odpt:busstopPole")
+src/tokyubus_gtfs/normalizers/routes.py:132:            dist = bs.get("odpt:distance")
+src/tokyubus_gtfs/normalizers/routes.py:141:            warnings.append(f"Pattern {odpt_pattern_id} has < 2 stops, skipped")
+src/tokyubus_gtfs/normalizers/routes.py:151:        route_short_name = str(manual.get("route_short_name") or title or short_id(odpt_pattern_id, pattern_id))
+src/tokyubus_gtfs/normalizers/routes.py:187:            "odpt_pattern_id": odpt_pattern_id,
+src/tokyubus_gtfs/normalizers/routes.py:188:            "odpt_busroute_id": str(item.get("odpt:busroute") or ""),
+src/tokyubus_gtfs/normalizers/routes.py:189:            "odpt_raw_title": title,
+src/tokyubus_gtfs/normalizers/routes.py:236:                    odpt_pattern_id=record["odpt_pattern_id"],
+src/tokyubus_gtfs/normalizers/routes.py:237:                    odpt_busroute_id=record["odpt_busroute_id"],
+src/tokyubus_gtfs/normalizers/routes.py:238:                    odpt_raw_title=record["odpt_raw_title"],
+src/tokyubus_gtfs/normalizers/routes.py:244:            pattern_lookup[record["odpt_pattern_id"]] = {
+src/tokyubus_gtfs/normalizers/routes.py:266:                        odpt_pattern_id=record["odpt_pattern_id"],
+src/tokyubus_gtfs/normalizers/services.py:12:from .helpers import service_id_from_odpt, short_id
+src/tokyubus_gtfs/normalizers/services.py:34:        (e.g., ``{"odpt.Calendar:Weekday", "odpt.Calendar:Saturday", ...}``).
+src/tokyubus_gtfs/normalizers/services.py:52:        sid = service_id_from_odpt(short)
+src/tokyubus_gtfs/normalizers/services.py:70:                odpt_calendar_raw=raw_key,
+src/tokyubus_gtfs/normalizers/services.py:85:                odpt_calendar_raw=raw_key,
+src/tokyubus_gtfs/normalizers/services.py:100:                odpt_calendar_raw=raw_key,
+src/tokyubus_gtfs/normalizers/services.py:115:                odpt_calendar_raw=raw_key,
+src/tokyubus_gtfs/normalizers/services.py:129:                odpt_calendar_raw=raw_key,
+src/tokyubus_gtfs/normalizers/stops.py:29:        return lat, lon, CoordSourceType.odpt_direct, 0.95
+src/tokyubus_gtfs/normalizers/stops.py:32:        return lat, lon, CoordSourceType.odpt_direct, 0.5
+src/tokyubus_gtfs/normalizers/stops.py:39:    Normalize ``odpt:BusstopPole`` records into canonical stops.
+src/tokyubus_gtfs/normalizers/stops.py:76:        pole_number = item.get("odpt:busstopPoleNumber")
+src/tokyubus_gtfs/normalizers/stops.py:88:            odpt_id=stop_id,
+src/tokyubus_gtfs/normalizers/stops.py:89:            odpt_raw={
+src/tokyubus_gtfs/normalizers/stops.py:92:                "odpt:busstopPoleNumber": pole_number,
+src/tokyubus_gtfs/normalizers/stop_timetables.py:11:from .helpers import safe_time_hhmm, service_id_from_odpt, short_id
+src/tokyubus_gtfs/normalizers/stop_timetables.py:21:    Normalize ``odpt:BusstopPoleTimetable`` for reconciliation.
+src/tokyubus_gtfs/normalizers/stop_timetables.py:45:        stop_id = str(item.get("odpt:busstopPole") or "")
+src/tokyubus_gtfs/normalizers/stop_timetables.py:46:        calendar_raw = str(item.get("odpt:calendar") or "")
+src/tokyubus_gtfs/normalizers/stop_timetables.py:48:        service_id = service_id_from_odpt(service_key)
+src/tokyubus_gtfs/normalizers/stop_timetables.py:50:        tt_objects = item.get("odpt:busstopPoleTimetableObject") or []
+src/tokyubus_gtfs/normalizers/stop_timetables.py:58:                    "departure": safe_time_hhmm(obj.get("odpt:departureTime")),
+src/tokyubus_gtfs/normalizers/stop_timetables.py:59:                    "destination": str(obj.get("odpt:destinationBusstopPole") or ""),
+src/tokyubus_gtfs/normalizers/stop_timetables.py:60:                    "busroutePattern": str(obj.get("odpt:busroutePattern") or ""),
+src/tokyubus_gtfs/normalizers/stop_timetables.py:61:                    "busroute": str(obj.get("odpt:busroute") or ""),
+src/tokyubus_gtfs/normalizers/stop_timetables.py:62:                    "isMidnight": bool(obj.get("odpt:isMidnight")),
+src/tokyubus_gtfs/normalizers/stop_timetables.py:63:                    "note": str(obj.get("odpt:note") or ""),
+src/tokyubus_gtfs/normalizers/stop_timetables.py:73:                odpt_calendar_raw=calendar_raw,
+src/tokyubus_gtfs/normalizers/trips.py:15:    service_id_from_odpt,
+src/tokyubus_gtfs/normalizers/trips.py:38:    Normalize ``odpt:BusTimetable`` into canonical trips and stop times.
+src/tokyubus_gtfs/normalizers/trips.py:72:        pattern_id = str(timetable.get("odpt:busroutePattern") or "")
+src/tokyubus_gtfs/normalizers/trips.py:73:        calendar_raw = str(timetable.get("odpt:calendar") or "")
+src/tokyubus_gtfs/normalizers/trips.py:74:        tt_objects = timetable.get("odpt:busTimetableObject") or []
+src/tokyubus_gtfs/normalizers/trips.py:84:        service_id = service_id_from_odpt(service_key)
+src/tokyubus_gtfs/normalizers/trips.py:90:            or f"odpt-trip-{hashlib.sha1(data_hash(timetable).encode()).hexdigest()[:12]}"
+src/tokyubus_gtfs/normalizers/trips.py:97:            key=lambda obj: int(obj.get("odpt:index") or 0),
+src/tokyubus_gtfs/normalizers/trips.py:101:            stop_id = str(st.get("odpt:busstopPole") or "")
+src/tokyubus_gtfs/normalizers/trips.py:102:            raw_dep = st.get("odpt:departureTime")
+src/tokyubus_gtfs/normalizers/trips.py:103:            raw_arr = st.get("odpt:arrivalTime")
+src/tokyubus_gtfs/normalizers/trips.py:121:                odpt_raw_arrival=str(raw_arr) if raw_arr else None,
+src/tokyubus_gtfs/normalizers/trips.py:122:                odpt_raw_departure=str(raw_dep) if raw_dep else None,
+src/tokyubus_gtfs/normalizers/trips.py:171:            odpt_timetable_id=timetable_id,
+src/tokyubus_gtfs/normalizers/trips.py:172:            odpt_pattern_id=pattern_id,
+src/tokyubus_gtfs/normalizers/trips.py:173:            odpt_calendar_raw=calendar_raw,
+src/tokyubus_gtfs/odpt_client.py:2:src.tokyubus_gtfs.odpt_client — ODPT data source adapter.
+src/tokyubus_gtfs/odpt_client.py:5:infrastructure in ``bff/services/odpt_fetch.py`` and
+src/tokyubus_gtfs/odpt_client.py:14:    from src.tokyubus_gtfs.odpt_client import fetch_raw_odpt
+src/tokyubus_gtfs/odpt_client.py:16:    staging_dir = fetch_raw_odpt(out_dir=Path("./data/staging"))
+src/tokyubus_gtfs/odpt_client.py:38:    "odpt:BusstopPole": "odpt:BusstopPole",
+src/tokyubus_gtfs/odpt_client.py:39:    "odpt:BusroutePattern": "odpt:BusroutePattern",
+src/tokyubus_gtfs/odpt_client.py:40:    "odpt:BusTimetable": "odpt:BusTimetable",
+src/tokyubus_gtfs/odpt_client.py:41:    "odpt:BusstopPoleTimetable": "odpt:BusstopPoleTimetable",
+src/tokyubus_gtfs/odpt_client.py:46:    """Convert ``'odpt:BusstopPole'`` → ``'odpt_BusstopPole.json'``."""
+src/tokyubus_gtfs/odpt_client.py:51:# Fetch via bff.services.odpt_fetch (sync, small-scale)
+src/tokyubus_gtfs/odpt_client.py:66:        from bff.services.odpt_fetch import fetch_odpt_resource
+src/tokyubus_gtfs/odpt_client.py:68:        return fetch_odpt_resource(resource_type, operator=operator)
+src/tokyubus_gtfs/odpt_client.py:71:            "bff.services.odpt_fetch not available — cannot fetch %s",
+src/tokyubus_gtfs/odpt_client.py:85:def fetch_raw_odpt(
+src/tokyubus_gtfs/odpt_client.py:152:            "fetch-odpt",
+src/tokyubus_gtfs/odpt_client.py:166:        return fetch_raw_odpt(
+src/tokyubus_gtfs/pipeline.py:38:    "odpt:BusstopPole",
+src/tokyubus_gtfs/pipeline.py:39:    "odpt:BusroutePattern",
+src/tokyubus_gtfs/pipeline.py:40:    "odpt:BusTimetable",
+src/tokyubus_gtfs/pipeline.py:43:    "odpt:BusstopPole",
+src/tokyubus_gtfs/pipeline.py:44:    "odpt:BusroutePattern",
+src/tokyubus_gtfs/pipeline.py:45:    "odpt:BusTimetable",
+src/tokyubus_gtfs/validate.py:34:    "sidecar_trip_odpt_extra.json",

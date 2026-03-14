@@ -13,10 +13,10 @@ Each file stores the complete scenario document:
     "stops":   [ Stop ... ],
     "depot_route_permissions":   [ {depotId, routeId, allowed} ... ],
     "vehicle_route_permissions": [ {vehicleId, routeId, allowed} ... ],
-    "route_import_meta": { "odpt": { ... } },
-    "stop_import_meta": { "odpt": { ... } },
-    "timetable_import_meta": { "odpt": { ... } },
-    "stop_timetable_import_meta": { "odpt": { ... } },
+    "route_import_meta": { "seed": { ... } },
+    "stop_import_meta": { "seed": { ... } },
+    "timetable_import_meta": { "seed": { ... } },
+    "stop_timetable_import_meta": { "seed": { ... } },
     "timetable_rows": [ TimetableRow ... ],   # service_id field included
     "stop_timetables": [ StopTimetable ... ],
     "calendar": [ ServiceCalendar ... ],      # WEEKDAY/SAT/SUN_HOL definitions
@@ -1874,7 +1874,7 @@ def _operator_matches_route(route: Dict[str, Any], operator: Optional[str]) -> b
         return True
     source = str(route.get("source") or "").lower()
     if operator == "tokyu":
-        return source in {"", "manual", "odpt"}
+        return source in {"", "manual", "seed"}
     if operator == "toei":
         return source in {"", "manual", "gtfs"}
     return source == operator.lower()
@@ -2100,8 +2100,8 @@ def upsert_route_depot_assignment(
             str(value)
             for value in (
                 route.get("id"),
-                route.get("odptPatternId"),
-                route.get("odptBusrouteId"),
+                route.get("patternId"),
+                route.get("routeExternalId"),
             )
             if value is not None
         }

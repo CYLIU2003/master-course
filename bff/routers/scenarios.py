@@ -17,7 +17,6 @@ Routes:
   GET    /scenarios/{id}/timetable               → get timetable rows (optional ?service_id=)
   PUT    /scenarios/{id}/timetable               → replace timetable rows
   POST   /scenarios/{id}/timetable/import-csv    → import rows from CSV text body
-  POST   /scenarios/{id}/timetable/import-gtfs   → import rows from local GTFS feed
   GET    /scenarios/{id}/timetable/export-csv    → export rows as CSV text body
 
   GET    /scenarios/{id}/deadhead-rules    → list
@@ -27,7 +26,6 @@ Routes:
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 from threading import Lock
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -36,25 +34,10 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from bff.services import research_catalog, runtime_catalog, transit_catalog
-from bff.services.gtfs_import import (
-    DEFAULT_GTFS_FEED_PATH,
-    summarize_gtfs_stop_timetable_import,
-    summarize_gtfs_timetable_import,
-)
-from bff.services.odpt_routes import DEFAULT_OPERATOR
-from bff.services.odpt_stop_timetables import (
-    summarize_stop_timetable_import,
-)
-from bff.services.odpt_timetable import (
-    normalize_timetable_row_indexes,
-    summarize_timetable_import,
-)
+from bff.services import research_catalog
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
-from src.feed_identity import TOKYU_ODPT_GTFS_FEED_ID, build_dataset_id, infer_feed_id
-from src.tokyubus_gtfs.constants import DEFAULT_TURNAROUND_SEC, ROUTE_FAMILY_MAP_PATH
 
 router = APIRouter(tags=["scenarios"])
 _default_scenario_lock = Lock()
@@ -366,46 +349,6 @@ class ImportCsvBody(BaseModel):
     content: str  # raw CSV text (UTF-8)
 
 
-class ImportOdptTimetableBody(BaseModel):
-    operator: str = DEFAULT_OPERATOR
-    dump: bool = True
-    forceRefresh: bool = False
-    ttlSec: int = 3600
-    chunkBusTimetables: bool = False
-    busTimetableCursor: int = 0
-    busTimetableBatchSize: int = 25
-    reset: bool = True
-
-
-class ImportGtfsTimetableBody(BaseModel):
-    feedPath: str = DEFAULT_GTFS_FEED_PATH
-    forceRefresh: bool = False
-    reset: bool = True
-
-
-class ImportOdptStopTimetableBody(BaseModel):
-    operator: str = DEFAULT_OPERATOR
-    dump: bool = True
-    forceRefresh: bool = False
-    ttlSec: int = 3600
-    stopTimetableCursor: int = 0
-    stopTimetableBatchSize: int = 50
-    reset: bool = True
-
-
-class ImportGtfsStopTimetableBody(BaseModel):
-    feedPath: str = DEFAULT_GTFS_FEED_PATH
-    forceRefresh: bool = False
-    reset: bool = True
-
-
-class ImportRuntimeSnapshotBody(BaseModel):
-    snapshotId: Optional[str] = None
-    importDeadheadRules: bool = True
-    importTurnaroundRules: bool = True
-    resetRuntimeSource: bool = True
-
-
 # ── Helpers ────────────────────────────────────────────────────
 
 
@@ -428,51 +371,6 @@ def _runtime_err_to_http(e: RuntimeError) -> HTTPException:
     raise e
 
 
-def _load_odpt_bundle(
-    *,
-    operator: str,
-    dump: bool,
-    force_refresh: bool,
-    ttl_sec: int,
-    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
-) -> Dict[str, Any]:
-    if force_refresh:
-        return transit_catalog.refresh_odpt_snapshot(
-            operator=operator,
-            dump=dump,
-            force_refresh=True,
-            ttl_sec=ttl_sec,
-            progress_callback=progress_callback,
-        )
-    bundle = transit_catalog.load_existing_odpt_snapshot(operator=operator)
-    if bundle is not None:
-        return bundle
-    raise RuntimeError(
-        "No saved ODPT snapshot is available. Run `python3 catalog_update_app.py refresh odpt` "
-        "or retry with forceRefresh=true."
-    )
-
-
-def _load_gtfs_bundle(
-    *,
-    feed_path: str,
-    force_refresh: bool,
-    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
-) -> Dict[str, Any]:
-    if force_refresh:
-        return transit_catalog.refresh_gtfs_snapshot(
-            feed_path=feed_path,
-            progress_callback=progress_callback,
-        )
-    bundle = transit_catalog.load_existing_gtfs_snapshot(feed_path=feed_path)
-    if bundle is not None:
-        return bundle
-    raise RuntimeError(
-        "No saved GTFS snapshot is available. Run `python3 catalog_update_app.py refresh gtfs` "
-        "or retry with forceRefresh=true."
-    )
-
-
 def _pick_latest_scenario(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not items:
         return None
@@ -487,215 +385,20 @@ def _pick_latest_scenario(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any
     )[0]
 
 
-def _build_odpt_import_meta(
-    *,
-    dataset: Dict[str, Any],
-    operator: str,
-    dump: bool,
-    quality: Dict[str, Any],
-    progress_key: str,
-    resource_type: str,
-) -> Dict[str, Any]:
-    meta = dataset.get("meta", {}) if isinstance(dataset, dict) else {}
-    progress = (meta.get("progress") or {}).get(progress_key)
+def _scenario_summary(item: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "operator": operator,
-        "dump": meta.get("effectiveDump", meta.get("dump", dump)),
-        "requestedDump": dump,
-        "source": "odpt",
-        "feed_id": str(meta.get("feed_id") or TOKYU_ODPT_GTFS_FEED_ID),
-        "snapshot_id": meta.get("snapshotId"),
-        "dataset_id": str(
-            meta.get("dataset_id")
-            or build_dataset_id(
-                str(meta.get("feed_id") or TOKYU_ODPT_GTFS_FEED_ID),
-                str(meta.get("snapshotId") or "") or None,
-            )
-        ),
-        "resourceType": resource_type,
-        "generatedAt": meta.get("generatedAt"),
-        "warnings": meta.get("warnings", []),
-        "cache": meta.get("cache", {}),
-        "progress": progress,
-        "snapshotKey": (dataset.get("snapshot") or {}).get("snapshotKey"),
-        "snapshotMode": meta.get("snapshotMode"),
-        "quality": quality,
+        "id": item.get("id"),
+        "name": item.get("name"),
+        "description": item.get("description"),
+        "mode": item.get("mode"),
+        "operatorId": item.get("operatorId"),
+        "createdAt": item.get("createdAt"),
+        "updatedAt": item.get("updatedAt"),
+        "status": item.get("status"),
+        "datasetId": item.get("datasetId"),
+        "datasetVersion": item.get("datasetVersion"),
+        "randomSeed": item.get("randomSeed"),
     }
-
-
-def _build_gtfs_import_meta(
-    *,
-    bundle: Dict[str, Any],
-    quality: Dict[str, Any],
-    resource_type: str,
-) -> Dict[str, Any]:
-    meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
-    feed_id = str(
-        meta.get("feed_id") or infer_feed_id(meta.get("feedPath") or "") or ""
-    )
-    snapshot_id = str(meta.get("snapshot_id") or "") or None
-    dataset_id = str(meta.get("dataset_id") or "") or (
-        build_dataset_id(feed_id, snapshot_id) if feed_id else ""
-    )
-    return {
-        "feedPath": meta.get("feedPath"),
-        "agencyName": meta.get("agencyName"),
-        "source": "gtfs",
-        "feed_id": feed_id or None,
-        "snapshot_id": snapshot_id,
-        "dataset_id": dataset_id or None,
-        "resourceType": resource_type,
-        "generatedAt": meta.get("generatedAt"),
-        "warnings": meta.get("warnings", []),
-        "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
-        "snapshotMode": meta.get("snapshotMode"),
-        "quality": quality,
-    }
-
-
-def _build_runtime_import_meta(
-    *,
-    bundle: Dict[str, Any],
-    quality: Dict[str, Any],
-    resource_type: str,
-) -> Dict[str, Any]:
-    meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
-    return {
-        "source": "gtfs_runtime",
-        "operator": meta.get("operator") or "tokyu",
-        "feed_id": meta.get("feed_id"),
-        "snapshot_id": meta.get("snapshotId"),
-        "dataset_id": meta.get("dataset_id"),
-        "resourceType": resource_type,
-        "generatedAt": meta.get("generatedAt"),
-        "warnings": meta.get("warnings", []),
-        "snapshotId": meta.get("snapshotId"),
-        "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
-        "snapshotMode": meta.get("snapshotMode"),
-        "canonicalDir": meta.get("canonicalDir"),
-        "featuresDir": meta.get("featuresDir"),
-        "featureCounts": meta.get("featureCounts") or {},
-        "quality": quality,
-    }
-
-
-def _runtime_deadhead_rules(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
-    items = list(((bundle.get("features") or {}).get("deadhead_candidates") or []))
-    return [
-        {
-            "from_stop": str(item.get("from_stop_id") or ""),
-            "to_stop": str(item.get("to_stop_id") or ""),
-            "travel_time_min": int(round(float(item.get("estimated_time_min") or 0.0))),
-            "distance_km": float(item.get("estimated_road_km") or 0.0),
-        }
-        for item in items
-        if item.get("from_stop_id") is not None and item.get("to_stop_id") is not None
-    ]
-
-
-def _runtime_turnaround_rules(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
-    route_items = list(bundle.get("routes") or [])
-    turnaround_min = max(1, int(round(DEFAULT_TURNAROUND_SEC / 60)))
-    stop_ids = {
-        str(stop_id)
-        for route in route_items
-        for stop_id in (route.get("startStopId"), route.get("endStopId"))
-        if stop_id
-    }
-    if not stop_ids:
-        stop_ids = {
-            str(item.get("id"))
-            for item in list(bundle.get("stops") or [])
-            if item.get("id") is not None
-        }
-    return [
-        {"stop_id": stop_id, "min_turnaround_min": turnaround_min}
-        for stop_id in sorted(stop_ids)
-    ]
-
-
-def _bundle_feed_context(
-    source: str, bundle: Dict[str, Any]
-) -> Optional[Dict[str, Any]]:
-    meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
-    feed_id = str(
-        meta.get("feed_id")
-        or infer_feed_id(meta.get("feedPath") or "")
-        or (TOKYU_ODPT_GTFS_FEED_ID if source in {"odpt", "gtfs_runtime"} else "")
-    ).strip()
-    snapshot_id = str(meta.get("snapshot_id") or meta.get("snapshotId") or "").strip()
-    dataset_id = str(meta.get("dataset_id") or "").strip()
-    if feed_id and not dataset_id:
-        dataset_id = build_dataset_id(feed_id, snapshot_id or None)
-    manual_hash = str(
-        meta.get("manualRouteFamilyMapHash") or _manual_route_family_map_hash() or ""
-    ).strip()
-    dataset_fingerprint = dataset_id or build_dataset_id(
-        feed_id or source, snapshot_id or None
-    )
-    if manual_hash:
-        dataset_fingerprint = (
-            f"{dataset_fingerprint}::route_family_map:{manual_hash[:12]}"
-        )
-    if not any((feed_id, snapshot_id, dataset_id)):
-        return None
-    return {
-        "feed_id": feed_id or None,
-        "snapshot_id": snapshot_id or None,
-        "dataset_id": dataset_id or None,
-        "dataset_fingerprint": dataset_fingerprint or None,
-        "manual_route_family_map_hash": manual_hash or None,
-        "source": source,
-    }
-
-
-def _manual_route_family_map_hash() -> Optional[str]:
-    try:
-        if not ROUTE_FAMILY_MAP_PATH.exists():
-            return None
-        return hashlib.sha256(ROUTE_FAMILY_MAP_PATH.read_bytes()).hexdigest()
-    except Exception:
-        return None
-
-
-def _source_snapshot_from_bundle(source: str, bundle: Dict[str, Any]) -> Dict[str, Any]:
-    meta = bundle.get("meta", {}) if isinstance(bundle, dict) else {}
-    feed_id = meta.get("feed_id") or infer_feed_id(meta.get("feedPath") or "")
-    snapshot_id = meta.get("snapshot_id") or meta.get("snapshotId")
-    dataset_id = meta.get("dataset_id")
-    manual_hash = (
-        str(
-            meta.get("manualRouteFamilyMapHash")
-            or _manual_route_family_map_hash()
-            or ""
-        ).strip()
-        or None
-    )
-    dataset_fingerprint = dataset_id or build_dataset_id(
-        str(feed_id or source), str(snapshot_id or "") or None
-    )
-    if manual_hash:
-        dataset_fingerprint = (
-            f"{dataset_fingerprint}::route_family_map:{manual_hash[:12]}"
-        )
-    snapshot = {
-        "source": source,
-        "snapshotId": snapshot_id,
-        "snapshotKey": (bundle.get("snapshot") or {}).get("snapshotKey"),
-        "feedId": feed_id,
-        "datasetId": dataset_id,
-        "datasetFingerprint": dataset_fingerprint,
-        "manualRouteFamilyMapHash": manual_hash,
-    }
-    if source == "gtfs_runtime":
-        snapshot.update(
-            {
-                "canonicalDir": meta.get("canonicalDir"),
-                "featuresDir": meta.get("featuresDir"),
-                "featureCounts": meta.get("featureCounts") or {},
-            }
-        )
-    return snapshot
 
 
 # ── Scenario CRUD ──────────────────────────────────────────────
@@ -703,7 +406,7 @@ def _source_snapshot_from_bundle(source: str, bundle: Dict[str, Any]) -> Dict[st
 
 @router.get("/scenarios")
 def list_scenarios() -> Dict[str, Any]:
-    items = store.list_scenarios()
+    items = [_scenario_summary(item) for item in store.list_scenarios()]
     return {"items": items, "total": len(items)}
 
 
@@ -718,7 +421,7 @@ def get_or_create_default_scenario() -> Dict[str, Any]:
         latest = _pick_latest_scenario(items)
         if latest is None:
             raise HTTPException(status_code=404, detail="No scenarios found")
-        return latest
+        return _scenario_summary(latest)
 
 
 @router.post("/scenarios", status_code=201)
@@ -1069,363 +772,6 @@ def import_timetable_csv(scenario_id: str, body: ImportCsvBody) -> Dict[str, Any
     return {"items": rows, "total": len(rows)}
 
 
-def _import_odpt_timetable_data(
-    scenario_id: str,
-    body: ImportOdptTimetableBody,
-    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
-) -> Dict[str, Any]:
-    try:
-        store.get_scenario(scenario_id)
-    except KeyError:
-        raise _not_found(scenario_id)
-
-    bundle = _load_odpt_bundle(
-        operator=body.operator,
-        dump=body.dump,
-        force_refresh=body.forceRefresh,
-        ttl_sec=body.ttlSec,
-        progress_callback=progress_callback,
-    )
-    rows = list(bundle.get("timetable_rows") or [])
-    merged_rows = store.upsert_timetable_rows_from_source(
-        scenario_id,
-        "odpt",
-        rows,
-        replace_existing_source=body.reset,
-    )
-    normalized_rows = normalize_timetable_row_indexes(merged_rows)
-    store.set_field(
-        scenario_id,
-        "timetable_rows",
-        normalized_rows,
-        invalidate_dispatch=True,
-    )
-    odpt_rows = [row for row in normalized_rows if row.get("source") == "odpt"]
-    quality = summarize_timetable_import(
-        odpt_rows,
-        {
-            "meta": bundle.get("meta") or {},
-            "stopTimetables": list(bundle.get("stop_timetables") or []),
-        },
-    )
-    for entry in list(bundle.get("calendar_entries") or []):
-        store.upsert_calendar_entry(scenario_id, entry)
-    import_meta = _build_odpt_import_meta(
-        dataset=bundle,
-        operator=body.operator,
-        dump=body.dump,
-        quality=quality,
-        progress_key="busTimetables",
-        resource_type="BusTimetable",
-    )
-    store.set_timetable_import_meta(scenario_id, "odpt", import_meta)
-    store.set_field(
-        scenario_id,
-        "source_snapshot",
-        _source_snapshot_from_bundle("odpt", bundle),
-    )
-    store.set_feed_context(scenario_id, _bundle_feed_context("odpt", bundle))
-    return {
-        "items": odpt_rows,
-        "total": len(odpt_rows),
-        "meta": import_meta,
-    }
-
-
-def _import_gtfs_timetable_data(
-    scenario_id: str,
-    body: ImportGtfsTimetableBody,
-    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
-) -> Dict[str, Any]:
-    try:
-        store.get_scenario(scenario_id)
-    except KeyError:
-        raise _not_found(scenario_id)
-
-    bundle = _load_gtfs_bundle(
-        feed_path=body.feedPath,
-        force_refresh=body.forceRefresh,
-        progress_callback=progress_callback,
-    )
-    rows = list(bundle.get("timetable_rows") or [])
-    merged_rows = store.upsert_timetable_rows_from_source(
-        scenario_id,
-        "gtfs",
-        rows,
-        replace_existing_source=body.reset,
-    )
-    normalized_rows = normalize_timetable_row_indexes(merged_rows)
-    store.set_field(
-        scenario_id,
-        "timetable_rows",
-        normalized_rows,
-        invalidate_dispatch=True,
-    )
-    gtfs_rows = [row for row in normalized_rows if row.get("source") == "gtfs"]
-    quality = summarize_gtfs_timetable_import(
-        gtfs_rows,
-        {
-            "meta": bundle.get("meta") or {},
-            "stop_timetable_count": len(list(bundle.get("stop_timetables") or [])),
-        },
-    )
-
-    calendar_entries = list(bundle.get("calendar_entries") or [])
-    calendar_date_entries = list(bundle.get("calendar_date_entries") or [])
-    for entry in calendar_entries:
-        store.upsert_calendar_entry(scenario_id, entry)
-    for entry in calendar_date_entries:
-        store.upsert_calendar_date(scenario_id, entry)
-    quality["calendarEntriesSynced"] = len(calendar_entries)
-    quality["calendarDateEntriesSynced"] = len(calendar_date_entries)
-
-    import_meta = _build_gtfs_import_meta(
-        bundle=bundle,
-        quality=quality,
-        resource_type="GTFSTrip",
-    )
-    store.set_timetable_import_meta(scenario_id, "gtfs", import_meta)
-    store.set_field(
-        scenario_id,
-        "source_snapshot",
-        _source_snapshot_from_bundle("gtfs", bundle),
-    )
-    store.set_feed_context(scenario_id, _bundle_feed_context("gtfs", bundle))
-    return {
-        "items": gtfs_rows,
-        "total": len(gtfs_rows),
-        "meta": import_meta,
-    }
-
-
-def _import_odpt_stop_timetables_data(
-    scenario_id: str,
-    body: ImportOdptStopTimetableBody,
-    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
-) -> Dict[str, Any]:
-    try:
-        store.get_scenario(scenario_id)
-    except KeyError:
-        raise _not_found(scenario_id)
-
-    bundle = _load_odpt_bundle(
-        operator=body.operator,
-        dump=body.dump,
-        force_refresh=body.forceRefresh,
-        ttl_sec=body.ttlSec,
-        progress_callback=progress_callback,
-    )
-    items = list(bundle.get("stop_timetables") or [])
-    merged_items = store.upsert_stop_timetables_from_source(
-        scenario_id,
-        "odpt",
-        items,
-        replace_existing_source=body.reset,
-    )
-    odpt_items = [item for item in merged_items if item.get("source") == "odpt"]
-    quality = summarize_stop_timetable_import(
-        odpt_items,
-        {"meta": bundle.get("meta") or {}},
-    )
-    for entry in list(bundle.get("calendar_entries") or []):
-        store.upsert_calendar_entry(scenario_id, entry)
-    import_meta = _build_odpt_import_meta(
-        dataset=bundle,
-        operator=body.operator,
-        dump=body.dump,
-        quality=quality,
-        progress_key="stopTimetables",
-        resource_type="BusstopPoleTimetable",
-    )
-    store.set_stop_timetable_import_meta(scenario_id, "odpt", import_meta)
-    store.set_field(
-        scenario_id,
-        "source_snapshot",
-        _source_snapshot_from_bundle("odpt", bundle),
-    )
-    store.set_feed_context(scenario_id, _bundle_feed_context("odpt", bundle))
-    return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
-
-
-def _import_gtfs_stop_timetables_data(
-    scenario_id: str,
-    body: ImportGtfsStopTimetableBody,
-    progress_callback: Optional[transit_catalog.ProgressCallback] = None,
-) -> Dict[str, Any]:
-    try:
-        store.get_scenario(scenario_id)
-    except KeyError:
-        raise _not_found(scenario_id)
-
-    bundle = _load_gtfs_bundle(
-        feed_path=body.feedPath,
-        force_refresh=body.forceRefresh,
-        progress_callback=progress_callback,
-    )
-    items = list(bundle.get("stop_timetables") or [])
-    merged_items = store.upsert_stop_timetables_from_source(
-        scenario_id,
-        "gtfs",
-        items,
-        replace_existing_source=body.reset,
-    )
-    gtfs_items = [item for item in merged_items if item.get("source") == "gtfs"]
-    quality = summarize_gtfs_stop_timetable_import(gtfs_items, bundle)
-    import_meta = _build_gtfs_import_meta(
-        bundle=bundle,
-        quality=quality,
-        resource_type="GTFSStopTimetable",
-    )
-    store.set_stop_timetable_import_meta(scenario_id, "gtfs", import_meta)
-    store.set_field(
-        scenario_id,
-        "source_snapshot",
-        _source_snapshot_from_bundle("gtfs", bundle),
-    )
-    store.set_feed_context(scenario_id, _bundle_feed_context("gtfs", bundle))
-    return {"items": merged_items, "total": len(merged_items), "meta": import_meta}
-
-
-@router.post("/scenarios/{scenario_id}/timetable/import-odpt")
-def import_timetable_odpt(
-    scenario_id: str, body: ImportOdptTimetableBody
-) -> Dict[str, Any]:
-    try:
-        return _import_odpt_timetable_data(scenario_id, body)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-
-@router.post("/scenarios/{scenario_id}/timetable/import-gtfs")
-def import_timetable_gtfs(
-    scenario_id: str, body: ImportGtfsTimetableBody
-) -> Dict[str, Any]:
-    try:
-        return _import_gtfs_timetable_data(scenario_id, body)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-
-@router.post("/scenarios/{scenario_id}/import-runtime-snapshot")
-def import_runtime_snapshot(
-    scenario_id: str,
-    body: Optional[ImportRuntimeSnapshotBody] = None,
-) -> Dict[str, Any]:
-    try:
-        store.get_scenario(scenario_id)
-    except KeyError:
-        raise _not_found(scenario_id)
-
-    request = body or ImportRuntimeSnapshotBody()
-    try:
-        bundle = runtime_catalog.load_runtime_snapshot(request.snapshotId)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-
-    stops = list(bundle.get("stops") or [])
-    routes = list(bundle.get("routes") or [])
-    timetable_rows = list(bundle.get("timetable_rows") or [])
-    stop_timetables = list(bundle.get("stop_timetables") or [])
-    calendar_entries = list(bundle.get("calendar_entries") or [])
-    calendar_date_entries = list(bundle.get("calendar_date_entries") or [])
-    features = dict(bundle.get("features") or {})
-
-    stop_import_meta = _build_runtime_import_meta(
-        bundle=bundle,
-        quality={"stopCount": len(stops)},
-        resource_type="RuntimeStop",
-    )
-    route_import_meta = _build_runtime_import_meta(
-        bundle=bundle,
-        quality={"routeCount": len(routes)},
-        resource_type="RuntimeRoute",
-    )
-    timetable_import_meta = _build_runtime_import_meta(
-        bundle=bundle,
-        quality=summarize_gtfs_timetable_import(
-            timetable_rows,
-            {
-                "meta": bundle.get("meta") or {},
-                "stop_timetable_count": len(stop_timetables),
-            },
-        ),
-        resource_type="RuntimeTrip",
-    )
-    stop_timetable_import_meta = _build_runtime_import_meta(
-        bundle=bundle,
-        quality=summarize_gtfs_stop_timetable_import(stop_timetables, bundle),
-        resource_type="RuntimeStopTimetable",
-    )
-
-    store.replace_stops_from_source(
-        scenario_id,
-        "gtfs_runtime",
-        stops,
-        import_meta=stop_import_meta,
-    )
-    store.replace_routes_from_source(
-        scenario_id,
-        "gtfs_runtime",
-        routes,
-        import_meta=route_import_meta,
-    )
-    merged_rows = store.upsert_timetable_rows_from_source(
-        scenario_id,
-        "gtfs_runtime",
-        timetable_rows,
-        replace_existing_source=request.resetRuntimeSource,
-    )
-    store.set_field(
-        scenario_id,
-        "timetable_rows",
-        normalize_timetable_row_indexes(merged_rows),
-        invalidate_dispatch=True,
-    )
-    store.set_timetable_import_meta(scenario_id, "gtfs_runtime", timetable_import_meta)
-    store.upsert_stop_timetables_from_source(
-        scenario_id,
-        "gtfs_runtime",
-        stop_timetables,
-        replace_existing_source=request.resetRuntimeSource,
-    )
-    store.set_stop_timetable_import_meta(
-        scenario_id,
-        "gtfs_runtime",
-        stop_timetable_import_meta,
-    )
-    if calendar_entries:
-        store.set_calendar(scenario_id, calendar_entries)
-    if calendar_date_entries or request.resetRuntimeSource:
-        store.set_calendar_dates(scenario_id, calendar_date_entries)
-
-    if request.importDeadheadRules:
-        store.set_deadhead_rules(scenario_id, _runtime_deadhead_rules(bundle))
-    if request.importTurnaroundRules:
-        store.set_turnaround_rules(scenario_id, _runtime_turnaround_rules(bundle))
-
-    source_snapshot = _source_snapshot_from_bundle("gtfs_runtime", bundle)
-    store.set_field(scenario_id, "source_snapshot", source_snapshot)
-    store.set_feed_context(scenario_id, _bundle_feed_context("gtfs_runtime", bundle))
-    store.set_field(scenario_id, "runtime_features", features)
-
-    return {
-        "snapshot": source_snapshot,
-        "counts": {
-            "stops": len(stops),
-            "routes": len(routes),
-            "timetableRows": len(timetable_rows),
-            "stopTimetables": len(stop_timetables),
-            "calendarEntries": len(calendar_entries),
-            "deadheadRules": len(store.get_deadhead_rules(scenario_id) or []),
-            "turnaroundRules": len(store.get_turnaround_rules(scenario_id) or []),
-        },
-        "imports": {
-            "stops": stop_import_meta,
-            "routes": route_import_meta,
-            "timetable": timetable_import_meta,
-            "stopTimetables": stop_timetable_import_meta,
-        },
-    }
 
 
 @router.get("/scenarios/{scenario_id}/stop-timetables")
@@ -1469,26 +815,6 @@ def get_stop_timetables_summary(scenario_id: str) -> Dict[str, Any]:
         raise _not_found(scenario_id)
     imports = store.get_stop_timetable_import_meta(scenario_id)
     return {"item": _build_stop_timetable_summary(items, imports)}
-
-
-@router.post("/scenarios/{scenario_id}/stop-timetables/import-odpt")
-def import_stop_timetables_odpt(
-    scenario_id: str, body: ImportOdptStopTimetableBody
-) -> Dict[str, Any]:
-    try:
-        return _import_odpt_stop_timetables_data(scenario_id, body)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-
-@router.post("/scenarios/{scenario_id}/stop-timetables/import-gtfs")
-def import_stop_timetables_gtfs(
-    scenario_id: str, body: ImportGtfsStopTimetableBody
-) -> Dict[str, Any]:
-    try:
-        return _import_gtfs_stop_timetables_data(scenario_id, body)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.get("/scenarios/{scenario_id}/timetable/export-csv")

@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 
+class DatasetIntegrityError(RuntimeError):
+    pass
+
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = REPO_ROOT / "data"
 SEED_ROOT = DATA_ROOT / "seed" / "tokyu"
@@ -69,6 +73,16 @@ def evaluate_dataset_integrity(dataset_id: str) -> Dict[str, Any]:
         "integrity_error": integrity_error,
         "manifest": manifest_payload,
     }
+
+
+def check_dataset_integrity(dataset_id: str) -> Dict[str, Any]:
+    result = evaluate_dataset_integrity(dataset_id)
+    if not result["seed_ready"] or result["integrity_error"] or result["missing_artifacts"]:
+        raise DatasetIntegrityError(
+            result["integrity_error"]
+            or f"Dataset '{dataset_id}' integrity check failed: {result['missing_artifacts']}"
+        )
+    return result
 
 
 def load_parquet_schema(name: str) -> Dict[str, Any]:

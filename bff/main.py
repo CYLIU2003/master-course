@@ -19,7 +19,6 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
-from time import perf_counter
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -55,13 +54,8 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
-# Map legacy ODPT_TOKEN → ODPT_CONSUMER_KEY if needed
-if "ODPT_CONSUMER_KEY" not in os.environ and "ODPT_TOKEN" in os.environ:
-    os.environ["ODPT_CONSUMER_KEY"] = os.environ["ODPT_TOKEN"]
-
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import os
 
 from bff.routers import (
     app_state,
@@ -73,6 +67,7 @@ from bff.routers import (
     simulation,
     timetable,
 )
+from bff.middleware.timing import TimingMiddleware
 from bff.services import app_cache
 
 _log = logging.getLogger(__name__)
@@ -96,24 +91,6 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
-
-
-@app.middleware("http")
-async def log_request_metrics(request: Request, call_next):
-    started = perf_counter()
-    response = await call_next(request)
-    duration_ms = (perf_counter() - started) * 1000.0
-    payload_size = response.headers.get("content-length", "unknown")
-    _log.info(
-        "%s %s -> %s in %.1fms (payload=%s)",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
-        payload_size,
-    )
-    return response
-
 # ── CORS ───────────────────────────────────────────────────────
 # Allow the Vite dev server (localhost:5173) to call the BFF.
 # In production (same origin), CORS is not needed.
@@ -142,6 +119,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(TimingMiddleware)
 
 # ── Routers ────────────────────────────────────────────────────
 
