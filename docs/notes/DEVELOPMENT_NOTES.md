@@ -560,3 +560,8 @@ master-course/
   - API/runtime efficiency: scenario list summary 化、route/depot list summary 化、`tests/test_performance_contracts.py` を追加。
   - scoped runtime loading: `src/runtime_scope.py` を追加し、simulation/optimization run 前に `bff/services/run_preparation.py` で scoped solver_input を生成する構成へ拡張。
   - operational docs: `docs/notes/run_prep_contract.md` を追加。
+  - `data-prep/` をカレントディレクトリにして `python -m data_prep.pipeline.build_all` を実行すると
+    `ModuleNotFoundError` になる問題を確認。`data-prep/data_prep/` に互換 shim package を追加し、
+    root の `data_prep.pipeline.build_all` へ委譲する形で、root / `data-prep/` どちらからでも同じ
+    モジュールパスで起動できるよう修正。
+  - `data-prep/README.md` に上記の実行方法を追記。

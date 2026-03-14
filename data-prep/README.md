@@ -28,6 +28,13 @@ Output goes to `data/built/<dataset_id>/`:
 ## Quick build
 
 ```bash
+# Run from the repository root
+python -m data_prep.pipeline.build_all --dataset tokyu_core
+
+# Or run from inside data-prep/ via the compatibility wrapper
+cd data-prep
+python -m data_prep.pipeline.build_all --dataset tokyu_core
+
 # Full build (fetch + build all + write manifest + validate)
 python -m data_prep.pipeline.build_all --dataset tokyu_core
 
@@ -37,6 +44,9 @@ python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch
 # Build full dataset
 python -m data_prep.pipeline.build_all --dataset tokyu_full --no-fetch
 ```
+
+The compatibility package under `data-prep/data_prep/` forwards execution to the
+root `data_prep` package so the module path works from either working directory.
 
 ## Exit codes
 
