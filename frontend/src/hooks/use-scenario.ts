@@ -22,6 +22,8 @@ import type {
 export const scenarioKeys = {
   all: ["scenarios"] as const,
   detail: (id: string) => ["scenarios", id] as const,
+  editorBootstrap: (id: string) =>
+    ["scenarios", id, "editor-bootstrap"] as const,
   dispatchScope: (id: string) => ["scenarios", id, "dispatch-scope"] as const,
   timetable: (id: string, serviceId?: string) =>
     ["scenarios", id, "timetable", serviceId ?? "all"] as const,
@@ -115,6 +117,14 @@ export function useScenario(id: string) {
   return useQuery({
     queryKey: scenarioKeys.detail(id),
     queryFn: () => scenarioApi.get(id),
+    enabled: !!id,
+  });
+}
+
+export function useEditorBootstrap(id: string) {
+  return useQuery({
+    queryKey: scenarioKeys.editorBootstrap(id),
+    queryFn: () => scenarioApi.getEditorBootstrap(id),
     enabled: !!id,
   });
 }
@@ -285,6 +295,9 @@ export function useUpdateDispatchScope(scenarioId: string) {
         queryKey: scenarioKeys.dispatchScope(scenarioId),
       });
       qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+      qc.invalidateQueries({
+        queryKey: scenarioKeys.editorBootstrap(scenarioId),
+      });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });

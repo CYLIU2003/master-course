@@ -5,7 +5,8 @@ import { useScenarios, useCreateScenario, useDeleteScenario } from "@/hooks";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import { formatDate } from "@/utils/format";
 import { appApi } from "@/api/app";
-import { fetchMaybeJson } from "@/api/client";
+import { scenarioApi } from "@/api/scenario";
+import { useUIStore } from "@/stores/ui-store";
 
 export function ScenarioListPage() {
   const { t } = useTranslation();
@@ -17,6 +18,8 @@ export function ScenarioListPage() {
   });
   const createMutation = useCreateScenario();
   const deleteMutation = useDeleteScenario();
+  const activatingScenarioId = useUIStore((s) => s.activatingScenarioId);
+  const setActivatingScenarioId = useUIStore((s) => s.setActivatingScenarioId);
 
   if (isLoading) return <LoadingBlock message={t("scenarios.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;
@@ -31,8 +34,16 @@ export function ScenarioListPage() {
   });
 
   async function activateAndOpen(scenarioId: string) {
-    await fetchMaybeJson(`/api/scenarios/${scenarioId}/activate`, { method: "POST" });
-    navigate(`/scenarios/${scenarioId}/planning`);
+    if (activatingScenarioId === scenarioId) {
+      return;
+    }
+    setActivatingScenarioId(scenarioId);
+    try {
+      await scenarioApi.activate(scenarioId);
+      navigate(`/scenarios/${scenarioId}/planning`);
+    } finally {
+      setActivatingScenarioId(null);
+    }
   }
 
   async function createFromDataset(datasetId: string) {
@@ -91,7 +102,7 @@ export function ScenarioListPage() {
               </p>
               <button
                 onClick={() => void createFromDataset(dataset.datasetId)}
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || activatingScenarioId !== null}
                 className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
               >
                 {createMutation.isPending ? t("scenarios.creating") : "Create"}
@@ -128,9 +139,10 @@ export function ScenarioListPage() {
                 <button
                   type="button"
                   onClick={() => void activateAndOpen(s.id)}
-                  className="rounded-md border border-primary-200 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50"
+                  disabled={activatingScenarioId !== null}
+                  className="rounded-md border border-primary-200 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-50"
                 >
-                  {t("common.open", "開く")}
+                  {activatingScenarioId === s.id ? t("common.loading", "読込中") : t("common.open", "開く")}
                 </button>
                 <button
                   onClick={(e) => {
@@ -138,6 +150,7 @@ export function ScenarioListPage() {
                     if (confirm(t("scenarios.delete_confirm", { name: s.name })))
                       deleteMutation.mutate(s.id);
                   }}
+                  disabled={activatingScenarioId !== null}
                   className="text-xs text-red-400 hover:text-red-600"
                 >
                   {t("common.delete")}

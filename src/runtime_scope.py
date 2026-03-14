@@ -2,20 +2,123 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
+
+from src.tokyu_shard_loader import (
+    load_stop_time_rows_for_scope,
+    load_trip_rows_for_scope,
+    shard_runtime_ready,
+)
 
 
 @dataclass
 class RuntimeScope:
     depot_ids: list[str]
     route_ids: list[str]
-    service_types: list[str]
+    service_ids: list[str]
+    service_date: str | None = None
+
+    @property
+    def service_types(self) -> list[str]:
+        return list(self.service_ids)
+
+
+_SERVICE_ALIASES: dict[str, tuple[str, ...]] = {
+    "WEEKDAY": ("WEEKDAY", "weekday", "平日"),
+    "SAT": ("SAT", "sat", "saturday", "土曜", "土曜日"),
+    "SUN_HOL": (
+        "SUN_HOL",
+        "sun_hol",
+        "sun_holiday",
+        "holiday",
+        "sunday",
+        "日曜",
+        "日曜・休日",
+        "休日",
+    ),
+}
+
+
+def _normalize_service_id(value: Any) -> str:
+    raw = str(value or "").strip()
+    upper = raw.upper()
+    if upper in {"WEEKDAY", "WEEKDAYS"} or raw in {"weekday", "平日"}:
+        return "WEEKDAY"
+    if upper in {"SAT", "SATURDAY"} or raw in {"sat", "saturday", "土曜", "土曜日"}:
+        return "SAT"
+    if upper in {"SUN_HOL", "SUN_HOLIDAY", "HOLIDAY", "SUNDAY"} or raw in {
+        "sun_hol",
+        "holiday",
+        "sunday",
+        "日曜",
+        "日曜・休日",
+        "休日",
+    }:
+        return "SUN_HOL"
+    return upper or "WEEKDAY"
+
+
+def _service_aliases(values: list[str]) -> set[str]:
+    aliases: set[str] = set()
+    for value in values:
+        normalized = _normalize_service_id(value)
+        aliases.update(_SERVICE_ALIASES.get(normalized, (normalized, normalized.lower())))
+    return aliases
+
+
+def _overlay_like(scenario_like: dict) -> dict:
+    if isinstance(scenario_like.get("scenario_overlay"), dict):
+        return dict(scenario_like["scenario_overlay"])
+    if isinstance(scenario_like.get("scenarioOverlay"), dict):
+        return dict(scenario_like["scenarioOverlay"])
+    return dict(scenario_like)
+
+
+def _dispatch_scope_like(scenario_like: dict) -> dict:
+    if isinstance(scenario_like.get("dispatch_scope"), dict):
+        return dict(scenario_like["dispatch_scope"])
+    if isinstance(scenario_like.get("dispatchScope"), dict):
+        return dict(scenario_like["dispatchScope"])
+    return {}
+
+
+def _resolve_service_ids(scenario_like: dict) -> list[str]:
+    dispatch_scope = _dispatch_scope_like(scenario_like)
+    service_selection = dispatch_scope.get("serviceSelection") or {}
+    selected = [
+        _normalize_service_id(value)
+        for value in list(service_selection.get("serviceIds") or [])
+        if str(value or "").strip()
+    ]
+    if not selected:
+        direct = dispatch_scope.get("serviceId") or scenario_like.get("service_id") or scenario_like.get("serviceId")
+        if direct:
+            selected = [_normalize_service_id(direct)]
+    if not selected:
+        simulation_config = scenario_like.get("simulation_config") or scenario_like.get("simulationConfig") or {}
+        day_type = simulation_config.get("day_type") or simulation_config.get("dayType")
+        if day_type:
+            selected = [_normalize_service_id(day_type)]
+    return selected or ["WEEKDAY"]
 
 
 def resolve_scope(scenario_overlay: dict, routes_df: pd.DataFrame) -> RuntimeScope:
-    depot_ids = list(scenario_overlay.get("depot_ids") or [])
-    route_ids = list(scenario_overlay.get("route_ids") or [])
+    overlay = _overlay_like(scenario_overlay)
+    dispatch_scope = _dispatch_scope_like(scenario_overlay)
+    depot_ids = list(overlay.get("depot_ids") or [])
+    route_ids = list(overlay.get("route_ids") or [])
+    if not depot_ids:
+        depot_selection = dispatch_scope.get("depotSelection") or {}
+        depot_ids = [str(value) for value in list(depot_selection.get("depotIds") or []) if str(value or "").strip()]
+        primary = dispatch_scope.get("depotId") or depot_selection.get("primaryDepotId")
+        if primary and str(primary) not in depot_ids:
+            depot_ids.insert(0, str(primary))
+    if not route_ids:
+        route_selection = dispatch_scope.get("routeSelection") or {}
+        route_ids = [str(value) for value in list(route_selection.get("includeRouteIds") or []) if str(value or "").strip()]
+        route_ids = route_ids or [str(value) for value in list(dispatch_scope.get("effectiveRouteIds") or []) if str(value or "").strip()]
     if not route_ids and depot_ids and not routes_df.empty:
         depot_column = "depot_id" if "depot_id" in routes_df.columns else "depotId"
         route_column = "route_code" if "route_code" in routes_df.columns else "routeCode"
@@ -24,28 +127,83 @@ def resolve_scope(scenario_overlay: dict, routes_df: pd.DataFrame) -> RuntimeSco
     return RuntimeScope(
         depot_ids=depot_ids,
         route_ids=route_ids,
-        service_types=["weekday", "saturday", "holiday"],
+        service_ids=_resolve_service_ids(scenario_overlay),
+        service_date=str(
+            (
+                (scenario_overlay.get("simulation_config") or {}).get("service_date")
+                or (scenario_overlay.get("simulationConfig") or {}).get("serviceDate")
+                or ""
+            )
+        ).strip()
+        or None,
     )
 
 
-def load_scoped_trips(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame:
-    frame = pd.read_parquet(built_dir / "trips.parquet")
-    if not scope.route_ids:
+def _filter_by_service(frame: pd.DataFrame, scope: RuntimeScope) -> pd.DataFrame:
+    if frame.empty or not scope.service_ids:
+        return frame
+    aliases = _service_aliases(scope.service_ids)
+    for column in ("service_id", "serviceId", "service_type", "serviceType", "calendar"):
+        if column in frame.columns:
+            series = frame[column].astype(str).str.strip()
+            return frame[series.isin(aliases)].reset_index(drop=True)
+    return frame.reset_index(drop=True)
+
+
+def _route_aliases(route_ids: list[str]) -> set[str]:
+    aliases: set[str] = set()
+    for value in route_ids:
+        raw = str(value or "").strip()
+        if not raw:
+            continue
+        aliases.add(raw)
+        aliases.add(raw.split(":")[-1])
+    return aliases
+
+
+def _filter_by_route(frame: pd.DataFrame, route_ids: list[str]) -> pd.DataFrame:
+    if frame.empty or not route_ids:
         return frame.reset_index(drop=True)
-    if "route_code" in frame.columns:
-        mask = frame["route_code"].isin(scope.route_ids)
-    elif "routeCode" in frame.columns:
-        mask = frame["routeCode"].isin(scope.route_ids)
-    else:
-        route_series = frame["route_id"].astype(str).str.split(":").str[-1]
-        mask = route_series.isin(scope.route_ids)
-    return frame[mask].reset_index(drop=True)
+    aliases = _route_aliases(route_ids)
+    for column in ("route_code", "routeCode", "route_id", "routeId"):
+        if column not in frame.columns:
+            continue
+        series = frame[column].astype(str).str.strip()
+        expanded = series.where(~series.str.contains(":"), series.str.split(":").str[-1])
+        mask = series.isin(aliases) | expanded.isin(aliases)
+        return frame[mask].reset_index(drop=True)
+    return frame.reset_index(drop=True)
+
+
+def load_scoped_trips(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame:
+    dataset_id = built_dir.name
+    if shard_runtime_ready(dataset_id):
+        frame = pd.DataFrame(
+            load_trip_rows_for_scope(
+                dataset_id=dataset_id,
+                route_ids=scope.route_ids,
+                depot_ids=scope.depot_ids,
+                service_ids=scope.service_ids,
+            )
+        )
+        return frame.reset_index(drop=True)
+    frame = pd.read_parquet(built_dir / "trips.parquet")
+    frame = _filter_by_service(frame, scope)
+    return _filter_by_route(frame, scope.route_ids)
 
 
 def load_scoped_timetables(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame:
-    frame = pd.read_parquet(built_dir / "timetables.parquet")
-    if not scope.route_ids:
+    dataset_id = built_dir.name
+    if shard_runtime_ready(dataset_id):
+        frame = pd.DataFrame(
+            load_stop_time_rows_for_scope(
+                dataset_id=dataset_id,
+                route_ids=scope.route_ids,
+                depot_ids=scope.depot_ids,
+                service_ids=scope.service_ids,
+            )
+        )
         return frame.reset_index(drop=True)
-    route_series = frame["route_id"].astype(str).str.split(":").str[-1]
-    mask = route_series.isin(scope.route_ids)
-    return frame[mask].reset_index(drop=True)
+    frame = pd.read_parquet(built_dir / "timetables.parquet")
+    frame = _filter_by_service(frame, scope)
+    return _filter_by_route(frame, scope.route_ids)

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tokyu_shards/manifest.schema.json",
+  "type": "object",
+  "required": [
+    "dataset_id",
+    "operator",
+    "operator_id",
+    "build_timestamp",
+    "source_version",
+    "shard_version",
+    "available_depots",
+    "available_routes",
+    "available_day_types",
+    "output_files",
+    "warning_count"
+  ],
+  "properties": {
+    "dataset_id": { "type": "string", "minLength": 1 },
+    "operator": { "type": "string", "minLength": 1 },
+    "operator_id": { "type": "string", "const": "tokyu" },
+    "build_timestamp": { "type": "string", "minLength": 1 },
+    "source_version": { "type": "string", "minLength": 1 },
+    "seed_version": { "type": ["string", "null"] },
+    "dataset_version": { "type": ["string", "null"] },
+    "shard_version": { "type": "string", "minLength": 1 },
+    "available_depots": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "available_routes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "available_day_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["weekday", "saturday", "holiday"]
+      }
+    },
+    "output_files": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warning_count": { "type": "integer", "minimum": 0 },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "depot_filter": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "source_counts": {
+      "type": "object",
+      "properties": {
+        "routes": { "type": "integer", "minimum": 0 },
+        "route_patterns": { "type": "integer", "minimum": 0 },
+        "services": { "type": "integer", "minimum": 0 },
+        "trips": { "type": "integer", "minimum": 0 },
+        "stop_times": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tokyu_shards/depot_route_summary.schema.json",
+  "type": "object",
+  "required": ["dataset_id", "operator_id", "items"],
+  "properties": {
+    "dataset_id": { "type": "string", "minLength": 1 },
+    "operator_id": { "type": "string", "const": "tokyu" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "depot_id",
+          "route_id",
+          "weekday_trip_count",
+          "saturday_trip_count",
+          "holiday_trip_count",
+          "main_trip_count",
+          "short_turn_trip_count",
+          "depot_in_trip_count",
+          "depot_out_trip_count"
+        ],
+        "properties": {
+          "depot_id": { "type": "string", "minLength": 1 },
+          "route_id": { "type": "string", "minLength": 1 },
+          "weekday_trip_count": { "type": "integer", "minimum": 0 },
+          "saturday_trip_count": { "type": "integer", "minimum": 0 },
+          "holiday_trip_count": { "type": "integer", "minimum": 0 },
+          "first_departure": { "type": ["string", "null"] },
+          "last_departure": { "type": ["string", "null"] },
+          "main_trip_count": { "type": "integer", "minimum": 0 },
+          "short_turn_trip_count": { "type": "integer", "minimum": 0 },
+          "depot_in_trip_count": { "type": "integer", "minimum": 0 },
+          "depot_out_trip_count": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

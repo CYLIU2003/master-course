@@ -38,6 +38,12 @@ from bff.services import research_catalog
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
+from src.tokyu_shard_loader import (
+    build_stop_timetable_summary_for_scope,
+    build_timetable_summary_for_scope,
+    load_trip_rows_for_scope,
+    shard_runtime_ready,
+)
 
 router = APIRouter(tags=["scenarios"])
 _default_scenario_lock = Lock()
@@ -371,6 +377,72 @@ def _runtime_err_to_http(e: RuntimeError) -> HTTPException:
     raise e
 
 
+def _scenario_dataset_id(doc: Dict[str, Any]) -> Optional[str]:
+    meta = dict(doc.get("meta") or {})
+    overlay = dict(doc.get("scenario_overlay") or {})
+    feed_context = dict(doc.get("feed_context") or {})
+    for value in (
+        feed_context.get("datasetId"),
+        overlay.get("dataset_id"),
+        overlay.get("datasetId"),
+        meta.get("datasetId"),
+    ):
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+    return None
+
+
+def _shard_scope_params(
+    scenario_id: str,
+    doc: Dict[str, Any],
+    *,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    dataset_id = _scenario_dataset_id(doc)
+    if not dataset_id or not shard_runtime_ready(dataset_id):
+        return None
+    dispatch_scope = store._normalize_dispatch_scope(doc)
+    depot_ids = [str(item) for item in (dispatch_scope.get("depotSelection") or {}).get("depotIds") or [] if str(item or "").strip()]
+    if depot_id and depot_id not in depot_ids:
+        depot_ids.insert(0, depot_id)
+    service_ids = [str(item) for item in (dispatch_scope.get("serviceSelection") or {}).get("serviceIds") or [] if str(item or "").strip()]
+    if service_id and service_id not in service_ids:
+        service_ids.insert(0, service_id)
+    route_ids = list(store.effective_route_ids_for_scope(scenario_id, dispatch_scope))
+    return {
+        "dataset_id": dataset_id,
+        "dispatch_scope": dispatch_scope,
+        "depot_ids": depot_ids,
+        "service_ids": service_ids,
+        "route_ids": route_ids,
+    }
+
+
+def _load_shard_timetable_rows(
+    scenario_id: str,
+    doc: Dict[str, Any],
+    *,
+    service_id: Optional[str] = None,
+    depot_id: Optional[str] = None,
+) -> Optional[List[Dict[str, Any]]]:
+    scope_params = _shard_scope_params(
+        scenario_id,
+        doc,
+        service_id=service_id,
+        depot_id=depot_id,
+    )
+    if scope_params is None:
+        return None
+    return load_trip_rows_for_scope(
+        dataset_id=scope_params["dataset_id"],
+        route_ids=scope_params["route_ids"],
+        depot_ids=scope_params["depot_ids"],
+        service_ids=scope_params["service_ids"],
+    )
+
+
 def _pick_latest_scenario(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not items:
         return None
@@ -401,14 +473,254 @@ def _scenario_summary(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _ensure_scenario_bootstrap(scenario_id: str) -> Dict[str, Any]:
-    scenario = store.get_scenario(scenario_id)
-    has_core_setup = bool(scenario.get("depots")) and bool(scenario.get("routes"))
-    if has_core_setup:
-        return scenario
+def _route_display_name(route: Dict[str, Any]) -> str:
+    return str(
+        route.get("routeFamilyLabel")
+        or route.get("routeLabel")
+        or route.get("routeCode")
+        or route.get("name")
+        or route.get("id")
+        or ""
+    )
 
-    dataset_id = str(scenario.get("datasetId") or research_catalog.default_dataset_id())
-    random_seed = int(scenario.get("randomSeed") or 42)
+
+def _route_trip_count(route: Dict[str, Any]) -> int:
+    try:
+        value = route.get("tripCount")
+        if value in (None, ""):
+            return 0
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _depot_route_index(doc: Dict[str, Any]) -> Dict[str, List[str]]:
+    route_ids_by_depot: Dict[str, List[str]] = {}
+    route_lookup = {
+        str(route.get("id") or ""): dict(route)
+        for route in doc.get("routes") or []
+        if route.get("id") is not None
+    }
+    for assignment in doc.get("route_depot_assignments") or []:
+        depot_id = str(assignment.get("depotId") or "").strip()
+        route_id = str(assignment.get("routeId") or "").strip()
+        if not depot_id or not route_id or route_id not in route_lookup:
+            continue
+        route_ids_by_depot.setdefault(depot_id, [])
+        if route_id not in route_ids_by_depot[depot_id]:
+            route_ids_by_depot[depot_id].append(route_id)
+    for route_id, route in route_lookup.items():
+        depot_id = str(route.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        route_ids_by_depot.setdefault(depot_id, [])
+        if route_id not in route_ids_by_depot[depot_id]:
+            route_ids_by_depot[depot_id].append(route_id)
+    return {
+        depot_id: sorted(route_ids)
+        for depot_id, route_ids in route_ids_by_depot.items()
+    }
+
+
+def _depot_route_summary(
+    doc: Dict[str, Any],
+    route_index: Dict[str, List[str]],
+    dispatch_scope: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    routes_by_id = {
+        str(route.get("id") or ""): dict(route)
+        for route in doc.get("routes") or []
+        if route.get("id") is not None
+    }
+    selected_route_ids = set(dispatch_scope.get("effectiveRouteIds") or [])
+    selected_depot_ids = set(
+        (dispatch_scope.get("depotSelection") or {}).get("depotIds") or []
+    )
+    items: List[Dict[str, Any]] = []
+    for depot in doc.get("depots") or []:
+        depot_id = str(depot.get("id") or depot.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        route_ids = route_index.get(depot_id) or []
+        trip_count = sum(_route_trip_count(routes_by_id.get(route_id) or {}) for route_id in route_ids)
+        items.append(
+            {
+                "depotId": depot_id,
+                "name": depot.get("name") or depot_id,
+                "routeCount": len(route_ids),
+                "selected": depot_id in selected_depot_ids,
+                "selectedRouteCount": len([route_id for route_id in route_ids if route_id in selected_route_ids]),
+                "tripCount": trip_count,
+            }
+        )
+    return items
+
+
+def _available_day_types(doc: Dict[str, Any], dispatch_scope: Dict[str, Any]) -> List[Dict[str, Any]]:
+    selected = str(dispatch_scope.get("serviceId") or "").strip()
+    items: List[Dict[str, Any]] = []
+    for entry in doc.get("calendar") or []:
+        service_id = canonical_service_id(entry.get("service_id"))
+        label = str(entry.get("name") or service_id)
+        if any(item.get("serviceId") == service_id for item in items):
+            continue
+        items.append(
+            {
+                "serviceId": service_id,
+                "label": label,
+                "isDefault": service_id == selected,
+            }
+        )
+    if not items:
+        items.append({"serviceId": "WEEKDAY", "label": "平日", "isDefault": True})
+    return items
+
+
+def _builder_defaults(
+    doc: Dict[str, Any],
+    route_index: Dict[str, List[str]],
+    dispatch_scope: Dict[str, Any],
+) -> Dict[str, Any]:
+    overlay = dict(doc.get("scenario_overlay") or {})
+    simulation_config = dict(doc.get("simulation_config") or {})
+    template_items = [dict(item) for item in doc.get("vehicle_templates") or []]
+    primary_depot_id = str(dispatch_scope.get("depotId") or "").strip()
+    selected_depot_ids = list((dispatch_scope.get("depotSelection") or {}).get("depotIds") or [])
+    if not selected_depot_ids and primary_depot_id:
+        selected_depot_ids = [primary_depot_id]
+    if not selected_depot_ids and doc.get("depots"):
+        selected_depot_ids = [str((doc.get("depots") or [])[0].get("id") or "")]
+    if not primary_depot_id and selected_depot_ids:
+        primary_depot_id = selected_depot_ids[0]
+
+    selected_route_ids = list(dispatch_scope.get("effectiveRouteIds") or [])
+    if not selected_route_ids and primary_depot_id:
+        selected_route_ids = list(route_index.get(primary_depot_id) or [])
+
+    primary_template = next(
+        (
+            template
+            for template in template_items
+            if str(template.get("type") or "").upper() == "BEV"
+        ),
+        template_items[0] if template_items else {},
+    )
+    existing_vehicles = [
+        dict(item)
+        for item in doc.get("vehicles") or []
+        if not primary_depot_id or str(item.get("depotId") or "") == primary_depot_id
+    ]
+    existing_chargers = [
+        dict(item)
+        for item in doc.get("chargers") or []
+        if not primary_depot_id
+        or str(item.get("siteId") or item.get("site_id") or "") == primary_depot_id
+    ]
+    overlay_fleet = dict(overlay.get("fleet") or {})
+    overlay_cost = dict(overlay.get("cost_coefficients") or {})
+    overlay_charging = dict(overlay.get("charging_constraints") or {})
+    overlay_solver = dict(overlay.get("solver_config") or {})
+    grouped_fleet_templates: Dict[str, Dict[str, Any]] = {}
+    for vehicle in existing_vehicles:
+        template_id = str(vehicle.get("vehicleTemplateId") or "")
+        if not template_id:
+            continue
+        group = grouped_fleet_templates.setdefault(
+            template_id,
+            {
+                "vehicleTemplateId": template_id,
+                "vehicleCount": 0,
+                "initialSoc": vehicle.get("initialSoc"),
+                "batteryKwh": vehicle.get("batteryKwh"),
+                "chargePowerKw": vehicle.get("chargePowerKw"),
+            },
+        )
+        group["vehicleCount"] += 1
+    fleet_templates = list(grouped_fleet_templates.values())
+
+    return {
+        "selectedDepotIds": selected_depot_ids,
+        "selectedRouteIds": selected_route_ids,
+        "dayType": str(dispatch_scope.get("serviceId") or "WEEKDAY"),
+        "serviceDate": simulation_config.get("service_date"),
+        "vehicleTemplateId": primary_template.get("id"),
+        "vehicleCount": len(existing_vehicles) or int(overlay_fleet.get("n_bev") or 10),
+        "initialSoc": simulation_config.get("initial_soc", 0.8),
+        "batteryKwh": (
+            existing_vehicles[0].get("batteryKwh")
+            if existing_vehicles
+            else primary_template.get("batteryKwh")
+        ),
+        "chargerCount": len(existing_chargers) or int(overlay_charging.get("max_simultaneous_sessions") or 4),
+        "chargerPowerKw": (
+            existing_chargers[0].get("powerKw")
+            if existing_chargers
+            else overlay_charging.get("charger_power_limit_kw")
+            or primary_template.get("chargePowerKw")
+            or 90
+        ),
+        "solverMode": overlay_solver.get("mode") or "mode_milp_only",
+        "objectiveMode": overlay_solver.get("objective_mode") or simulation_config.get("objective_mode") or "total_cost",
+        "allowPartialService": bool(
+            overlay_solver.get(
+                "allow_partial_service",
+                simulation_config.get("allow_partial_service", False),
+            )
+        ),
+        "unservedPenalty": float(
+            overlay_solver.get(
+                "unserved_penalty",
+                simulation_config.get("unserved_penalty", 10000.0),
+            )
+        ),
+        "gridFlatPricePerKwh": overlay_cost.get("grid_flat_price_per_kwh"),
+        "gridSellPricePerKwh": overlay_cost.get("grid_sell_price_per_kwh"),
+        "demandChargeCostPerKw": overlay_cost.get("demand_charge_cost_per_kw"),
+        "dieselPricePerL": overlay_cost.get("diesel_price_per_l"),
+        "gridCo2KgPerKwh": overlay_cost.get("grid_co2_kg_per_kwh"),
+        "co2PricePerKg": overlay_cost.get("co2_price_per_kg"),
+        "depotPowerLimitKw": overlay_charging.get("depot_power_limit_kw"),
+        "touPricing": list(overlay_cost.get("tou_pricing") or []),
+        "fleetTemplates": fleet_templates,
+        "timeLimitSeconds": int(overlay_solver.get("time_limit_seconds") or 300),
+        "mipGap": float(overlay_solver.get("mip_gap") or 0.01),
+        "includeDeadhead": bool(
+            (dispatch_scope.get("tripSelection") or {}).get("includeDeadhead", True)
+        ),
+    }
+
+
+def _has_materialized_bootstrap(doc: Dict[str, Any]) -> bool:
+    return bool(doc.get("depots")) and bool(doc.get("routes")) and bool(
+        doc.get("vehicle_templates")
+    )
+
+
+def _ensure_scenario_bootstrap_persisted(scenario_id: str) -> Dict[str, Any]:
+    scenario_doc = store.get_scenario_document(
+        scenario_id,
+        repair_missing_master=False,
+    )
+    has_core_setup = _has_materialized_bootstrap(scenario_doc)
+    if has_core_setup:
+        return store.get_scenario(scenario_id)
+
+    meta = dict(scenario_doc.get("meta") or {})
+    overlay = dict(scenario_doc.get("scenario_overlay") or {})
+    feed_context = dict(scenario_doc.get("feed_context") or {})
+    dataset_id = str(
+        overlay.get("dataset_id")
+        or overlay.get("datasetId")
+        or feed_context.get("datasetId")
+        or meta.get("datasetId")
+        or research_catalog.default_dataset_id()
+    )
+    random_seed = int(
+        overlay.get("random_seed")
+        or overlay.get("randomSeed")
+        or meta.get("randomSeed")
+        or 42
+    )
     bootstrap = research_catalog.bootstrap_scenario(
         scenario_id=scenario_id,
         dataset_id=dataset_id,
@@ -474,7 +786,7 @@ def duplicate_scenario(
 @router.get("/scenarios/{scenario_id}")
 def get_scenario(scenario_id: str) -> Dict[str, Any]:
     try:
-        return _ensure_scenario_bootstrap(scenario_id)
+        return store.get_scenario(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
@@ -484,6 +796,40 @@ def get_scenario(scenario_id: str) -> Dict[str, Any]:
                 detail={"code": "INCOMPLETE_ARTIFACT", "message": str(e)},
             )
         raise
+
+
+@router.get("/scenarios/{scenario_id}/editor-bootstrap")
+def get_editor_bootstrap(scenario_id: str) -> Dict[str, Any]:
+    try:
+        doc = store.get_scenario_document(scenario_id)
+        scenario = store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
+
+    dispatch_scope = store._normalize_dispatch_scope(doc)
+    route_index = _depot_route_index(doc)
+    return {
+        "scenario": scenario,
+        "dispatchScope": dispatch_scope,
+        "depots": [dict(item) for item in doc.get("depots") or []],
+        "routes": [
+            {
+                **dict(route),
+                "displayName": _route_display_name(route),
+            }
+            for route in doc.get("routes") or []
+        ],
+        "vehicleTemplates": [dict(item) for item in doc.get("vehicle_templates") or []],
+        "depotRouteIndex": route_index,
+        "depotRouteSummary": _depot_route_summary(doc, route_index, dispatch_scope),
+        "availableDayTypes": _available_day_types(doc, dispatch_scope),
+        "builderDefaults": _builder_defaults(doc, route_index, dispatch_scope),
+        "datasetVersion": scenario.get("datasetVersion"),
+        "datasetStatus": scenario.get("datasetStatus"),
+        "warning": (scenario.get("datasetStatus") or {}).get("warning"),
+    }
 
 
 @router.put("/scenarios/{scenario_id}")
@@ -505,7 +851,6 @@ def update_scenario(scenario_id: str, body: UpdateScenarioBody) -> Dict[str, Any
 @router.get("/scenarios/{scenario_id}/dispatch-scope")
 def get_dispatch_scope(scenario_id: str) -> Dict[str, Any]:
     try:
-        _ensure_scenario_bootstrap(scenario_id)
         return store.get_dispatch_scope(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
@@ -550,6 +895,16 @@ def get_depot_scope_trips(
             scoped_scope["serviceSelection"] = {"serviceIds": [service_id]}
         route_ids = set(store.effective_route_ids_for_scope(scenario_id, scoped_scope))
         rows = list(store.get_field(scenario_id, "timetable_rows") or [])
+        if not rows:
+            doc = store.get_scenario_document(scenario_id)
+            shard_rows = _load_shard_timetable_rows(
+                scenario_id,
+                doc,
+                service_id=service_id,
+                depot_id=depot_id,
+            )
+            if shard_rows is not None:
+                rows = list(shard_rows)
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
@@ -586,7 +941,7 @@ def delete_scenario(scenario_id: str) -> Response:
 @router.post("/scenarios/{scenario_id}/activate")
 def activate_scenario(scenario_id: str) -> Dict[str, Any]:
     try:
-        scenario = _ensure_scenario_bootstrap(scenario_id)
+        scenario = _ensure_scenario_bootstrap_persisted(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
@@ -657,6 +1012,24 @@ def get_timetable(
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     try:
+        imports = store.get_timetable_import_meta(scenario_id)
+        rows = store.get_field(scenario_id, "timetable_rows") or []
+        if not rows:
+            doc = store.get_scenario_document(scenario_id)
+            shard_rows = _load_shard_timetable_rows(
+                scenario_id,
+                doc,
+                service_id=service_id,
+            )
+            if shard_rows is not None:
+                paged_rows, page_limit = _paginate_items(shard_rows, limit, offset)
+                return {
+                    "items": paged_rows,
+                    "total": len(shard_rows),
+                    "limit": page_limit,
+                    "offset": offset,
+                    "meta": {"imports": imports, "source": "tokyu_shards"},
+                }
         if limit is not None:
             paged_rows = (
                 store.page_timetable_rows(
@@ -678,20 +1051,17 @@ def get_timetable(
                 if service_id is not None
                 else store.count_field_rows(scenario_id, "timetable_rows")
             )
-            page_limit = limit
             return {
                 "items": paged_rows,
                 "total": total,
-                "limit": page_limit,
+                "limit": limit,
                 "offset": offset,
-                "meta": {"imports": store.get_timetable_import_meta(scenario_id)},
+                "meta": {"imports": imports},
             }
-        rows = store.get_field(scenario_id, "timetable_rows")
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
         raise _runtime_err_to_http(e)
-    rows = rows or []
     if service_id:
         rows = [r for r in rows if r.get("service_id", "WEEKDAY") == service_id]
     paged_rows, page_limit = _paginate_items(rows, limit, offset)
@@ -701,7 +1071,7 @@ def get_timetable(
         "total": total,
         "limit": page_limit,
         "offset": offset,
-        "meta": {"imports": store.get_timetable_import_meta(scenario_id)},
+        "meta": {"imports": imports},
     }
 
 
@@ -709,14 +1079,26 @@ def get_timetable(
 def get_timetable_summary(scenario_id: str) -> Dict[str, Any]:
     try:
         summary = store.get_field_summary(scenario_id, "timetable_rows")
+        if summary is not None:
+            return {"item": summary}
+        rows = store.get_field(scenario_id, "timetable_rows") or []
+        imports = store.get_timetable_import_meta(scenario_id)
+        if not rows:
+            doc = store.get_scenario_document(scenario_id)
+            scope_params = _shard_scope_params(scenario_id, doc)
+            if scope_params is not None:
+                shard_summary = build_timetable_summary_for_scope(
+                    dataset_id=scope_params["dataset_id"],
+                    route_ids=scope_params["route_ids"],
+                    depot_ids=scope_params["depot_ids"],
+                    service_ids=scope_params["service_ids"],
+                )
+                if shard_summary is not None:
+                    return {"item": shard_summary}
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
         raise _runtime_err_to_http(e)
-    if summary is not None:
-        return {"item": summary}
-    rows = store.get_field(scenario_id, "timetable_rows") or []
-    imports = store.get_timetable_import_meta(scenario_id)
     return {"item": _build_timetable_summary(rows, imports)}
 
 
@@ -828,8 +1210,22 @@ def get_stop_timetables(
 def get_stop_timetables_summary(scenario_id: str) -> Dict[str, Any]:
     try:
         items = store.get_field(scenario_id, "stop_timetables") or []
+        if not items:
+            doc = store.get_scenario_document(scenario_id)
+            scope_params = _shard_scope_params(scenario_id, doc)
+            if scope_params is not None:
+                shard_summary = build_stop_timetable_summary_for_scope(
+                    dataset_id=scope_params["dataset_id"],
+                    route_ids=scope_params["route_ids"],
+                    depot_ids=scope_params["depot_ids"],
+                    service_ids=scope_params["service_ids"],
+                )
+                if shard_summary is not None:
+                    return {"item": shard_summary}
     except KeyError:
         raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
     imports = store.get_stop_timetable_import_meta(scenario_id)
     return {"item": _build_stop_timetable_summary(items, imports)}
 

@@ -51,6 +51,11 @@ from src.dispatch.models import (
     VehicleProfile,
 )
 from src.dispatch.pipeline import TimetableDispatchPipeline
+from src.tokyu_shard_loader import (
+    load_dispatch_trip_rows_for_scope,
+    load_trip_rows_for_scope,
+    shard_runtime_ready,
+)
 
 router = APIRouter(tags=["graph"])
 _MAX_PAGE_LIMIT = 500
@@ -370,6 +375,38 @@ def _build_dispatch_context(
     route_lookup = {
         str(route.get("id")): route for route in store.list_routes(scenario_id)
     }
+    if not raw_trips or not timetable_rows:
+        scenario_doc = store.get_scenario_document(scenario_id)
+        feed_context = dict(scenario_doc.get("feed_context") or {})
+        overlay = dict(scenario_doc.get("scenario_overlay") or {})
+        dataset_id = str(
+            feed_context.get("datasetId")
+            or overlay.get("dataset_id")
+            or overlay.get("datasetId")
+            or ""
+        ).strip()
+        if dataset_id and shard_runtime_ready(dataset_id):
+            scoped_depot_ids = [str(item) for item in (scope.get("depotSelection") or {}).get("depotIds") or [] if str(item or "").strip()]
+            if depot_id and depot_id not in scoped_depot_ids:
+                scoped_depot_ids.insert(0, depot_id)
+            scoped_service_ids = list((scope.get("serviceSelection") or {}).get("serviceIds") or [])
+            if service_id and service_id not in scoped_service_ids:
+                scoped_service_ids.insert(0, service_id)
+            scoped_route_ids = list(effective_route_ids)
+            if not raw_trips:
+                raw_trips = load_dispatch_trip_rows_for_scope(
+                    dataset_id=dataset_id,
+                    route_ids=scoped_route_ids,
+                    depot_ids=scoped_depot_ids,
+                    service_ids=scoped_service_ids,
+                )
+            if not timetable_rows:
+                timetable_rows = load_trip_rows_for_scope(
+                    dataset_id=dataset_id,
+                    route_ids=scoped_route_ids,
+                    depot_ids=scoped_depot_ids,
+                    service_ids=scoped_service_ids,
+                )
 
     if service_id:
         timetable_rows = [r for r in timetable_rows if r.get("service_id", "WEEKDAY") == service_id]

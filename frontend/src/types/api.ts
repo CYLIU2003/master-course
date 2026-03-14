@@ -1,6 +1,7 @@
 // ── API response / request DTOs ───────────────────────────────
 import type {
   Scenario,
+  EditorBootstrap,
   ResearchDatasetStatus,
   Depot,
   Vehicle,
@@ -28,6 +29,8 @@ import type {
   DispatchScope,
   SimulationResult,
   SimulationConfig,
+  SimulationBuilderSettings,
+  SimulationPrepareResult,
   OptimizationResult,
   Job,
   RunCapabilities,
@@ -51,6 +54,7 @@ export interface ApiError {
 
 export type ScenarioListResponse = ApiListResponse<Scenario>;
 export type ScenarioDetailResponse = Scenario;
+export type EditorBootstrapResponse = EditorBootstrap;
 
 export interface CreateScenarioRequest {
   name: string;
@@ -707,6 +711,7 @@ export type SimulationResultResponse = SimulationResult;
 export type SimulationConfigResponse = SimulationConfig;
 export type DispatchScopeResponse = DispatchScope;
 export type SimulationCapabilitiesResponse = RunCapabilities;
+export type SimulationPrepareResponse = SimulationPrepareResult;
 
 export interface UpdateDispatchScopeRequest {
   scopeId?: string | null;
@@ -742,13 +747,62 @@ export interface RunSimulationRequest {
   depot_id?: string;
 }
 
+export interface PrepareSimulationRequest {
+  selected_depot_ids: string[];
+  selected_route_ids: string[];
+  day_type?: string | null;
+  service_date?: string | null;
+  simulation_settings: {
+    vehicle_template_id?: string | null;
+    vehicle_count: number;
+    initial_soc: number;
+    battery_kwh?: number | null;
+    fleet_templates?: Array<{
+      vehicle_template_id: string;
+      vehicle_count: number;
+      initial_soc?: number | null;
+      battery_kwh?: number | null;
+      charge_power_kw?: number | null;
+    }>;
+    charger_count: number;
+    charger_power_kw: number;
+    solver_mode: SimulationBuilderSettings["solverMode"];
+    objective_mode?: "total_cost" | "co2";
+    allow_partial_service?: boolean;
+    unserved_penalty?: number;
+    time_limit_seconds: number;
+    mip_gap: number;
+    include_deadhead: boolean;
+    grid_flat_price_per_kwh?: number | null;
+    grid_sell_price_per_kwh?: number | null;
+    demand_charge_cost_per_kw?: number | null;
+    diesel_price_per_l?: number | null;
+    grid_co2_kg_per_kwh?: number | null;
+    co2_price_per_kg?: number | null;
+    depot_power_limit_kw?: number | null;
+    tou_pricing?: Array<{
+      start_hour: number;
+      end_hour: number;
+      price_per_kwh: number;
+    }>;
+    service_date?: string | null;
+    start_time?: string | null;
+    planning_horizon_hours?: number | null;
+  };
+}
+
+export interface RunPreparedSimulationRequest {
+  prepared_input_id: string;
+  source?: string;
+}
+
 // ── Optimization ──────────────────────────────────────────────
 
 export type OptimizationResultResponse = OptimizationResult;
 export type OptimizationCapabilitiesResponse = RunCapabilities;
 
 export interface RunOptimizationRequest {
-  mode: Scenario["mode"];
+  mode: string;
   time_limit_seconds?: number;
   mip_gap?: number;
   service_id?: string;

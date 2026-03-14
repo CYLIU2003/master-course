@@ -39,6 +39,214 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-14] Meguro 3-route shard runtime / Gurobi 実走確認と cost parameter surfaced
+
+- **実施条件**:
+  - depot: `meguro`
+  - routes: `tokyu:meguro:さんまバス`, `tokyu:meguro:東98`, `tokyu:meguro:渋72`
+  - runtime source: `tokyu_shards`
+  - solver: Gurobi (`mode_milp_only`)
+  - tariffs: `constant/input_template.json` 相当
+    - TOU `00:00-08:00=18`, `08:00-22:00=32`, `22:00-24:00=20`
+    - diesel `150 JPY/L`
+    - demand charge `1200 JPY/kW`
+    - depot power limit `200 kW`
+
+- **確認した問題**:
+  - 3路線 scope の最大同時運行は 19 本で、16台 fleet では MILP が infeasible。
+    これは shard runtime 不具合ではなく fleet shortage だった。
+  - fresh scenario の builder defaults が `constant/input_template.json` を見ず、
+    diesel / demand / TOU / depot limit が 0 扱いになっていた。
+  - `simulation.prepare` が TOU band を dict のまま overlay へ入れており、
+    Pydantic serializer warning を出していた。
+  - frontend builder store / prepare payload が
+    `objectiveMode`, `allowPartialService`, `unservedPenalty`,
+    `fleetTemplates`, cost / CO2 / depot limit / TOU を drop していた。
+
+- **対応**:
+  - `src/scenario_overlay.py`
+    - `constant/input_template.json` から overlay default を構築する loader を追加。
+    - TOU / diesel / demand charge / depot power limit を fresh scenario default に反映。
+  - `bff/routers/simulation.py`
+    - TOU band を `TimeOfUseBand` として overlay に格納し、serializer warning を解消。
+  - `data-prep/pipeline/build_tokyu_shards.py`
+    - `distance_hint_km` が trip / pattern に無い場合でも、
+      route row の `distance_km` を fallback に使って shard へ残すよう修正。
+  - `frontend/src/stores/simulation-builder-store.ts`
+    - builder defaults の cost / objective / mixed-fleet / TOU を hydrate するよう修正。
+  - `frontend/src/pages/scenario/ScenarioOverviewPage.tsx`
+    - prepare payload に `fleet_templates`, `objective_mode`,
+      `allow_partial_service`, `unserved_penalty`,
+      `demand_charge_cost_per_kw`, `diesel_price_per_l`,
+      `grid_co2_kg_per_kwh`, `co2_price_per_kg`,
+      `depot_power_limit_kw`, `tou_pricing` を追加。
+    - Step 2 に objective / cost / CO2 / depot limit の入力と、
+      fleet / TOU summary 表示を追加。
+
+- **Gurobi 実測結果**:
+  - `total_cost` mode
+    - status: `OPTIMAL`
+    - objective: `18592.2765`
+    - total operating cost: `18592.23 JPY`
+    - fuel: `18589.068 JPY`
+    - electricity: `0.6485 JPY`
+    - demand: `2.56 JPY`
+    - total CO2: `319.7433 kg`
+  - `co2` mode
+    - status: `OPTIMAL`
+    - objective: `243.8922 kg-CO2`
+    - total operating cost: `229294.96 JPY`
+    - fuel: `6331.1 JPY`
+    - electricity: `6963.86 JPY`
+    - demand: `216000.0 JPY`
+    - total CO2: `243.8922 kg`
+
+- **現時点の示唆**:
+  - shard runtime で prepare / optimization は end-to-end に成立した。
+  - `total_cost` と `co2` で fuel / electricity / demand の構成差は明確に出た。
+  - ただし `vehicle_fixed_cost = 0` 設定では使用台数に tie-break が無く、
+    solver が全 vehicle を使う解を返しやすい。これは secondary objective
+    ないし fixed-use cost 設計の課題として残る。
+
+### [DEV-2026-03-14] Tokyu shard build 基盤と runtime shard fallback を追加
+
+- **問題**:
+  - scenario open / simulation prepare が `data/built/<dataset>/timetables.parquet` と
+    `trips.parquet` を広く読むため、Tokyu 全体時刻表の読み込みコストが高すぎた。
+  - `build_dataset_bootstrap()` が built dataset を見つけると scenario document に
+    full `timetable_rows` / `trips` を preload しており、保存サイズと open latency を押し上げていた。
+  - Tokyu 向けに必要な `depot x route x day_type` の build-time shard / index / summary /
+    schema / validation CLI が存在しなかった。
+
+- **対応**:
+  - `data-prep/pipeline/build_tokyu_shards.py`
+    - canonical Tokyu data から `outputs/built/tokyu/` を生成する Tokyu-only shard builder を追加。
+    - `manifest.json` / `depots.json` / `routes.json` / `depot_route_index.json` /
+      `depot_route_summary.json` / `shard_manifest.json` と
+      `trip_shards` / `timetable_shards` / `stop_time_shards` を出力。
+    - `python -m data_prep.pipeline.build_tokyu_shards --dataset ...`
+      `--validate-only` `--depot ...` をサポート。
+    - build 時の整合性チェック
+      （trip shard 所属、manifest 件数、summary/index 整合、trip/timetable 対応、
+      stop sequence 昇順、schema validation）を追加。
+  - `schema/tokyu_shards/*.schema.json`
+    - manifest / index / summary / shard manifest / trip shard /
+      timetable shard / stop_time shard の JSON Schema を追加。
+  - `data-prep/pipeline/build_all.py`
+    - `build_tokyu_shards` stage を追加し、通常 build で shard も生成するよう変更。
+  - `src/tokyu_shard_loader.py`
+    - runtime 専用 shard loader を拡張し、trip rows / dispatch trip rows /
+      stop-time rows / timetable summary / stop timetable summary を scope 指定でロード可能にした。
+  - `src/runtime_scope.py` / `bff/routers/graph.py` / `bff/routers/scenarios.py`
+    - scenario に full `timetable_rows` / `trips` が無い場合でも、
+      shard manifest があれば scope 限定で fallback 読み込みするよう変更。
+  - `src/research_dataset_loader.py`
+    - shard manifest が ready の場合は `feed_context.source = "tokyu_shards"` を返し、
+      bootstrap では route/depot/calendar のみ materialize、full timetable/trips preload を停止。
+  - `bff/store/scenario_store.py`
+    - bootstrap payload の `runtime_features` を永続化対象に追加。
+
+- **検証結果**:
+  - `python -m pytest tests/test_build_tokyu_shards.py tests/test_research_dataset_loader.py tests/test_bff_research_scenario_bootstrap.py tests/test_run_preparation_parity.py tests/test_bff_scenario_timetable_summary.py tests/test_bff_graph_router.py -q` → pass
+  - `python -m pytest tests/test_architecture.py tests/test_performance_contracts.py -q` →
+    `test_app_bootstrap_manager_prewarms_setup_and_execute_tabs` が既存 frontend 差分起因で fail
+    （今回変更の Python shard 経路とは無関係）
+
+### [DEV-2026-03-14] Scenario UI を viewer から simulation input builder へ再設計
+
+- **問題**:
+  - scenario open 時に timetable summary / detail を先読みする viewer 寄りの構成が残っており、
+    「subset を選んで simulation input を作る」主目的に対して無駄な read が多かった。
+  - frontend store は閲覧用 cache と builder state が混在しており、
+    depot / route / day type / solver 条件の確定前に重い payload を抱えやすかった。
+  - `run_preparation` は built parquet filter 前提だったため、
+    Tokyu shard runtime artifact が存在しても prepare がそれを優先利用していなかった。
+  - prepared input hash には `scenario_store._scope_summary()` が meta へ注入する
+    `selectedDepotIds` / `selectedRouteIds` / `serviceIds` まで含まれ、
+    prepare 直後の run でも stale 判定になるケースがあった。
+
+- **対応**:
+  - `bff/routers/scenarios.py`
+    - `GET /api/scenarios/{id}/editor-bootstrap` を追加。
+    - scenario metadata / depots / routes / vehicle templates / depotRouteIndex /
+      depotRouteSummary / availableDayTypes / builderDefaults だけを返す pure-read endpoint にした。
+  - `bff/routers/simulation.py`
+    - `POST /api/scenarios/{id}/simulation/prepare` を追加し、
+      builder で選ばれた depot / route / day type / vehicle / charger / solver 条件を
+      scenario overlay / dispatch scope / generated vehicles / chargers に反映して一度だけ保存。
+    - `POST /api/scenarios/{id}/simulation/run` を追加し、
+      prepared input id を検証した上で simulation job を起動する構成にした。
+    - request body は `Field(default_factory=...)` に変更し、mutable default を排除。
+  - `bff/services/run_preparation.py`
+    - prepared input に `dataset_id` / `random_seed` / `depot_ids` / `route_ids` /
+      `service_ids` / `trip_count` などの top-level compatibility key を追加。
+    - `outputs/prepared_inputs/<scenario_id>/...` を新 API 用の標準保存先に整理し、
+      旧 `.../<scenario_id>/prepared_inputs/...` caller との互換も維持。
+    - Tokyu shard runtime artifact が存在する場合は `src/tokyu_shard_loader.py` を優先し、
+      `trip_shard` / `stop_time_shard` から prepared input を組み立てるよう変更。
+    - built stops が無い場合でも stop-time rows から最小 stop list を推定して canonical input に含めるようにした。
+    - hash の volatile key に `selectedDepotIds` / `selectedRouteIds` / `serviceIds` を追加し、
+      prepare 後の即 run が stale 判定される問題を解消。
+  - `src/tokyu_shard_loader.py`
+    - `load_stop_time_rows_for_scope()` を追加し、
+      stop-time shard を canonical stop-time sequence へ変換できるようにした。
+  - `frontend`
+    - `ScenarioOverviewPage` を 3-step builder UI に置換。
+    - `simulation-builder-store` を追加し、
+      selected depots / routes / day type / settings / prepared result / active job を一元管理。
+    - `useEditorBootstrap` / `usePrepareSimulation` / `useRunPreparedSimulation` を追加。
+    - `AppBootstrapManager` は open 時に editor-bootstrap だけを warm し、
+      timetable / dispatch 系は lazy load 優先に変更。
+
+- **回帰テスト**:
+  - `tests/test_run_preparation_parity.py`
+    - prepared input の `random_seed` / scope key 互換を検証。
+    - Tokyu shard runtime artifact がある場合に shard を優先することを検証。
+  - `tests/test_bff_simulation_builder.py`
+    - editor-bootstrap の軽量 payload を検証。
+    - prepare → run prepared simulation の builder flow を検証。
+
+### [DEV-2026-03-14] Scenario activate/open の bootstrap/save 競合を緊急修正
+
+- **問題**:
+  - `GET /api/scenarios/{id}` や `GET /api/scenarios/{id}/dispatch-scope` の read path が
+    bootstrap 保存を誘発していた。
+  - `bff/routers/scenarios.py` の bootstrap 判定は `store.get_scenario()` の meta payload を見ており、
+    `depots/routes` を持たないため高確率で「未bootstrap」と誤判定していた。
+  - `POST /activate` と複数の GET が短時間に重なると、
+    同じ scenario の `.staging/artifacts.sqlite` を並行保存・削除し、
+    Windows で `WinError 32` が発生していた。
+  - frontend では `ScenarioListPage` と `AppLayout` の両方が `/activate` を叩き、
+    open 直後に request burst を作っていた。
+
+- **対応**:
+  - `bff/routers/scenarios.py`
+    - GET 系から bootstrap 保存を除去し、`get_scenario` / `get_dispatch_scope` を pure read 化。
+    - activate 専用の `_ensure_scenario_bootstrap_persisted()` を追加し、
+      raw scenario document を見て bootstrap 要否を判定するよう修正。
+  - `bff/store/scenario_store.py`
+    - `_load(..., repair_missing_master=True)` に分離し、read path の self-heal が `_save()` しないよう変更。
+    - `get_scenario_document(..., repair_missing_master=False)` を追加し、
+      persisted state と in-memory repaired view を使い分け可能にした。
+    - scenario 単位 `RLock` を `_save()` と `apply_dataset_bootstrap()` に導入。
+    - `apply_dataset_bootstrap()` を dataset/version/fingerprint ベースで idempotent 化し、
+      同一 bootstrap 再適用では `_save()` を skip。
+    - `_remove_tree_with_retries()` は retry 後に quarantine rename を試すようにし、
+      Windows の cleanup 衝突に強くした。
+  - `frontend/src/features/layout/AppLayout.tsx`
+    - route 遷移後の child render / boot prewarm を、activate 完了まで待つ構成へ変更。
+  - `frontend/src/pages/scenario/ScenarioListPage.tsx`
+    - 同一 scenario の activate 二重送信を抑止し、open 中はボタンを disable。
+  - `frontend/src/api/scenario.ts`
+    - in-flight dedupe 付き `ensureScenarioActivated()` を追加。
+  - `frontend/src/app/AppBootstrapManager.tsx`
+    - open 直後の一斉 prewarm を削減し、scenario detail / dispatch scope 確認後は
+      timetable / dispatch / explorer を lazy load 優先に変更。
+
+- **確認結果**:
+  - `python -m pytest tests/test_bff_research_scenario_bootstrap.py tests/test_bff_scenario_store.py -q` → pass
+  - `cd frontend && npx tsc --noEmit` → pass
+
 ### [DEV-2026-03-14] Vehicle template catalog を実車カタログ値へ更新
 
 - **問題**:

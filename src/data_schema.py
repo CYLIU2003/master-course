@@ -141,6 +141,7 @@ class ElectricityPrice:
     grid_energy_price: float = 0.0      # [円/kWh]
     sell_back_price: float = 0.0        # [円/kWh]
     base_load_kw: float = 0.0           # バス以外の基礎負荷 [kW]
+    co2_factor: float = 0.0             # [kg-CO2/kWh]
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +215,8 @@ class ProblemData:
         "unserved_penalty": 10000.0,
         "slack_penalty": 1000000.0,
     })
+    demand_charge_rate_per_kw: float = 1500.0
+    co2_price_per_kg: float = 1.0
 
     # --- Big-M 等 (§6.5) ---
     BIG_M_ASSIGN: float = 1e6

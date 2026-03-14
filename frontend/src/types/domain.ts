@@ -49,10 +49,14 @@ export interface TimeOfUseBand {
 
 export interface CostConfig {
   tou_pricing: TimeOfUseBand[];
+  grid_flat_price_per_kwh: number;
+  grid_sell_price_per_kwh: number;
   demand_charge_cost_per_kw: number;
   pv_enabled: boolean;
   pv_scale: number;
   diesel_price_per_l: number;
+  grid_co2_kg_per_kwh: number;
+  co2_price_per_kg: number;
 }
 
 export interface SolverConfig {
@@ -66,6 +70,10 @@ export interface SolverConfig {
   time_limit_seconds: number;
   mip_gap: number;
   alns_iterations: number;
+  objective_mode: "total_cost" | "co2";
+  allow_partial_service: boolean;
+  unserved_penalty: number;
+  objective_weights: Record<string, number>;
 }
 
 export interface ScenarioOverlay {
@@ -112,6 +120,99 @@ export interface FeedContext {
   source?: string | null;
 }
 
+export interface EditorAvailableDayType {
+  serviceId: string;
+  label: string;
+  isDefault: boolean;
+}
+
+export interface SimulationFleetTemplateSelection {
+  vehicleTemplateId: string;
+  vehicleCount: number;
+  initialSoc?: number | null;
+  batteryKwh?: number | null;
+  chargePowerKw?: number | null;
+}
+
+export interface SimulationBuilderDefaults {
+  selectedDepotIds: string[];
+  selectedRouteIds: string[];
+  dayType: string;
+  serviceDate?: string | null;
+  vehicleTemplateId?: string | null;
+  vehicleCount: number;
+  initialSoc: number;
+  batteryKwh?: number | null;
+  fleetTemplates?: SimulationFleetTemplateSelection[];
+  chargerCount: number;
+  chargerPowerKw: number;
+  solverMode: SolverMode;
+  objectiveMode?: "total_cost" | "co2";
+  allowPartialService?: boolean;
+  unservedPenalty?: number;
+  gridFlatPricePerKwh?: number | null;
+  gridSellPricePerKwh?: number | null;
+  demandChargeCostPerKw?: number | null;
+  dieselPricePerL?: number | null;
+  gridCo2KgPerKwh?: number | null;
+  co2PricePerKg?: number | null;
+  depotPowerLimitKw?: number | null;
+  touPricing?: TimeOfUseBand[];
+  timeLimitSeconds: number;
+  mipGap: number;
+  includeDeadhead: boolean;
+}
+
+export interface SimulationBuilderSettings {
+  vehicleTemplateId?: string | null;
+  vehicleCount: number;
+  initialSoc: number;
+  batteryKwh?: number | null;
+  fleetTemplates?: SimulationFleetTemplateSelection[];
+  chargerCount: number;
+  chargerPowerKw: number;
+  solverMode: SolverMode;
+  objectiveMode?: "total_cost" | "co2";
+  allowPartialService?: boolean;
+  unservedPenalty?: number;
+  gridFlatPricePerKwh?: number | null;
+  gridSellPricePerKwh?: number | null;
+  demandChargeCostPerKw?: number | null;
+  dieselPricePerL?: number | null;
+  gridCo2KgPerKwh?: number | null;
+  co2PricePerKg?: number | null;
+  depotPowerLimitKw?: number | null;
+  touPricing?: TimeOfUseBand[];
+  timeLimitSeconds: number;
+  mipGap: number;
+  includeDeadhead: boolean;
+  serviceDate?: string | null;
+  startTime?: string | null;
+  planningHorizonHours?: number | null;
+}
+
+export interface EditorBootstrap {
+  scenario: Scenario;
+  dispatchScope: DispatchScope;
+  depots: Depot[];
+  routes: Array<Route & { displayName?: string }>;
+  vehicleTemplates: VehicleTemplate[];
+  depotRouteIndex: Record<string, string[]>;
+  depotRouteSummary: Array<{
+    depotId: string;
+    name: string;
+    routeCount: number;
+    selected: boolean;
+    selectedRouteCount: number;
+    tripCount: number;
+  }>;
+  availableDayTypes: EditorAvailableDayType[];
+  builderDefaults: SimulationBuilderDefaults;
+  datasetVersion?: string | null;
+  datasetStatus?: ResearchDatasetStatus | null;
+  warning?: string | null;
+}
+
 export type ScenarioStatus =
   | "draft"
   | "trips_built"
@@ -121,6 +222,9 @@ export type ScenarioStatus =
   | "optimized";
 
 export type SolverMode =
+  | "milp"
+  | "alns"
+  | "hybrid"
   | "thesis_mode"
   | "mode_milp_only"
   | "mode_alns_only"
@@ -678,6 +782,21 @@ export interface SimulationConfig {
   mipGap: number;
 }
 
+export interface SimulationPrepareResult {
+  preparedInputId: string;
+  ready: boolean;
+  tripCount: number;
+  blockCount: number;
+  routeCount: number;
+  depotCount: number;
+  timetableRowCount: number;
+  primaryDepotId?: string | null;
+  serviceIds: string[];
+  serviceDate?: string | null;
+  warnings: string[];
+  scopeSummary: Record<string, unknown>;
+}
+
 export interface TouPriceSlot {
   startHour: number;
   endHour: number;
@@ -719,6 +838,7 @@ export interface OptimizationResult {
   scenario_id: string;
   scope?: DispatchScope;
   mode?: string;
+  objective_mode?: "total_cost" | "co2" | string;
   audit?: Record<string, unknown>;
   feed_context?: FeedContext | null;
   solver_status: string;
@@ -727,6 +847,21 @@ export interface OptimizationResult {
   duties: VehicleDuty[];
   charging_schedule: ChargingSlot[];
   cost_breakdown: CostBreakdown;
+  simulation_summary?: {
+    total_operating_cost?: number;
+    total_energy_cost?: number;
+    total_demand_charge?: number;
+    total_degradation_cost?: number;
+    total_fuel_cost?: number;
+    total_co2_kg?: number;
+    peak_demand_kw?: number;
+  };
+  summary?: {
+    vehicle_count_used?: number;
+    vehicle_count_by_type?: Record<string, number>;
+    trip_count_served?: number;
+    trip_count_unserved?: number;
+  };
   feasible?: boolean;
   solver_mode?: string;
   warnings?: string[];
@@ -752,6 +887,11 @@ export interface CostBreakdown {
   peak_demand_cost: number;
   vehicle_cost: number;
   deadhead_cost: number;
+  fuel_cost?: number;
+  battery_degradation_cost?: number;
+  co2_cost?: number;
+  penalty_unserved?: number;
+  total_co2_kg?: number;
   total_cost: number;
 }
 

@@ -9,6 +9,12 @@ import pandas as pd
 
 from src.dataset_integrity import evaluate_dataset_integrity, validate_rows_against_schema
 from src.scenario_overlay import default_scenario_overlay
+from src.tokyu_shard_loader import (
+    TOKYU_SHARD_ROOT,
+    day_type_to_service_id,
+    load_manifest as load_tokyu_shard_manifest,
+    shard_runtime_ready,
+)
 from src.value_normalization import (
     coerce_list,
     coerce_str_list,
@@ -137,6 +143,11 @@ def _dataset_version_for(dataset_id: str) -> str:
     manifest = get_built_manifest(dataset_id)
     if manifest and manifest.get("dataset_version"):
         return str(manifest["dataset_version"])
+    shard_manifest = load_tokyu_shard_manifest(dataset_id)
+    if shard_manifest and shard_manifest.get("dataset_version"):
+        return str(shard_manifest["dataset_version"])
+    if shard_manifest and shard_manifest.get("build_timestamp"):
+        return str(shard_manifest["build_timestamp"])
     version = load_seed_version()
     return str(version.get("dataset_version") or version.get("seed_version") or "unknown")
 
@@ -441,6 +452,16 @@ def _derive_calendar_entries(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, A
     return [_calendar_template(service_id) for service_id in service_ids]
 
 
+def _derive_calendar_entries_from_day_types(day_types: Iterable[str]) -> List[Dict[str, Any]]:
+    service_ids = [
+        day_type_to_service_id(day_type)
+        for day_type in day_types
+        if str(day_type or "").strip()
+    ]
+    deduped = list(dict.fromkeys(service_ids))
+    return [_calendar_template(service_id) for service_id in (deduped or ["WEEKDAY"])]
+
+
 def _catalog_preset_to_vehicle_template(
     preset: Dict[str, Any],
     *,
@@ -553,6 +574,8 @@ def get_dataset_status(dataset_id: str) -> Dict[str, Any]:
     definition = load_dataset_definition(dataset_id)
     integrity = evaluate_dataset_integrity(dataset_id)
     manifest = integrity.get("manifest") or get_built_manifest(dataset_id)
+    shard_manifest = load_tokyu_shard_manifest(dataset_id)
+    shard_ready = shard_runtime_ready(dataset_id)
     built_dir = _built_dataset_dir(dataset_id)
     required_files = {
         "routes": built_dir / "routes.parquet",
@@ -560,10 +583,13 @@ def get_dataset_status(dataset_id: str) -> Dict[str, Any]:
         "timetables": built_dir / "timetables.parquet",
         "stops": built_dir / "stops.parquet",
         "stop_timetables": built_dir / "stop_timetables.parquet",
+        "tokyu_shards": TOKYU_SHARD_ROOT,
     }
     built_available = bool(integrity.get("built_ready"))
     dataset_version = str(
-        (manifest or {}).get("dataset_version")
+        (shard_manifest or {}).get("dataset_version")
+        or (shard_manifest or {}).get("build_timestamp")
+        or (manifest or {}).get("dataset_version")
         or load_seed_version().get("dataset_version")
         or "unknown"
     )
@@ -578,10 +604,13 @@ def get_dataset_status(dataset_id: str) -> Dict[str, Any]:
         "seedReady": bool(integrity.get("seed_ready")),
         "builtReady": bool(integrity.get("built_ready")),
         "builtAvailable": built_available,
-        "warning": None if built_available else MISSING_BUILT_DATA_MESSAGE,
+        "shardReady": shard_ready,
+        "runtimeReady": bool(built_available or shard_ready),
+        "warning": None if (built_available or shard_ready) else MISSING_BUILT_DATA_MESSAGE,
         "missingArtifacts": list(integrity.get("missing_artifacts") or []),
         "integrityError": integrity.get("integrity_error"),
         "manifest": manifest,
+        "shardManifest": shard_manifest,
         "paths": {key: str(path) for key, path in required_files.items()},
     }
 
@@ -614,6 +643,11 @@ def build_dataset_bootstrap(
         depots = list(depots_by_id.values())
     route_rows = load_route_to_depot_rows()
     seed_routes = _seed_route_items(definition, route_rows)
+    shard_ready = bool(status.get("shardReady"))
+    shard_manifest = dict(status.get("shardManifest") or {})
+    runtime_features: Dict[str, Any] | None = None
+    built_routes: List[Dict[str, Any]] = []
+    built_stops: List[Dict[str, Any]] = []
 
     if status["builtAvailable"]:
         built_dir = _built_dataset_dir(dataset_id)
@@ -625,28 +659,6 @@ def build_dataset_bootstrap(
             ),
             route_rows,
         )
-        route_ids = {str(item.get("id") or "") for item in built_routes}
-        built_timetable_rows = _filter_rows_by_route_ids(
-            [
-                _normalize_timetable_row(item)
-                for item in _read_parquet_rows_validated(
-                    built_dir / "timetables.parquet",
-                    schema_name="timetables",
-                )
-            ],
-            route_ids,
-        )
-        built_trips = _filter_rows_by_route_ids(
-            [
-                _normalize_trip_row(item)
-                for item in _read_parquet_rows_validated(
-                    built_dir / "trips.parquet",
-                    schema_name="trips",
-                )
-            ],
-            route_ids,
-        )
-        built_stops: List[Dict[str, Any]] = []
         stops_path = built_dir / "stops.parquet"
         if stops_path.exists():
             built_stops = [
@@ -656,41 +668,108 @@ def build_dataset_bootstrap(
                     schema_name="stops",
                 )
             ]
-        built_stop_timetables: List[Dict[str, Any]] = []
-        stop_timetables_path = built_dir / "stop_timetables.parquet"
-        if stop_timetables_path.exists():
-            built_stop_timetables = [
-                _normalize_stop_timetable_row(item)
-                for item in _read_parquet_rows_validated(
-                    stop_timetables_path,
-                    schema_name="stop_timetables",
-                )
-            ]
-        if built_routes and built_timetable_rows and built_trips:
-            routes = built_routes
-            timetable_rows = built_timetable_rows
-            trips = built_trips
-            stops = built_stops
-            stop_timetables = built_stop_timetables
-            source = "built_dataset"
-        else:
-            routes = seed_routes
+
+        if shard_ready:
+            routes = built_routes or seed_routes
             timetable_rows = []
             trips = []
-            stops = []
+            stops = built_stops
             stop_timetables = []
-            source = "seed_only"
+            calendar_entries = _derive_calendar_entries_from_day_types(
+                shard_manifest.get("available_day_types") or []
+            )
+            source = "tokyu_shards"
+            runtime_features = {
+                "tokyuShards": {
+                    "enabled": True,
+                    "datasetId": dataset_id,
+                    "root": str(TOKYU_SHARD_ROOT),
+                    "manifestPath": shard_manifest.get("manifest_path"),
+                    "buildTimestamp": shard_manifest.get("build_timestamp"),
+                    "availableDepots": list(shard_manifest.get("available_depots") or []),
+                    "availableRoutes": list(shard_manifest.get("available_routes") or []),
+                }
+            }
+        else:
+            route_ids = {str(item.get("id") or "") for item in built_routes}
+            built_timetable_rows = _filter_rows_by_route_ids(
+                [
+                    _normalize_timetable_row(item)
+                    for item in _read_parquet_rows_validated(
+                        built_dir / "timetables.parquet",
+                        schema_name="timetables",
+                    )
+                ],
+                route_ids,
+            )
+            built_trips = _filter_rows_by_route_ids(
+                [
+                    _normalize_trip_row(item)
+                    for item in _read_parquet_rows_validated(
+                        built_dir / "trips.parquet",
+                        schema_name="trips",
+                    )
+                ],
+                route_ids,
+            )
+            built_stop_timetables: List[Dict[str, Any]] = []
+            stop_timetables_path = built_dir / "stop_timetables.parquet"
+            if stop_timetables_path.exists():
+                built_stop_timetables = [
+                    _normalize_stop_timetable_row(item)
+                    for item in _read_parquet_rows_validated(
+                        stop_timetables_path,
+                        schema_name="stop_timetables",
+                    )
+                ]
+            if built_routes and built_timetable_rows and built_trips:
+                routes = built_routes
+                timetable_rows = built_timetable_rows
+                trips = built_trips
+                stops = built_stops
+                stop_timetables = built_stop_timetables
+                calendar_entries = _derive_calendar_entries(timetable_rows)
+                source = "built_dataset"
+            else:
+                routes = seed_routes
+                timetable_rows = []
+                trips = []
+                stops = []
+                stop_timetables = []
+                calendar_entries = _derive_calendar_entries(timetable_rows)
+                source = "seed_only"
+    elif shard_ready:
+        routes = seed_routes
+        timetable_rows = []
+        trips = []
+        stops = []
+        stop_timetables = []
+        calendar_entries = _derive_calendar_entries_from_day_types(
+            shard_manifest.get("available_day_types") or []
+        )
+        source = "tokyu_shards"
+        runtime_features = {
+            "tokyuShards": {
+                "enabled": True,
+                "datasetId": dataset_id,
+                "root": str(TOKYU_SHARD_ROOT),
+                "manifestPath": shard_manifest.get("manifest_path"),
+                "buildTimestamp": shard_manifest.get("build_timestamp"),
+                "availableDepots": list(shard_manifest.get("available_depots") or []),
+                "availableRoutes": list(shard_manifest.get("available_routes") or []),
+            }
+        }
     else:
         routes = seed_routes
         timetable_rows = []
         trips = []
         stops = []
         stop_timetables = []
+        calendar_entries = _derive_calendar_entries(timetable_rows)
         source = "seed_only"
 
     route_assignments = _build_route_assignments(routes, route_rows)
     depot_permissions = _build_depot_permissions(route_assignments)
-    calendar_entries = _derive_calendar_entries(timetable_rows)
     overlay = default_scenario_overlay(
         scenario_id=scenario_id,
         dataset_id=dataset_id,
@@ -743,6 +822,7 @@ def build_dataset_bootstrap(
             "datasetFingerprint": f"{dataset_id}:{status.get('datasetVersion')}",
             "source": source,
         },
+        "runtime_features": runtime_features,
         "scenario_overlay": overlay.model_dump(),
         "dataset_status": status,
     }

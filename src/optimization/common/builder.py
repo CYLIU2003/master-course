@@ -183,8 +183,12 @@ class ProblemBuilder:
             allowed_route_ids,
         )
         trips: List[Trip] = []
-        for row in scenario.get("timetable_rows") or []:
-            if row.get("service_id") != service_id:
+        source_rows = list(scenario.get("timetable_rows") or [])
+        if not source_rows:
+            source_rows = list(scenario.get("trips") or [])
+        for row in source_rows:
+            row_service_id = row.get("service_id")
+            if row_service_id is not None and row_service_id != service_id:
                 continue
             route_id = str(row.get("route_id") or "")
             if allowed_route_ids is not None and route_id not in allowed_route_ids:
@@ -429,6 +433,7 @@ class ProblemBuilder:
                                 grid_buy_yen_per_kwh=float(value or 0.0),
                                 grid_sell_yen_per_kwh=float(item.get("sell_back_price") or 0.0),
                                 demand_charge_weight=float(item.get("demand_charge_weight") or 0.0),
+                                co2_factor=float(item.get("co2_factor") or 0.0),
                             )
                         )
                 elif item.get("time_idx") is not None:
@@ -438,10 +443,50 @@ class ProblemBuilder:
                             grid_buy_yen_per_kwh=float(item.get("grid_energy_price") or item.get("value") or 0.0),
                             grid_sell_yen_per_kwh=float(item.get("sell_back_price") or 0.0),
                             demand_charge_weight=float(item.get("demand_charge_weight") or 0.0),
+                            co2_factor=float(item.get("co2_factor") or 0.0),
                         )
                     )
             if expanded:
                 return tuple(sorted(expanded, key=lambda slot: slot.slot_index))
+
+        overlay_costs = ((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {})
+        if isinstance(overlay_costs, dict):
+            tou_bands = [
+                dict(item)
+                for item in overlay_costs.get("tou_pricing") or []
+                if isinstance(item, dict)
+            ]
+            default_buy = float(overlay_costs.get("grid_flat_price_per_kwh") or 0.0)
+            default_sell = float(overlay_costs.get("grid_sell_price_per_kwh") or 0.0)
+            default_co2 = float(overlay_costs.get("grid_co2_kg_per_kwh") or 0.0)
+            demand_weight = float(overlay_costs.get("demand_charge_cost_per_kw") or 0.0)
+            generated_slots = list(self._build_time_slot_prices(context, ()))
+            if tou_bands or default_buy > 0.0 or default_sell > 0.0 or default_co2 > 0.0 or demand_weight > 0.0:
+                start_min = min((trip.departure_min for trip in context.trips), default=0)
+                expanded: List[EnergyPriceSlot] = []
+                for slot in generated_slots:
+                    minute_of_day = (start_min + slot.slot_index * 30) % (24 * 60)
+                    half_hour_index = minute_of_day // 30
+                    buy_price = default_buy
+                    for band in tou_bands:
+                        try:
+                            start_hour = int(band.get("start_hour") or 0)
+                            end_hour = int(band.get("end_hour") or 48)
+                        except (TypeError, ValueError):
+                            continue
+                        if start_hour <= half_hour_index < end_hour:
+                            buy_price = float(band.get("price_per_kwh") or default_buy)
+                            break
+                    expanded.append(
+                        EnergyPriceSlot(
+                            slot_index=slot.slot_index,
+                            grid_buy_yen_per_kwh=buy_price,
+                            grid_sell_yen_per_kwh=default_sell,
+                            demand_charge_weight=demand_weight,
+                            co2_factor=default_co2,
+                        )
+                    )
+                return tuple(expanded)
 
         tariff_cfg = (
             (scenario.get("simulation_config") or {}).get("tariff")
@@ -467,6 +512,7 @@ class ProblemBuilder:
                         grid_buy_yen_per_kwh=price.grid_energy_price,
                         grid_sell_yen_per_kwh=price.sell_back_price,
                         demand_charge_weight=price.base_load_kw,
+                        co2_factor=0.0,
                     )
                 return tuple(grouped[idx] for idx in sorted(grouped))
         return tuple(self._build_time_slot_prices(context, ()))
@@ -561,7 +607,35 @@ class ProblemBuilder:
         self,
         scenario: Dict[str, Any],
     ) -> OptimizationObjectiveWeights:
-        objective_weights = (scenario.get("simulation_config") or {}).get("objective_weights") or {}
+        simulation_config = scenario.get("simulation_config") or {}
+        overlay_solver = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
+        objective_weights = (
+            simulation_config.get("objective_weights")
+            or overlay_solver.get("objective_weights")
+            or {}
+        )
+        objective_mode = str(
+            simulation_config.get("objective_mode")
+            or overlay_solver.get("objective_mode")
+            or "total_cost"
+        ).strip().lower()
+        if not objective_weights:
+            if objective_mode == "co2":
+                objective_weights = {
+                    "electricity_cost": 0.0,
+                    "demand_charge_cost": 0.0,
+                    "vehicle_fixed_cost": 0.0,
+                    "unserved_penalty": float(overlay_solver.get("unserved_penalty") or 10000.0),
+                    "deviation_cost": 0.0,
+                }
+            else:
+                objective_weights = {
+                    "electricity_cost": 1.0,
+                    "demand_charge_cost": 1.0,
+                    "vehicle_fixed_cost": 0.0,
+                    "unserved_penalty": float(overlay_solver.get("unserved_penalty") or 10000.0),
+                    "deviation_cost": 0.0,
+                }
         return OptimizationObjectiveWeights(
             energy=float(objective_weights.get("electricity_cost", 1.0)),
             demand=float(objective_weights.get("demand_charge_cost", 1.0)),

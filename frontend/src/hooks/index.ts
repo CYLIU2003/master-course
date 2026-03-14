@@ -1,6 +1,7 @@
 export {
   useScenarios,
   useScenario,
+  useEditorBootstrap,
   useScenarioIsIncomplete,
   useDispatchScope,
   useTimetable,
@@ -101,6 +102,8 @@ export {
   useOptimizationResult,
   useOptimizationCapabilities,
   useRunSimulation,
+  usePrepareSimulation,
+  useRunPreparedSimulation,
   useRunOptimization,
   runKeys,
 } from "./use-run";

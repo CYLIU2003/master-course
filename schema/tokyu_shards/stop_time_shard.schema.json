@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tokyu_shards/stop_time_shard.schema.json",
+  "type": "object",
+  "required": [
+    "dataset_id",
+    "operator_id",
+    "source_version",
+    "artifact_kind",
+    "depot_id",
+    "route_id",
+    "day_type",
+    "items"
+  ],
+  "properties": {
+    "dataset_id": { "type": "string", "minLength": 1 },
+    "operator_id": { "type": "string", "const": "tokyu" },
+    "source_version": { "type": "string", "minLength": 1 },
+    "artifact_kind": { "type": "string", "const": "stop_time_shard" },
+    "depot_id": { "type": "string", "minLength": 1 },
+    "route_id": { "type": "string", "minLength": 1 },
+    "day_type": {
+      "type": "string",
+      "enum": ["weekday", "saturday", "holiday"]
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "trip_id",
+          "depot_id",
+          "route_id",
+          "day_type",
+          "direction",
+          "service_variant",
+          "origin_stop_id",
+          "destination_stop_id",
+          "departure_time",
+          "arrival_time",
+          "stop_times"
+        ],
+        "properties": {
+          "trip_id": { "type": "string", "minLength": 1 },
+          "depot_id": { "type": "string", "minLength": 1 },
+          "route_id": { "type": "string", "minLength": 1 },
+          "day_type": {
+            "type": "string",
+            "enum": ["weekday", "saturday", "holiday"]
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["outbound", "inbound"]
+          },
+          "service_variant": { "type": "string", "minLength": 1 },
+          "origin_stop_id": { "type": "string" },
+          "destination_stop_id": { "type": "string" },
+          "origin_name": { "type": "string" },
+          "destination_name": { "type": "string" },
+          "departure_time": { "type": "string", "minLength": 1 },
+          "arrival_time": { "type": "string", "minLength": 1 },
+          "stop_times": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["seq", "stop_id", "stop_name", "arrival_time", "departure_time"],
+              "properties": {
+                "seq": { "type": "integer", "minimum": 0 },
+                "stop_id": { "type": "string", "minLength": 1 },
+                "stop_name": { "type": "string", "minLength": 1 },
+                "arrival_time": { "type": "string", "minLength": 1 },
+                "departure_time": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

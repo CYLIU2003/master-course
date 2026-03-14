@@ -346,6 +346,13 @@ def _cost_breakdown(
         ),
         "vehicle_cost": float(obj_breakdown.get("vehicle_fixed_cost", 0.0) or 0.0),
         "deadhead_cost": float(obj_breakdown.get("deadhead_cost", 0.0) or 0.0),
+        "fuel_cost": float(
+            obj_breakdown.get(
+                "fuel_cost",
+                (sim_payload or {}).get("total_fuel_cost", 0.0),
+            )
+            or 0.0
+        ),
         "battery_degradation_cost": float(
             obj_breakdown.get(
                 "battery_degradation_cost",
@@ -353,10 +360,12 @@ def _cost_breakdown(
             )
             or 0.0
         ),
+        "co2_cost": float(obj_breakdown.get("emission_cost", 0.0) or 0.0),
         "penalty_unserved": float(obj_breakdown.get("unserved_penalty", 0.0) or 0.0),
+        "total_co2_kg": float((sim_payload or {}).get("total_co2_kg", 0.0) or 0.0),
         "total_cost": float(
-            result_payload.get("objective_value")
-            or (sim_payload or {}).get("total_operating_cost", 0.0)
+            (sim_payload or {}).get("total_operating_cost", 0.0)
+            or result_payload.get("objective_value")
             or 0.0
         ),
     }
@@ -493,6 +502,23 @@ def _run_optimization(
             if solve_output.get("sim_result") is not None
             else None
         )
+        vehicle_type_by_id = {
+            vehicle.vehicle_id: vehicle.vehicle_type
+            for vehicle in data.vehicles
+        }
+        vehicle_count_by_type: Dict[str, int] = {}
+        for vehicle_id, task_ids in (result_payload.get("assignment") or {}).items():
+            if not task_ids:
+                continue
+            vehicle_type = str(vehicle_type_by_id.get(vehicle_id) or "UNKNOWN")
+            vehicle_count_by_type[vehicle_type] = vehicle_count_by_type.get(vehicle_type, 0) + 1
+        objective_mode = str(
+            (
+                ((scenario.get("scenario_overlay") or {}).get("solver_config") or {}).get("objective_mode")
+                or (scenario.get("simulation_config") or {}).get("objective_mode")
+                or "total_cost"
+            )
+        )
 
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
@@ -500,6 +526,7 @@ def _run_optimization(
             "scope": {"serviceId": service_id, "depotId": depot_id},
             "solver_status": result_payload["status"],
             "mode": mode,
+            "objective_mode": objective_mode,
             "objective_value": result_payload.get("objective_value"),
             "solve_time_seconds": result_payload.get("solve_time_seconds", 0.0),
             "mip_gap": result_payload.get("mip_gap"),
@@ -514,6 +541,7 @@ def _run_optimization(
                     ).items()
                     if task_ids
                 ),
+                "vehicle_count_by_type": vehicle_count_by_type,
                 "trip_count_served": sum(
                     len(task_ids)
                     for task_ids in (result_payload.get("assignment") or {}).values()

@@ -180,6 +180,45 @@ def test_build_problem_data_from_scenario_applies_analysis_scope_filters():
     assert [task.task_id for task in data.tasks] == ["T1"]
 
 
+def test_build_problem_data_from_scenario_uses_prebuilt_trips_when_timetable_rows_are_empty():
+    scenario = {
+        "meta": {"id": "scenario-shards", "updatedAt": "2026-03-14T00:00:00+00:00"},
+        "depots": [{"id": "D1"}],
+        "vehicles": [{"id": "V1", "depotId": "D1", "type": "BEV", "batteryKwh": 300.0}],
+        "routes": [{"id": "R1"}],
+        "timetable_rows": [],
+        "trips": [
+            {
+                "trip_id": "T1",
+                "route_id": "R1",
+                "origin": "A",
+                "destination": "B",
+                "departure": "07:00",
+                "arrival": "07:30",
+                "distance_km": 10.0,
+                "allowed_vehicle_types": ["BEV"],
+            }
+        ],
+        "simulation_config": {"start_time": "05:00", "time_step_min": 15},
+    }
+
+    data, report = build_problem_data_from_scenario(
+        scenario,
+        depot_id="D1",
+        service_id="WEEKDAY",
+        mode="mode_milp_only",
+        analysis_scope={
+            "effectiveRouteIds": ["R1"],
+            "routeSelection": {"includeRouteIds": ["R1"]},
+            "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+        },
+    )
+
+    assert report.trip_count == 1
+    assert report.task_count == 1
+    assert [task.task_id for task in data.tasks] == ["T1"]
+
+
 def test_split_artifact_scenario_roundtrip_builds_equivalent_problem_data(tmp_path: Path):
     store_dir = tmp_path / "scenarios"
     app_context_path = tmp_path / "app_context.json"

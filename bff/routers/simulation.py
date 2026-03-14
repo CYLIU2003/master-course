@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bff.dependencies import require_built
 from bff.errors import AppErrorCode, make_error
@@ -33,8 +33,10 @@ from bff.routers.graph import (
     _build_graph_payload,
     _build_trips_payload,
 )
+from bff.services.service_ids import canonical_service_id
 from bff.services.run_preparation import get_or_build_run_preparation
 from bff.store import job_store, scenario_store as store
+from src.scenario_overlay import TimeOfUseBand, default_scenario_overlay
 from src.milp_model import MILPResult
 from src.pipeline.simulate import simulate_problem_data
 
@@ -47,6 +49,63 @@ _SIMULATION_FUTURE_LOCK = threading.Lock()
 class RunSimulationBody(BaseModel):
     service_id: Optional[str] = None
     depot_id: Optional[str] = None
+    source: str = "duties"
+
+
+class PrepareTimeOfUseBandBody(BaseModel):
+    start_hour: int
+    end_hour: int
+    price_per_kwh: float
+
+
+class PrepareFleetTemplateBody(BaseModel):
+    vehicle_template_id: str
+    vehicle_count: int = 0
+    initial_soc: Optional[float] = None
+    battery_kwh: Optional[float] = None
+    charge_power_kw: Optional[float] = None
+
+
+class PrepareSimulationSettingsBody(BaseModel):
+    vehicle_template_id: Optional[str] = None
+    vehicle_count: int = 10
+    initial_soc: float = 0.8
+    battery_kwh: Optional[float] = None
+    fleet_templates: list[PrepareFleetTemplateBody] = Field(default_factory=list)
+    charger_count: int = 4
+    charger_power_kw: float = 90.0
+    solver_mode: str = "mode_milp_only"
+    objective_mode: str = "total_cost"
+    allow_partial_service: bool = False
+    unserved_penalty: float = 10000.0
+    time_limit_seconds: int = 300
+    mip_gap: float = 0.01
+    include_deadhead: bool = True
+    grid_flat_price_per_kwh: Optional[float] = None
+    grid_sell_price_per_kwh: Optional[float] = None
+    demand_charge_cost_per_kw: Optional[float] = None
+    diesel_price_per_l: Optional[float] = None
+    grid_co2_kg_per_kwh: Optional[float] = None
+    co2_price_per_kg: Optional[float] = None
+    depot_power_limit_kw: Optional[float] = None
+    tou_pricing: list[PrepareTimeOfUseBandBody] = Field(default_factory=list)
+    service_date: Optional[str] = None
+    start_time: str = "05:00"
+    planning_horizon_hours: float = 20.0
+
+
+class PrepareSimulationBody(BaseModel):
+    selected_depot_ids: list[str] = Field(default_factory=list)
+    selected_route_ids: list[str] = Field(default_factory=list)
+    day_type: Optional[str] = None
+    service_date: Optional[str] = None
+    simulation_settings: PrepareSimulationSettingsBody = Field(
+        default_factory=PrepareSimulationSettingsBody
+    )
+
+
+class RunPreparedSimulationBody(BaseModel):
+    prepared_input_id: str
     source: str = "duties"
 
 
@@ -172,6 +231,10 @@ def _require_scenario(scenario_id: str) -> None:
         raise
 
 
+def _prepared_inputs_root() -> Path:
+    return Path(__file__).resolve().parents[2] / "outputs" / "prepared_inputs"
+
+
 def _resolve_dispatch_scope(
     scenario_id: str,
     *,
@@ -192,6 +255,373 @@ def _resolve_dispatch_scope(
     doc = store._load(scenario_id)
     doc["dispatch_scope"] = {**current, **scope}
     return store._normalize_dispatch_scope(doc)
+
+
+def _select_builder_template(
+    doc: Dict[str, Any],
+    template_id: Optional[str],
+) -> Dict[str, Any]:
+    templates = [dict(item) for item in doc.get("vehicle_templates") or []]
+    if template_id:
+        for template in templates:
+            if str(template.get("id") or "") == str(template_id):
+                return template
+    for template in templates:
+        if str(template.get("type") or "").upper() == "BEV":
+            return template
+    return templates[0] if templates else {}
+
+
+def _resolve_builder_template_selections(
+    doc: Dict[str, Any],
+    settings: PrepareSimulationSettingsBody,
+) -> list[Dict[str, Any]]:
+    if settings.fleet_templates:
+        selections: list[Dict[str, Any]] = []
+        for item in settings.fleet_templates:
+            template = _select_builder_template(doc, item.vehicle_template_id)
+            if not template:
+                continue
+            selections.append(
+                {
+                    "template": template,
+                    "vehicle_count": max(int(item.vehicle_count), 0),
+                    "initial_soc": settings.initial_soc if item.initial_soc is None else item.initial_soc,
+                    "battery_kwh": item.battery_kwh,
+                    "charge_power_kw": item.charge_power_kw,
+                }
+            )
+        return [item for item in selections if item["vehicle_count"] > 0]
+
+    template = _select_builder_template(doc, settings.vehicle_template_id)
+    if not template:
+        return []
+    return [
+        {
+            "template": template,
+            "vehicle_count": max(int(settings.vehicle_count), 0),
+            "initial_soc": settings.initial_soc,
+            "battery_kwh": settings.battery_kwh,
+            "charge_power_kw": settings.charger_power_kw,
+        }
+    ]
+
+
+def _objective_weights_for_mode(
+    *,
+    objective_mode: str,
+    unserved_penalty: float,
+) -> Dict[str, float]:
+    if str(objective_mode or "").strip().lower() == "co2":
+        return {
+            "vehicle_fixed_cost": 0.0,
+            "electricity_cost": 0.0,
+            "demand_charge_cost": 0.0,
+            "fuel_cost": 0.0,
+            "deadhead_cost": 0.0,
+            "battery_degradation_cost": 0.0,
+            "emission_cost": 1.0,
+            "unserved_penalty": float(unserved_penalty),
+            "slack_penalty": 1000000.0,
+        }
+    return {
+        "vehicle_fixed_cost": 0.0,
+        "electricity_cost": 1.0,
+        "demand_charge_cost": 1.0,
+        "fuel_cost": 1.0,
+        "deadhead_cost": 0.0,
+        "battery_degradation_cost": 0.0,
+        "emission_cost": 0.0,
+        "unserved_penalty": float(unserved_penalty),
+        "slack_penalty": 1000000.0,
+    }
+
+
+def _build_builder_vehicles(
+    *,
+    primary_depot_id: str,
+    template: Dict[str, Any],
+    vehicle_count: int,
+    initial_soc: float,
+    battery_kwh: Optional[float],
+    charger_power_kw: float,
+) -> list[Dict[str, Any]]:
+    items: list[Dict[str, Any]] = []
+    vehicle_type = str(template.get("type") or "BEV").upper()
+    for index in range(max(vehicle_count, 0)):
+        item = dict(template)
+        item["id"] = f"builder-{vehicle_type.lower()}-{primary_depot_id}-{index + 1:03d}"
+        item["vehicleTemplateId"] = template.get("id")
+        item["depotId"] = primary_depot_id
+        item["enabled"] = True
+        item["initialSoc"] = initial_soc if vehicle_type == "BEV" else None
+        if vehicle_type == "BEV":
+            item["batteryKwh"] = battery_kwh if battery_kwh is not None else template.get("batteryKwh")
+            item["chargePowerKw"] = charger_power_kw or template.get("chargePowerKw")
+            item["fuelTankL"] = None
+        else:
+            item["batteryKwh"] = None
+        items.append(item)
+    return items
+
+
+def _build_builder_fleet_vehicles(
+    *,
+    primary_depot_id: str,
+    selections: list[Dict[str, Any]],
+) -> list[Dict[str, Any]]:
+    items: list[Dict[str, Any]] = []
+    sequence = 1
+    for selection in selections:
+        template = dict(selection.get("template") or {})
+        vehicle_count = int(selection.get("vehicle_count") or 0)
+        built = _build_builder_vehicles(
+            primary_depot_id=primary_depot_id,
+            template=template,
+            vehicle_count=vehicle_count,
+            initial_soc=float(selection.get("initial_soc") or 0.8),
+            battery_kwh=selection.get("battery_kwh"),
+            charger_power_kw=float(selection.get("charge_power_kw") or 0.0),
+        )
+        for vehicle in built:
+            vehicle_type = str(vehicle.get("type") or "BEV").upper()
+            vehicle["id"] = f"builder-{vehicle_type.lower()}-{primary_depot_id}-{sequence:03d}"
+            sequence += 1
+            items.append(vehicle)
+    return items
+
+
+def _build_builder_chargers(
+    *,
+    primary_depot_id: str,
+    has_bev: bool,
+    charger_count: int,
+    charger_power_kw: float,
+) -> list[Dict[str, Any]]:
+    if not has_bev:
+        return []
+    items: list[Dict[str, Any]] = []
+    power_kw = charger_power_kw or float(template.get("chargePowerKw") or 90.0)
+    for index in range(max(charger_count, 0)):
+        items.append(
+            {
+                "id": f"builder-charger-{primary_depot_id}-{index + 1:03d}",
+                "siteId": primary_depot_id,
+                "powerKw": power_kw,
+                "bidirectional": False,
+                "simultaneous_ports": 1,
+            }
+        )
+    return items
+
+
+def _apply_builder_configuration(
+    scenario_id: str,
+    body: PrepareSimulationBody,
+) -> Dict[str, Any]:
+    doc = store.get_scenario_document(scenario_id, repair_missing_master=False)
+    valid_depot_ids = {
+        str(item.get("id") or item.get("depotId") or "").strip()
+        for item in doc.get("depots") or []
+        if str(item.get("id") or item.get("depotId") or "").strip()
+    }
+    selected_depot_ids = [
+        depot_id
+        for depot_id in body.selected_depot_ids
+        if str(depot_id or "").strip() in valid_depot_ids
+    ]
+    if not selected_depot_ids and valid_depot_ids:
+        selected_depot_ids = [sorted(valid_depot_ids)[0]]
+    if not selected_depot_ids:
+        raise HTTPException(status_code=422, detail="No valid depot is selected.")
+
+    selected_day_type = canonical_service_id(
+        body.day_type
+        or (doc.get("dispatch_scope") or {}).get("serviceId")
+        or "WEEKDAY"
+    )
+    candidate_scope = {
+        "depotSelection": {
+            "mode": "include",
+            "depotIds": selected_depot_ids,
+            "primaryDepotId": selected_depot_ids[0],
+        },
+        "routeSelection": {"mode": "all"},
+        "serviceSelection": {"serviceIds": [selected_day_type]},
+        "tripSelection": {
+            "includeShortTurn": True,
+            "includeDepotMoves": True,
+            "includeDeadhead": bool(body.simulation_settings.include_deadhead),
+        },
+        "depotId": selected_depot_ids[0],
+        "serviceId": selected_day_type,
+    }
+    candidate_route_ids = store.route_ids_for_selected_depots(scenario_id, candidate_scope)
+    selected_route_ids = [
+        route_id
+        for route_id in body.selected_route_ids
+        if str(route_id or "").strip() in set(candidate_route_ids)
+    ]
+    if not selected_route_ids:
+        selected_route_ids = list(candidate_route_ids)
+
+    template_selections = _resolve_builder_template_selections(doc, body.simulation_settings)
+    if not template_selections:
+        raise HTTPException(status_code=422, detail="No vehicle template is available for builder prepare.")
+    primary_template = dict(template_selections[0]["template"] or {})
+    fleet_counts = {"BEV": 0, "ICE": 0}
+    for selection in template_selections:
+        template_type = str((selection.get("template") or {}).get("type") or "BEV").upper()
+        fleet_counts[template_type] = fleet_counts.get(template_type, 0) + int(
+            selection.get("vehicle_count") or 0
+        )
+
+    scenario_meta = store.get_scenario(scenario_id)
+    current_overlay = dict(doc.get("scenario_overlay") or {})
+    overlay = default_scenario_overlay(
+        scenario_id=scenario_id,
+        dataset_id=str(
+            scenario_meta.get("datasetId")
+            or current_overlay.get("dataset_id")
+            or "tokyu_core"
+        ),
+        dataset_version=str(
+            scenario_meta.get("datasetVersion")
+            or current_overlay.get("dataset_version")
+            or "unknown"
+        ),
+        random_seed=int(scenario_meta.get("randomSeed") or current_overlay.get("random_seed") or 42),
+        depot_ids=selected_depot_ids,
+        route_ids=selected_route_ids,
+    )
+    if isinstance(current_overlay.get("cost_coefficients"), dict):
+        current_cost_coefficients = dict(current_overlay.get("cost_coefficients") or {})
+        if current_cost_coefficients.get("tou_pricing"):
+            current_cost_coefficients["tou_pricing"] = [
+                item
+                if isinstance(item, TimeOfUseBand)
+                else TimeOfUseBand(**dict(item))
+                for item in current_cost_coefficients.get("tou_pricing") or []
+                if isinstance(item, (dict, TimeOfUseBand))
+            ]
+        overlay.cost_coefficients = overlay.cost_coefficients.model_copy(
+            update=current_cost_coefficients
+        )
+    if isinstance(current_overlay.get("solver_config"), dict):
+        overlay.solver_config = overlay.solver_config.model_copy(
+            update=current_overlay.get("solver_config") or {}
+        )
+    overlay.fleet.n_bev = int(fleet_counts.get("BEV", 0))
+    overlay.fleet.n_ice = int(fleet_counts.get("ICE", 0))
+    overlay.charging_constraints.max_simultaneous_sessions = body.simulation_settings.charger_count
+    overlay.charging_constraints.charger_power_limit_kw = body.simulation_settings.charger_power_kw
+    if body.simulation_settings.depot_power_limit_kw is not None:
+        overlay.charging_constraints.depot_power_limit_kw = body.simulation_settings.depot_power_limit_kw
+    overlay.solver_config.mode = body.simulation_settings.solver_mode
+    overlay.solver_config.objective_mode = str(body.simulation_settings.objective_mode or "total_cost")
+    overlay.solver_config.allow_partial_service = bool(body.simulation_settings.allow_partial_service)
+    overlay.solver_config.unserved_penalty = float(body.simulation_settings.unserved_penalty)
+    overlay.solver_config.time_limit_seconds = body.simulation_settings.time_limit_seconds
+    overlay.solver_config.mip_gap = body.simulation_settings.mip_gap
+    overlay.solver_config.objective_weights = _objective_weights_for_mode(
+        objective_mode=overlay.solver_config.objective_mode,
+        unserved_penalty=overlay.solver_config.unserved_penalty,
+    )
+    if body.simulation_settings.grid_flat_price_per_kwh is not None:
+        overlay.cost_coefficients.grid_flat_price_per_kwh = body.simulation_settings.grid_flat_price_per_kwh
+    if body.simulation_settings.grid_sell_price_per_kwh is not None:
+        overlay.cost_coefficients.grid_sell_price_per_kwh = body.simulation_settings.grid_sell_price_per_kwh
+    if body.simulation_settings.demand_charge_cost_per_kw is not None:
+        overlay.cost_coefficients.demand_charge_cost_per_kw = body.simulation_settings.demand_charge_cost_per_kw
+    if body.simulation_settings.diesel_price_per_l is not None:
+        overlay.cost_coefficients.diesel_price_per_l = body.simulation_settings.diesel_price_per_l
+    if body.simulation_settings.grid_co2_kg_per_kwh is not None:
+        overlay.cost_coefficients.grid_co2_kg_per_kwh = body.simulation_settings.grid_co2_kg_per_kwh
+    if body.simulation_settings.co2_price_per_kg is not None:
+        overlay.cost_coefficients.co2_price_per_kg = body.simulation_settings.co2_price_per_kg
+    if body.simulation_settings.tou_pricing:
+        overlay.cost_coefficients.tou_pricing = [
+            TimeOfUseBand(**item.model_dump())
+            for item in body.simulation_settings.tou_pricing
+        ]
+
+    primary_depot_id = selected_depot_ids[0]
+    doc["dispatch_scope"] = {
+        "scopeId": f"{scenario_meta.get('datasetId') or 'tokyu_core'}:{scenario_meta.get('datasetVersion') or 'unknown'}",
+        "operatorId": scenario_meta.get("operatorId") or "tokyu",
+        "datasetVersion": scenario_meta.get("datasetVersion"),
+        "depotSelection": {
+            "mode": "include",
+            "depotIds": selected_depot_ids,
+            "primaryDepotId": primary_depot_id,
+        },
+        "routeSelection": {
+            "mode": "include",
+            "includeRouteIds": selected_route_ids,
+            "excludeRouteIds": [],
+        },
+        "serviceSelection": {"serviceIds": [selected_day_type]},
+        "tripSelection": {
+            "includeShortTurn": True,
+            "includeDepotMoves": True,
+            "includeDeadhead": bool(body.simulation_settings.include_deadhead),
+        },
+        "depotId": primary_depot_id,
+        "serviceId": selected_day_type,
+    }
+    doc["scenario_overlay"] = overlay.model_dump()
+    doc["simulation_config"] = {
+        "service_date": body.service_date or body.simulation_settings.service_date,
+        "day_type": selected_day_type,
+        "initial_soc": body.simulation_settings.initial_soc,
+        "start_time": body.simulation_settings.start_time,
+        "planning_horizon_hours": body.simulation_settings.planning_horizon_hours,
+        "time_step_min": 15,
+        "vehicle_template_id": primary_template.get("id"),
+        "fleet_templates": [
+            {
+                "vehicle_template_id": (selection.get("template") or {}).get("id"),
+                "vehicle_count": int(selection.get("vehicle_count") or 0),
+                "initial_soc": selection.get("initial_soc"),
+                "battery_kwh": selection.get("battery_kwh"),
+                "charge_power_kw": selection.get("charge_power_kw"),
+            }
+            for selection in template_selections
+        ],
+        "charger_count": body.simulation_settings.charger_count,
+        "charger_power_kw": body.simulation_settings.charger_power_kw,
+        "solver_mode": body.simulation_settings.solver_mode,
+        "objective_mode": overlay.solver_config.objective_mode,
+        "allow_partial_service": overlay.solver_config.allow_partial_service,
+        "unserved_penalty": overlay.solver_config.unserved_penalty,
+        "objective_weights": dict(overlay.solver_config.objective_weights),
+        "time_limit_seconds": body.simulation_settings.time_limit_seconds,
+        "mip_gap": body.simulation_settings.mip_gap,
+    }
+    doc["vehicles"] = _build_builder_fleet_vehicles(
+        primary_depot_id=primary_depot_id,
+        selections=template_selections,
+    )
+    doc["chargers"] = _build_builder_chargers(
+        primary_depot_id=primary_depot_id,
+        has_bev=overlay.fleet.n_bev > 0,
+        charger_count=body.simulation_settings.charger_count,
+        charger_power_kw=body.simulation_settings.charger_power_kw,
+    )
+    if overlay.charging_constraints.depot_power_limit_kw is not None:
+        doc["charger_sites"] = [
+            {
+                "id": primary_depot_id,
+                "site_type": "depot",
+                "grid_import_limit_kw": overlay.charging_constraints.depot_power_limit_kw,
+                "contract_demand_limit_kw": overlay.charging_constraints.depot_power_limit_kw,
+            }
+        ]
+    store._normalize_dispatch_scope(doc)
+    store._invalidate_dispatch_artifacts(doc)
+    doc["meta"]["updatedAt"] = store._now_iso()
+    store._save(doc)
+    return doc
 
 def _git_sha() -> str:
     try:
@@ -452,6 +882,133 @@ def get_simulation_result(scenario_id: str) -> Dict[str, Any]:
 def get_simulation_capabilities(scenario_id: str) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     return _simulation_capabilities()
+
+
+@router.post("/scenarios/{scenario_id}/simulation/prepare")
+def prepare_simulation(
+    scenario_id: str,
+    body: PrepareSimulationBody,
+    _app_state: dict = Depends(require_built),
+) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    scenario_doc = _apply_builder_configuration(scenario_id, body)
+    prep = get_or_build_run_preparation(
+        scenario=scenario_doc,
+        built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
+        scenarios_dir=_prepared_inputs_root(),
+        routes_df=_app_state.get("routes_df"),
+    )
+    if not prep.is_valid:
+        raise HTTPException(
+            status_code=500,
+            detail=make_error(
+                AppErrorCode.SCENARIO_INCOMPLETE,
+                f"Simulation prepare failed: {prep.error}",
+            ),
+        )
+    warnings = list(prep.warnings)
+    if not prep.scope_summary.get("primary_depot_id"):
+        warnings.append("A primary depot is required before simulation can run.")
+    return {
+        "preparedInputId": prep.prepared_input_id,
+        "ready": bool(prep.is_valid and prep.scope_summary.get("trip_count", 0) > 0 and prep.scope_summary.get("primary_depot_id")),
+        "tripCount": prep.scope_summary.get("trip_count", 0),
+        "blockCount": 0,
+        "routeCount": len(prep.scope_summary.get("route_ids") or []),
+        "depotCount": len(prep.scope_summary.get("depot_ids") or []),
+        "timetableRowCount": prep.scope_summary.get("timetable_row_count", 0),
+        "primaryDepotId": prep.scope_summary.get("primary_depot_id"),
+        "serviceIds": prep.scope_summary.get("service_ids") or [],
+        "serviceDate": prep.scope_summary.get("service_date"),
+        "warnings": warnings,
+        "scopeSummary": prep.scope_summary,
+    }
+
+
+@router.post("/scenarios/{scenario_id}/simulation/run")
+def run_prepared_simulation(
+    scenario_id: str,
+    body: RunPreparedSimulationBody,
+    _app_state: dict = Depends(require_built),
+) -> Dict[str, Any]:
+    _require_scenario(scenario_id)
+    scenario_doc = store.get_scenario_document(scenario_id)
+    prep = get_or_build_run_preparation(
+        scenario=scenario_doc,
+        built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
+        scenarios_dir=_prepared_inputs_root(),
+        routes_df=_app_state.get("routes_df"),
+    )
+    if not prep.is_valid:
+        raise HTTPException(
+            status_code=500,
+            detail=make_error(
+                AppErrorCode.SCENARIO_INCOMPLETE,
+                f"Run preparation failed: {prep.error}",
+            ),
+        )
+    if prep.prepared_input_id != body.prepared_input_id:
+        raise HTTPException(
+            status_code=409,
+            detail=make_error(
+                AppErrorCode.SCENARIO_INCOMPLETE,
+                "Prepared input is stale. Run prepare again before starting simulation.",
+                preparedInputId=body.prepared_input_id,
+                currentPreparedInputId=prep.prepared_input_id,
+            ),
+        )
+    service_id = str((prep.scope_summary.get("service_ids") or ["WEEKDAY"])[0])
+    depot_id = prep.scope_summary.get("primary_depot_id")
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=service_id,
+        depot_id=depot_id,
+        persist=True,
+    )
+    job = job_store.create_job()
+    job_store.update_job(
+        job.job_id,
+        metadata={
+            "scenario_id": scenario_id,
+            "feed_context": store.get_feed_context(scenario_id),
+            "service_id": scope.get("serviceId") or service_id,
+            "depot_id": scope.get("depotId"),
+            "stage": "queued",
+            "source": body.source,
+            "prepared_input_id": body.prepared_input_id,
+            "persistence": dict(job_store.JOB_PERSISTENCE_INFO),
+        },
+    )
+    submitted = _submit_simulation_job(
+        args=(
+            scenario_id,
+            job.job_id,
+            scope.get("serviceId") or service_id,
+            scope.get("depotId"),
+            body.source,
+        ),
+        job_id=job.job_id,
+        scenario_id=scenario_id,
+        service_id=scope.get("serviceId") or service_id,
+        depot_id=scope.get("depotId"),
+        source=body.source,
+    )
+    if not submitted:
+        job_store.update_job(
+            job.job_id,
+            status="failed",
+            progress=100,
+            message="Rejected because another simulation job is already running.",
+            error="job_already_running",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=make_error(
+                AppErrorCode.EXECUTION_IN_PROGRESS,
+                "A simulation job is already running. Please retry after it completes.",
+            ),
+        )
+    return job_store.job_to_dict(job)
 
 
 @router.post("/scenarios/{scenario_id}/run-simulation")

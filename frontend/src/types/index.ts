@@ -10,6 +10,10 @@ export type {
   SolverConfig,
   TimeOfUseBand,
   ResearchDatasetStatus,
+  EditorAvailableDayType,
+  SimulationBuilderDefaults,
+  SimulationBuilderSettings,
+  EditorBootstrap,
   HHMMTime,
   MinutesFromMidnight,
   // Master data
@@ -52,6 +56,7 @@ export type {
   CatalogPatternSummary,
   // Simulation config
   SimulationConfig,
+  SimulationPrepareResult,
   TouPriceSlot,
   // Results
   SimulationResult,
@@ -79,6 +84,7 @@ export type {
   // Scenario
   ScenarioListResponse,
   ScenarioDetailResponse,
+  EditorBootstrapResponse,
   CreateScenarioRequest,
   UpdateScenarioRequest,
   ResearchDatasetsResponse,
@@ -182,6 +188,9 @@ export type {
   DispatchScopeResponse,
   UpdateDispatchScopeRequest,
   RunSimulationRequest,
+  PrepareSimulationRequest,
+  SimulationPrepareResponse,
+  RunPreparedSimulationRequest,
   // Optimization
   OptimizationResultResponse,
   OptimizationCapabilitiesResponse,

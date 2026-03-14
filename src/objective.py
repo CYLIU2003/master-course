@@ -75,24 +75,37 @@ def build_objective(
     delta_h = data.delta_t_hour
 
     obj_expr = gp.LinExpr()
+    obj_terms: Dict[str, Any] = {}
+
+    def _append_term(name: str, expr: Any) -> None:
+        if expr is None:
+            return
+        obj_terms[name] = expr
+        nonlocal obj_expr
+        obj_expr += expr
 
     # ===== w1: 車両使用固定費 =====
     if w.get("vehicle_fixed_cost", 0.0) > 0 and u is not None:
+        term = gp.LinExpr()
         for k in K_ALL:
             veh = dp.vehicle_lut[k]
-            obj_expr += w["vehicle_fixed_cost"] * veh.fixed_use_cost * u[k]
+            term += w["vehicle_fixed_cost"] * veh.fixed_use_cost * u[k]
+        _append_term("vehicle_fixed_cost", term)
 
     # ===== w2: 電力量料金 =====
     if w.get("electricity_cost", 0.0) > 0 and p_grid is not None:
         # depot サイトの電力料金を集計
+        term = gp.LinExpr()
         for site_id in ms.I_CHARGE:
             for t in T:
                 price = get_grid_price(dp, site_id, t)
                 # p_grid は kW 単位。エネルギー = p_grid * delta_h [kWh]
-                obj_expr += w["electricity_cost"] * price * p_grid[site_id, t] * delta_h
+                term += w["electricity_cost"] * price * p_grid[site_id, t] * delta_h
+        _append_term("electricity_cost", term)
 
     # p_grid がない場合の代替: p_charge から直接集計
     if w.get("electricity_cost", 0.0) > 0 and p_grid is None and p is not None:
+        term = gp.LinExpr()
         for site_id in ms.I_CHARGE:
             for t in T:
                 price = get_grid_price(dp, site_id, t)
@@ -100,28 +113,32 @@ def build_objective(
                 for k in K_BEV:
                     for c in site_chargers:
                         if c in ms.vehicle_charger_feasible.get(k, set()):
-                            obj_expr += w["electricity_cost"] * price * p[k, c, t] * delta_h
+                            term += w["electricity_cost"] * price * p[k, c, t] * delta_h
+        _append_term("electricity_cost", term)
 
     # ===== w3: デマンド料金 =====
     if w.get("demand_charge_cost", 0.0) > 0 and peak is not None and data.enable_demand_charge:
+        term = gp.LinExpr()
         for site_id in ms.I_CHARGE:
-            site = dp.site_lut.get(site_id)
-            demand_rate = 1500.0  # 円/kW (標準値; 設定ファイル拡張可能)
-            obj_expr += w["demand_charge_cost"] * demand_rate * peak[site_id]
+            term += w["demand_charge_cost"] * data.demand_charge_rate_per_kw * peak[site_id]
+        _append_term("demand_charge_cost", term)
 
     # ===== w4: ICE 燃料費 =====
     if w.get("fuel_cost", 0.0) > 0:
+        term = gp.LinExpr()
         for k in K_ICE:
             veh = dp.vehicle_lut[k]
             fuel_cost = veh.fuel_cost_coeff  # 円/L
             for r in R:
                 if r in ms.vehicle_task_feasible.get(k, set()):
                     fuel_l = dp.task_fuel_ice.get(r, 0.0)
-                    obj_expr += w["fuel_cost"] * fuel_cost * fuel_l * x[k, r]
+                    term += w["fuel_cost"] * fuel_cost * fuel_l * x[k, r]
+        _append_term("fuel_cost", term)
 
     # ===== w5: 回送コスト (距離ベース簡易) =====
     if w.get("deadhead_cost", 0.0) > 0:
         dh_cost_per_km = 50.0  # 円/km (デフォルト; 拡張可能)
+        term = gp.LinExpr()
         for k in K_ALL:
             for r1_id in R:
                 for r2_id in R:
@@ -133,38 +150,76 @@ def build_objective(
                     # 変数 y_follow[k,r1,r2] があれば使う
                     y = vars.get("y_follow")
                     if y is not None and (k, r1_id, r2_id) in y:
-                        obj_expr += w["deadhead_cost"] * dh_cost_per_km * dh_dist * y[k, r1_id, r2_id]
+                        term += w["deadhead_cost"] * dh_cost_per_km * dh_dist * y[k, r1_id, r2_id]
+        _append_term("deadhead_cost", term)
 
     # ===== w6: 電池劣化コスト =====
     if w.get("battery_degradation_cost", 0.0) > 0 and deg is not None and data.enable_battery_degradation:
+        term = gp.LinExpr()
         for k in K_BEV:
             for t in T:
-                obj_expr += w["battery_degradation_cost"] * deg[k, t]
+                term += w["battery_degradation_cost"] * deg[k, t]
+        _append_term("battery_degradation_cost", term)
 
     # ===== w7: CO2 排出コスト =====
     if w.get("emission_cost", 0.0) > 0:
-        co2_price_per_kg = 5.0  # 円/kg-CO2 (デフォルト)
+        term = gp.LinExpr()
+        co2_price_per_kg = data.co2_price_per_kg
         for k in K_ICE:
             veh = dp.vehicle_lut[k]
             co2_coeff = veh.co2_emission_coeff  # kg-CO2/L
-            fuel_cost = veh.fuel_cost_coeff
             for r in R:
                 if r in ms.vehicle_task_feasible.get(k, set()):
                     fuel_l = dp.task_fuel_ice.get(r, 0.0)
                     co2_kg = co2_coeff * fuel_l
-                    obj_expr += w["emission_cost"] * co2_price_per_kg * co2_kg * x[k, r]
+                    term += w["emission_cost"] * co2_price_per_kg * co2_kg * x[k, r]
+        if p_grid is not None:
+            for site_id in ms.I_CHARGE:
+                for t in T:
+                    co2_factor = dp.grid_co2_factor.get(site_id, {}).get(t, 0.0)
+                    if co2_factor <= 0:
+                        continue
+                    term += (
+                        w["emission_cost"]
+                        * co2_price_per_kg
+                        * co2_factor
+                        * p_grid[site_id, t]
+                        * delta_h
+                    )
+        elif p is not None:
+            for site_id in ms.I_CHARGE:
+                site_chargers = ms.C_at_site.get(site_id, [])
+                for t in T:
+                    co2_factor = dp.grid_co2_factor.get(site_id, {}).get(t, 0.0)
+                    if co2_factor <= 0:
+                        continue
+                    for k in K_BEV:
+                        for c in site_chargers:
+                            if c in ms.vehicle_charger_feasible.get(k, set()):
+                                term += (
+                                    w["emission_cost"]
+                                    * co2_price_per_kg
+                                    * co2_factor
+                                    * p[k, c, t]
+                                    * delta_h
+                                )
+        _append_term("emission_cost", term)
 
     # ===== w8: 未割当ペナルティ =====
     if w.get("unserved_penalty", 0.0) > 0 and slack_cover is not None:
+        term = gp.LinExpr()
         for r in R:
             task = dp.task_lut[r]
-            obj_expr += w["unserved_penalty"] * task.penalty_unserved * slack_cover[r]
+            term += w["unserved_penalty"] * task.penalty_unserved * slack_cover[r]
+        _append_term("unserved_penalty", term)
 
     # ===== w9: 緩和変数ペナルティ =====
     if w.get("slack_penalty", 0.0) > 0 and slack_soc is not None:
+        term = gp.LinExpr()
         for k in K_BEV:
             for t in range(len(T) + 1):
-                obj_expr += w["slack_penalty"] * slack_soc[k, t]
+                term += w["slack_penalty"] * slack_soc[k, t]
+        _append_term("slack_penalty", term)
 
     # ===== w10: デポ充電インフラコスト (距離 + 電力複合) =====
     depot_infra_weight = w.get("depot_charger_cost", 0.0)
@@ -173,6 +228,7 @@ def build_objective(
         depot_detour_cost_per_km = w.get("depot_detour_cost_per_km", 80.0)  # 円/km
         # 充電器設置コスト (日割): 設置 site 数 × 日額固定費
         charger_daily_cost = w.get("charger_daily_fixed_cost", 500.0)  # 円/基/日
+        term = gp.LinExpr()
 
         # 充電器利用実績 → 充電器固定費 (利用された充電器のみ)
         z = vars.get("z_charge")
@@ -188,7 +244,7 @@ def build_objective(
                                 charger_used[c] >= z[k_bev, c, t],
                                 name=f"charger_used_link[{c},{k_bev},{t}]",
                             )
-                obj_expr += depot_infra_weight * charger_daily_cost * charger_used[c]
+                term += depot_infra_weight * charger_daily_cost * charger_used[c]
 
         # 充電迂回距離コスト
         y = vars.get("y_follow")
@@ -202,18 +258,22 @@ def build_objective(
                         if r2_id.startswith("__charger_") or r2_id.startswith("__depot_"):
                             dh_dist = dp.deadhead_distance_km.get(r1_id, {}).get(r2_id, 0.0)
                             if dh_dist > 0 and (k, r1_id, r2_id) in y:
-                                obj_expr += (
+                                term += (
                                     depot_infra_weight
                                     * depot_detour_cost_per_km
                                     * dh_dist
                                     * y[k, r1_id, r2_id]
                                 )
+        _append_term("depot_charger_cost", term)
 
     # ===== w11: 充電電力ピークシェービング =====
     peak_shaving_weight = w.get("peak_shaving_cost", 0.0)
     if peak_shaving_weight > 0 and peak is not None:
         # ピーク電力に対するペナルティ (デマンドチャージとは別のインセンティブ)
+        term = gp.LinExpr()
         for site_id in ms.I_CHARGE:
-            obj_expr += peak_shaving_weight * peak[site_id]
+            term += peak_shaving_weight * peak[site_id]
+        _append_term("peak_shaving_cost", term)
 
+    vars["obj_terms"] = obj_terms
     model.setObjective(obj_expr, GRB.MINIMIZE)

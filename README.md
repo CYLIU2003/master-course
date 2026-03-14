@@ -156,6 +156,8 @@ scenario bootstrap の default vehicle templates の基準データです。
 
 ```bash
 python -m data_prep.pipeline.build_all --dataset tokyu_core
+python -m data_prep.pipeline.build_tokyu_shards --dataset tokyu_core
+python -m data_prep.pipeline.build_tokyu_shards --dataset tokyu_core --validate-only
 ```
 
 | File                                      | 内容 / Contents                                        |
@@ -165,6 +167,43 @@ python -m data_prep.pipeline.build_all --dataset tokyu_core
 | `data/built/<dataset>/trips.parquet`      | 対象路線の全 trip / All trips for included routes          |
 | `data/built/<dataset>/timetables.parquet` | 実行時ロード用 timetable-level trip rows                    |
 | `data/built/<dataset>/gtfs_reconciliation.json` | route master と `GTFS/TokyuBus-GTFS/` の照合結果 / GTFS reconciliation report |
+
+### Tokyu runtime shards（`data-prep` が生成・Git には含めない）
+
+Tokyu Bus runtime では scenario open / simulation prepare 時に
+東急全体の full timetable を再集計しないため、
+`outputs/built/tokyu/` に build-time shard を出力します。
+
+```text
+outputs/built/tokyu/
+  manifest.json
+  depots.json
+  routes.json
+  depot_route_index.json
+  depot_route_summary.json
+  shard_manifest.json
+  trip_shards/<depot>/<route>/<day>.json
+  timetable_shards/<depot>/<route>/<day>.json
+  stop_time_shards/<depot>/<route>/<day>.json
+```
+
+この shard layer は **営業所 × 路線 × 日種別** 単位で分割され、
+runtime 側では必要 scope のみを読む構成です。
+`build_dataset_bootstrap()` は shard manifest が利用可能な場合、
+scenario に full `timetable_rows` / `trips` を preload せず
+`feed_context.source = "tokyu_shards"` で軽量 bootstrap を返します。
+
+simulation builder / optimization overlay の既定値は
+`constant/input_template.json` を参照し、少なくとも次を fresh scenario に反映します。
+
+- TOU pricing bands
+- diesel price
+- demand charge
+- depot contract / site power limit
+
+これにより scenario prepare 後は、Tokyu shard を使った軽量入力生成と、
+`total_cost` / `co2` を切り替えた optimization の両方を
+full timetable preload なしで実行できます。
 
 ---
 
@@ -256,11 +295,19 @@ http://localhost:5173
 
 ### App flow
 
-1. dataset を選択（`tokyu_core` / `tokyu_full`）
-2. depot と routes を選択
-3. scenario を設定
-4. simulation / optimization を実行
-5. results と KPI を確認
+1. dataset を選択して scenario を開く
+2. `GET /api/scenarios/{id}/editor-bootstrap` で軽量 index / summary だけ読む
+3. depot / routes / day type / vehicle / charger / solver 条件を builder で確定する
+4. `POST /api/scenarios/{id}/simulation/prepare` で selected scope の built parquet または Tokyu shard を canonical prepared input に変換する
+5. `POST /api/scenarios/{id}/simulation/run` で prepared input から simulation job を起動する
+6. results / KPI を確認する
+
+### Builder-first UX
+
+* scenario open 直後は timetable detail / full trip expansion を読まない
+* 初期表示で許可するのは scenario metadata / depots / routes / depot-route index / summary / available day types / readiness のみ
+* heavy timetable / dispatch artifact は `prepare` または対象タブ open 時に遅延読込する
+* frontend store は巨大閲覧キャッシュではなく、selected depots / routes / service / simulation settings / prepared result を持つ
 
 ### Check readiness
 

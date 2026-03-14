@@ -52,6 +52,7 @@ class DerivedParams:
     grid_price: Dict[str, Dict[int, float]] = field(default_factory=dict)
     sell_back_price: Dict[str, Dict[int, float]] = field(default_factory=dict)
     base_load_kw: Dict[str, Dict[int, float]] = field(default_factory=dict)
+    grid_co2_factor: Dict[str, Dict[int, float]] = field(default_factory=dict)
 
     # --- 車両パラメータ dict (LUT) ---
     vehicle_lut: dict = field(default_factory=dict)  # vid -> Vehicle
@@ -142,6 +143,7 @@ def build_derived_params(data: ProblemData, ms: ModelSets) -> DerivedParams:
         dp.grid_price.setdefault(ep.site_id, {})[ep.time_idx] = ep.grid_energy_price
         dp.sell_back_price.setdefault(ep.site_id, {})[ep.time_idx] = ep.sell_back_price
         dp.base_load_kw.setdefault(ep.site_id, {})[ep.time_idx] = ep.base_load_kw
+        dp.grid_co2_factor.setdefault(ep.site_id, {})[ep.time_idx] = ep.co2_factor
 
     # can_follow を ProblemData にも保存
     data.can_follow_matrix = dp.can_follow

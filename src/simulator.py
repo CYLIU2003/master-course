@@ -250,7 +250,7 @@ def simulate(
     ms: ModelSets,
     dp: DerivedParams,
     milp_result: MILPResult,
-    demand_charge_rate: float = 1500.0,  # 円/kW
+    demand_charge_rate: Optional[float] = None,  # 円/kW
 ) -> SimulationResult:
     """
     MILP 結果を受け取り、時系列シミュレーションで評価指標を計算する。
@@ -290,6 +290,7 @@ def simulate(
     # ===== 系統受電・電力料金 =====
     total_grid = 0.0
     total_cost = 0.0
+    total_grid_co2 = 0.0
     peak_kw = 0.0
     for site_id, series in milp_result.grid_import_kw.items():
         sim.grid_import_kw_series[site_id] = series
@@ -297,6 +298,7 @@ def simulate(
             kwh = kw * delta_h
             total_grid += kwh
             total_cost += get_grid_price(dp, site_id, t_idx) * kwh
+            total_grid_co2 += dp.grid_co2_factor.get(site_id, {}).get(t_idx, 0.0) * kwh
             if kw > peak_kw:
                 peak_kw = kw
 
@@ -304,8 +306,10 @@ def simulate(
     sim.total_energy_cost = round(total_cost, 2)
     sim.peak_demand_kw   = round(peak_kw, 4)
 
+    if demand_charge_rate is None:
+        demand_charge_rate = data.demand_charge_rate_per_kw
     if data.enable_demand_charge:
-        sim.total_demand_charge = round(demand_charge_rate * peak_kw, 2)
+        sim.total_demand_charge = round(float(demand_charge_rate) * peak_kw, 2)
 
     # ===== PV 利用 =====
     total_pv = 0.0
@@ -330,6 +334,7 @@ def simulate(
             fuel_l = dp.task_fuel_ice.get(r, 0.0)
             sim.total_fuel_cost += veh.fuel_cost_coeff * fuel_l
             sim.total_co2_kg    += veh.co2_emission_coeff * fuel_l
+    sim.total_co2_kg += total_grid_co2
 
     sim.total_fuel_cost = round(sim.total_fuel_cost, 2)
     sim.total_co2_kg    = round(sim.total_co2_kg, 4)

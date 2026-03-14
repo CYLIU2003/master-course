@@ -2,6 +2,7 @@ import { api } from "./client";
 import type {
   ScenarioListResponse,
   ScenarioDetailResponse,
+  EditorBootstrapResponse,
   CreateScenarioRequest,
   UpdateScenarioRequest,
   TimetableResponse,
@@ -31,12 +32,41 @@ import type {
   UpdateDispatchScopeRequest,
 } from "@/types";
 
+let lastActivatedScenarioId: string | null = null;
+const activationRequests = new Map<string, Promise<void>>();
+
+export async function ensureScenarioActivated(id: string): Promise<void> {
+  if (!id) {
+    return;
+  }
+  if (lastActivatedScenarioId === id) {
+    return;
+  }
+  const existing = activationRequests.get(id);
+  if (existing) {
+    return existing;
+  }
+  const request = api
+    .post(`/scenarios/${id}/activate`)
+    .then(() => {
+      lastActivatedScenarioId = id;
+    })
+    .finally(() => {
+      activationRequests.delete(id);
+    });
+  activationRequests.set(id, request);
+  return request;
+}
+
 // ── Scenarios ─────────────────────────────────────────────────
 
 export const scenarioApi = {
   list: () => api.get<ScenarioListResponse>("/scenarios"),
 
   get: (id: string) => api.get<ScenarioDetailResponse>(`/scenarios/${id}`),
+
+  getEditorBootstrap: (id: string) =>
+    api.get<EditorBootstrapResponse>(`/scenarios/${id}/editor-bootstrap`),
 
   create: (data: CreateScenarioRequest) =>
     api.post<ScenarioDetailResponse>("/scenarios", data),
@@ -51,6 +81,8 @@ export const scenarioApi = {
     api.put<DispatchScopeResponse>(`/scenarios/${id}/dispatch-scope`, data),
 
   delete: (id: string) => api.delete<void>(`/scenarios/${id}`),
+
+  activate: (id: string) => ensureScenarioActivated(id),
 
   // ── Timetable ───────────────────────────────────────────────
 

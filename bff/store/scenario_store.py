@@ -62,6 +62,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock, RLock
 from typing import Any, Dict, List, Optional
 
 from bff.services.service_ids import canonical_service_id
@@ -123,6 +124,17 @@ _SUMMARY_SCALAR_NAMES = {
     "duties": "duties_summary",
 }
 _PARQUET_ROW_ARTIFACT_FIELDS = {"trips", "blocks", "duties"}
+_SCENARIO_LOCKS: dict[str, RLock] = {}
+_SCENARIO_LOCKS_GUARD = Lock()
+
+
+def _scenario_lock(scenario_id: str) -> RLock:
+    with _SCENARIO_LOCKS_GUARD:
+        lock = _SCENARIO_LOCKS.get(scenario_id)
+        if lock is None:
+            lock = RLock()
+            _SCENARIO_LOCKS[scenario_id] = lock
+        return lock
 
 
 def _default_dispatch_scope() -> Dict[str, Any]:
@@ -198,6 +210,25 @@ def _ensure_dir() -> None:
     _STORE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _quarantine_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.delete-me-{int(time.time() * 1000)}")
+
+
+def _quarantine_tree(path: Path) -> bool:
+    if not path.exists():
+        return True
+    try:
+        quarantine = _quarantine_path(path)
+        if quarantine.exists():
+            _remove_tree_with_retries(quarantine, ignore_errors=True)
+        _rename_with_retries(path, quarantine)
+        return True
+    except FileNotFoundError:
+        return True
+    except PermissionError:
+        return False
+
+
 def _remove_tree_with_retries(path: Path, *, ignore_errors: bool = False) -> None:
     if not path.exists():
         return
@@ -212,6 +243,8 @@ def _remove_tree_with_retries(path: Path, *, ignore_errors: bool = False) -> Non
             last_error = exc
             # Windows may keep SQLite staging files briefly after close.
             time.sleep(0.1 * (attempt + 1))
+    if _quarantine_tree(path):
+        return
     if ignore_errors:
         shutil.rmtree(path, ignore_errors=True)
         return
@@ -240,6 +273,21 @@ def _unlink_with_retries(path: Path, *, missing_ok: bool = False) -> None:
             return
         except Exception:
             return
+    if last_error is not None:
+        raise last_error
+
+
+def _rename_with_retries(source: Path, target: Path) -> None:
+    last_error: Exception | None = None
+    for attempt in range(6):
+        try:
+            source.rename(target)
+            return
+        except FileNotFoundError:
+            raise
+        except PermissionError as exc:
+            last_error = exc
+            time.sleep(0.1 * (attempt + 1))
     if last_error is not None:
         raise last_error
 
@@ -489,20 +537,28 @@ def _master_repair_dataset_id(doc: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _repair_missing_master_defaults(doc: Dict[str, Any]) -> bool:
+def _repair_missing_master_defaults(
+    doc: Dict[str, Any],
+    *,
+    touch_updated_at: bool = False,
+) -> bool:
     dataset_id = _master_repair_dataset_id(doc)
     if not dataset_id:
         return False
     from bff.services import master_defaults
 
     repaired = master_defaults.repair_missing_master_data(doc, dataset_id=dataset_id)
-    if repaired:
+    if repaired and touch_updated_at:
         _normalize_dispatch_scope(doc)
         doc["meta"]["updatedAt"] = _now_iso()
     return repaired
 
 
-def _load(scenario_id: str) -> Dict[str, Any]:
+def _load(
+    scenario_id: str,
+    *,
+    repair_missing_master: bool = True,
+) -> Dict[str, Any]:
     if _incomplete_marker_path(scenario_id).exists() and not _complete_marker_path(scenario_id).exists():
         raise RuntimeError(
             f"Scenario '{scenario_id}' artifacts are incomplete. The previous save may have been interrupted."
@@ -597,8 +653,8 @@ def _load(scenario_id: str) -> Dict[str, Any]:
     doc.setdefault("scenario_overlay", None)
     doc.setdefault("dispatch_scope", _default_dispatch_scope())
     doc.setdefault("public_data", _default_public_data_state())
-    if _repair_missing_master_defaults(doc):
-        _save(doc)
+    if repair_missing_master:
+        _repair_missing_master_defaults(doc)
     doc.setdefault("stats", _scenario_stats(doc))
     for key, value in _default_v1_2_fields().items():
         doc.setdefault(key, value)
@@ -608,58 +664,71 @@ def _load(scenario_id: str) -> Dict[str, Any]:
 def _save(doc: Dict[str, Any]) -> None:
     _ensure_dir()
     scenario_id = doc["meta"]["id"]
-    refs = _refs_for_scenario(scenario_id, doc)
-    
-    staging_dir = _STORE_DIR / f"{scenario_id}.staging"
-    if staging_dir.exists():
-        _remove_tree_with_retries(staging_dir)
-    staging_dir.mkdir(parents=True, exist_ok=True)
-    
-    staging_refs = {}
-    for k, v in refs.items():
-        staging_refs[k] = str(staging_dir / Path(v).name)
+    with _scenario_lock(scenario_id):
+        refs = _refs_for_scenario(scenario_id, doc)
 
-    artifact_db_path = Path(staging_refs["artifactStore"])
-    
-    complete_marker = staging_dir / "_COMPLETE"
-    incomplete_marker = staging_dir / "_INCOMPLETE"
-    incomplete_marker.write_text(_now_iso(), encoding="utf-8")
+        staging_dir = _STORE_DIR / f"{scenario_id}.staging"
+        if staging_dir.exists():
+            _remove_tree_with_retries(staging_dir)
+        staging_dir.mkdir(parents=True, exist_ok=True)
 
-    staging_json = _STORE_DIR / f"{scenario_id}.json.staging"
+        staging_refs = {}
+        for k, v in refs.items():
+            staging_refs[k] = str(staging_dir / Path(v).name)
 
-    try:
-        master_payload = {key: doc.get(key) for key in _MASTER_DATA_KEYS}
-        master_data_store.save_master_data(Path(staging_refs["masterData"]), master_payload)
+        artifact_db_path = Path(staging_refs["artifactStore"])
 
-        preserved_artifacts: Dict[str, Any] = {}
-        for field, ref_key in _ARTIFACT_REF_KEYS.items():
-            preserved_artifacts[field] = doc.get(field)
-            target_path = Path(staging_refs[ref_key])
-            if field == "graph":
-                _save_graph_artifact(artifact_db_path, doc.get(field))
-            elif field == "timetable_rows":
-                rows = list(doc.get(field) or [])
-                trip_store.save_timetable_rows(artifact_db_path, rows)
-                trip_store.save_rows(artifact_db_path, field, rows)
-                trip_store.save_scalar(
-                    artifact_db_path,
-                    _SUMMARY_SCALAR_NAMES[field],
-                    _build_timetable_summary_artifact(rows, doc.get("timetable_import_meta") or {}),
-                )
-            elif field in _PARQUET_ROW_ARTIFACT_FIELDS:
-                value = doc.get(field)
-                if value is None:
-                    if target_path.exists():
-                        _unlink_with_retries(target_path)
-                    if field in _SUMMARY_SCALAR_NAMES:
-                        trip_store.save_scalar(
-                            artifact_db_path,
-                            _SUMMARY_SCALAR_NAMES[field],
-                            None,
-                        )
-                else:
-                    rows = list(value or [])
-                    trip_store.save_parquet_rows(target_path, rows)
+        complete_marker = staging_dir / "_COMPLETE"
+        incomplete_marker = staging_dir / "_INCOMPLETE"
+        incomplete_marker.write_text(_now_iso(), encoding="utf-8")
+
+        staging_json = _STORE_DIR / f"{scenario_id}.json.staging"
+
+        try:
+            master_payload = {key: doc.get(key) for key in _MASTER_DATA_KEYS}
+            master_data_store.save_master_data(Path(staging_refs["masterData"]), master_payload)
+
+            preserved_artifacts: Dict[str, Any] = {}
+            for field, ref_key in _ARTIFACT_REF_KEYS.items():
+                preserved_artifacts[field] = doc.get(field)
+                target_path = Path(staging_refs[ref_key])
+                if field == "graph":
+                    _save_graph_artifact(artifact_db_path, doc.get(field))
+                elif field == "timetable_rows":
+                    rows = list(doc.get(field) or [])
+                    trip_store.save_timetable_rows(artifact_db_path, rows)
+                    trip_store.save_rows(artifact_db_path, field, rows)
+                    trip_store.save_scalar(
+                        artifact_db_path,
+                        _SUMMARY_SCALAR_NAMES[field],
+                        _build_timetable_summary_artifact(rows, doc.get("timetable_import_meta") or {}),
+                    )
+                elif field in _PARQUET_ROW_ARTIFACT_FIELDS:
+                    value = doc.get(field)
+                    if value is None:
+                        if target_path.exists():
+                            _unlink_with_retries(target_path)
+                        if field in _SUMMARY_SCALAR_NAMES:
+                            trip_store.save_scalar(
+                                artifact_db_path,
+                                _SUMMARY_SCALAR_NAMES[field],
+                                None,
+                            )
+                    else:
+                        rows = list(value or [])
+                        trip_store.save_parquet_rows(target_path, rows)
+                        if field in _SUMMARY_SCALAR_NAMES:
+                            summary_builder = (
+                                _build_trips_summary_artifact if field == "trips" else _build_duties_summary_artifact
+                            )
+                            trip_store.save_scalar(
+                                artifact_db_path,
+                                _SUMMARY_SCALAR_NAMES[field],
+                                summary_builder(rows),
+                            )
+                elif field in _SQLITE_ROW_ARTIFACT_FIELDS:
+                    rows = list(doc.get(field) or [])
+                    trip_store.save_rows(artifact_db_path, field, rows)
                     if field in _SUMMARY_SCALAR_NAMES:
                         summary_builder = (
                             _build_trips_summary_artifact if field == "trips" else _build_duties_summary_artifact
@@ -669,81 +738,68 @@ def _save(doc: Dict[str, Any]) -> None:
                             _SUMMARY_SCALAR_NAMES[field],
                             summary_builder(rows),
                         )
-            elif field in _SQLITE_ROW_ARTIFACT_FIELDS:
-                rows = list(doc.get(field) or [])
-                trip_store.save_rows(artifact_db_path, field, rows)
-                if field in _SUMMARY_SCALAR_NAMES:
-                    summary_builder = (
-                        _build_trips_summary_artifact if field == "trips" else _build_duties_summary_artifact
-                    )
-                    trip_store.save_scalar(
-                        artifact_db_path,
-                        _SUMMARY_SCALAR_NAMES[field],
-                        summary_builder(rows),
-                    )
-            elif field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
-                trip_store.save_scalar(artifact_db_path, field, doc.get(field))
-            if field not in _PARQUET_ROW_ARTIFACT_FIELDS and target_path.exists():
-                _unlink_with_retries(target_path)
+                elif field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
+                    trip_store.save_scalar(artifact_db_path, field, doc.get(field))
+                if field not in _PARQUET_ROW_ARTIFACT_FIELDS and target_path.exists():
+                    _unlink_with_retries(target_path)
 
-        slim_doc = {
-            "scenarioId": scenario_id,
-            "name": doc.get("meta", {}).get("name"),
-            "meta": {
-                **dict(doc.get("meta") or {}),
-                **_scope_summary(doc.get("dispatch_scope")),
-            },
-            "feed_context": doc.get("feed_context"),
-            "refs": refs,
-            "stats": _scenario_stats(doc),
-        }
+            slim_doc = {
+                "scenarioId": scenario_id,
+                "name": doc.get("meta", {}).get("name"),
+                "meta": {
+                    **dict(doc.get("meta") or {}),
+                    **_scope_summary(doc.get("dispatch_scope")),
+                },
+                "feed_context": doc.get("feed_context"),
+                "refs": refs,
+                "stats": _scenario_stats(doc),
+            }
 
-        staging_json.write_text(
-            json.dumps(slim_doc, ensure_ascii=False, indent=2),
-            encoding="utf-8"
-        )
+            staging_json.write_text(
+                json.dumps(slim_doc, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
 
-        manifest = staging_dir / "manifest.json"
-        manifest.write_text(json.dumps({"committedAt": _now_iso()}), encoding="utf-8")
-        complete_marker.write_text(scenario_id, encoding="utf-8")
-        if incomplete_marker.exists():
-            incomplete_marker.unlink()
+            manifest = staging_dir / "manifest.json"
+            manifest.write_text(json.dumps({"committedAt": _now_iso()}), encoding="utf-8")
+            complete_marker.write_text(scenario_id, encoding="utf-8")
+            if incomplete_marker.exists():
+                incomplete_marker.unlink()
 
-        # Atomic commit
-        active_dir = _artifact_dir_for_scenario(scenario_id)
-        old_dir = _STORE_DIR / f"{scenario_id}.old"
-        active_json = scenario_meta_store.scenario_path(_STORE_DIR, scenario_id)
-        old_json = _STORE_DIR / f"{scenario_id}.json.old"
+            # Atomic commit
+            active_dir = _artifact_dir_for_scenario(scenario_id)
+            old_dir = _STORE_DIR / f"{scenario_id}.old"
+            active_json = scenario_meta_store.scenario_path(_STORE_DIR, scenario_id)
+            old_json = _STORE_DIR / f"{scenario_id}.json.old"
 
-        if old_dir.exists():
-            _remove_tree_with_retries(old_dir, ignore_errors=True)
-        if old_json.exists():
-            _unlink_with_retries(old_json, missing_ok=True)
+            if old_dir.exists():
+                _remove_tree_with_retries(old_dir, ignore_errors=True)
+            if old_json.exists():
+                _unlink_with_retries(old_json, missing_ok=True)
 
-        if active_dir.exists():
-            active_dir.rename(old_dir)
-        staging_dir.rename(active_dir)
+            if active_dir.exists():
+                _rename_with_retries(active_dir, old_dir)
+            _rename_with_retries(staging_dir, active_dir)
 
-        if active_json.exists():
-            active_json.rename(old_json)
-        staging_json.rename(active_json)
+            if active_json.exists():
+                _rename_with_retries(active_json, old_json)
+            _rename_with_retries(staging_json, active_json)
 
-        # Cleanup
-        if old_dir.exists():
-            _remove_tree_with_retries(old_dir, ignore_errors=True)
-        if old_json.exists():
-            _unlink_with_retries(old_json, missing_ok=True)
+            if old_dir.exists():
+                _remove_tree_with_retries(old_dir, ignore_errors=True)
+            if old_json.exists():
+                _unlink_with_retries(old_json, missing_ok=True)
 
-        doc["refs"] = refs
-        doc["stats"] = slim_doc["stats"]
-        for field, value in preserved_artifacts.items():
-            doc[field] = value
-    except Exception:
-        if staging_dir.exists():
-            _remove_tree_with_retries(staging_dir, ignore_errors=True)
-        if staging_json.exists():
-            _unlink_with_retries(staging_json, missing_ok=True)
-        raise
+            doc["refs"] = refs
+            doc["stats"] = slim_doc["stats"]
+            for field, value in preserved_artifacts.items():
+                doc[field] = value
+        except Exception:
+            if staging_dir.exists():
+                _remove_tree_with_retries(staging_dir, ignore_errors=True)
+            if staging_json.exists():
+                _unlink_with_retries(staging_json, missing_ok=True)
+            raise
 
 
 def _load_app_context() -> Dict[str, Any]:
@@ -820,6 +876,80 @@ def _meta_payload(doc: Dict[str, Any]) -> Dict[str, Any]:
     if "stats" in doc:
         payload["stats"] = dict(doc.get("stats") or {})
     return payload
+
+
+def _bootstrap_state_from_overlay_and_feed(
+    overlay: Optional[Dict[str, Any]],
+    feed_context: Optional[Dict[str, Any]],
+) -> Dict[str, Optional[str]]:
+    overlay = overlay if isinstance(overlay, dict) else {}
+    feed_context = feed_context if isinstance(feed_context, dict) else {}
+    dataset_id = (
+        overlay.get("dataset_id")
+        or overlay.get("datasetId")
+        or feed_context.get("datasetId")
+        or feed_context.get("dataset_id")
+    )
+    dataset_version = (
+        overlay.get("dataset_version")
+        or overlay.get("datasetVersion")
+        or feed_context.get("snapshotId")
+        or feed_context.get("snapshot_id")
+    )
+    dataset_fingerprint = (
+        feed_context.get("datasetFingerprint")
+        or feed_context.get("dataset_fingerprint")
+    )
+    return {
+        "datasetId": str(dataset_id).strip() or None if dataset_id is not None else None,
+        "datasetVersion": str(dataset_version).strip() or None
+        if dataset_version is not None
+        else None,
+        "datasetFingerprint": str(dataset_fingerprint).strip() or None
+        if dataset_fingerprint is not None
+        else None,
+    }
+
+
+def _bootstrap_state_from_doc(doc: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    state = _bootstrap_state_from_overlay_and_feed(
+        doc.get("scenario_overlay"),
+        doc.get("feed_context"),
+    )
+    meta = doc.get("meta") or {}
+    if not state["datasetId"] and meta.get("datasetBootstrapDatasetId"):
+        state["datasetId"] = str(meta.get("datasetBootstrapDatasetId")).strip() or None
+    if not state["datasetVersion"] and meta.get("datasetBootstrapVersion"):
+        state["datasetVersion"] = str(meta.get("datasetBootstrapVersion")).strip() or None
+    if not state["datasetFingerprint"] and meta.get("datasetBootstrapFingerprint"):
+        state["datasetFingerprint"] = (
+            str(meta.get("datasetBootstrapFingerprint")).strip() or None
+        )
+    return state
+
+
+def _bootstrap_state_from_payload(payload: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    return _bootstrap_state_from_overlay_and_feed(
+        payload.get("scenario_overlay"),
+        payload.get("feed_context"),
+    )
+
+
+def _has_materialized_dataset_bootstrap(doc: Dict[str, Any]) -> bool:
+    return bool(doc.get("depots")) and bool(doc.get("routes")) and bool(
+        doc.get("vehicle_templates")
+    )
+
+
+def _same_dataset_bootstrap(doc: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+    current = _bootstrap_state_from_doc(doc)
+    incoming = _bootstrap_state_from_payload(payload)
+    if not any(incoming.values()):
+        return False
+    for key, incoming_value in incoming.items():
+        if incoming_value and current.get(key) != incoming_value:
+            return False
+    return True
 
 
 def _normalize_operator_id(value: Any, default: Optional[str] = None) -> Optional[str]:
@@ -1298,6 +1428,14 @@ def create_scenario(
     return _meta_payload(doc)
 
 
+def get_scenario_document(
+    scenario_id: str,
+    *,
+    repair_missing_master: bool = True,
+) -> Dict[str, Any]:
+    return _load(scenario_id, repair_missing_master=repair_missing_master)
+
+
 def get_scenario(scenario_id: str) -> Dict[str, Any]:
     return _meta_payload(_load(scenario_id))
 
@@ -1337,7 +1475,7 @@ def delete_scenario(scenario_id: str) -> None:
     p.unlink()
     artifact_dir = scenario_meta_store.artifact_dir(_STORE_DIR, scenario_id)
     if artifact_dir.exists():
-        shutil.rmtree(artifact_dir)
+        _remove_tree_with_retries(artifact_dir, ignore_errors=True)
     for extra_path in (
         _legacy_timetable_path(scenario_id),
         _legacy_stop_timetables_path(scenario_id),
@@ -1584,50 +1722,63 @@ def set_scenario_overlay(
 
 
 def apply_dataset_bootstrap(scenario_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load(scenario_id)
-    invalidate_fields = {
-        "depots",
-        "routes",
-        "route_depot_assignments",
-        "depot_route_permissions",
-        "dispatch_scope",
-        "timetable_rows",
-        "stop_timetables",
-        "calendar",
-        "calendar_dates",
-    }
-    if any(field in payload for field in invalidate_fields):
-        _invalidate_dispatch_artifacts(doc)
+    with _scenario_lock(scenario_id):
+        doc = _load(scenario_id, repair_missing_master=False)
+        if _same_dataset_bootstrap(doc, payload) and _has_materialized_dataset_bootstrap(doc):
+            return _meta_payload(doc)
 
-    for field in (
-        "depots",
-        "routes",
-        "stops",
-        "vehicle_templates",
-        "route_depot_assignments",
-        "depot_route_permissions",
-        "dispatch_scope",
-        "timetable_rows",
-        "trips",
-        "stop_timetables",
-        "calendar",
-        "calendar_dates",
-        "feed_context",
-        "scenario_overlay",
-    ):
-        if field not in payload:
-            continue
-        value = payload[field]
-        if isinstance(value, list):
-            doc[field] = [dict(item) if isinstance(item, dict) else item for item in value]
-        elif isinstance(value, dict):
-            doc[field] = dict(value)
-        else:
-            doc[field] = value
+        invalidate_fields = {
+            "depots",
+            "routes",
+            "route_depot_assignments",
+            "depot_route_permissions",
+            "dispatch_scope",
+            "timetable_rows",
+            "stop_timetables",
+            "calendar",
+            "calendar_dates",
+        }
+        if any(field in payload for field in invalidate_fields):
+            _invalidate_dispatch_artifacts(doc)
 
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
-    return _meta_payload(doc)
+        for field in (
+            "depots",
+            "routes",
+            "stops",
+            "vehicle_templates",
+            "route_depot_assignments",
+            "depot_route_permissions",
+            "dispatch_scope",
+            "timetable_rows",
+            "trips",
+            "stop_timetables",
+            "calendar",
+            "calendar_dates",
+            "feed_context",
+            "runtime_features",
+            "scenario_overlay",
+        ):
+            if field not in payload:
+                continue
+            value = payload[field]
+            if isinstance(value, list):
+                doc[field] = [dict(item) if isinstance(item, dict) else item for item in value]
+            elif isinstance(value, dict):
+                doc[field] = dict(value)
+            else:
+                doc[field] = value
+
+        bootstrap_state = _bootstrap_state_from_payload(payload)
+        if bootstrap_state["datasetId"]:
+            doc["meta"]["datasetBootstrapDatasetId"] = bootstrap_state["datasetId"]
+        if bootstrap_state["datasetVersion"]:
+            doc["meta"]["datasetBootstrapVersion"] = bootstrap_state["datasetVersion"]
+        if bootstrap_state["datasetFingerprint"]:
+            doc["meta"]["datasetBootstrapFingerprint"] = bootstrap_state["datasetFingerprint"]
+        doc["meta"]["datasetBootstrapAppliedAt"] = _now_iso()
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save(doc)
+        return _meta_payload(doc)
 
 
 def set_feed_context(

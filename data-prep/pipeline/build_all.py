@@ -70,6 +70,7 @@ def build_dataset(
     trips_mod = _load_module("build_trips", "pipeline/build_trips.py")
     timetables_mod = _load_module("build_timetables", "pipeline/build_timetables.py")
     helper_mod = _load_module("tokyu_gtfs_built_artifacts", "pipeline/_gtfs_built_artifacts.py")
+    shard_mod = _load_module("build_tokyu_shards", "pipeline/build_tokyu_shards.py")
     manifest_mod = _load_module("manifest_writer", "lib/manifest_writer.py")
     version_mod = _load_module("producer_version", "lib/producer_version.py")
 
@@ -144,6 +145,14 @@ def build_dataset(
         strict=strict_gtfs_reconciliation,
     ):
         log.error("Build aborted at gtfs_reconciliation. No manifest written.")
+        return 1
+
+    if not run_stage(
+        "build_tokyu_shards",
+        shard_mod.build_tokyu_shards,
+        dataset_id,
+    ):
+        log.error("Build aborted at build_tokyu_shards. No manifest written.")
         return 1
 
     seed_def_path = SEED_ROOT / "datasets" / f"{dataset_id}.json"

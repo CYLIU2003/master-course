@@ -1134,3 +1134,30 @@ def test_remove_tree_with_retries_recovers_from_transient_permission_error(
 
     assert calls["count"] >= 2
     assert not target.exists()
+
+
+def test_rename_with_retries_recovers_from_transient_permission_error(
+    temp_store_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    source = temp_store_dir / "rename-source"
+    target = temp_store_dir / "rename-target"
+    source.mkdir(parents=True, exist_ok=True)
+
+    original_rename = Path.rename
+    calls = {"count": 0}
+
+    def flaky_rename(path: Path, destination: Path):
+        calls["count"] += 1
+        if path == source and destination == target and calls["count"] == 1:
+            raise PermissionError(32, "locked")
+        return original_rename(path, destination)
+
+    monkeypatch.setattr(Path, "rename", flaky_rename)
+    monkeypatch.setattr(scenario_store.time, "sleep", lambda _: None)
+
+    scenario_store._rename_with_retries(source, target)
+
+    assert calls["count"] >= 2
+    assert target.exists()
+    assert not source.exists()

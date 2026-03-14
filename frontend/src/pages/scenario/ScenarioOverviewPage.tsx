@@ -1,75 +1,730 @@
-import { Link, useParams, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { useScenario, useDeleteScenario } from "@/hooks";
-import { PageSection, LoadingBlock, ErrorBlock } from "@/features/common";
+import { useEffect, useMemo } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  BackendJobPanel,
+  EmptyState,
+  ErrorBlock,
+  LoadingBlock,
+  PageSection,
+} from "@/features/common";
+import {
+  useDeleteScenario,
+  useEditorBootstrap,
+  useJob,
+  usePrepareSimulation,
+  useRunPreparedSimulation,
+  useScenarioRunReadiness,
+} from "@/hooks";
 import { isIncompleteArtifactError } from "@/api/client";
+import { runKeys } from "@/hooks/use-run";
+import { useSimulationBuilderStore } from "@/stores/simulation-builder-store";
+import type { Route, SimulationBuilderSettings } from "@/types";
+
+const SOLVER_MODES: Array<{
+  value: SimulationBuilderSettings["solverMode"];
+  label: string;
+}> = [
+  { value: "mode_milp_only", label: "MILP only" },
+  { value: "mode_alns_only", label: "ALNS only" },
+  { value: "mode_alns_milp", label: "ALNS + MILP" },
+  { value: "hybrid", label: "Hybrid" },
+];
+
+const OBJECTIVE_MODES: Array<{
+  value: NonNullable<SimulationBuilderSettings["objectiveMode"]>;
+  label: string;
+}> = [
+  { value: "total_cost", label: "Total cost" },
+  { value: "co2", label: "CO2" },
+];
 
 export function ScenarioOverviewPage() {
-  const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
-  const { data: scenario, isLoading, error } = useScenario(scenarioId!);
+  const queryClient = useQueryClient();
+  const {
+    data: bootstrap,
+    isLoading,
+    error,
+  } = useEditorBootstrap(scenarioId!);
+  const {
+    canRun,
+    reason: runReadinessReason,
+  } = useScenarioRunReadiness();
+  const prepareMutation = usePrepareSimulation(scenarioId!);
+  const runPreparedMutation = useRunPreparedSimulation(scenarioId!);
+  const {
+    scenarioId: builderScenarioId,
+    selectedDepotIds,
+    selectedRouteIds,
+    dayType,
+    serviceDate,
+    settings,
+    preparedResult,
+    activeJobId,
+    hydrateFromBootstrap,
+    setSelectedDepotIds,
+    setSelectedRouteIds,
+    setDayType,
+    setServiceDate,
+    updateSettings,
+    setPreparedResult,
+    setActiveJobId,
+  } = useSimulationBuilderStore();
+  const { data: activeJob } = useJob(activeJobId);
 
-  if (isLoading) return <LoadingBlock />;
+  useEffect(() => {
+    if (!bootstrap) {
+      return;
+    }
+    hydrateFromBootstrap(bootstrap, builderScenarioId !== bootstrap.scenario.id);
+  }, [bootstrap, builderScenarioId, hydrateFromBootstrap]);
 
+  useEffect(() => {
+    if (activeJob?.status === "completed" && scenarioId) {
+      void queryClient.invalidateQueries({
+        queryKey: runKeys.simulation(scenarioId),
+      });
+    }
+  }, [activeJob?.status, queryClient, scenarioId]);
+
+  const depotRouteIndex = bootstrap?.depotRouteIndex ?? {};
+  const routesById = useMemo(() => {
+    const map = new Map<string, Route & { displayName?: string }>();
+    for (const route of bootstrap?.routes ?? []) {
+      map.set(route.id, route);
+    }
+    return map;
+  }, [bootstrap?.routes]);
+  const selectedDepotId = selectedDepotIds[0] ?? "";
+  const visibleRouteIds = useMemo(() => {
+    const ids = selectedDepotId ? depotRouteIndex[selectedDepotId] ?? [] : [];
+    return ids.filter((routeId) => routesById.has(routeId));
+  }, [depotRouteIndex, routesById, selectedDepotId]);
+  const visibleRoutes = useMemo(
+    () =>
+      visibleRouteIds
+        .map((routeId) => routesById.get(routeId))
+        .filter((route): route is Route & { displayName?: string } => Boolean(route))
+        .sort((left, right) =>
+          String(left.displayName ?? left.routeCode ?? left.name).localeCompare(
+            String(right.displayName ?? right.routeCode ?? right.name),
+            "ja",
+          ),
+        ),
+    [routesById, visibleRouteIds],
+  );
+
+  useEffect(() => {
+    if (!visibleRouteIds.length) {
+      return;
+    }
+    const allowed = new Set(visibleRouteIds);
+    const filtered = selectedRouteIds.filter((routeId) => allowed.has(routeId));
+    if (filtered.length !== selectedRouteIds.length) {
+      setSelectedRouteIds(filtered);
+    }
+  }, [selectedRouteIds, setSelectedRouteIds, visibleRouteIds]);
+
+  if (isLoading) {
+    return <LoadingBlock />;
+  }
   if (error && isIncompleteArtifactError(error)) {
-    return (
-      <IncompleteArtifactBanner
-        scenarioId={scenarioId!}
-        message={error.message}
-      />
-    );
+    return <IncompleteArtifactBanner scenarioId={scenarioId!} message={error.message} />;
+  }
+  if (error) {
+    return <ErrorBlock message={error.message} />;
+  }
+  if (!bootstrap) {
+    return null;
   }
 
-  if (error) return <ErrorBlock message={error.message} />;
-  if (!scenario) return null;
+  const scenario = bootstrap.scenario;
+  const selectedRouteCount = selectedRouteIds.length;
+  const selectedTripCount = selectedRouteIds.reduce((sum, routeId) => {
+    const route = routesById.get(routeId);
+    const tripCount = Number(route?.tripCount ?? 0);
+    return sum + (Number.isFinite(tripCount) ? tripCount : 0);
+  }, 0);
+  const prepareDisabled =
+    prepareMutation.isPending ||
+    !selectedDepotIds.length ||
+    !selectedRouteIds.length;
+  const runDisabled =
+    runPreparedMutation.isPending ||
+    !preparedResult?.preparedInputId ||
+    !preparedResult.ready ||
+    !canRun;
+
+  async function handlePrepare() {
+    const result = await prepareMutation.mutateAsync({
+      selected_depot_ids: [...selectedDepotIds],
+      selected_route_ids: [...selectedRouteIds],
+      day_type: dayType,
+      service_date: serviceDate || undefined,
+      simulation_settings: {
+        vehicle_template_id: settings.vehicleTemplateId ?? undefined,
+        vehicle_count: settings.vehicleCount,
+        initial_soc: settings.initialSoc,
+        battery_kwh: settings.batteryKwh ?? undefined,
+        fleet_templates: (settings.fleetTemplates ?? []).map((item) => ({
+          vehicle_template_id: item.vehicleTemplateId,
+          vehicle_count: item.vehicleCount,
+          initial_soc: item.initialSoc ?? undefined,
+          battery_kwh: item.batteryKwh ?? undefined,
+          charge_power_kw: item.chargePowerKw ?? undefined,
+        })),
+        charger_count: settings.chargerCount,
+        charger_power_kw: settings.chargerPowerKw,
+        solver_mode: settings.solverMode,
+        objective_mode: settings.objectiveMode ?? "total_cost",
+        allow_partial_service: settings.allowPartialService ?? false,
+        unserved_penalty: settings.unservedPenalty ?? 10000,
+        time_limit_seconds: settings.timeLimitSeconds,
+        mip_gap: settings.mipGap,
+        include_deadhead: settings.includeDeadhead,
+        grid_flat_price_per_kwh: settings.gridFlatPricePerKwh ?? undefined,
+        grid_sell_price_per_kwh: settings.gridSellPricePerKwh ?? undefined,
+        demand_charge_cost_per_kw: settings.demandChargeCostPerKw ?? undefined,
+        diesel_price_per_l: settings.dieselPricePerL ?? undefined,
+        grid_co2_kg_per_kwh: settings.gridCo2KgPerKwh ?? undefined,
+        co2_price_per_kg: settings.co2PricePerKg ?? undefined,
+        depot_power_limit_kw: settings.depotPowerLimitKw ?? undefined,
+        tou_pricing: (settings.touPricing ?? []).map((item) => ({
+          start_hour: item.start_hour,
+          end_hour: item.end_hour,
+          price_per_kwh: item.price_per_kwh,
+        })),
+        service_date: serviceDate || undefined,
+        start_time: settings.startTime ?? undefined,
+        planning_horizon_hours: settings.planningHorizonHours ?? undefined,
+      },
+    });
+    setPreparedResult(result);
+  }
+
+  async function handleRun() {
+    if (!preparedResult?.preparedInputId) {
+      return;
+    }
+    const job = await runPreparedMutation.mutateAsync({
+      prepared_input_id: preparedResult.preparedInputId,
+      source: "duties",
+    });
+    setActiveJobId(job.job_id);
+  }
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageSection title={scenario.name} description={scenario.description}>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-4">
           <InfoCard label="Operator" value={scenario.operatorId} />
           <InfoCard label="Dataset" value={scenario.datasetId ?? "tokyu_core"} />
           <InfoCard label="Dataset Version" value={scenario.datasetVersion ?? "unknown"} />
           <InfoCard label="Random Seed" value={String(scenario.randomSeed ?? 42)} />
-          <InfoCard label={t("scenarios.mode")} value={scenario.mode} />
-          <InfoCard label={t("scenarios.status")} value={scenario.status} />
-          <InfoCard label={t("scenarios.created")} value={scenario.createdAt} />
-          <InfoCard label={t("scenarios.updated")} value={scenario.updatedAt} />
         </div>
-        {scenario.datasetStatus?.warning ? (
+        {bootstrap.warning ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {scenario.datasetStatus.warning}
+            {bootstrap.warning}
           </div>
         ) : null}
       </PageSection>
 
       <PageSection
-        title={t("scenarios.pipeline_progress")}
-        description={t("scenarios.pipeline_description")}
+        title="Step 1 Target Selection"
+        description="初期表示では営業所・路線の index だけを使います。時刻表本体は prepare まで読みません。"
       >
-        <div className="grid gap-3 md:grid-cols-3">
-          <QuickLinkCard
-            title="Step 2 Setup"
-            description="Depots, routes, fleet, charging, and solver parameters."
-            to={`/scenarios/${scenario.id}/planning`}
-          />
-          <QuickLinkCard
-            title="Step 3 Execute"
-            description="Build dispatch artifacts, run simulation, and launch optimization."
-            to={`/scenarios/${scenario.id}/simulation`}
-          />
-          <QuickLinkCard
-            title="Step 4 Results"
-            description="Review duties, KPI, and reproducibility metadata."
-            to={`/scenarios/${scenario.id}/results/dispatch`}
-          />
+        <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <div className="space-y-3">
+            {(bootstrap.depotRouteSummary ?? []).map((item) => {
+              const active = selectedDepotId === item.depotId;
+              return (
+                <button
+                  key={item.depotId}
+                  type="button"
+                  onClick={() => setSelectedDepotIds([item.depotId])}
+                  className={`w-full rounded-xl border p-4 text-left transition ${
+                    active
+                      ? "border-primary-300 bg-primary-50"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                      {item.routeCount} routes
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    trip estimate {item.tripCount.toLocaleString()} / selected {item.selectedRouteCount}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">
+                  {selectedDepotId ? `${selectedDepotId} routes` : "Select a depot"}
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  route summary のみ表示。trip 明細は prepare 後に canonical input へ入ります。
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRouteIds([...visibleRouteIds])}
+                  className="rounded border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRouteIds([])}
+                  className="rounded border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {!visibleRoutes.length ? (
+              <EmptyState
+                title="路線がありません"
+                description="営業所を選択すると対象 route の summary がここに表示されます。"
+              />
+            ) : (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {visibleRoutes.map((route) => {
+                  const checked = selectedRouteIds.includes(route.id);
+                  return (
+                    <label
+                      key={route.id}
+                      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                        checked
+                          ? "border-primary-300 bg-primary-50"
+                          : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={checked}
+                        onChange={() => {
+                          if (checked) {
+                            setSelectedRouteIds(
+                              selectedRouteIds.filter((routeId) => routeId !== route.id),
+                            );
+                            return;
+                          }
+                          setSelectedRouteIds([...selectedRouteIds, route.id]);
+                        }}
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-800">
+                          {route.displayName ?? route.routeCode ?? route.name}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {route.startStop || "-"} → {route.endStop || "-"}
+                        </p>
+                        <p className="mt-2 text-[11px] text-slate-500">
+                          tripCount {Number(route.tripCount ?? 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
+      </PageSection>
+
+      <PageSection
+        title="Step 2 Simulation Settings"
+        description="solver に必要な車両・充電・day type 条件だけをここで確定します。"
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Day Type">
+            <select
+              value={dayType}
+              onChange={(event) => setDayType(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              {(bootstrap.availableDayTypes ?? []).map((item) => (
+                <option key={item.serviceId} value={item.serviceId}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Service Date">
+            <input
+              type="date"
+              value={serviceDate}
+              onChange={(event) => setServiceDate(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </Field>
+          <Field label="Vehicle Template">
+            <select
+              value={settings.vehicleTemplateId ?? ""}
+              onChange={(event) =>
+                updateSettings({ vehicleTemplateId: event.target.value || null })
+              }
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              {(bootstrap.vehicleTemplates ?? []).map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Vehicle Count">
+            <NumberInput
+              value={settings.vehicleCount}
+              min={1}
+              onChange={(value) => updateSettings({ vehicleCount: value })}
+            />
+          </Field>
+          <Field label="Initial SOC">
+            <NumberInput
+              value={settings.initialSoc}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(value) => updateSettings({ initialSoc: value })}
+            />
+          </Field>
+          <Field label="Battery kWh">
+            <NumberInput
+              value={settings.batteryKwh ?? 0}
+              min={0}
+              step={1}
+              onChange={(value) => updateSettings({ batteryKwh: value || null })}
+            />
+          </Field>
+          <Field label="Charger Count">
+            <NumberInput
+              value={settings.chargerCount}
+              min={0}
+              onChange={(value) => updateSettings({ chargerCount: value })}
+            />
+          </Field>
+          <Field label="Charger Power kW">
+            <NumberInput
+              value={settings.chargerPowerKw}
+              min={0}
+              step={5}
+              onChange={(value) => updateSettings({ chargerPowerKw: value })}
+            />
+          </Field>
+          <Field label="Solver Mode">
+            <select
+              value={settings.solverMode}
+              onChange={(event) =>
+                updateSettings({
+                  solverMode: event.target.value as SimulationBuilderSettings["solverMode"],
+                })
+              }
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              {SOLVER_MODES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Objective">
+            <select
+              value={settings.objectiveMode ?? "total_cost"}
+              onChange={(event) =>
+                updateSettings({
+                  objectiveMode: event.target.value as NonNullable<
+                    SimulationBuilderSettings["objectiveMode"]
+                  >,
+                })
+              }
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              {OBJECTIVE_MODES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Time Limit (sec)">
+            <NumberInput
+              value={settings.timeLimitSeconds}
+              min={1}
+              onChange={(value) => updateSettings({ timeLimitSeconds: value })}
+            />
+          </Field>
+          <Field label="MIP Gap">
+            <NumberInput
+              value={settings.mipGap}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => updateSettings({ mipGap: value })}
+            />
+          </Field>
+          <Field label="Unserved Penalty">
+            <NumberInput
+              value={settings.unservedPenalty ?? 10000}
+              min={0}
+              step={100}
+              onChange={(value) => updateSettings({ unservedPenalty: value })}
+            />
+          </Field>
+          <Field label="Deadhead">
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={settings.includeDeadhead}
+                onChange={(event) =>
+                  updateSettings({ includeDeadhead: event.target.checked })
+                }
+              />
+              include deadhead edges
+            </label>
+          </Field>
+          <Field label="Allow Partial Service">
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.allowPartialService)}
+                onChange={(event) =>
+                  updateSettings({ allowPartialService: event.target.checked })
+                }
+              />
+              enable unserved penalty
+            </label>
+          </Field>
+          <Field label="Demand Charge (JPY/kW)">
+            <NumberInput
+              value={settings.demandChargeCostPerKw ?? 0}
+              min={0}
+              step={10}
+              onChange={(value) => updateSettings({ demandChargeCostPerKw: value })}
+            />
+          </Field>
+          <Field label="Diesel Price (JPY/L)">
+            <NumberInput
+              value={settings.dieselPricePerL ?? 0}
+              min={0}
+              step={1}
+              onChange={(value) => updateSettings({ dieselPricePerL: value })}
+            />
+          </Field>
+          <Field label="Depot Power Limit (kW)">
+            <NumberInput
+              value={settings.depotPowerLimitKw ?? 0}
+              min={0}
+              step={10}
+              onChange={(value) =>
+                updateSettings({ depotPowerLimitKw: value > 0 ? value : null })
+              }
+            />
+          </Field>
+          <Field label="Grid CO2 (kg/kWh)">
+            <NumberInput
+              value={settings.gridCo2KgPerKwh ?? 0}
+              min={0}
+              step={0.01}
+              onChange={(value) => updateSettings({ gridCo2KgPerKwh: value })}
+            />
+          </Field>
+          <Field label="CO2 Price (JPY/kg)">
+            <NumberInput
+              value={settings.co2PricePerKg ?? 0}
+              min={0}
+              step={0.1}
+              onChange={(value) => updateSettings({ co2PricePerKg: value })}
+            />
+          </Field>
+        </div>
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Fleet Templates
+            </p>
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              {(settings.fleetTemplates ?? []).length === 0 ? (
+                <p>single-template mode</p>
+              ) : (
+                (settings.fleetTemplates ?? []).map((item) => (
+                  <div
+                    key={item.vehicleTemplateId}
+                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <span className="truncate pr-3">{item.vehicleTemplateId}</span>
+                    <span>{item.vehicleCount}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              TOU Pricing
+            </p>
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              {(settings.touPricing ?? []).length === 0 ? (
+                <p>flat/default pricing</p>
+              ) : (
+                (settings.touPricing ?? []).map((item) => (
+                  <div
+                    key={`${item.start_hour}-${item.end_hour}-${item.price_per_kwh}`}
+                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <span>
+                      {item.start_hour / 2}:00 - {item.end_hour / 2}:00
+                    </span>
+                    <span>{item.price_per_kwh} JPY/kWh</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Step 3 Prepare and Run"
+        description="prepare で selected shard だけを canonical input 化し、ready になったら simulation を開始します。"
+        actions={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void handlePrepare()}
+              disabled={prepareDisabled}
+              className="rounded bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+            >
+              {prepareMutation.isPending ? "Preparing..." : "入力データ作成"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRun()}
+              disabled={runDisabled}
+              className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {runPreparedMutation.isPending ? "Starting..." : "シミュレーション開始"}
+            </button>
+          </div>
+        }
+      >
+        <BackendJobPanel job={activeJob} />
+
+        {!canRun ? (
+          <div className="mb-4 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">
+            {runReadinessReason ?? "Built dataset が未準備のため simulation を実行できません。"}
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 md:grid-cols-4">
+          <InfoCard label="Selected Depot" value={selectedDepotId || "-"} />
+          <InfoCard label="Selected Routes" value={String(selectedRouteCount)} />
+          <InfoCard label="Estimated Trips" value={selectedTripCount.toLocaleString()} />
+          <InfoCard label="Prepared" value={preparedResult?.preparedInputId ?? "not yet"} />
+        </div>
+
+        {prepareMutation.error ? (
+          <div className="mt-4">
+            <ErrorBlock message={prepareMutation.error.message} />
+          </div>
+        ) : null}
+
+        {preparedResult ? (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <InfoCard label="Trip Count" value={preparedResult.tripCount.toLocaleString()} />
+              <InfoCard label="Timetable Rows" value={preparedResult.timetableRowCount.toLocaleString()} />
+              <InfoCard label="Ready" value={preparedResult.ready ? "yes" : "no"} />
+            </div>
+            {preparedResult.warnings.length ? (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {preparedResult.warnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              <Link
+                to={`/scenarios/${scenario.id}/simulation`}
+                className="rounded border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                Legacy simulation view
+              </Link>
+              <Link
+                to={`/scenarios/${scenario.id}/results/dispatch`}
+                className="rounded border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                Results
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <EmptyState
+              title="まだ prepared input はありません"
+              description="営業所・路線・条件を確定したら「入力データ作成」を押してください。"
+            />
+          </div>
+        )}
       </PageSection>
     </div>
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function NumberInput({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={Number.isFinite(value) ? value : 0}
+      onChange={(event) => onChange(Number(event.target.value))}
+      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+    />
+  );
+}
 
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
@@ -77,30 +732,10 @@ function InfoCard({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
         {label}
       </p>
-      <p className="mt-1 text-sm font-medium text-slate-700 truncate">
+      <p className="mt-1 text-sm font-medium text-slate-700 break-all">
         {value}
       </p>
     </div>
-  );
-}
-
-function QuickLinkCard({
-  title,
-  description,
-  to,
-}: {
-  title: string;
-  description: string;
-  to: string;
-}) {
-  return (
-    <Link
-      to={to}
-      className="rounded-lg border border-border bg-surface-raised p-4 text-left transition hover:border-primary-200 hover:bg-primary-50/40"
-    >
-      <p className="text-sm font-semibold text-slate-800">{title}</p>
-      <p className="mt-1 text-xs text-slate-500">{description}</p>
-    </Link>
   );
 }
 
@@ -111,26 +746,17 @@ function IncompleteArtifactBanner({
   scenarioId: string;
   message: string;
 }) {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const deleteMutation = useDeleteScenario();
 
   async function handleDelete() {
-    if (
-      !window.confirm(
-        t(
-          "scenarios.incomplete_delete_confirm",
-          "このシナリオを削除して一覧に戻りますか？",
-        ),
-      )
-    ) {
+    if (!window.confirm("このシナリオを削除して一覧に戻りますか？")) {
       return;
     }
     try {
       await deleteMutation.mutateAsync(scenarioId);
       navigate("/scenarios");
     } catch {
-      // Delete itself failed — navigate away regardless so the UI doesn't stay stuck
       navigate("/scenarios");
     }
   }
@@ -138,28 +764,20 @@ function IncompleteArtifactBanner({
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
       <div className="rounded-lg border border-amber-300 bg-amber-50 p-6">
-        {/* Icon row */}
         <div className="flex items-start gap-3">
           <span className="mt-0.5 text-xl text-amber-500" aria-hidden>
             ⚠️
           </span>
           <div className="flex-1">
             <h2 className="text-base font-semibold text-amber-900">
-              {t(
-                "scenarios.incomplete_title",
-                "シナリオの保存が中断されました",
-              )}
+              シナリオの保存が中断されました
             </h2>
             <p className="mt-1 text-sm text-amber-800">
-              {t(
-                "scenarios.incomplete_description",
-                "前回の保存処理が途中で中断されたため、このシナリオは使用できない状態です。シナリオを削除して再作成してください。",
-              )}
+              前回の保存処理が途中で中断されたため、このシナリオは使用できない状態です。削除して再作成してください。
             </p>
-            {/* Technical detail (collapsed-style) */}
             <details className="mt-3">
               <summary className="cursor-pointer text-xs text-amber-700 hover:text-amber-900">
-                {t("common.technical_detail", "技術的な詳細")}
+                技術的な詳細
               </summary>
               <pre className="mt-2 overflow-auto rounded bg-amber-100 px-3 py-2 text-xs text-amber-800">
                 {message}
@@ -167,8 +785,6 @@ function IncompleteArtifactBanner({
             </details>
           </div>
         </div>
-
-        {/* Action row */}
         <div className="mt-5 flex items-center gap-3">
           <button
             type="button"
@@ -176,16 +792,14 @@ function IncompleteArtifactBanner({
             disabled={deleteMutation.isPending}
             className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
           >
-            {deleteMutation.isPending
-              ? t("common.deleting", "削除中…")
-              : t("scenarios.delete_and_back", "削除して一覧に戻る")}
+            {deleteMutation.isPending ? "削除中..." : "削除して一覧に戻る"}
           </button>
           <button
             type="button"
             onClick={() => navigate("/scenarios")}
             className="rounded-md border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50"
           >
-            {t("common.back_to_list", "一覧に戻る")}
+            一覧に戻る
           </button>
         </div>
       </div>

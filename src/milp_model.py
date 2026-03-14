@@ -277,6 +277,16 @@ def extract_result(
         result.mip_gap = float(model.MIPGap)
     except Exception:
         pass
+    obj_terms = vars.get("obj_terms") or {}
+    if isinstance(obj_terms, dict):
+        for name, expr in obj_terms.items():
+            try:
+                result.obj_breakdown[str(name)] = round(float(expr.getValue()), 6)
+            except Exception:
+                try:
+                    result.obj_breakdown[str(name)] = round(float(expr), 6)
+                except Exception:
+                    continue
 
     T     = ms.T
     K_ALL = ms.K_ALL

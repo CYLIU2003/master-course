@@ -23,6 +23,11 @@ from src.value_normalization import coerce_list
 from bff.store import scenario_store
 
 
+_DEFAULT_LIFETIME_YEAR = 12.0
+_DEFAULT_OPERATION_DAYS_PER_YEAR = 300.0
+_DEFAULT_RESIDUAL_VALUE_YEN = 0.0
+
+
 @dataclass
 class ScenarioBuildReport:
     scenario_id: str
@@ -86,6 +91,123 @@ def _normalize_soc_value(
     if 0.0 <= value <= 1.0:
         return battery_kwh * value
     return value
+
+
+def _scenario_overlay_costs(scenario: Dict[str, Any]) -> Dict[str, Any]:
+    overlay = scenario.get("scenario_overlay") or {}
+    costs = overlay.get("cost_coefficients") or {}
+    return dict(costs) if isinstance(costs, dict) else {}
+
+
+def _scenario_overlay_solver(scenario: Dict[str, Any]) -> Dict[str, Any]:
+    overlay = scenario.get("scenario_overlay") or {}
+    solver = overlay.get("solver_config") or {}
+    return dict(solver) if isinstance(solver, dict) else {}
+
+
+def _dailyized_vehicle_cost(vehicle_like: Dict[str, Any]) -> float:
+    purchase_cost = _safe_float(vehicle_like.get("acquisitionCost"), 0.0)
+    residual_value = _safe_float(
+        vehicle_like.get("residualValueYen", vehicle_like.get("residual_value_yen")),
+        _DEFAULT_RESIDUAL_VALUE_YEN,
+    )
+    lifetime_year = max(
+        _safe_float(
+            vehicle_like.get("lifetimeYear", vehicle_like.get("lifetime_year")),
+            _DEFAULT_LIFETIME_YEAR,
+        ),
+        1.0,
+    )
+    operation_days_per_year = max(
+        _safe_float(
+            vehicle_like.get(
+                "operationDaysPerYear",
+                vehicle_like.get("operation_days_per_year"),
+            ),
+            _DEFAULT_OPERATION_DAYS_PER_YEAR,
+        ),
+        1.0,
+    )
+    return max(0.0, purchase_cost - residual_value) / (lifetime_year * operation_days_per_year)
+
+
+def _hhmm_to_minutes(time_str: str) -> int:
+    parts = str(time_str or "").split(":")
+    if len(parts) < 2:
+        return 0
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+    except ValueError:
+        return 0
+    return max(0, hour * 60 + minute)
+
+
+def _slot_price_from_tou(
+    tou_bands: List[Dict[str, Any]],
+    *,
+    slot_index: int,
+    delta_t_min: float,
+    start_time: str,
+    default_price: float,
+) -> float:
+    if not tou_bands:
+        return default_price
+    minute_of_day = (_hhmm_to_minutes(start_time) + int(round(slot_index * delta_t_min))) % (24 * 60)
+    half_hour_index = minute_of_day // 30
+    for band in tou_bands:
+        start_hour = _safe_int(band.get("start_hour"), 0)
+        end_hour = _safe_int(band.get("end_hour"), 48)
+        if start_hour <= half_hour_index < end_hour:
+            return _safe_float(band.get("price_per_kwh"), default_price)
+    return default_price
+
+
+def _objective_weights_from_scenario(scenario: Dict[str, Any]) -> Dict[str, float]:
+    simulation_cfg = scenario.get("simulation_config") or {}
+    overlay_solver = _scenario_overlay_solver(scenario)
+    objective_mode = str(
+        simulation_cfg.get("objective_mode")
+        or overlay_solver.get("objective_mode")
+        or "total_cost"
+    ).strip().lower()
+    unserved_penalty = _safe_float(
+        simulation_cfg.get("unserved_penalty", overlay_solver.get("unserved_penalty")),
+        10000.0,
+    )
+    if objective_mode == "co2":
+        weights: Dict[str, float] = {
+            "vehicle_fixed_cost": 0.0,
+            "electricity_cost": 0.0,
+            "demand_charge_cost": 0.0,
+            "fuel_cost": 0.0,
+            "deadhead_cost": 0.0,
+            "battery_degradation_cost": 0.0,
+            "emission_cost": 1.0,
+            "unserved_penalty": unserved_penalty,
+            "slack_penalty": 1000000.0,
+        }
+    else:
+        weights = {
+            "vehicle_fixed_cost": 0.0,
+            "electricity_cost": 1.0,
+            "demand_charge_cost": 1.0,
+            "fuel_cost": 1.0,
+            "deadhead_cost": 0.0,
+            "battery_degradation_cost": 0.0,
+            "emission_cost": 0.0,
+            "unserved_penalty": unserved_penalty,
+            "slack_penalty": 1000000.0,
+        }
+    explicit_weights = (
+        simulation_cfg.get("objective_weights")
+        or overlay_solver.get("objective_weights")
+        or {}
+    )
+    if isinstance(explicit_weights, dict):
+        for key, value in explicit_weights.items():
+            weights[str(key)] = _safe_float(value, weights.get(str(key), 0.0))
+    return weights
 
 
 def _filter_rows_for_scope(
@@ -172,6 +294,42 @@ def _normalize_trip_allowed_types(
     return [item for item in allowed if item in route_allowed_types]
 
 
+def _estimate_trip_distance_km(
+    trip_like: Dict[str, Any],
+    route_like: Dict[str, Any],
+) -> float:
+    explicit_distance = _safe_float(trip_like.get("distance_km"), 0.0)
+    if explicit_distance > 0.0:
+        return explicit_distance
+    base_distance = _safe_float(
+        route_like.get("distanceKm", route_like.get("distance_km")),
+        0.0,
+    )
+    if base_distance <= 0.0:
+        return 0.0
+    stop_sequence = [
+        str(item)
+        for item in coerce_list(route_like.get("stopSequence") or route_like.get("stop_sequence"))
+        if str(item or "").strip()
+    ]
+    origin_stop_id = str(trip_like.get("origin_stop_id") or "").strip()
+    destination_stop_id = str(trip_like.get("destination_stop_id") or "").strip()
+    if (
+        origin_stop_id
+        and destination_stop_id
+        and len(stop_sequence) >= 2
+        and origin_stop_id in stop_sequence
+        and destination_stop_id in stop_sequence
+    ):
+        origin_idx = stop_sequence.index(origin_stop_id)
+        destination_idx = stop_sequence.index(destination_stop_id)
+        span = abs(destination_idx - origin_idx)
+        total_span = max(len(stop_sequence) - 1, 1)
+        if span > 0:
+            return round(base_distance * (span / total_span), 4)
+    return base_distance
+
+
 def _collect_trips_for_scope(
     scenario: Dict[str, Any],
     depot_id: str,
@@ -179,17 +337,45 @@ def _collect_trips_for_scope(
     analysis_scope: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     scoped_rows = _filter_rows_for_scope(scenario, depot_id, service_id, analysis_scope)
+    scope = dict(analysis_scope or scenario.get("dispatch_scope") or {})
+    effective_route_ids = {
+        str(item)
+        for item in scope.get("effectiveRouteIds") or []
+        if str(item or "").strip()
+    }
+    route_selection = dict(scope.get("routeSelection") or {})
+    if not effective_route_ids:
+        effective_route_ids = {
+            str(item)
+            for item in route_selection.get("includeRouteIds") or []
+            if str(item or "").strip()
+        }
     depot_vehicles = [
         vehicle
         for vehicle in _as_list(scenario.get("vehicles"))
         if vehicle.get("depotId") == depot_id
     ]
     allowed_route_ids = {str(row.get("route_id")) for row in scoped_rows}
-    prebuilt_trips = [
-        trip
-        for trip in _as_list(scenario.get("trips"))
-        if str(trip.get("route_id", "")) in allowed_route_ids
-    ]
+    if not allowed_route_ids and effective_route_ids:
+        allowed_route_ids = set(effective_route_ids)
+    scoped_rows_by_trip_id = {
+        str(row.get("trip_id") or ""): dict(row)
+        for row in scoped_rows
+        if str(row.get("trip_id") or "").strip()
+    }
+    route_lookup = {
+        str(route.get("id") or ""): dict(route)
+        for route in _as_list(scenario.get("routes"))
+        if str(route.get("id") or "").strip()
+    }
+    prebuilt_trips: List[Dict[str, Any]] = []
+    for trip in _as_list(scenario.get("trips")):
+        if allowed_route_ids and str(trip.get("route_id", "")) not in allowed_route_ids:
+            continue
+        trip_id = str(trip.get("trip_id") or "")
+        merged_trip = dict(scoped_rows_by_trip_id.get(trip_id) or {})
+        merged_trip.update(trip)
+        prebuilt_trips.append(merged_trip)
     trips_source = prebuilt_trips or scoped_rows
     trips: List[Dict[str, Any]] = []
     for index, item in enumerate(trips_source):
@@ -203,6 +389,7 @@ def _collect_trips_for_scope(
         allowed_types = _normalize_trip_allowed_types(item, route_allowed_types)
         if not allowed_types:
             continue
+        route_like = route_lookup.get(route_id) or {}
         trips.append(
             {
                 "trip_id": str(
@@ -214,7 +401,7 @@ def _collect_trips_for_scope(
                 "destination": str(item.get("destination")),
                 "departure": str(item.get("departure")),
                 "arrival": str(item.get("arrival")),
-                "distance_km": _safe_float(item.get("distance_km"), 0.0),
+                "distance_km": _estimate_trip_distance_km(item, route_like),
                 "allowed_vehicle_types": allowed_types,
             }
         )
@@ -235,6 +422,8 @@ def _vehicles_for_scope(
 def _build_vehicle(vehicle_like: Dict[str, Any]) -> Vehicle:
     vehicle_type = str(vehicle_like.get("type") or "BEV").upper()
     battery_kwh = _safe_float(vehicle_like.get("batteryKwh"), 0.0) or None
+    fuel_cost_coeff = _safe_float(vehicle_like.get("fuelCostPerL"), 145.0)
+    co2_emission_coeff = _safe_float(vehicle_like.get("co2EmissionKgPerL"), 2.58)
     return Vehicle(
         vehicle_id=str(vehicle_like.get("id")),
         vehicle_type=vehicle_type,
@@ -248,7 +437,9 @@ def _build_vehicle(vehicle_like: Dict[str, Any]) -> Vehicle:
         ),
         charge_power_max=_safe_float(vehicle_like.get("chargePowerKw"), 0.0) or None,
         fuel_tank_capacity=_safe_float(vehicle_like.get("fuelTankL"), 0.0) or None,
-        fixed_use_cost=_safe_float(vehicle_like.get("acquisitionCost"), 0.0),
+        fuel_cost_coeff=fuel_cost_coeff,
+        co2_emission_coeff=co2_emission_coeff,
+        fixed_use_cost=_dailyized_vehicle_cost(vehicle_like),
         max_distance=_safe_float(vehicle_like.get("maxDistanceKm"), 9999.0),
     )
 
@@ -302,17 +493,25 @@ def _build_tasks(
 
 def _build_sites(scenario: Dict[str, Any], depot_id: str) -> List[Site]:
     sites: Dict[str, Site] = {}
+    charging_cfg = ((scenario.get("scenario_overlay") or {}).get("charging_constraints") or {})
+    depot_power_limit_kw = charging_cfg.get("depot_power_limit_kw")
     for depot in _as_list(scenario.get("depots")):
         site_id = str(depot.get("id"))
         sites[site_id] = Site(
             site_id=site_id,
             site_type="depot",
             grid_import_limit_kw=_safe_float(
-                depot.get("gridImportLimitKw", depot.get("grid_import_limit_kw")),
+                depot.get(
+                    "gridImportLimitKw",
+                    depot.get("grid_import_limit_kw", depot_power_limit_kw),
+                ),
                 9999.0,
             ),
             contract_demand_limit_kw=_safe_float(
-                depot.get("contractDemandLimitKw", depot.get("contract_demand_limit_kw")),
+                depot.get(
+                    "contractDemandLimitKw",
+                    depot.get("contract_demand_limit_kw", depot_power_limit_kw),
+                ),
                 9999.0,
             ),
             site_transformer_limit_kw=_safe_float(
@@ -340,7 +539,24 @@ def _build_sites(scenario: Dict[str, Any], depot_id: str) -> List[Site]:
         )
 
     if depot_id not in sites:
-        sites[depot_id] = Site(site_id=depot_id, site_type="depot")
+        sites[depot_id] = Site(
+            site_id=depot_id,
+            site_type="depot",
+            grid_import_limit_kw=_safe_float(depot_power_limit_kw, 9999.0),
+            contract_demand_limit_kw=_safe_float(depot_power_limit_kw, 9999.0),
+        )
+    elif depot_power_limit_kw is not None:
+        site = sites[depot_id]
+        sites[depot_id] = Site(
+            site_id=site.site_id,
+            site_type=site.site_type,
+            grid_import_limit_kw=_safe_float(depot_power_limit_kw, site.grid_import_limit_kw),
+            contract_demand_limit_kw=_safe_float(
+                depot_power_limit_kw,
+                site.contract_demand_limit_kw,
+            ),
+            site_transformer_limit_kw=site.site_transformer_limit_kw,
+        )
     return list(sites.values())
 
 
@@ -397,7 +613,14 @@ def _build_pv_profiles(scenario: Dict[str, Any]) -> List[PVProfile]:
     ]
 
 
-def _build_electricity_prices(scenario: Dict[str, Any]) -> List[ElectricityPrice]:
+def _build_electricity_prices(
+    scenario: Dict[str, Any],
+    *,
+    site_ids: List[str],
+    num_periods: int,
+    delta_t_min: float,
+    start_time: str,
+) -> List[ElectricityPrice]:
     rows = _expand_profile_rows(
         _as_list(scenario.get("energy_price_profiles")),
         "grid_energy_price",
@@ -417,8 +640,51 @@ def _build_electricity_prices(scenario: Dict[str, Any]) -> List[ElectricityPrice
                 ),
                 sell_back_price=_safe_float(row.get("sell_back_price"), 0.0),
                 base_load_kw=_safe_float(row.get("base_load_kw"), 0.0),
+                co2_factor=_safe_float(row.get("co2_factor"), 0.0),
             )
         )
+    if prices:
+        return prices
+
+    cost_cfg = _scenario_overlay_costs(scenario)
+    tou_bands = [
+        dict(item)
+        for item in _as_list(cost_cfg.get("tou_pricing"))
+        if isinstance(item, dict)
+    ]
+    default_buy_price = _safe_float(cost_cfg.get("grid_flat_price_per_kwh"), 0.0)
+    default_sell_price = _safe_float(cost_cfg.get("grid_sell_price_per_kwh"), 0.0)
+    default_co2_factor = _safe_float(cost_cfg.get("grid_co2_kg_per_kwh"), 0.0)
+    if not site_ids:
+        site_ids = ["depot_default"]
+    if not any(
+        (
+            tou_bands,
+            default_buy_price > 0.0,
+            default_sell_price > 0.0,
+            default_co2_factor > 0.0,
+            _safe_float(cost_cfg.get("demand_charge_cost_per_kw"), 0.0) > 0.0,
+        )
+    ):
+        return prices
+    for site_id in site_ids:
+        for time_idx in range(max(num_periods, 0)):
+            prices.append(
+                ElectricityPrice(
+                    site_id=site_id,
+                    time_idx=time_idx,
+                    grid_energy_price=_slot_price_from_tou(
+                        tou_bands,
+                        slot_index=time_idx,
+                        delta_t_min=delta_t_min,
+                        start_time=start_time,
+                        default_price=default_buy_price,
+                    ),
+                    sell_back_price=default_sell_price,
+                    base_load_kw=0.0,
+                    co2_factor=default_co2_factor,
+                )
+            )
     return prices
 
 
@@ -499,6 +765,8 @@ def build_problem_data_from_scenario(
 ) -> tuple[ProblemData, ScenarioBuildReport]:
     meta = scenario.get("meta") or {}
     simulation_cfg = scenario.get("simulation_config") or {}
+    solver_cfg = _scenario_overlay_solver(scenario)
+    cost_cfg = _scenario_overlay_costs(scenario)
     start_time = str(simulation_cfg.get("start_time") or "05:00")
     delta_t_min = _safe_float(simulation_cfg.get("time_step_min"), 15.0)
     delta_t_hour = delta_t_min / 60.0
@@ -518,7 +786,12 @@ def build_problem_data_from_scenario(
         analysis_scope=analysis_scope,
     )
     scope_vehicles_raw = _vehicles_for_scope(scenario, depot_id)
-    vehicles = [_build_vehicle(item) for item in scope_vehicles_raw]
+    diesel_price_per_l = _safe_float(cost_cfg.get("diesel_price_per_l"), 145.0)
+    vehicles = []
+    for item in scope_vehicles_raw:
+        vehicle_like = dict(item)
+        vehicle_like.setdefault("fuelCostPerL", diesel_price_per_l)
+        vehicles.append(_build_vehicle(vehicle_like))
     tasks = _build_tasks(trips, scope_vehicles_raw, start_time, delta_t_min)
     num_periods = max(
         _safe_int(simulation_cfg.get("num_periods"), 0),
@@ -528,7 +801,25 @@ def build_problem_data_from_scenario(
     sites = _build_sites(scenario, depot_id)
     chargers = _build_chargers(scenario)
     pv_profiles = _build_pv_profiles(scenario)
-    electricity_prices = _build_electricity_prices(scenario)
+    electricity_prices = _build_electricity_prices(
+        scenario,
+        site_ids=[site.site_id for site in sites],
+        num_periods=num_periods,
+        delta_t_min=delta_t_min,
+        start_time=start_time,
+    )
+    objective_weights = _objective_weights_from_scenario(scenario)
+    allow_partial_service = bool(
+        simulation_cfg.get(
+            "allow_partial_service",
+            solver_cfg.get("allow_partial_service", False),
+        )
+    )
+    demand_charge_rate_per_kw = _safe_float(
+        cost_cfg.get("demand_charge_cost_per_kw"),
+        0.0,
+    )
+    co2_price_per_kg = _safe_float(cost_cfg.get("co2_price_per_kg"), 1.0)
 
     data = ProblemData(
         vehicles=vehicles,
@@ -540,8 +831,12 @@ def build_problem_data_from_scenario(
         num_periods=num_periods,
         delta_t_hour=delta_t_hour,
         planning_horizon_hours=planning_horizon_hours,
+        allow_partial_service=allow_partial_service,
         enable_pv=bool(pv_profiles),
-        enable_demand_charge=bool(electricity_prices),
+        enable_demand_charge=demand_charge_rate_per_kw > 0.0,
+        objective_weights=objective_weights,
+        demand_charge_rate_per_kw=demand_charge_rate_per_kw,
+        co2_price_per_kg=co2_price_per_kg,
     )
 
     connections, dispatch_report = build_travel_connections_via_dispatch(

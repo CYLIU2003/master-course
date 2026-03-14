@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tokyu_shards/shard_manifest.schema.json",
+  "type": "object",
+  "required": ["dataset_id", "operator_id", "items"],
+  "properties": {
+    "dataset_id": { "type": "string", "minLength": 1 },
+    "operator_id": { "type": "string", "const": "tokyu" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "artifact_kind",
+          "depot_id",
+          "route_id",
+          "day_type",
+          "trip_count",
+          "stop_time_count",
+          "artifact_path",
+          "hash",
+          "size_bytes"
+        ],
+        "properties": {
+          "artifact_kind": {
+            "type": "string",
+            "enum": ["trip_shard", "timetable_shard", "stop_time_shard"]
+          },
+          "depot_id": { "type": "string", "minLength": 1 },
+          "route_id": { "type": "string", "minLength": 1 },
+          "day_type": {
+            "type": "string",
+            "enum": ["weekday", "saturday", "holiday"]
+          },
+          "trip_count": { "type": "integer", "minimum": 0 },
+          "stop_time_count": { "type": "integer", "minimum": 0 },
+          "artifact_path": { "type": "string", "minLength": 1 },
+          "hash": { "type": "string", "minLength": 1 },
+          "size_bytes": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

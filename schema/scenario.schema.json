@@ -52,10 +52,14 @@
           "type": "array",
           "items": { "$ref": "#/definitions/TimeOfUseBand" }
         },
+        "grid_flat_price_per_kwh": { "type": "number", "minimum": 0 },
+        "grid_sell_price_per_kwh": { "type": "number", "minimum": 0 },
         "demand_charge_cost_per_kw": { "type": "number", "minimum": 0 },
         "pv_enabled": { "type": "boolean" },
         "pv_scale": { "type": "number", "minimum": 0 },
-        "diesel_price_per_l": { "type": "number", "minimum": 0 }
+        "diesel_price_per_l": { "type": "number", "minimum": 0 },
+        "grid_co2_kg_per_kwh": { "type": "number", "minimum": 0 },
+        "co2_price_per_kg": { "type": "number", "minimum": 0 }
       },
       "additionalProperties": false
     },
@@ -68,7 +72,17 @@
         },
         "time_limit_seconds": { "type": "integer", "minimum": 1 },
         "mip_gap": { "type": "number", "minimum": 0 },
-        "alns_iterations": { "type": "integer", "minimum": 1 }
+        "alns_iterations": { "type": "integer", "minimum": 1 },
+        "objective_mode": {
+          "type": "string",
+          "enum": ["total_cost", "co2"]
+        },
+        "allow_partial_service": { "type": "boolean" },
+        "unserved_penalty": { "type": "number", "minimum": 0 },
+        "objective_weights": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
       },
       "additionalProperties": false
     },

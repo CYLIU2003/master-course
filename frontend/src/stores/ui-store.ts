@@ -11,6 +11,10 @@ interface UIState {
   activeScenarioId: string | null;
   setActiveScenarioId: (id: string | null) => void;
 
+  /** Scenario activation request currently in flight */
+  activatingScenarioId: string | null;
+  setActivatingScenarioId: (id: string | null) => void;
+
   /** Active main tab */
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
@@ -27,6 +31,9 @@ export const useUIStore = create<UIState>((set) => ({
 
   activeScenarioId: null,
   setActiveScenarioId: (id) => set({ activeScenarioId: id }),
+
+  activatingScenarioId: null,
+  setActivatingScenarioId: (id) => set({ activatingScenarioId: id }),
 
   activeTab: "planning",
   setActiveTab: (tab) => set({ activeTab: tab }),
