@@ -4,8 +4,10 @@ import pathlib
 import tempfile
 
 import pandas as pd
-import pytest
 from fastapi.testclient import TestClient
+
+from bff.services import research_catalog
+from bff.store import scenario_store
 
 
 def _make_minimal_built(tmp: pathlib.Path) -> pathlib.Path:
@@ -109,12 +111,17 @@ def test_depot_list_does_not_embed_trips(monkeypatch):
         monkeypatch.setattr(app_cache, "DEFAULT_DATASET_ID", "tokyu_core")
         app_cache.reload_state()
 
+        meta = scenario_store.create_scenario("Perf depot list", "", "mode_B_resource_assignment")
+        bootstrap = research_catalog.bootstrap_scenario(
+            scenario_id=meta["id"],
+            dataset_id="tokyu_core",
+            random_seed=42,
+        )
+        scenario_store.apply_dataset_bootstrap(meta["id"], bootstrap)
+
         client = TestClient(app)
-        response = client.get("/api/depots")
-        if response.status_code == 404:
-            pytest.skip("depots endpoint not mounted")
-        if response.status_code != 200:
-            pytest.skip(f"depots returned {response.status_code}")
+        response = client.get(f"/api/scenarios/{meta['id']}/depots")
+        assert response.status_code == 200
         body_str = json.dumps(response.json())
         assert "stop_times" not in body_str
         assert "timetable_rows" not in body_str
@@ -133,11 +140,23 @@ def test_scenario_list_does_not_embed_full_overlay(monkeypatch):
 
         client = TestClient(app)
         response = client.get("/api/scenarios")
-        if response.status_code == 404:
-            pytest.skip("scenarios endpoint not mounted")
+        assert response.status_code == 200
         body = response.json()
         items = body.get("items") if isinstance(body, dict) else body
         if isinstance(items, list) and items:
             first = json.dumps(items[0])
             assert len(first) < 2000
             assert "scenarioOverlay" not in first
+
+
+def test_performance_budget_is_documented():
+    path = pathlib.Path("docs/notes/performance_baseline.md")
+    assert path.exists(), "docs/notes/performance_baseline.md must exist"
+    text = path.read_text(encoding="utf-8")
+    assert "Budget" in text or "budget" in text
+    import re
+
+    assert bool(re.search(r"\d+\s*(ms|KB|MB|s\b)", text)), (
+        "performance_baseline.md must contain numeric performance targets "
+        "(e.g., '< 200ms', '< 300KB')"
+    )

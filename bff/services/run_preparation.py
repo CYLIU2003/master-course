@@ -71,7 +71,7 @@ def _build_run_preparation(
     try:
         from src.runtime_scope import load_scoped_timetables, load_scoped_trips, resolve_scope
 
-        overlay = dict(scenario.get("scenarioOverlay") or scenario.get("scenario_overlay") or {})
+        overlay = dict(scenario.get("scenarioOverlay") or scenario.get("scenario_overlay") or scenario)
         scope = resolve_scope(overlay, routes_df)
         trips_df = load_scoped_trips(built_dir, scope)
         timetables_df = load_scoped_timetables(built_dir, scope)

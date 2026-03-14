@@ -260,6 +260,38 @@ def test_data_readiness_banner_exists():
     assert "onClose" not in banner_text and "onDismiss" not in banner_text
 
 
+def test_no_architecture_tests_are_skipped():
+    tree = ast.parse(pathlib.Path("tests/test_architecture.py").read_text(encoding="utf-8"))
+    parents: dict[ast.AST, ast.AST] = {}
+    for candidate in ast.walk(tree):
+        for child in ast.iter_child_nodes(candidate):
+            parents[child] = candidate
+
+    violations = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if not (isinstance(func.value, ast.Name) and func.value.id == "pytest" and func.attr == "skip"):
+            continue
+        current = parents.get(node)
+        conditional = False
+        while current is not None:
+            if isinstance(current, (ast.If, ast.Try, ast.Match)):
+                conditional = True
+                break
+            current = parents.get(current)
+        if not conditional:
+            violations.append(f"line {getattr(node, 'lineno', 0)}")
+    assert not violations, (
+        "Unconditional pytest.skip() found in test_architecture.py.\n"
+        "Architecture tests must always run.\n"
+        + "\n".join(f"  {item}" for item in violations)
+    )
+
+
 REQUIRED_READINESS_STATES = {
     "no-seed",
     "seed-only",
@@ -496,6 +528,92 @@ def test_runtime_scope_module_exists():
     assert "resolve_scope" in source
     assert "load_scoped_trips" in source
     assert "load_scoped_timetables" in source
+
+
+def test_simulation_and_optimization_both_use_run_preparation_service():
+    for router_file in [
+        "bff/routers/simulation.py",
+        "bff/routers/optimization.py",
+    ]:
+        source = pathlib.Path(router_file).read_text(encoding="utf-8")
+        assert "run_preparation" in source or "get_or_build_run_preparation" in source, (
+            f"{router_file} must use get_or_build_run_preparation() from "
+            "bff/services/run_preparation.py. Both simulation and optimization must share the same prep path."
+        )
+
+
+MASTER_DATA_FORBIDDEN = [
+    "odpt",
+    "gtfs",
+    "catalog_import",
+    "public_data",
+    "timetable_rows",
+    "stop_times",
+    "all_trips",
+    "import_routes",
+    "fetch_routes",
+]
+
+
+def test_master_data_router_has_no_forbidden_tokens():
+    path = pathlib.Path("bff/routers/master_data.py")
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    violations = []
+    in_docstring = False
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith('"""'):
+            in_docstring = not in_docstring
+            continue
+        if in_docstring or stripped.startswith("#"):
+            continue
+        for token in MASTER_DATA_FORBIDDEN:
+            if token in line:
+                violations.append(f"line {i}: '{token}' in: {stripped[:80]}")
+    assert not violations, (
+        "bff/routers/master_data.py contains forbidden tokens.\n"
+        "This file must remain summary-only reference data.\n"
+        + "\n".join(f"  {item}" for item in violations[:10])
+    )
+
+
+APP_CACHE_FORBIDDEN_LOGIC = [
+    "sha256",
+    "hashlib",
+    "odpt",
+    "gtfs",
+    "requests.get",
+    "httpx",
+    "ContractErrorCode",
+]
+
+
+def test_app_cache_does_not_reimplement_contract_logic():
+    path = pathlib.Path("bff/services/app_cache.py")
+    source = path.read_text(encoding="utf-8")
+    violations = []
+    in_docstring = False
+    for i, line in enumerate(source.splitlines(), 1):
+        stripped = line.strip()
+        if stripped.startswith('"""'):
+            in_docstring = not in_docstring
+            continue
+        if in_docstring or stripped.startswith("#"):
+            continue
+        for token in APP_CACHE_FORBIDDEN_LOGIC:
+            if token not in stripped:
+                continue
+            if token in {"sha256", "hashlib"} and "import" not in stripped:
+                violations.append(f"line {i}: '{token}'")
+            elif token in {"odpt", "gtfs", "requests.get", "httpx"}:
+                violations.append(f"line {i}: '{token}'")
+            elif token == "ContractErrorCode" and "class" in stripped:
+                violations.append(f"line {i}: defines ContractErrorCode")
+    assert not violations, (
+        "bff/services/app_cache.py re-implements contract logic that belongs in src/artifact_contract.py.\n"
+        + "\n".join(f"  {item}" for item in violations)
+    )
 
 
 SUMMARY_FORBIDDEN_FIELDS = [

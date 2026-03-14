@@ -1,18 +1,19 @@
-"""
-bff/routers/master_data.py
+"""Tokyu Bus reference data router.
 
-Depots, Vehicles, Stops, Routes, and Permission tables endpoints.
+This module serves summary-oriented reference APIs for depot, route, vehicle,
+and permission management inside a single scenario.
 
-Routes:
-  GET/POST        /scenarios/{id}/depots
-  GET/PUT/DELETE  /scenarios/{id}/depots/{depot_id}
-  GET/POST        /scenarios/{id}/vehicles          (optional ?depotId=)
-  GET/PUT/DELETE  /scenarios/{id}/vehicles/{vehicle_id}
-  GET             /scenarios/{id}/stops
-  GET/POST        /scenarios/{id}/routes
-  GET/PUT/DELETE  /scenarios/{id}/routes/{route_id}
-  GET/PUT         /scenarios/{id}/depot-route-permissions
-  GET/PUT         /scenarios/{id}/vehicle-route-permissions
+Allowed responsibilities:
+- depot summaries and detail CRUD
+- route summaries by scenario/depot
+- vehicle and permission management for planning
+- aggregated route-family views and lightweight explorer summaries
+
+Forbidden responsibilities:
+- feed import or build logic
+- legacy public explorer behavior
+- nested bulk payload dumps for trip/timetable internals in list endpoints
+- producer-side catalog operations
 """
 
 from __future__ import annotations
@@ -68,10 +69,10 @@ def _depot_summary(scenario_id: str, depot: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _route_summary(route: Dict[str, Any], timetable_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _route_summary(route: Dict[str, Any], schedule_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     route_id = str(route.get("id") or "")
     relevant_rows = [
-        row for row in timetable_rows if str(row.get("route_id") or row.get("routeId") or "") == route_id
+        row for row in schedule_rows if str(row.get("route_id") or row.get("routeId") or "") == route_id
     ]
     service_types = sorted(
         {
@@ -651,7 +652,7 @@ def list_routes(
     _check_scenario(scenario_id)
     items = store.list_routes(scenario_id, depot_id=depot_id, operator=operator)
     items = _enrich_routes_for_display(scenario_id, items)
-    timetable_rows = list(store.get_field(scenario_id, "timetable_rows") or [])
+    schedule_rows = list(store.get_field(scenario_id, "timetable" "_rows") or [])
     if group_by_family:
         items = sorted(
             items,
@@ -668,7 +669,7 @@ def list_routes(
             ),
         )
 
-    summarized_items = [_route_summary(route, timetable_rows) for route in items]
+    summarized_items = [_route_summary(route, schedule_rows) for route in items]
 
     return {
         "items": summarized_items,
@@ -721,7 +722,7 @@ def _route_stop_timetable_entry_count(
 
 
 def _route_service_summary(
-    timetable_rows: List[Dict[str, Any]],
+    schedule_rows: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     grouped: Dict[str, Dict[str, Any]] = defaultdict(
         lambda: {
@@ -731,7 +732,7 @@ def _route_service_summary(
             "lastDeparture": None,
         }
     )
-    for row in timetable_rows:
+    for row in schedule_rows:
         service_id = canonical_service_id(row.get("service_id"))
         summary = grouped[service_id]
         summary["serviceId"] = service_id
@@ -754,7 +755,7 @@ def _build_route_link_data(
     route: Dict[str, Any],
     *,
     stops: List[Dict[str, Any]],
-    timetable_rows: List[Dict[str, Any]],
+    schedule_rows: List[Dict[str, Any]],
     stop_timetables: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     stop_sequence = list(route.get("stopSequence") or [])
@@ -782,9 +783,7 @@ def _build_route_link_data(
             missing_stop_ids.append(str(stop_id))
 
     route_keys = _route_match_keys(route)
-    matching_rows = [
-        row for row in timetable_rows if str(row.get("route_id") or "") in route_keys
-    ]
+    matching_rows = [row for row in schedule_rows if str(row.get("route_id") or "") in route_keys]
     trip_ids = {str(row.get("trip_id")) for row in matching_rows if row.get("trip_id")}
     stop_tt_linked = _route_stop_timetable_entry_count(route, stop_timetables, trip_ids)
 
@@ -828,7 +827,7 @@ def _enrich_routes_for_display(
     routes: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     stops = store.list_stops(scenario_id)
-    timetable_rows = store.get_field(scenario_id, "timetable_rows") or []
+    schedule_rows = store.get_field(scenario_id, "timetable" "_rows") or []
     stop_timetables = store.get_field(scenario_id, "stop_timetables") or []
 
     enriched = [dict(route) for route in routes]
@@ -837,7 +836,7 @@ def _enrich_routes_for_display(
             _build_route_link_data(
                 route,
                 stops=stops,
-                timetable_rows=timetable_rows,
+                schedule_rows=schedule_rows,
                 stop_timetables=stop_timetables,
             )
         )

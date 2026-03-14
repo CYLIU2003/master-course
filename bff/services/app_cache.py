@@ -1,3 +1,18 @@
+"""Runtime app-state assembly and caching.
+
+Sole responsibility:
+- call artifact and dataset validation once during startup/reload
+- assemble AppState from validation result plus lightweight loader state
+- cache the assembled state and expose reload hooks for tests
+- provide get_app_state() for FastAPI dependencies
+
+Not responsible for:
+- contract judgment implementation details
+- parquet loading and normalization rules
+- banner message text
+- producer-side build operations or legacy feed import logic
+"""
+
 from __future__ import annotations
 
 import logging
