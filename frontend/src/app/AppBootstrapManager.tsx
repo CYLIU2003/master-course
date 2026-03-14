@@ -2,6 +2,16 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchMaybeJson } from "@/api/client";
 import { scenarioApi } from "@/api/scenario";
+import {
+  vehicleApi,
+  vehicleTemplateApi,
+  routeApi,
+  stopApi,
+  permissionApi,
+  graphApi,
+  simulationApi,
+  optimizationApi,
+} from "@/api";
 import { scenarioKeys } from "@/hooks";
 import { useBootStore } from "@/stores/boot-store";
 import { useTabWarmStore } from "@/stores/tab-warm-store";
@@ -163,6 +173,55 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         });
         if (cancelled) return;
         updateStep("cache", { status: "success", progress: 100 });
+        // prewarm commonly-needed master & graph data for tabs
+        await measureAsyncStep("boot:prewarm_tabs", async () =>
+          Promise.all([
+            queryClient.ensureQueryData({
+              queryKey: ["vehicles", currentScenarioId],
+              queryFn: () => vehicleApi.list(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["vehicle-templates", currentScenarioId],
+              queryFn: () => vehicleTemplateApi.list(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["routes", currentScenarioId],
+              queryFn: () => routeApi.list(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["stops", currentScenarioId],
+              queryFn: () => stopApi.list(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["permissions", currentScenarioId, "depot-route"],
+              queryFn: () => permissionApi.getDepotRoutePermissions(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["deadhead-rules", currentScenarioId],
+              queryFn: () => scenarioApi.getDeadheadRules(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["graph", currentScenarioId, "trips-summary"],
+              queryFn: () => graphApi.getTripsSummary(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["graph", currentScenarioId, "graph-summary"],
+              queryFn: () => graphApi.getGraphSummary(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["graph", currentScenarioId, "duties-summary"],
+              queryFn: () => graphApi.getDutiesSummary(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["simulation", "capabilities"],
+              queryFn: () => simulationApi.getCapabilities(currentScenarioId),
+            }),
+            queryClient.ensureQueryData({
+              queryKey: ["optimization", "capabilities"],
+              queryFn: () => optimizationApi.getCapabilities(currentScenarioId),
+            }),
+          ]),
+        );
         const scenarioDetail = queryClient.getQueryData<{
           operatorId?: "tokyu" | "toei";
           feedContext?: {

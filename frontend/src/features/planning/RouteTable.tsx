@@ -4,32 +4,38 @@ import { useRoutes, useCreateRoute, useDeleteRoute } from "@/hooks";
 import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
 import type { Route } from "@/types";
 import {
-  selectVisibleRoutes,
   usePlanningDatasetStore,
 } from "@/stores/planning-dataset-store";
 
 interface RouteTableProps {
   scenarioId: string;
   depotId?: string;
+  showAll?: boolean;
 }
 
-export function RouteTable({ scenarioId, depotId }: RouteTableProps) {
+export function RouteTable({ scenarioId, depotId, showAll }: RouteTableProps) {
   const { t } = useTranslation();
   const { data, isLoading, error } = useRoutes(
     scenarioId,
-    depotId ? { depotId } : undefined,
+    showAll ? { enabled: true } : (depotId ? { depotId, enabled: true } : { enabled: false }),
   );
-  const syncRoutes = usePlanningDatasetStore((s) => s.syncRoutes);
   const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
-  const routes = usePlanningDatasetStore(selectVisibleRoutes);
   const createRoute = useCreateRoute(scenarioId);
   const deleteRoute = useDeleteRoute(scenarioId);
-  useEffect(() => {
-    syncRoutes((data?.items as Route[] | undefined) ?? []);
-  }, [data?.items, syncRoutes]);
+
+  const routes: Route[] = data?.items ?? [];
+
   useEffect(() => {
     setActiveDepotId(depotId ?? null);
   }, [depotId, setActiveDepotId]);
+
+  if (!depotId && !showAll) {
+    return (
+      <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
+        営業所を選択すると、対象 route 一覧を読み込みます。
+      </div>
+    );
+  }
 
   if (isLoading) return <LoadingBlock message={t("routes.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;

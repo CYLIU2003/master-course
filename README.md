@@ -337,6 +337,46 @@ http://localhost:5173
 * TOU pricing bands（add / remove）
 * experiment method / experiment notes
 
+### CLI: シミュレーション条件を変更する方法
+
+シミュレーション条件は CLI からもエクスポート・表示・適用できます。手順:
+
+1. 現在の profile をエクスポート（JSON）
+
+```bash
+python -m scripts.simulation_profile_cli export --scenario <scenario_id>
+```
+
+2. エクスポートされた JSON を編集して条件を変更（例: `simulation_settings.time_limit_seconds`, `simulation_settings.alns_iterations`, `simulation_settings.solver_mode`, `simulation_settings.objective_mode`）。
+
+3. 変更内容を scenario に適用
+
+```bash
+python -m scripts.simulation_profile_cli apply --scenario <scenario_id> --input outputs/scenario_profiles/<scenario_id>.json
+```
+
+4. その後、API から simulation を prepare/run します（または `bff` を通してフロントエンドで実行）。
+
+CLI で変更できる主なフィールド（`simulation_settings` 内）:
+
+- `solver_mode` : `mode_milp_only` / `mode_alns_only` / `mode_alns_milp` / `milp` / `alns` / `hybrid` / `ga` / `abc`
+- `objective_mode` : `total_cost` / `co2` / `balanced`
+- `time_limit_seconds` : MILP/Hybrid の time limit
+- `mip_gap` : MILP の許容ギャップ
+- `alns_iterations` : ALNS の反復回数
+- `random_seed` : 再現性のためのシード値
+- `allow_partial_service` : 未対応トリップを許容するか
+
+例: ALNS（GA/ABC を ALNS として使う）で CO2 を最適化、30 分タイムリミットにする
+
+```bash
+python -m scripts.simulation_profile_cli export --scenario verify-001
+# edit outputs/scenario_profiles/verify-001.json → set solver_mode/alns, objective_mode/co2, time_limit_seconds=1800
+python -m scripts.simulation_profile_cli apply --scenario verify-001 --input outputs/scenario_profiles/verify-001.json
+```
+
+この README の `outputs/experiments/` に結果と使用条件が保存されます。
+
 `prepare` 実行時に上記は `dispatch_scope`, `scenario_overlay`, `simulation_config`,
 `vehicles`, `chargers`, `charger_sites` に反映され、その後の simulation / optimization /
 experiment logging が同じ条件を参照します。

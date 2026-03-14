@@ -1,7 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
-import { useScenario } from "@/hooks";
+import { useEditorBootstrap } from "@/hooks";
 import { useUIStore } from "@/stores/ui-store";
 import { usePlanningDatasetStore } from "@/stores/planning-dataset-store";
 import { PageSection } from "@/features/common";
@@ -16,12 +16,22 @@ import {
 export function MasterPlanningPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
-  const { data: scenario } = useScenario(scenarioId ?? "");
+  const { data: bootstrap, isLoading, error } = useEditorBootstrap(scenarioId ?? "");
+  const scenario = bootstrap?.scenario;
   const selectedDepotId = useUIStore((s) => s.selectedDepotId);
   const [showAllRoutes, setShowAllRoutes] = useState(false);
+  const [showDepotRouteMatrix, setShowDepotRouteMatrix] = useState(false);
+  const [showVehicleRouteMatrix, setShowVehicleRouteMatrix] = useState(false);
   const setActiveDepotId = usePlanningDatasetStore((s) => s.setActiveDepotId);
   const setShowAllRoutesStore = usePlanningDatasetStore((s) => s.setShowAllRoutes);
   const setFeedContext = usePlanningDatasetStore((s) => s.setFeedContext);
+  const syncDepots = usePlanningDatasetStore((s) => s.syncDepots);
+
+  useEffect(() => {
+    if (bootstrap?.depots) {
+      syncDepots(bootstrap.depots);
+    }
+  }, [bootstrap?.depots, syncDepots]);
 
   useEffect(() => {
     setActiveDepotId(selectedDepotId);
@@ -36,6 +46,22 @@ export function MasterPlanningPage() {
   }, [scenario?.feedContext, setFeedContext]);
 
   if (!scenarioId) return null;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="text-sm text-slate-500">{t("common.loading")}...</div>
+      </div>
+    );
+  }
+
+  if (error || !bootstrap) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="text-sm text-red-500">{error?.message ?? "Failed to load"}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -63,7 +89,7 @@ export function MasterPlanningPage() {
       <div className="flex gap-4" style={{ minHeight: "400px" }}>
         {/* Left: Depot list */}
         <div className="w-56 shrink-0 rounded-lg border border-border bg-surface-raised">
-          <DepotListPanel scenarioId={scenarioId} />
+          <DepotListPanel scenarioId={scenarioId} depots={bootstrap.depots} />
         </div>
 
         {/* Right: Depot detail or placeholder */}
@@ -105,7 +131,8 @@ export function MasterPlanningPage() {
         {selectedDepotId ? (
           <RouteTable
             scenarioId={scenarioId}
-            depotId={selectedDepotId && !showAllRoutes ? selectedDepotId : undefined}
+            depotId={!showAllRoutes ? selectedDepotId : undefined}
+            showAll={showAllRoutes}
           />
         ) : (
           <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
@@ -114,29 +141,45 @@ export function MasterPlanningPage() {
         )}
       </PageSection>
 
-      {/* Depot-Route permission matrix */}
+      {/* Depot-Route permission matrix - lazy loaded */}
       {selectedDepotId && (
         <PageSection
           title="営業所-路線許可"
           description="選択中の営業所で扱う路線を明示的に切り替えます。配車前処理ではこの許可集合を起点に subset を絞ります。"
+          defaultExpanded={false}
+          onExpandChange={(expanded) => setShowDepotRouteMatrix(expanded)}
         >
-          <DepotRouteMatrix
-            scenarioId={scenarioId}
-            depotId={selectedDepotId}
-          />
+          {showDepotRouteMatrix ? (
+            <DepotRouteMatrix
+              scenarioId={scenarioId}
+              depotId={selectedDepotId}
+            />
+          ) : (
+            <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
+              クリックして許可設定を編集
+            </div>
+          )}
         </PageSection>
       )}
 
-      {/* Vehicle-Route permission matrix */}
+      {/* Vehicle-Route permission matrix - lazy loaded */}
       {selectedDepotId && (
         <PageSection
           title={t("planning.permissions_title")}
           description="営業所で許可された路線のうち、どの車両が担当できるかを制御します。"
+          defaultExpanded={false}
+          onExpandChange={(expanded) => setShowVehicleRouteMatrix(expanded)}
         >
-          <VehicleRouteMatrix
-            scenarioId={scenarioId}
-            depotId={selectedDepotId}
-          />
+          {showVehicleRouteMatrix ? (
+            <VehicleRouteMatrix
+              scenarioId={scenarioId}
+              depotId={selectedDepotId}
+            />
+          ) : (
+            <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-slate-500">
+              クリックして車両許可設定を編集
+            </div>
+          )}
         </PageSection>
       )}
     </div>

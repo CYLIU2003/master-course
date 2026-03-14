@@ -312,20 +312,47 @@ class ProblemBuilder:
         return tuple(items)
 
     def _build_baseline_plan(self, context: DispatchContext) -> AssignmentPlan:
+        # Build a baseline greedy plan but avoid assigning the same trip to
+        # multiple vehicle types. Some trips are allowed for several vehicle
+        # types (BEV/ICE); the previous implementation ran the greedy
+        # generator per vehicle type over the full trip list which led to the
+        # same trip appearing in duties of multiple types. That caused
+        # duplicate-assignment infeasibility warnings downstream.
         duties: List[VehicleDuty] = []
-        served_trip_ids: List[str] = []
+        assigned_trip_ids: set[str] = set()
         dispatcher = DispatchGenerator()
-        for vehicle_type in context.vehicle_profiles:
-            vt_duties = dispatcher.generate_greedy_duties(context, vehicle_type)
+
+        # Iterate vehicle types in deterministic order and assign only
+        # currently-unassigned trips that are eligible for that type.
+        for vehicle_type in list(context.vehicle_profiles.keys()):
+            # filter context.trips to those eligible for this vehicle type and
+            # not yet assigned
+            eligible_trips = [
+                t for t in context.trips
+                if vehicle_type in t.allowed_vehicle_types and t.trip_id not in assigned_trip_ids
+            ]
+            if not eligible_trips:
+                continue
+            # create a shallow DispatchContext with the filtered trips
+            temp_ctx = DispatchContext(
+                service_date=context.service_date,
+                trips=eligible_trips,
+                turnaround_rules=context.turnaround_rules,
+                deadhead_rules=context.deadhead_rules,
+                vehicle_profiles=context.vehicle_profiles,
+                default_turnaround_min=context.default_turnaround_min,
+            )
+            vt_duties = dispatcher.generate_greedy_duties(temp_ctx, vehicle_type)
             duties.extend(vt_duties)
             for duty in vt_duties:
-                served_trip_ids.extend(duty.trip_ids)
+                assigned_trip_ids.update(duty.trip_ids)
+
         all_trip_ids = {trip.trip_id for trip in context.trips}
         return AssignmentPlan(
             duties=tuple(duties),
             charging_slots=(),
-            served_trip_ids=tuple(sorted(set(served_trip_ids))),
-            unserved_trip_ids=tuple(sorted(all_trip_ids - set(served_trip_ids))),
+            served_trip_ids=tuple(sorted(assigned_trip_ids)),
+            unserved_trip_ids=tuple(sorted(all_trip_ids - assigned_trip_ids)),
             metadata={"source": "dispatch_greedy_baseline"},
         )
 

@@ -237,6 +237,8 @@ export type SolverMode =
   | "milp"
   | "alns"
   | "hybrid"
+  | "ga"
+  | "abc"
   | "thesis_mode"
   | "mode_milp_only"
   | "mode_alns_only"

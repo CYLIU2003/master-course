@@ -1,25 +1,24 @@
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "@/stores/ui-store";
-import { useDepots, useCreateDepot, useDeleteDepot } from "@/hooks";
-import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
+import { useCreateDepot, useDeleteDepot, scenarioKeys } from "@/hooks";
+import { EmptyState } from "@/features/common";
 import type { Depot } from "@/types";
 
 interface DepotListPanelProps {
   scenarioId: string;
+  depots?: Depot[];
 }
 
-export function DepotListPanel({ scenarioId }: DepotListPanelProps) {
+export function DepotListPanel({ scenarioId, depots: propDepots }: DepotListPanelProps) {
   const { t } = useTranslation();
-  const { data, isLoading, error } = useDepots(scenarioId);
+  const queryClient = useQueryClient();
   const selectedDepotId = useUIStore((s) => s.selectedDepotId);
   const setSelectedDepotId = useUIStore((s) => s.setSelectedDepotId);
   const createDepot = useCreateDepot(scenarioId);
   const deleteDepot = useDeleteDepot(scenarioId);
 
-  if (isLoading) return <LoadingBlock message={t("depots.loading")} />;
-  if (error) return <ErrorBlock message={error.message} />;
-
-  const depots: Depot[] = data?.items ?? [];
+  const depots: Depot[] = propDepots ?? [];
 
   const handleAddDepot = () => {
     createDepot.mutate(
@@ -30,6 +29,7 @@ export function DepotListPanel({ scenarioId }: DepotListPanelProps) {
       {
         onSuccess: (newDepot) => {
           setSelectedDepotId(newDepot.id);
+          queryClient.invalidateQueries({ queryKey: scenarioKeys.editorBootstrap(scenarioId) });
         },
       },
     );
@@ -41,6 +41,7 @@ export function DepotListPanel({ scenarioId }: DepotListPanelProps) {
     deleteDepot.mutate(depotId, {
       onSuccess: () => {
         if (selectedDepotId === depotId) setSelectedDepotId(null);
+        queryClient.invalidateQueries({ queryKey: scenarioKeys.editorBootstrap(scenarioId) });
       },
     });
   };
