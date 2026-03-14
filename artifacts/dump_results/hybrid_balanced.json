@@ -1,0 +1,6127 @@
+{
+  "solver_mode": "hybrid",
+  "solver_status": "infeasible_candidate",
+  "objective_value": 140179.19999999995,
+  "feasible": false,
+  "warnings": [],
+  "infeasibility_reasons": [
+    "Duplicate trip assignments: K1-001, K1-002, K1-003, K1-004, K1-005, K1-006, K1-007, K1-008, K1-009, K1-010, K1-011, K1-012, K1-013, K1-014, K1-015, K1-016, K1-017, K1-018, K1-019, K1-020, K1-021, K1-022, K1-023, K1-024, K1-025, K1-026, K1-027, K1-028, K1-029, K1-030, K1-031, K1-032, K1-033, K1-034, K1-035, K1-036, K1-037, K1-038, K1-039, K1-040, K1-041, K1-042, K1-043, K1-044, K1-045, K1-046, K1-047, K1-048, K1-049, K1-050, K1-051, K1-052, K1-053, K1-054, K1-055, K1-056, K1-057, K1-058, K1-059, K1-060, K1-061, K1-062, K1-063, K1-064, K1-065, K1-066, K1-067, K1-068, K1-069, K1-070, K1-071, K1-072, K1-073, K1-074, K1-075, K1-076, K1-077, K1-078, K1-079, K1-080, K1-081, K1-082, K1-083, K1-084, K2-001, K2-002, K2-003, K2-004, K2-005, K2-006, K2-007, K2-008, K2-009, K2-010, K2-011, K2-012, K2-013, K2-014, K2-015, K2-016, K2-017, K2-018, K2-019, K2-020, K2-021, K2-022, K2-023, K2-024, K2-025, K2-026, K2-027, K2-028, K2-029, K2-030, K2-031, K2-032, K2-033, K2-034, K2-035, K2-036, K2-037, K2-038, K2-039, K2-040, K2-041, K2-042, K2-043, K2-044, K2-045, K2-046, K2-047, K2-048, K2-049, K2-050, K2-051, K2-052, K2-053, K2-054, K2-055, K2-056, S41-001, S41-002, S41-003, S41-004, S41-005, S41-006, S41-007, S41-008, S41-009, S41-010, S41-011, S41-012, S41-013, S41-014, S41-015, S41-016, S41-017, S41-018, S41-019, S41-020, S41-021, S41-022, S41-023, S41-024, S41-025, S41-026, S41-027, S41-028, S41-029, S41-030, S41-031, S41-032, S41-033, S41-034, S41-035, S41-036, S41-037, S41-038, S41-039, S41-040, S41-041, S41-042"
+  ],
+  "cost_breakdown": {
+    "energy_cost": 140179.19999999995,
+    "demand_cost": 0.0,
+    "vehicle_cost": 0.0,
+    "unserved_penalty": 0.0,
+    "switch_cost": 0.0,
+    "degradation_cost": 0.0,
+    "deviation_cost": 0.0,
+    "total_cost": 140179.19999999995
+  },
+  "solver_metadata": {
+    "milp_seed_status": "baseline_feasible",
+    "partial_milp_calls": 1,
+    "generated_columns": 1,
+    "iterations": 30,
+    "best_destroy_operator": "greedy_trip_insertion",
+    "accepted_neighborhoods": 20,
+    "rejected_neighborhoods": 10
+  },
+  "operator_stats": {
+    "random_trip_removal": {
+      "selected": 7,
+      "accepted": 4,
+      "rejected": 3,
+      "reward": 9.5
+    },
+    "peak_hour_removal": {
+      "selected": 7,
+      "accepted": 7,
+      "rejected": 0,
+      "reward": 14.0
+    },
+    "worst_trip_removal": {
+      "selected": 4,
+      "accepted": 0,
+      "rejected": 4,
+      "reward": 2.0
+    },
+    "vehicle_path_removal": {
+      "selected": 8,
+      "accepted": 5,
+      "rejected": 3,
+      "reward": 11.5
+    },
+    "unlocked_future_only_removal": {
+      "selected": 4,
+      "accepted": 4,
+      "rejected": 0,
+      "reward": 8.0
+    },
+    "greedy_trip_insertion": {
+      "selected": 10,
+      "accepted": 10,
+      "rejected": 0,
+      "reward": 20.0
+    },
+    "regret_k_insertion": {
+      "selected": 2,
+      "accepted": 1,
+      "rejected": 1,
+      "reward": 2.5
+    },
+    "energy_aware_insertion": {
+      "selected": 4,
+      "accepted": 2,
+      "rejected": 2,
+      "reward": 5.0
+    },
+    "baseline_dispatch_repair": {
+      "selected": 5,
+      "accepted": 5,
+      "rejected": 0,
+      "reward": 10.0
+    },
+    "charger_reassignment_repair": {
+      "selected": 3,
+      "accepted": 0,
+      "rejected": 3,
+      "reward": 1.5
+    },
+    "soc_repair": {
+      "selected": 3,
+      "accepted": 0,
+      "rejected": 3,
+      "reward": 1.5
+    },
+    "partial_milp_repair": {
+      "selected": 3,
+      "accepted": 2,
+      "rejected": 1,
+      "reward": 4.5
+    }
+  },
+  "incumbent_history": [
+    {
+      "iteration": 0,
+      "objective_value": 140179.19999999995,
+      "feasible": false
+    }
+  ],
+  "duties": [
+    {
+      "duty_id": "DUTY-BEV-0001",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-001"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-001",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0002",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-001"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-001",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0003",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-001"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-001",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0004",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-002"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-002",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0005",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-002"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-002",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0006",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-003"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-003",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0007",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-002"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-002",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0008",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-004"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-004",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0009",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-003"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-003",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0010",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-005"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-005",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0011",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-003"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-003",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0012",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-004"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-004",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0013",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-006"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-006",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0014",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-007"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-007",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0015",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-005"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-005",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0016",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-004"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-004",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0017",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-008"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-008",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0018",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-006"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-006",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0019",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-009"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-009",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0020",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-005"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-005",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0021",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-010"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-010",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0022",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-007"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-007",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0023",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-011"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-011",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0024",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-006"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-006",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0025",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-008"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-008",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0026",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-012"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-012",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0027",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-013"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-013",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0028",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-009"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-009",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0029",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-007"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-007",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0030",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-014"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-014",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0031",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-010"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-010",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0032",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-015"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-015",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0033",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-008"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-008",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0034",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-016"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-016",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0035",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-011"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-011",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0036",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-017"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-017",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0037",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-009"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-009",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0038",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-012"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-012",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0039",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-018"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-018",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0040",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-019"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-019",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0041",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-013"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-013",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0042",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-010"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-010",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0043",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-020"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-020",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0044",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-014"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-014",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0045",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-021"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-021",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0046",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-011"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-011",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0047",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-022"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-022",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0048",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-015"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-015",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0049",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-023"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-023",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0050",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-012"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-012",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0051",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-016"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-016",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0052",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-024"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-024",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0053",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-025"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-025",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0054",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-017"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-017",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0055",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-013"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-013",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0056",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-026"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-026",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0057",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-018"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-018",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0058",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-027"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-027",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0059",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-014"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-014",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0060",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-028"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-028",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0061",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-019"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-019",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0062",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-029"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-029",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0063",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-015"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-015",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0064",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-020"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-020",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0065",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-030"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-030",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0066",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-031"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-031",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0067",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-021"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-021",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0068",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-016"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-016",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0069",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-032"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-032",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0070",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-022"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-022",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0071",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-033"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-033",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0072",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-017"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-017",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0073",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-034"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-034",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0074",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-023"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-023",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0075",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-035"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-035",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0076",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-018"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-018",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0077",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-024"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-024",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0078",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-036"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-036",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0079",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-037"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-037",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0080",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-025"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-025",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0081",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-019"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-019",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0082",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-038"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-038",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0083",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-026"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-026",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0084",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-039"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-039",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0085",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-020"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-020",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0086",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-040"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-040",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0087",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-027"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-027",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0088",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-041"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-041",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0089",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-021"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-021",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0090",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-028"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-028",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0091",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-042"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-042",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0092",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-043"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-043",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0093",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-029"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-029",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0094",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-022"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-022",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0095",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-044"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-044",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0096",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-030"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-030",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0097",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-045"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-045",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0098",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-023"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-023",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0099",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-046"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-046",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0100",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-031"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-031",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0101",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-047"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-047",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0102",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-024"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-024",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0103",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-032"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-032",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0104",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-048"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-048",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0105",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-049"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-049",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0106",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-033"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-033",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0107",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-025"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-025",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0108",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-050"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-050",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0109",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-034"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-034",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0110",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-051"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-051",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0111",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-026"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-026",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0112",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-052"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-052",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0113",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-035"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-035",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0114",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-053"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-053",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0115",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-027"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-027",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0116",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-036"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-036",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0117",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-054"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-054",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0118",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-055"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-055",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0119",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-037"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-037",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0120",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-028"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-028",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0121",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-056"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-056",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0122",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-038"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-038",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0123",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-057"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-057",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0124",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-029"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-029",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0125",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-058"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-058",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0126",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-039"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-039",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0127",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-059"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-059",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0128",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-030"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-030",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0129",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-040"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-040",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0130",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-060"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-060",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0131",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-061"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-061",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0132",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-041"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-041",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0133",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-031"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-031",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0134",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-062"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-062",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0135",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-042"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-042",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0136",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-063"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-063",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0137",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-032"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-032",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0138",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-064"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-064",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0139",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-043"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-043",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0140",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-065"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-065",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0141",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-033"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-033",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0142",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-044"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-044",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0143",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-066"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-066",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0144",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-067"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-067",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0145",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-045"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-045",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0146",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-034"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-034",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0147",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-068"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-068",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0148",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-046"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-046",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0149",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-069"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-069",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0150",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-035"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-035",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0151",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-070"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-070",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0152",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-047"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-047",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0153",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-071"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-071",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0154",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-036"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-036",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0155",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-048"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-048",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0156",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-072"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-072",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0157",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-073"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-073",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0158",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-049"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-049",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0159",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-037"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-037",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0160",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-074"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-074",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0161",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-050"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-050",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0162",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-075"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-075",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0163",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-038"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-038",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0164",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-076"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-076",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0165",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-051"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-051",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0166",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-077"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-077",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0167",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-039"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-039",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0168",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-052"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-052",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0169",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-078"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-078",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0170",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-079"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-079",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0171",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-053"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-053",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0172",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-040"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-040",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0173",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-080"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-080",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0174",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-054"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-054",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0175",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-081"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-081",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0176",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-041"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-041",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0177",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-082"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-082",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0178",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-055"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-055",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0179",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-083"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-083",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0180",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "S41-042"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-042",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0181",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K2-056"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-056",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-BEV-0182",
+      "vehicle_type": "BEV",
+      "trip_ids": [
+        "K1-084"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-084",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0001",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-001"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-001",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0002",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-001"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-001",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0003",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-001"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-001",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0004",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-002"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-002",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0005",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-002"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-002",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0006",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-003"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-003",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0007",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-002"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-002",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0008",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-004"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-004",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0009",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-003"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-003",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0010",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-005"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-005",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0011",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-003"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-003",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0012",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-004"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-004",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0013",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-006"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-006",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0014",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-007"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-007",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0015",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-005"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-005",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0016",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-004"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-004",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0017",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-008"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-008",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0018",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-006"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-006",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0019",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-009"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-009",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0020",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-005"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-005",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0021",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-010"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-010",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0022",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-007"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-007",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0023",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-011"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-011",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0024",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-006"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-006",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0025",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-008"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-008",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0026",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-012"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-012",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0027",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-013"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-013",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0028",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-009"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-009",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0029",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-007"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-007",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0030",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-014"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-014",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0031",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-010"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-010",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0032",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-015"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-015",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0033",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-008"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-008",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0034",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-016"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-016",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0035",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-011"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-011",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0036",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-017"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-017",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0037",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-009"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-009",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0038",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-012"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-012",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0039",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-018"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-018",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0040",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-019"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-019",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0041",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-013"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-013",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0042",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-010"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-010",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0043",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-020"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-020",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0044",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-014"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-014",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0045",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-021"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-021",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0046",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-011"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-011",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0047",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-022"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-022",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0048",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-015"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-015",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0049",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-023"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-023",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0050",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-012"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-012",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0051",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-016"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-016",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0052",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-024"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-024",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0053",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-025"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-025",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0054",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-017"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-017",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0055",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-013"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-013",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0056",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-026"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-026",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0057",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-018"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-018",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0058",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-027"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-027",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0059",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-014"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-014",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0060",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-028"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-028",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0061",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-019"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-019",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0062",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-029"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-029",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0063",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-015"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-015",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0064",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-020"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-020",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0065",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-030"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-030",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0066",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-031"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-031",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0067",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-021"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-021",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0068",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-016"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-016",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0069",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-032"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-032",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0070",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-022"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-022",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0071",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-033"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-033",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0072",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-017"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-017",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0073",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-034"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-034",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0074",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-023"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-023",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0075",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-035"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-035",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0076",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-018"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-018",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0077",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-024"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-024",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0078",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-036"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-036",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0079",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-037"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-037",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0080",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-025"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-025",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0081",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-019"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-019",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0082",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-038"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-038",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0083",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-026"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-026",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0084",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-039"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-039",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0085",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-020"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-020",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0086",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-040"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-040",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0087",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-027"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-027",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0088",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-041"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-041",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0089",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-021"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-021",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0090",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-028"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-028",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0091",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-042"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-042",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0092",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-043"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-043",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0093",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-029"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-029",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0094",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-022"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-022",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0095",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-044"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-044",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0096",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-030"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-030",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0097",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-045"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-045",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0098",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-023"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-023",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0099",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-046"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-046",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0100",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-031"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-031",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0101",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-047"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-047",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0102",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-024"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-024",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0103",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-032"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-032",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0104",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-048"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-048",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0105",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-049"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-049",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0106",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-033"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-033",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0107",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-025"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-025",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0108",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-050"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-050",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0109",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-034"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-034",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0110",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-051"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-051",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0111",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-026"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-026",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0112",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-052"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-052",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0113",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-035"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-035",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0114",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-053"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-053",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0115",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-027"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-027",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0116",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-036"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-036",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0117",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-054"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-054",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0118",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-055"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-055",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0119",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-037"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-037",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0120",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-028"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-028",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0121",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-056"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-056",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0122",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-038"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-038",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0123",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-057"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-057",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0124",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-029"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-029",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0125",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-058"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-058",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0126",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-039"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-039",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0127",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-059"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-059",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0128",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-030"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-030",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0129",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-040"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-040",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0130",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-060"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-060",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0131",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-061"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-061",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0132",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-041"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-041",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0133",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-031"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-031",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0134",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-062"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-062",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0135",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-042"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-042",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0136",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-063"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-063",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0137",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-032"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-032",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0138",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-064"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-064",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0139",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-043"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-043",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0140",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-065"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-065",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0141",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-033"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-033",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0142",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-044"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-044",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0143",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-066"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-066",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0144",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-067"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-067",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0145",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-045"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-045",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0146",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-034"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-034",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0147",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-068"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-068",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0148",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-046"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-046",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0149",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-069"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-069",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0150",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-035"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-035",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0151",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-070"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-070",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0152",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-047"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-047",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0153",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-071"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-071",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0154",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-036"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-036",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0155",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-048"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-048",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0156",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-072"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-072",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0157",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-073"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-073",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0158",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-049"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-049",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0159",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-037"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-037",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0160",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-074"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-074",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0161",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-050"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-050",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0162",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-075"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-075",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0163",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-038"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-038",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0164",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-076"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-076",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0165",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-051"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-051",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0166",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-077"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-077",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0167",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-039"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-039",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0168",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-052"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-052",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0169",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-078"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-078",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0170",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-079"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-079",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0171",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-053"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-053",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0172",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-040"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-040",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0173",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-080"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-080",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0174",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-054"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-054",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0175",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-081"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-081",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0176",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-041"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-041",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0177",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-082"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-082",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0178",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-055"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-055",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0179",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-083"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-083",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0180",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "S41-042"
+      ],
+      "legs": [
+        {
+          "trip_id": "S41-042",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0181",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K2-056"
+      ],
+      "legs": [
+        {
+          "trip_id": "K2-056",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    },
+    {
+      "duty_id": "DUTY-ICE-0182",
+      "vehicle_type": "ICE",
+      "trip_ids": [
+        "K1-084"
+      ],
+      "legs": [
+        {
+          "trip_id": "K1-084",
+          "deadhead_from_prev_min": 0
+        }
+      ]
+    }
+  ],
+  "vehicle_paths": {
+    "DUTY-BEV-0001": [
+      "K1-001"
+    ],
+    "DUTY-BEV-0002": [
+      "K2-001"
+    ],
+    "DUTY-BEV-0003": [
+      "S41-001"
+    ],
+    "DUTY-BEV-0004": [
+      "K1-002"
+    ],
+    "DUTY-BEV-0005": [
+      "K2-002"
+    ],
+    "DUTY-BEV-0006": [
+      "K1-003"
+    ],
+    "DUTY-BEV-0007": [
+      "S41-002"
+    ],
+    "DUTY-BEV-0008": [
+      "K1-004"
+    ],
+    "DUTY-BEV-0009": [
+      "K2-003"
+    ],
+    "DUTY-BEV-0010": [
+      "K1-005"
+    ],
+    "DUTY-BEV-0011": [
+      "S41-003"
+    ],
+    "DUTY-BEV-0012": [
+      "K2-004"
+    ],
+    "DUTY-BEV-0013": [
+      "K1-006"
+    ],
+    "DUTY-BEV-0014": [
+      "K1-007"
+    ],
+    "DUTY-BEV-0015": [
+      "K2-005"
+    ],
+    "DUTY-BEV-0016": [
+      "S41-004"
+    ],
+    "DUTY-BEV-0017": [
+      "K1-008"
+    ],
+    "DUTY-BEV-0018": [
+      "K2-006"
+    ],
+    "DUTY-BEV-0019": [
+      "K1-009"
+    ],
+    "DUTY-BEV-0020": [
+      "S41-005"
+    ],
+    "DUTY-BEV-0021": [
+      "K1-010"
+    ],
+    "DUTY-BEV-0022": [
+      "K2-007"
+    ],
+    "DUTY-BEV-0023": [
+      "K1-011"
+    ],
+    "DUTY-BEV-0024": [
+      "S41-006"
+    ],
+    "DUTY-BEV-0025": [
+      "K2-008"
+    ],
+    "DUTY-BEV-0026": [
+      "K1-012"
+    ],
+    "DUTY-BEV-0027": [
+      "K1-013"
+    ],
+    "DUTY-BEV-0028": [
+      "K2-009"
+    ],
+    "DUTY-BEV-0029": [
+      "S41-007"
+    ],
+    "DUTY-BEV-0030": [
+      "K1-014"
+    ],
+    "DUTY-BEV-0031": [
+      "K2-010"
+    ],
+    "DUTY-BEV-0032": [
+      "K1-015"
+    ],
+    "DUTY-BEV-0033": [
+      "S41-008"
+    ],
+    "DUTY-BEV-0034": [
+      "K1-016"
+    ],
+    "DUTY-BEV-0035": [
+      "K2-011"
+    ],
+    "DUTY-BEV-0036": [
+      "K1-017"
+    ],
+    "DUTY-BEV-0037": [
+      "S41-009"
+    ],
+    "DUTY-BEV-0038": [
+      "K2-012"
+    ],
+    "DUTY-BEV-0039": [
+      "K1-018"
+    ],
+    "DUTY-BEV-0040": [
+      "K1-019"
+    ],
+    "DUTY-BEV-0041": [
+      "K2-013"
+    ],
+    "DUTY-BEV-0042": [
+      "S41-010"
+    ],
+    "DUTY-BEV-0043": [
+      "K1-020"
+    ],
+    "DUTY-BEV-0044": [
+      "K2-014"
+    ],
+    "DUTY-BEV-0045": [
+      "K1-021"
+    ],
+    "DUTY-BEV-0046": [
+      "S41-011"
+    ],
+    "DUTY-BEV-0047": [
+      "K1-022"
+    ],
+    "DUTY-BEV-0048": [
+      "K2-015"
+    ],
+    "DUTY-BEV-0049": [
+      "K1-023"
+    ],
+    "DUTY-BEV-0050": [
+      "S41-012"
+    ],
+    "DUTY-BEV-0051": [
+      "K2-016"
+    ],
+    "DUTY-BEV-0052": [
+      "K1-024"
+    ],
+    "DUTY-BEV-0053": [
+      "K1-025"
+    ],
+    "DUTY-BEV-0054": [
+      "K2-017"
+    ],
+    "DUTY-BEV-0055": [
+      "S41-013"
+    ],
+    "DUTY-BEV-0056": [
+      "K1-026"
+    ],
+    "DUTY-BEV-0057": [
+      "K2-018"
+    ],
+    "DUTY-BEV-0058": [
+      "K1-027"
+    ],
+    "DUTY-BEV-0059": [
+      "S41-014"
+    ],
+    "DUTY-BEV-0060": [
+      "K1-028"
+    ],
+    "DUTY-BEV-0061": [
+      "K2-019"
+    ],
+    "DUTY-BEV-0062": [
+      "K1-029"
+    ],
+    "DUTY-BEV-0063": [
+      "S41-015"
+    ],
+    "DUTY-BEV-0064": [
+      "K2-020"
+    ],
+    "DUTY-BEV-0065": [
+      "K1-030"
+    ],
+    "DUTY-BEV-0066": [
+      "K1-031"
+    ],
+    "DUTY-BEV-0067": [
+      "K2-021"
+    ],
+    "DUTY-BEV-0068": [
+      "S41-016"
+    ],
+    "DUTY-BEV-0069": [
+      "K1-032"
+    ],
+    "DUTY-BEV-0070": [
+      "K2-022"
+    ],
+    "DUTY-BEV-0071": [
+      "K1-033"
+    ],
+    "DUTY-BEV-0072": [
+      "S41-017"
+    ],
+    "DUTY-BEV-0073": [
+      "K1-034"
+    ],
+    "DUTY-BEV-0074": [
+      "K2-023"
+    ],
+    "DUTY-BEV-0075": [
+      "K1-035"
+    ],
+    "DUTY-BEV-0076": [
+      "S41-018"
+    ],
+    "DUTY-BEV-0077": [
+      "K2-024"
+    ],
+    "DUTY-BEV-0078": [
+      "K1-036"
+    ],
+    "DUTY-BEV-0079": [
+      "K1-037"
+    ],
+    "DUTY-BEV-0080": [
+      "K2-025"
+    ],
+    "DUTY-BEV-0081": [
+      "S41-019"
+    ],
+    "DUTY-BEV-0082": [
+      "K1-038"
+    ],
+    "DUTY-BEV-0083": [
+      "K2-026"
+    ],
+    "DUTY-BEV-0084": [
+      "K1-039"
+    ],
+    "DUTY-BEV-0085": [
+      "S41-020"
+    ],
+    "DUTY-BEV-0086": [
+      "K1-040"
+    ],
+    "DUTY-BEV-0087": [
+      "K2-027"
+    ],
+    "DUTY-BEV-0088": [
+      "K1-041"
+    ],
+    "DUTY-BEV-0089": [
+      "S41-021"
+    ],
+    "DUTY-BEV-0090": [
+      "K2-028"
+    ],
+    "DUTY-BEV-0091": [
+      "K1-042"
+    ],
+    "DUTY-BEV-0092": [
+      "K1-043"
+    ],
+    "DUTY-BEV-0093": [
+      "K2-029"
+    ],
+    "DUTY-BEV-0094": [
+      "S41-022"
+    ],
+    "DUTY-BEV-0095": [
+      "K1-044"
+    ],
+    "DUTY-BEV-0096": [
+      "K2-030"
+    ],
+    "DUTY-BEV-0097": [
+      "K1-045"
+    ],
+    "DUTY-BEV-0098": [
+      "S41-023"
+    ],
+    "DUTY-BEV-0099": [
+      "K1-046"
+    ],
+    "DUTY-BEV-0100": [
+      "K2-031"
+    ],
+    "DUTY-BEV-0101": [
+      "K1-047"
+    ],
+    "DUTY-BEV-0102": [
+      "S41-024"
+    ],
+    "DUTY-BEV-0103": [
+      "K2-032"
+    ],
+    "DUTY-BEV-0104": [
+      "K1-048"
+    ],
+    "DUTY-BEV-0105": [
+      "K1-049"
+    ],
+    "DUTY-BEV-0106": [
+      "K2-033"
+    ],
+    "DUTY-BEV-0107": [
+      "S41-025"
+    ],
+    "DUTY-BEV-0108": [
+      "K1-050"
+    ],
+    "DUTY-BEV-0109": [
+      "K2-034"
+    ],
+    "DUTY-BEV-0110": [
+      "K1-051"
+    ],
+    "DUTY-BEV-0111": [
+      "S41-026"
+    ],
+    "DUTY-BEV-0112": [
+      "K1-052"
+    ],
+    "DUTY-BEV-0113": [
+      "K2-035"
+    ],
+    "DUTY-BEV-0114": [
+      "K1-053"
+    ],
+    "DUTY-BEV-0115": [
+      "S41-027"
+    ],
+    "DUTY-BEV-0116": [
+      "K2-036"
+    ],
+    "DUTY-BEV-0117": [
+      "K1-054"
+    ],
+    "DUTY-BEV-0118": [
+      "K1-055"
+    ],
+    "DUTY-BEV-0119": [
+      "K2-037"
+    ],
+    "DUTY-BEV-0120": [
+      "S41-028"
+    ],
+    "DUTY-BEV-0121": [
+      "K1-056"
+    ],
+    "DUTY-BEV-0122": [
+      "K2-038"
+    ],
+    "DUTY-BEV-0123": [
+      "K1-057"
+    ],
+    "DUTY-BEV-0124": [
+      "S41-029"
+    ],
+    "DUTY-BEV-0125": [
+      "K1-058"
+    ],
+    "DUTY-BEV-0126": [
+      "K2-039"
+    ],
+    "DUTY-BEV-0127": [
+      "K1-059"
+    ],
+    "DUTY-BEV-0128": [
+      "S41-030"
+    ],
+    "DUTY-BEV-0129": [
+      "K2-040"
+    ],
+    "DUTY-BEV-0130": [
+      "K1-060"
+    ],
+    "DUTY-BEV-0131": [
+      "K1-061"
+    ],
+    "DUTY-BEV-0132": [
+      "K2-041"
+    ],
+    "DUTY-BEV-0133": [
+      "S41-031"
+    ],
+    "DUTY-BEV-0134": [
+      "K1-062"
+    ],
+    "DUTY-BEV-0135": [
+      "K2-042"
+    ],
+    "DUTY-BEV-0136": [
+      "K1-063"
+    ],
+    "DUTY-BEV-0137": [
+      "S41-032"
+    ],
+    "DUTY-BEV-0138": [
+      "K1-064"
+    ],
+    "DUTY-BEV-0139": [
+      "K2-043"
+    ],
+    "DUTY-BEV-0140": [
+      "K1-065"
+    ],
+    "DUTY-BEV-0141": [
+      "S41-033"
+    ],
+    "DUTY-BEV-0142": [
+      "K2-044"
+    ],
+    "DUTY-BEV-0143": [
+      "K1-066"
+    ],
+    "DUTY-BEV-0144": [
+      "K1-067"
+    ],
+    "DUTY-BEV-0145": [
+      "K2-045"
+    ],
+    "DUTY-BEV-0146": [
+      "S41-034"
+    ],
+    "DUTY-BEV-0147": [
+      "K1-068"
+    ],
+    "DUTY-BEV-0148": [
+      "K2-046"
+    ],
+    "DUTY-BEV-0149": [
+      "K1-069"
+    ],
+    "DUTY-BEV-0150": [
+      "S41-035"
+    ],
+    "DUTY-BEV-0151": [
+      "K1-070"
+    ],
+    "DUTY-BEV-0152": [
+      "K2-047"
+    ],
+    "DUTY-BEV-0153": [
+      "K1-071"
+    ],
+    "DUTY-BEV-0154": [
+      "S41-036"
+    ],
+    "DUTY-BEV-0155": [
+      "K2-048"
+    ],
+    "DUTY-BEV-0156": [
+      "K1-072"
+    ],
+    "DUTY-BEV-0157": [
+      "K1-073"
+    ],
+    "DUTY-BEV-0158": [
+      "K2-049"
+    ],
+    "DUTY-BEV-0159": [
+      "S41-037"
+    ],
+    "DUTY-BEV-0160": [
+      "K1-074"
+    ],
+    "DUTY-BEV-0161": [
+      "K2-050"
+    ],
+    "DUTY-BEV-0162": [
+      "K1-075"
+    ],
+    "DUTY-BEV-0163": [
+      "S41-038"
+    ],
+    "DUTY-BEV-0164": [
+      "K1-076"
+    ],
+    "DUTY-BEV-0165": [
+      "K2-051"
+    ],
+    "DUTY-BEV-0166": [
+      "K1-077"
+    ],
+    "DUTY-BEV-0167": [
+      "S41-039"
+    ],
+    "DUTY-BEV-0168": [
+      "K2-052"
+    ],
+    "DUTY-BEV-0169": [
+      "K1-078"
+    ],
+    "DUTY-BEV-0170": [
+      "K1-079"
+    ],
+    "DUTY-BEV-0171": [
+      "K2-053"
+    ],
+    "DUTY-BEV-0172": [
+      "S41-040"
+    ],
+    "DUTY-BEV-0173": [
+      "K1-080"
+    ],
+    "DUTY-BEV-0174": [
+      "K2-054"
+    ],
+    "DUTY-BEV-0175": [
+      "K1-081"
+    ],
+    "DUTY-BEV-0176": [
+      "S41-041"
+    ],
+    "DUTY-BEV-0177": [
+      "K1-082"
+    ],
+    "DUTY-BEV-0178": [
+      "K2-055"
+    ],
+    "DUTY-BEV-0179": [
+      "K1-083"
+    ],
+    "DUTY-BEV-0180": [
+      "S41-042"
+    ],
+    "DUTY-BEV-0181": [
+      "K2-056"
+    ],
+    "DUTY-BEV-0182": [
+      "K1-084"
+    ],
+    "DUTY-ICE-0001": [
+      "K1-001"
+    ],
+    "DUTY-ICE-0002": [
+      "K2-001"
+    ],
+    "DUTY-ICE-0003": [
+      "S41-001"
+    ],
+    "DUTY-ICE-0004": [
+      "K1-002"
+    ],
+    "DUTY-ICE-0005": [
+      "K2-002"
+    ],
+    "DUTY-ICE-0006": [
+      "K1-003"
+    ],
+    "DUTY-ICE-0007": [
+      "S41-002"
+    ],
+    "DUTY-ICE-0008": [
+      "K1-004"
+    ],
+    "DUTY-ICE-0009": [
+      "K2-003"
+    ],
+    "DUTY-ICE-0010": [
+      "K1-005"
+    ],
+    "DUTY-ICE-0011": [
+      "S41-003"
+    ],
+    "DUTY-ICE-0012": [
+      "K2-004"
+    ],
+    "DUTY-ICE-0013": [
+      "K1-006"
+    ],
+    "DUTY-ICE-0014": [
+      "K1-007"
+    ],
+    "DUTY-ICE-0015": [
+      "K2-005"
+    ],
+    "DUTY-ICE-0016": [
+      "S41-004"
+    ],
+    "DUTY-ICE-0017": [
+      "K1-008"
+    ],
+    "DUTY-ICE-0018": [
+      "K2-006"
+    ],
+    "DUTY-ICE-0019": [
+      "K1-009"
+    ],
+    "DUTY-ICE-0020": [
+      "S41-005"
+    ],
+    "DUTY-ICE-0021": [
+      "K1-010"
+    ],
+    "DUTY-ICE-0022": [
+      "K2-007"
+    ],
+    "DUTY-ICE-0023": [
+      "K1-011"
+    ],
+    "DUTY-ICE-0024": [
+      "S41-006"
+    ],
+    "DUTY-ICE-0025": [
+      "K2-008"
+    ],
+    "DUTY-ICE-0026": [
+      "K1-012"
+    ],
+    "DUTY-ICE-0027": [
+      "K1-013"
+    ],
+    "DUTY-ICE-0028": [
+      "K2-009"
+    ],
+    "DUTY-ICE-0029": [
+      "S41-007"
+    ],
+    "DUTY-ICE-0030": [
+      "K1-014"
+    ],
+    "DUTY-ICE-0031": [
+      "K2-010"
+    ],
+    "DUTY-ICE-0032": [
+      "K1-015"
+    ],
+    "DUTY-ICE-0033": [
+      "S41-008"
+    ],
+    "DUTY-ICE-0034": [
+      "K1-016"
+    ],
+    "DUTY-ICE-0035": [
+      "K2-011"
+    ],
+    "DUTY-ICE-0036": [
+      "K1-017"
+    ],
+    "DUTY-ICE-0037": [
+      "S41-009"
+    ],
+    "DUTY-ICE-0038": [
+      "K2-012"
+    ],
+    "DUTY-ICE-0039": [
+      "K1-018"
+    ],
+    "DUTY-ICE-0040": [
+      "K1-019"
+    ],
+    "DUTY-ICE-0041": [
+      "K2-013"
+    ],
+    "DUTY-ICE-0042": [
+      "S41-010"
+    ],
+    "DUTY-ICE-0043": [
+      "K1-020"
+    ],
+    "DUTY-ICE-0044": [
+      "K2-014"
+    ],
+    "DUTY-ICE-0045": [
+      "K1-021"
+    ],
+    "DUTY-ICE-0046": [
+      "S41-011"
+    ],
+    "DUTY-ICE-0047": [
+      "K1-022"
+    ],
+    "DUTY-ICE-0048": [
+      "K2-015"
+    ],
+    "DUTY-ICE-0049": [
+      "K1-023"
+    ],
+    "DUTY-ICE-0050": [
+      "S41-012"
+    ],
+    "DUTY-ICE-0051": [
+      "K2-016"
+    ],
+    "DUTY-ICE-0052": [
+      "K1-024"
+    ],
+    "DUTY-ICE-0053": [
+      "K1-025"
+    ],
+    "DUTY-ICE-0054": [
+      "K2-017"
+    ],
+    "DUTY-ICE-0055": [
+      "S41-013"
+    ],
+    "DUTY-ICE-0056": [
+      "K1-026"
+    ],
+    "DUTY-ICE-0057": [
+      "K2-018"
+    ],
+    "DUTY-ICE-0058": [
+      "K1-027"
+    ],
+    "DUTY-ICE-0059": [
+      "S41-014"
+    ],
+    "DUTY-ICE-0060": [
+      "K1-028"
+    ],
+    "DUTY-ICE-0061": [
+      "K2-019"
+    ],
+    "DUTY-ICE-0062": [
+      "K1-029"
+    ],
+    "DUTY-ICE-0063": [
+      "S41-015"
+    ],
+    "DUTY-ICE-0064": [
+      "K2-020"
+    ],
+    "DUTY-ICE-0065": [
+      "K1-030"
+    ],
+    "DUTY-ICE-0066": [
+      "K1-031"
+    ],
+    "DUTY-ICE-0067": [
+      "K2-021"
+    ],
+    "DUTY-ICE-0068": [
+      "S41-016"
+    ],
+    "DUTY-ICE-0069": [
+      "K1-032"
+    ],
+    "DUTY-ICE-0070": [
+      "K2-022"
+    ],
+    "DUTY-ICE-0071": [
+      "K1-033"
+    ],
+    "DUTY-ICE-0072": [
+      "S41-017"
+    ],
+    "DUTY-ICE-0073": [
+      "K1-034"
+    ],
+    "DUTY-ICE-0074": [
+      "K2-023"
+    ],
+    "DUTY-ICE-0075": [
+      "K1-035"
+    ],
+    "DUTY-ICE-0076": [
+      "S41-018"
+    ],
+    "DUTY-ICE-0077": [
+      "K2-024"
+    ],
+    "DUTY-ICE-0078": [
+      "K1-036"
+    ],
+    "DUTY-ICE-0079": [
+      "K1-037"
+    ],
+    "DUTY-ICE-0080": [
+      "K2-025"
+    ],
+    "DUTY-ICE-0081": [
+      "S41-019"
+    ],
+    "DUTY-ICE-0082": [
+      "K1-038"
+    ],
+    "DUTY-ICE-0083": [
+      "K2-026"
+    ],
+    "DUTY-ICE-0084": [
+      "K1-039"
+    ],
+    "DUTY-ICE-0085": [
+      "S41-020"
+    ],
+    "DUTY-ICE-0086": [
+      "K1-040"
+    ],
+    "DUTY-ICE-0087": [
+      "K2-027"
+    ],
+    "DUTY-ICE-0088": [
+      "K1-041"
+    ],
+    "DUTY-ICE-0089": [
+      "S41-021"
+    ],
+    "DUTY-ICE-0090": [
+      "K2-028"
+    ],
+    "DUTY-ICE-0091": [
+      "K1-042"
+    ],
+    "DUTY-ICE-0092": [
+      "K1-043"
+    ],
+    "DUTY-ICE-0093": [
+      "K2-029"
+    ],
+    "DUTY-ICE-0094": [
+      "S41-022"
+    ],
+    "DUTY-ICE-0095": [
+      "K1-044"
+    ],
+    "DUTY-ICE-0096": [
+      "K2-030"
+    ],
+    "DUTY-ICE-0097": [
+      "K1-045"
+    ],
+    "DUTY-ICE-0098": [
+      "S41-023"
+    ],
+    "DUTY-ICE-0099": [
+      "K1-046"
+    ],
+    "DUTY-ICE-0100": [
+      "K2-031"
+    ],
+    "DUTY-ICE-0101": [
+      "K1-047"
+    ],
+    "DUTY-ICE-0102": [
+      "S41-024"
+    ],
+    "DUTY-ICE-0103": [
+      "K2-032"
+    ],
+    "DUTY-ICE-0104": [
+      "K1-048"
+    ],
+    "DUTY-ICE-0105": [
+      "K1-049"
+    ],
+    "DUTY-ICE-0106": [
+      "K2-033"
+    ],
+    "DUTY-ICE-0107": [
+      "S41-025"
+    ],
+    "DUTY-ICE-0108": [
+      "K1-050"
+    ],
+    "DUTY-ICE-0109": [
+      "K2-034"
+    ],
+    "DUTY-ICE-0110": [
+      "K1-051"
+    ],
+    "DUTY-ICE-0111": [
+      "S41-026"
+    ],
+    "DUTY-ICE-0112": [
+      "K1-052"
+    ],
+    "DUTY-ICE-0113": [
+      "K2-035"
+    ],
+    "DUTY-ICE-0114": [
+      "K1-053"
+    ],
+    "DUTY-ICE-0115": [
+      "S41-027"
+    ],
+    "DUTY-ICE-0116": [
+      "K2-036"
+    ],
+    "DUTY-ICE-0117": [
+      "K1-054"
+    ],
+    "DUTY-ICE-0118": [
+      "K1-055"
+    ],
+    "DUTY-ICE-0119": [
+      "K2-037"
+    ],
+    "DUTY-ICE-0120": [
+      "S41-028"
+    ],
+    "DUTY-ICE-0121": [
+      "K1-056"
+    ],
+    "DUTY-ICE-0122": [
+      "K2-038"
+    ],
+    "DUTY-ICE-0123": [
+      "K1-057"
+    ],
+    "DUTY-ICE-0124": [
+      "S41-029"
+    ],
+    "DUTY-ICE-0125": [
+      "K1-058"
+    ],
+    "DUTY-ICE-0126": [
+      "K2-039"
+    ],
+    "DUTY-ICE-0127": [
+      "K1-059"
+    ],
+    "DUTY-ICE-0128": [
+      "S41-030"
+    ],
+    "DUTY-ICE-0129": [
+      "K2-040"
+    ],
+    "DUTY-ICE-0130": [
+      "K1-060"
+    ],
+    "DUTY-ICE-0131": [
+      "K1-061"
+    ],
+    "DUTY-ICE-0132": [
+      "K2-041"
+    ],
+    "DUTY-ICE-0133": [
+      "S41-031"
+    ],
+    "DUTY-ICE-0134": [
+      "K1-062"
+    ],
+    "DUTY-ICE-0135": [
+      "K2-042"
+    ],
+    "DUTY-ICE-0136": [
+      "K1-063"
+    ],
+    "DUTY-ICE-0137": [
+      "S41-032"
+    ],
+    "DUTY-ICE-0138": [
+      "K1-064"
+    ],
+    "DUTY-ICE-0139": [
+      "K2-043"
+    ],
+    "DUTY-ICE-0140": [
+      "K1-065"
+    ],
+    "DUTY-ICE-0141": [
+      "S41-033"
+    ],
+    "DUTY-ICE-0142": [
+      "K2-044"
+    ],
+    "DUTY-ICE-0143": [
+      "K1-066"
+    ],
+    "DUTY-ICE-0144": [
+      "K1-067"
+    ],
+    "DUTY-ICE-0145": [
+      "K2-045"
+    ],
+    "DUTY-ICE-0146": [
+      "S41-034"
+    ],
+    "DUTY-ICE-0147": [
+      "K1-068"
+    ],
+    "DUTY-ICE-0148": [
+      "K2-046"
+    ],
+    "DUTY-ICE-0149": [
+      "K1-069"
+    ],
+    "DUTY-ICE-0150": [
+      "S41-035"
+    ],
+    "DUTY-ICE-0151": [
+      "K1-070"
+    ],
+    "DUTY-ICE-0152": [
+      "K2-047"
+    ],
+    "DUTY-ICE-0153": [
+      "K1-071"
+    ],
+    "DUTY-ICE-0154": [
+      "S41-036"
+    ],
+    "DUTY-ICE-0155": [
+      "K2-048"
+    ],
+    "DUTY-ICE-0156": [
+      "K1-072"
+    ],
+    "DUTY-ICE-0157": [
+      "K1-073"
+    ],
+    "DUTY-ICE-0158": [
+      "K2-049"
+    ],
+    "DUTY-ICE-0159": [
+      "S41-037"
+    ],
+    "DUTY-ICE-0160": [
+      "K1-074"
+    ],
+    "DUTY-ICE-0161": [
+      "K2-050"
+    ],
+    "DUTY-ICE-0162": [
+      "K1-075"
+    ],
+    "DUTY-ICE-0163": [
+      "S41-038"
+    ],
+    "DUTY-ICE-0164": [
+      "K1-076"
+    ],
+    "DUTY-ICE-0165": [
+      "K2-051"
+    ],
+    "DUTY-ICE-0166": [
+      "K1-077"
+    ],
+    "DUTY-ICE-0167": [
+      "S41-039"
+    ],
+    "DUTY-ICE-0168": [
+      "K2-052"
+    ],
+    "DUTY-ICE-0169": [
+      "K1-078"
+    ],
+    "DUTY-ICE-0170": [
+      "K1-079"
+    ],
+    "DUTY-ICE-0171": [
+      "K2-053"
+    ],
+    "DUTY-ICE-0172": [
+      "S41-040"
+    ],
+    "DUTY-ICE-0173": [
+      "K1-080"
+    ],
+    "DUTY-ICE-0174": [
+      "K2-054"
+    ],
+    "DUTY-ICE-0175": [
+      "K1-081"
+    ],
+    "DUTY-ICE-0176": [
+      "S41-041"
+    ],
+    "DUTY-ICE-0177": [
+      "K1-082"
+    ],
+    "DUTY-ICE-0178": [
+      "K2-055"
+    ],
+    "DUTY-ICE-0179": [
+      "K1-083"
+    ],
+    "DUTY-ICE-0180": [
+      "S41-042"
+    ],
+    "DUTY-ICE-0181": [
+      "K2-056"
+    ],
+    "DUTY-ICE-0182": [
+      "K1-084"
+    ]
+  },
+  "charging_schedule": [],
+  "served_trip_ids": [
+    "K1-001",
+    "K1-002",
+    "K1-003",
+    "K1-004",
+    "K1-005",
+    "K1-006",
+    "K1-007",
+    "K1-008",
+    "K1-009",
+    "K1-010",
+    "K1-011",
+    "K1-012",
+    "K1-013",
+    "K1-014",
+    "K1-015",
+    "K1-016",
+    "K1-017",
+    "K1-018",
+    "K1-019",
+    "K1-020",
+    "K1-021",
+    "K1-022",
+    "K1-023",
+    "K1-024",
+    "K1-025",
+    "K1-026",
+    "K1-027",
+    "K1-028",
+    "K1-029",
+    "K1-030",
+    "K1-031",
+    "K1-032",
+    "K1-033",
+    "K1-034",
+    "K1-035",
+    "K1-036",
+    "K1-037",
+    "K1-038",
+    "K1-039",
+    "K1-040",
+    "K1-041",
+    "K1-042",
+    "K1-043",
+    "K1-044",
+    "K1-045",
+    "K1-046",
+    "K1-047",
+    "K1-048",
+    "K1-049",
+    "K1-050",
+    "K1-051",
+    "K1-052",
+    "K1-053",
+    "K1-054",
+    "K1-055",
+    "K1-056",
+    "K1-057",
+    "K1-058",
+    "K1-059",
+    "K1-060",
+    "K1-061",
+    "K1-062",
+    "K1-063",
+    "K1-064",
+    "K1-065",
+    "K1-066",
+    "K1-067",
+    "K1-068",
+    "K1-069",
+    "K1-070",
+    "K1-071",
+    "K1-072",
+    "K1-073",
+    "K1-074",
+    "K1-075",
+    "K1-076",
+    "K1-077",
+    "K1-078",
+    "K1-079",
+    "K1-080",
+    "K1-081",
+    "K1-082",
+    "K1-083",
+    "K1-084",
+    "K2-001",
+    "K2-002",
+    "K2-003",
+    "K2-004",
+    "K2-005",
+    "K2-006",
+    "K2-007",
+    "K2-008",
+    "K2-009",
+    "K2-010",
+    "K2-011",
+    "K2-012",
+    "K2-013",
+    "K2-014",
+    "K2-015",
+    "K2-016",
+    "K2-017",
+    "K2-018",
+    "K2-019",
+    "K2-020",
+    "K2-021",
+    "K2-022",
+    "K2-023",
+    "K2-024",
+    "K2-025",
+    "K2-026",
+    "K2-027",
+    "K2-028",
+    "K2-029",
+    "K2-030",
+    "K2-031",
+    "K2-032",
+    "K2-033",
+    "K2-034",
+    "K2-035",
+    "K2-036",
+    "K2-037",
+    "K2-038",
+    "K2-039",
+    "K2-040",
+    "K2-041",
+    "K2-042",
+    "K2-043",
+    "K2-044",
+    "K2-045",
+    "K2-046",
+    "K2-047",
+    "K2-048",
+    "K2-049",
+    "K2-050",
+    "K2-051",
+    "K2-052",
+    "K2-053",
+    "K2-054",
+    "K2-055",
+    "K2-056",
+    "S41-001",
+    "S41-002",
+    "S41-003",
+    "S41-004",
+    "S41-005",
+    "S41-006",
+    "S41-007",
+    "S41-008",
+    "S41-009",
+    "S41-010",
+    "S41-011",
+    "S41-012",
+    "S41-013",
+    "S41-014",
+    "S41-015",
+    "S41-016",
+    "S41-017",
+    "S41-018",
+    "S41-019",
+    "S41-020",
+    "S41-021",
+    "S41-022",
+    "S41-023",
+    "S41-024",
+    "S41-025",
+    "S41-026",
+    "S41-027",
+    "S41-028",
+    "S41-029",
+    "S41-030",
+    "S41-031",
+    "S41-032",
+    "S41-033",
+    "S41-034",
+    "S41-035",
+    "S41-036",
+    "S41-037",
+    "S41-038",
+    "S41-039",
+    "S41-040",
+    "S41-041",
+    "S41-042"
+  ],
+  "unserved_trip_ids": [],
+  "metadata": {
+    "source": "dispatch_greedy_baseline"
+  }
+}

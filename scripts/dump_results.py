@@ -111,6 +111,9 @@ def summarize(payload: dict) -> dict:
 def main():
     engine = OptimizationEngine()
     results = []
+    import os
+    out_dir = "artifacts/dump_results"
+    os.makedirs(out_dir, exist_ok=True)
     for label, opt_mode, tl in _SOLVER_SPECS:
         for obj_mode in _OBJ_MODES:
             problem = _build(obj_mode)
@@ -123,6 +126,10 @@ def main():
             header = f"[{label.upper()} / {obj_mode}]"
             print(header)
             print(json.dumps(summary, indent=2, ensure_ascii=False))
+            # write full payload to file for deeper inspection
+            fname = f"{label}_{obj_mode}.json"
+            with open(os.path.join(out_dir, fname), "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, ensure_ascii=False, indent=2)
             results.append({"label": label, "obj_mode": obj_mode, "summary": summary})
 
 
