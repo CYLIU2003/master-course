@@ -3,13 +3,20 @@ import { useTranslation } from "react-i18next";
 import { fetchJson } from "@/api/client";
 import {
   useCalendar,
+  useCatalogDepotRoutes,
+  useCatalogDepots,
   useDepots,
   useDispatchScope,
   useRoutes,
   useUpdateDispatchScope,
 } from "@/hooks";
 import { EmptyState, LoadingBlock } from "@/features/common";
-import type { Depot, DispatchScope, Route } from "@/types";
+import type {
+  CatalogDepotSummary,
+  CatalogRouteSummary,
+  DispatchScope,
+  Route,
+} from "@/types";
 
 interface DispatchScopePanelProps {
   scenarioId: string;
@@ -45,21 +52,14 @@ export function DispatchScopePanel({
   const [subsetExport, setSubsetExport] = useState<DispatchSubsetExportResponse | null>(null);
   const [subsetExportError, setSubsetExportError] = useState<string | null>(null);
   const { data: scope, isLoading: loadingScope } = useDispatchScope(scenarioId);
-  const { data: depotsData, isLoading: loadingDepots } = useDepots(scenarioId);
   const scopeDepotIds =
     scope?.depotSelection?.depotIds && scope.depotSelection.depotIds.length > 0
       ? scope.depotSelection.depotIds
       : scope?.depotId
         ? [scope.depotId]
         : [];
-  const { data: routesData, isLoading: loadingRoutes } = useRoutes(scenarioId, {
-    enabled: scopeDepotIds.length > 0,
-  });
   const { data: calendarData, isLoading: loadingCalendar } = useCalendar(scenarioId);
   const updateScope = useUpdateDispatchScope(scenarioId);
-
-  const depots: Depot[] = depotsData?.items ?? [];
-  const routes: Route[] = routesData?.items ?? [];
   const normalizedScope = useMemo<NormalizedDispatchScope>(
     () => normalizeScope(scope),
     [scope],
@@ -67,6 +67,29 @@ export function DispatchScopePanel({
 
   const selectedDepotIds = normalizedScope.depotSelection.depotIds;
   const selectedDepotId = normalizedScope.depotSelection.primaryDepotId;
+  const selectedServiceId = normalizedScope.serviceSelection.serviceIds[0] ?? "WEEKDAY";
+  const calendarType = serviceIdToCalendarType(selectedServiceId);
+  const {
+    data: catalogDepots = [],
+    isLoading: loadingCatalogDepots,
+    error: catalogDepotsError,
+  } = useCatalogDepots(calendarType);
+  const {
+    data: catalogRoutes = [],
+    isLoading: loadingCatalogRoutes,
+    error: catalogRoutesError,
+  } = useCatalogDepotRoutes(selectedDepotId ?? "", {
+    enabled: Boolean(selectedDepotId),
+    includeDepotMoves: true,
+  });
+  const { data: depotsData, isLoading: loadingDepots } = useDepots(scenarioId);
+  const { data: routesData, isLoading: loadingRoutes } = useRoutes(scenarioId, {
+    enabled: scopeDepotIds.length > 0 && Boolean(catalogRoutesError),
+  });
+
+  const depots: Array<CatalogDepotSummary | { id: string; name: string }> =
+    catalogDepotsError ? (depotsData?.items ?? []) : catalogDepots;
+  const routes: Route[] = routesData?.items ?? [];
   const serviceOptions =
     calendarData?.items?.map((entry) => ({
       value: entry.service_id,
@@ -79,17 +102,9 @@ export function DispatchScopePanel({
     ];
   const effectiveRouteIds = new Set(normalizedScope.effectiveRouteIds);
   const candidateRouteIds = new Set(normalizedScope.candidateRouteIds);
-  const effectiveRouteFamilyIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          routes
-            .filter((route) => effectiveRouteIds.has(route.id))
-            .map((route) => route.routeFamilyId ?? route.id),
-        ),
-      ),
-    [effectiveRouteIds, routes],
-  );
+  const effectiveRouteFamilyCodes = new Set(normalizedScope.effectiveRouteFamilyCodes);
+  const candidateRouteFamilyCodes = new Set(normalizedScope.candidateRouteFamilyCodes);
+  const effectiveRouteFamilyIds = Array.from(effectiveRouteFamilyCodes);
 
   const routeRows = useMemo(
     () =>
@@ -101,14 +116,53 @@ export function DispatchScopePanel({
     [candidateRouteIds, effectiveRouteIds, routes],
   );
 
-  if (loadingScope || loadingDepots || loadingRoutes || loadingCalendar) {
+  const catalogRouteRows = useMemo(
+    () =>
+      catalogRoutes
+        .map((route) => {
+          const filteredPatterns = route.pattern_summary.filter((pattern) => {
+            if (!tripSelectionEnabled(normalizedScope.tripSelection.includeDepotMoves, pattern.patternType)) {
+              return false;
+            }
+            if (!normalizedScope.tripSelection.includeShortTurn && pattern.patternType === "short_turn") {
+              return false;
+            }
+            return true;
+          });
+          if (filteredPatterns.length === 0) {
+            return null;
+          }
+          return {
+            route,
+            filteredPatterns,
+            isCandidate: candidateRouteFamilyCodes.has(route.route_code),
+            isSelected: effectiveRouteFamilyCodes.has(route.route_code),
+            tripCount: countRouteSummaryForService(route, selectedServiceId),
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null),
+    [
+      catalogRoutes,
+      candidateRouteFamilyCodes,
+      effectiveRouteFamilyCodes,
+      normalizedScope.tripSelection.includeDepotMoves,
+      normalizedScope.tripSelection.includeShortTurn,
+      selectedServiceId,
+    ],
+  );
+
+  if (
+    loadingScope
+    || loadingCalendar
+    || (loadingCatalogDepots && loadingDepots)
+    || (selectedDepotId && loadingCatalogRoutes && loadingRoutes)
+  ) {
     return <LoadingBlock message={t("dispatch.scope_loading", "実行条件を読み込み中...")} />;
   }
 
   const selectedDepotNames = depots
-    .filter((depot) => selectedDepotIds.includes(depot.id))
-    .map((depot) => depot.name);
-  const selectedServiceId = normalizedScope.serviceSelection.serviceIds[0] ?? "WEEKDAY";
+    .filter((depot) => selectedDepotIds.includes("depot_id" in depot ? depot.depot_id : depot.id))
+    .map((depot) => ("depot_id" in depot ? depot.name : depot.name));
   const selectedServiceLabel =
     serviceOptions.find((option) => option.value === selectedServiceId)?.label ??
     selectedServiceId;
@@ -227,6 +281,37 @@ export function DispatchScopePanel({
         mode: "refine",
         includeRouteIds: Array.from(includeRouteIds),
         excludeRouteIds: Array.from(excludeRouteIds),
+        includeRouteFamilyCodes: normalizedScope.routeSelection.includeRouteFamilyCodes,
+        excludeRouteFamilyCodes: normalizedScope.routeSelection.excludeRouteFamilyCodes,
+      },
+    });
+  };
+
+  const handleCatalogRouteToggle = (routeFamilyCode: string) => {
+    const includeRouteFamilyCodes = new Set(normalizedScope.routeSelection.includeRouteFamilyCodes);
+    const excludeRouteFamilyCodes = new Set(normalizedScope.routeSelection.excludeRouteFamilyCodes);
+    const isCandidate = candidateRouteFamilyCodes.has(routeFamilyCode);
+    const isSelected = effectiveRouteFamilyCodes.has(routeFamilyCode);
+
+    if (isSelected) {
+      if (isCandidate) {
+        excludeRouteFamilyCodes.add(routeFamilyCode);
+      } else {
+        includeRouteFamilyCodes.delete(routeFamilyCode);
+      }
+    } else if (isCandidate) {
+      excludeRouteFamilyCodes.delete(routeFamilyCode);
+    } else {
+      includeRouteFamilyCodes.add(routeFamilyCode);
+    }
+
+    saveScope({
+      routeSelection: {
+        mode: "refine",
+        includeRouteIds: [],
+        excludeRouteIds: [],
+        includeRouteFamilyCodes: Array.from(includeRouteFamilyCodes),
+        excludeRouteFamilyCodes: Array.from(excludeRouteFamilyCodes),
       },
     });
   };
@@ -266,7 +351,10 @@ export function DispatchScopePanel({
           >
             <option value="">{t("dispatch.depot_placeholder", "営業所を選択")}</option>
             {depots.map((depot) => (
-              <option key={depot.id} value={depot.id}>
+              <option
+                key={"depot_id" in depot ? depot.depot_id : depot.id}
+                value={"depot_id" in depot ? depot.depot_id : depot.id}
+              >
                 {depot.name}
               </option>
             ))}
@@ -316,7 +404,7 @@ export function DispatchScopePanel({
         />
         <ScopeStat
           label={t("dispatch.allowed_routes", "対象路線")}
-          value={`${normalizedScope.effectiveRouteIds.length} / ${routes.length}`}
+          value={`${effectiveRouteFamilyIds.length} / ${(catalogRouteRows.length || routeRows.length)}`}
         />
         <ScopeStat
           label="Trip filters"
@@ -377,16 +465,17 @@ export function DispatchScopePanel({
           ) : (
             <div className="grid gap-2 md:grid-cols-2">
               {depots.map((depot) => {
-                const checked = selectedDepotIds.includes(depot.id);
+                const depotId = "depot_id" in depot ? depot.depot_id : depot.id;
+                const checked = selectedDepotIds.includes(depotId);
                 return (
                   <label
-                    key={depot.id}
+                    key={depotId}
                     className="flex items-start gap-3 rounded-lg border border-border px-3 py-2"
                   >
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={() => handleDepotToggle(depot.id)}
+                      onChange={() => handleDepotToggle(depotId)}
                       disabled={updateScope.isPending}
                       className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600"
                     />
@@ -395,7 +484,7 @@ export function DispatchScopePanel({
                         {depot.name}
                       </span>
                       <span className="block text-xs text-slate-500">
-                        {selectedDepotId === depot.id ? "主営業所" : "補助スコープ"}
+                        {selectedDepotId === depotId ? "主営業所" : "補助スコープ"}
                       </span>
                     </span>
                   </label>
@@ -460,45 +549,84 @@ export function DispatchScopePanel({
             </span>
           </div>
 
-          {routeRows.length === 0 ? (
+          {catalogRouteRows.length === 0 && routeRows.length === 0 ? (
             <EmptyState
               title={t("dispatch.no_routes", "路線がありません")}
               description={t("dispatch.no_routes_description", "先に路線を取り込んでください")}
             />
           ) : (
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {routeRows.map(({ route, isCandidate, isSelected }) => (
-                <label
-                  key={route.id}
-                  className="flex items-start gap-3 rounded-lg border border-border bg-white px-3 py-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => handleRouteToggle(route.id)}
-                    disabled={updateScope.isPending}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                      {route.color && (
-                        <span
-                          className="inline-block h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: route.color }}
-                        />
+            catalogRouteRows.length > 0 ? (
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {catalogRouteRows.map(({ route, filteredPatterns, isCandidate, isSelected, tripCount }) => (
+                  <label
+                    key={route.route_family_id}
+                    className="flex items-start gap-3 rounded-lg border border-border bg-white px-3 py-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleCatalogRouteToggle(route.route_code)}
+                      disabled={updateScope.isPending}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                        <span className="truncate">{route.route_code}</span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                          {route.dominant_pattern_type}
+                        </span>
+                      </span>
+                      <span className="block text-xs text-slate-500">
+                        {tripCount.toLocaleString()} 便 / {filteredPatterns.length} パターン
+                      </span>
+                      <span className="block text-[11px] text-slate-400">
+                        {isCandidate ? "営業所候補" : "明示追加候補"}
+                        {filteredPatterns.some((pattern) => pattern.isDepotRelated) ? " / depot-related含む" : ""}
+                      </span>
+                      {route.notes && (
+                        <span className="mt-1 block text-[11px] text-amber-600">
+                          {route.notes}
+                        </span>
                       )}
-                      <span className="truncate">{route.name}</span>
                     </span>
-                    <span className="block text-xs text-slate-500">
-                      {route.startStop} - {route.endStop}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {routeRows.map(({ route, isCandidate, isSelected }) => (
+                  <label
+                    key={route.id}
+                    className="flex items-start gap-3 rounded-lg border border-border bg-white px-3 py-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleRouteToggle(route.id)}
+                      disabled={updateScope.isPending}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                        {route.color && (
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: route.color }}
+                          />
+                        )}
+                        <span className="truncate">{route.name}</span>
+                      </span>
+                      <span className="block text-xs text-slate-500">
+                        {route.startStop} - {route.endStop}
+                      </span>
+                      <span className="block text-[11px] text-slate-400">
+                        {isCandidate ? "営業所候補" : "明示追加候補"} / {route.routeVariantType ?? "unknown"}
+                      </span>
                     </span>
-                    <span className="block text-[11px] text-slate-400">
-                      {isCandidate ? "営業所候補" : "明示追加候補"} / {route.routeVariantType ?? "unknown"}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </div>
+                  </label>
+                ))}
+              </div>
+            )
           )}
         </div>
       )}
@@ -516,6 +644,8 @@ interface NormalizedDispatchScope extends DispatchScope {
     mode: "all" | "include" | "exclude" | "refine";
     includeRouteIds: string[];
     excludeRouteIds: string[];
+    includeRouteFamilyCodes: string[];
+    excludeRouteFamilyCodes: string[];
   };
   serviceSelection: {
     serviceIds: string[];
@@ -527,6 +657,8 @@ interface NormalizedDispatchScope extends DispatchScope {
   };
   candidateRouteIds: string[];
   effectiveRouteIds: string[];
+  candidateRouteFamilyCodes: string[];
+  effectiveRouteFamilyCodes: string[];
 }
 
 function normalizeScope(scope?: DispatchScope | null): NormalizedDispatchScope {
@@ -543,6 +675,8 @@ function normalizeScope(scope?: DispatchScope | null): NormalizedDispatchScope {
       mode: scope?.routeSelection?.mode ?? "refine",
       includeRouteIds: scope?.routeSelection?.includeRouteIds ?? [],
       excludeRouteIds: scope?.routeSelection?.excludeRouteIds ?? [],
+      includeRouteFamilyCodes: scope?.routeSelection?.includeRouteFamilyCodes ?? [],
+      excludeRouteFamilyCodes: scope?.routeSelection?.excludeRouteFamilyCodes ?? [],
     },
     serviceSelection: {
       serviceIds: scope?.serviceSelection?.serviceIds ?? [scope?.serviceId ?? "WEEKDAY"],
@@ -554,9 +688,41 @@ function normalizeScope(scope?: DispatchScope | null): NormalizedDispatchScope {
     },
     candidateRouteIds: scope?.candidateRouteIds ?? [],
     effectiveRouteIds: scope?.effectiveRouteIds ?? [],
+    candidateRouteFamilyCodes: scope?.candidateRouteFamilyCodes ?? [],
+    effectiveRouteFamilyCodes: scope?.effectiveRouteFamilyCodes ?? [],
     depotId: scope?.depotId ?? null,
     serviceId: scope?.serviceId ?? "WEEKDAY",
   };
+}
+
+function serviceIdToCalendarType(serviceId: string): string {
+  if (serviceId === "SAT") {
+    return "土曜";
+  }
+  if (serviceId === "SUN_HOL" || serviceId === "SAT_HOL") {
+    return "日曜・休日";
+  }
+  return "平日";
+}
+
+function countRouteSummaryForService(
+  route: CatalogRouteSummary,
+  serviceId: string,
+): number {
+  if (serviceId === "SAT") {
+    return route.tripCountSaturday;
+  }
+  if (serviceId === "SUN_HOL" || serviceId === "SAT_HOL") {
+    return route.tripCountSunday;
+  }
+  return route.tripCountWeekday;
+}
+
+function tripSelectionEnabled(includeDepotMoves: boolean, patternType: string): boolean {
+  if (patternType !== "depot_move") {
+    return true;
+  }
+  return includeDepotMoves;
 }
 
 function ScopeStat({ label, value }: { label: string; value: string }) {

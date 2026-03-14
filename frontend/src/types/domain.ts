@@ -582,6 +582,8 @@ export interface DispatchScope {
     mode: "all" | "include" | "exclude" | "refine";
     includeRouteIds: string[];
     excludeRouteIds: string[];
+    includeRouteFamilyCodes?: string[];
+    excludeRouteFamilyCodes?: string[];
   };
   serviceSelection?: {
     serviceIds: string[];
@@ -593,8 +595,50 @@ export interface DispatchScope {
   };
   candidateRouteIds?: string[];
   effectiveRouteIds?: string[];
+  candidateRouteFamilyCodes?: string[];
+  effectiveRouteFamilyCodes?: string[];
   depotId: string | null;
   serviceId: string;
+}
+
+export interface CatalogDepotSummary {
+  depot_id: string;
+  name: string;
+  lat?: number | null;
+  lon?: number | null;
+  route_count: number;
+  trip_count: number;
+}
+
+export interface CatalogPatternSummary {
+  patternId: string;
+  routeFamilyId: string;
+  routeCode: string;
+  titleJa: string;
+  direction: string;
+  origin: string;
+  destination: string;
+  stopCount: number;
+  patternType: "mainline" | "short_turn" | "depot_move" | "loop" | "unknown";
+  routeVariantType: RouteVariantType | "unknown";
+  isDepotRelated: boolean;
+  notes: string;
+  tripCountWeekday: number;
+  tripCountSaturday: number;
+  tripCountSunday: number;
+}
+
+export interface CatalogRouteSummary {
+  route_family_id: string;
+  route_code: string;
+  display_name: string;
+  dominant_pattern_type: "mainline" | "short_turn" | "depot_move" | "loop" | "unknown";
+  pattern_summary: CatalogPatternSummary[];
+  tripCountWeekday: number;
+  tripCountSaturday: number;
+  tripCountSunday: number;
+  confirmed: boolean;
+  notes: string;
 }
 
 // ── Simulation Config ─────────────────────────────────────────

@@ -6,6 +6,27 @@ from collections.abc import Iterable
 from typing import Any
 
 
+def normalize_for_python(obj: Any) -> Any:
+    """Parquet/Arrow 由来の型を Python ネイティブ型に再帰変換する。
+
+    numpy.ndarray / numpy.generic が BFF 層に漏れて真偽判定クラッシュを
+    起こす問題を防ぐため、loader の公開関数出口で必ず呼ぶこと。
+    """
+    try:
+        import numpy as np
+        if isinstance(obj, np.ndarray):
+            return [normalize_for_python(v) for v in obj.tolist()]
+        if isinstance(obj, np.generic):
+            return obj.item()
+    except ImportError:
+        pass
+    if isinstance(obj, dict):
+        return {k: normalize_for_python(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [normalize_for_python(v) for v in obj]
+    return obj
+
+
 def normalize_text_nfkc(value: Any) -> str:
     return unicodedata.normalize("NFKC", str(value or "")).strip()
 

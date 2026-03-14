@@ -644,3 +644,14 @@ master-course/
     - small-scope smoke: `tokyu_core` 1 route + 1 BEV で duties 生成後 `simulate_problem_data()` 実行 → pass
     - `python scripts/build_tokyu_gtfs_db.py --dataset-id tokyu_core --out data/tokyu_core_gtfs.sqlite` → pass
     - `python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_core_gtfs.sqlite --dataset-id tokyu_core --built-root data/gtfs_sqlite_export_test` → pass (`stops.parquet` / `stop_timetables.parquet` も出力)
+
+- 2026-03-14 (Catalog-backed dispatch scope for runtime route selection)
+  - `bff/services/local_db_catalog.py` に depot / route-family summary 読み出しを追加し、`/api/catalog/depots`, `/api/catalog/depots/{depot_id}/routes`, `/api/catalog/route-families/{route_family_id}/patterns` を `bff/routers/catalog_local.py` から公開した。
+  - 軽量 summary は既存 SQLite schema をそのまま使い、追加 catalog table は作らずに `route_families`, `route_patterns`, `route_pattern_depots`, `timetable_trips` を集計する方式にした。
+  - `東98` は summary 分類で `東京駅南口 ↔ 等々力操車所` を mainline 固定にし、昼間 split を `short_turn`, `清水` / `目黒郵便局` 端点を Meguro depot-related note として返すようにした。
+  - `bff/store/scenario_store.py` の `dispatch_scope` 正規化は `includeRouteFamilyCodes` / `excludeRouteFamilyCodes` を受け付け、runtime では既存どおり route ids に展開するよう拡張した。
+  - `frontend/src/features/planning/DispatchScopePanel.tsx` は local SQLite catalog summary を優先表示し、catalog が使えないときだけ scenario master routes へフォールバックするよう変更した。
+  - GTFS 未収録路線は runtime scope UI に出さない方針とし、catalog summary 上は「存在しない route family は選択不可」として扱う。
+  - 追加確認:
+    - `python -m pytest tests/test_catalog_local.py tests/test_bff_scenario_store.py -q` → 29 passed
+    - `cd frontend && npm run build` → pass

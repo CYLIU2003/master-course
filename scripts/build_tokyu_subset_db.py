@@ -51,10 +51,12 @@ DEFAULT_DISTANCE_KM = 0.0
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 DEPOT_MASTER_CANDIDATES = (
+    _REPO_ROOT / "tokyu_bus_depots_master_full.json",  # full rebuild (2026-03-14) — preferred
     _REPO_ROOT / "tokyu_bus_depots_master.json",
     _REPO_ROOT / "data" / "seed" / "tokyu" / "sources" / "tokyu_bus_depots_master.json",
 )
 ROUTE_TO_DEPOT_CANDIDATES = (
+    _REPO_ROOT / "tokyu_bus_route_to_depot_full.csv",  # full rebuild (2026-03-14) — preferred
     _REPO_ROOT / "tokyu_bus_route_to_depot.csv",
     _REPO_ROOT / "data" / "seed" / "tokyu" / "sources" / "tokyu_bus_route_to_depot.csv",
 )

@@ -1034,3 +1034,76 @@ def test_dispatch_scope_supports_depot_route_and_trip_filters(temp_store_dir: Pa
     assert scope["candidateRouteIds"] == ["R_MAIN", "R_SHORT", "R_REMOTE"]
     assert scope["effectiveRouteIds"] == ["R_MAIN", "R_SHORT"]
     assert scope["tripSelection"]["includeShortTurn"] is False
+
+
+def test_dispatch_scope_supports_route_family_code_filters(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Family code scope", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id, {"name": "Meguro Depot", "location": "Meguro"}
+    )
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "gtfs",
+        [
+            {
+                "id": "R_A_OUT",
+                "name": "A01 outbound",
+                "routeCode": "A01",
+                "routeFamilyCode": "A01",
+                "startStop": "A",
+                "endStop": "B",
+                "stopSequence": ["A", "B"],
+            },
+            {
+                "id": "R_A_IN",
+                "name": "A01 inbound",
+                "routeCode": "A01",
+                "routeFamilyCode": "A01",
+                "startStop": "B",
+                "endStop": "A",
+                "stopSequence": ["B", "A"],
+            },
+            {
+                "id": "R_B",
+                "name": "B02 main",
+                "routeCode": "B02",
+                "routeFamilyCode": "B02",
+                "startStop": "C",
+                "endStop": "D",
+                "stopSequence": ["C", "D"],
+            },
+        ],
+    )
+
+    for route_id in ("R_A_OUT", "R_A_IN", "R_B"):
+        scenario_store.upsert_route_depot_assignment(
+            scenario_id,
+            route_id,
+            {
+                "depotId": depot["id"],
+                "assignmentType": "manual_override",
+                "confidence": 1.0,
+            },
+        )
+
+    scope = scenario_store.set_dispatch_scope(
+        scenario_id,
+        {
+            "depotSelection": {
+                "depotIds": [depot["id"]],
+                "primaryDepotId": depot["id"],
+            },
+            "routeSelection": {
+                "mode": "refine",
+                "includeRouteFamilyCodes": [],
+                "excludeRouteFamilyCodes": ["A01"],
+            },
+        },
+    )
+
+    assert scope["candidateRouteFamilyCodes"] == ["A01", "B02"]
+    assert scope["effectiveRouteIds"] == ["R_B"]
+    assert scope["effectiveRouteFamilyCodes"] == ["B02"]
+    assert scope["routeSelection"]["excludeRouteFamilyCodes"] == ["A01"]

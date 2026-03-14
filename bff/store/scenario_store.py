@@ -138,6 +138,8 @@ def _default_dispatch_scope() -> Dict[str, Any]:
             "mode": "refine",
             "includeRouteIds": [],
             "excludeRouteIds": [],
+            "includeRouteFamilyCodes": [],
+            "excludeRouteFamilyCodes": [],
         },
         "serviceSelection": {
             "serviceIds": ["WEEKDAY"],
@@ -821,6 +823,19 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
         for route in doc.get("routes") or []
         if route.get("id") is not None
     }
+    route_family_code_by_route_id = {
+        str(route.get("id")): str(
+            route.get("routeFamilyCode")
+            or route.get("routeCode")
+            or route.get("routeLabel")
+            or ""
+        ).strip()
+        for route in doc.get("routes") or []
+        if route.get("id") is not None
+    }
+    valid_route_family_codes = {
+        code for code in route_family_code_by_route_id.values() if code
+    }
     service_ids = {
         str(entry.get("service_id"))
         for entry in doc.get("calendar") or _default_calendar()
@@ -868,6 +883,32 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
     for route_id in route_selection.get("excludeRouteIds") or []:
         route_id = str(route_id)
         if route_id in route_ids and route_id not in exclude_route_ids:
+            exclude_route_ids.append(route_id)
+    include_route_family_codes = []
+    for route_family_code in route_selection.get("includeRouteFamilyCodes") or []:
+        route_family_code = str(route_family_code).strip()
+        if route_family_code in valid_route_family_codes and route_family_code not in include_route_family_codes:
+            include_route_family_codes.append(route_family_code)
+    exclude_route_family_codes = []
+    for route_family_code in route_selection.get("excludeRouteFamilyCodes") or []:
+        route_family_code = str(route_family_code).strip()
+        if route_family_code in valid_route_family_codes and route_family_code not in exclude_route_family_codes:
+            exclude_route_family_codes.append(route_family_code)
+    include_route_ids_from_family = [
+        route_id
+        for route_id, route_family_code in route_family_code_by_route_id.items()
+        if route_family_code in include_route_family_codes
+    ]
+    exclude_route_ids_from_family = [
+        route_id
+        for route_id, route_family_code in route_family_code_by_route_id.items()
+        if route_family_code in exclude_route_family_codes
+    ]
+    for route_id in include_route_ids_from_family:
+        if route_id not in include_route_ids:
+            include_route_ids.append(route_id)
+    for route_id in exclude_route_ids_from_family:
+        if route_id not in exclude_route_ids:
             exclude_route_ids.append(route_id)
 
     service_selection = scope.get("serviceSelection")
@@ -960,6 +1001,8 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
             "mode": route_mode,
             "includeRouteIds": include_route_ids,
             "excludeRouteIds": exclude_route_ids,
+            "includeRouteFamilyCodes": include_route_family_codes,
+            "excludeRouteFamilyCodes": exclude_route_family_codes,
         },
         "serviceSelection": {
             "serviceIds": selected_service_ids,
@@ -969,6 +1012,26 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
         "serviceId": selected_service_ids[0],
         "candidateRouteIds": candidate_route_ids,
         "effectiveRouteIds": effective_route_ids,
+        "candidateRouteFamilyCodes": list(
+            dict.fromkeys(
+                route_family_code
+                for route_family_code in [
+                    route_family_code_by_route_id.get(route_id, "")
+                    for route_id in candidate_route_ids
+                ]
+                if route_family_code
+            )
+        ),
+        "effectiveRouteFamilyCodes": list(
+            dict.fromkeys(
+                route_family_code
+                for route_family_code in [
+                    route_family_code_by_route_id.get(route_id, "")
+                    for route_id in effective_route_ids
+                ]
+                if route_family_code
+            )
+        ),
     }
     doc["dispatch_scope"] = normalized
     return dict(normalized)

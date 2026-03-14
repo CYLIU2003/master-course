@@ -1,0 +1,157 @@
+{
+  "_comment": "tokyu_core 4営業所 マスタデータ（車両・充電器・電気料金）",
+  "_last_updated": "2026-03-14",
+  "_sources": {
+    "bev_spec": "日野ブルーリボン Z EV 公称値参照（battery 300kWh, 充電器 90kW DCは業界標準）",
+    "bev_count": "PLACEHOLDER — 実台数未確定。感度分析のため初期仮定値3台を使用",
+    "energy_consumption": "1.2 kWh/km はバスEVの実測平均値（東急バス等の公開レポート参照）",
+    "tariff": "東京電力エナジーパートナー 高圧季節別時間帯別電灯 2024年度版 参考値。実運用前に最新料金表と照合すること",
+    "charger_count": "PLACEHOLDER — 感度分析パラメータ。初期値2基（1〜5基で感度分析予定）"
+  },
+
+  "vehicles_by_depot": {
+    "meguro": {
+      "_notes": "目黒営業所。黒01が最高頻度路線。渋41が最多パターン。",
+      "bev_count": 3,
+      "ice_count": 10,
+      "bev_count_placeholder": true,
+      "ice_count_placeholder": true,
+      "bev_spec": {
+        "battery_capacity_kwh": 300,
+        "soc_min_ratio": 0.15,
+        "soc_max_ratio": 1.0,
+        "soc_initial_ratio": 0.90,
+        "soc_min_kwh": 45.0,
+        "soc_max_kwh": 300.0,
+        "soc_initial_kwh": 270.0,
+        "energy_consumption_kwh_per_km": 1.2,
+        "max_charging_power_kw": 90,
+        "charge_efficiency": 0.95,
+        "fixed_use_cost_yen_per_day": 5000
+      },
+      "ice_spec": {
+        "fuel_tank_capacity_liter": 200,
+        "fuel_cost_yen_per_liter": 145,
+        "fuel_consumption_liter_per_km": 0.4,
+        "co2_emission_kg_per_liter": 2.58,
+        "fixed_use_cost_yen_per_day": 3000
+      }
+    },
+    "seta": {
+      "_notes": "瀬田営業所。玉07が最高頻度。等12のパターンが最多(11)で入出庫便複雑。",
+      "bev_count": 3,
+      "ice_count": 10,
+      "bev_count_placeholder": true,
+      "ice_count_placeholder": true,
+      "bev_spec": {
+        "battery_capacity_kwh": 300,
+        "soc_min_ratio": 0.15,
+        "soc_max_ratio": 1.0,
+        "soc_initial_ratio": 0.90,
+        "soc_min_kwh": 45.0,
+        "soc_max_kwh": 300.0,
+        "soc_initial_kwh": 270.0,
+        "energy_consumption_kwh_per_km": 1.2,
+        "max_charging_power_kw": 90,
+        "charge_efficiency": 0.95,
+        "fixed_use_cost_yen_per_day": 5000
+      },
+      "ice_spec": {
+        "fuel_tank_capacity_liter": 200,
+        "fuel_cost_yen_per_liter": 145,
+        "fuel_consumption_liter_per_km": 0.4,
+        "co2_emission_kg_per_liter": 2.58,
+        "fixed_use_cost_yen_per_day": 3000
+      }
+    },
+    "awashima": {
+      "_notes": "淡島営業所。5路線・23パターンと比較的シンプル。渋51が最高頻度。",
+      "bev_count": 3,
+      "ice_count": 8,
+      "bev_count_placeholder": true,
+      "ice_count_placeholder": true,
+      "bev_spec": {
+        "battery_capacity_kwh": 300,
+        "soc_min_ratio": 0.15,
+        "soc_max_ratio": 1.0,
+        "soc_initial_ratio": 0.90,
+        "soc_min_kwh": 45.0,
+        "soc_max_kwh": 300.0,
+        "soc_initial_kwh": 270.0,
+        "energy_consumption_kwh_per_km": 1.2,
+        "max_charging_power_kw": 90,
+        "charge_efficiency": 0.95,
+        "fixed_use_cost_yen_per_day": 5000
+      },
+      "ice_spec": {
+        "fuel_tank_capacity_liter": 200,
+        "fuel_cost_yen_per_liter": 145,
+        "fuel_consumption_liter_per_km": 0.4,
+        "co2_emission_kg_per_liter": 2.58,
+        "fixed_use_cost_yen_per_day": 3000
+      }
+    },
+    "tsurumaki": {
+      "_notes": "弦巻営業所。渋24が最高頻度。黒07(入出庫専用78便)・渋05(全便営業所起終点110便)に注意。",
+      "bev_count": 3,
+      "ice_count": 10,
+      "bev_count_placeholder": true,
+      "ice_count_placeholder": true,
+      "bev_spec": {
+        "battery_capacity_kwh": 300,
+        "soc_min_ratio": 0.15,
+        "soc_max_ratio": 1.0,
+        "soc_initial_ratio": 0.90,
+        "soc_min_kwh": 45.0,
+        "soc_max_kwh": 300.0,
+        "soc_initial_kwh": 270.0,
+        "energy_consumption_kwh_per_km": 1.2,
+        "max_charging_power_kw": 90,
+        "charge_efficiency": 0.95,
+        "fixed_use_cost_yen_per_day": 5000
+      },
+      "ice_spec": {
+        "fuel_tank_capacity_liter": 200,
+        "fuel_cost_yen_per_liter": 145,
+        "fuel_consumption_liter_per_km": 0.4,
+        "co2_emission_kg_per_liter": 2.58,
+        "fixed_use_cost_yen_per_day": 3000
+      }
+    }
+  },
+
+  "chargers_by_depot": {
+    "_notes": "初期値2基。感度分析で1〜5基を振る。全営業所で同一スペックを仮定。",
+    "meguro":    { "count": 2, "power_kw": 90, "type": "dc_fast", "count_placeholder": true },
+    "seta":      { "count": 2, "power_kw": 90, "type": "dc_fast", "count_placeholder": true },
+    "awashima":  { "count": 2, "power_kw": 90, "type": "dc_fast", "count_placeholder": true },
+    "tsurumaki": { "count": 2, "power_kw": 90, "type": "dc_fast", "count_placeholder": true }
+  },
+
+  "tariff": {
+    "_notes": "東京電力エナジーパートナー 高圧季節別時間帯別電灯 参考値（2024年度）。実運用前に最新料金表を照合すること。4営業所とも同一契約を仮定。",
+    "_source_placeholder": true,
+    "tou_rates": [
+      { "start_hour": 0,  "end_hour": 8,  "rate_yen_per_kwh": 15.0, "label": "夜間" },
+      { "start_hour": 8,  "end_hour": 13, "rate_yen_per_kwh": 30.0, "label": "昼間" },
+      { "start_hour": 13, "end_hour": 16, "rate_yen_per_kwh": 40.0, "label": "ピーク" },
+      { "start_hour": 16, "end_hour": 22, "rate_yen_per_kwh": 30.0, "label": "昼間" },
+      { "start_hour": 22, "end_hour": 24, "rate_yen_per_kwh": 15.0, "label": "夜間" }
+    ],
+    "demand_charge_yen_per_kw": 1800,
+    "basic_charge_yen": 0,
+    "contract_type": "高圧季節別時間帯別電灯"
+  },
+
+  "pv_profile": {
+    "_notes": "PVなしケースを優先。PVありは後の感度分析で追加。",
+    "enabled": false,
+    "capacity_kw": 0
+  },
+
+  "sensitivity_parameters": {
+    "charger_count_range": [1, 2, 3, 4, 5],
+    "bev_ratio_range": [0.2, 0.3, 0.5, 0.7, 1.0],
+    "pv_capacity_range_kw": [0, 30, 50, 100]
+  }
+}

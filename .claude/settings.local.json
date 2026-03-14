@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(python scripts/extract_meguro_small_case.py --exclude-depot-runs --dry-run)",
+      "Bash(python scripts/extract_meguro_small_case.py --exclude-depot-runs)",
+      "Bash(python -m pytest tests/ -x -q)"
+    ]
+  }
+}

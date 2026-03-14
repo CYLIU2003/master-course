@@ -61,6 +61,31 @@ def generate_report(config_path: str = "config/experiment_config.json") -> str:
     lines.append(f"# E-Bus Simulation Report")
     lines.append(f"\nmode: `{mode}` | status: `{result.status}` | time: {elapsed:.2f}s\n")
 
+    # --- 環境情報 (再現性確保) ---
+    import platform
+    import sys as _sys
+    import datetime as _dt
+    lines.append("## 実行環境\n")
+    lines.append("| 項目 | 値 |")
+    lines.append("|---|---|")
+    lines.append(f"| 実行日時 | {_dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} |")
+    lines.append(f"| Python | {_sys.version.split()[0]} |")
+    lines.append(f"| OS | {platform.platform()} |")
+    lines.append(f"| CPU | {platform.processor() or platform.machine()} |")
+    try:
+        import psutil as _psutil
+        ram_gb = _psutil.virtual_memory().total / (1024 ** 3)
+        lines.append(f"| RAM | {ram_gb:.1f} GB |")
+    except ImportError:
+        pass
+    try:
+        import gurobipy as _grb
+        lines.append(f"| Gurobi | {_grb.gurobi.version()} |")
+    except Exception:
+        lines.append("| Gurobi | 取得失敗 |")
+    lines.append(f"| config | {config_path} |")
+    lines.append("")
+
     # --- KPI 表 ---
     lines.append("## KPI サマリ\n")
     lines.append("| 指標 | 値 | 単位 |")

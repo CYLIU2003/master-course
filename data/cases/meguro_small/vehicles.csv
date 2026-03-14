@@ -1,0 +1,4 @@
+vehicle_id,vehicle_type,home_depot,battery_capacity,soc_init,soc_min,soc_max,soc_target_end,charge_power_max,discharge_power_max,fixed_use_cost,max_operating_time,max_distance,charge_efficiency,fuel_tank_capacity,fuel_cost_coeff,co2_emission_coeff
+BEV_01,BEV,meguro_depot,300.0,270.0,45.0,300.0,45.0,90.0,,5000.0,20.0,9999.0,0.95,,,
+BEV_02,BEV,meguro_depot,300.0,270.0,45.0,300.0,45.0,90.0,,5000.0,20.0,9999.0,0.95,,,
+BEV_03,BEV,meguro_depot,300.0,270.0,45.0,300.0,45.0,90.0,,5000.0,20.0,9999.0,0.95,,,

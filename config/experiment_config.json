@@ -1,5 +1,15 @@
 {
-  "_comment": "仕様書 §12.10 config.json - 実験設定ファイル",
+  "_comment": "仕様書 §12.10 config.json - 実験設定ファイル (tokyu_core 4営業所)",
+  "_cases": {
+    "_note": "段階的スケールアップ: toy → S1(meguro_small) → S2(meguro_full) → S3(4-depot)",
+    "toy": "config/cases/toy_mode_A_case01.json",
+    "S1_meguro_small": "config/cases/meguro_small.json",
+    "S2_meguro_full":   "config/cases/meguro_full.json",
+    "S3_seta_full":      "config/cases/seta_full.json",
+    "S3_awashima_full":  "config/cases/awashima_full.json",
+    "S3_tsurumaki_full": "config/cases/tsurumaki_full.json"
+  },
+  "_active_case": "S1_meguro_small",
   "time_step_min": 15,
   "num_periods": 64,
   "start_time": "05:00",

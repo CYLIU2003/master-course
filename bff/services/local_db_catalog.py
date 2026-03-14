@@ -10,10 +10,11 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+from bff.services.route_family import derive_route_family_metadata
 from src.dispatch.models import Trip
 from src.geo import haversine_km
 
@@ -25,8 +26,10 @@ _DEFAULT_DB_CANDIDATES = (
 )
 _DEFAULT_DB_PATH = next((path for path in _DEFAULT_DB_CANDIDATES if path.exists()), _DEFAULT_DB_CANDIDATES[0])
 DB_PATH = Path(os.environ.get("TOKYU_DB_PATH", str(_DEFAULT_DB_PATH)))
+OPERATOR_ID = "odpt.Operator:TokyuBus"
 DEFAULT_ALLOWED_VEHICLE_TYPES = ("BEV", "ICE")
 DEFAULT_DISTANCE_KM = 0.0
+_DEPOT_KEYWORDS = ("営業所", "操車所", "操車場", "車庫")
 
 
 def resolve_db_path() -> Path:
@@ -107,6 +110,10 @@ def _minutes_to_hhmm(value: int | None, fallback: str = "00:00", wrap: bool = Fa
     hours = minutes // 60
     mins = minutes % 60
     return f"{hours:02d}:{mins:02d}"
+
+
+def _normalize_label(value: Any) -> str:
+    return str(value or "").strip()
 
 
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
@@ -271,6 +278,321 @@ def list_depots(operator_id: str | None = None) -> list[dict[str, Any]]:
     sql += " ORDER BY depot_id"
     with get_conn() as conn:
         return _query_dicts(conn, sql, params)
+
+
+def _calendar_count_key(calendar_type: str) -> str:
+    return {
+        "平日": "tripCountWeekday",
+        "土曜": "tripCountSaturday",
+        "日曜・休日": "tripCountSunday",
+    }.get(calendar_type, "tripCountWeekday")
+
+
+def _load_pattern_stop_names(
+    conn: sqlite3.Connection,
+    pattern_ids: Sequence[str],
+) -> dict[str, list[str]]:
+    if not pattern_ids:
+        return {}
+    placeholders = ",".join("?" for _ in pattern_ids)
+    rows = conn.execute(
+        f"""
+        SELECT ps.pattern_id, ps.seq, COALESCE(s.title_ja, ps.stop_id) AS stop_name
+        FROM pattern_stops ps
+        LEFT JOIN stops s ON s.stop_id = ps.stop_id
+        WHERE ps.pattern_id IN ({placeholders})
+        ORDER BY ps.pattern_id, ps.seq
+        """,
+        list(pattern_ids),
+    ).fetchall()
+    grouped: dict[str, list[str]] = defaultdict(list)
+    for row in rows:
+        grouped[str(row[0])].append(str(row[2] or ""))
+    return grouped
+
+
+def _load_pattern_trip_counts(
+    conn: sqlite3.Connection,
+    pattern_ids: Sequence[str],
+) -> dict[str, dict[str, int]]:
+    if not pattern_ids:
+        return {}
+    placeholders = ",".join("?" for _ in pattern_ids)
+    rows = conn.execute(
+        f"""
+        SELECT pattern_id, calendar_type, COUNT(*) AS trip_count
+        FROM timetable_trips
+        WHERE pattern_id IN ({placeholders})
+        GROUP BY pattern_id, calendar_type
+        """,
+        list(pattern_ids),
+    ).fetchall()
+    counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"平日": 0, "土曜": 0, "日曜・休日": 0}
+    )
+    for pattern_id, calendar_type, trip_count in rows:
+        counts[str(pattern_id)][str(calendar_type or "平日")] = int(trip_count or 0)
+    return counts
+
+
+def _pattern_type_from_variant(
+    *,
+    route_code: str,
+    origin_name: str,
+    destination_name: str,
+    stop_count: int,
+    max_stop_count: int,
+    variant_type: str,
+) -> tuple[str, bool, str]:
+    origin = _normalize_label(origin_name)
+    destination = _normalize_label(destination_name)
+    terminals = {origin, destination}
+    has_depot_keyword = any(
+        keyword in origin or keyword in destination for keyword in _DEPOT_KEYWORDS
+    )
+
+    if origin and origin == destination:
+        return ("loop", False, "origin and destination are identical")
+
+    if route_code == "東98":
+        if terminals == {"東京駅南口", "等々力操車所"}:
+            return ("mainline", False, "東98 mainline override")
+        if "目黒郵便局" in terminals:
+            return (
+                "depot_move",
+                True,
+                "東98 Meguro depot-related pattern via 目黒郵便局",
+            )
+        if "清水" in terminals:
+            if "東京駅南口" in terminals:
+                return (
+                    "short_turn",
+                    True,
+                    "東98 daytime split pattern; 清水 endpoint remains depot-related for Meguro operations",
+                )
+            return (
+                "depot_move",
+                True,
+                "東98 Meguro depot-related pattern via 清水",
+            )
+        if "等々力操車所" in terminals and terminals.intersection({"目黒駅前", "目黒駅東口", "目黒駅"}):
+            return ("short_turn", False, "東98 daytime split pattern")
+
+    if variant_type in {"main", "main_outbound", "main_inbound"}:
+        return ("mainline", has_depot_keyword, "route-family main variant")
+    if variant_type in {"short_turn", "branch"}:
+        return ("short_turn", has_depot_keyword, "route-family short-turn/branch variant")
+    if variant_type in {"depot_in", "depot_out"}:
+        return ("depot_move", True, "route-family depot variant")
+    if has_depot_keyword and stop_count < max_stop_count:
+        return ("depot_move", True, "terminal contains depot-like keyword and pattern is shorter than mainline")
+    if stop_count < max_stop_count:
+        return ("short_turn", has_depot_keyword, "pattern is shorter than mainline")
+    return ("unknown", has_depot_keyword, "no explicit pattern classification matched")
+
+
+def _load_route_pattern_records(
+    conn: sqlite3.Connection,
+    *,
+    depot_id: str | None = None,
+    route_family: str | None = None,
+) -> list[dict[str, Any]]:
+    sql = """
+        SELECT
+            rp.pattern_id,
+            rp.route_family,
+            rp.route_code,
+            rp.title_ja,
+            rp.direction,
+            rp.stop_count,
+            COALESCE(origin_stop.title_ja, rp.origin_stop_id) AS origin_name,
+            COALESCE(dest_stop.title_ja, rp.dest_stop_id) AS destination_name
+        FROM route_patterns rp
+        LEFT JOIN stops origin_stop ON origin_stop.stop_id = rp.origin_stop_id
+        LEFT JOIN stops dest_stop ON dest_stop.stop_id = rp.dest_stop_id
+        WHERE 1=1
+    """
+    params: list[Any] = []
+    if depot_id:
+        sql += """
+            AND EXISTS (
+                SELECT 1
+                FROM route_pattern_depots rpd
+                WHERE rpd.pattern_id = rp.pattern_id AND rpd.depot_id = ?
+            )
+        """
+        params.append(depot_id)
+    if route_family:
+        sql += " AND rp.route_family = ?"
+        params.append(route_family)
+    sql += " ORDER BY rp.route_family, rp.pattern_id"
+    rows = _query_dicts(conn, sql, params)
+    pattern_ids = [str(row.get("pattern_id") or "") for row in rows if row.get("pattern_id")]
+    stop_names = _load_pattern_stop_names(conn, pattern_ids)
+    trip_counts = _load_pattern_trip_counts(conn, pattern_ids)
+    route_records = [
+        {
+            "id": str(row.get("pattern_id") or ""),
+            "name": str(row.get("title_ja") or row.get("route_code") or ""),
+            "routeCode": str(row.get("route_code") or row.get("route_family") or ""),
+            "routeLabel": str(row.get("title_ja") or row.get("route_code") or ""),
+            "startStop": str(row.get("origin_name") or ""),
+            "endStop": str(row.get("destination_name") or ""),
+            "stopSequence": stop_names.get(str(row.get("pattern_id") or ""), []),
+            "tripCount": sum(trip_counts.get(str(row.get("pattern_id") or ""), {}).values()),
+            "distanceKm": float(row.get("stop_count") or 0.0),
+            "source": "local_sqlite",
+        }
+        for row in rows
+    ]
+    metadata = derive_route_family_metadata(route_records)
+    max_stop_count_by_family: dict[str, int] = defaultdict(int)
+    for row in rows:
+        family = str(row.get("route_family") or "")
+        max_stop_count_by_family[family] = max(
+            max_stop_count_by_family.get(family, 0),
+            _safe_int(row.get("stop_count"), 0),
+        )
+
+    enriched: list[dict[str, Any]] = []
+    for row in rows:
+        pattern_id = str(row.get("pattern_id") or "")
+        route_code = str(row.get("route_code") or row.get("route_family") or "")
+        family = str(row.get("route_family") or "")
+        variant_type = metadata.get(pattern_id).route_variant_type if pattern_id in metadata else "unknown"
+        pattern_type, is_depot_related, note = _pattern_type_from_variant(
+            route_code=route_code,
+            origin_name=str(row.get("origin_name") or ""),
+            destination_name=str(row.get("destination_name") or ""),
+            stop_count=_safe_int(row.get("stop_count"), 0),
+            max_stop_count=max_stop_count_by_family.get(family, 0),
+            variant_type=variant_type,
+        )
+        counts = trip_counts.get(pattern_id, {})
+        enriched.append(
+            {
+                "patternId": pattern_id,
+                "routeFamilyId": family,
+                "routeCode": route_code,
+                "titleJa": str(row.get("title_ja") or route_code),
+                "direction": str(row.get("direction") or "unknown"),
+                "origin": str(row.get("origin_name") or ""),
+                "destination": str(row.get("destination_name") or ""),
+                "stopCount": _safe_int(row.get("stop_count"), 0),
+                "patternType": pattern_type,
+                "routeVariantType": variant_type,
+                "isDepotRelated": is_depot_related,
+                "notes": note,
+                "tripCountWeekday": _safe_int(counts.get("平日"), 0),
+                "tripCountSaturday": _safe_int(counts.get("土曜"), 0),
+                "tripCountSunday": _safe_int(counts.get("日曜・休日"), 0),
+            }
+        )
+    return enriched
+
+
+def list_depot_summaries(calendar_type: str = "平日") -> list[dict[str, Any]]:
+    count_key = _calendar_count_key(calendar_type)
+    summaries: list[dict[str, Any]] = []
+    for depot in list_depots(operator_id=OPERATOR_ID):
+        routes = list_depot_route_summaries(
+            str(depot.get("depot_id") or ""),
+            include_depot_moves=True,
+        )
+        summaries.append(
+            {
+                "depot_id": str(depot.get("depot_id") or ""),
+                "name": str(depot.get("title_ja") or depot.get("depot_key") or ""),
+                "lat": depot.get("lat"),
+                "lon": depot.get("lon"),
+                "route_count": len(routes),
+                "trip_count": sum(_safe_int(route.get(count_key), 0) for route in routes),
+            }
+        )
+    summaries.sort(key=lambda item: item["depot_id"])
+    return summaries
+
+
+def list_depot_route_summaries(
+    depot_id: str,
+    *,
+    include_depot_moves: bool = False,
+) -> list[dict[str, Any]]:
+    normalized_depot_id = _normalize_depot_id(depot_id)
+    if not normalized_depot_id:
+        return []
+    with get_conn() as conn:
+        pattern_records = _load_route_pattern_records(conn, depot_id=normalized_depot_id)
+        family_rows = {
+            str(row.get("route_family") or ""): row
+            for row in _query_dicts(
+                conn,
+                """
+                SELECT route_family, route_code, title_ja
+                FROM route_families
+                WHERE route_family IN (
+                    SELECT DISTINCT rp.route_family
+                    FROM route_patterns rp
+                    INNER JOIN route_pattern_depots rpd ON rpd.pattern_id = rp.pattern_id
+                    WHERE rpd.depot_id = ?
+                )
+                """,
+                (normalized_depot_id,),
+            )
+        }
+
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in pattern_records:
+        grouped[str(record.get("routeFamilyId") or "")].append(record)
+
+    priority = {"mainline": 0, "short_turn": 1, "depot_move": 2, "loop": 3, "unknown": 4}
+    summaries: list[dict[str, Any]] = []
+    for family_id, patterns in grouped.items():
+        type_counter = Counter()
+        for item in patterns:
+            type_counter[str(item.get("patternType") or "unknown")] += (
+                _safe_int(item.get("tripCountWeekday"), 0)
+                + _safe_int(item.get("tripCountSaturday"), 0)
+                + _safe_int(item.get("tripCountSunday"), 0)
+            )
+        dominant_pattern_type = sorted(
+            type_counter.items(),
+            key=lambda pair: (priority.get(pair[0], 99), -pair[1], pair[0]),
+        )[0][0] if type_counter else "unknown"
+        if not include_depot_moves and dominant_pattern_type == "depot_move":
+            continue
+        family_row = family_rows.get(family_id, {})
+        notes = sorted({str(item.get("notes") or "") for item in patterns if item.get("notes")})
+        summaries.append(
+            {
+                "route_family_id": family_id,
+                "route_code": str(family_row.get("route_code") or family_id),
+                "display_name": str(family_row.get("title_ja") or family_id),
+                "dominant_pattern_type": dominant_pattern_type,
+                "pattern_summary": patterns,
+                "tripCountWeekday": sum(_safe_int(item.get("tripCountWeekday"), 0) for item in patterns),
+                "tripCountSaturday": sum(_safe_int(item.get("tripCountSaturday"), 0) for item in patterns),
+                "tripCountSunday": sum(_safe_int(item.get("tripCountSunday"), 0) for item in patterns),
+                "confirmed": True,
+                "notes": " / ".join(notes),
+            }
+        )
+    summaries.sort(key=lambda item: (item["route_code"], item["route_family_id"]))
+    return summaries
+
+
+def get_route_family_patterns(
+    route_family: str,
+    *,
+    depot_id: str | None = None,
+) -> list[dict[str, Any]]:
+    normalized_depot_id = _normalize_depot_id(depot_id) if depot_id else None
+    with get_conn() as conn:
+        return _load_route_pattern_records(
+            conn,
+            depot_id=normalized_depot_id,
+            route_family=route_family,
+        )
 
 
 def get_depot(depot_id: str) -> dict[str, Any] | None:

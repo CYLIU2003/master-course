@@ -723,6 +723,8 @@ export interface UpdateDispatchScopeRequest {
     mode?: "all" | "include" | "exclude" | "refine";
     includeRouteIds?: string[];
     excludeRouteIds?: string[];
+    includeRouteFamilyCodes?: string[];
+    excludeRouteFamilyCodes?: string[];
   };
   serviceSelection?: {
     serviceIds?: string[];

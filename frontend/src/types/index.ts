@@ -47,6 +47,9 @@ export type {
   DispatchPlanResponse,
   DutyValidationResult,
   DispatchScope,
+  CatalogDepotSummary,
+  CatalogRouteSummary,
+  CatalogPatternSummary,
   // Simulation config
   SimulationConfig,
   TouPriceSlot,

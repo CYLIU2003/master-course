@@ -1,0 +1,131 @@
+{
+  "_comment": "tokyu_core 4営業所 × 路線マッピング — GTFS実データ（tokyu_core_gtfs.sqlite）から自動生成+手動確認済み",
+  "_generated_from": "tokyu_core_gtfs.sqlite / route_code_depots + route_patterns",
+  "_last_verified": "2026-03-14",
+  "_odpt_data_caveats": [
+    "同一系統番号が複数パターンを持つ（本線・区間便・入出庫便が混在）",
+    "directionフィールドは全件'unknown'のため使用不可",
+    "入出庫便パターン識別: title_jaに'営業所'/'操車所'を含むもの",
+    "等01・等11は瀬田と弦巻の両営業所が運行する共用路線",
+    "井51・井52はODPTデータに存在しない（目黒営業所旧master記載だが欠落）",
+    "黒07は全便が目黒駅前↔弦巻営業所の入出庫便（旅客輸送なし）"
+  ],
+  "depots": [
+    {
+      "depot_id": "meguro",
+      "name": "目黒営業所",
+      "confirmed": true,
+      "address": "東京都目黒区目黒本町1-15-24",
+      "location": { "lat": 35.628292, "lon": 139.694458 },
+      "location_source": "tokyu_core_gtfs.sqlite depots table",
+      "gtfs_depot_id": "tokyu:depot:meguro",
+      "weekday_trips_total": 1010,
+      "route_codes": ["渋41", "渋42", "渋71", "渋72", "黒01", "黒02", "東98", "さんまバス"],
+      "pattern_count": 49,
+      "routes_detail": [
+        { "code": "黒01", "weekday_trips": 225, "patterns": 4, "main_pattern": "目黒駅前 → 大岡山小学校前 (26stops)", "notes": "最高頻度。区間便(清水↔目黒6stops)・朝専用区間便(目黒郵便局→権之助坂20stops)含む" },
+        { "code": "黒02", "weekday_trips": 168, "patterns": 7, "main_pattern": "目黒駅前 → 二子玉川駅 (25stops)", "notes": "区間便(等々力七丁目↔目黒)含む" },
+        { "code": "渋41", "weekday_trips": 158, "patterns": 11, "main_pattern": "渋谷駅 → 大井町駅 (27stops)", "notes": "最多パターン数。多数の区間便バリアント" },
+        { "code": "渋42", "weekday_trips": 124, "patterns": 4, "main_pattern": "大崎駅西口 → 渋谷駅 (18stops)", "notes": "" },
+        { "code": "渋71", "weekday_trips": 109, "patterns": 6, "main_pattern": "渋谷駅東口 → 洗足駅 (19stops)", "notes": "" },
+        { "code": "東98",  "weekday_trips": 104, "patterns": 9, "main_pattern": "東京駅南口 → 等々力操車所 (43stops)", "notes": "操車所絡みパターン多数。目黒郵便局/東京駅南口の2起点あり" },
+        { "code": "渋72", "weekday_trips": 100, "patterns": 6, "main_pattern": "渋谷駅東口 → 五反田駅 (22stops)", "notes": "清水を経由する区間便あり" },
+        { "code": "さんまバス", "weekday_trips": 22, "patterns": 2, "main_pattern": "目黒区総合庁舎 → 目黒駅前 (16stops)", "notes": "特別運行。目黒区地域交通バス" }
+      ],
+      "missing_from_gtfs": ["井51", "井52"],
+      "missing_notes": "井51・井52は公式路線図(tokyu_bus_depots_master_full.json)に記載されているがODPTデータに存在しない。修論では'データ制約により除外'と注記する。"
+    },
+    {
+      "depot_id": "seta",
+      "name": "瀬田営業所",
+      "confirmed": true,
+      "address": "東京都世田谷区上野毛4-37-7",
+      "location": { "lat": 35.617458, "lon": 139.635818 },
+      "location_source": "tokyu_core_gtfs.sqlite depots table",
+      "gtfs_depot_id": "tokyu:depot:seta",
+      "weekday_trips_total": 995,
+      "route_codes": ["玉07", "渋82", "玉11", "園01", "等12", "玉31", "用01", "用22", "用06", "自11", "用21", "玉30", "自01"],
+      "pattern_count": 49,
+      "routes_detail": [
+        { "code": "玉07", "weekday_trips": 278, "patterns": 3, "main_pattern": "成城学園前駅 → 二子玉川駅 (3stops相当)", "notes": "最高頻度" },
+        { "code": "渋82", "weekday_trips": 162, "patterns": 6, "main_pattern": "渋谷駅 → 等々力 (20stops相当)", "notes": "瀬田営業所発着パターン含む(入出庫便)" },
+        { "code": "玉11", "weekday_trips": 147, "patterns": 6, "main_pattern": "二子玉川駅 → 多摩川駅 (15stops)", "notes": "瀬田営業所発着パターン含む(入出庫便)" },
+        { "code": "園01", "weekday_trips": 82, "patterns": 6, "main_pattern": "千歳船橋 → 田園調布駅 (11stops)", "notes": "瀬田営業所発着パターン含む(入出庫便)" },
+        { "code": "等12", "weekday_trips": 81, "patterns": 11, "main_pattern": "成城学園前駅 → 等々力操車所 (33stops)", "notes": "最多パターン数。操車所・瀬田営業所絡みの入出庫多数" },
+        { "code": "玉31", "weekday_trips": 75, "patterns": 4, "main_pattern": "二子玉川駅 → 成城学園前駅 (4stops相当)", "notes": "" },
+        { "code": "用01", "weekday_trips": 46, "patterns": 1, "main_pattern": "用賀駅 → 美術館", "notes": "" },
+        { "code": "用22", "weekday_trips": 30, "patterns": 2, "main_pattern": "用賀駅 → 美術館 (2stops)", "notes": "" },
+        { "code": "用06", "weekday_trips": 24, "patterns": 1, "main_pattern": "", "notes": "" },
+        { "code": "自11", "weekday_trips": 20, "patterns": 2, "main_pattern": "東京医療センター → 自由が丘駅", "notes": "" },
+        { "code": "用21", "weekday_trips": 20, "patterns": 2, "main_pattern": "関東中央病院 → 用賀駅", "notes": "" },
+        { "code": "玉30", "weekday_trips": 19, "patterns": 1, "main_pattern": "", "notes": "" },
+        { "code": "自01", "weekday_trips": 11, "patterns": 2, "main_pattern": "自由が丘駅 → 瀬田営業所", "notes": "入庫便として機能" }
+      ],
+      "missing_from_gtfs": [],
+      "cross_depot_routes": ["等01", "等11"],
+      "cross_depot_notes": "等01・等11は弦巻営業所も運行。route_code_depots上は瀬田のみに割り当てられているが実態は共用。"
+    },
+    {
+      "depot_id": "awashima",
+      "name": "淡島営業所",
+      "confirmed": true,
+      "address": "東京都世田谷区三宿2-39-1",
+      "location": { "lat": 35.653526, "lon": 139.672928 },
+      "location_source": "tokyu_core_gtfs.sqlite depots table",
+      "gtfs_depot_id": "tokyu:depot:awashima",
+      "weekday_trips_total": 728,
+      "route_codes": ["渋51", "恵32", "渋11", "渋32", "渋31"],
+      "pattern_count": 23,
+      "routes_detail": [
+        { "code": "渋51", "weekday_trips": 312, "patterns": 4, "main_pattern": "渋谷駅 → 淡島 (区間=若林折返所)", "notes": "最高頻度" },
+        { "code": "恵32", "weekday_trips": 150, "patterns": 5, "main_pattern": "恵比寿駅 → 用賀駅 (4stops相当)", "notes": "" },
+        { "code": "渋11", "weekday_trips": 131, "patterns": 8, "main_pattern": "田園調布駅 → 渋谷駅 (8patterns)", "notes": "多バリアント" },
+        { "code": "渋32", "weekday_trips": 97,  "patterns": 4, "main_pattern": "三宿 → 渋谷駅 (4stops相当)", "notes": "'渋谷駅→渋谷駅'パターン存在(循環便)" },
+        { "code": "渋31", "weekday_trips": 38,  "patterns": 1, "main_pattern": "", "notes": "" }
+      ],
+      "missing_from_gtfs": []
+    },
+    {
+      "depot_id": "tsurumaki",
+      "name": "弦巻営業所",
+      "confirmed": true,
+      "address": "東京都世田谷区弦巻4-29-23",
+      "location": { "lat": 35.638203, "lon": 139.643631 },
+      "location_source": "tokyu_core_gtfs.sqlite depots table",
+      "gtfs_depot_id": "tokyu:depot:tsurumaki",
+      "weekday_trips_total": 966,
+      "route_codes": ["渋24", "黒06", "渋23", "渋22", "渋05", "黒07", "反11", "等13", "渋21", "等01", "反12", "等11"],
+      "pattern_count": 39,
+      "routes_detail": [
+        { "code": "渋24", "weekday_trips": 224, "patterns": 5, "main_pattern": "渋谷駅 → 成城学園前駅西口", "notes": "" },
+        { "code": "黒06", "weekday_trips": 136, "patterns": 4, "main_pattern": "三軒茶屋駅 → 目黒駅前", "notes": "" },
+        { "code": "渋23", "weekday_trips": 112, "patterns": 5, "main_pattern": "渋谷駅 → 祖師ヶ谷大蔵駅", "notes": "" },
+        { "code": "渋22", "weekday_trips": 110, "patterns": 5, "main_pattern": "渋谷駅 → 用賀駅", "notes": "" },
+        { "code": "渋05", "weekday_trips": 110, "patterns": 1, "main_pattern": "弦巻営業所 → 渋谷駅 (全便が弦巻営業所発着)", "notes": "全便が入出庫兼用の本線。弦巻営業所が起終点" },
+        { "code": "黒07", "weekday_trips": 78,  "patterns": 2, "main_pattern": "目黒駅前 ↔ 弦巻営業所 (28stops)", "notes": "全便が入出庫専用（旅客輸送あり）。目黒営業所の車両が弦巻経由する構造" },
+        { "code": "反11", "weekday_trips": 56,  "patterns": 4, "main_pattern": "五反田駅 → 世田谷区民会館", "notes": "弦巻営業所発着パターン含む(入出庫便)" },
+        { "code": "等13", "weekday_trips": 44,  "patterns": 2, "main_pattern": "梅ヶ丘駅 → 等々力操車所", "notes": "" },
+        { "code": "渋21", "weekday_trips": 42,  "patterns": 5, "main_pattern": "渋谷駅 → 上町駅", "notes": "" },
+        { "code": "等01", "weekday_trips": 40,  "patterns": 1, "main_pattern": "", "notes": "瀬田営業所と共用路線" },
+        { "code": "反12", "weekday_trips": 10,  "patterns": 1, "main_pattern": "", "notes": "" },
+        { "code": "等11", "weekday_trips": 4,   "patterns": 2, "main_pattern": "等々力操車所 → 桜小学校", "notes": "瀬田営業所と共用路線。弦巻では平日4本のみ" }
+      ],
+      "missing_from_gtfs": ["渋91"],
+      "missing_notes": "渋91は公式路線図(tokyu_bus_depots_master_full.json)記載だがODPTデータに存在しない。"
+    }
+  ],
+  "summary": {
+    "total_weekday_trips": 3699,
+    "total_route_codes": 38,
+    "total_patterns": 160,
+    "missing_from_gtfs": ["井51", "井52", "渋91"],
+    "cross_depot_routes": ["等01", "等11"],
+    "major_odpt_issues": [
+      "黒07(弦巻): 全78便が入出庫便。タスクではなくデッドヘッドとして扱うべきか要検討",
+      "渋05(弦巻): 全110便が弦巻営業所起終点。入出庫兼本線",
+      "等12(瀬田): 11パターン。うち多数が操車所・営業所絡みの入出庫便",
+      "東98(目黒): 9パターン。等々力操車所/東京駅南口の2起点が混在",
+      "渋41(目黒): 11パターン。渋谷↔大井町の本線に短区間バリアント多数"
+    ]
+  }
+}

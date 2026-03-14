@@ -1,0 +1,21 @@
+{
+  "generated_by": "scripts/extract_meguro_small_case.py",
+  "route": "黒01",
+  "db": "data/tokyu_core_gtfs.sqlite",
+  "calendar": "平日",
+  "exclude_depot_runs": true,
+  "task_count": 225,
+  "excluded_depot_runs": 0,
+  "bev_count": 3,
+  "charger_count": 2,
+  "num_periods": 80,
+  "time_step_min": 15,
+  "start_hour": 5,
+  "end_hour": 25,
+  "odpt_caveats": [
+    "directionフィールドは全件'unknown'",
+    "区間便・入出庫便が同一route_codeに混在",
+    "入出庫便除外フラグ: True",
+    "距離は直線距離×detour係数で推定。実走行距離ではない"
+  ]
+}

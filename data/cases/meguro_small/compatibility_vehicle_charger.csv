@@ -1,0 +1,7 @@
+vehicle_id,charger_id,feasible
+BEV_01,CHG_01,True
+BEV_01,CHG_02,True
+BEV_02,CHG_01,True
+BEV_02,CHG_02,True
+BEV_03,CHG_01,True
+BEV_03,CHG_02,True

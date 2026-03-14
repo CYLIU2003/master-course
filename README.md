@@ -286,6 +286,16 @@ curl "http://localhost:8000/api/catalog/milp-trips?depot_ids=tokyu:depot:meguro,
 
 The SQLite catalog stores stop coordinates and depot coordinates, and the local catalog backend computes straight-line trip distances from origin/destination stop coordinates for MILP input preparation. You can also round-trip the SQLite catalog back into built artifacts with `scripts/export_tokyu_sqlite_to_built.py`.
 
+When `CATALOG_BACKEND=local_sqlite`, the main app now uses lightweight catalog summary endpoints for dispatch scope setup:
+
+```text
+GET /api/catalog/depots
+GET /api/catalog/depots/{depot_id}/routes
+GET /api/catalog/route-families/{route_family_id}/patterns
+```
+
+The dispatch scope UI reads depot / route-family summaries from SQLite first, then saves route-family-code filters back into `dispatch-scope`, where they are expanded into scenario route ids. GTFS-missing routes are simply absent from the catalog summary and are treated as out-of-scope for runtime selection. For Tokyu `東98`, the catalog summary keeps `東京駅南口 ↔ 等々力操車所` as the mainline reference, classifies daytime split patterns as `short_turn`, and marks `清水` / `目黒郵便局` terminals as Meguro depot-related in the notes.
+
 </details>
 
 ## Data-Prep App

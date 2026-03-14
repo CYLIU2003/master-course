@@ -13,6 +13,7 @@ from src.value_normalization import (
     coerce_list,
     coerce_str_list,
     first_non_empty_list,
+    normalize_for_python,
     normalize_text_nfkc,
 )
 
@@ -640,7 +641,7 @@ def build_dataset_bootstrap(
         depot_ids=[str(item.get("id") or item.get("depotId")) for item in depots],
         route_ids=[str(item.get("id") or "") for item in routes if item.get("id")],
     )
-    return {
+    result = {
         "depots": depots,
         "routes": routes,
         "vehicle_templates": default_vehicle_templates(),
@@ -687,3 +688,6 @@ def build_dataset_bootstrap(
         "scenario_overlay": overlay.model_dump(),
         "dataset_status": status,
     }
+    # Parquet/Arrow 由来の numpy 型を Python ネイティブ型に一括変換して返す。
+    # BFF 層で個別ガードを入れているが、ここで一括処理するのが canonical パス。
+    return normalize_for_python(result)

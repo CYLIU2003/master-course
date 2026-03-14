@@ -107,3 +107,9 @@ export {
 export { useAppState } from "./use-app-state";
 export { useScenarioRunReadiness } from "./use-scenario-run-readiness";
 export { useJob, jobKeys } from "./use-job";
+export {
+  useCatalogDepots,
+  useCatalogDepotRoutes,
+  useCatalogRouteFamilyPatterns,
+  catalogKeys,
+} from "./use-catalog";

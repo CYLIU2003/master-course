@@ -38,12 +38,30 @@ def list_depots(operator_id: str) -> list[dict]:
     return db.list_depots(operator_id=operator_id)
 
 
+@router.get("/depots")
+def list_depot_summaries(
+    calendar_type: str = Query(default="平日"),
+) -> list[dict]:
+    return db.list_depot_summaries(calendar_type=calendar_type)
+
+
 @router.get("/operators/{operator_id}/depots/{depot_id}")
 def get_depot(operator_id: str, depot_id: str) -> dict:
     depot = db.get_depot(depot_id)
     if not depot or str(depot.get("operator_id") or "") != operator_id:
         raise HTTPException(status_code=404, detail=f"Depot not found: {depot_id}")
     return depot
+
+
+@router.get("/depots/{depot_id}/routes")
+def list_depot_routes(
+    depot_id: str,
+    include_depot_moves: bool = Query(default=False),
+) -> list[dict]:
+    return db.list_depot_route_summaries(
+        depot_id,
+        include_depot_moves=include_depot_moves,
+    )
 
 
 @router.get("/operators/{operator_id}/route-families")
@@ -65,6 +83,14 @@ def get_route_family(operator_id: str, route_family_id: str) -> dict:
     if detail is None:
         raise HTTPException(status_code=404, detail=f"Route family not found: {route_family_id}")
     return detail
+
+
+@router.get("/route-families/{route_family_id}/patterns")
+def get_route_family_patterns(
+    route_family_id: str,
+    depot_id: Optional[str] = Query(default=None),
+) -> list[dict]:
+    return db.get_route_family_patterns(route_family_id, depot_id=depot_id)
 
 
 @router.get("/operators/{operator_id}/route-families/{route_family_id}/timetable")
