@@ -59,6 +59,7 @@ NUL
 
 # Databases and caches
 *.sqlite3
+*.sqlite
 *.db
 
 # Misc
