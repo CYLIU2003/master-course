@@ -265,7 +265,7 @@ def show_profile(scenario_id: str) -> None:
     )
 
 
-def main() -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="simulation profile JSON を export/apply する lightweight CLI"
     )
@@ -286,8 +286,11 @@ def main() -> int:
 
     show_parser = subparsers.add_parser("show", help="現在の profile JSON を標準出力する")
     show_parser.add_argument("--scenario", required=True, help="scenario id")
+    return parser
 
-    args = parser.parse_args()
+
+def main() -> int:
+    args = _build_parser().parse_args()
 
     if args.command == "export":
         output = args.output or _profile_output_path(args.scenario)

@@ -600,6 +600,9 @@ These tests enforce:
 * summary endpoints do not return detail payloads
 * built data without `manifest.json` is rejected
 
+Experiment report / profile CLI の局所回帰は
+`tests/test_experiment_reports.py` で確認します。
+
 </details>
 
 <details>

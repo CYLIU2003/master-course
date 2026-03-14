@@ -39,6 +39,33 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-14] `.claude/worktrees/magical-elgamal` の残差分を main へ吸収
+
+- **確認した状態**:
+  - `claude/magical-elgamal` branch 自体は `main` と同一 commit で、
+    worktree 側には未コミット差分だけが残っていた。
+  - 差分の大半は既に main 側へ別経路で反映済みだったため、
+    丸ごと checkout すると current main を後退させる恐れがあった。
+
+- **吸収したもの**:
+  - `frontend/src/pages/planning/SimulationBuilderPage.tsx`
+    - dedicated route wrapper を main 側へ追加し、
+      `/simulation-builder` の実体を明示した。
+  - `scripts/simulation_profile_cli.py`
+    - `_build_parser()` を追加し、CLI parser を個別テスト可能にした。
+  - `tests/test_experiment_reports.py`
+    - experiment report payload と simulation profile CLI parser の
+      最小回帰テストを main 側へ追加した。
+  - `README.md`
+    - 上記 test の位置を追記。
+
+- **吸収しなかったもの**:
+  - `.claude/settings.local.json`
+    - ローカル開発設定なので main には取り込まない。
+  - worktree 内の旧 `simulation.py` / TS 型差分
+    - main 側で既により新しい実装へ再整列済みのため、
+      そのままは採用しなかった。
+
 ### [DEV-2026-03-14] Simulation builder / experiment logger の実装実態を再整列
 
 - **確認した問題**:
