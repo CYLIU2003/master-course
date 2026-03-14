@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+from typing import Iterable
 from typing import Any
 
 import pandas as pd
@@ -17,6 +18,30 @@ def _load_module(module_name: str, relative_path: str) -> Any:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _coalesce_scalar(value: Any, default: Any) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value if value else default
+    try:
+        if pd.isna(value):
+            return default
+    except Exception:
+        pass
+    return value
+
+
+def _coalesce_sequence(value: Any, default: list[str]) -> list[str]:
+    if value is None:
+        return list(default)
+    if isinstance(value, str):
+        return [value] if value else list(default)
+    if isinstance(value, Iterable):
+        items = [str(item) for item in value if item is not None and str(item)]
+        return items or list(default)
+    return list(default)
 
 
 def build_timetables(
@@ -38,12 +63,15 @@ def build_timetables(
                 "trip_id": trip.get("trip_id"),
                 "route_id": trip.get("route_id"),
                 "service_id": trip.get("service_id"),
-                "origin": trip.get("origin") or "origin",
-                "destination": trip.get("destination") or "destination",
-                "departure": trip.get("departure") or "06:00:00",
-                "arrival": trip.get("arrival") or "06:30:00",
-                "distance_km": trip.get("distance_km") or 0.0,
-                "allowed_vehicle_types": trip.get("allowed_vehicle_types") or ["BEV", "ICE"],
+                "origin": _coalesce_scalar(trip.get("origin"), "origin"),
+                "destination": _coalesce_scalar(trip.get("destination"), "destination"),
+                "departure": _coalesce_scalar(trip.get("departure"), "06:00:00"),
+                "arrival": _coalesce_scalar(trip.get("arrival"), "06:30:00"),
+                "distance_km": _coalesce_scalar(trip.get("distance_km"), 0.0),
+                "allowed_vehicle_types": _coalesce_sequence(
+                    trip.get("allowed_vehicle_types"),
+                    ["BEV", "ICE"],
+                ),
                 "source": "seed_build",
             }
         )

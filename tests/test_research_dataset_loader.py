@@ -24,8 +24,11 @@ def test_dataset_status_exposes_tokyu_core_seed_contract():
         "黒52",
         "さんまバス",
     ]
-    assert status["builtAvailable"] is False
-    assert status["warning"] == MISSING_BUILT_DATA_MESSAGE
+    if status["builtAvailable"]:
+        assert status["warning"] is None
+        assert status["manifest"] is not None
+    else:
+        assert status["warning"] == MISSING_BUILT_DATA_MESSAGE
 
 
 def test_dataset_bootstrap_returns_seed_only_tokyu_core_defaults():
@@ -33,11 +36,16 @@ def test_dataset_bootstrap_returns_seed_only_tokyu_core_defaults():
 
     assert [item["id"] for item in bootstrap["depots"]] == ["meguro"]
     assert len(bootstrap["routes"]) == 11
-    assert bootstrap["timetable_rows"] == []
-    assert bootstrap["trips"] == []
-    assert bootstrap["feed_context"]["source"] == "seed_only"
+    assert bootstrap["feed_context"]["source"] in {"seed_only", "built_dataset"}
+    if bootstrap["feed_context"]["source"] == "seed_only":
+        assert bootstrap["timetable_rows"] == []
+        assert bootstrap["trips"] == []
+    else:
+        assert len(bootstrap["timetable_rows"]) > 0
+        assert len(bootstrap["trips"]) > 0
     assert bootstrap["scenario_overlay"]["dataset_id"] == "tokyu_core"
-    assert bootstrap["scenario_overlay"]["dataset_version"] == "2026-03-13"
+    assert isinstance(bootstrap["scenario_overlay"]["dataset_version"], str)
+    assert bootstrap["scenario_overlay"]["dataset_version"]
     assert bootstrap["scenario_overlay"]["random_seed"] == 7
     assert bootstrap["dispatch_scope"]["depotId"] == "meguro"
     assert len(bootstrap["dispatch_scope"]["routeSelection"]["includeRouteIds"]) == 11

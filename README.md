@@ -209,11 +209,23 @@ The main app exposes `GET /api/app-state` to show the current readiness and cont
 > [!TIP]
 > built dataset がない場合でも起動は可能ですが、**optimization / simulation は無効**になります。
 
+> [!NOTE]
+> Tokyu catalog/timetable recovery can also run through a local SQLite catalog backend.
+> In that mode the runtime still stays lightweight because it reads `data/tokyu_full.sqlite`
+> only for `/api/catalog/*` lookups and MILP trip extraction.
+
 ### Start backend
 
 ```bash
 python -m pip install -r requirements.txt
 uvicorn bff.main:app --reload --port 8000
+```
+
+Optional `.env` for local SQLite catalog recovery:
+
+```dotenv
+CATALOG_BACKEND=local_sqlite
+TOKYU_DB_PATH=data/tokyu_full.sqlite
 ```
 
 ### Start frontend
@@ -247,6 +259,15 @@ curl http://localhost:8000/api/app-state
 * `built_ready: true` → optimization available
 * `built_ready: false` → built data missing or invalid
 
+### Optional local SQLite catalog recovery
+
+```bash
+python scripts/build_tokyu_full_db.py --api-key YOUR_ODPT_KEY --skip-stop-timetables
+curl "http://localhost:8000/api/catalog/milp-trips?depot_ids=tokyu:depot:meguro,tokyu:depot:denenchofu&calendar_type=平日"
+```
+
+This path is useful when you need Tokyu timetable and MILP input recovery before exporting fresh built artifacts.
+
 </details>
 
 ## Data-Prep App
@@ -279,6 +300,13 @@ python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch
 
 # Build the full Tokyu dataset
 python -m data_prep.pipeline.build_all --dataset tokyu_full --no-fetch
+
+# Build a local SQLite Tokyu catalog for catalog recovery / MILP input generation
+python scripts/build_tokyu_full_db.py --api-key YOUR_ODPT_KEY --skip-stop-timetables
+
+# Export SQLite subsets back into built artifacts
+python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_full.sqlite --dataset-id tokyu_core --depot-ids tokyu:depot:meguro
+python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_full.sqlite --dataset-id tokyu_full
 ```
 
 ### Exit codes
@@ -347,6 +375,10 @@ The following capabilities are deliberately excluded from the main app.
 > [!WARNING]
 > `bff/` や `src/` に ODPT / GTFS の生処理が現れた場合、それはアーキテクチャ違反です。
 > If raw ODPT/GTFS logic appears in `bff/` or `src/`, it is a bug.
+
+> [!NOTE]
+> The optional local SQLite catalog backend is allowed because it reads a prebuilt
+> file (`data/tokyu_full.sqlite`) rather than raw feed data.
 
 ---
 

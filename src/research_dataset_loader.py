@@ -150,6 +150,15 @@ def _normalize_route_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _normalize_timetable_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    vehicle_types = row.get("allowed_vehicle_types")
+    if vehicle_types is None:
+        vehicle_types = row.get("allowedVehicleTypes")
+    if vehicle_types is None:
+        normalized_vehicle_types = ["BEV", "ICE"]
+    elif isinstance(vehicle_types, str):
+        normalized_vehicle_types = [vehicle_types]
+    else:
+        normalized_vehicle_types = [str(item) for item in list(vehicle_types)]
     return {
         "trip_id": str(row.get("trip_id") or row.get("tripId") or "").strip(),
         "route_id": str(row.get("route_id") or row.get("routeId") or "").strip(),
@@ -160,7 +169,7 @@ def _normalize_timetable_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "departure": str(row.get("departure") or row.get("departure_time") or "").strip(),
         "arrival": str(row.get("arrival") or row.get("arrival_time") or "").strip(),
         "distance_km": float(row.get("distance_km") or row.get("distanceKm") or 0.0),
-        "allowed_vehicle_types": list(row.get("allowed_vehicle_types") or row.get("allowedVehicleTypes") or ["BEV", "ICE"]),
+        "allowed_vehicle_types": normalized_vehicle_types,
         "source": row.get("source") or "built_dataset",
     }
 

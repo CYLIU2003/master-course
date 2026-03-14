@@ -71,6 +71,10 @@ from bff.middleware.timing import TimingMiddleware
 from bff.services import app_cache
 
 _log = logging.getLogger(__name__)
+CATALOG_BACKEND = os.getenv("CATALOG_BACKEND", "").strip().lower()
+
+if CATALOG_BACKEND == "local_sqlite":
+    from bff.routers import catalog_local
 
 
 @asynccontextmanager
@@ -133,6 +137,8 @@ app.include_router(graph.router, prefix=PREFIX)
 app.include_router(simulation.router, prefix=PREFIX)
 app.include_router(optimization.router, prefix=PREFIX)
 app.include_router(jobs.router, prefix=PREFIX)
+if CATALOG_BACKEND == "local_sqlite":
+    app.include_router(catalog_local.router, prefix=PREFIX)
 
 
 # ── Health check ───────────────────────────────────────────────
