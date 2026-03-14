@@ -165,10 +165,10 @@ def _max_rss_mb() -> Optional[float]:
 
 
 def _consumer_key() -> str:
-    key = get_runtime_secret(["ODPT_CONSUMER_KEY", "ODPT_TOKEN"])
+    key = get_runtime_secret(["ODPT_CONSUMER_KEY", "ODPT_API_KEY", "ODPT_TOKEN"])
     if not key:
         raise RuntimeError(
-            "ODPT consumer key is missing. Set ODPT_CONSUMER_KEY or ODPT_TOKEN "
+            "ODPT consumer key is missing. Set ODPT_CONSUMER_KEY, ODPT_API_KEY, or ODPT_TOKEN "
             "in environment variables, .env, .env.local, or config/local.json."
         )
     return key

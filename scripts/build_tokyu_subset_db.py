@@ -7,9 +7,10 @@ time. At runtime the BFF reads the SQLite only; it never calls ODPT directly.
 Default editable selection lives in `scripts/tokyu_subset_config.py`.
 
 Example:
+    python scripts/build_tokyu_subset_db.py --skip-stop-timetables
+    python scripts/build_tokyu_subset_db.py --depots meguro,seta
+    python scripts/build_tokyu_subset_db.py --depots meguro,seta --route-codes 黒01,園01
     python scripts/build_tokyu_subset_db.py --api-key YOUR_KEY --skip-stop-timetables
-    python scripts/build_tokyu_subset_db.py --api-key YOUR_KEY --depots meguro,seta
-    python scripts/build_tokyu_subset_db.py --api-key YOUR_KEY --depots meguro,seta --route-codes 黒01,園01
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from _odpt_runtime import resolve_odpt_api_key
 from tokyu_subset_config import SELECTED_DEPOTS, SELECTED_ROUTE_CODES
 
 
@@ -1001,7 +1003,10 @@ def write_pipeline_meta(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build a Tokyu Bus depot-scoped subset SQLite catalog.")
-    parser.add_argument("--api-key", required=True, help="ODPT API key")
+    parser.add_argument(
+        "--api-key",
+        help="ODPT API key. Omit to use ODPT_CONSUMER_KEY / ODPT_API_KEY / ODPT_TOKEN from .env or environment.",
+    )
     parser.add_argument(
         "--depots",
         default=",".join(SELECTED_DEPOTS),
@@ -1017,6 +1022,10 @@ def main() -> None:
     parser.add_argument("--out", default=str(DEFAULT_OUT), help=f"output SQLite path (default: {DEFAULT_OUT})")
     parser.add_argument("--no-cache", action="store_true", help="Disable local ODPT response cache")
     args = parser.parse_args()
+    try:
+        api_key = resolve_odpt_api_key(args.api_key)
+    except RuntimeError as exc:
+        parser.error(str(exc))
 
     selected_depots = [depot_key_from_id(value) for value in args.depots.split(",") if depot_key_from_id(value)]
     requested_route_codes = [normalize_route_code(value) for value in args.route_codes.split(",") if normalize_route_code(value)]
@@ -1045,7 +1054,7 @@ def main() -> None:
     seed_route_code_depots(conn, selected_route_codes, selected_depots, route_to_depots)
 
     if not is_done(conn, "BusroutePattern", "selected"):
-        patterns = odpt_fetch("odpt:BusroutePattern", {"odpt:operator": OPERATOR_ID}, args.api_key, use_cache)
+        patterns = odpt_fetch("odpt:BusroutePattern", {"odpt:operator": OPERATOR_ID}, api_key, use_cache)
         pattern_to_family = insert_patterns_subset(
             conn,
             patterns,
@@ -1068,6 +1077,9 @@ def main() -> None:
     all_stop_ids: set[str] = set(
         str(row[0]) for row in conn.execute("SELECT DISTINCT stop_id FROM pattern_stops").fetchall() if str(row[0] or "")
     )
+    all_stop_ids.update(
+        str(row[0]) for row in conn.execute("SELECT DISTINCT stop_id FROM trip_stops").fetchall() if str(row[0] or "")
+    )
     for index, pattern_id in enumerate(selected_pattern_ids, start=1):
         if is_done(conn, "BusTimetable", pattern_id):
             continue
@@ -1075,7 +1087,7 @@ def main() -> None:
         timetable_objects = odpt_fetch(
             "odpt:BusTimetable",
             {"odpt:busroutePattern": pattern_id},
-            args.api_key,
+            api_key,
             use_cache,
         )
         trip_count_for_pattern = 0
@@ -1087,7 +1099,7 @@ def main() -> None:
         mark_done(conn, "BusTimetable", pattern_id, trip_count_for_pattern)
 
     if not is_done(conn, "BusstopPole", "selected"):
-        stop_objects = odpt_fetch("odpt:BusstopPole", {"odpt:operator": OPERATOR_ID}, args.api_key, use_cache)
+        stop_objects = odpt_fetch("odpt:BusstopPole", {"odpt:operator": OPERATOR_ID}, api_key, use_cache)
         inserted_stops = insert_stops(conn, stop_objects, all_stop_ids)
         mark_done(conn, "BusstopPole", "selected", inserted_stops)
 
@@ -1101,7 +1113,7 @@ def main() -> None:
             stop_timetable_objects = odpt_fetch(
                 "odpt:BusstopPoleTimetable",
                 {"odpt:busroutePattern": pattern_id},
-                args.api_key,
+                api_key,
                 use_cache,
             )
             inserted_entries = 0

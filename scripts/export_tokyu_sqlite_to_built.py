@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import sqlite3
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,10 @@ import pandas as pd
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+
+from src.geo import haversine_km
+
 DEFAULT_DB = REPO_ROOT / "data" / "tokyu_full.sqlite"
 DEFAULT_BUILT_ROOT = REPO_ROOT / "data" / "built"
 SEED_ROOT = REPO_ROOT / "data" / "seed" / "tokyu"
@@ -44,6 +49,26 @@ def _read_seed_definition(dataset_id: str, depot_ids: list[str]) -> dict[str, An
     }
 
 
+def _compute_distance_km(row: pd.Series) -> float:
+    values = [
+        row.get("origin_lat"),
+        row.get("origin_lon"),
+        row.get("destination_lat"),
+        row.get("destination_lon"),
+    ]
+    if any(pd.isna(value) for value in values):
+        return 0.0
+    return round(
+        haversine_km(
+            float(row["origin_lat"]),
+            float(row["origin_lon"]),
+            float(row["destination_lat"]),
+            float(row["destination_lon"]),
+        ),
+        4,
+    )
+
+
 def export_sqlite_to_built(
     db_path: Path,
     dataset_id: str,
@@ -61,19 +86,22 @@ def export_sqlite_to_built(
     params: list[Any] = []
     if depot_ids:
         placeholders = ",".join("?" for _ in depot_ids)
-        route_where = f"WHERE depot_id IN ({placeholders})"
+        route_where = f"WHERE route_families.depot_id IN ({placeholders})"
         params.extend(depot_ids)
 
     routes_df = pd.read_sql_query(
         f"""
         SELECT
-            'tokyu:' || replace(depot_id, 'tokyu:depot:', '') || ':' || route_family AS id,
-            route_family AS routeCode,
-            route_family AS routeLabel,
-            coalesce(title_ja, route_family) AS name,
-            depot_id AS depotId,
+            'tokyu:' || replace(route_families.depot_id, 'tokyu:depot:', '') || ':' || route_families.route_family AS id,
+            route_families.route_family AS routeCode,
+            route_families.route_family AS routeLabel,
+            coalesce(route_families.title_ja, route_families.route_family) AS name,
+            route_families.depot_id AS depotId,
+            depot.lat AS depotLat,
+            depot.lon AS depotLon,
             'sqlite_export' AS source
         FROM route_families
+        LEFT JOIN depots depot ON route_families.depot_id = depot.depot_id
         {route_where}
         ORDER BY route_family
         """,
@@ -98,18 +126,26 @@ def export_sqlite_to_built(
             t.departure_hhmm AS departure,
             t.arrival_hhmm AS arrival,
             t.origin_stop_id AS origin,
+            origin_stop.title_ja AS origin_name,
+            origin_stop.lat AS origin_lat,
+            origin_stop.lon AS origin_lon,
             t.dest_stop_id AS destination,
-            0.0 AS distance_km,
+            dest_stop.title_ja AS destination_name,
+            dest_stop.lat AS destination_lat,
+            dest_stop.lon AS destination_lon,
             json('["BEV","ICE"]') AS allowed_vehicle_types,
             'sqlite_export' AS source
         FROM timetable_trips t
         JOIN route_patterns rp ON t.pattern_id = rp.pattern_id
+        LEFT JOIN stops origin_stop ON t.origin_stop_id = origin_stop.stop_id
+        LEFT JOIN stops dest_stop ON t.dest_stop_id = dest_stop.stop_id
         {trip_where}
         ORDER BY t.dep_min, t.trip_id
         """,
         conn,
         params=trip_params,
     )
+    trips_df["distance_km"] = trips_df.apply(_compute_distance_km, axis=1)
     trips_df["allowed_vehicle_types"] = trips_df["allowed_vehicle_types"].apply(json.loads)
     trips_df.to_parquet(built_dir / "trips.parquet", index=False)
 
@@ -119,7 +155,13 @@ def export_sqlite_to_built(
             "route_id",
             "service_id",
             "origin",
+            "origin_name",
+            "origin_lat",
+            "origin_lon",
             "destination",
+            "destination_name",
+            "destination_lat",
+            "destination_lon",
             "departure",
             "arrival",
             "distance_km",

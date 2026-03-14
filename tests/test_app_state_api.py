@@ -153,3 +153,22 @@ def test_run_endpoint_returns_503_when_not_built_ready(monkeypatch):
         assert response.status_code == 503
         body = response.json()
         assert body["detail"]["error"] == "BUILT_DATASET_REQUIRED"
+
+
+def test_app_master_data_endpoint_returns_preloaded_master_blueprint():
+    from bff.main import app
+
+    client = TestClient(app)
+    response = client.get("/api/app/master-data")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["datasetId"] == "tokyu_dispatch_ready"
+    assert {item["id"] for item in body["depots"]} == {
+        "meguro",
+        "seta",
+        "awashima",
+        "tsurumaki",
+    }
+    assert len(body["routes"]) == 46
+    assert len(body["vehicleTemplates"]) >= 2

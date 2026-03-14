@@ -29,6 +29,7 @@ def test_create_scenario_bootstraps_tokyu_core_seed_dataset(temp_store_dir: Path
     assert doc["feed_context"]["source"] in {"seed_only", "built_dataset"}
     assert [depot["id"] for depot in doc["depots"]] == ["meguro"]
     assert len(doc["routes"]) == 11
+    assert len(doc["vehicle_templates"]) >= 2
     assert len(doc["depot_route_permissions"]) == 11
     assert doc["dispatch_scope"]["depotId"] == "meguro"
     assert len(doc["scenario_overlay"]["route_ids"]) == 11

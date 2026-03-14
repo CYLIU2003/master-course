@@ -138,6 +138,7 @@ data-prep/                  ->   data/built/<dataset>/                 ->   app 
 | `data/seed/tokyu/route_to_depot.csv`       | 系統→営業所対応表 / Route-to-depot mapping                 |
 | `data/seed/tokyu/version.json`             | Seed provenance metadata                           |
 | `data/seed/tokyu/datasets/tokyu_core.json` | 目黒営業所 + 11 路線定義 / Meguro depot + 11 routes         |
+| `data/seed/tokyu/datasets/tokyu_dispatch_ready.json` | 目黒・瀬田・淡島・弦巻 + 46 route rows / 4-depot dispatch-ready preload |
 | `data/seed/tokyu/datasets/tokyu_full.json` | 全 12 営業所 + 全路線定義 / All depots and routes           |
 
 ### Built data（`data-prep` が生成・Git には含めない）
@@ -166,9 +167,11 @@ python -m data_prep.pipeline.build_all --dataset tokyu_core
 | Dataset ID   | Depots           | Routes               |
 | ------------ | ---------------- | -------------------- |
 | `tokyu_core` | `meguro (目黒営業所)` | All 11 Meguro routes |
+| `tokyu_dispatch_ready` | `meguro,seta,awashima,tsurumaki` | 46 route rows / 43 route codes |
 | `tokyu_full` | All 12 depots    | All routes           |
 
 **Default dataset:** `tokyu_core`
+**Default preloaded master dataset:** `tokyu_dispatch_ready`
 
 ---
 
@@ -211,8 +214,9 @@ The main app exposes `GET /api/app-state` to show the current readiness and cont
 
 > [!NOTE]
 > Tokyu catalog/timetable recovery can also run through a local SQLite catalog backend.
-> In that mode the runtime still stays lightweight because it reads `data/tokyu_full.sqlite`
-> only for `/api/catalog/*` lookups and MILP trip extraction.
+> In that mode the runtime still stays lightweight because it reads a prebuilt
+> SQLite catalog (`data/tokyu_full.sqlite` by default) only for `/api/catalog/*`
+> lookups and MILP trip extraction.
 
 ### Start backend
 
@@ -226,6 +230,8 @@ Optional `.env` for local SQLite catalog recovery:
 ```dotenv
 CATALOG_BACKEND=local_sqlite
 TOKYU_DB_PATH=data/tokyu_full.sqlite
+PRELOAD_MASTER_DATASET_ID=tokyu_dispatch_ready
+ODPT_CONSUMER_KEY=your_actual_odpt_key
 ```
 
 ### Start frontend
@@ -254,19 +260,27 @@ http://localhost:5173
 
 ```bash
 curl http://localhost:8000/api/app-state
+curl http://localhost:8000/api/app/master-data
 ```
 
 * `built_ready: true` → optimization available
+* `/api/app/master-data` → scenario 非依存の depot / route / vehicle template blueprint
+
+### Preloaded master data
+
+* `GET /api/app/master-data` は scenario 非依存で営業所・路線・車両テンプレートを返します。
+* dataset bootstrap は `vehicle_templates` を含むため、新規 scenario 作成直後からテンプレートが空になりません。
+* dataset-backed scenario で `depots/routes/route_depot_assignments/depot_route_permissions/vehicle_templates` が空だった場合、load 時に seed dataset から自己修復します。
 * `built_ready: false` → built data missing or invalid
 
 ### Optional local SQLite catalog recovery
 
 ```bash
-python scripts/build_tokyu_full_db.py --api-key YOUR_ODPT_KEY --skip-stop-timetables
+python scripts/build_tokyu_full_db.py --skip-stop-timetables
 curl "http://localhost:8000/api/catalog/milp-trips?depot_ids=tokyu:depot:meguro,tokyu:depot:denenchofu&calendar_type=平日"
 ```
 
-This path is useful when you need Tokyu timetable and MILP input recovery before exporting fresh built artifacts.
+The SQLite catalog stores stop coordinates and depot coordinates, and the local catalog backend computes straight-line trip distances from origin/destination stop coordinates for MILP input preparation. This path is useful when you need Tokyu timetable and MILP input recovery before exporting fresh built artifacts, while keeping the main runtime free from live ODPT access.
 
 </details>
 
@@ -285,7 +299,12 @@ This path is useful when you need Tokyu timetable and MILP input recovery before
 ### Prerequisites
 
 * Python 3.11+
-* `ODPT_API_KEY` を環境変数に設定
+* `.env` または環境変数に `ODPT_CONSUMER_KEY` を設定
+
+> [!NOTE]
+> ODPT キーは `ODPT_CONSUMER_KEY` を推奨します。互換で
+> `ODPT_API_KEY` / `ODPT_TOKEN` も参照します。
+> `YOUR_ODPT_KEY` はプレースホルダなので、そのまま実行すると 404 になります。
 
 ### Full build
 
@@ -302,6 +321,12 @@ python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch
 python -m data_prep.pipeline.build_all --dataset tokyu_full --no-fetch
 
 # Build a local SQLite Tokyu catalog for catalog recovery / MILP input generation
+python scripts/build_tokyu_full_db.py --skip-stop-timetables
+
+# Resume after interruption
+python scripts/build_tokyu_full_db.py --skip-stop-timetables --resume
+
+# Or override the key explicitly for one-off runs
 python scripts/build_tokyu_full_db.py --api-key YOUR_ODPT_KEY --skip-stop-timetables
 
 # Export SQLite subsets back into built artifacts

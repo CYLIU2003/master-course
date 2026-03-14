@@ -434,6 +434,72 @@ def test_create_vehicle_batch_duplicate_and_template_flow(temp_store_dir: Path):
     assert scenario_store.list_vehicle_templates(scenario_id) == []
 
 
+def test_load_repairs_missing_master_data_for_dataset_backed_scenario(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Dataset repair", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    doc = scenario_store._load(scenario_id)
+    doc["depots"] = []
+    doc["routes"] = []
+    doc["vehicle_templates"] = []
+    doc["route_depot_assignments"] = []
+    doc["depot_route_permissions"] = []
+    doc["dispatch_scope"] = scenario_store._default_dispatch_scope()
+    doc["feed_context"] = {
+        "feedId": "tokyu",
+        "snapshotId": "2026-03-14",
+        "datasetId": "tokyu_dispatch_ready",
+        "datasetFingerprint": "tokyu_dispatch_ready:2026-03-14",
+        "source": "seed_only",
+    }
+    doc["scenario_overlay"] = {
+        "scenario_id": scenario_id,
+        "dataset_id": "tokyu_dispatch_ready",
+        "dataset_version": "2026-03-14",
+        "random_seed": 42,
+        "depot_ids": [],
+        "route_ids": [],
+        "fleet": {"n_bev": 0, "n_ice": 0},
+        "charging_constraints": {
+            "max_simultaneous_sessions": None,
+            "overnight_window_start": None,
+            "overnight_window_end": None,
+            "depot_power_limit_kw": None,
+            "charger_power_limit_kw": None,
+        },
+        "cost_coefficients": {
+            "tou_pricing": [],
+            "demand_charge_cost_per_kw": 0.0,
+            "pv_enabled": False,
+            "pv_scale": 1.0,
+            "diesel_price_per_l": 0.0,
+        },
+        "solver_config": {
+            "mode": "hybrid",
+            "time_limit_seconds": 300,
+            "mip_gap": 0.01,
+            "alns_iterations": 500,
+        },
+    }
+    scenario_store._save(doc)
+
+    repaired = scenario_store._load(scenario_id)
+
+    assert {item["id"] for item in repaired["depots"]} == {
+        "meguro",
+        "seta",
+        "awashima",
+        "tsurumaki",
+    }
+    assert len(repaired["routes"]) == 46
+    assert len(repaired["route_depot_assignments"]) > len(repaired["routes"])
+    assert len(repaired["depot_route_permissions"]) > 0
+    assert len(repaired["vehicle_templates"]) >= 2
+    assert (repaired["dispatch_scope"]["depotSelection"]["depotIds"]) != []
+
+
 def test_duplicate_vehicle_batch_to_target_depot_filters_route_permissions(
     temp_store_dir: Path,
 ):

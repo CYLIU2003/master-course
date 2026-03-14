@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from bff.errors import AppErrorCode, make_error
 from bff.services import app_cache
+from bff.services import master_defaults
 from bff.services import research_catalog
 
 router = APIRouter(tags=["app-state"])
@@ -80,3 +81,17 @@ def get_app_state(
         "integrity_error": item.get("integrity_error"),
         "contract_error_code": item.get("contract_error_code"),
     }
+
+
+@router.get("/app/master-data")
+def get_app_master_data(
+    dataset_id: str = Query(
+        default=master_defaults.default_preload_dataset_id(),
+        alias="datasetId",
+    ),
+) -> dict:
+    item = app_cache.get_cached(
+        f"app:master-data:{dataset_id}",
+        lambda: master_defaults.get_preloaded_master_data(dataset_id),
+    )
+    return dict(item)

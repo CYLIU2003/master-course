@@ -36,6 +36,7 @@ def test_dataset_bootstrap_returns_seed_only_tokyu_core_defaults():
 
     assert [item["id"] for item in bootstrap["depots"]] == ["meguro"]
     assert len(bootstrap["routes"]) == 11
+    assert len(bootstrap["vehicle_templates"]) >= 2
     assert bootstrap["feed_context"]["source"] in {"seed_only", "built_dataset"}
     if bootstrap["feed_context"]["source"] == "seed_only":
         assert bootstrap["timetable_rows"] == []
@@ -53,4 +54,4 @@ def test_dataset_bootstrap_returns_seed_only_tokyu_core_defaults():
 
 def test_list_dataset_statuses_returns_core_and_full():
     dataset_ids = {item["datasetId"] for item in list_dataset_statuses()}
-    assert {"tokyu_core", "tokyu_full"}.issubset(dataset_ids)
+    assert {"tokyu_core", "tokyu_full", "tokyu_dispatch_ready"}.issubset(dataset_ids)

@@ -173,6 +173,35 @@ tests/       回帰テスト
   - TypeScript: `npx tsc --noEmit` → 0 errors。
   - orphan ファイル削除確認済み。
 
+### [DEV-2026-03-14] Scenario 非依存 master preload と dataset-backed scenario 自己修復
+
+- **問題**:
+  - 既存 scenario の一部は `feed_context.datasetId` を持っていても `depots/routes/route_depot_assignments/depot_route_permissions` が空のまま残っていた。
+  - `vehicle_templates` は dataset bootstrap に含まれておらず、scenario ごとに毎回手動で作る必要があった。
+  - app 起動時に scenario 非依存で参照できる depot / route / template の基準 master がなかった。
+
+- **対応**:
+  - `data/seed/tokyu/datasets/tokyu_dispatch_ready.json` を追加し、目黒・瀬田・淡島・弦巻の 4営業所 / 43 route code を preload 用 dataset として固定。
+  - `src/research_dataset_loader.py`
+    - `default_vehicle_templates()` を追加。
+    - `build_dataset_bootstrap()` が `vehicle_templates` を返すよう変更。
+  - `bff/services/master_defaults.py` を追加。
+    - `GET /api/app/master-data` 用の scenario 非依存 master blueprint を構築。
+    - dataset-backed scenario の欠落 master data を埋める repair helper を追加。
+  - `bff/store/scenario_store.py`
+    - `_load()` 時に `scenario_overlay/feed_context.datasetId` を見て
+      `depots/routes/route_depot_assignments/depot_route_permissions/vehicle_templates`
+      を自己修復するよう変更。
+    - `apply_dataset_bootstrap()` が `vehicle_templates` を保存するよう変更。
+  - `bff/services/app_cache.py`
+    - startup warm-up で preloaded master blueprint をキャッシュするよう変更。
+  - `bff/routers/app_state.py`
+    - `GET /api/app/master-data` を追加。
+
+- **確認結果**:
+  - `tokyu_dispatch_ready` で 4営業所 / 46 route rows / default vehicle templates を app-level に返却できることを確認。
+  - dataset-backed だが master が空の scenario は `_load()` 一発目で自己修復されることをテスト追加で確認。
+
 ### [DEV-2026-03-13] 起動画面で既存シナリオを選択できない問題を修正
 
 - **問題**:
@@ -565,3 +594,19 @@ master-course/
     root の `data_prep.pipeline.build_all` へ委譲する形で、root / `data-prep/` どちらからでも同じ
     モジュールパスで起動できるよう修正。
   - `data-prep/README.md` に上記の実行方法を追記。
+
+- 2026-03-14 (Tokyu subset emergency recovery)
+  - `scripts/tokyu_subset_config.py` を追加し、目黒・瀬田・淡島・弦巻の default depot subset を1か所で編集できるようにした。
+  - `scripts/build_tokyu_subset_db.py` を追加し、権威データ `tokyu_bus_depots_master.json` / `tokyu_bus_route_to_depot.csv` を正本にした depot-scoped SQLite subset builder を実装。
+  - shared route code を単一 `depot_id` 列で潰さないため、subset DB schema に `route_pattern_depots` / `route_family_depots` / `route_code_depots` bridge を追加した。
+  - `bff/services/local_db_catalog.py` を short depot id (`meguro`) / canonical depot id (`tokyu:depot:meguro`) 両対応にし、複数営業所 union・midnight rollover・optimizer-ready trip shape を実装。
+  - `bff/routers/catalog_local.py` の `/api/catalog/milp-trips` を複数営業所対応のまま canonical depot ids を返す形へ調整。
+  - `src/research_dataset_loader.py` は built manifest があっても routes / timetables / trips が空なら seed bootstrap にフォールバックするよう修正し、研究 bootstrap が止まらないようにした。
+  - `README.md` に subset builder の使い方、`TOKYU_DB_PATH=data/tokyu_subset.sqlite`、short depot id API 例を追記。
+  - 追加テスト: `tests/test_build_tokyu_subset_db.py`, `tests/test_local_db_catalog_subset.py`, `tests/test_catalog_local_subset.py`
+
+- 2026-03-14 (ODPT key resolution cleanup)
+  - `scripts/_odpt_runtime.py` を追加し、ODPT キー解決を共通化した。
+  - `scripts/build_tokyu_full_db.py` / `scripts/build_tokyu_subset_db.py` は `--api-key` 未指定時でも `.env` / 環境変数の `ODPT_CONSUMER_KEY` / `ODPT_API_KEY` / `ODPT_TOKEN` を自動参照するよう修正。
+  - `data-prep/lib/catalog_builder/odpt_fetch.py` と `tools/fast_catalog_ingest.py` も同じキー名セットを参照するよう揃えた。
+  - `README.md` と `bff/services/local_db_catalog.py` の案内文を更新し、`YOUR_ODPT_KEY` がプレースホルダである点と `.env` 自動読込を明記した。

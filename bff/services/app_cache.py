@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, Optional
 
 import pandas as pd
 
-from bff.services import research_catalog
+from bff.services import master_defaults, research_catalog
 from src.artifact_contract import ArtifactContractError, RUNTIME_VERSION, check_artifact_contract
 
 _log = logging.getLogger(__name__)
@@ -103,6 +103,19 @@ def warm_startup_cache() -> None:
         reload_state()
     except Exception:
         _log.exception("App state warm-up failed")
+
+    try:
+        master_data = master_defaults.get_preloaded_master_data()
+        set_cached("app:master-data:default", master_data)
+        _log.info(
+            "Preloaded master data cached for %s (%s depots, %s routes, %s templates)",
+            master_data.get("datasetId"),
+            len(master_data.get("depots") or []),
+            len(master_data.get("routes") or []),
+            len(master_data.get("vehicleTemplates") or []),
+        )
+    except Exception:
+        _log.exception("Preloaded master data warm-up failed")
 
 
 def _load_state(dataset_id: str | None = None) -> Dict[str, Any]:

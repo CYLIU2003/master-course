@@ -16,10 +16,11 @@ scripts/build_tokyu_full_db.py
   - pipeline_meta          取得メタ情報
 
 実行例:
+    python scripts/build_tokyu_full_db.py
+    python scripts/build_tokyu_full_db.py --skip-stop-timetables
+    python scripts/build_tokyu_full_db.py --resume
+    python scripts/build_tokyu_full_db.py --out data/tokyu_full.sqlite
     python scripts/build_tokyu_full_db.py --api-key YOUR_KEY
-    python scripts/build_tokyu_full_db.py --api-key YOUR_KEY --skip-stop-timetables
-    python scripts/build_tokyu_full_db.py --api-key YOUR_KEY --resume
-    python scripts/build_tokyu_full_db.py --api-key YOUR_KEY --out data/tokyu_full.sqlite
 
 注意:
     停留所時刻表（BusstopPoleTimetable）は件数が多く時間がかかります（30分〜）。
@@ -43,6 +44,8 @@ from urllib.error import HTTPError, URLError
 from datetime import datetime, timezone
 from typing import Any, Iterator
 import csv
+
+from _odpt_runtime import resolve_odpt_api_key
 
 # ─── 定数 ─────────────────────────────────────────────────────────────────
 
@@ -861,8 +864,8 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--api-key", required=True,
-                        help="ODPT APIキー (https://developer.odpt.org/)")
+    parser.add_argument("--api-key",
+                        help="ODPT APIキー。未指定時は .env / 環境変数の ODPT_CONSUMER_KEY / ODPT_API_KEY / ODPT_TOKEN から解決")
     parser.add_argument("--out", default=str(DEFAULT_OUT),
                         help=f"出力SQLiteパス (デフォルト: {DEFAULT_OUT})")
     parser.add_argument("--skip-stop-timetables", action="store_true",
@@ -874,6 +877,10 @@ def main() -> None:
     parser.add_argument("--phases", default="1,2,3,4",
                         help="実行するフェーズをカンマ区切りで指定 (デフォルト: 1,2,3,4)")
     args = parser.parse_args()
+    try:
+        api_key = resolve_odpt_api_key(args.api_key)
+    except RuntimeError as exc:
+        parser.error(str(exc))
 
     phases = set(int(p.strip()) for p in args.phases.split(","))
     use_cache = not args.no_cache
@@ -892,11 +899,11 @@ def main() -> None:
 
     # Phase 1: 停留所
     if 1 in phases:
-        phase_stops(conn, args.api_key, use_cache)
+        phase_stops(conn, api_key, use_cache)
 
     # Phase 2: 路線パターン
     if 2 in phases:
-        pattern_to_family = phase_patterns(conn, args.api_key, use_cache)
+        pattern_to_family = phase_patterns(conn, api_key, use_cache)
     else:
         rows = conn.execute(
             "SELECT pattern_id, route_family FROM route_patterns"
@@ -908,18 +915,18 @@ def main() -> None:
 
     if not pattern_ids:
         log("⚠ 路線パターンが0件です。")
-        log("  --api-key が正しいか確認してください:")
+        log("  キー指定を確認してください（--api-key または .env の ODPT_CONSUMER_KEY / ODPT_API_KEY / ODPT_TOKEN）:")
         log(f'  curl "{ODPT_BASE}/odpt:BusroutePattern?odpt:operator={OPERATOR_ID}&acl:consumerKey=YOUR_KEY"')
         conn.close()
         sys.exit(1)
 
     # Phase 3: 時刻表
     if 3 in phases:
-        phase_timetables(conn, args.api_key, use_cache, pattern_ids, pattern_to_family)
+        phase_timetables(conn, api_key, use_cache, pattern_ids, pattern_to_family)
 
     # Phase 4: 停留所時刻表
     if 4 in phases and not args.skip_stop_timetables:
-        phase_stop_timetables(conn, args.api_key, use_cache, pattern_ids)
+        phase_stop_timetables(conn, api_key, use_cache, pattern_ids)
     elif args.skip_stop_timetables:
         log("=== Phase 4: 停留所時刻表 — スキップ ===")
 

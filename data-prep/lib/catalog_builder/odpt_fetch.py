@@ -10,9 +10,9 @@ into memory or returns it through an API response.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,18 +43,32 @@ DEFAULT_ODPT_TOKYU_RESOURCES = list(ODPT_RESOURCE_FILE_MAP.keys())
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_CACHE_DIR = _REPO_ROOT / "data" / "cache" / "odpt" / "raw"
 
+try:
+    from tools._config_runtime import get_runtime_secret
+except ModuleNotFoundError:  # pragma: no cover - direct path fallback
+    _config_runtime_path = _REPO_ROOT / "tools" / "_config_runtime.py"
+    _config_runtime_spec = importlib.util.spec_from_file_location(
+        "tools._config_runtime",
+        _config_runtime_path,
+    )
+    if _config_runtime_spec is None or _config_runtime_spec.loader is None:
+        raise
+    _config_runtime_module = importlib.util.module_from_spec(_config_runtime_spec)
+    _config_runtime_spec.loader.exec_module(_config_runtime_module)
+    get_runtime_secret = _config_runtime_module.get_runtime_secret
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
 def _consumer_key() -> str:
-    """Read the ODPT consumer key from environment variables only."""
-    key = os.environ.get("ODPT_CONSUMER_KEY") or os.environ.get("ODPT_TOKEN")
+    """Read the ODPT consumer key from env vars or .env-style config."""
+    key = get_runtime_secret(["ODPT_CONSUMER_KEY", "ODPT_API_KEY", "ODPT_TOKEN"])
     if not key:
         raise RuntimeError(
-            "ODPT_CONSUMER_KEY (or ODPT_TOKEN) environment variable is not set. "
-            "Set it in your .env or system environment."
+            "ODPT consumer key is not set. Configure ODPT_CONSUMER_KEY, "
+            "ODPT_API_KEY, or ODPT_TOKEN in your environment or .env."
         )
     return key
 

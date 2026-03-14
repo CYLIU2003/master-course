@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from src.dispatch.models import Trip
+from src.geo import haversine_km
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -42,8 +43,9 @@ def get_conn() -> sqlite3.Connection:
         raise FileNotFoundError(
             f"Tokyu catalog SQLite DB not found: {db_path}\n"
             "Build it first with either:\n"
-            "  python scripts/build_tokyu_subset_db.py --api-key YOUR_KEY --skip-stop-timetables\n"
-            "  python scripts/build_tokyu_full_db.py --api-key YOUR_KEY --skip-stop-timetables"
+            "  python scripts/build_tokyu_subset_db.py --skip-stop-timetables\n"
+            "  python scripts/build_tokyu_full_db.py --skip-stop-timetables\n"
+            "If your key is not in .env, add --api-key YOUR_KEY."
         )
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -89,6 +91,13 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
 def _minutes_to_hhmm(value: int | None, fallback: str = "00:00", wrap: bool = False) -> str:
     if value is None:
         return fallback
@@ -110,6 +119,26 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
 
 def _query_dicts(conn: sqlite3.Connection, sql: str, params: Sequence[Any] | None = None) -> list[dict[str, Any]]:
     return _rows_to_dicts(conn.execute(sql, params or []))
+
+
+def _straight_line_distance_km(record: dict[str, Any]) -> float:
+    required = [
+        record.get("origin_lat"),
+        record.get("origin_lon"),
+        record.get("destination_lat"),
+        record.get("destination_lon"),
+    ]
+    if any(value is None for value in required):
+        return DEFAULT_DISTANCE_KM
+    return round(
+        haversine_km(
+            _safe_float(record.get("origin_lat")),
+            _safe_float(record.get("origin_lon")),
+            _safe_float(record.get("destination_lat")),
+            _safe_float(record.get("destination_lon")),
+        ),
+        4,
+    )
 
 
 def _attach_depot_scope(
@@ -357,9 +386,17 @@ def get_timetable_trips(
         SELECT
             t.*,
             rp.route_code,
-            rp.depot_id AS primary_depot_id
+            rp.depot_id AS primary_depot_id,
+            origin_stop.title_ja AS origin_name,
+            origin_stop.lat AS origin_lat,
+            origin_stop.lon AS origin_lon,
+            dest_stop.title_ja AS destination_name,
+            dest_stop.lat AS destination_lat,
+            dest_stop.lon AS destination_lon
         FROM timetable_trips t
         LEFT JOIN route_patterns rp ON t.pattern_id=rp.pattern_id
+        LEFT JOIN stops origin_stop ON t.origin_stop_id=origin_stop.stop_id
+        LEFT JOIN stops dest_stop ON t.dest_stop_id=dest_stop.stop_id
         WHERE t.calendar_type=?
     """
     params: list[Any] = [calendar_type]
@@ -400,8 +437,12 @@ def get_timetable_trips(
                 "arr_min": arr_min_int,
                 "departure_time": departure_time,
                 "arrival_time": arrival_time,
-                "origin": str(item.get("origin_stop_id") or ""),
-                "destination": str(item.get("dest_stop_id") or ""),
+                "origin": str(item.get("origin_name") or item.get("origin_stop_id") or ""),
+                "destination": str(item.get("destination_name") or item.get("dest_stop_id") or ""),
+                "origin_lat": item.get("origin_lat"),
+                "origin_lon": item.get("origin_lon"),
+                "destination_lat": item.get("destination_lat"),
+                "destination_lon": item.get("destination_lon"),
             }
         )
     result.sort(
@@ -420,7 +461,7 @@ def get_trip_stops(trip_id: str) -> list[dict[str, Any]]:
         return _query_dicts(
             conn,
             """
-            SELECT ts.seq, ts.stop_id, s.title_ja,
+            SELECT ts.seq, ts.stop_id, s.title_ja, s.lat, s.lon,
                    ts.departure_hhmm, ts.arrival_hhmm, ts.dep_min, ts.arr_min
             FROM trip_stops ts
             LEFT JOIN stops s ON ts.stop_id=s.stop_id
@@ -543,6 +584,10 @@ def build_milp_trips(
             "destination": str(item.get("destination") or item.get("dest_stop_id") or ""),
             "origin_stop_id": str(item.get("origin_stop_id") or ""),
             "dest_stop_id": str(item.get("dest_stop_id") or ""),
+            "origin_lat": item.get("origin_lat"),
+            "origin_lon": item.get("origin_lon"),
+            "destination_lat": item.get("destination_lat"),
+            "destination_lon": item.get("destination_lon"),
             "departure_time": _minutes_to_hhmm(dep_min, fallback=str(item.get("departure_time") or "")),
             "arrival_time": _minutes_to_hhmm(arr_min, fallback=str(item.get("arrival_time") or "")),
             "dep_min": dep_min,
@@ -550,7 +595,7 @@ def build_milp_trips(
             "duration_min": arr_min - dep_min,
             "stop_count": _safe_int(item.get("stop_count"), 0),
             "allowed_vehicle_types": list(DEFAULT_ALLOWED_VEHICLE_TYPES),
-            "distance_km": DEFAULT_DISTANCE_KM,
+            "distance_km": _straight_line_distance_km(item),
         }
         dispatch_trip = milp_trip_to_dispatch_trip(record)
         record["dispatch_trip"] = {

@@ -424,6 +424,34 @@ def _build_duties_summary_artifact(items: List[Dict[str, Any]]) -> Dict[str, Any
     }
 
 
+def _master_repair_dataset_id(doc: Dict[str, Any]) -> Optional[str]:
+    overlay = doc.get("scenario_overlay") or {}
+    feed_context = doc.get("feed_context") or {}
+    for value in (
+        overlay.get("dataset_id"),
+        overlay.get("datasetId"),
+        feed_context.get("datasetId"),
+        feed_context.get("dataset_id"),
+    ):
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+    return None
+
+
+def _repair_missing_master_defaults(doc: Dict[str, Any]) -> bool:
+    dataset_id = _master_repair_dataset_id(doc)
+    if not dataset_id:
+        return False
+    from bff.services import master_defaults
+
+    repaired = master_defaults.repair_missing_master_data(doc, dataset_id=dataset_id)
+    if repaired:
+        _normalize_dispatch_scope(doc)
+        doc["meta"]["updatedAt"] = _now_iso()
+    return repaired
+
+
 def _load(scenario_id: str) -> Dict[str, Any]:
     if _incomplete_marker_path(scenario_id).exists() and not _complete_marker_path(scenario_id).exists():
         raise RuntimeError(
@@ -519,6 +547,8 @@ def _load(scenario_id: str) -> Dict[str, Any]:
     doc.setdefault("scenario_overlay", None)
     doc.setdefault("dispatch_scope", _default_dispatch_scope())
     doc.setdefault("public_data", _default_public_data_state())
+    if _repair_missing_master_defaults(doc):
+        _save(doc)
     doc.setdefault("stats", _scenario_stats(doc))
     for key, value in _default_v1_2_fields().items():
         doc.setdefault(key, value)
@@ -1461,6 +1491,7 @@ def apply_dataset_bootstrap(scenario_id: str, payload: Dict[str, Any]) -> Dict[s
     for field in (
         "depots",
         "routes",
+        "vehicle_templates",
         "route_depot_assignments",
         "depot_route_permissions",
         "dispatch_scope",

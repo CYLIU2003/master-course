@@ -165,7 +165,11 @@ def _normalize_timetable_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "service_id": str(row.get("service_id") or row.get("serviceId") or "WEEKDAY").strip() or "WEEKDAY",
         "direction": str(row.get("direction") or "outbound").strip() or "outbound",
         "origin": row.get("origin") or row.get("origin_name") or row.get("origin_stop_name") or "",
+        "origin_lat": row.get("origin_lat") or row.get("originLat"),
+        "origin_lon": row.get("origin_lon") or row.get("originLon"),
         "destination": row.get("destination") or row.get("destination_name") or row.get("destination_stop_name") or "",
+        "destination_lat": row.get("destination_lat") or row.get("destinationLat"),
+        "destination_lon": row.get("destination_lon") or row.get("destinationLon"),
         "departure": str(row.get("departure") or row.get("departure_time") or "").strip(),
         "arrival": str(row.get("arrival") or row.get("arrival_time") or "").strip(),
         "distance_km": float(row.get("distance_km") or row.get("distanceKm") or 0.0),
@@ -343,6 +347,56 @@ def _derive_calendar_entries(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, A
     return [_calendar_template(service_id) for service_id in service_ids]
 
 
+def default_vehicle_templates() -> List[Dict[str, Any]]:
+    return [
+        {
+            "id": "tokyu-template-bev-standard-300",
+            "name": "Tokyu Standard BEV 300kWh",
+            "type": "BEV",
+            "modelName": "Standard BEV 300kWh",
+            "capacityPassengers": 70,
+            "batteryKwh": 300.0,
+            "fuelTankL": None,
+            "energyConsumption": 1.2,
+            "chargePowerKw": 150.0,
+            "minSoc": 0.2,
+            "maxSoc": 0.9,
+            "acquisitionCost": 30_000_000.0,
+            "enabled": True,
+        },
+        {
+            "id": "tokyu-template-bev-compact-220",
+            "name": "Tokyu Compact BEV 220kWh",
+            "type": "BEV",
+            "modelName": "Compact BEV 220kWh",
+            "capacityPassengers": 55,
+            "batteryKwh": 220.0,
+            "fuelTankL": None,
+            "energyConsumption": 1.0,
+            "chargePowerKw": 90.0,
+            "minSoc": 0.2,
+            "maxSoc": 0.9,
+            "acquisitionCost": 26_000_000.0,
+            "enabled": True,
+        },
+        {
+            "id": "tokyu-template-ice-standard",
+            "name": "Tokyu Standard ICE",
+            "type": "ICE",
+            "modelName": "Standard Diesel Bus",
+            "capacityPassengers": 75,
+            "batteryKwh": None,
+            "fuelTankL": 220.0,
+            "energyConsumption": 0.42,
+            "chargePowerKw": None,
+            "minSoc": None,
+            "maxSoc": None,
+            "acquisitionCost": 22_000_000.0,
+            "enabled": True,
+        },
+    ]
+
+
 def get_dataset_status(dataset_id: str) -> Dict[str, Any]:
     definition = load_dataset_definition(dataset_id)
     integrity = evaluate_dataset_integrity(dataset_id)
@@ -401,10 +455,11 @@ def build_dataset_bootstrap(
         in {str(value) for value in definition.get("included_depots") or []}
     ]
     route_rows = load_route_to_depot_rows()
+    seed_routes = _seed_route_items(definition, route_rows)
 
     if status["builtAvailable"]:
         built_dir = _built_dataset_dir(dataset_id)
-        routes = _filter_built_routes(
+        built_routes = _filter_built_routes(
             definition,
             _read_parquet_rows_validated(
                 built_dir / "routes.parquet",
@@ -412,8 +467,8 @@ def build_dataset_bootstrap(
             ),
             route_rows,
         )
-        route_ids = {str(item.get("id") or "") for item in routes}
-        timetable_rows = _filter_rows_by_route_ids(
+        route_ids = {str(item.get("id") or "") for item in built_routes}
+        built_timetable_rows = _filter_rows_by_route_ids(
             [
                 _normalize_timetable_row(item)
                 for item in _read_parquet_rows_validated(
@@ -423,7 +478,7 @@ def build_dataset_bootstrap(
             ],
             route_ids,
         )
-        trips = _filter_rows_by_route_ids(
+        built_trips = _filter_rows_by_route_ids(
             [
                 _normalize_trip_row(item)
                 for item in _read_parquet_rows_validated(
@@ -433,9 +488,18 @@ def build_dataset_bootstrap(
             ],
             route_ids,
         )
-        source = "built_dataset"
+        if built_routes and built_timetable_rows and built_trips:
+            routes = built_routes
+            timetable_rows = built_timetable_rows
+            trips = built_trips
+            source = "built_dataset"
+        else:
+            routes = seed_routes
+            timetable_rows = []
+            trips = []
+            source = "seed_only"
     else:
-        routes = _seed_route_items(definition, route_rows)
+        routes = seed_routes
         timetable_rows = []
         trips = []
         source = "seed_only"
@@ -454,6 +518,7 @@ def build_dataset_bootstrap(
     return {
         "depots": depots,
         "routes": routes,
+        "vehicle_templates": default_vehicle_templates(),
         "route_depot_assignments": route_assignments,
         "depot_route_permissions": depot_permissions,
         "timetable_rows": timetable_rows,
