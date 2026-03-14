@@ -33,11 +33,16 @@ def write_manifest(
     source: str = "odpt + mapping inputs",
 ) -> Path:
     artifact_names = ["routes.parquet", "trips.parquet", "timetables.parquet"]
+    optional_artifacts = ["stops.parquet", "stop_timetables.parquet"]
 
     for name in artifact_names:
         path = built_dir / name
         if not path.exists():
             raise FileNotFoundError(f"Cannot write manifest: artifact not found: {path}")
+
+    artifact_names.extend(
+        [name for name in optional_artifacts if (built_dir / name).exists()]
+    )
 
     try:
         import pandas as pd
@@ -52,7 +57,7 @@ def write_manifest(
     manifest = {
         "dataset_id": dataset_id,
         "dataset_version": dataset_version,
-        "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
         "source": source,
         "included_depots": included_depots,
         "included_routes": included_routes,
@@ -69,6 +74,16 @@ def write_manifest(
             "routes": "v1",
             "trips": "v1",
             "timetables": "v1",
+            **(
+                {"stops": "v1"}
+                if (built_dir / "stops.parquet").exists()
+                else {}
+            ),
+            **(
+                {"stop_timetables": "v1"}
+                if (built_dir / "stop_timetables.parquet").exists()
+                else {}
+            ),
         },
     }
 

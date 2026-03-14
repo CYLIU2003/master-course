@@ -17,6 +17,7 @@ Output goes to `data/built/<dataset_id>/`:
 - `routes.parquet`
 - `trips.parquet`
 - `timetables.parquet`
+- `gtfs_reconciliation.json`
 
 ## What this app does NOT do
 
@@ -41,6 +42,9 @@ python -m data_prep.pipeline.build_all --dataset tokyu_core
 # Skip ODPT fetch (use existing raw cache)
 python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch
 
+# Fail if GTFS/TokyuBus-GTFS does not fully match the authoritative route master
+python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch --strict-gtfs-reconciliation
+
 # Build full dataset
 python -m data_prep.pipeline.build_all --dataset tokyu_full --no-fetch
 ```
@@ -58,9 +62,11 @@ root `data_prep` package so the module path works from either working directory.
 
 ## Build guarantees
 
-- Manifest is written only after all three Parquet files succeed
+- Manifest is written only after the required Parquet files succeed
+- `build_all` also emits `stops.parquet` and `stop_timetables.parquet` so scenario bootstrap can hydrate stop master data and stop timetable links from the built dataset itself
 - Any stale manifest from a previous run is removed at build start
 - The runtime contract check is run immediately after manifest write
+- `gtfs_reconciliation.json` is written on every build so route-master vs GTFS mismatches are visible
 - A build that exits non-zero will not produce a manifest that tricks the runtime into `built_ready=True`
 
 ## If a build fails partway

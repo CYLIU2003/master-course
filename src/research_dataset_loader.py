@@ -9,6 +9,12 @@ import pandas as pd
 
 from src.dataset_integrity import evaluate_dataset_integrity, validate_rows_against_schema
 from src.scenario_overlay import default_scenario_overlay
+from src.value_normalization import (
+    coerce_list,
+    coerce_str_list,
+    first_non_empty_list,
+    normalize_text_nfkc,
+)
 
 
 DEFAULT_OPERATOR_ID = "tokyu"
@@ -31,12 +37,38 @@ def _read_csv_rows(path: Path) -> List[Dict[str, Any]]:
         return [dict(row) for row in csv.DictReader(fh)]
 
 
+def _normalize_parquet_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _normalize_parquet_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_normalize_parquet_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_normalize_parquet_value(item) for item in value]
+    if isinstance(value, str) or value is None:
+        return value
+    if hasattr(value, "tolist"):
+        try:
+            return _normalize_parquet_value(value.tolist())
+        except Exception:
+            return value
+    return value
+
+
 def _read_parquet_rows(path: Path) -> List[Dict[str, Any]]:
     if not path.exists():
         return []
     frame = pd.read_parquet(path)
     frame = frame.where(pd.notnull(frame), None)
-    return [dict(item) for item in frame.to_dict(orient="records")]
+    return [
+        {
+            key: _normalize_parquet_value(value)
+            for key, value in dict(item).items()
+        }
+        for item in frame.to_dict(orient="records")
+    ]
 
 
 def _read_parquet_rows_validated(path: Path, *, schema_name: str) -> List[Dict[str, Any]]:
@@ -119,13 +151,40 @@ def _normalize_route_id(route_code: str, depot_id: str) -> str:
     return f"{DEFAULT_OPERATOR_ID}:{depot_id}:{route_code}"
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value in (None, ""):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        if value in (None, ""):
+            return default
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_optional_float(value: Any) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalize_route_row(row: Dict[str, Any]) -> Dict[str, Any]:
     route_id = str(
         row.get("id") or row.get("route_id") or row.get("routeId") or ""
     ).strip()
-    route_code = str(
+    route_code = normalize_text_nfkc(
         row.get("routeCode") or row.get("route_code") or route_id
-    ).strip()
+    )
     normalized = {
         "id": route_id or route_code,
         "name": row.get("name") or row.get("routeLabel") or row.get("route_label") or route_code,
@@ -133,8 +192,8 @@ def _normalize_route_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "routeLabel": row.get("routeLabel") or row.get("route_label") or row.get("name") or route_code,
         "startStop": row.get("startStop") or row.get("origin") or row.get("start_stop") or "",
         "endStop": row.get("endStop") or row.get("destination") or row.get("end_stop") or "",
-        "distanceKm": float(row.get("distanceKm") or row.get("distance_km") or 0.0),
-        "durationMin": int(float(row.get("durationMin") or row.get("duration_min") or 0)),
+        "distanceKm": _safe_float(row.get("distanceKm", row.get("distance_km")), 0.0),
+        "durationMin": _safe_int(row.get("durationMin", row.get("duration_min")), 0),
         "color": row.get("color") or row.get("route_color") or "",
         "enabled": bool(row.get("enabled", True)),
         "source": row.get("source") or "built_dataset",
@@ -143,8 +202,10 @@ def _normalize_route_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "routeFamilyLabel": row.get("routeFamilyLabel") or row.get("route_family_label"),
         "routeVariantType": row.get("routeVariantType") or row.get("route_variant_type"),
         "canonicalDirection": row.get("canonicalDirection") or row.get("canonical_direction"),
-        "tripCount": int(float(row.get("tripCount") or row.get("trip_count") or 0)),
-        "stopSequence": list(row.get("stopSequence") or row.get("stop_sequence") or []),
+        "tripCount": _safe_int(row.get("tripCount", row.get("trip_count")), 0),
+        "stopSequence": coerce_str_list(
+            first_non_empty_list(row.get("stopSequence"), row.get("stop_sequence"))
+        ),
     }
     return normalized
 
@@ -183,6 +244,38 @@ def _normalize_trip_row(row: Dict[str, Any]) -> Dict[str, Any]:
     return {
         **normalized,
         "trip_id": normalized["trip_id"] or f"trip:{normalized['route_id']}:{normalized['departure']}",
+    }
+
+
+def _normalize_stop_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    stop_id = str(row.get("id") or row.get("stopId") or row.get("stop_id") or "").strip()
+    return {
+        "id": stop_id,
+        "code": str(row.get("code") or row.get("stop_code") or stop_id).strip() or stop_id,
+        "name": row.get("name") or row.get("stopName") or row.get("title_ja") or stop_id,
+        "kana": row.get("kana") or row.get("title_kana") or "",
+        "lat": _safe_optional_float(row.get("lat", row.get("stop_lat"))),
+        "lon": _safe_optional_float(row.get("lon", row.get("stop_lon"))),
+        "poleNumber": row.get("poleNumber") or row.get("platform_num") or row.get("platformCode") or "",
+        "operatorId": row.get("operatorId") or row.get("operator_id") or DEFAULT_OPERATOR_ID,
+        "source": row.get("source") or "built_dataset",
+    }
+
+
+def _normalize_stop_timetable_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    items = [
+        dict(item)
+        for item in coerce_list(row.get("items"))
+        if isinstance(item, dict)
+    ]
+    return {
+        "id": str(row.get("id") or row.get("stopTimetableId") or "").strip(),
+        "stopId": str(row.get("stopId") or row.get("stop_id") or "").strip(),
+        "stopName": row.get("stopName") or row.get("stop_name") or "",
+        "calendar": row.get("calendar") or row.get("service_id") or "WEEKDAY",
+        "service_id": row.get("service_id") or row.get("calendar") or "WEEKDAY",
+        "source": row.get("source") or "built_dataset",
+        "items": items,
     }
 
 
@@ -406,6 +499,8 @@ def get_dataset_status(dataset_id: str) -> Dict[str, Any]:
         "routes": built_dir / "routes.parquet",
         "trips": built_dir / "trips.parquet",
         "timetables": built_dir / "timetables.parquet",
+        "stops": built_dir / "stops.parquet",
+        "stop_timetables": built_dir / "stop_timetables.parquet",
     }
     built_available = bool(integrity.get("built_ready"))
     dataset_version = str(
@@ -448,12 +543,16 @@ def build_dataset_bootstrap(
 ) -> Dict[str, Any]:
     definition = load_dataset_definition(dataset_id)
     status = get_dataset_status(dataset_id)
-    depots = [
-        dict(item)
+    requested_depot_ids = [str(value) for value in definition.get("included_depots") or [] if str(value)]
+    depots_by_id = {
+        str(item.get("id") or item.get("depotId") or ""): dict(item)
         for item in load_seed_depots()
         if str(item.get("id") or item.get("depotId") or "")
-        in {str(value) for value in definition.get("included_depots") or []}
-    ]
+    }
+    if requested_depot_ids:
+        depots = [dict(depots_by_id[depot_id]) for depot_id in requested_depot_ids if depot_id in depots_by_id]
+    else:
+        depots = list(depots_by_id.values())
     route_rows = load_route_to_depot_rows()
     seed_routes = _seed_route_items(definition, route_rows)
 
@@ -488,20 +587,46 @@ def build_dataset_bootstrap(
             ],
             route_ids,
         )
+        built_stops: List[Dict[str, Any]] = []
+        stops_path = built_dir / "stops.parquet"
+        if stops_path.exists():
+            built_stops = [
+                _normalize_stop_row(item)
+                for item in _read_parquet_rows_validated(
+                    stops_path,
+                    schema_name="stops",
+                )
+            ]
+        built_stop_timetables: List[Dict[str, Any]] = []
+        stop_timetables_path = built_dir / "stop_timetables.parquet"
+        if stop_timetables_path.exists():
+            built_stop_timetables = [
+                _normalize_stop_timetable_row(item)
+                for item in _read_parquet_rows_validated(
+                    stop_timetables_path,
+                    schema_name="stop_timetables",
+                )
+            ]
         if built_routes and built_timetable_rows and built_trips:
             routes = built_routes
             timetable_rows = built_timetable_rows
             trips = built_trips
+            stops = built_stops
+            stop_timetables = built_stop_timetables
             source = "built_dataset"
         else:
             routes = seed_routes
             timetable_rows = []
             trips = []
+            stops = []
+            stop_timetables = []
             source = "seed_only"
     else:
         routes = seed_routes
         timetable_rows = []
         trips = []
+        stops = []
+        stop_timetables = []
         source = "seed_only"
 
     route_assignments = _build_route_assignments(routes, route_rows)
@@ -523,9 +648,10 @@ def build_dataset_bootstrap(
         "depot_route_permissions": depot_permissions,
         "timetable_rows": timetable_rows,
         "trips": trips,
+        "stops": stops,
         "calendar": calendar_entries,
         "calendar_dates": [],
-        "stop_timetables": [],
+        "stop_timetables": stop_timetables,
         "dispatch_scope": {
             "scopeId": f"{dataset_id}:{status.get('datasetVersion')}",
             "operatorId": DEFAULT_OPERATOR_ID,

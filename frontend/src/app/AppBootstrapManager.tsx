@@ -1,10 +1,21 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchMaybeJson } from "@/api/client";
+import { graphApi } from "@/api/graph";
+import { optimizationApi } from "@/api/optimization";
+import { simulationApi } from "@/api/simulation";
 import { scenarioApi } from "@/api/scenario";
-import { depotApi } from "@/api/master-data";
-import { depotKeys } from "@/hooks/use-master-data";
-import { scenarioKeys } from "@/hooks";
+import {
+  depotApi,
+  permissionApi,
+  routeApi,
+  routeFamilyApi,
+  stopApi,
+  vehicleApi,
+  vehicleTemplateApi,
+} from "@/api/master-data";
+import { depotKeys, graphKeys, permissionKeys, routeKeys, scenarioKeys, stopKeys, vehicleKeys } from "@/hooks";
+import { runKeys } from "@/hooks/use-run";
 import { useBootStore } from "@/stores/boot-store";
 import { useTabWarmStore } from "@/stores/tab-warm-store";
 import { measureAsyncStep } from "@/utils/perf/measureAsyncStep";
@@ -87,6 +98,18 @@ function buildBootManifestKey(
     datasetFingerprint: feedContext?.datasetFingerprint ?? null,
     source: feedContext?.source ?? null,
   });
+}
+
+
+async function ensureOptionalQueryData<T>(queryClient: ReturnType<typeof useQueryClient>, options: {
+  queryKey: readonly unknown[];
+  queryFn: () => Promise<T>;
+}) {
+  try {
+    await queryClient.ensureQueryData(options);
+  } catch {
+    // Optional warm-up: let the page load handle empty/not-yet-built states.
+  }
 }
 
 interface Props {
@@ -186,26 +209,65 @@ export function AppBootstrapManager({ scenarioId }: Props) {
           updateStep("master", {
             status: "running",
             progress: 20,
-            detailMessage: "depots のみ先読み中",
+            detailMessage: "Step 2 Setup の基本情報を先読み中",
           });
           await measureAsyncStep("boot:master", async () => {
-            await queryClient.ensureQueryData({
-              queryKey: depotKeys.all(currentScenarioId),
-              queryFn: () => depotApi.list(currentScenarioId),
-            });
+            const operatorId = scenarioDetail?.operatorId ?? "tokyu";
+            await Promise.all([
+              queryClient.ensureQueryData({
+                queryKey: depotKeys.all(currentScenarioId),
+                queryFn: () => depotApi.list(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: vehicleKeys.all(currentScenarioId),
+                queryFn: () => vehicleApi.list(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: vehicleKeys.templates(currentScenarioId),
+                queryFn: () => vehicleTemplateApi.list(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: routeKeys.all(currentScenarioId),
+                queryFn: () => routeApi.list(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: routeKeys.families(currentScenarioId, operatorId),
+                queryFn: () => routeFamilyApi.list(currentScenarioId, operatorId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: stopKeys.all(currentScenarioId),
+                queryFn: () => stopApi.list(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: permissionKeys.depotRoute(currentScenarioId),
+                queryFn: () => permissionApi.getDepotRoutePermissions(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: permissionKeys.depotRouteFamily(currentScenarioId),
+                queryFn: () => permissionApi.getDepotRouteFamilyPermissions(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: permissionKeys.vehicleRoute(currentScenarioId),
+                queryFn: () => permissionApi.getVehicleRoutePermissions(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: permissionKeys.vehicleRouteFamily(currentScenarioId),
+                queryFn: () => permissionApi.getVehicleRouteFamilyPermissions(currentScenarioId),
+              }),
+            ]);
           });
           if (cancelled) {
             return;
           }
           updateStep("master", { status: "success", progress: 100 });
-          setTabStatus("planning", "ready", "基本マスタの先読みが完了");
+          setTabStatus("planning", "ready", "Step 2 Setup の基本データ先読みが完了");
         };
 
         const runTimetableStep = async () => {
           updateStep("timetable", {
             status: "running",
             progress: 20,
-            detailMessage: "timetable / stop-timetable summary を構築中",
+            detailMessage: "Setup の timetable / rule 情報を先読み中",
           });
           await measureAsyncStep("boot:timetable", async () => {
             await Promise.all([
@@ -219,13 +281,29 @@ export function AppBootstrapManager({ scenarioId }: Props) {
                 queryFn: () =>
                   scenarioApi.getStopTimetablesSummary(currentScenarioId),
               }),
+              queryClient.ensureQueryData({
+                queryKey: scenarioKeys.calendar(currentScenarioId),
+                queryFn: () => scenarioApi.getCalendar(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: scenarioKeys.calendarDates(currentScenarioId),
+                queryFn: () => scenarioApi.getCalendarDates(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: scenarioKeys.deadheadRules(currentScenarioId),
+                queryFn: () => scenarioApi.getDeadheadRules(currentScenarioId),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: scenarioKeys.turnaroundRules(currentScenarioId),
+                queryFn: () => scenarioApi.getTurnaroundRules(currentScenarioId),
+              }),
             ]);
           });
           if (cancelled) {
             return;
           }
           updateStep("timetable", { status: "success", progress: 100 });
-          setTabStatus("timetable", "ready", "時刻表 summary の先読みが完了");
+          setTabStatus("timetable", "ready", "Step 2 Setup の timetable / rule 情報先読みが完了");
         };
 
         await Promise.all([runMasterStep(), runTimetableStep()]);
@@ -234,11 +312,51 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         updateStep("tabs", {
           status: "running",
           progress: 40,
-          detailMessage: "各タブの lightweight cache を確定中",
-          currentCount: 2,
-          totalCount: 2,
+          detailMessage: "Step 3 Execute の軽量データを先読み中",
+          currentCount: 1,
+          totalCount: 1,
         });
-        setTabStatus("dispatch", "ready", "dispatch scope の準備が完了");
+        await measureAsyncStep("boot:dispatch", async () => {
+          await Promise.all([
+            ensureOptionalQueryData(queryClient, {
+              queryKey: graphKeys.tripsSummary(currentScenarioId),
+              queryFn: () => graphApi.getTripsSummary(currentScenarioId),
+            }),
+            ensureOptionalQueryData(queryClient, {
+              queryKey: graphKeys.trips(currentScenarioId, 120, 0),
+              queryFn: () => graphApi.getTrips(currentScenarioId, { limit: 120, offset: 0 }),
+            }),
+            ensureOptionalQueryData(queryClient, {
+              queryKey: graphKeys.graphSummary(currentScenarioId),
+              queryFn: () => graphApi.getGraphSummary(currentScenarioId),
+            }),
+            ensureOptionalQueryData(queryClient, {
+              queryKey: graphKeys.graphArcs(currentScenarioId, undefined, 120, 0),
+              queryFn: () => graphApi.getGraphArcs(currentScenarioId, { limit: 120, offset: 0 }),
+            }),
+            ensureOptionalQueryData(queryClient, {
+              queryKey: graphKeys.dutiesSummary(currentScenarioId),
+              queryFn: () => graphApi.getDutiesSummary(currentScenarioId),
+            }),
+            ensureOptionalQueryData(queryClient, {
+              queryKey: graphKeys.duties(currentScenarioId, 60, 0),
+              queryFn: () => graphApi.getDuties(currentScenarioId, { limit: 60, offset: 0 }),
+            }),
+            ensureOptionalQueryData(queryClient, {
+              queryKey: graphKeys.validation(currentScenarioId),
+              queryFn: () => graphApi.validateDuties(currentScenarioId),
+            }),
+            ensureOptionalQueryData(queryClient, {
+              queryKey: runKeys.simulationCapabilities(currentScenarioId),
+              queryFn: () => simulationApi.getCapabilities(currentScenarioId),
+            }),
+            ensureOptionalQueryData(queryClient, {
+              queryKey: runKeys.optimizationCapabilities(currentScenarioId),
+              queryFn: () => optimizationApi.getCapabilities(currentScenarioId),
+            }),
+          ]);
+        });
+        setTabStatus("dispatch", "ready", "Step 3 Execute の軽量データ先読みが完了");
         setTabStatus("explorer", "ready", "Explorer は開いた時だけ読込");
         if (cancelled) return;
         updateStep("tabs", { status: "success", progress: 100 });

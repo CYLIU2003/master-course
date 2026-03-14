@@ -13,17 +13,17 @@
 **Tokyu Bus BEV/ICE Mixed Fleet Scheduling Research Application**
 **东急巴士 BEV / ICE 混合车队调度研究系统**
 
-Meguro depot case study · PV / TOU / demand charge · reproducible thesis experiments
+4-depot Tokyu core case study · PV / TOU / demand charge · reproducible thesis experiments
 
 ---
 
 ## 概要 / Overview / 概述
 
-本リポジトリは、東急バスの営業所単位ケーススタディ（主に `tokyu_core`、目黒営業所）を対象として、**BEV（電気バス）/ ICE（内燃機関バス）の混成運用、充電計画、事業者保有 PV（太陽光発電）、時間帯別料金（TOU）、デマンドチャージ、MILP + ALNS による最適化**を扱う研究システムです。
+本リポジトリは、東急バスの営業所単位ケーススタディ（主に `tokyu_core` の 4営業所コアスコープ: 目黒・瀬田・淡島・弦巻）を対象として、**BEV（電気バス）/ ICE（内燃機関バス）の混成運用、充電計画、事業者保有 PV（太陽光発電）、時間帯別料金（TOU）、デマンドチャージ、MILP + ALNS による最適化**を扱う研究システムです。
 
-本仓库是一个围绕东急巴士营业所级案例研究（当前以 `tokyu_core`、目黑营业所为核心）的研究系统，涵盖 **BEV / ICE 混合车队调度、充电可行性、运营方自有光伏（PV）利用、分时电价（TOU）、需量电费（Demand Charge）以及基于 MILP + ALNS 的优化**。
+本仓库是一个围绕东急巴士营业所级案例研究（当前以 `tokyu_core` 的 4 营业所核心范围: 目黑、濑田、淡岛、弦卷为核心）的研究系统，涵盖 **BEV / ICE 混合车队调度、充电可行性、运营方自有光伏（PV）利用、分时电价（TOU）、需量电费（Demand Charge）以及基于 MILP + ALNS 的优化**。
 
-This repository is a research system for Tokyu Bus depot-level case studies, primarily centered on the `tokyu_core` Meguro depot scenario. It studies **mixed BEV/ICE fleet scheduling, charging feasibility, operator-owned PV utilization, time-of-use pricing, demand charges, and MILP + ALNS-based optimization**.
+This repository is a research system for Tokyu Bus depot-level case studies, primarily centered on the `tokyu_core` 4-depot scenario (Meguro, Seta, Awashima, and Tsurumaki). It studies **mixed BEV/ICE fleet scheduling, charging feasibility, operator-owned PV utilization, time-of-use pricing, demand charges, and MILP + ALNS-based optimization**.
 
 > [!IMPORTANT]
 > メインアプリは、実行時に ODPT / GTFS の生データ取得・変換を行いません。
@@ -137,9 +137,9 @@ data-prep/                  ->   data/built/<dataset>/                 ->   app 
 | `data/seed/tokyu/depots.json`              | 東急バス 12 営業所マスタ / 12 Tokyu Bus depot master records |
 | `data/seed/tokyu/route_to_depot.csv`       | 系統→営業所対応表 / Route-to-depot mapping                 |
 | `data/seed/tokyu/version.json`             | Seed provenance metadata                           |
-| `data/seed/tokyu/datasets/tokyu_core.json` | 目黒営業所 + 11 路線定義 / Meguro depot + 11 routes         |
-| `data/seed/tokyu/datasets/tokyu_dispatch_ready.json` | 目黒・瀬田・淡島・弦巻 + 46 route rows / 4-depot dispatch-ready preload |
-| `data/seed/tokyu/datasets/tokyu_full.json` | 全 12 営業所 + 全路線定義 / All depots and routes           |
+| `data/seed/tokyu/datasets/tokyu_core.json` | 目黒・瀬田・淡島・弦巻 + `route_to_depot.csv` 起点の全 route rows / 4-depot core scope |
+| `data/seed/tokyu/datasets/tokyu_dispatch_ready.json` | 目黒・瀬田・淡島・弦巻 + preload baseline / 4-depot dispatch-ready preload |
+| `data/seed/tokyu/datasets/tokyu_full.json` | 全 12 営業所 + `route_to_depot.csv` 起点の全 route rows / All depots and routes |
 
 ### Built data（`data-prep` が生成・Git には含めない）
 
@@ -159,6 +159,7 @@ python -m data_prep.pipeline.build_all --dataset tokyu_core
 | `data/built/<dataset>/routes.parquet`     | 正規化済み路線一覧 / Canonical route list                     |
 | `data/built/<dataset>/trips.parquet`      | 対象路線の全 trip / All trips for included routes          |
 | `data/built/<dataset>/timetables.parquet` | 実行時ロード用 timetable-level trip rows                    |
+| `data/built/<dataset>/gtfs_reconciliation.json` | route master と `GTFS/TokyuBus-GTFS/` の照合結果 / GTFS reconciliation report |
 
 ---
 
@@ -166,9 +167,9 @@ python -m data_prep.pipeline.build_all --dataset tokyu_core
 
 | Dataset ID   | Depots           | Routes               |
 | ------------ | ---------------- | -------------------- |
-| `tokyu_core` | `meguro (目黒営業所)` | All 11 Meguro routes |
+| `tokyu_core` | `meguro,seta,awashima,tsurumaki` | 46 route rows / 43 route codes |
 | `tokyu_dispatch_ready` | `meguro,seta,awashima,tsurumaki` | 46 route rows / 43 route codes |
-| `tokyu_full` | All 12 depots    | All routes           |
+| `tokyu_full` | All 12 depots    | 165 route rows / 159 route codes |
 
 **Default dataset:** `tokyu_core`
 **Default preloaded master dataset:** `tokyu_dispatch_ready`
@@ -277,10 +278,13 @@ curl http://localhost:8000/api/app/master-data
 
 ```bash
 python scripts/build_tokyu_full_db.py --skip-stop-timetables
+python scripts/build_tokyu_gtfs_db.py --dataset-id tokyu_full --out data/tokyu_gtfs.sqlite
 curl "http://localhost:8000/api/catalog/milp-trips?depot_ids=tokyu:depot:meguro,tokyu:depot:denenchofu&calendar_type=平日"
 ```
 
-The SQLite catalog stores stop coordinates and depot coordinates, and the local catalog backend computes straight-line trip distances from origin/destination stop coordinates for MILP input preparation. This path is useful when you need Tokyu timetable and MILP input recovery before exporting fresh built artifacts, while keeping the main runtime free from live ODPT access.
+`build_tokyu_full_db.py` is the ODPT-backed path. `build_tokyu_gtfs_db.py` is the GTFS-backed path and keeps the route/depot mapping as separate bridge tables while loading GTFS stops, timetable trips, trip stop-times, and stop timetables into SQLite. This is the preferred recovery path when you already have a large `GTFS/TokyuBus-GTFS` feed and want a lightweight local catalog without live ODPT access.
+
+The SQLite catalog stores stop coordinates and depot coordinates, and the local catalog backend computes straight-line trip distances from origin/destination stop coordinates for MILP input preparation. You can also round-trip the SQLite catalog back into built artifacts with `scripts/export_tokyu_sqlite_to_built.py`.
 
 </details>
 
@@ -320,6 +324,12 @@ python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch
 # Build the full Tokyu dataset
 python -m data_prep.pipeline.build_all --dataset tokyu_full --no-fetch
 
+# Fail fast if GTFS and route master do not fully reconcile
+python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch --strict-gtfs-reconciliation
+
+# Build a GTFS-backed local SQLite Tokyu catalog with route/depot bridges + stop timetables
+python scripts/build_tokyu_gtfs_db.py --dataset-id tokyu_full --out data/tokyu_gtfs.sqlite
+
 # Build a local SQLite Tokyu catalog for catalog recovery / MILP input generation
 python scripts/build_tokyu_full_db.py --skip-stop-timetables
 
@@ -329,9 +339,16 @@ python scripts/build_tokyu_full_db.py --skip-stop-timetables --resume
 # Or override the key explicitly for one-off runs
 python scripts/build_tokyu_full_db.py --api-key YOUR_ODPT_KEY --skip-stop-timetables
 
-# Export SQLite subsets back into built artifacts
-python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_full.sqlite --dataset-id tokyu_core --depot-ids tokyu:depot:meguro
+# Export SQLite subsets back into built artifacts (dataset definition decides depot scope)
+python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_full.sqlite --dataset-id tokyu_core
 python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_full.sqlite --dataset-id tokyu_full
+python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_gtfs.sqlite --dataset-id tokyu_core
+
+# Refresh Tokyu ODPT -> GTFS/TokyuBus-GTFS -> built datasets
+python catalog_update_app.py refresh odpt --skip-stop-timetables --profile fast
+
+# The same refresh, plus rebuild a GTFS-backed SQLite catalog
+python catalog_update_app.py refresh odpt --skip-stop-timetables --profile fast --build-gtfs-db --gtfs-db-dataset-id tokyu_full
 ```
 
 ### Exit codes
@@ -346,6 +363,7 @@ python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_full.sqlite --dat
 
 ```bash
 cat data/built/tokyu_core/manifest.json
+cat data/built/tokyu_core/gtfs_reconciliation.json
 ```
 
 `manifest.json` must contain at least:
@@ -353,6 +371,15 @@ cat data/built/tokyu_core/manifest.json
 * `schema_version`
 * `producer_version`
 * `artifact_hashes`
+
+`gtfs_reconciliation.json` records which authoritative route codes are missing from the current
+`GTFS/TokyuBus-GTFS` feed. Use `--strict-gtfs-reconciliation` if you want the build to fail
+instead of writing a warning-only report.
+
+`build_all` now also writes `stops.parquet` and `stop_timetables.parquet` alongside the required
+`routes/trips/timetables` artifacts. Scenario bootstrap uses these optional artifacts so new
+scenarios start with GTFS-backed stop master data and stop timetable linkage instead of empty
+placeholders.
 
 </details>
 

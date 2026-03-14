@@ -32,10 +32,15 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from _odpt_runtime import resolve_odpt_api_key
+from _stop_timetable_fallback import (
+    SYNTHETIC_STOP_TIMETABLE_NOTE,
+    delete_synthetic_stop_timetables,
+    synthesize_missing_stop_timetables,
+)
 from tokyu_subset_config import SELECTED_DEPOTS, SELECTED_ROUTE_CODES
 
 
-ODPT_BASE = "https://api.odpt.org/api/4"
+ODPT_BASE = "https://api.odpt.org/api/v4"
 OPERATOR_ID = "odpt.Operator:TokyuBus"
 DEFAULT_OUT = Path("data") / "tokyu_subset.sqlite"
 CACHE_DIR = Path("data") / "odpt_subset_cache"
@@ -943,6 +948,7 @@ def print_summary(
     selected_route_codes: list[str],
     missing_route_codes: list[str],
     zero_trip_route_codes: list[str],
+    synthetic_stop_timetable_entries: int,
 ) -> None:
     print()
     print("=" * 72)
@@ -954,6 +960,8 @@ def print_summary(
         print(f"  no_pattern_routes   : {', '.join(missing_route_codes)}")
     if zero_trip_route_codes:
         print(f"  zero_trip_routes    : {', '.join(zero_trip_route_codes)}")
+    if synthetic_stop_timetable_entries:
+        print(f"  synthetic_stop_tt   : {synthetic_stop_timetable_entries:>8,}")
     for table_name in (
         "depots",
         "route_families",
@@ -976,6 +984,8 @@ def write_pipeline_meta(
     warnings: list[str],
     missing_route_codes: list[str],
     zero_trip_route_codes: list[str],
+    synthetic_stop_timetable_entries: int,
+    synthetic_stop_timetable_patterns: int,
 ) -> None:
     meta_rows = [
         ("built_at", now_iso()),
@@ -993,6 +1003,9 @@ def write_pipeline_meta(
         ("missing_route_codes", json.dumps(missing_route_codes, ensure_ascii=False)),
         ("zero_trip_route_codes", json.dumps(zero_trip_route_codes, ensure_ascii=False)),
         ("default_distance_km", str(DEFAULT_DISTANCE_KM)),
+        ("synthetic_stop_timetable_note", SYNTHETIC_STOP_TIMETABLE_NOTE),
+        ("synthetic_stop_timetable_entries", str(synthetic_stop_timetable_entries)),
+        ("synthetic_stop_timetable_patterns", str(synthetic_stop_timetable_patterns)),
     ]
     conn.executemany(
         "INSERT OR REPLACE INTO pipeline_meta (key, value) VALUES (?, ?)",
@@ -1117,10 +1130,24 @@ def main() -> None:
                 use_cache,
             )
             inserted_entries = 0
+            if stop_timetable_objects:
+                delete_synthetic_stop_timetables(conn, pattern_ids=[pattern_id])
             for stop_timetable in stop_timetable_objects:
                 inserted_entries += insert_stop_timetable(conn, stop_timetable)
             conn.commit()
             mark_done(conn, "BusstopPoleTimetable", pattern_id, inserted_entries)
+
+    synthetic_stop_timetable_summary = synthesize_missing_stop_timetables(
+        conn,
+        pattern_ids=selected_pattern_ids,
+    )
+    if synthetic_stop_timetable_summary["entries"] > 0:
+        conn.commit()
+        log(
+            "synthetic stop_timetables applied: "
+            f"{synthetic_stop_timetable_summary['entries']} entries "
+            f"across {synthetic_stop_timetable_summary['patterns']} pattern(s)"
+        )
 
     missing_route_codes = sorted(set(selected_route_codes) - set(pattern_to_family.values()))
     trip_rows = conn.execute(
@@ -1145,9 +1172,18 @@ def main() -> None:
         selection_warnings,
         missing_route_codes,
         zero_trip_route_codes,
+        synthetic_stop_timetable_summary["entries"],
+        synthetic_stop_timetable_summary["patterns"],
     )
 
-    print_summary(conn, selected_depots, selected_route_codes, missing_route_codes, zero_trip_route_codes)
+    print_summary(
+        conn,
+        selected_depots,
+        selected_route_codes,
+        missing_route_codes,
+        zero_trip_route_codes,
+        synthetic_stop_timetable_summary["entries"],
+    )
     conn.close()
     log(f"done: {db_path}")
 

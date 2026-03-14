@@ -401,6 +401,22 @@ def _scenario_summary(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _ensure_scenario_bootstrap(scenario_id: str) -> Dict[str, Any]:
+    scenario = store.get_scenario(scenario_id)
+    has_core_setup = bool(scenario.get("depots")) and bool(scenario.get("routes"))
+    if has_core_setup:
+        return scenario
+
+    dataset_id = str(scenario.get("datasetId") or research_catalog.default_dataset_id())
+    random_seed = int(scenario.get("randomSeed") or 42)
+    bootstrap = research_catalog.bootstrap_scenario(
+        scenario_id=scenario_id,
+        dataset_id=dataset_id,
+        random_seed=random_seed,
+    )
+    return store.apply_dataset_bootstrap(scenario_id, bootstrap)
+
+
 # ── Scenario CRUD ──────────────────────────────────────────────
 
 
@@ -458,7 +474,7 @@ def duplicate_scenario(
 @router.get("/scenarios/{scenario_id}")
 def get_scenario(scenario_id: str) -> Dict[str, Any]:
     try:
-        return store.get_scenario(scenario_id)
+        return _ensure_scenario_bootstrap(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
@@ -489,6 +505,7 @@ def update_scenario(scenario_id: str, body: UpdateScenarioBody) -> Dict[str, Any
 @router.get("/scenarios/{scenario_id}/dispatch-scope")
 def get_dispatch_scope(scenario_id: str) -> Dict[str, Any]:
     try:
+        _ensure_scenario_bootstrap(scenario_id)
         return store.get_dispatch_scope(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
@@ -569,7 +586,7 @@ def delete_scenario(scenario_id: str) -> Response:
 @router.post("/scenarios/{scenario_id}/activate")
 def activate_scenario(scenario_id: str) -> Dict[str, Any]:
     try:
-        scenario = store.get_scenario(scenario_id)
+        scenario = _ensure_scenario_bootstrap(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:

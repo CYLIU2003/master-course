@@ -1,0 +1,11 @@
+{
+  "table": "stop_timetables",
+  "required_columns": {
+    "id": "string",
+    "stopId": "string",
+    "calendar": "string",
+    "service_id": "string",
+    "items": "array",
+    "source": "string"
+  }
+}

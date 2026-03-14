@@ -21,6 +21,7 @@ def _load_builder_module():
 
 def test_full_builder_accepts_env_backed_key_when_flag_is_omitted(tmp_path, monkeypatch):
     module = _load_builder_module()
+    assert module.ODPT_BASE.endswith("/api/v4")
     seen_keys: list[str] = []
 
     def fake_phase_stops(conn, api_key, use_cache):

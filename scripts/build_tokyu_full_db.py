@@ -37,6 +37,7 @@ import sqlite3
 import sys
 import time
 import os
+import unicodedata
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import urlopen, Request
@@ -46,10 +47,15 @@ from typing import Any, Iterator
 import csv
 
 from _odpt_runtime import resolve_odpt_api_key
+from _stop_timetable_fallback import (
+    SYNTHETIC_STOP_TIMETABLE_NOTE,
+    delete_synthetic_stop_timetables,
+    synthesize_missing_stop_timetables,
+)
 
 # ─── 定数 ─────────────────────────────────────────────────────────────────
 
-ODPT_BASE        = "https://api.odpt.org/api/4"
+ODPT_BASE        = "https://api.odpt.org/api/v4"
 OPERATOR_ID      = "odpt.Operator:TokyuBus"
 DEFAULT_OUT      = Path("data") / "tokyu_full.sqlite"
 CACHE_DIR        = Path("data") / "odpt_raw_cache"
@@ -315,13 +321,24 @@ def hhmm_to_min(t: str) -> int | None:
     return int(m.group(1)) * 60 + int(m.group(2))
 
 
+def normalize_route_code(value: str) -> str:
+    text = unicodedata.normalize("NFKC", str(value or "")).strip()
+    if not text:
+        return ""
+    if "さんま" in text:
+        return "さんまバス"
+    if "トランセ" in text:
+        return "トランセ"
+    return text
+
+
 def load_seed_route_map() -> dict[str, tuple[str, str]]:
     mapping: dict[str, tuple[str, str]] = {}
     if not ROUTE_TO_DEPOT_PATH.exists():
         return mapping
     with ROUTE_TO_DEPOT_PATH.open("r", encoding="utf-8-sig", newline="") as fh:
         for row in csv.DictReader(fh):
-            route_code = str(row.get("route_code") or "").strip()
+            route_code = normalize_route_code(str(row.get("route_code") or ""))
             depot_id = str(row.get("depot_id") or "").strip()
             depot_name = str(row.get("depot_name") or depot_id).strip()
             if route_code and depot_id:
@@ -377,12 +394,12 @@ def extract_route_family(pattern_id: str, title: str) -> str:
     # 形式1: TokyuBus.FAMILY.数字.方向
     m = re.search(r"TokyuBus\.([^.]+)\.\d", pattern_id)
     if m:
-        return m.group(1)
+        return normalize_route_code(m.group(1))
     # 形式2: タイトルの先頭（スペース・括弧前）
     m2 = re.match(r"^([^\s（(【「\[]+)", title.strip())
     if m2:
-        return m2.group(1)
-    return title.strip() or pattern_id
+        return normalize_route_code(m2.group(1))
+    return normalize_route_code(title.strip() or pattern_id)
 
 
 def calendar_label(raw: str) -> str:
@@ -758,6 +775,8 @@ def phase_stop_timetables(conn: sqlite3.Connection, api_key: str,
                                {"odpt:busroutePattern": pid},
                                api_key, use_cache)
         entry_count = 0
+        if stt_list:
+            delete_synthetic_stop_timetables(conn, pattern_ids=[pid])
         for stt in stt_list:
             entry_count += insert_stop_timetable(conn, stt)
         conn.commit()
@@ -930,6 +949,18 @@ def main() -> None:
     elif args.skip_stop_timetables:
         log("=== Phase 4: 停留所時刻表 — スキップ ===")
 
+    synthetic_stop_timetable_summary = synthesize_missing_stop_timetables(
+        conn,
+        pattern_ids=pattern_ids,
+    )
+    if synthetic_stop_timetable_summary["entries"] > 0:
+        conn.commit()
+        log(
+            "synthetic stop_timetables applied: "
+            f"{synthetic_stop_timetable_summary['entries']}件 / "
+            f"{synthetic_stop_timetable_summary['patterns']}パターン"
+        )
+
     # メタ情報
     conn.executemany("INSERT OR REPLACE INTO pipeline_meta (key, value) VALUES (?,?)", [
         ("built_at", now_iso()),
@@ -939,6 +970,9 @@ def main() -> None:
         ("cache_dir", str(CACHE_DIR.resolve())),
         ("source", "remote_api_with_local_cache"),
         ("schema_version", "1.1"),
+        ("synthetic_stop_timetable_note", SYNTHETIC_STOP_TIMETABLE_NOTE),
+        ("synthetic_stop_timetable_entries", str(synthetic_stop_timetable_summary["entries"])),
+        ("synthetic_stop_timetable_patterns", str(synthetic_stop_timetable_summary["patterns"])),
     ])
     conn.commit()
 

@@ -1,0 +1,9 @@
+{
+  "table": "stops",
+  "required_columns": {
+    "id": "string",
+    "code": "string",
+    "name": "string",
+    "source": "string"
+  }
+}

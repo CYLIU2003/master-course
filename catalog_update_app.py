@@ -11,13 +11,15 @@ heavy public-data refresh work can be run on demand.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 DEFAULT_OPERATOR = "odpt.Operator:TokyuBus"
-DEFAULT_GTFS_FEED_PATH = "GTFS/ToeiBus-GTFS"
+DEFAULT_GTFS_FEED_PATH = "GTFS/TokyuBus-GTFS"
 DEFAULT_TOKYUBUS_PIPELINE_SOURCE_DIR = "./data/raw-odpt"
 ALL_RESOURCES = ("routes", "stops", "timetable", "stop-timetables", "calendar")
 
@@ -54,6 +56,88 @@ def _fast_ingest():
     from tools import fast_catalog_ingest
 
     return fast_catalog_ingest
+
+
+def _tokyubus_gtfs_pipeline():
+    lib_root = Path(__file__).resolve().parent / "data-prep" / "lib"
+    if str(lib_root) not in sys.path:
+        sys.path.insert(0, str(lib_root))
+    from tokyubus_gtfs.pipeline import PipelineConfig, run_pipeline
+
+    return PipelineConfig, run_pipeline
+
+
+def _data_prep_build_all():
+    source_path = Path(__file__).resolve().parent / "data-prep" / "pipeline" / "build_all.py"
+    spec = importlib.util.spec_from_file_location("data_prep_build_all_source", source_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load build_all.py from {source_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _build_tokyu_gtfs_db_module():
+    source_path = Path(__file__).resolve().parent / "scripts" / "build_tokyu_gtfs_db.py"
+    spec = importlib.util.spec_from_file_location("build_tokyu_gtfs_db_source", source_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load build_tokyu_gtfs_db.py from {source_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _parse_dataset_ids(value: Optional[str]) -> List[str]:
+    if not value:
+        return ["tokyu_core", "tokyu_full"]
+    return [item.strip() for item in str(value).split(",") if item.strip()]
+
+
+def _rebuild_tokyu_built_datasets(
+    *,
+    dataset_ids: Sequence[str],
+    feed_path: str,
+    strict_gtfs_reconciliation: bool,
+) -> Dict[str, Any]:
+    build_all = _data_prep_build_all()
+    results: Dict[str, Any] = {}
+    for dataset_id in dataset_ids:
+        exit_code = int(
+            build_all.build_dataset(
+                dataset_id,
+                no_fetch=True,
+                force=True,
+                feed_path=feed_path,
+                strict_gtfs_reconciliation=strict_gtfs_reconciliation,
+            )
+        )
+        results[dataset_id] = {
+            "exitCode": exit_code,
+            "builtDir": str((Path("data") / "built" / dataset_id).resolve()),
+        }
+        if exit_code != 0:
+            raise RuntimeError(
+                f"Built dataset rebuild failed for '{dataset_id}' with exit code {exit_code}."
+            )
+    return results
+
+
+def _build_gtfs_sqlite_catalog(
+    *,
+    dataset_id: str,
+    feed_path: str,
+    db_path: str,
+) -> Dict[str, Any]:
+    module = _build_tokyu_gtfs_db_module()
+    output_path = module.build_tokyu_gtfs_db(
+        Path(db_path),
+        dataset_id=dataset_id,
+        feed_path=feed_path,
+    )
+    return {
+        "datasetId": dataset_id,
+        "dbPath": str(Path(output_path).resolve()),
+    }
 
 
 def _build_odpt_import_meta(
@@ -414,26 +498,35 @@ def _cmd_list_snapshots(_: argparse.Namespace) -> int:
 
 def _cmd_refresh(args: argparse.Namespace) -> int:
     if args.source == "gtfs-pipeline":
-        from pathlib import Path
-
-        from src.tokyubus_gtfs.pipeline import PipelineConfig, run_pipeline
+        PipelineConfig, run_pipeline = _tokyubus_gtfs_pipeline()
 
         result = run_pipeline(
             PipelineConfig(
                 source_dir=Path(args.source_dir).resolve(),
                 snapshot_id=args.snapshot_id,
+                gtfs_out_dir=Path(args.feed_path).resolve(),
                 skip_archive=args.skip_archive,
                 skip_gtfs=args.skip_gtfs,
                 skip_features=args.skip_features,
                 profile=args.profile,
             )
         )
+        if not args.skip_built_datasets:
+            result["built_datasets"] = _rebuild_tokyu_built_datasets(
+                dataset_ids=_parse_dataset_ids(args.built_datasets),
+                feed_path=str(Path(args.feed_path).resolve()),
+                strict_gtfs_reconciliation=args.strict_gtfs_reconciliation,
+            )
+        if args.build_gtfs_db:
+            result["gtfs_db"] = _build_gtfs_sqlite_catalog(
+                dataset_id=args.gtfs_db_dataset_id,
+                feed_path=str(Path(args.feed_path).resolve()),
+                db_path=args.gtfs_db_path,
+            )
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.source == "odpt":
-        from pathlib import Path
-
-        from src.tokyubus_gtfs.pipeline import PipelineConfig, run_pipeline
+        PipelineConfig, run_pipeline = _tokyubus_gtfs_pipeline()
 
         out_dir = args.out_dir or "./data/catalog-fast"
         fast_args = [
@@ -454,12 +547,25 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
             PipelineConfig(
                 source_dir=Path(out_dir).resolve(),
                 snapshot_id=args.snapshot_id,
+                gtfs_out_dir=Path(args.feed_path).resolve(),
                 skip_archive=args.skip_archive,
                 skip_gtfs=args.skip_gtfs,
                 skip_features=args.skip_features,
                 profile=args.profile,
             )
         )
+        if not args.skip_built_datasets:
+            result["built_datasets"] = _rebuild_tokyu_built_datasets(
+                dataset_ids=_parse_dataset_ids(args.built_datasets),
+                feed_path=str(Path(args.feed_path).resolve()),
+                strict_gtfs_reconciliation=args.strict_gtfs_reconciliation,
+            )
+        if args.build_gtfs_db:
+            result["gtfs_db"] = _build_gtfs_sqlite_catalog(
+                dataset_id=args.gtfs_db_dataset_id,
+                feed_path=str(Path(args.feed_path).resolve()),
+                db_path=args.gtfs_db_path,
+            )
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         print("note: research runtime uses bff/ as the official backend; backend_legacy/ is legacy")
         return 0
@@ -474,6 +580,13 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
         force_refresh=args.force_refresh,
         ttl_sec=args.ttl_sec,
     )
+    if args.build_gtfs_db:
+        payload = _build_gtfs_sqlite_catalog(
+            dataset_id=args.gtfs_db_dataset_id,
+            feed_path=str(Path(args.feed_path).resolve()),
+            db_path=args.gtfs_db_path,
+        )
+        print(json.dumps({"gtfs_db": payload}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -588,6 +701,12 @@ def _run_interactive() -> int:
                 concurrency=32,
                 resume=False,
                 skip_stop_timetables=False,
+                built_datasets="tokyu_core,tokyu_full",
+                skip_built_datasets=False,
+                strict_gtfs_reconciliation=False,
+                build_gtfs_db=False,
+                gtfs_db_dataset_id="tokyu_full",
+                gtfs_db_path="data/tokyu_gtfs.sqlite",
             )
         )
     if choice == "4":
@@ -610,6 +729,12 @@ def _run_interactive() -> int:
                 concurrency=32,
                 resume=False,
                 skip_stop_timetables=False,
+                built_datasets="tokyu_core,tokyu_full",
+                skip_built_datasets=False,
+                strict_gtfs_reconciliation=False,
+                build_gtfs_db=False,
+                gtfs_db_dataset_id="tokyu_full",
+                gtfs_db_path="data/tokyu_gtfs.sqlite",
             )
         )
     if choice == "5":
@@ -675,6 +800,12 @@ def _build_parser() -> argparse.ArgumentParser:
     refresh_parser.add_argument("--skip-stop-timetables", action="store_true")
     refresh_parser.add_argument("--fetch-only", action="store_true")
     refresh_parser.add_argument("--profile", choices=["fast", "full"], default="fast")
+    refresh_parser.add_argument("--built-datasets", default="tokyu_core,tokyu_full")
+    refresh_parser.add_argument("--skip-built-datasets", action="store_true")
+    refresh_parser.add_argument("--strict-gtfs-reconciliation", action="store_true")
+    refresh_parser.add_argument("--build-gtfs-db", action="store_true")
+    refresh_parser.add_argument("--gtfs-db-dataset-id", default="tokyu_full")
+    refresh_parser.add_argument("--gtfs-db-path", default="data/tokyu_gtfs.sqlite")
 
     sync_parser = subparsers.add_parser("sync", help="Refresh catalog and sync data into a scenario")
     sync_parser.add_argument("source", choices=["odpt", "gtfs"])

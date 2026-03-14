@@ -1,54 +1,54 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import sys
 from pathlib import Path
+from typing import Any
 
-import pandas as pd
+
+def _load_module(module_name: str, relative_path: str) -> Any:
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+    module_path = Path(__file__).resolve().parents[1] / relative_path
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def build_trips(
     dataset_id: str,
     built_dir: Path,
     seed_root: Path,
+    feed_path: str | Path | None = None,
 ) -> None:
-    del dataset_id, seed_root
-    built_dir.mkdir(parents=True, exist_ok=True)
-    routes_path = built_dir / "routes.parquet"
-    if not routes_path.exists():
-        raise FileNotFoundError(f"Routes artifact not found: {routes_path}")
-
-    routes = pd.read_parquet(routes_path)
-    trip_rows = []
-    for idx, route in enumerate(routes.to_dict(orient="records"), start=1):
-        route_id = str(route.get("id") or "")
-        route_code = str(route.get("routeCode") or "")
-        trip_rows.append(
-            {
-                "trip_id": f"{route_code}:trip:{idx:03d}",
-                "route_id": route_id,
-                "service_id": "WEEKDAY",
-                "departure": "06:00:00",
-                "arrival": "06:30:00",
-                "origin": route_code,
-                "destination": route_code,
-                "distance_km": 0.0,
-                "allowed_vehicle_types": ["BEV", "ICE"],
-                "source": "seed_build",
-            }
-        )
-
-    pd.DataFrame(trip_rows).to_parquet(built_dir / "trips.parquet", index=False)
+    helper = _load_module(
+        "tokyu_gtfs_built_artifacts",
+        "pipeline/_gtfs_built_artifacts.py",
+    )
+    helper.build_trips_artifact(
+        dataset_id=dataset_id,
+        built_dir=built_dir,
+        seed_root=seed_root,
+        feed_path=feed_path,
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True)
+    parser.add_argument("--feed-path", default="")
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[2]
     build_trips(
         dataset_id=args.dataset,
         built_dir=repo_root / "data" / "built" / args.dataset,
         seed_root=repo_root / "data" / "seed" / "tokyu",
+        feed_path=args.feed_path or None,
     )
 
 

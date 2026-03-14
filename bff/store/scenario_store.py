@@ -65,6 +65,7 @@ from typing import Any, Dict, List, Optional
 
 from bff.services.service_ids import canonical_service_id
 from bff.store import master_data_store, scenario_meta_store, trip_store
+from src.value_normalization import coerce_list
 
 _STORE_DIR = Path(__file__).parent.parent.parent / "outputs" / "scenarios"
 _APP_CONTEXT_PATH = Path(__file__).parent.parent.parent / "outputs" / "app_context.json"
@@ -1491,6 +1492,7 @@ def apply_dataset_bootstrap(scenario_id: str, payload: Dict[str, Any]) -> Dict[s
     for field in (
         "depots",
         "routes",
+        "stops",
         "vehicle_templates",
         "route_depot_assignments",
         "depot_route_permissions",
@@ -2097,7 +2099,7 @@ def list_route_depot_assignments(
                 "endStop": route.get("endStop"),
                 "source": route.get("source"),
                 "tripCount": route.get("tripCount") or 0,
-                "stopCount": len(list(route.get("stopSequence") or [])),
+                "stopCount": len(coerce_list(route.get("stopSequence"))),
                 "depotId": assignment.get("depotId") if assignment else None,
                 "depotName": depot.get("name") if depot else None,
                 "assignmentType": assignment.get("assignmentType")

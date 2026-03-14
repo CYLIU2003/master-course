@@ -65,3 +65,7 @@ NUL
 *.log
 *.zip
 *.tar.gz
+
+
+data/odpt_subset_cache
+data/built/odpt_subset_cache

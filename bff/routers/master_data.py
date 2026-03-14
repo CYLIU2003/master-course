@@ -31,6 +31,7 @@ from bff.services.route_family import (
 )
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
+from src.value_normalization import coerce_list
 
 router = APIRouter(tags=["master-data"])
 
@@ -590,7 +591,7 @@ def _build_explorer_overview(
         1
         for route in routes
         if int((route.get("linkStatus") or {}).get("stopsResolved") or 0) > 0
-        or len(route.get("stopSequence") or []) > 0
+        or len(coerce_list(route.get("stopSequence"))) > 0
     )
     routes_with_timetable = sum(
         1
@@ -758,7 +759,7 @@ def _build_route_link_data(
     schedule_rows: List[Dict[str, Any]],
     stop_timetables: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    stop_sequence = list(route.get("stopSequence") or [])
+    stop_sequence = [str(item) for item in coerce_list(route.get("stopSequence")) if item is not None]
     stop_index = {
         str(stop.get("id")): stop for stop in stops if stop.get("id") is not None
     }

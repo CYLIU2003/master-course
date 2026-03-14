@@ -542,6 +542,27 @@ def test_simulation_and_optimization_both_use_run_preparation_service():
         )
 
 
+def test_app_bootstrap_manager_prewarms_setup_and_execute_tabs():
+    source = pathlib.Path("frontend/src/app/AppBootstrapManager.tsx").read_text(encoding="utf-8")
+    required_tokens = [
+        "vehicleApi.list",
+        "vehicleTemplateApi.list",
+        "routeApi.list",
+        "stopApi.list",
+        "permissionApi.getDepotRoutePermissions",
+        "scenarioApi.getDeadheadRules",
+        "graphApi.getTripsSummary",
+        "graphApi.getGraphSummary",
+        "graphApi.getDutiesSummary",
+        "simulationApi.getCapabilities",
+        "optimizationApi.getCapabilities",
+    ]
+    for token in required_tokens:
+        assert token in source, (
+            f"AppBootstrapManager must prewarm setup/execute data and reference '{token}'."
+        )
+
+
 MASTER_DATA_FORBIDDEN = [
     "odpt",
     "gtfs",

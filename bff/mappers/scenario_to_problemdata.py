@@ -19,6 +19,7 @@ from src.preprocess.trip_converter import (
     build_vehicle_task_compat,
 )
 from src.schemas.duty_entities import DutyLeg, VehicleDuty
+from src.value_normalization import coerce_list
 from bff.store import scenario_store
 
 
@@ -41,7 +42,7 @@ class ScenarioBuildReport:
 
 
 def _as_list(value: Any) -> List[Any]:
-    return list(value or [])
+    return coerce_list(value)
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:

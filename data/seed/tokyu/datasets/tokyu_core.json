@@ -1,21 +1,12 @@
 {
   "dataset_id": "tokyu_core",
-  "description": "Lightweight research dataset centered on Meguro depot. Primary case-study target for literature-based BEV/ICE mixed fleet optimization.",
-  "note": "Single-depot default. Schema supports multi-depot for future expansion.",
+  "description": "Core Tokyu research dataset covering the Meguro, Seta, Awashima, and Tsurumaki depots for the primary 4-depot case study.",
+  "note": "Authoritative 4-depot core scope. Route membership is derived from route_to_depot.csv to stay in sync with depot master updates.",
   "included_depots": [
-    "meguro"
+    "meguro",
+    "seta",
+    "awashima",
+    "tsurumaki"
   ],
-  "included_routes": [
-    "渋41",
-    "渋42",
-    "渋71",
-    "渋72",
-    "黒01",
-    "黒02",
-    "東98",
-    "井50",
-    "反51",
-    "黒52",
-    "さんまバス"
-  ]
+  "included_routes": "ALL"
 }

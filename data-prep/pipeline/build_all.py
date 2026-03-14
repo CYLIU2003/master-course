@@ -50,14 +50,14 @@ def _today() -> str:
     return datetime.date.today().isoformat()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", required=True, choices=["tokyu_core", "tokyu_full"])
-    parser.add_argument("--no-fetch", action="store_true")
-    parser.add_argument("--force", action="store_true")
-    args = parser.parse_args()
-
-    dataset_id = args.dataset
+def build_dataset(
+    dataset_id: str,
+    *,
+    no_fetch: bool = False,
+    force: bool = False,
+    feed_path: str | None = None,
+    strict_gtfs_reconciliation: bool = False,
+) -> int:
     built_dir = BUILT_ROOT / dataset_id
     built_dir.mkdir(parents=True, exist_ok=True)
 
@@ -69,10 +69,11 @@ def main() -> int:
     routes_mod = _load_module("build_routes", "pipeline/build_routes.py")
     trips_mod = _load_module("build_trips", "pipeline/build_trips.py")
     timetables_mod = _load_module("build_timetables", "pipeline/build_timetables.py")
+    helper_mod = _load_module("tokyu_gtfs_built_artifacts", "pipeline/_gtfs_built_artifacts.py")
     manifest_mod = _load_module("manifest_writer", "lib/manifest_writer.py")
     version_mod = _load_module("producer_version", "lib/producer_version.py")
 
-    if not args.no_fetch:
+    if not no_fetch:
         if not run_stage("fetch_odpt", fetch_mod.fetch_odpt, dataset_id=dataset_id):
             log.error("Build aborted at fetch stage. No manifest written.")
             return 1
@@ -83,7 +84,8 @@ def main() -> int:
         dataset_id=dataset_id,
         built_dir=built_dir,
         seed_root=SEED_ROOT,
-        force=args.force,
+        force=force,
+        feed_path=feed_path,
     ):
         log.error("Build aborted at build_routes. No manifest written.")
         return 1
@@ -94,6 +96,7 @@ def main() -> int:
         dataset_id=dataset_id,
         built_dir=built_dir,
         seed_root=SEED_ROOT,
+        feed_path=feed_path,
     ):
         log.error("Build aborted at build_trips. No manifest written.")
         return 1
@@ -104,8 +107,43 @@ def main() -> int:
         dataset_id=dataset_id,
         built_dir=built_dir,
         seed_root=SEED_ROOT,
+        feed_path=feed_path,
     ):
         log.error("Build aborted at build_timetables. No manifest written.")
+        return 1
+
+    if not run_stage(
+        "build_stops",
+        helper_mod.build_stops_artifact,
+        dataset_id=dataset_id,
+        built_dir=built_dir,
+        seed_root=SEED_ROOT,
+        feed_path=feed_path,
+    ):
+        log.error("Build aborted at build_stops. No manifest written.")
+        return 1
+
+    if not run_stage(
+        "build_stop_timetables",
+        helper_mod.build_stop_timetables_artifact,
+        dataset_id=dataset_id,
+        built_dir=built_dir,
+        seed_root=SEED_ROOT,
+        feed_path=feed_path,
+    ):
+        log.error("Build aborted at build_stop_timetables. No manifest written.")
+        return 1
+
+    if not run_stage(
+        "gtfs_reconciliation",
+        helper_mod.build_gtfs_reconciliation_artifact,
+        dataset_id=dataset_id,
+        built_dir=built_dir,
+        seed_root=SEED_ROOT,
+        feed_path=feed_path,
+        strict=strict_gtfs_reconciliation,
+    ):
+        log.error("Build aborted at gtfs_reconciliation. No manifest written.")
         return 1
 
     seed_def_path = SEED_ROOT / "datasets" / f"{dataset_id}.json"
@@ -139,6 +177,24 @@ def main() -> int:
 
     log.info("Build complete: %s", dataset_id)
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", required=True, choices=["tokyu_core", "tokyu_full"])
+    parser.add_argument("--no-fetch", action="store_true")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--feed-path", default="")
+    parser.add_argument("--strict-gtfs-reconciliation", action="store_true")
+    args = parser.parse_args()
+
+    return build_dataset(
+        args.dataset,
+        no_fetch=args.no_fetch,
+        force=args.force,
+        feed_path=args.feed_path or None,
+        strict_gtfs_reconciliation=args.strict_gtfs_reconciliation,
+    )
 
 
 if __name__ == "__main__":

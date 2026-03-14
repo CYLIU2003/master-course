@@ -19,6 +19,8 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
+from src.value_normalization import coerce_str_list
+
 # ── Type aliases ───────────────────────────────────────────────
 
 VariantType = Literal[
@@ -63,7 +65,7 @@ class RawRoute:
             route_label=d.get("routeLabel"),
             start_stop=d.get("startStop"),
             end_stop=d.get("endStop"),
-            stop_sequence=d.get("stopSequence") or [],
+            stop_sequence=coerce_str_list(d.get("stopSequence")),
             distance_km=d.get("distanceKm"),
             duration_min=d.get("durationMin"),
             trip_count=d.get("tripCount"),
