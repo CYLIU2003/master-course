@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -195,6 +196,52 @@ def _default_app_context() -> Dict[str, Any]:
 
 def _ensure_dir() -> None:
     _STORE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _remove_tree_with_retries(path: Path, *, ignore_errors: bool = False) -> None:
+    if not path.exists():
+        return
+    last_error: Exception | None = None
+    for attempt in range(6):
+        try:
+            shutil.rmtree(path, ignore_errors=False)
+            return
+        except FileNotFoundError:
+            return
+        except PermissionError as exc:
+            last_error = exc
+            # Windows may keep SQLite staging files briefly after close.
+            time.sleep(0.1 * (attempt + 1))
+    if ignore_errors:
+        shutil.rmtree(path, ignore_errors=True)
+        return
+    if last_error is not None:
+        raise last_error
+
+
+def _unlink_with_retries(path: Path, *, missing_ok: bool = False) -> None:
+    if missing_ok and not path.exists():
+        return
+    last_error: Exception | None = None
+    for attempt in range(6):
+        try:
+            path.unlink(missing_ok=missing_ok)
+            return
+        except FileNotFoundError:
+            if missing_ok:
+                return
+            raise
+        except PermissionError as exc:
+            last_error = exc
+            time.sleep(0.1 * (attempt + 1))
+    if missing_ok:
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except Exception:
+            return
+    if last_error is not None:
+        raise last_error
 
 
 def _path(scenario_id: str) -> Path:
@@ -565,7 +612,7 @@ def _save(doc: Dict[str, Any]) -> None:
     
     staging_dir = _STORE_DIR / f"{scenario_id}.staging"
     if staging_dir.exists():
-        shutil.rmtree(staging_dir)
+        _remove_tree_with_retries(staging_dir)
     staging_dir.mkdir(parents=True, exist_ok=True)
     
     staging_refs = {}
@@ -603,7 +650,7 @@ def _save(doc: Dict[str, Any]) -> None:
                 value = doc.get(field)
                 if value is None:
                     if target_path.exists():
-                        target_path.unlink()
+                        _unlink_with_retries(target_path)
                     if field in _SUMMARY_SCALAR_NAMES:
                         trip_store.save_scalar(
                             artifact_db_path,
@@ -637,7 +684,7 @@ def _save(doc: Dict[str, Any]) -> None:
             elif field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
                 trip_store.save_scalar(artifact_db_path, field, doc.get(field))
             if field not in _PARQUET_ROW_ARTIFACT_FIELDS and target_path.exists():
-                target_path.unlink()
+                _unlink_with_retries(target_path)
 
         slim_doc = {
             "scenarioId": scenario_id,
@@ -669,9 +716,9 @@ def _save(doc: Dict[str, Any]) -> None:
         old_json = _STORE_DIR / f"{scenario_id}.json.old"
 
         if old_dir.exists():
-            shutil.rmtree(old_dir, ignore_errors=True)
+            _remove_tree_with_retries(old_dir, ignore_errors=True)
         if old_json.exists():
-            old_json.unlink(missing_ok=True)
+            _unlink_with_retries(old_json, missing_ok=True)
 
         if active_dir.exists():
             active_dir.rename(old_dir)
@@ -683,9 +730,9 @@ def _save(doc: Dict[str, Any]) -> None:
 
         # Cleanup
         if old_dir.exists():
-            shutil.rmtree(old_dir, ignore_errors=True)
+            _remove_tree_with_retries(old_dir, ignore_errors=True)
         if old_json.exists():
-            old_json.unlink(missing_ok=True)
+            _unlink_with_retries(old_json, missing_ok=True)
 
         doc["refs"] = refs
         doc["stats"] = slim_doc["stats"]
@@ -693,9 +740,9 @@ def _save(doc: Dict[str, Any]) -> None:
             doc[field] = value
     except Exception:
         if staging_dir.exists():
-            shutil.rmtree(staging_dir, ignore_errors=True)
+            _remove_tree_with_retries(staging_dir, ignore_errors=True)
         if staging_json.exists():
-            staging_json.unlink(missing_ok=True)
+            _unlink_with_retries(staging_json, missing_ok=True)
         raise
 
 

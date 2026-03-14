@@ -441,7 +441,65 @@ def _derive_calendar_entries(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, A
     return [_calendar_template(service_id) for service_id in service_ids]
 
 
+def _catalog_preset_to_vehicle_template(
+    preset: Dict[str, Any],
+    *,
+    type_: str,
+) -> Dict[str, Any]:
+    profile_id = str(
+        preset.get("profile_id") or preset.get("vehicle_id") or preset.get("id") or ""
+    ).strip()
+    template_id = f"tokyu-template-{profile_id.replace('_', '-')}" if profile_id else ""
+    model_name = str(
+        preset.get("model_name") or preset.get("display_name") or profile_id
+    ).strip()
+    energy_key = (
+        "energy_consumption_kWh_per_km" if type_ == "BEV" else "fuel_consumption_L_per_km"
+    )
+    return {
+        "id": template_id or f"tokyu-template-{type_.lower()}-unknown",
+        "name": str(preset.get("display_name") or model_name).strip() or model_name,
+        "type": type_,
+        "modelName": model_name,
+        "capacityPassengers": _safe_int(
+            preset.get("passenger_capacity"),
+            70 if type_ == "BEV" else 75,
+        ),
+        "batteryKwh": _safe_optional_float(preset.get("battery_capacity_kWh"))
+        if type_ == "BEV"
+        else None,
+        "fuelTankL": None
+        if type_ == "BEV"
+        else _safe_optional_float(preset.get("fuel_tank_capacity_L")),
+        "energyConsumption": _safe_float(
+            preset.get(energy_key),
+            1.2 if type_ == "BEV" else 0.2,
+        ),
+        "chargePowerKw": _safe_optional_float(preset.get("charging_power_dc_kW"))
+        if type_ == "BEV"
+        else None,
+        "minSoc": 0.2 if type_ == "BEV" else None,
+        "maxSoc": 0.9 if type_ == "BEV" else None,
+        "acquisitionCost": _safe_float(preset.get("purchase_cost_yen"), 0.0),
+        "enabled": True,
+    }
+
+
 def default_vehicle_templates() -> List[Dict[str, Any]]:
+    catalog_path = _DATA_ROOT / "vehicle_catalog.json"
+    catalog = _read_json(catalog_path) if catalog_path.exists() else {}
+    templates: List[Dict[str, Any]] = []
+
+    for preset in catalog.get("ev_presets") or []:
+        if isinstance(preset, dict):
+            templates.append(_catalog_preset_to_vehicle_template(preset, type_="BEV"))
+    for preset in catalog.get("engine_presets") or []:
+        if isinstance(preset, dict):
+            templates.append(_catalog_preset_to_vehicle_template(preset, type_="ICE"))
+
+    if templates:
+        return templates
+
     return [
         {
             "id": "tokyu-template-bev-standard-300",

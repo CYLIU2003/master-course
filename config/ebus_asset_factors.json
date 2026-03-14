@@ -68,12 +68,12 @@
       {
         "manufacturer": "BYD",
         "model_name": "K8 2.0",
-        "capacity_persons": 80,
+        "capacity_persons": 81,
         "source_trace": {
-          "source_file": "バス性能比較.xlsx",
-          "sheet": "Sheet1"
+          "source_file": "data/vehicle_catalog.json",
+          "entry": "byd_k8_2_0"
         },
-        "vehicle_id": "BYD_K8_2.0",
+        "vehicle_id": "byd_k8_2_0",
         "category": "BEV",
         "battery_capacity_kwh": 314,
         "rated_output_text": "150(75*2)",
@@ -87,23 +87,25 @@
           90
         ],
         "co2_g_per_km": null,
-        "notes": []
+        "notes": [
+          "冷房起動時 / GB/T19754"
+        ]
       },
       {
-        "manufacturer": "Jバス(日野)",
-        "model_name": "ZEV ブルーリボン",
+        "manufacturer": "いすゞ自動車",
+        "model_name": "エルガEV",
         "capacity_persons": 70,
         "source_trace": {
-          "source_file": "バス性能比較.xlsx",
-          "sheet": "Sheet1"
+          "source_file": "data/vehicle_catalog.json",
+          "entry": "isuzu_erga_ev_swb_urban"
         },
-        "vehicle_id": "Jバス(日野)_ZEV_ブルーリボン",
+        "vehicle_id": "isuzu_erga_ev_swb_urban",
         "category": "BEV",
-        "battery_capacity_kwh": 242,
-        "rated_output_text": "174(87*2)",
+        "battery_capacity_kwh": 245.3,
+        "rated_output_text": "250(125*2)",
         "max_output_text": "250(125*2)",
         "nominal_range_km": 360,
-        "nominal_efficiency_km_per_kwh": 1.48,
+        "nominal_efficiency_km_per_kwh": 1.47,
         "battery_type": "リチウムイオン",
         "charging_limit_text": "<50kW",
         "charging_power_candidates_kw": [
@@ -111,23 +113,25 @@
           50
         ],
         "co2_g_per_km": null,
-        "notes": []
+        "notes": [
+          "国土交通省届出値 / 30km/h一定速"
+        ]
       },
       {
-        "manufacturer": "Jバス(いすゞ)",
-        "model_name": "エルガ EV",
+        "manufacturer": "日野自動車",
+        "model_name": "ブルーリボン Z EV",
         "capacity_persons": 70,
         "source_trace": {
-          "source_file": "バス性能比較.xlsx",
-          "sheet": "Sheet1"
+          "source_file": "data/vehicle_catalog.json",
+          "entry": "hino_blueribbon_z_ev_swb_urban"
         },
-        "vehicle_id": "Jバス(いすゞ)_エルガ_EV",
+        "vehicle_id": "hino_blueribbon_z_ev_swb_urban",
         "category": "BEV",
         "battery_capacity_kwh": 242,
-        "rated_output_text": "174(87*2)",
+        "rated_output_text": "250(125*2)",
         "max_output_text": "250(125*2)",
         "nominal_range_km": 360,
-        "nominal_efficiency_km_per_kwh": 1.48,
+        "nominal_efficiency_km_per_kwh": 1.49,
         "battery_type": "リチウムイオン",
         "charging_limit_text": "<50kW",
         "charging_power_candidates_kw": [
@@ -135,42 +139,46 @@
           50
         ],
         "co2_g_per_km": null,
-        "notes": []
+        "notes": [
+          "国土交通省審査値 / 30km/h一定速"
+        ]
       }
     ],
     "ice": [
       {
-        "manufacturer": "Jバス(日野)",
+        "manufacturer": "日野自動車",
         "model_name": "ブルーリボン",
-        "capacity_persons": 77,
+        "capacity_persons": 79,
         "source_trace": {
-          "source_file": "バス性能比較.xlsx",
-          "sheet": "Sheet1"
+          "source_file": "data/vehicle_catalog.json",
+          "entry": "hino_blueribbon_diesel_swb"
         },
-        "vehicle_id": "Jバス(日野)_ブルーリボン",
+        "vehicle_id": "hino_blueribbon_diesel_swb",
         "category": "ICE",
-        "engine_max_output_text": "177 /2400",
-        "fuel_efficiency_km_per_l": 5.35,
-        "co2_g_per_km": 475,
+        "engine_max_output_text": "191 / 260PS",
+        "fuel_efficiency_km_per_l": 5.25,
+        "co2_g_per_km": 506,
         "notes": [
-          "(AT)2KG-KV290N4"
+          "AMT",
+          "2TG-KV290N1 / 2KG-KV290N1"
         ]
       },
       {
-        "manufacturer": "Jバス(いすゞ)",
+        "manufacturer": "いすゞ自動車",
         "model_name": "エルガ",
-        "capacity_persons": 77,
+        "capacity_persons": 79,
         "source_trace": {
-          "source_file": "バス性能比較.xlsx",
-          "sheet": "Sheet1"
+          "source_file": "data/vehicle_catalog.json",
+          "entry": "isuzu_erga_diesel_swb_nonstep_amt"
         },
-        "vehicle_id": "Jバス(いすゞ)_エルガ",
+        "vehicle_id": "isuzu_erga_diesel_swb_nonstep_amt",
         "category": "ICE",
-        "engine_max_output_text": "177 /2400",
-        "fuel_efficiency_km_per_l": 5.35,
-        "co2_g_per_km": 475,
+        "engine_max_output_text": "191 / 260PS",
+        "fuel_efficiency_km_per_l": 5.25,
+        "co2_g_per_km": 506,
         "notes": [
-          "(AT)2KG-LV290N4"
+          "AMT",
+          "2TG-LV290N3 / 2TG-LV290N4 / 2KG-LV290N4"
         ]
       },
       {
@@ -178,24 +186,27 @@
         "model_name": "エアロスター",
         "capacity_persons": 79,
         "source_trace": {
-          "source_file": "バス性能比較.xlsx",
-          "sheet": "Sheet1"
+          "source_file": "data/vehicle_catalog.json",
+          "entry": "mitsubishi_fuso_aerostar_diesel_nonstep"
         },
-        "vehicle_id": "三菱ふそう_エアロスター",
+        "vehicle_id": "mitsubishi_fuso_aerostar_diesel_nonstep",
         "category": "ICE",
-        "engine_max_output_text": "199 /2400",
-        "fuel_efficiency_km_per_l": 4.52,
-        "co2_g_per_km": 572,
+        "engine_max_output_text": "199 / 270PS",
+        "fuel_efficiency_km_per_l": 4.4,
+        "co2_g_per_km": 607,
         "notes": [
-          "(AT)2KG-MP38FK"
+          "AT",
+          "2PG-MP38FM / 2KG-MP38FM / 2PG-MP35FM"
         ]
       }
     ],
     "future_extension": [
       {
         "category": "HEV",
-        "status": "not_included_yet",
-        "reason": "諸元データ収集中"
+        "status": "reference_only",
+        "vehicle_id": "isuzu_erga_hybrid_swb",
+        "model_name": "エルガハイブリッド / ブルーリボンハイブリッド",
+        "reason": "template layer が BEV/ICE 二値のため scenario default seed には未投入"
       }
     ]
   },

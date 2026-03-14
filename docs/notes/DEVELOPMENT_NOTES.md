@@ -39,6 +39,33 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-14] Vehicle template catalog を実車カタログ値へ更新
+
+- **問題**:
+  - `src/research_dataset_loader.py` の `default_vehicle_templates()` が汎用ダミー値のままで、
+    `data/vehicle_catalog.json` や `config/ebus_asset_factors.json` の車両カタログとも乖離していた。
+  - BYD K8 2.0 / エルガEV / ブルーリボン Z EV / エルガ / ブルーリボン / エアロスターの
+    大型路線バス実車テンプレートが scenario 初期値に出てこなかった。
+  - HEV 参考車種を保持したくても、現行 template 層は `BEV` / `ICE` 二値前提だった。
+
+- **対応**:
+  - `data/vehicle_catalog.json`
+    - 大型路線バスカタログ値 dataset として全面更新。
+    - `ev_presets` / `engine_presets` を実車ベースへ差し替え、
+      scenario template seed の正本に位置づけた。
+    - HEV は `hybrid_reference_presets` に reference-only で保持。
+  - `src/research_dataset_loader.py`
+    - `default_vehicle_templates()` を `data/vehicle_catalog.json` 読み込みに変更。
+    - scenario bootstrap / master preload の vehicle templates が catalog 連動になった。
+  - `config/ebus_asset_factors.json`
+    - `vehicle_catalog` を同じカタログ値へ更新し、研究設定側とのズレを解消。
+  - `README.md`
+    - `data/vehicle_catalog.json` を seed asset として明記。
+
+- **制約メモ**:
+  - 現行 runtime の vehicle template は `BEV` / `ICE` のみ自動 seed。
+  - `isuzu_erga_hybrid_swb` は catalog reference として保持し、HEV template 自動投入は将来拡張扱い。
+
 ### [DEV-2026-03-13] Tokyu-only two-app data contract baseline
 
 - **目的**:
@@ -655,3 +682,11 @@ master-course/
   - 追加確認:
     - `python -m pytest tests/test_catalog_local.py tests/test_bff_scenario_store.py -q` → 29 passed
     - `cd frontend && npm run build` → pass
+
+- 2026-03-14 (Scenario open regression on Windows)
+  - `bff/store/master_data_store.py` と `bff/store/trip_store.py` の SQLite artifact connection を `journal_mode=WAL` から `journal_mode=DELETE` に変更した。
+  - `bff/store/scenario_store.py` の staging cleanup に retry 付き削除を追加し、直前の SQLite close と競合した `PermissionError [WinError 32]` を吸収するようにした。
+  - Windows では scenario save の staging cleanup 時に `master_data.sqlite` / `artifacts.sqlite` の `-wal` / `-shm` 系ハンドルが残り、`GET /api/scenarios/{id}` や `POST /api/scenarios/{id}/activate` が `PermissionError [WinError 32]` で落ちるケースがあったため。
+  - 確認:
+    - `python -m pytest tests/test_bff_scenario_store.py tests/test_bff_research_scenario_bootstrap.py -q` → 26 passed
+    - `TestClient(bff.main:app)` 経由の `GET /api/scenarios/e2379614-2885-40c4-b064-6982bdf57e31` → 200

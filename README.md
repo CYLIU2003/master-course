@@ -140,6 +140,11 @@ data-prep/                  ->   data/built/<dataset>/                 ->   app 
 | `data/seed/tokyu/datasets/tokyu_core.json` | 目黒・瀬田・淡島・弦巻 + `route_to_depot.csv` 起点の全 route rows / 4-depot core scope |
 | `data/seed/tokyu/datasets/tokyu_dispatch_ready.json` | 目黒・瀬田・淡島・弦巻 + preload baseline / 4-depot dispatch-ready preload |
 | `data/seed/tokyu/datasets/tokyu_full.json` | 全 12 営業所 + `route_to_depot.csv` 起点の全 route rows / All depots and routes |
+| `data/vehicle_catalog.json`                | 大型路線バスのカタログ値ベース車両テンプレート seed / catalog-based large route-bus template seed |
+
+`data/vehicle_catalog.json` の `ev_presets` / `engine_presets` は
+scenario bootstrap の default vehicle templates の基準データです。
+現行 runtime の template 層は `BEV` / `ICE` のみ自動 seed 対象で、`HEV` は reference-only に保持しています。
 
 ### Built data（`data-prep` が生成・Git には含めない）
 

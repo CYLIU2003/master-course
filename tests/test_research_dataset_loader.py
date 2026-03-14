@@ -4,6 +4,7 @@ from src.research_dataset_loader import (
     MISSING_BUILT_DATA_MESSAGE,
     _normalize_route_row,
     build_dataset_bootstrap,
+    default_vehicle_templates,
     get_dataset_status,
     list_dataset_statuses,
 )
@@ -47,6 +48,36 @@ def test_dataset_bootstrap_returns_seed_only_tokyu_core_defaults():
 def test_list_dataset_statuses_returns_core_and_full():
     dataset_ids = {item["datasetId"] for item in list_dataset_statuses()}
     assert {"tokyu_core", "tokyu_full", "tokyu_dispatch_ready"}.issubset(dataset_ids)
+
+
+def test_default_vehicle_templates_follow_catalog_based_large_route_bus_presets():
+    templates = default_vehicle_templates()
+    template_ids = {item["id"] for item in templates}
+
+    assert {
+        "tokyu-template-byd-k8-2-0",
+        "tokyu-template-isuzu-erga-ev-swb-urban",
+        "tokyu-template-hino-blueribbon-z-ev-swb-urban",
+        "tokyu-template-isuzu-erga-diesel-swb-nonstep-amt",
+        "tokyu-template-hino-blueribbon-diesel-swb",
+        "tokyu-template-mitsubishi-fuso-aerostar-diesel-nonstep",
+    }.issubset(template_ids)
+
+    byd = next(item for item in templates if item["id"] == "tokyu-template-byd-k8-2-0")
+    assert byd["type"] == "BEV"
+    assert byd["batteryKwh"] == 314.0
+    assert byd["energyConsumption"] == 1.308
+    assert byd["chargePowerKw"] == 90.0
+
+    erga_diesel = next(
+        item
+        for item in templates
+        if item["id"] == "tokyu-template-isuzu-erga-diesel-swb-nonstep-amt"
+    )
+    assert erga_diesel["type"] == "ICE"
+    assert erga_diesel["fuelTankL"] == 150.0
+    assert erga_diesel["energyConsumption"] == 0.19
+    assert erga_diesel["chargePowerKw"] is None
 
 
 def test_normalize_route_row_accepts_ndarray_stop_sequence():

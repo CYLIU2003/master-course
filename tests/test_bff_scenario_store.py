@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -1107,3 +1108,29 @@ def test_dispatch_scope_supports_route_family_code_filters(temp_store_dir: Path)
     assert scope["effectiveRouteIds"] == ["R_B"]
     assert scope["effectiveRouteFamilyCodes"] == ["B02"]
     assert scope["routeSelection"]["excludeRouteFamilyCodes"] == ["A01"]
+
+
+def test_remove_tree_with_retries_recovers_from_transient_permission_error(
+    temp_store_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    target = temp_store_dir / "locked-dir"
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "dummy.txt").write_text("x", encoding="utf-8")
+
+    original_rmtree = shutil.rmtree
+    calls = {"count": 0}
+
+    def flaky_rmtree(path, ignore_errors=False):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise PermissionError(32, "locked")
+        return original_rmtree(path, ignore_errors=ignore_errors)
+
+    monkeypatch.setattr(scenario_store.shutil, "rmtree", flaky_rmtree)
+    monkeypatch.setattr(scenario_store.time, "sleep", lambda _: None)
+
+    scenario_store._remove_tree_with_retries(target)
+
+    assert calls["count"] >= 2
+    assert not target.exists()
