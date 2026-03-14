@@ -767,7 +767,7 @@ export interface PrepareSimulationRequest {
     charger_count: number;
     charger_power_kw: number;
     solver_mode: SimulationBuilderSettings["solverMode"];
-    objective_mode?: "total_cost" | "co2";
+    objective_mode?: "total_cost" | "co2" | "balanced";
     allow_partial_service?: boolean;
     unserved_penalty?: number;
     time_limit_seconds: number;

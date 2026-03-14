@@ -187,6 +187,18 @@ def _objective_weights_from_scenario(scenario: Dict[str, Any]) -> Dict[str, floa
             "unserved_penalty": unserved_penalty,
             "slack_penalty": 1000000.0,
         }
+    elif objective_mode in {"balanced", "cost_co2_balanced", "multi_objective"}:
+        weights = {
+            "vehicle_fixed_cost": 0.0,
+            "electricity_cost": 1.0,
+            "demand_charge_cost": 1.0,
+            "fuel_cost": 1.0,
+            "deadhead_cost": 0.0,
+            "battery_degradation_cost": 0.0,
+            "emission_cost": 1.0,
+            "unserved_penalty": unserved_penalty,
+            "slack_penalty": 1000000.0,
+        }
     else:
         weights = {
             "vehicle_fixed_cost": 0.0,
@@ -248,7 +260,12 @@ def _filter_rows_for_scope(
         filtered_rows: List[Dict[str, Any]] = []
         for row in timetable_rows:
             route = route_lookup.get(str(row.get("route_id")) or "") or {}
-            variant_type = str(route.get("routeVariantType") or "unknown")
+            variant_type = str(
+                row.get("routeVariantType")
+                or row.get("route_variant_type")
+                or route.get("routeVariantType")
+                or "unknown"
+            )
             if not trip_selection.get("includeShortTurn", True) and variant_type == "short_turn":
                 continue
             if (
@@ -397,8 +414,23 @@ def _collect_trips_for_scope(
                     or f"trip_{route_id}_{item.get('direction', 'out')}_{index:03d}"
                 ),
                 "route_id": route_id,
+                "direction": str(
+                    item.get("direction")
+                    or item.get("direction_id")
+                    or item.get("canonicalDirection")
+                    or item.get("canonical_direction")
+                    or "outbound"
+                ),
+                "routeVariantType": str(
+                    item.get("routeVariantType")
+                    or item.get("route_variant_type")
+                    or route_like.get("routeVariantType")
+                    or "unknown"
+                ),
                 "origin": str(item.get("origin")),
                 "destination": str(item.get("destination")),
+                "origin_stop_id": str(item.get("origin_stop_id") or ""),
+                "destination_stop_id": str(item.get("destination_stop_id") or ""),
                 "departure": str(item.get("departure")),
                 "arrival": str(item.get("arrival")),
                 "distance_km": _estimate_trip_distance_km(item, route_like),

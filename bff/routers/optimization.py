@@ -95,6 +95,8 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "milp",
             "alns",
             "hybrid",
+            "ga",
+            "abc",
             "mode_milp_only",
             "mode_alns_only",
             "mode_alns_milp",
@@ -664,7 +666,7 @@ def _parse_optimization_mode(mode: str) -> OptimizationMode:
     normalized = (mode or "").strip().lower()
     if normalized in {"milp", "mode_milp_only", "exact"}:
         return OptimizationMode.MILP
-    if normalized in {"alns", "mode_alns_only", "heuristic"}:
+    if normalized in {"alns", "mode_alns_only", "heuristic", "ga", "abc"}:
         return OptimizationMode.ALNS
     return OptimizationMode.HYBRID
 

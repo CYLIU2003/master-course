@@ -71,12 +71,25 @@ def objective_weights_for_mode(
     objective_mode: str,
     unserved_penalty: float,
 ) -> Dict[str, float]:
-    if str(objective_mode or "").strip().lower() == "co2":
+    normalized = str(objective_mode or "").strip().lower()
+    if normalized == "co2":
         return {
             "vehicle_fixed_cost": 0.0,
             "electricity_cost": 0.0,
             "demand_charge_cost": 0.0,
             "fuel_cost": 0.0,
+            "deadhead_cost": 0.0,
+            "battery_degradation_cost": 0.0,
+            "emission_cost": 1.0,
+            "unserved_penalty": float(unserved_penalty),
+            "slack_penalty": 1000000.0,
+        }
+    if normalized in {"balanced", "cost_co2_balanced", "multi_objective"}:
+        return {
+            "vehicle_fixed_cost": 0.0,
+            "electricity_cost": 1.0,
+            "demand_charge_cost": 1.0,
+            "fuel_cost": 1.0,
             "deadhead_cost": 0.0,
             "battery_degradation_cost": 0.0,
             "emission_cost": 1.0,
@@ -303,7 +316,7 @@ def apply_builder_configuration(
             body.simulation_settings.depot_power_limit_kw
         )
     overlay.solver_config.mode = body.simulation_settings.solver_mode
-    overlay.solver_config.objective_mode = str(
+    overlay.solver_config.objective_mode = str(  # type: ignore[assignment]
         body.simulation_settings.objective_mode or "total_cost"
     )
     overlay.solver_config.allow_partial_service = bool(

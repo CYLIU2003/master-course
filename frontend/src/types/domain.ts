@@ -64,13 +64,15 @@ export interface SolverConfig {
     | "milp"
     | "alns"
     | "hybrid"
+    | "ga"
+    | "abc"
     | "mode_milp_only"
     | "mode_alns_only"
     | "mode_alns_milp";
   time_limit_seconds: number;
   mip_gap: number;
   alns_iterations: number;
-  objective_mode: "total_cost" | "co2";
+  objective_mode: "total_cost" | "co2" | "balanced";
   allow_partial_service: boolean;
   unserved_penalty: number;
   objective_weights: Record<string, number>;
@@ -147,7 +149,7 @@ export interface SimulationBuilderDefaults {
   chargerCount: number;
   chargerPowerKw: number;
   solverMode: SolverMode;
-  objectiveMode?: "total_cost" | "co2";
+  objectiveMode?: "total_cost" | "co2" | "balanced";
   allowPartialService?: boolean;
   unservedPenalty?: number;
   gridFlatPricePerKwh?: number | null;
@@ -178,7 +180,7 @@ export interface SimulationBuilderSettings {
   chargerCount: number;
   chargerPowerKw: number;
   solverMode: SolverMode;
-  objectiveMode?: "total_cost" | "co2";
+  objectiveMode?: "total_cost" | "co2" | "balanced";
   allowPartialService?: boolean;
   unservedPenalty?: number;
   gridFlatPricePerKwh?: number | null;
@@ -501,8 +503,12 @@ export interface Trip {
   trip_id: string;
   route_id: string;
   direction: "outbound" | "inbound";
+  canonicalDirection?: "outbound" | "inbound" | "unknown";
+  routeVariantType?: string;
   origin: string;
   destination: string;
+  origin_stop_id?: string;
+  destination_stop_id?: string;
   departure: HHMMTime;
   arrival: HHMMTime;
   departure_min: MinutesFromMidnight;
@@ -516,9 +522,13 @@ export interface TimetableRow {
   route_id: string;
   service_id: string;  // e.g. "WEEKDAY" | "SAT" | "SUN_HOL"
   direction: "outbound" | "inbound";
+  canonicalDirection?: "outbound" | "inbound" | "unknown";
+  routeVariantType?: string;
   trip_index: number;
   origin: string;
   destination: string;
+  origin_stop_id?: string;
+  destination_stop_id?: string;
   departure: HHMMTime;
   arrival: HHMMTime;
   distance_km: number;

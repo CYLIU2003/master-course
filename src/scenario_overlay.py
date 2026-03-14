@@ -58,6 +58,8 @@ class SolverConfig(BaseModel):
         "milp",
         "alns",
         "hybrid",
+        "ga",
+        "abc",
         "mode_milp_only",
         "mode_alns_only",
         "mode_alns_milp",
@@ -65,7 +67,7 @@ class SolverConfig(BaseModel):
     time_limit_seconds: int = Field(default=300, ge=1)
     mip_gap: float = Field(default=0.01, ge=0.0)
     alns_iterations: int = Field(default=500, ge=1)
-    objective_mode: Literal["total_cost", "co2"] = "total_cost"
+    objective_mode: Literal["total_cost", "co2", "balanced"] = "total_cost"
     allow_partial_service: bool = False
     unserved_penalty: float = Field(default=10000.0, ge=0.0)
     objective_weights: dict[str, float] = Field(default_factory=dict)

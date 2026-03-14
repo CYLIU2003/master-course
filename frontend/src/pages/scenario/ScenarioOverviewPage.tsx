@@ -29,6 +29,8 @@ const SOLVER_MODES: Array<{
   { value: "mode_alns_only", label: "ALNS only" },
   { value: "mode_alns_milp", label: "ALNS + MILP" },
   { value: "hybrid", label: "Hybrid" },
+  { value: "ga", label: "GA (ALNS fallback)" },
+  { value: "abc", label: "ABC (ALNS fallback)" },
 ];
 
 const OBJECTIVE_MODES: Array<{
@@ -37,6 +39,7 @@ const OBJECTIVE_MODES: Array<{
 }> = [
   { value: "total_cost", label: "Total cost" },
   { value: "co2", label: "CO2" },
+  { value: "balanced", label: "Cost + CO2" },
 ];
 
 const EXPERIMENT_METHOD_SUGGESTIONS = [

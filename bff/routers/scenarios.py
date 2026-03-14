@@ -338,9 +338,13 @@ class TimetableRowBody(BaseModel):
     route_id: str
     service_id: str = "WEEKDAY"
     direction: str = "outbound"
+    canonicalDirection: Optional[str] = None
+    routeVariantType: Optional[str] = None
     trip_index: int = 0
     origin: str
     destination: str
+    origin_stop_id: Optional[str] = None
+    destination_stop_id: Optional[str] = None
     departure: str  # HH:MM (24h, may exceed 24 for overnight)
     arrival: str  # HH:MM
     distance_km: float = 0.0
@@ -1143,7 +1147,8 @@ def import_timetable_csv(scenario_id: str, body: ImportCsvBody) -> Dict[str, Any
     """
     Parse CSV text and replace the scenario's timetable rows.
     Expected columns (in any order):
-      trip_id (optional), route_id, service_id, direction, origin, destination,
+      trip_id (optional), route_id, service_id, direction, canonicalDirection,
+      routeVariantType, origin, destination, origin_stop_id, destination_stop_id,
       departure, arrival, distance_km, allowed_vehicle_types
     allowed_vehicle_types may be semicolon-separated: BEV;ICE
     """
@@ -1164,11 +1169,15 @@ def import_timetable_csv(scenario_id: str, body: ImportCsvBody) -> Dict[str, Any
                 "route_id": raw.get("route_id", "").strip(),
                 "service_id": raw.get("service_id", "WEEKDAY").strip() or "WEEKDAY",
                 "direction": raw.get("direction", "outbound").strip() or "outbound",
+                "canonicalDirection": raw.get("canonicalDirection", raw.get("canonical_direction", "")).strip() or None,
+                "routeVariantType": raw.get("routeVariantType", raw.get("route_variant_type", "")).strip() or None,
                 "trip_index": i - 2,
                 "origin": raw.get("origin", raw.get("from_stop_id", "")).strip(),
                 "destination": raw.get(
                     "destination", raw.get("to_stop_id", "")
                 ).strip(),
+                "origin_stop_id": raw.get("origin_stop_id", "").strip() or None,
+                "destination_stop_id": raw.get("destination_stop_id", "").strip() or None,
                 "departure": raw.get("departure", raw.get("dep_time", "")).strip(),
                 "arrival": raw.get("arrival", raw.get("arr_time", "")).strip(),
                 "distance_km": float(
