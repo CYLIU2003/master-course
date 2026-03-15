@@ -162,6 +162,10 @@ def _default_dispatch_scope() -> Dict[str, Any]:
             "includeDepotMoves": True,
             "includeDeadhead": True,
         },
+        # Swap permissions control whether vehicles may serve trips from other
+        # routes (intra-depot) or across depots (inter-depot).
+        "allowIntraDepotRouteSwap": False,
+        "allowInterDepotSwap": False,
         "depotId": None,
         "serviceId": "WEEKDAY",
     }
@@ -634,10 +638,10 @@ def _load_shallow(
 
 
 def _load(
-
     scenario_id: str,
     *,
     repair_missing_master: bool = True,
+    skip_graph_arcs: bool = False,
 ) -> Dict[str, Any]:
     if _incomplete_marker_path(scenario_id).exists() and not _complete_marker_path(scenario_id).exists():
         raise RuntimeError(
@@ -685,8 +689,18 @@ def _load(
         artifact_path = Path(refs[ref_key])
         artifact_db_path = _artifact_store_path(refs)
         if field == "graph":
-            graph_value = _load_graph_artifact(artifact_db_path, artifact_path)
-            doc[field] = graph_value
+            if skip_graph_arcs:
+                # Load only graph metadata (arc counts), not the full arc list.
+                # Callers that need arcs must call get_field(scenario_id, "graph").
+                graph_meta = trip_store.load_scalar(artifact_db_path, _graph_meta_name(), None)
+                if graph_meta is not None:
+                    doc[field] = dict(graph_meta)
+                    doc[field]["arcs"] = []  # placeholder — not loaded
+                else:
+                    doc[field] = None
+            else:
+                graph_value = _load_graph_artifact(artifact_db_path, artifact_path)
+                doc[field] = graph_value
             continue
         if field == "timetable_rows":
             if trip_store.count_timetable_rows(artifact_db_path) > 0:
@@ -1265,6 +1279,8 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
             "serviceIds": selected_service_ids,
         },
         "tripSelection": normalized_trip_selection,
+        "allowIntraDepotRouteSwap": bool(scope.get("allowIntraDepotRouteSwap", False)),
+        "allowInterDepotSwap": bool(scope.get("allowInterDepotSwap", False)),
         "depotId": primary_depot_id,
         "serviceId": selected_service_ids[0],
         "candidateRouteIds": candidate_route_ids,
@@ -1512,8 +1528,19 @@ def get_scenario_document(
     scenario_id: str,
     *,
     repair_missing_master: bool = True,
+    include_graph_arcs: bool = False,
 ) -> Dict[str, Any]:
-    return _load(scenario_id, repair_missing_master=repair_missing_master)
+    """Load a full scenario document.
+
+    By default graph arcs are NOT loaded (skip_graph_arcs=True) because loading
+    100K+ arcs takes several seconds and is rarely needed outside of graph-specific
+    endpoints.  Pass include_graph_arcs=True when you explicitly need the arc data.
+    """
+    return _load(
+        scenario_id,
+        repair_missing_master=repair_missing_master,
+        skip_graph_arcs=not include_graph_arcs,
+    )
 
 
 def get_scenario_document_shallow(scenario_id: str) -> Dict[str, Any]:
@@ -1537,7 +1564,7 @@ def update_scenario(
     operator_id: Optional[str] = None,
     status: Optional[str] = None,
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     if name is not None:
         doc["meta"]["name"] = name
     if description is not None:
@@ -1581,7 +1608,7 @@ def delete_scenario(scenario_id: str) -> None:
 def duplicate_scenario(
     scenario_id: str, *, name: Optional[str] = None
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     new_id = _new_id()
     now = _now_iso()
     cloned = json.loads(json.dumps(doc))
@@ -1824,7 +1851,7 @@ def page_graph_arcs(
 def set_field(
     scenario_id: str, field: str, value: Any, *, invalidate_dispatch: bool = False
 ) -> None:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     doc[field] = value
     if invalidate_dispatch:
         _invalidate_dispatch_artifacts(doc)
@@ -1847,7 +1874,7 @@ def set_scenario_overlay(
     scenario_id: str,
     overlay: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     doc["scenario_overlay"] = dict(overlay) if isinstance(overlay, dict) else None
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
@@ -1918,7 +1945,7 @@ def set_feed_context(
     scenario_id: str,
     feed_context: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     doc["feed_context"] = _normalize_feed_context(feed_context)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
@@ -1943,7 +1970,7 @@ def _get_item(
 
 
 def _create_item(scenario_id: str, field: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     item = dict(data)
     item["id"] = item.get("id") or _new_id()
     doc[field].append(item)
@@ -1962,7 +1989,7 @@ def _create_item(scenario_id: str, field: str, data: Dict[str, Any]) -> Dict[str
 def _update_item(
     scenario_id: str, field: str, item_id_key: str, item_id: str, patch: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     for item in doc[field]:
         if item.get(item_id_key) == item_id:
             item.update({k: v for k, v in patch.items() if v is not None})
@@ -1980,7 +2007,7 @@ def _update_item(
 
 
 def _delete_item(scenario_id: str, field: str, item_id_key: str, item_id: str) -> None:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     before = len(doc[field])
     doc[field] = [i for i in doc[field] if i.get(item_id_key) != item_id]
     if len(doc[field]) == before:
@@ -2019,7 +2046,7 @@ def update_depot(
 
 def delete_depot(scenario_id: str, depot_id: str) -> None:
     _delete_item(scenario_id, "depots", "id", depot_id)
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     doc["route_depot_assignments"] = [
         item
         for item in doc.get("route_depot_assignments") or []
@@ -2030,7 +2057,7 @@ def delete_depot(scenario_id: str, depot_id: str) -> None:
 
 
 def get_public_data_state(scenario_id: str) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     state = doc.get("public_data")
     if not isinstance(state, dict):
         return _default_public_data_state()
@@ -2040,7 +2067,7 @@ def get_public_data_state(scenario_id: str) -> Dict[str, Any]:
 
 
 def set_public_data_state(scenario_id: str, state: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     normalized = _default_public_data_state()
     normalized.update(state)
     doc["public_data"] = normalized
@@ -2117,7 +2144,7 @@ def create_vehicle_batch(
     if quantity == 1:
         return [create_vehicle(scenario_id, data)]
 
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     base_name = (data.get("modelName") or "New vehicle").strip() or "New vehicle"
     created: List[Dict[str, Any]] = []
 
@@ -2159,7 +2186,7 @@ def duplicate_vehicle_batch(
     if quantity < 1:
         raise ValueError("quantity must be >= 1")
 
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     source = next((v for v in doc["vehicles"] if v.get("id") == vehicle_id), None)
     if source is None:
         raise KeyError(vehicle_id)
@@ -2215,7 +2242,7 @@ def update_vehicle(
 
 
 def delete_vehicle(scenario_id: str, vehicle_id: str) -> None:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     before = len(doc["vehicles"])
     doc["vehicles"] = [v for v in doc["vehicles"] if v.get("id") != vehicle_id]
     if len(doc["vehicles"]) == before:
@@ -2246,12 +2273,12 @@ def duplicate_vehicle_to_depot(
 
 
 def list_vehicle_templates(scenario_id: str) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     return list(doc.get("vehicle_templates") or [])
 
 
 def get_vehicle_template(scenario_id: str, template_id: str) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     for item in doc.get("vehicle_templates") or []:
         if item.get("id") == template_id:
             return item
@@ -2259,7 +2286,7 @@ def get_vehicle_template(scenario_id: str, template_id: str) -> Dict[str, Any]:
 
 
 def create_vehicle_template(scenario_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     item = dict(data)
     item["id"] = _new_id()
     doc.setdefault("vehicle_templates", []).append(item)
@@ -2271,7 +2298,7 @@ def create_vehicle_template(scenario_id: str, data: Dict[str, Any]) -> Dict[str,
 def update_vehicle_template(
     scenario_id: str, template_id: str, patch: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     templates = doc.setdefault("vehicle_templates", [])
     for item in templates:
         if item.get("id") == template_id:
@@ -2283,7 +2310,7 @@ def update_vehicle_template(
 
 
 def delete_vehicle_template(scenario_id: str, template_id: str) -> None:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     templates = doc.setdefault("vehicle_templates", [])
     before = len(templates)
     doc["vehicle_templates"] = [i for i in templates if i.get("id") != template_id]
@@ -2345,7 +2372,7 @@ def list_routes(
     depot_id: Optional[str] = None,
     operator: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     assignments = _route_assignment_map(doc)
     items: List[Dict[str, Any]] = []
     for route in doc.get("routes") or []:
@@ -2375,7 +2402,7 @@ def list_routes(
 
 
 def get_route(scenario_id: str, route_id: str) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     route = _get_item(scenario_id, "routes", "id", route_id)
     assignment = _route_assignment_map(doc).get(route_id)
     if assignment is None:
@@ -2401,7 +2428,7 @@ def update_route(
 
 def delete_route(scenario_id: str, route_id: str) -> None:
     _delete_item(scenario_id, "routes", "id", route_id)
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     doc["route_depot_assignments"] = [
         item
         for item in doc.get("route_depot_assignments") or []
@@ -2417,7 +2444,7 @@ def replace_routes_from_source(
     routes: List[Dict[str, Any]],
     import_meta: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     route_import_meta = doc.setdefault("route_import_meta", {})
     preserved = [r for r in doc["routes"] if r.get("source") != source]
     doc["routes"] = preserved + routes
@@ -2453,7 +2480,7 @@ def replace_routes_from_source(
 def get_route_import_meta(
     scenario_id: str, source: Optional[str] = None
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     route_import_meta = doc.get("route_import_meta") or {}
     if source is None:
         return dict(route_import_meta)
@@ -2466,7 +2493,7 @@ def list_route_depot_assignments(
     operator: Optional[str] = None,
     unresolved_only: bool = False,
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     routes_by_id = {
         str(route.get("id")): dict(route)
         for route in doc.get("routes") or []
@@ -2520,7 +2547,7 @@ def upsert_route_depot_assignment(
     route_id: str,
     data: Dict[str, Any],
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     resolved_route_id = None
     for route in doc.get("routes") or []:
         route_keys = {
@@ -2592,7 +2619,7 @@ def replace_stops_from_source(
     stops: List[Dict[str, Any]],
     import_meta: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     stop_import_meta = doc.setdefault("stop_import_meta", {})
     preserved = [stop for stop in doc.get("stops", []) if stop.get("source") != source]
     normalized_stops = []
@@ -2615,7 +2642,7 @@ def replace_stops_from_source(
 def get_stop_import_meta(
     scenario_id: str, source: Optional[str] = None
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     stop_import_meta = doc.get("stop_import_meta") or {}
     if source is None:
         return dict(stop_import_meta)
@@ -2626,7 +2653,7 @@ def get_stop_import_meta(
 def set_stop_import_meta(
     scenario_id: str, source: str, import_meta: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     stop_import_meta = doc.setdefault("stop_import_meta", {})
     stop_import_meta[source] = import_meta
     doc["meta"]["updatedAt"] = _now_iso()
@@ -2637,7 +2664,7 @@ def set_stop_import_meta(
 def set_timetable_import_meta(
     scenario_id: str, source: str, import_meta: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     timetable_import_meta = doc.setdefault("timetable_import_meta", {})
     timetable_import_meta[source] = import_meta
     doc["meta"]["updatedAt"] = _now_iso()
@@ -2648,7 +2675,7 @@ def set_timetable_import_meta(
 def get_timetable_import_meta(
     scenario_id: str, source: Optional[str] = None
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     timetable_import_meta = doc.get("timetable_import_meta") or {}
     if source is None:
         return dict(timetable_import_meta)
@@ -2663,7 +2690,7 @@ def upsert_timetable_rows_from_source(
     *,
     replace_existing_source: bool = False,
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     existing_rows = list(doc.get("timetable_rows") or [])
 
     preserved_rows = [row for row in existing_rows if row.get("source") != source]
@@ -2709,7 +2736,7 @@ def upsert_timetable_rows_from_source(
 def set_stop_timetable_import_meta(
     scenario_id: str, source: str, import_meta: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     stop_timetable_import_meta = doc.setdefault("stop_timetable_import_meta", {})
     stop_timetable_import_meta[source] = import_meta
     doc["meta"]["updatedAt"] = _now_iso()
@@ -2720,7 +2747,7 @@ def set_stop_timetable_import_meta(
 def get_stop_timetable_import_meta(
     scenario_id: str, source: Optional[str] = None
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     stop_timetable_import_meta = doc.get("stop_timetable_import_meta") or {}
     if source is None:
         return dict(stop_timetable_import_meta)
@@ -2735,7 +2762,7 @@ def upsert_stop_timetables_from_source(
     *,
     replace_existing_source: bool = False,
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     existing_items = list(doc.get("stop_timetables") or [])
     preserved_items = [item for item in existing_items if item.get("source") != source]
     source_items = (
@@ -2766,14 +2793,14 @@ def upsert_stop_timetables_from_source(
 
 
 def get_depot_route_permissions(scenario_id: str) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     return list(doc.get("depot_route_permissions") or [])
 
 
 def set_depot_route_permissions(
     scenario_id: str, permissions: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     # Store permissions as given by the caller (may reference entities
     # not yet created, e.g. during cross-scenario setup). The _sync
     # helpers are called on entity lifecycle events to prune stale entries.
@@ -2795,14 +2822,14 @@ def set_depot_route_permissions(
 
 
 def get_vehicle_route_permissions(scenario_id: str) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     return list(doc.get("vehicle_route_permissions") or [])
 
 
 def set_vehicle_route_permissions(
     scenario_id: str, permissions: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     # Store permissions as given by the caller (may reference entities
     # not yet created). The _sync helpers are called on entity lifecycle
     # events to prune stale entries.
@@ -2823,14 +2850,14 @@ def set_vehicle_route_permissions(
 
 
 def get_deadhead_rules(scenario_id: str) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     return list(doc.get("deadhead_rules") or [])
 
 
 def set_deadhead_rules(
     scenario_id: str, rules: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
 
     def _optional_float(value: Any) -> Optional[float]:
         if value in (None, ""):
@@ -2857,14 +2884,14 @@ def set_deadhead_rules(
 
 
 def get_turnaround_rules(scenario_id: str) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     return list(doc.get("turnaround_rules") or [])
 
 
 def set_turnaround_rules(
     scenario_id: str, rules: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     sanitized = [
         {
             "stop_id": str(item.get("stop_id")),
@@ -2881,12 +2908,12 @@ def set_turnaround_rules(
 
 
 def get_dispatch_scope(scenario_id: str) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     return _normalize_dispatch_scope(doc)
 
 
 def set_dispatch_scope(scenario_id: str, scope: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     current = _normalize_dispatch_scope(doc)
     depot_selection = dict(current.get("depotSelection") or {})
     route_selection = dict(current.get("routeSelection") or {})
@@ -2943,7 +2970,7 @@ def effective_route_ids_for_scope(
     scenario_id: str,
     scope: Optional[Dict[str, Any]] = None,
 ) -> List[str]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     if scope is not None:
         doc["dispatch_scope"] = scope
     normalized = _normalize_dispatch_scope(doc)
@@ -2954,7 +2981,7 @@ def route_ids_for_selected_depots(
     scenario_id: str,
     scope: Optional[Dict[str, Any]] = None,
 ) -> List[str]:
-    doc = _load(scenario_id)
+    doc = _load_shallow(scenario_id)
     if scope is not None:
         doc["dispatch_scope"] = scope
     normalized = _normalize_dispatch_scope(doc)
@@ -2966,7 +2993,7 @@ def route_ids_for_selected_depots(
 
 def get_calendar(scenario_id: str) -> List[Dict[str, Any]]:
     """Return the list of service_id definitions for this scenario."""
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     return doc.get("calendar") or _default_calendar()
 
 
@@ -2974,7 +3001,7 @@ def set_calendar(
     scenario_id: str, entries: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """Replace the entire calendar (list of service_id definitions)."""
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     doc["calendar"] = entries
     _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
@@ -2984,7 +3011,7 @@ def set_calendar(
 
 def upsert_calendar_entry(scenario_id: str, entry: Dict[str, Any]) -> Dict[str, Any]:
     """Insert or update a single service_id entry (keyed by service_id)."""
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     calendar: List[Dict[str, Any]] = doc.get("calendar") or _default_calendar()
     sid = entry["service_id"]
     replaced = False
@@ -3004,7 +3031,7 @@ def upsert_calendar_entry(scenario_id: str, entry: Dict[str, Any]) -> Dict[str, 
 
 def delete_calendar_entry(scenario_id: str, service_id: str) -> None:
     """Delete a service_id definition. Raises KeyError if not found."""
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     calendar: List[Dict[str, Any]] = doc.get("calendar") or []
     before = len(calendar)
     doc["calendar"] = [e for e in calendar if e.get("service_id") != service_id]
@@ -3020,7 +3047,7 @@ def delete_calendar_entry(scenario_id: str, service_id: str) -> None:
 
 def get_calendar_dates(scenario_id: str) -> List[Dict[str, Any]]:
     """Return exception date overrides for this scenario."""
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     return doc.get("calendar_dates") or []
 
 
@@ -3028,7 +3055,7 @@ def set_calendar_dates(
     scenario_id: str, entries: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """Replace the entire calendar_dates list."""
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     doc["calendar_dates"] = entries
     _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
@@ -3038,7 +3065,7 @@ def set_calendar_dates(
 
 def upsert_calendar_date(scenario_id: str, entry: Dict[str, Any]) -> Dict[str, Any]:
     """Insert or update a single date exception (keyed by date)."""
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     dates: List[Dict[str, Any]] = doc.get("calendar_dates") or []
     date_key = entry["date"]
     replaced = False
@@ -3058,7 +3085,7 @@ def upsert_calendar_date(scenario_id: str, entry: Dict[str, Any]) -> Dict[str, A
 
 def delete_calendar_date(scenario_id: str, date: str) -> None:
     """Delete a date exception. Raises KeyError if not found."""
-    doc = _load(scenario_id)
+    doc = _load(scenario_id, skip_graph_arcs=True)
     dates: List[Dict[str, Any]] = doc.get("calendar_dates") or []
     before = len(dates)
     doc["calendar_dates"] = [e for e in dates if e.get("date") != date]

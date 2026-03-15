@@ -106,6 +106,13 @@ class PrepareSimulationBody(BaseModel):
     simulation_settings: PrepareSimulationSettingsBody = Field(
         default_factory=PrepareSimulationSettingsBody
     )
+    # Trip selection overrides — None means "keep existing scope value"
+    include_short_turn: Optional[bool] = None
+    include_depot_moves: Optional[bool] = None
+    include_deadhead: Optional[bool] = None
+    # Vehicle swap permissions
+    allow_intra_depot_route_swap: Optional[bool] = None
+    allow_inter_depot_swap: Optional[bool] = None
 
 
 class RunPreparedSimulationBody(BaseModel):

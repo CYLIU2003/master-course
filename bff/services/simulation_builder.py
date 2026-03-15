@@ -366,6 +366,31 @@ def apply_builder_configuration(
             for item in body.simulation_settings.tou_pricing
         ]
 
+    # Read current scope for swap defaults so user settings persist
+    current_scope = dict(doc.get("dispatch_scope") or {})
+
+    # Resolve tripSelection: body overrides take priority, else keep scope default
+    include_short_turn = (
+        body.include_short_turn
+        if hasattr(body, "include_short_turn") and body.include_short_turn is not None
+        else bool((current_scope.get("tripSelection") or {}).get("includeShortTurn", True))
+    )
+    include_depot_moves = (
+        body.include_depot_moves
+        if hasattr(body, "include_depot_moves") and body.include_depot_moves is not None
+        else bool((current_scope.get("tripSelection") or {}).get("includeDepotMoves", True))
+    )
+    allow_intra_depot_swap = (
+        body.allow_intra_depot_route_swap
+        if hasattr(body, "allow_intra_depot_route_swap") and body.allow_intra_depot_route_swap is not None
+        else bool(current_scope.get("allowIntraDepotRouteSwap", False))
+    )
+    allow_inter_depot_swap = (
+        body.allow_inter_depot_swap
+        if hasattr(body, "allow_inter_depot_swap") and body.allow_inter_depot_swap is not None
+        else bool(current_scope.get("allowInterDepotSwap", False))
+    )
+
     primary_depot_id = selected_depot_ids[0]
     doc["dispatch_scope"] = {
         "scopeId": f"{scenario_meta.get('datasetId') or 'tokyu_core'}:{scenario_meta.get('datasetVersion') or 'unknown'}",
@@ -383,10 +408,12 @@ def apply_builder_configuration(
         },
         "serviceSelection": {"serviceIds": [selected_day_type]},
         "tripSelection": {
-            "includeShortTurn": True,
-            "includeDepotMoves": True,
+            "includeShortTurn": include_short_turn,
+            "includeDepotMoves": include_depot_moves,
             "includeDeadhead": bool(body.simulation_settings.include_deadhead),
         },
+        "allowIntraDepotRouteSwap": allow_intra_depot_swap,
+        "allowInterDepotSwap": allow_inter_depot_swap,
         "depotId": primary_depot_id,
         "serviceId": selected_day_type,
     }

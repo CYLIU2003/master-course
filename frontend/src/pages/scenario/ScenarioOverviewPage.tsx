@@ -76,6 +76,10 @@ export function ScenarioOverviewPage() {
     dayType,
     serviceDate,
     settings,
+    includeShortTurn,
+    includeDepotMoves,
+    allowIntraDepotRouteSwap,
+    allowInterDepotSwap,
     preparedResult,
     activeJobId,
     hydrateFromBootstrap,
@@ -84,6 +88,10 @@ export function ScenarioOverviewPage() {
     setDayType,
     setServiceDate,
     updateSettings,
+    setIncludeShortTurn,
+    setIncludeDepotMoves,
+    setAllowIntraDepotRouteSwap,
+    setAllowInterDepotSwap,
     setPreparedResult,
     setActiveJobId,
   } = useSimulationBuilderStore();
@@ -262,6 +270,12 @@ export function ScenarioOverviewPage() {
       selected_route_ids: [...selectedRouteIds],
       day_type: dayType,
       service_date: serviceDate || undefined,
+      // Trip selection: control which variant types enter the dispatch pipeline
+      include_short_turn: includeShortTurn,
+      include_depot_moves: includeDepotMoves,
+      // Vehicle swap permissions
+      allow_intra_depot_route_swap: allowIntraDepotRouteSwap,
+      allow_inter_depot_swap: allowInterDepotSwap,
       simulation_settings: {
         vehicle_template_id: settings.vehicleTemplateId ?? undefined,
         vehicle_count: settings.vehicleCount,
@@ -395,6 +409,61 @@ export function ScenarioOverviewPage() {
               </div>
             </div>
 
+            {/* Trip selection toggles — control which variant types enter dispatch */}
+            <div className="mt-3 flex flex-wrap gap-3 border-t border-slate-100 pt-3">
+              <span className="text-xs font-medium text-slate-500">便種フィルタ:</span>
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={includeShortTurn}
+                  onChange={(e) => setIncludeShortTurn(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
+                />
+                区間便 (short turn)
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={includeDepotMoves}
+                  onChange={(e) => setIncludeDepotMoves(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
+                />
+                入出庫便 (depot in/out)
+              </label>
+            </div>
+
+            {/* Swap permission toggles */}
+            <div className="mt-2 flex flex-wrap gap-3">
+              <span className="text-xs font-medium text-slate-500">車両トレード:</span>
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={allowIntraDepotRouteSwap}
+                  onChange={(e) => setAllowIntraDepotRouteSwap(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500"
+                />
+                <span className={allowIntraDepotRouteSwap ? "font-semibold text-amber-700" : ""}>
+                  路線内トレード許可
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={allowInterDepotSwap}
+                  onChange={(e) => setAllowInterDepotSwap(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-red-500"
+                />
+                <span className={allowInterDepotSwap ? "font-semibold text-red-700" : ""}>
+                  営業所間トレード許可
+                </span>
+              </label>
+              {allowInterDepotSwap && (
+                <p className="w-full text-[11px] text-red-600">
+                  ⚠ 複数営業所の trips が1つの DispatchContext に統合されます。計算コストが増加します。
+                </p>
+              )}
+            </div>
+
             {!visibleRoutes.length ? (
               <EmptyState
                 title="路線がありません"
@@ -434,7 +503,35 @@ export function ScenarioOverviewPage() {
                         <p className="mt-1 text-xs text-slate-500">
                           {route.startStop || "-"} → {route.endStop || "-"}
                         </p>
-                        <p className="mt-2 text-[11px] text-slate-500">
+                        {/* Direction & variant badges */}
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {route.canonicalDirection && route.canonicalDirection !== "unknown" && (
+                            <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              route.canonicalDirection === "outbound"
+                                ? "bg-blue-100 text-blue-700"
+                                : route.canonicalDirection === "inbound"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {route.canonicalDirection === "outbound" ? "↗ 上り" : "↙ 下り"}
+                            </span>
+                          )}
+                          {route.routeVariantType && route.routeVariantType !== "unknown" && route.routeVariantType !== "main" && (
+                            <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              route.routeVariantType === "depot_in" || route.routeVariantType === "depot_out"
+                                ? "bg-orange-100 text-orange-700"
+                                : route.routeVariantType === "short_turn"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-slate-100 text-slate-600"
+                            }`}>
+                              {route.routeVariantType === "depot_in" ? "入庫"
+                                : route.routeVariantType === "depot_out" ? "出庫"
+                                : route.routeVariantType === "short_turn" ? "区間"
+                                : route.routeVariantType}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-500">
                           tripCount {Number(route.tripCount ?? 0).toLocaleString()}
                         </p>
                       </div>

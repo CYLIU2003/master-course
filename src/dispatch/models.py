@@ -34,6 +34,13 @@ class Trip:
     arrival_time: str  # "HH:MM"
     distance_km: float
     allowed_vehicle_types: Tuple[str, ...]  # e.g. ("BEV", "ICE")
+    # Optional metadata preserved from timetable_rows for smarter dispatching.
+    # direction helps greedy dispatcher prefer the return leg on the same route;
+    # route_variant_type lets the dispatcher treat depot-moves differently.
+    direction: str = "unknown"            # "outbound" | "inbound" | "unknown"
+    route_variant_type: str = "unknown"   # "main_outbound" | "main_inbound"
+                                          # | "short_turn" | "branch"
+                                          # | "depot_in" | "depot_out" | "unknown"
 
     @property
     def departure_min(self) -> int:
@@ -194,6 +201,9 @@ class DispatchContext:
     deadhead_rules: Dict[Tuple[str, str], DeadheadRule]  # keyed by (from, to)
     vehicle_profiles: Dict[str, VehicleProfile]  # keyed by vehicle_type
     default_turnaround_min: int = 10  # fallback when no rule
+    # Swap permissions: whether vehicles may serve trips from other routes/depots
+    allow_intra_depot_swap: bool = False   # permit vehicle swap across routes in same depot
+    allow_inter_depot_swap: bool = False   # permit vehicle swap across different depots
 
     def get_turnaround_min(self, stop_id: str) -> int:
         rule = self.turnaround_rules.get(stop_id)

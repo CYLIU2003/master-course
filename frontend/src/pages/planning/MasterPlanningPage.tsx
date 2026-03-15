@@ -1,10 +1,11 @@
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
-import { useEditorBootstrap } from "@/hooks";
+import { useEditorBootstrap, useDispatchScope, useUpdateDispatchScope } from "@/hooks";
 import { useUIStore } from "@/stores/ui-store";
 import { usePlanningDatasetStore } from "@/stores/planning-dataset-store";
 import { PageSection } from "@/features/common";
+import type { UpdateDispatchScopeRequest } from "@/types";
 import {
   DepotListPanel,
   DepotDetailPanel,
@@ -26,6 +27,18 @@ export function MasterPlanningPage() {
   const setShowAllRoutesStore = usePlanningDatasetStore((s) => s.setShowAllRoutes);
   const setFeedContext = usePlanningDatasetStore((s) => s.setFeedContext);
   const syncDepots = usePlanningDatasetStore((s) => s.syncDepots);
+
+  // Dispatch scope — for reading/writing swap permissions and tripSelection
+  const { data: dispatchScope } = useDispatchScope(scenarioId ?? "");
+  const updateScope = useUpdateDispatchScope(scenarioId ?? "");
+  const intraSwap = dispatchScope?.allowIntraDepotRouteSwap ?? false;
+  const interSwap = dispatchScope?.allowInterDepotSwap ?? false;
+  const includeShortTurn = dispatchScope?.tripSelection?.includeShortTurn ?? true;
+  const includeDepotMoves = dispatchScope?.tripSelection?.includeDepotMoves ?? true;
+
+  function handleScopeToggle(patch: UpdateDispatchScopeRequest) {
+    updateScope.mutate(patch);
+  }
 
   useEffect(() => {
     if (bootstrap?.depots) {
@@ -105,6 +118,59 @@ export function MasterPlanningPage() {
               {t("planning.select_depot")}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Dispatch scope: swap permissions and trip selection */}
+      <div className="rounded-lg border border-border bg-surface-raised px-4 py-3">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">配車スコープ設定</h3>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          {/* Trip selection */}
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-medium text-slate-500">便種:</span>
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                checked={includeShortTurn}
+                onChange={(e) => handleScopeToggle({ tripSelection: { includeShortTurn: e.target.checked, includeDepotMoves, includeDeadhead: true } })}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
+              />
+              区間便
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                checked={includeDepotMoves}
+                onChange={(e) => handleScopeToggle({ tripSelection: { includeShortTurn, includeDepotMoves: e.target.checked, includeDeadhead: true } })}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
+              />
+              入出庫便
+            </label>
+          </div>
+          {/* Swap permissions */}
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-medium text-slate-500">車両トレード:</span>
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                checked={intraSwap}
+                onChange={(e) => handleScopeToggle({ allowIntraDepotRouteSwap: e.target.checked })}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500"
+                disabled={updateScope.isPending}
+              />
+              <span className={intraSwap ? "font-semibold text-amber-700" : ""}>路線内</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                checked={interSwap}
+                onChange={(e) => handleScopeToggle({ allowInterDepotSwap: e.target.checked })}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-red-500"
+                disabled={updateScope.isPending}
+              />
+              <span className={interSwap ? "font-semibold text-red-700" : ""}>営業所間</span>
+            </label>
+          </div>
         </div>
       </div>
 

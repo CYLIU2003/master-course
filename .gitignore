@@ -70,3 +70,18 @@ NUL
 
 data/odpt_subset_cache
 data/built/odpt_subset_cache
+
+# SQLite stubs / test export artifacts (regenerable, no runtime value)
+data/tokyu_full.sqlite
+data/tokyu_subset_*.sqlite
+data/gtfs_sqlite_export_test/
+
+# Large catalog DBs (regenerable via build scripts, track via USB/NAS instead)
+data/odpt_tokyu.db
+data/gtfs_toei.db
+data/tokyu_gtfs.sqlite
+data/tokyu_core_gtfs.sqlite
+outputs/transit_catalog.sqlite
+
+# Scenario solver results (NAS management recommended)
+outputs/scenarios/

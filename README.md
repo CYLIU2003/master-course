@@ -1,925 +1,417 @@
-# master-course
+# master-course — EV バス配車・充電スケジューリング最適化研究システム
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python\&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js\&logoColor=white)
-![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi\&logoColor=white)
-![React](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB?logo=react\&logoColor=black)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)
+![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB?logo=react&logoColor=black)
 ![Optimization](https://img.shields.io/badge/Optimization-MILP%20%2B%20ALNS-F59E0B)
-![Data](https://img.shields.io/badge/Data-Parquet%20%2B%20Manifest-7C3AED)
-![Architecture](https://img.shields.io/badge/Architecture-Producer%20%2F%20Consumer-0EA5E9)
 ![Status](https://img.shields.io/badge/Status-Research%20Code-FACC15)
 
-**東急バス BEV / ICE 混成車両スケジューリング研究システム**
-**Tokyu Bus BEV/ICE Mixed Fleet Scheduling Research Application**
-**东急巴士 BEV / ICE 混合车队调度研究系统**
+---
 
-4-depot Tokyu core case study · PV / TOU / demand charge · reproducible thesis experiments
+## 目次
+
+1. [研究目的と概要](#1-研究目的と概要)
+2. [アーキテクチャ概要](#2-アーキテクチャ概要)
+3. [起動手順](#3-起動手順)
+4. [主要画面と操作フロー](#4-主要画面と操作フロー)
+5. [最適化計算の仕組み](#5-最適化計算の仕組み)
+6. [データ構造とファイルレイアウト](#6-データ構造とファイルレイアウト)
+7. [開発ノート・既知問題](#7-開発ノート既知問題)
+8. [AI エージェント向けアーキテクチャ仕様](#8-ai-エージェント向けアーキテクチャ仕様)
 
 ---
 
-## 概要 / Overview / 概述
+## 1. 研究目的と概要
 
-本リポジトリは、東急バスの営業所単位ケーススタディ（主に `tokyu_core` の 4営業所コアスコープ: 目黒・瀬田・淡島・弦巻）を対象として、**BEV（電気バス）/ ICE（内燃機関バス）の混成運用、充電計画、事業者保有 PV（太陽光発電）、時間帯別料金（TOU）、デマンドチャージ、MILP + ALNS による最適化**を扱う研究システムです。
+**修士研究テーマ：PV 出力を考慮した BEV/ICE 混成フリートの充電・運行スケジューリング統合最適化**
 
-本仓库是一个围绕东急巴士营业所级案例研究（当前以 `tokyu_core` 的 4 营业所核心范围: 目黑、濑田、淡岛、弦卷为核心）的研究系统，涵盖 **BEV / ICE 混合车队调度、充电可行性、运营方自有光伏（PV）利用、分时电价（TOU）、需量电费（Demand Charge）以及基于 MILP + ALNS 的优化**。
+東急バスを対象ケーススタディとして、以下を比較検証する。
 
-This repository is a research system for Tokyu Bus depot-level case studies, primarily centered on the `tokyu_core` 4-depot scenario (Meguro, Seta, Awashima, and Tsurumaki). It studies **mixed BEV/ICE fleet scheduling, charging feasibility, operator-owned PV utilization, time-of-use pricing, demand charges, and MILP + ALNS-based optimization**.
+| ケース | 内容 |
+|--------|------|
+| A（ベースライン） | ICE バスのみ、現行ダイヤ通り運行 |
+| B（混成） | BEV + ICE 混成、充電なし最適化 |
+| C（混成 + PV） | BEV + ICE、PV 出力あり最適化 |
+| D（提案手法） | 混成 + PV + TOU 料金 + デマンド制限 統合最適化 |
 
-> [!IMPORTANT]
-> メインアプリは、実行時に ODPT / GTFS の生データ取得・変換を行いません。
-> 主应用在运行时不会抓取、解析或转换原始 ODPT / GTFS 数据。
-> The main app never fetches, parses, or transforms raw ODPT/GTFS data at runtime.
-
----
-
-## 目次 / Table of Contents / 目录
-
-* [このリポジトリの位置づけ / What This Repo Is Now / 当前定位](#このリポジトリの位置づけ--what-this-repo-is-now--当前定位)
-* [二層アーキテクチャ / Two-App Architecture / 双应用架构](#二層アーキテクチャ--two-app-architecture--双应用架构)
-* [データ契約 / Data Contract / 数据契约](#データ契約--data-contract--数据契约)
-* [データセット定義 / Dataset Definitions / 数据集定义](#データセット定義--dataset-definitions--数据集定义)
-* [アプリ状態 / App State / 应用状态](#アプリ状態--app-state--应用状态)
-* [クイックスタート / Quick Start / 快速开始](#クイックスタート--quick-start--快速开始)
-
-  * [Main Research App](#main-research-app)
-  * [Data-Prep App](#data-prep-app)
-* [再現性 / Reproducibility / 可复现性](#再現性--reproducibility--可复现性)
-* [メインアプリに含めないもの / What Is NOT in the Main App / 主应用中不包含的内容](#メインアプリに含めないもの--what-is-not-in-the-main-app--主应用中不包含的内容)
-* [レガシー要素 / Legacy Components / 冻结组件](#レガシー要素--legacy-components--冻结组件)
-* [開発者向け / Development Reference / 开发参考](#開発者向け--development-reference--开发参考)
-* [ディレクトリ構成 / Directory Structure / 目录结构](#ディレクトリ構成--directory-structure--目录结构)
-* [ブランチ方針 / Branch Policy / 分支策略](#ブランチ方針--branch-policy--分支策略)
-* [ライセンス / License / 许可证](#ライセンス--license--许可証)
-* [データファイル構成 / USB 転送ガイド](#データファイル構成--usb-転送ガイド)
+**目標：**
+- 車両割り当てコスト（燃料費 + 電力費 + デマンド料金）の最小化
+- CO2 排出量の削減
+- 実運行ダイヤの完全カバー（上り・下り・区間便・入出庫便すべて）
 
 ---
 
-## このリポジトリの位置づけ / What This Repo Is Now / 当前定位
+## 2. アーキテクチャ概要
 
-本リポジトリは現在、**Producer / Consumer を厳密に分離した二層構成**を採用しています。
-
-### Producer 側
-
-* `data-prep/`
-
-  * ODPT データ取得
-  * 生データの整形・変換
-  * 研究用データセットの構築
-  * `data/built/` への成果物出力
-
-### Consumer 側
-
-* リポジトリルート直下のランタイム
-
-  * `bff/`：API orchestration
-  * `src/`：研究ロジック
-  * `frontend/`：UI
-  * `app/VERSION`：runtime version marker
-
-本仓库当前采用 **严格的 Producer / Consumer 分离架构**。`data-prep/` 负责离线获取与构建数据集，根目录运行时应用仅消费 `data/built/` 中的构建结果。
-
-The repository follows a **strict producer/consumer split architecture**. `data-prep/` builds offline datasets, while the runtime stack consumes only prebuilt artifacts from `data/built/`.
-
----
-
-## 二層アーキテクチャ / Two-App Architecture / 双应用架构
-
-```text
-data-prep/                  ->   data/built/<dataset>/                 ->   app runtime
-(producer)                       manifest.json                              (consumer)
-                                 routes.parquet                             bff/ + src/ + frontend/
-                                 trips.parquet
-                                 timetables.parquet
+```
+┌─────────────────────────────────────────────────┐
+│                フロントエンド                       │
+│  React + Vite + TypeScript + Zustand              │
+│  ポート: 5173 (dev) / dist/ (prod)                │
+│                                                   │
+│  主要画面:                                         │
+│  ① Scenario Overview (シミュレーション入力設定)     │
+│  ② Planning (営業所・路線・権限管理)                │
+│  ③ Graph / Timetable / Results                   │
+└────────────────┬────────────────────────────────┘
+                 │ HTTP /api/*
+┌────────────────▼────────────────────────────────┐
+│              BFF (Backend for Frontend)           │
+│  FastAPI + Python  ポート: 8000                   │
+│                                                   │
+│  主要 Router:                                      │
+│  /scenarios  — シナリオ CRUD + editor-bootstrap   │
+│  /graph      — trips, graph, blocks, duties      │
+│  /simulation — prepare + run                     │
+│  /optimization — run-optimization + reoptimize  │
+│  /jobs       — ジョブポーリング                    │
+└────────────────┬────────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────────┐
+│           コアライブラリ (src/)                    │
+│                                                   │
+│  src/dispatch/        — 配車パイプライン            │
+│    models.py          — Trip / DispatchContext    │
+│    graph_builder.py   — 接続可能グラフ構築          │
+│    feasibility.py     — フィジビリティ判定          │
+│    dispatcher.py      — Greedy 配車 (帰り便優先)   │
+│    pipeline.py        — TimetableDispatchPipeline │
+│    validator.py       — DutyValidator             │
+│                                                   │
+│  src/optimization/    — 最適化エンジン             │
+│    milp/              — MILP ソルバー              │
+│    alns/              — ALNS ヒューリスティック     │
+│    hybrid/            — Hybrid (MILP + ALNS)      │
+│    rolling/           — ローリングホライズン再最適  │
+│                                                   │
+│  src/pipeline/        — E2E パイプライン            │
+│  src/data_schema.py   — ProblemData / Task / Vehicle │
+└─────────────────────────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────────┐
+│             データストア (outputs/)               │
+│  outputs/scenarios/{id}.json      — シナリオメタ  │
+│  outputs/scenarios/{id}/          — アーティファクト │
+│    artifacts.sqlite               — trips/duties/graph │
+│    master_data.sqlite             — depot/route/vehicle │
+│  outputs/jobs/*.json              — バックグラウンドジョブ │
+│  data/built/tokyu_core/           — 事前ビルド済みデータ │
+│  data/seed/tokyu/                 — シードマスタデータ │
+└─────────────────────────────────────────────────┘
 ```
 
-### 設計原則 / Design Principles / 设计原则
+### 設計の核心原則
 
-* 両アプリは **ファイルのみ** を介して連携します
-
-* 共有データベースはありません
-
-* アプリ間 REST API はありません
-
-* Consumer は `data-prep/` に実行時依存しません
-
-* 两个应用之间 **仅通过文件进行交互**
-
-* 无共享数据库
-
-* 无应用间 REST API
-
-* Consumer 不依赖 `data-prep/` 的运行时逻辑
-
-* The two apps communicate **only through files**
-
-* No shared database
-
-* No inter-app REST API
-
-* No runtime dependency of the consumer on `data-prep/`
-
-> [!NOTE]
-> `data-prep/` を先に実行して `data/built/` を生成する必要があります。
-> ただし、ビルド済みデータが無い場合でもメインアプリは **seed-only mode** で起動できます。
-> その場合、**simulation / optimization は無効**です。
+1. **Timetable First, Dispatch Second** — 時刻表から導出した trips が配車の唯一の入力。配車が時刻表を書き換えることは絶対に禁止。
+2. **Operator 境界の厳格分離** — 東急バス・都営バス等は operator_id で必ず分離。混在禁止。
+3. **段階的データロード** — 初期表示は editor-bootstrap（depots + summary）のみ。重い timetable / graph / trips は使用時に遅延読み込み。
+4. **フィジビリティは不変** — `arrival_time + turnaround + deadhead <= departure_time` という接続可能性の基準は変更禁止。
 
 ---
 
-## データ契約 / Data Contract / 数据契约
+## 3. 起動手順
 
-### Seed data（Git 管理・常時存在）
+### 必要環境
 
-### Seed 数据（Git 管理，始终存在）
+- Python 3.11+（3.14 動作確認済み）
+- Node.js 20+
+- pip と npm
 
-### Seed data (Git-managed, always present)
-
-| File                                       | 内容 / Contents                                      |
-| ------------------------------------------ | -------------------------------------------------- |
-| `data/seed/tokyu/depots.json`              | 東急バス 12 営業所マスタ / 12 Tokyu Bus depot master records |
-| `data/seed/tokyu/route_to_depot.csv`       | 系統→営業所対応表 / Route-to-depot mapping                 |
-| `data/seed/tokyu/version.json`             | Seed provenance metadata                           |
-| `data/seed/tokyu/datasets/tokyu_core.json` | 目黒・瀬田・淡島・弦巻 + `route_to_depot.csv` 起点の全 route rows / 4-depot core scope |
-| `data/seed/tokyu/datasets/tokyu_dispatch_ready.json` | 目黒・瀬田・淡島・弦巻 + preload baseline / 4-depot dispatch-ready preload |
-| `data/seed/tokyu/datasets/tokyu_full.json` | 全 12 営業所 + `route_to_depot.csv` 起点の全 route rows / All depots and routes |
-| `data/vehicle_catalog.json`                | 大型路線バスのカタログ値ベース車両テンプレート seed / catalog-based large route-bus template seed |
-
-`data/vehicle_catalog.json` の `ev_presets` / `engine_presets` は
-scenario bootstrap の default vehicle templates の基準データです。
-現行 runtime の template 層は `BEV` / `ICE` のみ自動 seed 対象で、`HEV` は reference-only に保持しています。
-
-### Built data（`data-prep` が生成・Git には含めない）
-
-### Built 数据（由 `data-prep` 生成，不提交 Git）
-
-### Built data (generated by `data-prep`, not committed)
-
-`data/built/` は `.gitignore` 対象です。
+### バックエンド起動
 
 ```bash
-python -m data_prep.pipeline.build_all --dataset tokyu_core
-python -m data_prep.pipeline.build_tokyu_shards --dataset tokyu_core
-python -m data_prep.pipeline.build_tokyu_shards --dataset tokyu_core --validate-only
+# リポジトリルートで
+pip install -r requirements.txt   # 初回のみ
+
+python -m uvicorn bff.main:app --reload --port 8000
 ```
 
-| File                                      | 内容 / Contents                                        |
-| ----------------------------------------- | ---------------------------------------------------- |
-| `data/built/<dataset>/manifest.json`      | ビルド来歴、契約バージョン、producer/runtime バージョン、artifact hashes |
-| `data/built/<dataset>/routes.parquet`     | 正規化済み路線一覧 / Canonical route list                     |
-| `data/built/<dataset>/trips.parquet`      | 対象路線の全 trip / All trips for included routes          |
-| `data/built/<dataset>/timetables.parquet` | 実行時ロード用 timetable-level trip rows                    |
-| `data/built/<dataset>/gtfs_reconciliation.json` | route master と `GTFS/TokyuBus-GTFS/` の照合結果 / GTFS reconciliation report |
-
-### Tokyu runtime shards（`data-prep` が生成・Git には含めない）
-
-Tokyu Bus runtime では scenario open / simulation prepare 時に
-東急全体の full timetable を再集計しないため、
-`outputs/built/tokyu/` に build-time shard を出力します。
-
-```text
-outputs/built/tokyu/
-  manifest.json
-  depots.json
-  routes.json
-  depot_route_index.json
-  depot_route_summary.json
-  shard_manifest.json
-  trip_shards/<depot>/<route>/<day>.json
-  timetable_shards/<depot>/<route>/<day>.json
-  stop_time_shards/<depot>/<route>/<day>.json
-```
-
-この shard layer は **営業所 × 路線 × 日種別** 単位で分割され、
-runtime 側では必要 scope のみを読む構成です。
-`build_dataset_bootstrap()` は shard manifest が利用可能な場合、
-scenario に full `timetable_rows` / `trips` を preload せず
-`feed_context.source = "tokyu_shards"` で軽量 bootstrap を返します。
-
-simulation builder / optimization overlay の既定値は
-`constant/input_template.json` を参照し、少なくとも次を fresh scenario に反映します。
-
-- TOU pricing bands
-- diesel price
-- demand charge
-- depot contract / site power limit
-
-これにより scenario prepare 後は、Tokyu shard を使った軽量入力生成と、
-`total_cost` / `co2` を切り替えた optimization の両方を
-full timetable preload なしで実行できます。
-
-frontend が使えない場合でも、scenario ごとの simulation profile を
-JSON として export / 手編集 / apply できます。
-
-```bash
-python -m scripts.simulation_profile_cli export --scenario <scenario_id>
-python -m scripts.simulation_profile_cli show --scenario <scenario_id>
-python -m scripts.simulation_profile_cli apply --scenario <scenario_id> --input outputs/scenario_profiles/<scenario_id>.json
-```
-
-export された JSON には `_meta.depots`, `_meta.routes_by_depot`,
-`_meta.vehicle_templates` を含めているため、営業所・路線・車両条件を
-メイン frontend なしで切り替えられます。`show` は raw JSON ではなく、
-選択営業所・対象路線・fleet・料金・solver・experiment metadata を
-ターミナルに要約表示します。`apply` は BFF HTTP を必須にせず、
-runtime と同じ builder service を Python から直接呼ぶ fallback です。
-
----
-
-## データセット定義 / Dataset Definitions / 数据集定义
-
-| Dataset ID   | Depots           | Routes               |
-| ------------ | ---------------- | -------------------- |
-| `tokyu_core` | `meguro,seta,awashima,tsurumaki` | 46 route rows / 43 route codes |
-| `tokyu_dispatch_ready` | `meguro,seta,awashima,tsurumaki` | 46 route rows / 43 route codes |
-| `tokyu_full` | All 12 depots    | 165 route rows / 159 route codes |
-
-**Default dataset:** `tokyu_core`
-**Default preloaded master dataset:** `tokyu_dispatch_ready`
-
----
-
-## アプリ状態 / App State / 应用状态
-
-メインアプリは `GET /api/app-state` により、現在の readiness と contract state を返します。
-
-主应用通过 `GET /api/app-state` 返回当前 readiness 与 contract state。
-
-The main app exposes `GET /api/app-state` to show the current readiness and contract state.
-
-| Field                 | Meaning                                           |
-| --------------------- | ------------------------------------------------- |
-| `seed_ready`          | Seed data loaded successfully                     |
-| `built_ready`         | Built dataset present, contract-valid, and loaded |
-| `contract_error_code` | Why built data was rejected                       |
-| `missing_artifacts`   | Missing required artifacts                        |
-| `dataset_version`     | Accepted built dataset version                    |
-| `producer_version`    | Producer app version                              |
-| `schema_version`      | Manifest schema version                           |
-| `runtime_version`     | Consumer runtime version                          |
-
----
-
-## クイックスタート / Quick Start / 快速开始
-
-## Main Research App
-
-<details>
-<summary><strong>メイン研究アプリ / 主研究应用 / Main Research App</strong></summary>
-
-### Prerequisites
-
-* Python 3.11+
-* Node.js 20+
-* built dataset in `data/built/tokyu_core/`
-
-> [!TIP]
-> built dataset がない場合でも起動は可能ですが、**optimization / simulation は無効**になります。
-
-> [!NOTE]
-> Tokyu catalog/timetable recovery can also run through a local SQLite catalog backend.
-> In that mode the runtime still stays lightweight because it reads a prebuilt
-> SQLite catalog (`data/tokyu_full.sqlite` by default) only for `/api/catalog/*`
-> lookups and MILP trip extraction.
-
-### Start backend
-
-```bash
-python -m pip install -r requirements.txt
-uvicorn bff.main:app --reload --port 8000
-```
-
-Optional `.env` for local SQLite catalog recovery:
-
-```dotenv
-CATALOG_BACKEND=local_sqlite
-TOKYU_DB_PATH=data/tokyu_full.sqlite
-PRELOAD_MASTER_DATASET_ID=tokyu_dispatch_ready
-ODPT_CONSUMER_KEY=your_actual_odpt_key
-```
-
-### Start frontend
+### フロントエンド起動
 
 ```bash
 cd frontend
-npm install
+npm install   # 初回のみ
 npm run dev
 ```
 
-Open:
+ブラウザで `http://localhost:5173` を開く。
 
-```text
-http://localhost:5173
-```
-
-### App flow
-
-1. dataset を選択して scenario を開く
-2. `GET /api/scenarios/{id}/editor-bootstrap` で軽量 index / summary だけ読む
-3. `Scenario Overview` または `/scenarios/{id}/simulation-builder` で、
-   depot / routes / day type / vehicle / charger / cost / solver / experiment 条件を builder で確定する
-4. `POST /api/scenarios/{id}/simulation/prepare` で selected scope の built parquet または Tokyu shard を canonical prepared input に変換する
-5. `POST /api/scenarios/{id}/simulation/run` で prepared input から simulation job を起動する
-6. results / KPI を確認する
-
-### Builder-first UX
-
-* scenario open 直後は timetable detail / full trip expansion を読まない
-* 初期表示で許可するのは scenario metadata / depots / routes / depot-route index / summary / available day types / readiness のみ
-* heavy timetable / dispatch artifact は `prepare` または対象タブ open 時に遅延読込する
-* frontend store は巨大閲覧キャッシュではなく、selected depots / routes / service / simulation settings / prepared result を持つ
-
-### Simulation Builder で編集できる主な条件
-
-* 対象営業所、対象路線、day type、service date
-* 単一 template fleet または mixed fleet（template ごとの台数、初期 SOC、battery、charge power）
-* charger count / charger power / depot power limit
-* objective（`total_cost` / `co2`）、solver mode（MILP / ALNS / hybrid）
-* time limit / mip gap / ALNS iterations / random seed / allow partial service
-* grid flat price / sell price / demand charge / diesel / grid CO2 / CO2 price
-* TOU pricing bands（add / remove）
-* experiment method / experiment notes
-
-### CLI: シミュレーション条件を変更する方法
-
-シミュレーション条件は CLI からもエクスポート・表示・適用できます。手順:
-
-1. 現在の profile をエクスポート（JSON）
+### ビルド確認
 
 ```bash
-python -m scripts.simulation_profile_cli export --scenario <scenario_id>
+# フロントエンド本番ビルド
+cd frontend && npm run build
+
+# バックエンドテスト
+python -m pytest tests/ -q
 ```
-
-2. エクスポートされた JSON を編集して条件を変更（例: `simulation_settings.time_limit_seconds`, `simulation_settings.alns_iterations`, `simulation_settings.solver_mode`, `simulation_settings.objective_mode`）。
-
-3. 変更内容を scenario に適用
-
-```bash
-python -m scripts.simulation_profile_cli apply --scenario <scenario_id> --input outputs/scenario_profiles/<scenario_id>.json
-```
-
-4. その後、API から simulation を prepare/run します（または `bff` を通してフロントエンドで実行）。
-
-CLI で変更できる主なフィールド（`simulation_settings` 内）:
-
-- `solver_mode` : `mode_milp_only` / `mode_alns_only` / `mode_alns_milp` / `milp` / `alns` / `hybrid` / `ga` / `abc`
-- `objective_mode` : `total_cost` / `co2` / `balanced`
-- `time_limit_seconds` : MILP/Hybrid の time limit
-- `mip_gap` : MILP の許容ギャップ
-- `alns_iterations` : ALNS の反復回数
-- `random_seed` : 再現性のためのシード値
-- `allow_partial_service` : 未対応トリップを許容するか
-
-例: ALNS（GA/ABC を ALNS として使う）で CO2 を最適化、30 分タイムリミットにする
-
-```bash
-python -m scripts.simulation_profile_cli export --scenario verify-001
-# edit outputs/scenario_profiles/verify-001.json → set solver_mode/alns, objective_mode/co2, time_limit_seconds=1800
-python -m scripts.simulation_profile_cli apply --scenario verify-001 --input outputs/scenario_profiles/verify-001.json
-```
-
-この README の `outputs/experiments/` に結果と使用条件が保存されます。
-
-`prepare` 実行時に上記は `dispatch_scope`, `scenario_overlay`, `simulation_config`,
-`vehicles`, `chargers`, `charger_sites` に反映され、その後の simulation / optimization /
-experiment logging が同じ条件を参照します。
-
-### Experiment logging
-
-simulation / optimization 完了時には、条件と結果の再現用レポートを
-`outputs/experiments/<scenario_id>/` に JSON と Markdown で保存します。
-
-```text
-outputs/experiments/<scenario_id>/
-  optimization/
-    exp_<timestamp>_<depot>_<objective>_<hash>.json
-    exp_<timestamp>_<depot>_<objective>_<hash>.md
-  simulation/
-    exp_<timestamp>_<depot>_<objective>_<hash>.json
-    exp_<timestamp>_<depot>_<objective>_<hash>.md
-```
-
-simulation report は API からも取得できます。
-
-```bash
-curl http://localhost:8000/api/scenarios/<scenario_id>/simulation/experiment-log
-```
-
-report には少なくとも次を含めます。
-
-* 対象営業所、対象路線、目的関数、手法名
-* fleet 構成、TOU、diesel、demand、depot power limit
-* solver 名、time limit、mip gap、seed
-* total cost / electricity / diesel / demand / CO2
-* BEV / ICE / total trip counts
-* git commit, timestamp, scenario hash
-
-### Check readiness
-
-```bash
-curl http://localhost:8000/api/app-state
-curl http://localhost:8000/api/app/master-data
-```
-
-* `built_ready: true` → optimization available
-* `/api/app/master-data` → scenario 非依存の depot / route / vehicle template blueprint
-
-### Preloaded master data
-
-* `GET /api/app/master-data` は scenario 非依存で営業所・路線・車両テンプレートを返します。
-* dataset bootstrap は `vehicle_templates` を含むため、新規 scenario 作成直後からテンプレートが空になりません。
-* dataset-backed scenario で `depots/routes/route_depot_assignments/depot_route_permissions/vehicle_templates` が空だった場合、load 時に seed dataset から自己修復します。
-* `built_ready: false` → built data missing or invalid
-
-### Optional local SQLite catalog recovery
-
-```bash
-python scripts/build_tokyu_full_db.py --skip-stop-timetables
-python scripts/build_tokyu_gtfs_db.py --dataset-id tokyu_full --out data/tokyu_gtfs.sqlite
-curl "http://localhost:8000/api/catalog/milp-trips?depot_ids=tokyu:depot:meguro,tokyu:depot:denenchofu&calendar_type=平日"
-```
-
-`build_tokyu_full_db.py` is the ODPT-backed path. `build_tokyu_gtfs_db.py` is the GTFS-backed path and keeps the route/depot mapping as separate bridge tables while loading GTFS stops, timetable trips, trip stop-times, and stop timetables into SQLite. This is the preferred recovery path when you already have a large `GTFS/TokyuBus-GTFS` feed and want a lightweight local catalog without live ODPT access.
-
-The SQLite catalog stores stop coordinates and depot coordinates, and the local catalog backend computes straight-line trip distances from origin/destination stop coordinates for MILP input preparation. You can also round-trip the SQLite catalog back into built artifacts with `scripts/export_tokyu_sqlite_to_built.py`.
-
-When `CATALOG_BACKEND=local_sqlite`, the main app now uses lightweight catalog summary endpoints for dispatch scope setup:
-
-```text
-GET /api/catalog/depots
-GET /api/catalog/depots/{depot_id}/routes
-GET /api/catalog/route-families/{route_family_id}/patterns
-```
-
-The dispatch scope UI reads depot / route-family summaries from SQLite first, then saves route-family-code filters back into `dispatch-scope`, where they are expanded into scenario route ids. GTFS-missing routes are simply absent from the catalog summary and are treated as out-of-scope for runtime selection. For Tokyu `東98`, the catalog summary keeps `東京駅南口 ↔ 等々力操車所` as the mainline reference, classifies daytime split patterns as `short_turn`, and marks `清水` / `目黒郵便局` terminals as Meguro depot-related in the notes.
-
-</details>
-
-## Data-Prep App
-
-<details>
-<summary><strong>データ前処理アプリ / 数据预处理应用 / Data-Prep App</strong></summary>
-
-`data-prep/` は ODPT データを取得し、研究用 built dataset を構築するための前処理アプリです。
-
-> [!IMPORTANT]
-> `python -m data_prep.pipeline.build_all ...` は **必ずリポジトリルート (`master-course/`) から実行してください。**
-> `data-prep/` ディレクトリ内で実行すると、`data_prep` パッケージが見つからず
-> `ModuleNotFoundError: No module named 'data_prep'` になることがあります。
-
-### Prerequisites
-
-* Python 3.11+
-* `.env` または環境変数に `ODPT_CONSUMER_KEY` を設定
-
-> [!NOTE]
-> ODPT キーは `ODPT_CONSUMER_KEY` を推奨します。互換で
-> `ODPT_API_KEY` / `ODPT_TOKEN` も参照します。
-> `YOUR_ODPT_KEY` はプレースホルダなので、そのまま実行すると 404 になります。
-
-### Full build
-
-```bash
-python -m pip install -r requirements.txt
-
-# Fetch ODPT + build artifacts + write manifest
-python -m data_prep.pipeline.build_all --dataset tokyu_core
-
-# Use cached raw data
-python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch
-
-# Build the full Tokyu dataset
-python -m data_prep.pipeline.build_all --dataset tokyu_full --no-fetch
-
-# Fail fast if GTFS and route master do not fully reconcile
-python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch --strict-gtfs-reconciliation
-
-# Build a GTFS-backed local SQLite Tokyu catalog with route/depot bridges + stop timetables
-python scripts/build_tokyu_gtfs_db.py --dataset-id tokyu_full --out data/tokyu_gtfs.sqlite
-
-# Build a local SQLite Tokyu catalog for catalog recovery / MILP input generation
-python scripts/build_tokyu_full_db.py --skip-stop-timetables
-
-# Resume after interruption
-python scripts/build_tokyu_full_db.py --skip-stop-timetables --resume
-
-# Or override the key explicitly for one-off runs
-python scripts/build_tokyu_full_db.py --api-key YOUR_ODPT_KEY --skip-stop-timetables
-
-# Export SQLite subsets back into built artifacts (dataset definition decides depot scope)
-python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_full.sqlite --dataset-id tokyu_core
-python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_full.sqlite --dataset-id tokyu_full
-python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_gtfs.sqlite --dataset-id tokyu_core
-
-# Refresh Tokyu ODPT -> GTFS/TokyuBus-GTFS -> built datasets
-python catalog_update_app.py refresh odpt --skip-stop-timetables --profile fast
-
-# The same refresh, plus rebuild a GTFS-backed SQLite catalog
-python catalog_update_app.py refresh odpt --skip-stop-timetables --profile fast --build-gtfs-db --gtfs-db-dataset-id tokyu_full
-```
-
-### Exit codes
-
-| Code | Meaning                                            |
-| ---- | -------------------------------------------------- |
-| 0    | Success - manifest written and contract-validated  |
-| 1    | Stage failure - build aborted, no manifest written |
-| 2    | Artifacts written but contract validation failed   |
-
-### Verify build
-
-```bash
-cat data/built/tokyu_core/manifest.json
-cat data/built/tokyu_core/gtfs_reconciliation.json
-```
-
-`manifest.json` must contain at least:
-
-* `schema_version`
-* `producer_version`
-* `artifact_hashes`
-
-`gtfs_reconciliation.json` records which authoritative route codes are missing from the current
-`GTFS/TokyuBus-GTFS` feed. Use `--strict-gtfs-reconciliation` if you want the build to fail
-instead of writing a warning-only report.
-
-`build_all` now also writes `stops.parquet` and `stop_timetables.parquet` alongside the required
-`routes/trips/timetables` artifacts. Scenario bootstrap uses these optional artifacts so new
-scenarios start with GTFS-backed stop master data and stop timetable linkage instead of empty
-placeholders.
-
-</details>
 
 ---
 
-## 再現性 / Reproducibility / 可复现性
+## 4. 主要画面と操作フロー
 
-すべての simulation / optimization run は、**再現可能**である必要があります。
-所有模拟与优化运行都必须具备 **可复现性**。
-Every simulation or optimization run must be **fully reproducible**.
+### シミュレーションを動かすまでの手順
 
-| Field             | Purpose                              |
-| ----------------- | ------------------------------------ |
-| `dataset_id`      | Which built dataset was used         |
-| `dataset_version` | When the built dataset was generated |
-| `random_seed`     | Solver random seed                   |
-| `depot_ids`       | Which depots were in scope           |
-| `route_ids`       | Which routes were in scope           |
+```
+① Scenario Overview を開く
+  → 左: シナリオ選択（または新規作成）
 
-### To reproduce a run
+② Step 1: Depot & Route 選択
+  → 対象営業所を選択
+  → 対象路線をチェック（上り↗/下り↙/区間/入出庫のバッジで確認）
+  → 便種フィルタ（区間便・入出庫便のON/OFF）
+  → 車両トレード許可（路線内 / 営業所間）を設定
 
-1. Use the same `dataset_id`
-2. Use the same `dataset_version`
-3. Use the same `ScenarioOverlay`
-4. Use the same `random_seed`
-5. Use the same runtime version
+③ Step 2: Simulation Settings
+  → 車両台数、充電器、solver モード、コスト設定を入力
+
+④ 「入力データ作成」ボタン（prepare）
+  → BFF が dispatch scope を確定し、trip count を返す
+
+⑤ 「シミュレーション開始」ボタン（run）
+  → バックグラウンドジョブで最適化実行
+  → ポーリングで完了を待つ
+
+⑥ 結果ページで確認
+  → duties, energy, cost breakdown を表示
+```
+
+### Planning 画面
+
+- 左パネル：営業所一覧（bootstrap から即時表示）
+- 右パネル：営業所詳細（タブ選択時に遅延ロード）
+- 「配車スコープ設定」エリア：
+  - **便種フィルタ**：区間便・入出庫便の ON/OFF（dispatch scope に保存）
+  - **路線内トレード許可**：同一営業所内で異なる路線間の車両融通を許可
+  - **営業所間トレード許可**：複数営業所の trips を統合して最適化（計算コスト増）
 
 ---
 
-## メインアプリに含めないもの / What Is NOT in the Main App / 主应用中不包含的内容
+## 5. 最適化計算の仕組み
 
-以下の機能は、意図的にメインアプリから分離されています。
-以下功能被有意排除在主应用之外。
-The following capabilities are deliberately excluded from the main app.
+### 配車パイプライン（dispatch pipeline）
 
-| Capability                        | Location                             |
-| --------------------------------- | ------------------------------------ |
-| ODPT JSON fetch                   | `data-prep/pipeline/fetch_odpt.py`   |
-| GTFS conversion                   | `data-prep/lib/tokyubus_gtfs/`       |
-| Route-to-depot mapping generation | `data-prep/pipeline/build_routes.py` |
-| Public transit data explorer      | `data-prep/`                         |
-| Catalog quality dashboard         | `data-prep/`                         |
-| Raw data browser                  | Not in this repo                     |
+```
+timetable_rows
+  ↓ (service_id + route フィルタ + variant フィルタ)
+Trip[] (direction・route_variant_type 付き)
+  ↓
+DispatchContext (trips + rules + vehicle_profiles + swap フラグ)
+  ↓
+ConnectionGraphBuilder.analyze()
+  → 全ペア可能性チェック: arrival + turnaround + deadhead <= departure
+  → O(n²) — trips が多いほど計算コスト増
+  ↓
+feasibility graph (trip_id → [接続可能 trip_id, ...])
+  ↓
+DispatchGenerator.generate_greedy_duties_from_graph()
+  → 帰り便優先スコアリング:
+    +200: 同一路線の逆方向 (上り→下り or 下り→上り)
+    +100: 出発地 == 前便の到着地 (デッドヘッドなし)
+    +50:  同一路線・同方向 (ループ・折り返し)
+    +20:  路線内トレード許可 + 同一停留所
+    +5:   営業所間トレード許可 (任意接続)
+    -1/分: デッドヘッド時間ペナルティ
+  ↓
+VehicleDuty[] → DutyValidator → PipelineResult
+```
 
-> [!WARNING]
-> `bff/` や `src/` に ODPT / GTFS の生処理が現れた場合、それはアーキテクチャ違反です。
-> If raw ODPT/GTFS logic appears in `bff/` or `src/`, it is a bug.
+### 最適化エンジン
 
-> [!NOTE]
-> The optional local SQLite catalog backend is allowed because it reads a prebuilt
-> file (`data/tokyu_full.sqlite`) rather than raw feed data.
+```
+ProblemData (trips → Tasks, vehicles, chargers, costs)
+  ↓
+OptimizationEngine.solve(mode, config)
+  ├── mode_milp_only  → MILPOptimizer (ベースライン実行可能解)
+  ├── mode_alns_only  → ALNSOptimizer (ヒューリスティック探索)
+  ├── mode_alns_milp  → ALNS + MILP 補修
+  └── hybrid          → MILP 初期解 + ALNS 外部ループ (デフォルト研究モード)
+  ↓
+OptimizationResult (duties, charging_schedule, cost_breakdown)
+```
+
+### 目的関数
+
+```
+min C_total = C_fuel + C_elec + C_demand + C_vehicle_depreciation
+
+C_elec    = Σ (energy_kwh × tou_price(t)) — TOU 料金
+C_demand  = peak_kw × demand_charge_rate  — デマンド料金
+C_vehicle = acquisition_cost / lifetime_days × days — 減価償却
+```
 
 ---
 
-## レガシー要素 / Legacy Components / 冻结组件
+## 6. データ構造とファイルレイアウト
 
-| Component          | Status   | Notes                                          |
-| ------------------ | -------- | ---------------------------------------------- |
-| `backend_legacy/`  | Frozen   | Reference only. Not imported by active runtime |
-| `odpt_only` branch | Archived | Legacy ODPT-direct implementation              |
-| `old` branch       | Archived | Legacy Streamlit UI                            |
-
-Architecture tests enforce that `backend_legacy/` is not imported by active code.
-
----
-
-## 開発者向け / Development Reference / 开发参考
-
-<details>
-<summary><strong>Tests / テスト / 测试</strong></summary>
-
-### Run all tests
-
-```bash
-python -m pytest -v
 ```
-
-Expected:
-
-* **310+ passed**
-* **0 unexplained skips**
-
-### Architecture regression tests
-
-```bash
-python -m pytest tests/test_architecture.py -v
-```
-
-These tests enforce:
-
-* no ODPT/GTFS imports in `bff/` or `src/`
-* no `backend_legacy/` imports in active code
-* simulation / optimization use shared run-preparation service
-* summary endpoints do not return detail payloads
-* built data without `manifest.json` is rejected
-
-Experiment report / profile CLI の局所回帰は
-`tests/test_experiment_reports.py` で確認します。
-
-</details>
-
-<details>
-<summary><strong>Performance / 性能</strong></summary>
-
-### Run performance benchmark
-
-```bash
-python tools/benchmark_api.py
-```
-
-See:
-
-```text
-docs/notes/performance_baseline.md
-```
-
-</details>
-
-<details>
-<summary><strong>Runtime cleanliness checks / 実行時健全性確認 / 运行时检查</strong></summary>
-
-### Check runtime import graph
-
-```bash
-python -c "from bff.main import app; print('import graph OK')"
-```
-
-### Check legacy token leakage
-
-```bash
-grep -rn "odpt\|gtfs_import\|catalog_import" bff/ src/ --include="*.py" | grep -v "^\s*#"
-```
-
-Expected:
-
-* **0 results**
-
-</details>
-
-<details>
-<summary><strong>Frontend build / 前端构建</strong></summary>
-
-```bash
-cd frontend
-npm run build
-```
-
-</details>
-
----
-
-## ディレクトリ構成 / Directory Structure / 目录结构
-
-<details>
-<summary><strong>Show directory tree</strong></summary>
-
-```text
 master-course/
-├── README.md
-├── AGENTS.md
-├── requirements.txt
-├── .gitignore
-├── app/
-│   └── VERSION
+├── frontend/           — React フロントエンド
+│   ├── src/
+│   │   ├── pages/      — Scenario, Planning, Graph, Results
+│   │   ├── features/   — planning, common コンポーネント
+│   │   ├── hooks/      — React Query hooks
+│   │   ├── stores/     — Zustand stores (ui, planning-dataset, simulation-builder)
+│   │   └── types/      — TypeScript 型定義
+│   └── vite.config.ts
+│
+├── bff/                — FastAPI BFF
+│   ├── routers/        — scenarios, graph, simulation, optimization, ...
+│   ├── services/       — simulation_builder, run_preparation, app_cache
+│   ├── store/          — scenario_store (SQLite/Parquet/JSON), job_store
+│   └── mappers/        — scenario_to_problemdata
+│
+├── src/                — コアライブラリ (dispatch / optimization / pipeline)
+│   ├── dispatch/       — Trip, DispatchContext, GraphBuilder, Dispatcher, Validator
+│   ├── optimization/   — MILP, ALNS, Hybrid, Rolling
+│   ├── pipeline/       — E2E pipeline, solve
+│   └── data_schema.py  — ProblemData, Task, Vehicle, Charger
+│
 ├── data/
-│   ├── seed/
-│   │   └── tokyu/
-│   │       ├── depots.json
-│   │       ├── route_to_depot.csv
-│   │       ├── version.json
-│   │       └── datasets/
-│   │           ├── tokyu_core.json
-│   │           └── tokyu_full.json
-│   └── built/
-│       └── <dataset>/
-│           ├── manifest.json
-│           ├── routes.parquet
-│           ├── trips.parquet
-│           └── timetables.parquet
-├── data-prep/
-├── data_prep/
-├── schema/
-├── src/
-├── bff/
-├── frontend/
-├── tests/
-├── tools/
-├── scripts/
-├── docs/
-├── config/
-├── constant/
+│   ├── built/tokyu_core/   — 事前ビルド済み Parquet (trips, routes, timetables)
+│   └── seed/tokyu/         — シードマスタデータ (depots.json, version.json)
+│
 ├── outputs/
-└── backend_legacy/
+│   ├── scenarios/      — シナリオ JSON + artifact SQLite/Parquet
+│   ├── jobs/           — バックグラウンドジョブ状態
+│   └── experiments/    — 実験ログ
+│
+├── tests/              — pytest テストスイート
+├── constant/           — 研究仕様書・エージェント指示書 (読み取り専用)
+└── AGENTS.md           — 開発ルール (最優先で遵守)
 ```
 
-</details>
+---
+
+## 7. 開発ノート・既知問題
+
+### 2026-03 時点での実装状態
+
+| 機能 | 状態 |
+|------|------|
+| editor-bootstrap（営業所一覧・概要） | ✅ 実装済み・軽量化済み |
+| Trip direction/variant 伝搬 | ✅ 2026-03 実装 |
+| 帰り便優先 greedy dispatcher | ✅ 2026-03 実装 |
+| 路線内/営業所間トレード許可 | ✅ 2026-03 実装（フラグ制御） |
+| MasterPlanningPage swap トグル | ✅ 2026-03 実装 |
+| ScenarioOverviewPage 便種バッジ | ✅ 2026-03 実装 |
+| 本番 MILP ソルバー（Gurobi） | ⚠️ ベースライン実装のみ（接続未完）|
+| 多営業所統合最適化 | ✅ フラグ実装済み（allowInterDepotSwap） |
+| PV プロファイル | ✅ データ構造あり・UI 未完 |
+| ローリングホライズン再最適化 | ✅ 実装済み |
+
+### パフォーマンス上の注意
+
+- `ConnectionGraphBuilder.analyze()` は O(n²) — 東急バス全線（825 trips）で約 4 秒
+- `_rebuild_dispatch_artifacts()` は DispatchContext を 1 回だけビルドして再利用
+- `editor-bootstrap` のペイロードは 28KB（shardManifest 等を除外済み）
+- BFF の `_load()` は `skip_graph_arcs=True` がデフォルト — graph 136 万弧は必要時のみ
+
+### 禁止事項（AGENTS.md より）
+
+1. timetable_rows を配車側から書き換えてはいけない
+2. feasibility 判定（arrival + turnaround + deadhead <= departure）を変更してはいけない
+3. `constant/` フォルダのファイルは指示なしに変更しない
+4. operator_id のない entity を保存・返却・描画してはいけない
+5. `src/dispatch/` は `frontend/` や `bff/` からインポートされてはいけない
 
 ---
 
-## ブランチ方針 / Branch Policy / 分支策略
+## 8. AI エージェント向けアーキテクチャ仕様
 
-| Branch      | Purpose                                                      |
-| ----------- | ------------------------------------------------------------ |
-| `main`      | Active development - Tokyu Bus-only research app + data-prep |
-| `odpt_only` | Archived - legacy ODPT-direct implementation                 |
-| `old`       | Archived - legacy Streamlit UI                               |
+> このセクションは Claude Code や他の AI エージェントが本リポジトリを理解するための機械可読仕様です。
 
----
+### 層構造と依存ルール
 
-## ライセンス / License / 许可证
-
-> [!CAUTION]
-> 現時点では、このリポジトリに独立したライセンスファイルは含まれていません。
-> 维护者未明确发布许可证前，请将其视为 **作者保留权利的研究代码**。
-> No standalone license file is currently included. Unless the maintainers publish one explicitly, treat this codebase as **author-retained research code rather than a general open-source release**.
-
----
-
-## データファイル構成 / USB 転送ガイド
-
-別 PC で作業を続けるためのデータ移送手順と、システムが実際にアクセスするファイルの一覧です。
-
----
-
-### 1. ランタイムが実際にアクセスするファイル
-
-#### 必須（軽量・Git 管理外 `data/built/`）
-
-| ファイル | サイズ | 説明 |
-| --- | --- | --- |
-| `data/built/tokyu_core/manifest.json` | ~1 KB | ビルド来歴・契約バージョン |
-| `data/built/tokyu_core/routes.parquet` | ~27 KB | 正規化済み路線一覧（43 route codes） |
-| `data/built/tokyu_core/trips.parquet` | ~248 KB | trip 一覧 |
-| `data/built/tokyu_core/timetables.parquet` | ~248 KB | timetable-level trip rows |
-| `data/built/tokyu_core/stops.parquet` | ~31 KB | 停留所マスタ |
-| `data/built/tokyu_core/stop_timetables.parquet` | ~1.2 MB | 停留所時刻表 |
-| `data/built/tokyu_full/` | ~9 MB | 同上・全 12 営業所スコープ版 |
-
-> `data/built/` は `.gitignore` 対象。`data-prep` で再生成するか、そのまま USB にコピーする。
-
-#### 必須（Git 管理済み seed・常に存在）
-
-| ファイル | サイズ | 説明 |
-| --- | --- | --- |
-| `data/seed/tokyu/depots.json` | ~5 KB | 12 営業所マスタ |
-| `data/seed/tokyu/route_to_depot.csv` | ~8 KB | 系統→営業所対応表 |
-| `data/seed/tokyu/datasets/tokyu_core.json` | ~6 KB | 4 営業所コアスコープ定義 |
-| `data/seed/tokyu/datasets/tokyu_full.json` | ~14 KB | 全営業所スコープ定義 |
-| `data/vehicle_catalog.json` | ~8 KB | BEV / ICE 車両テンプレート seed |
-
-#### 運用マスタ（Git 管理済み）
-
-| ディレクトリ | サイズ | 説明 |
-| --- | --- | --- |
-| `data/operations/` | ~2 KB | deadhead / turnaround / 車両 / 勤務スケジュール CSV |
-| `data/fleet/` | ~6 KB | 車両型式・duty 定義 CSV |
-| `data/infra/` | ~1 KB | 充電器・営業所・電力 CSV |
-| `data/external/` | ~2 KB | 運賃・交通量・気象時系列 CSV |
-| `data/route_master/` | ~47 KB | 路線・停留所・サービスカレンダー CSV |
-| `data/cases/` | ~156 KB | ケーススタディ入力 JSON |
-| `config/` | ~60 KB | runtime_paths.json・solver 設定 JSON |
-| `constant/` | ~353 KB | 定数定義（読み取り専用） |
-
-#### カタログ DB（Git 管理外・大容量）
-
-| ファイル | サイズ | 生成元スクリプト | 説明 |
-| --- | --- | --- | --- |
-| `data/odpt_tokyu.db` | **969 MB** | `scripts/build_tokyu_full_db.py` | Tokyu Bus ODPT フルカタログ（routes / stops / timetables / trips） |
-| `data/gtfs_toei.db` | **786 MB** | `catalog_update_app.py refresh gtfs` | Toei Bus GTFS カタログ |
-| `data/tokyu_gtfs.sqlite` | **343 MB** | `scripts/build_tokyu_gtfs_db.py` | Tokyu Bus GTFS 形式 SQLite |
-| `data/tokyu_core_gtfs.sqlite` | **110 MB** | `scripts/build_tokyu_gtfs_db.py` | Tokyu core サブセット SQLite |
-| `outputs/transit_catalog.sqlite` | **590 MB** | `catalog_update_app.py refresh odpt` | 共有カタログ DB（cross-operator） |
-
-> `CATALOG_BACKEND=local_sqlite` 時は `data/tokyu_full.sqlite`（実体は `tokyu_gtfs.sqlite` と同等）を BFF が直接参照する。
-
-#### シナリオ結果（Git 管理外・NAS 管理推奨）
-
-| ディレクトリ | サイズ | 説明 |
-| --- | --- | --- |
-| `outputs/scenarios/` | **~2.7 GB**（84 シナリオ） | ソルバー実行結果（artifacts.sqlite / master_data.sqlite / *.parquet） |
-
-> ソルバー結果は再実行で再生成可能。別 PC への転送は不要だが、論文で使用したシナリオは **NAS** に保管して UUID で管理することを推奨。
-
----
-
-### 2. データ生成ツール一覧
-
-| スクリプト | 出力先 | 説明 |
-| --- | --- | --- |
-| `scripts/build_tokyu_full_db.py` | `data/odpt_tokyu.db` | ODPT API から Tokyu Bus フルカタログを取得して SQLite に書き込む |
-| `scripts/build_tokyu_gtfs_db.py` | `data/tokyu_gtfs.sqlite` / `tokyu_core_gtfs.sqlite` | `GTFS/TokyuBus-GTFS/` から GTFS 形式 SQLite を構築する |
-| `scripts/export_tokyu_sqlite_to_built.py` | `data/built/<dataset>/*.parquet` | SQLite → Parquet へエクスポートする（built データの再生成） |
-| `data-prep/pipeline/build_all.py` | `data/built/<dataset>/*.parquet` | ODPT fetch → 正規化 → Parquet 書き出しを一括実行する |
-| `catalog_update_app.py refresh odpt` | `data/odpt_tokyu.db` + `outputs/transit_catalog.sqlite` | Tokyu ODPT データを取得してカタログ DB を更新する |
-| `catalog_update_app.py refresh gtfs` | `data/gtfs_toei.db` | `GTFS/ToeiBus-GTFS/` を取り込んで Toei DB を更新する |
-| `catalog_update_app.py refresh gtfs-pipeline` | `data/tokyubus/{raw,canonical,features}/` | 4 層 GTFS パイプラインを実行する |
-| `scripts/build_tokyu_subset_db.py` | `data/tokyu_subset_*.sqlite` | 営業所スコープを絞ったサブセット DB を生成する（テスト用） |
-
----
-
-### 3. USB 転送手順（別 PC で即起動するための最小セット）
-
-以下のファイルを USB にコピーすることで、別 PC でもメインアプリを起動できます。
-
-```text
-[必須・軽量]
-data/built/               ← ~10 MB（Parquet 群）
-data/seed/                ← ~41 KB（Git 管理済みだが念のため）
-data/operations/          ← ~2 KB
-data/fleet/               ← ~6 KB
-data/infra/               ← ~1 KB
-data/external/            ← ~2 KB
-data/route_master/        ← ~47 KB
-data/cases/               ← ~156 KB
-data/vehicle_catalog.json ← ~8 KB
-config/                   ← ~60 KB
-constant/                 ← ~353 KB
-GTFS/                     ← GTFS feed（TokyuBus / ToeiBus）
-.env                      ← ODPT_CONSUMER_KEY（キーが必要な場合）
-
-[カタログ DB・大容量だが転送推奨]
-data/odpt_tokyu.db          969 MB
-data/gtfs_toei.db           786 MB
-data/tokyu_gtfs.sqlite      343 MB
-data/tokyu_core_gtfs.sqlite 110 MB
-outputs/transit_catalog.sqlite  590 MB
+```
+frontend/ (React)
+  └── calls /api/* via fetch
+      └── bff/ (FastAPI)
+            ├── bff/routers/ — HTTP エンドポイント
+            ├── bff/services/ — ビジネスロジック
+            ├── bff/store/ — 永続化 (scenario_store, job_store)
+            └── bff/mappers/ — DTO 変換
+                  └── calls src/* — コアライブラリ
+                        └── src/dispatch/ — 配車層 (独立)
+                        └── src/optimization/ — 最適化層 (独立)
+                        └── src/pipeline/ — E2E パイプライン
 ```
 
-**除外してよいもの（再生成可能・またはキャッシュ）**
+**禁止インポート：**
+- `src/dispatch/` → `frontend/` or `bff/` or `src/constraints/` or `src/pipeline/` は禁止
+- `src/optimization/` → `frontend/` or `bff/` は禁止
 
-```text
-data/cache/               ← ODPT HTTP キャッシュ（再フェッチで再生成）
-data/odpt_subset_cache/   ← 同上
-data/catalog-fast/        ← 中間キャッシュ
-data/tokyubus/            ← 4 層パイプライン中間成果物（再実行で再生成）
-data/gtfs_sqlite_export_test/ ← テスト用エクスポート
-outputs/scenarios/        ← NAS に別途保管（→ 後述）
-outputs/transit_catalog.sqlite ← 上記リストに含める場合は転送不要
+### 主要エンドポイントマップ
+
+| エンドポイント | 処理内容 | 速度 |
+|---------------|---------|------|
+| `GET /api/app/context` | アクティブシナリオID | < 5ms |
+| `GET /api/scenarios/{id}/editor-bootstrap` | depots + routes(slim) + summary | ~50ms |
+| `PUT /api/scenarios/{id}/dispatch-scope` | swap フラグ・tripSelection 保存 | ~300ms |
+| `POST /api/scenarios/{id}/simulation/prepare` | scope 確定・trip count 検証 | ~500ms |
+| `POST /api/scenarios/{id}/run-optimization` | Job 登録（処理はworkerプロセス） | ~5s (job submit) |
+| `GET /api/jobs/{job_id}` | ジョブポーリング | < 10ms |
+
+### DispatchContext の swap フラグ動作
+
+```python
+DispatchContext(
+    ...,
+    allow_intra_depot_swap=False,  # デフォルト: 路線間トレード禁止
+    allow_inter_depot_swap=False,  # デフォルト: 営業所間トレード禁止
+)
 ```
 
-**別 PC での起動手順**
+- `allow_intra_depot_swap=True`: greedy dispatcher の接続スコアに +20 (同一停留所の異路線接続)
+- `allow_inter_depot_swap=True`: `_build_dispatch_context` が全選択 depot の trips を一つの context に統合
+
+### Trip dataclass（dispatch 層）
+
+```python
+@dataclass(frozen=True)
+class Trip:
+    trip_id: str
+    route_id: str
+    origin: str           # 出発停留所 ID
+    destination: str      # 到着停留所 ID
+    departure_time: str   # "HH:MM"
+    arrival_time: str     # "HH:MM"
+    distance_km: float
+    allowed_vehicle_types: Tuple[str, ...]
+    direction: str = "unknown"           # "outbound" | "inbound" | "unknown"
+    route_variant_type: str = "unknown"  # "main_outbound" | "main_inbound"
+                                         # | "short_turn" | "depot_in" | "depot_out"
+```
+
+`direction` と `route_variant_type` は `_build_dispatch_context`（`bff/routers/graph.py`）で timetable_rows から伝搬される。
+
+### シナリオストアの読み込み戦略
+
+| 関数 | graph arcs | timetable_rows | trips | 用途 |
+|------|------------|----------------|-------|------|
+| `_load_shallow()` | ❌ (skip) | ❌ (skip) | ❌ (skip) | editor-bootstrap, read-only |
+| `_load(skip_graph_arcs=True)` | ❌ (skip) | ✅ | ✅ | write operations |
+| `get_field("trips")` | ❌ | ❌ | ✅ | trip のみ必要な場合 |
+| `get_field("graph")` | ✅ | ❌ | ❌ | graph のみ必要な場合 |
+
+### テスト最低ライン
 
 ```bash
-# 1. Python / Node.js 依存をインストール
-python -m pip install -r requirements.txt
-cd frontend && npm install && cd ..
-
-# 2. .env を配置（ODPT_CONSUMER_KEY が必要な場合）
-# CATALOG_BACKEND=local_sqlite
-# TOKYU_DB_PATH=data/tokyu_gtfs.sqlite   ← USB からコピーした DB を指定
-# ODPT_CONSUMER_KEY=<your_key>
-
-# 3. built データが無い場合は再生成
-python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch
-
-# 4. バックエンド起動
-uvicorn bff.main:app --reload --port 8000
-
-# 5. フロントエンド起動
-cd frontend && npm run dev
+# 必須テスト（PR 前に必ず通すこと）
+python -m pytest tests/test_architecture.py tests/test_dispatch_pipeline.py tests/test_bff_simulation_builder.py -q
 ```
 
----
+現在の基準: **245 以上のテストがパス**（2026-03-09 確認）
 
-### 4. outputs/scenarios/ の NAS 管理について
+### constant/ フォルダの読み方
 
-`outputs/scenarios/` は 84 シナリオ・合計 **約 2.7 GB**（2026-03 時点）になっています。
-各ディレクトリは UUID で管理されており、ソルバー実行ごとに増加します。
+`constant/` フォルダには研究の仕様書が格納されている。実装時の優先順位は以下のとおり：
 
-**NAS 移動時の注意点**
+1. `AGENTS.md`（リポジトリルート） — 最優先の禁止事項・非変更ルール
+2. `constant/agent.md` — 実装ステージ順序（Stage 0〜7）
+3. `constant/AGENTS_ev_route_cost.md` — EV/ICE コスト計算エージェント指示書
+4. `constant/formulation.md` — MILP 数理定式化（制約 C1〜C21）
+5. `constant/masters_research_brief_alignment.md` — 研究目的の上位整理
 
-- シナリオ UUID は `outputs/app_context.json` と BFF のジョブ管理で参照されているため、
-  UUID ディレクトリ名はそのまま保持する。
-- NAS にコピー後も `outputs/scenarios/<uuid>/` のパス構造を維持すること。
-- 論文で使用したシナリオは UUID と実験条件（`outputs/experiments/<uuid>/` の JSON/Markdown）を
-  セットで NAS に保存し、再現性を確保すること。
-- BFF が参照するパスは `config/runtime_paths.json` で変更可能。
-  NAS マウントポイントを `outputs/` の代わりに指定すれば、移行後もアプリを再起動するだけで動く。
+これらは **読み取り専用**。指示なしに変更しない。

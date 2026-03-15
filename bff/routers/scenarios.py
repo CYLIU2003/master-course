@@ -851,7 +851,8 @@ def get_editor_bootstrap(scenario_id: str) -> Dict[str, Any]:
         "routeFamilyId", "routeFamilyCode", "routeFamilyLabel",
         "routeVariantId", "routeVariantType", "canonicalDirection",
         "isPrimaryVariant", "familySortOrder", "classificationConfidence",
-        "odptPatternId", "odptBusrouteId",
+        # Provenance IDs preserved for SimulationBuilder route selection
+        "patternId", "busrouteId",
     }
 
     def _slim_route(route: dict) -> dict:

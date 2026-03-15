@@ -739,6 +739,8 @@ export interface UpdateDispatchScopeRequest {
     includeDepotMoves?: boolean;
     includeDeadhead?: boolean;
   };
+  allowIntraDepotRouteSwap?: boolean;
+  allowInterDepotSwap?: boolean;
 }
 
 export interface RunSimulationRequest {
@@ -752,6 +754,13 @@ export interface PrepareSimulationRequest {
   selected_route_ids: string[];
   day_type?: string | null;
   service_date?: string | null;
+  // Trip selection overrides
+  include_short_turn?: boolean | null;
+  include_depot_moves?: boolean | null;
+  include_deadhead?: boolean | null;
+  // Vehicle swap permissions
+  allow_intra_depot_route_swap?: boolean | null;
+  allow_inter_depot_swap?: boolean | null;
   simulation_settings: {
     vehicle_template_id?: string | null;
     vehicle_count: number;

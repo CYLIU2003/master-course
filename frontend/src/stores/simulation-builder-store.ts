@@ -50,6 +50,12 @@ interface SimulationBuilderState {
   dayType: string;
   serviceDate: string;
   settings: SimulationBuilderSettings;
+  // Trip selection overrides (null = use scope default)
+  includeShortTurn: boolean;
+  includeDepotMoves: boolean;
+  // Vehicle swap permissions
+  allowIntraDepotRouteSwap: boolean;
+  allowInterDepotSwap: boolean;
   preparedResult: SimulationPrepareResult | null;
   activeJobId: string | null;
   hydrateFromBootstrap: (bootstrap: EditorBootstrap, force?: boolean) => void;
@@ -58,6 +64,10 @@ interface SimulationBuilderState {
   setDayType: (value: string) => void;
   setServiceDate: (value: string) => void;
   updateSettings: (patch: Partial<SimulationBuilderSettings>) => void;
+  setIncludeShortTurn: (v: boolean) => void;
+  setIncludeDepotMoves: (v: boolean) => void;
+  setAllowIntraDepotRouteSwap: (v: boolean) => void;
+  setAllowInterDepotSwap: (v: boolean) => void;
   setPreparedResult: (result: SimulationPrepareResult | null) => void;
   setActiveJobId: (jobId: string | null) => void;
   reset: () => void;
@@ -103,6 +113,11 @@ const initialState = {
   dayType: "WEEKDAY",
   serviceDate: "",
   settings: emptySettings,
+  // Default: include everything (matches BFF _default_dispatch_scope)
+  includeShortTurn: true,
+  includeDepotMoves: true,
+  allowIntraDepotRouteSwap: false,
+  allowInterDepotSwap: false,
   preparedResult: null,
   activeJobId: null,
 };
@@ -155,6 +170,10 @@ export const useSimulationBuilderStore = create<SimulationBuilderState>(
         settings: { ...get().settings, ...patch },
         preparedResult: null,
       }),
+    setIncludeShortTurn: (v) => set({ includeShortTurn: v, preparedResult: null }),
+    setIncludeDepotMoves: (v) => set({ includeDepotMoves: v, preparedResult: null }),
+    setAllowIntraDepotRouteSwap: (v) => set({ allowIntraDepotRouteSwap: v, preparedResult: null }),
+    setAllowInterDepotSwap: (v) => set({ allowInterDepotSwap: v, preparedResult: null }),
     setPreparedResult: (result) => set({ preparedResult: result }),
     setActiveJobId: (jobId) => set({ activeJobId: jobId }),
     reset: () => set({ ...initialState }),

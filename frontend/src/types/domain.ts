@@ -719,6 +719,10 @@ export interface DispatchScope {
     includeDepotMoves: boolean;
     includeDeadhead: boolean;
   };
+  /** 路線内車両トレード許可: 同一営業所内で異なる路線間の車両割り当てを許可する */
+  allowIntraDepotRouteSwap?: boolean;
+  /** 営業所間車両トレード許可: 選択した複数営業所間で車両を相互に融通する */
+  allowInterDepotSwap?: boolean;
   candidateRouteIds?: string[];
   effectiveRouteIds?: string[];
   candidateRouteFamilyCodes?: string[];

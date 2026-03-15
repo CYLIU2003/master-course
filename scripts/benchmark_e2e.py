@@ -16,7 +16,7 @@ POLL_INTERVAL = 2.0
 JOB_TIMEOUT = 300
 
 
-CLIENT = httpx.Client(base_url="", timeout=60.0)
+CLIENT = httpx.Client(base_url="", timeout=180.0)
 
 
 def get(path: str) -> Any:

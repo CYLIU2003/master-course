@@ -146,7 +146,7 @@ def _resolve_dispatch_scope(
         return store.set_dispatch_scope(scenario_id, scope)
     merged = dict(current)
     merged.update(scope)
-    doc = store._load(scenario_id)
+    doc = store.get_scenario_document_shallow(scenario_id)
     doc["dispatch_scope"] = merged
     return store._normalize_dispatch_scope(doc)
 
@@ -275,6 +275,7 @@ def _allowed_vehicle_types_for_route(
     depot_id: str,
     route_id: str,
     vehicles: List[Dict[str, Any]],
+    _permissions_cache: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Set[str]]:
     """
     Resolve which vehicle types at the selected depot may serve the route.
@@ -282,11 +283,14 @@ def _allowed_vehicle_types_for_route(
     If no vehicles exist at the depot, return None so timetable-side allowed types
     remain unchanged. If explicit vehicle-route permissions exist, they are honored;
     otherwise a vehicle defaults to allowed for that route.
+
+    Pass _permissions_cache to avoid re-fetching permissions on every call when
+    iterating over many trips.
     """
     if not vehicles:
         return None
 
-    permissions = store.get_vehicle_route_permissions(scenario_id)
+    permissions = _permissions_cache if _permissions_cache is not None else store.get_vehicle_route_permissions(scenario_id)
     by_vehicle_route: Dict[Tuple[str, str], bool] = {
         (str(item.get("vehicleId")), str(item.get("routeId"))): bool(item.get("allowed"))
         for item in permissions
@@ -356,6 +360,10 @@ def _build_dispatch_context(
     Build a DispatchContext from the scenario's timetable and stored trips.
     Uses timetable_rows if no trips have been built yet.
     If service_id is provided, only rows matching that service_id are used.
+
+    When scope.allowInterDepotSwap=True, trips from all selected depots are
+    merged into a single DispatchContext so the optimizer can assign vehicles
+    from any depot to any route in the combined scope.
     """
     scope = _resolve_dispatch_scope(
         scenario_id,
@@ -365,6 +373,22 @@ def _build_dispatch_context(
     )
     depot_id = scope.get("depotId")
     service_id = scope.get("serviceId")
+    allow_inter_depot_swap = bool(scope.get("allowInterDepotSwap", False))
+
+    # When inter-depot swap is enabled, collect all selected depot IDs so
+    # trips from every depot are loaded into the same context.
+    if allow_inter_depot_swap:
+        all_depot_ids: List[str] = [
+            str(d) for d in ((scope.get("depotSelection") or {}).get("depotIds") or [])
+            if str(d or "").strip()
+        ]
+        if depot_id and depot_id not in all_depot_ids:
+            all_depot_ids.insert(0, depot_id)
+        if not all_depot_ids and depot_id:
+            all_depot_ids = [depot_id]
+    else:
+        all_depot_ids = [depot_id] if depot_id else []
+
     if not depot_id:
         raise ValueError("No depot selected. Configure dispatch scope first.")
 
@@ -386,9 +410,8 @@ def _build_dispatch_context(
             or ""
         ).strip()
         if dataset_id and shard_runtime_ready(dataset_id):
-            scoped_depot_ids = [str(item) for item in (scope.get("depotSelection") or {}).get("depotIds") or [] if str(item or "").strip()]
-            if depot_id and depot_id not in scoped_depot_ids:
-                scoped_depot_ids.insert(0, depot_id)
+            # Use all_depot_ids for inter-depot swap; single depot_id otherwise
+            scoped_depot_ids = list(all_depot_ids)
             scoped_service_ids = list((scope.get("serviceSelection") or {}).get("serviceIds") or [])
             if service_id and service_id not in scoped_service_ids:
                 scoped_service_ids.insert(0, service_id)
@@ -440,18 +463,37 @@ def _build_dispatch_context(
             "Import ODPT or GTFS timetable data, or adjust the depot route selection."
         )
 
-    vehicles = store.list_vehicles(scenario_id, depot_id=depot_id)
+    # When inter-depot swap is allowed, collect vehicles from all selected depots.
+    # Otherwise only use vehicles from the primary depot.
+    if allow_inter_depot_swap and len(all_depot_ids) > 1:
+        vehicles: List[Dict[str, Any]] = []
+        for did in all_depot_ids:
+            vehicles.extend(store.list_vehicles(scenario_id, depot_id=did))
+    else:
+        vehicles = store.list_vehicles(scenario_id, depot_id=depot_id)
 
     # Convert raw trips to Trip objects
     trips: List[Trip] = []
 
     if raw_trips:
+        # Cache permissions once outside the loop — calling get_vehicle_route_permissions
+        # per trip previously triggered a full _load() on every iteration.
+        _permissions_cache = store.get_vehicle_route_permissions(scenario_id)
         for td in raw_trips:
             route_allowed_types = _allowed_vehicle_types_for_route(
                 scenario_id,
                 depot_id,
                 str(td["route_id"]),
                 vehicles,
+                _permissions_cache=_permissions_cache,
+            )
+            # Preserve direction and variant type from the stored trip dict
+            # so the greedy dispatcher can prefer return-leg connections.
+            direction = str(td.get("direction") or td.get("canonicalDirection") or "unknown")
+            variant = str(
+                td.get("routeVariantType")
+                or td.get("route_variant_type")
+                or "unknown"
             )
             trips.append(dict_to_trip(td))
             trips[-1] = Trip(
@@ -466,9 +508,12 @@ def _build_dispatch_context(
                     td.get("allowed_vehicle_types"),
                     route_allowed_types,
                 ),
+                direction=direction,
+                route_variant_type=variant,
             )
     else:
         # Build trips from timetable rows
+        _permissions_cache = store.get_vehicle_route_permissions(scenario_id)
         for i, row in enumerate(timetable_rows):
             trip_id = str(
                 row.get("trip_id")
@@ -479,6 +524,17 @@ def _build_dispatch_context(
                 depot_id,
                 str(row["route_id"]),
                 vehicles,
+                _permissions_cache=_permissions_cache,
+            )
+            direction = str(
+                row.get("direction")
+                or row.get("canonicalDirection")
+                or "unknown"
+            )
+            variant = str(
+                row.get("routeVariantType")
+                or row.get("route_variant_type")
+                or "unknown"
             )
             trips.append(
                 Trip(
@@ -493,6 +549,8 @@ def _build_dispatch_context(
                         row.get("allowed_vehicle_types"),
                         route_allowed_types,
                     ),
+                    direction=direction,
+                    route_variant_type=variant,
                 )
             )
 
@@ -527,6 +585,8 @@ def _build_dispatch_context(
         turnaround_rules=turnaround_rules,
         deadhead_rules=deadhead_rules,
         vehicle_profiles=vehicle_profiles,
+        allow_intra_depot_swap=bool(scope.get("allowIntraDepotRouteSwap", False)),
+        allow_inter_depot_swap=bool(scope.get("allowInterDepotSwap", False)),
     )
 
 

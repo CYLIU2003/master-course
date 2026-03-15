@@ -16,7 +16,7 @@ import multiprocessing
 from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -242,7 +242,7 @@ def _resolve_dispatch_scope(
         return current
     if persist:
         return store.set_dispatch_scope(scenario_id, scope)
-    doc = store._load(scenario_id)
+    doc = store.get_scenario_document_shallow(scenario_id)
     doc["dispatch_scope"] = {**current, **scope}
     return store._normalize_dispatch_scope(doc)
 
@@ -261,19 +261,103 @@ def _rebuild_dispatch_artifacts(
     service_id: str,
     depot_id: str,
 ) -> None:
-    trips = _build_trips_payload(scenario_id, service_id, depot_id)
-    graph = _build_graph_payload(scenario_id, service_id, depot_id)
-    blocks = _build_blocks_payload(scenario_id, None, "greedy", service_id, depot_id)
-    duties = _build_duties_payload(scenario_id, None, "greedy", service_id, depot_id)
-    dispatch_plan = _build_dispatch_plan_payload(
-        scenario_id,
-        None,
-        "greedy",
-        service_id,
-        depot_id,
+    """Rebuild trips, graph, blocks, duties and dispatch_plan in one pass.
+
+    Builds DispatchContext once and reuses it for all downstream steps,
+    avoiding the O(n^2) graph analysis being repeated 4 times.
+    """
+    from src.dispatch.graph_builder import ConnectionGraphBuilder
+    from src.dispatch.dispatcher import DispatchGenerator
+    from src.dispatch.pipeline import TimetableDispatchPipeline
+    from bff.routers.graph import (
+        _build_dispatch_context,
+        build_graph_response,
+        trip_to_dict,
+        vehicle_duty_to_dict,
     )
+
+    context = _build_dispatch_context(scenario_id, service_id, depot_id)
+
+    # Trips
+    trips = [trip_to_dict(t) for t in context.trips]
+
+    # Graph (O(n^2) — computed once)
+    builder = ConnectionGraphBuilder()
+    combined_graph: Dict[str, Any] = {
+        "trips": trips,
+        "arcs": [],
+        "total_arcs": 0,
+        "feasible_arcs": 0,
+        "infeasible_arcs": 0,
+        "reason_counts": {},
+    }
+    for vt in list(context.vehicle_profiles.keys()):
+        analyzed_arcs = builder.analyze(context, vt)
+        partial = build_graph_response(context.trips, analyzed_arcs)
+        combined_graph["arcs"].extend(partial["arcs"])
+        combined_graph["feasible_arcs"] += partial["feasible_arcs"]
+        combined_graph["infeasible_arcs"] += partial["infeasible_arcs"]
+        combined_graph["total_arcs"] += partial["total_arcs"]
+        for rc, cnt in partial["reason_counts"].items():
+            combined_graph["reason_counts"][rc] = (
+                combined_graph["reason_counts"].get(rc, 0) + cnt
+            )
+
+    # Blocks (reuse context)
+    generator = DispatchGenerator()
+    vehicle_types = list(context.vehicle_profiles.keys())
+    blocks: List[Dict[str, Any]] = []
+    for vt in vehicle_types:
+        for block in generator.generate_greedy_blocks(context, vt):
+            blocks.append({
+                "block_id": block.block_id,
+                "vehicle_type": block.vehicle_type,
+                "trip_ids": list(block.trip_ids),
+            })
+
+    # Duties (reuse context)
+    pipeline = TimetableDispatchPipeline()
+    duties: List[Dict[str, Any]] = []
+    for vt in vehicle_types:
+        result = pipeline.run(context, vt)
+        for duty in result.duties:
+            duties.append(vehicle_duty_to_dict(duty))
+
+    # Dispatch plan (reuse blocks + duties)
+    plan_blocks = [
+        {
+            "block_id": b["block_id"],
+            "vehicle_type": b["vehicle_type"],
+            "trip_ids": b["trip_ids"],
+        }
+        for b in blocks
+    ]
+    plan_duties = [
+        {
+            "duty_id": d["duty_id"],
+            "vehicle_type": d.get("vehicle_type", "BEV"),
+            "legs": d.get("legs", []),
+        }
+        for d in duties
+    ]
+    dispatch_plan = {
+        "plans": [
+            {
+                "plan_id": f"plan_{vt}",
+                "vehicle_type": vt,
+                "blocks": [b for b in plan_blocks if b["vehicle_type"] == vt],
+                "duties": [d for d in plan_duties if d["vehicle_type"] == vt],
+                "charging_plan": [],
+            }
+            for vt in vehicle_types
+        ],
+        "total_plans": len(vehicle_types),
+        "total_blocks": len(blocks),
+        "total_duties": len(duties),
+    }
+
     store.set_field(scenario_id, "trips", trips)
-    store.set_field(scenario_id, "graph", graph)
+    store.set_field(scenario_id, "graph", combined_graph)
     store.set_field(scenario_id, "blocks", blocks)
     store.set_field(scenario_id, "duties", duties)
     store.set_field(scenario_id, "dispatch_plan", dispatch_plan)
