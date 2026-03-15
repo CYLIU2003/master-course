@@ -11,6 +11,7 @@ venv/
 # Tool caches
 .pytest_cache/
 .ruff_cache/
+.cache/
 
 # Frontend artifacts
 frontend/node_modules/
@@ -27,9 +28,6 @@ backend/.cache/
 
 # Per-operator SQLite databases (generated on import)
 data/*.db
-
-# ODPT raw/normalized cache (large downloaded files)
-data/cache/
 
 # Research app built datasets (regenerable)
 data/built/
@@ -68,6 +66,8 @@ NUL
 *.tar.gz
 
 
+# Legacy cache locations (kept ignored for backward compatibility)
+data/cache/
 data/odpt_subset_cache
 data/built/odpt_subset_cache
 

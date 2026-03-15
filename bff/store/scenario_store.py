@@ -403,6 +403,95 @@ def _scenario_stats(doc: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _normalize_stats_payload(
+    doc: Dict[str, Any],
+    *,
+    fallback: Optional[Dict[str, Any]] = None,
+    dispatch_invalidated: bool = False,
+) -> Dict[str, Any]:
+    stats = dict(fallback or doc.get("stats") or {})
+    if "routes" in doc:
+        stats["routeCount"] = len(list(doc.get("routes") or []))
+    else:
+        stats.setdefault("routeCount", 0)
+    if "stops" in doc:
+        stats["stopCount"] = len(list(doc.get("stops") or []))
+    else:
+        stats.setdefault("stopCount", 0)
+    stats.setdefault("timetableRowCount", 0)
+    if dispatch_invalidated:
+        stats["tripCount"] = 0
+        stats["dutyCount"] = 0
+    else:
+        stats.setdefault("tripCount", 0)
+        stats.setdefault("dutyCount", 0)
+    return stats
+
+
+def _clear_dispatch_artifacts(refs: Dict[str, str]) -> None:
+    artifact_db_path = _artifact_store_path(refs)
+
+    trip_store.save_scalar(artifact_db_path, _graph_meta_name(), None)
+    trip_store.save_graph_arcs(artifact_db_path, [])
+
+    for field in _PARQUET_ROW_ARTIFACT_FIELDS:
+        trip_store.save_rows(artifact_db_path, field, [])
+        summary_name = _SUMMARY_SCALAR_NAMES.get(field)
+        if summary_name:
+            trip_store.save_scalar(artifact_db_path, summary_name, None)
+
+    for field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
+        trip_store.save_scalar(artifact_db_path, field, None)
+
+    for field in ("graph", "trips", "blocks", "duties", "dispatch_plan", "simulation_result", "optimization_result"):
+        artifact_path = Path(refs[_ARTIFACT_REF_KEYS[field]])
+        if artifact_path.exists():
+            _unlink_with_retries(artifact_path, missing_ok=True)
+
+
+def _save_master_only(
+    doc: Dict[str, Any],
+    *,
+    invalidate_dispatch: bool,
+) -> None:
+    _ensure_dir()
+    scenario_id = str((doc.get("meta") or {}).get("id") or "")
+    if not scenario_id:
+        raise ValueError("scenario id is required for _save_master_only")
+
+    with _scenario_lock(scenario_id):
+        refs = _refs_for_scenario(scenario_id, doc)
+        doc["refs"] = refs
+
+        master_payload = {key: doc.get(key) for key in _MASTER_DATA_KEYS}
+        master_data_store.save_master_data(Path(refs["masterData"]), master_payload)
+
+        if invalidate_dispatch:
+            _clear_dispatch_artifacts(refs)
+
+        existing_meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+        existing_stats = dict(existing_meta.get("stats") or {})
+        stats = _normalize_stats_payload(
+            doc,
+            fallback=existing_stats,
+            dispatch_invalidated=invalidate_dispatch,
+        )
+
+        slim_doc = {
+            "scenarioId": scenario_id,
+            "name": doc.get("meta", {}).get("name"),
+            "meta": {
+                **dict(doc.get("meta") or {}),
+                **_scope_summary(doc.get("dispatch_scope")),
+            },
+            "feed_context": doc.get("feed_context"),
+            "refs": refs,
+            "stats": stats,
+        }
+        scenario_meta_store.save_meta(_STORE_DIR, scenario_id, slim_doc)
+        doc["stats"] = stats
+
+
 def _scope_summary(scope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     normalized = scope if isinstance(scope, dict) else _default_dispatch_scope()
     depot_selection = dict(normalized.get("depotSelection") or {})

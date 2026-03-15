@@ -311,6 +311,34 @@ def count_timetable_rows(db_path: Path, *, service_id: Optional[str] = None) -> 
     return int(row["n"] or 0)
 
 
+def summarize_timetable_routes(db_path: Path) -> List[dict[str, Any]]:
+    if not db_path.exists():
+        return []
+    with closing(_connect(db_path)) as conn:
+        _ensure_schema(conn)
+        rows = conn.execute(
+            """
+            SELECT route_id, service_id, COUNT(*) AS trip_count
+            FROM timetable_rows
+            GROUP BY route_id, service_id
+            ORDER BY route_id ASC, service_id ASC
+            """
+        ).fetchall()
+    summaries: List[dict[str, Any]] = []
+    for row in rows:
+        route_id = str(row["route_id"] or "").strip()
+        if not route_id:
+            continue
+        summaries.append(
+            {
+                "route_id": route_id,
+                "service_id": str(row["service_id"] or "WEEKDAY"),
+                "trip_count": int(row["trip_count"] or 0),
+            }
+        )
+    return summaries
+
+
 def save_graph_arcs(db_path: Path, rows: List[Any]) -> None:
     with closing(_connect(db_path)) as conn:
         _ensure_schema(conn)

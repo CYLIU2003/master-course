@@ -147,6 +147,12 @@ cd frontend && npm run build
 python -m pytest tests/ -q
 ```
 
+### 他PCへ移行する場合（キャッシュ除外）
+
+- キャッシュ系はすべてリポジトリ直下の `.cache/` に集約する運用です（Git 管理対象外）。
+- 他PCへコピーする際は、`/.cache/`, `/.venv/`, `/frontend/node_modules/`, `/__pycache__/` を除外してください。
+- コピー先では仮想環境を再作成し、依存関係を再インストール後にそのまま `data/` と `outputs/` を参照して実行できます。
+
 ---
 
 ## 4. 主要画面と操作フロー

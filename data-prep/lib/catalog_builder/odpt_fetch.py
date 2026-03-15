@@ -13,6 +13,7 @@ import hashlib
 import importlib.util
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,7 +42,7 @@ ODPT_RESOURCE_FILE_MAP: Dict[str, str] = {
 DEFAULT_ODPT_TOKYU_RESOURCES = list(ODPT_RESOURCE_FILE_MAP.keys())
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_CACHE_DIR = _REPO_ROOT / "data" / "cache" / "odpt" / "raw"
+_DEFAULT_CACHE_DIR = _REPO_ROOT / ".cache" / "odpt" / "raw"
 
 try:
     from tools._config_runtime import get_runtime_secret

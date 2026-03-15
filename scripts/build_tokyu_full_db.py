@@ -58,7 +58,7 @@ from _stop_timetable_fallback import (
 ODPT_BASE        = "https://api.odpt.org/api/v4"
 OPERATOR_ID      = "odpt.Operator:TokyuBus"
 DEFAULT_OUT      = Path("data") / "tokyu_full.sqlite"
-CACHE_DIR        = Path("data") / "odpt_raw_cache"
+CACHE_DIR        = Path(".cache") / "odpt_raw_cache"
 RETRY_WAIT       = 5    # 秒
 MAX_RETRIES      = 5
 THROTTLE_SEC     = 0.25 # リクエスト間隔

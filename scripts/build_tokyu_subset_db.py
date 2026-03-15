@@ -43,7 +43,7 @@ from tokyu_subset_config import SELECTED_DEPOTS, SELECTED_ROUTE_CODES
 ODPT_BASE = "https://api.odpt.org/api/v4"
 OPERATOR_ID = "odpt.Operator:TokyuBus"
 DEFAULT_OUT = Path("data") / "tokyu_subset.sqlite"
-CACHE_DIR = Path("data") / "odpt_subset_cache"
+CACHE_DIR = Path(".cache") / "odpt_subset_cache"
 RETRY_WAIT = 5
 MAX_RETRIES = 5
 THROTTLE_SEC = 0.25
