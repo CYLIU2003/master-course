@@ -51,7 +51,7 @@ from src.pipeline.solve import solve_problem_data
 router = APIRouter(tags=["optimization"])
 _OPTIMIZATION_EXECUTOR: Optional[ProcessPoolExecutor] = None
 _OPTIMIZATION_FUTURE: Optional[Future[Any]] = None
-_OPTIMIZATION_FUTURE_LOCK = threading.Lock()
+_OPTIMIZATION_FUTURE_LOCK = threading.RLock()
 
 
 class RunOptimizationBody(BaseModel):

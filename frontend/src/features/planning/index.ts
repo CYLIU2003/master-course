@@ -24,3 +24,4 @@ export { StopTable } from "./StopTable";
 
 // ── Dispatch scope components ─────────────────────────────
 export { DispatchScopePanel } from "./DispatchScopePanel";
+export { ScenarioQuickParamGuide } from "./ScenarioQuickParamGuide";

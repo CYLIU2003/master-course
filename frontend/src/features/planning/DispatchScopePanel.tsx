@@ -178,6 +178,8 @@ export function DispatchScopePanel({
     routeSelection?: Partial<NormalizedDispatchScope["routeSelection"]>;
     serviceSelection?: Partial<NormalizedDispatchScope["serviceSelection"]>;
     tripSelection?: Partial<NormalizedDispatchScope["tripSelection"]>;
+    allowIntraDepotRouteSwap?: boolean;
+    allowInterDepotSwap?: boolean;
   }) => {
     updateScope.mutate({
       scopeId: normalizedScope.scopeId,
@@ -199,6 +201,12 @@ export function DispatchScopePanel({
         ...normalizedScope.tripSelection,
         ...(patch.tripSelection ?? {}),
       },
+      allowIntraDepotRouteSwap:
+        patch.allowIntraDepotRouteSwap ??
+        normalizedScope.allowIntraDepotRouteSwap,
+      allowInterDepotSwap:
+        patch.allowInterDepotSwap ??
+        normalizedScope.allowInterDepotSwap,
       depotId: patch.depotId ?? normalizedScope.depotId,
       serviceId: patch.serviceId ?? normalizedScope.serviceId,
     });
@@ -255,6 +263,15 @@ export function DispatchScopePanel({
         ...tripSelection,
         [key]: value,
       },
+    });
+  };
+
+  const handleSwapFlagChange = (
+    key: "allowIntraDepotRouteSwap" | "allowInterDepotSwap",
+    value: boolean,
+  ) => {
+    saveScope({
+      [key]: value,
     });
   };
 
@@ -522,6 +539,31 @@ export function DispatchScopePanel({
             description="回送接続ルールを使う前提フラグとして保存します。"
             onChange={(value) => handleTripFlagChange("includeDeadhead", value)}
           />
+          <div className="pt-1">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              車両トレード
+            </p>
+            <div className="space-y-2">
+              <TripFlag
+                checked={normalizedScope.allowIntraDepotRouteSwap}
+                disabled={updateScope.isPending}
+                label="路線内トレードを許可"
+                description="同一営業所内で、別路線への車両割当を許可します。"
+                onChange={(value) =>
+                  handleSwapFlagChange("allowIntraDepotRouteSwap", value)
+                }
+              />
+              <TripFlag
+                checked={normalizedScope.allowInterDepotSwap}
+                disabled={updateScope.isPending}
+                label="営業所間トレードを許可"
+                description="選択営業所群で車両を相互融通します。計算コストは増加します。"
+                onChange={(value) =>
+                  handleSwapFlagChange("allowInterDepotSwap", value)
+                }
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -655,6 +697,8 @@ interface NormalizedDispatchScope extends DispatchScope {
     includeDepotMoves: boolean;
     includeDeadhead: boolean;
   };
+  allowIntraDepotRouteSwap: boolean;
+  allowInterDepotSwap: boolean;
   candidateRouteIds: string[];
   effectiveRouteIds: string[];
   candidateRouteFamilyCodes: string[];
@@ -686,6 +730,8 @@ function normalizeScope(scope?: DispatchScope | null): NormalizedDispatchScope {
       includeDepotMoves: scope?.tripSelection?.includeDepotMoves ?? true,
       includeDeadhead: scope?.tripSelection?.includeDeadhead ?? true,
     },
+    allowIntraDepotRouteSwap: scope?.allowIntraDepotRouteSwap ?? false,
+    allowInterDepotSwap: scope?.allowInterDepotSwap ?? false,
     candidateRouteIds: scope?.candidateRouteIds ?? [],
     effectiveRouteIds: scope?.effectiveRouteIds ?? [],
     candidateRouteFamilyCodes: scope?.candidateRouteFamilyCodes ?? [],

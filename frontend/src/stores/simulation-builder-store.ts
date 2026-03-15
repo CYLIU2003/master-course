@@ -42,6 +42,21 @@ function defaultsFromBootstrap(
   };
 }
 
+function scopeFlagsFromBootstrap(bootstrap: EditorBootstrap): {
+  includeShortTurn: boolean;
+  includeDepotMoves: boolean;
+  allowIntraDepotRouteSwap: boolean;
+  allowInterDepotSwap: boolean;
+} {
+  const scope = bootstrap.dispatchScope;
+  return {
+    includeShortTurn: scope?.tripSelection?.includeShortTurn ?? true,
+    includeDepotMoves: scope?.tripSelection?.includeDepotMoves ?? true,
+    allowIntraDepotRouteSwap: scope?.allowIntraDepotRouteSwap ?? false,
+    allowInterDepotSwap: scope?.allowInterDepotSwap ?? false,
+  };
+}
+
 interface SimulationBuilderState {
   scenarioId: string | null;
   bootstrap: EditorBootstrap | null;
@@ -128,8 +143,15 @@ export const useSimulationBuilderStore = create<SimulationBuilderState>(
     hydrateFromBootstrap: (bootstrap, force = false) => {
       const current = get();
       const scenarioId = bootstrap.scenario.id;
+      const scopeFlags = scopeFlagsFromBootstrap(bootstrap);
       if (!force && current.scenarioId === scenarioId) {
-        set({ bootstrap });
+        set({
+          bootstrap,
+          includeShortTurn: scopeFlags.includeShortTurn,
+          includeDepotMoves: scopeFlags.includeDepotMoves,
+          allowIntraDepotRouteSwap: scopeFlags.allowIntraDepotRouteSwap,
+          allowInterDepotSwap: scopeFlags.allowInterDepotSwap,
+        });
         return;
       }
       set({
@@ -140,6 +162,10 @@ export const useSimulationBuilderStore = create<SimulationBuilderState>(
         dayType: bootstrap.builderDefaults.dayType,
         serviceDate: bootstrap.builderDefaults.serviceDate ?? "",
         settings: defaultsFromBootstrap(bootstrap),
+        includeShortTurn: scopeFlags.includeShortTurn,
+        includeDepotMoves: scopeFlags.includeDepotMoves,
+        allowIntraDepotRouteSwap: scopeFlags.allowIntraDepotRouteSwap,
+        allowInterDepotSwap: scopeFlags.allowInterDepotSwap,
         preparedResult: null,
         activeJobId: null,
       });

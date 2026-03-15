@@ -18,10 +18,6 @@ interface UIState {
   /** Active main tab */
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
-
-  /** Selected depot in Tab 1 — scopes vehicles/routes below */
-  selectedDepotId: string | null;
-  setSelectedDepotId: (id: string | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -37,7 +33,4 @@ export const useUIStore = create<UIState>((set) => ({
 
   activeTab: "planning",
   setActiveTab: (tab) => set({ activeTab: tab }),
-
-  selectedDepotId: null,
-  setSelectedDepotId: (id) => set({ selectedDepotId: id }),
 }));

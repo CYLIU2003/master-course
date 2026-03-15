@@ -39,6 +39,119 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-15] Scenario builder に ParamEditor 風クイック導線を統合（最適化実行まで短縮）
+
+- **目的**:
+  - シナリオ作成後、初見ユーザーでも `目黒営業所 -> 路線選択 -> prepare -> 最適化` まで迷わず到達できる導線を作る。
+  - 既存 Step2 の詳細設定は保持しつつ、性能負荷を増やさない範囲で ParamEditor モックの要点だけを統合する。
+
+- **対応**:
+  - `frontend/src/features/planning/ScenarioQuickParamGuide.tsx` を新規追加。
+    - 軽量なクイック設定カード（Solver/Object/TimeLimit/ALNS/MIPGap/Fleet/Charger/Demand）を実装。
+    - `Balanced / Quick / Robust` のプリセットを追加し、`updateSettings` に patch 適用。
+    - selected depot / route / trip の要約と、推定 fleet / charge capacity を同時表示。
+  - `frontend/src/pages/scenario/ScenarioOverviewPage.tsx`
+    - Step1 に `Top 3 by tripCount` 選択ボタンを追加（目黒3路線実行を即時化）。
+    - Step2 上部に `ScenarioQuickParamGuide` を配置（詳細フォームは保持）。
+    - Step3 に `最適化開始` ボタンを追加し、prepare 済み scope を使って
+      `POST /scenarios/{id}/run-optimization` を直接起動する導線を追加。
+    - simulation job と optimization job の両方を同画面で表示。
+    - prepare後カードから `Optimization view` へのリンクを追加。
+  - `frontend/src/features/planning/index.ts`
+    - `ScenarioQuickParamGuide` の export を追加。
+
+- **性能配慮**:
+  - route 一覧は既存の `visibleRoutes`（summaryベース）を再利用し、追加 API fetch はなし。
+  - Top3 選択は `useMemo` 内の既存配列ソートのみ（小規模 index データ対象）。
+  - クイックガイドは controlled input + patch 更新のみで、重い計算や副作用は追加しない。
+
+
+### [DEV-2026-03-15] run-optimization タイムアウトの原因を修正（最適化ジョブ投入の自己デッドロック）
+
+- **問題**:
+  - `POST /api/scenarios/{id}/run-optimization` 実行時、job を返す前に API 応答がタイムアウトする事象を確認。
+  - 原因は `bff/routers/optimization.py` のロック構造で、
+    `_submit_optimization_job()` が `_OPTIMIZATION_FUTURE_LOCK` を保持したまま
+    `_get_optimization_executor()` を呼び、同じロックを再取得しようとして自己デッドロックしていた。
+
+- **対応**:
+  - `bff/routers/optimization.py`
+    - `_OPTIMIZATION_FUTURE_LOCK` を `threading.Lock()` から `threading.RLock()` に変更。
+    - 同一スレッドでの再入ロックを許可し、job submit 経路のブロッキングを解消。
+
+- **テスト追加**:
+  - `tests/test_bff_optimization_router.py`
+    - `test_optimization_future_lock_is_reentrant`
+      - 最適化ロックが再入可能ロックであることを確認。
+    - `test_submit_optimization_job_does_not_deadlock_on_nested_lock`
+      - `submit` を別スレッドで実行し、短時間で復帰することを確認して
+        自己デッドロック再発を防止。
+
+- **確認**:
+  - `python -m pytest tests/test_bff_optimization_router.py tests/test_bff_simulation_builder.py tests/test_bff_scenario_store.py -q`
+  - 結果: `33 passed`
+
+### [DEV-2026-03-15] Simulation Builder の dispatch scope 初期同期を修正
+
+- **問題**:
+  - `ScenarioOverviewPage` の builder store は `includeShortTurn` / `includeDepotMoves` /
+    `allowIntraDepotRouteSwap` / `allowInterDepotSwap` を固定初期値で持っていた。
+  - 既存 scenario の `dispatch_scope` を編集しても、ページ再表示時に builder 側へ反映されず、
+    UI表示と backend の scope が乖離する可能性があった。
+
+- **対応**:
+  - `frontend/src/stores/simulation-builder-store.ts`
+    - `scopeFlagsFromBootstrap()` を追加。
+    - `hydrateFromBootstrap()` で `bootstrap.dispatchScope` から以下の初期値を同期するよう修正。
+      - `tripSelection.includeShortTurn`
+      - `tripSelection.includeDepotMoves`
+      - `allowIntraDepotRouteSwap`
+      - `allowInterDepotSwap`
+
+- **効果**:
+  - シナリオ保存済み `dispatch_scope` を開いたときに、builder のトグル表示と prepare payload が
+    scope 実態と一致する。
+
+### [DEV-2026-03-15] Dispatch scope を source-of-truth とする UI/Backend 同期を追加整理
+
+- **問題**:
+  - `PUT /scenarios/{id}/dispatch-scope` で `allowIntraDepotRouteSwap` /
+    `allowInterDepotSwap` が body schema に定義されておらず、UI から保存しても
+    `scenario_store.set_dispatch_scope()` まで値が届かない。
+  - builder 画面を開いたまま別画面で scope 更新した場合、同一 scenario 再hydrate時に
+    scope フラグが store 側へ再同期されない。
+  - `MasterPlanningPage` の tripSelection 更新は `includeDeadhead` を固定 `true` で送っており、
+    scope の既存値を上書きしてしまう。
+
+- **対応（scope source-of-truth）**:
+  - `bff/routers/scenarios.py`
+    - `UpdateDispatchScopeBody` に
+      `allowIntraDepotRouteSwap`, `allowInterDepotSwap` を追加。
+    - `body.model_dump(exclude_unset=True)` を使用し、未指定項目を不要上書きしない。
+  - `bff/store/scenario_store.py`
+    - `set_dispatch_scope()` の `next_scope` に swap フラグをマージする処理を追加。
+  - `frontend/src/stores/simulation-builder-store.ts`
+    - 同一 scenario の再hydrate時にも `dispatchScope` 由来フラグを再同期。
+  - `frontend/src/pages/planning/MasterPlanningPage.tsx`
+    - `includeDeadhead` を scope から読み取り、tripSelection patch で保持。
+
+- **対応（state責務分離フェーズ1）**:
+  - `frontend/src/stores/scenario-draft-store.ts` を新規追加。
+    - scenario 別ドラフト state として `selectedDepotIdByScenario` を保持。
+  - `frontend/src/features/planning/DepotListPanel.tsx` と
+    `frontend/src/pages/planning/MasterPlanningPage.tsx` を
+    `ui-store` 依存から `scenario-draft-store` 依存へ移行。
+  - `frontend/src/pages/scenario/ScenarioOverviewPage.tsx` で
+    builder の選択営業所を scenario draft へ同期。
+  - `frontend/src/stores/ui-store.ts` から `selectedDepotId` を除去し、
+    global UI state と scenario draft state の責務を分離。
+
+- **テスト追加**:
+  - `tests/test_bff_scenario_store.py`
+    - `test_dispatch_scope_setter_persists_swap_flags` を追加。
+  - `tests/test_bff_simulation_builder.py`
+    - `test_prepare_keeps_existing_scope_flags_when_body_does_not_override` を追加。
+
 ### [DEV-2026-03-14] `.claude/worktrees/magical-elgamal` の残差分を main へ吸収
 
 - **確認した状態**:

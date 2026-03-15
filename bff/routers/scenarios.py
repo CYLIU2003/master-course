@@ -332,6 +332,8 @@ class UpdateDispatchScopeBody(BaseModel):
     routeSelection: Optional[Dict[str, Any]] = None
     serviceSelection: Optional[Dict[str, Any]] = None
     tripSelection: Optional[Dict[str, Any]] = None
+    allowIntraDepotRouteSwap: Optional[bool] = None
+    allowInterDepotSwap: Optional[bool] = None
 
 
 class TimetableRowBody(BaseModel):
@@ -922,7 +924,10 @@ def update_dispatch_scope(
     scenario_id: str, body: UpdateDispatchScopeBody
 ) -> Dict[str, Any]:
     try:
-        return store.set_dispatch_scope(scenario_id, body.model_dump())
+        return store.set_dispatch_scope(
+            scenario_id,
+            body.model_dump(exclude_unset=True),
+        )
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:

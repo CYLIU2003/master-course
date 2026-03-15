@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,17 +8,20 @@ import {
   LoadingBlock,
   PageSection,
 } from "@/features/common";
+import { ScenarioQuickParamGuide } from "@/features/planning";
 import {
   useDeleteScenario,
   useEditorBootstrap,
   useJob,
   usePrepareSimulation,
+  useRunOptimization,
   useRunPreparedSimulation,
   useScenarioRunReadiness,
 } from "@/hooks";
 import { isIncompleteArtifactError } from "@/api/client";
 import { runKeys } from "@/hooks/use-run";
 import { useSimulationBuilderStore } from "@/stores/simulation-builder-store";
+import { useScenarioDraftStore } from "@/stores/scenario-draft-store";
 import type { Route, SimulationBuilderSettings } from "@/types";
 
 const SOLVER_MODES: Array<{
@@ -58,6 +61,7 @@ function formatTouHour(value: number) {
 export function ScenarioOverviewPage() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const queryClient = useQueryClient();
+  const [optimizationJobId, setOptimizationJobId] = useState<string | null>(null);
   const {
     data: bootstrap,
     isLoading,
@@ -69,6 +73,7 @@ export function ScenarioOverviewPage() {
   } = useScenarioRunReadiness();
   const prepareMutation = usePrepareSimulation(scenarioId!);
   const runPreparedMutation = useRunPreparedSimulation(scenarioId!);
+  const runOptimizationMutation = useRunOptimization(scenarioId!);
   const {
     scenarioId: builderScenarioId,
     selectedDepotIds,
@@ -95,7 +100,9 @@ export function ScenarioOverviewPage() {
     setPreparedResult,
     setActiveJobId,
   } = useSimulationBuilderStore();
+  const setDraftSelectedDepotId = useScenarioDraftStore((s) => s.setSelectedDepotId);
   const { data: activeJob } = useJob(activeJobId);
+  const { data: optimizationJob } = useJob(optimizationJobId);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -112,7 +119,14 @@ export function ScenarioOverviewPage() {
     }
   }, [activeJob?.status, queryClient, scenarioId]);
 
-  const depotRouteIndex = bootstrap?.depotRouteIndex ?? {};
+  useEffect(() => {
+    if (optimizationJob?.status === "completed" && scenarioId) {
+      void queryClient.invalidateQueries({
+        queryKey: runKeys.optimization(scenarioId),
+      });
+    }
+  }, [optimizationJob?.status, queryClient, scenarioId]);
+
   const routesById = useMemo(() => {
     const map = new Map<string, Route & { displayName?: string }>();
     for (const route of bootstrap?.routes ?? []) {
@@ -122,9 +136,10 @@ export function ScenarioOverviewPage() {
   }, [bootstrap?.routes]);
   const selectedDepotId = selectedDepotIds[0] ?? "";
   const visibleRouteIds = useMemo(() => {
+    const depotRouteIndex = bootstrap?.depotRouteIndex ?? {};
     const ids = selectedDepotId ? depotRouteIndex[selectedDepotId] ?? [] : [];
     return ids.filter((routeId) => routesById.has(routeId));
-  }, [depotRouteIndex, routesById, selectedDepotId]);
+  }, [bootstrap?.depotRouteIndex, routesById, selectedDepotId]);
   const visibleRoutes = useMemo(
     () =>
       visibleRouteIds
@@ -138,6 +153,21 @@ export function ScenarioOverviewPage() {
         ),
     [routesById, visibleRouteIds],
   );
+  const topTripRouteIds = useMemo(() => {
+    return [...visibleRoutes]
+      .sort((left, right) => {
+        const tripDiff = Number(right.tripCount ?? 0) - Number(left.tripCount ?? 0);
+        if (tripDiff !== 0) {
+          return tripDiff;
+        }
+        return String(left.displayName ?? left.routeCode ?? left.name).localeCompare(
+          String(right.displayName ?? right.routeCode ?? right.name),
+          "ja",
+        );
+      })
+      .slice(0, 3)
+      .map((route) => route.id);
+  }, [visibleRoutes]);
 
   useEffect(() => {
     if (!visibleRouteIds.length) {
@@ -149,6 +179,13 @@ export function ScenarioOverviewPage() {
       setSelectedRouteIds(filtered);
     }
   }, [selectedRouteIds, setSelectedRouteIds, visibleRouteIds]);
+
+  useEffect(() => {
+    if (!scenarioId) {
+      return;
+    }
+    setDraftSelectedDepotId(scenarioId, selectedDepotId || null);
+  }, [scenarioId, selectedDepotId, setDraftSelectedDepotId]);
 
   if (isLoading) {
     return <LoadingBlock />;
@@ -263,6 +300,11 @@ export function ScenarioOverviewPage() {
     !preparedResult?.preparedInputId ||
     !preparedResult.ready ||
     !canRun;
+  const runOptimizationDisabled =
+    runOptimizationMutation.isPending ||
+    !preparedResult?.preparedInputId ||
+    !preparedResult.ready ||
+    !canRun;
 
   async function handlePrepare() {
     const result = await prepareMutation.mutateAsync({
@@ -332,6 +374,23 @@ export function ScenarioOverviewPage() {
     setActiveJobId(job.job_id);
   }
 
+  async function handleRunOptimization() {
+    if (!preparedResult?.ready) {
+      return;
+    }
+    const job = await runOptimizationMutation.mutateAsync({
+      mode: settings.solverMode,
+      time_limit_seconds: settings.timeLimitSeconds,
+      mip_gap: settings.mipGap,
+      service_id: preparedResult.serviceIds[0] ?? dayType,
+      depot_id: selectedDepotId || preparedResult.primaryDepotId || undefined,
+      rebuild_dispatch: true,
+      use_existing_duties: false,
+      alns_iterations: settings.alnsIterations,
+    });
+    setOptimizationJobId(job.job_id);
+  }
+
   return (
     <div className="space-y-6">
       <PageSection title={scenario.name} description={scenario.description}>
@@ -398,6 +457,14 @@ export function ScenarioOverviewPage() {
                   className="rounded border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
                 >
                   Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRouteIds([...topTripRouteIds])}
+                  disabled={topTripRouteIds.length === 0}
+                  className="rounded border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Top 3 by tripCount
                 </button>
                 <button
                   type="button"
@@ -548,6 +615,15 @@ export function ScenarioOverviewPage() {
         title="Step 2 Simulation Settings"
         description="営業所・路線に対して、車両構成、料金、solver、実験メタデータをここで確定します。prepare に渡る値はこの画面の入力だけです。"
       >
+        <ScenarioQuickParamGuide
+          settings={settings}
+          onPatch={updateSettings}
+          solverOptions={SOLVER_MODES}
+          objectiveOptions={OBJECTIVE_MODES}
+          selectedDepotId={selectedDepotId}
+          selectedRouteCount={selectedRouteCount}
+          selectedTripCount={selectedTripCount}
+        />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Day Type">
             <select
@@ -1085,14 +1161,29 @@ export function ScenarioOverviewPage() {
             >
               {runPreparedMutation.isPending ? "Starting..." : "シミュレーション開始"}
             </button>
+            <button
+              type="button"
+              onClick={() => void handleRunOptimization()}
+              disabled={runOptimizationDisabled}
+              className="rounded bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
+            >
+              {runOptimizationMutation.isPending ? "Starting..." : "最適化開始"}
+            </button>
           </div>
         }
       >
         <BackendJobPanel job={activeJob} />
+        <BackendJobPanel job={optimizationJob} className="mt-3" />
 
         {!canRun ? (
           <div className="mb-4 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">
             {runReadinessReason ?? "Built dataset が未準備のため simulation を実行できません。"}
+          </div>
+        ) : null}
+
+        {runOptimizationMutation.error ? (
+          <div className="mt-3">
+            <ErrorBlock message={runOptimizationMutation.error.message} />
           </div>
         ) : null}
 
@@ -1135,6 +1226,12 @@ export function ScenarioOverviewPage() {
                 className="rounded border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
               >
                 Results
+              </Link>
+              <Link
+                to={`/scenarios/${scenario.id}/optimization`}
+                className="rounded border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                Optimization view
               </Link>
             </div>
           </div>

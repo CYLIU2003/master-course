@@ -1110,6 +1110,61 @@ def test_dispatch_scope_supports_route_family_code_filters(temp_store_dir: Path)
     assert scope["routeSelection"]["excludeRouteFamilyCodes"] == ["A01"]
 
 
+def test_dispatch_scope_setter_persists_swap_flags(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Swap flag scope", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Meguro", "location": "Meguro"},
+    )
+    route = scenario_store.create_route(
+        scenario_id,
+        {
+            "id": "R1",
+            "name": "Route 1",
+            "startStop": "A",
+            "endStop": "B",
+            "distanceKm": 1.0,
+            "durationMin": 5,
+            "color": "#111111",
+            "enabled": True,
+        },
+    )
+    scenario_store.upsert_route_depot_assignment(
+        scenario_id,
+        route["id"],
+        {
+            "depotId": depot["id"],
+            "assignmentType": "manual_override",
+            "confidence": 1.0,
+        },
+    )
+
+    scope = scenario_store.set_dispatch_scope(
+        scenario_id,
+        {
+            "depotSelection": {
+                "depotIds": [depot["id"]],
+                "primaryDepotId": depot["id"],
+            },
+            "allowIntraDepotRouteSwap": True,
+            "allowInterDepotSwap": True,
+        },
+    )
+    assert scope["allowIntraDepotRouteSwap"] is True
+    assert scope["allowInterDepotSwap"] is True
+
+    scope = scenario_store.set_dispatch_scope(
+        scenario_id,
+        {
+            "allowIntraDepotRouteSwap": False,
+        },
+    )
+    assert scope["allowIntraDepotRouteSwap"] is False
+    assert scope["allowInterDepotSwap"] is True
+
+
 def test_remove_tree_with_retries_recovers_from_transient_permission_error(
     temp_store_dir: Path,
     monkeypatch: pytest.MonkeyPatch,

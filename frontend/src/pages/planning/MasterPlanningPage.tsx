@@ -2,7 +2,7 @@ import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { useEditorBootstrap, useDispatchScope, useUpdateDispatchScope } from "@/hooks";
-import { useUIStore } from "@/stores/ui-store";
+import { useSelectedDepotId } from "@/stores/scenario-draft-store";
 import { usePlanningDatasetStore } from "@/stores/planning-dataset-store";
 import { PageSection } from "@/features/common";
 import type { UpdateDispatchScopeRequest } from "@/types";
@@ -19,7 +19,7 @@ export function MasterPlanningPage() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const { data: bootstrap, isLoading, error } = useEditorBootstrap(scenarioId ?? "");
   const scenario = bootstrap?.scenario;
-  const selectedDepotId = useUIStore((s) => s.selectedDepotId);
+  const selectedDepotId = useSelectedDepotId(scenarioId);
   const [showAllRoutes, setShowAllRoutes] = useState(false);
   const [showDepotRouteMatrix, setShowDepotRouteMatrix] = useState(false);
   const [showVehicleRouteMatrix, setShowVehicleRouteMatrix] = useState(false);
@@ -35,6 +35,7 @@ export function MasterPlanningPage() {
   const interSwap = dispatchScope?.allowInterDepotSwap ?? false;
   const includeShortTurn = dispatchScope?.tripSelection?.includeShortTurn ?? true;
   const includeDepotMoves = dispatchScope?.tripSelection?.includeDepotMoves ?? true;
+  const includeDeadhead = dispatchScope?.tripSelection?.includeDeadhead ?? true;
 
   function handleScopeToggle(patch: UpdateDispatchScopeRequest) {
     updateScope.mutate(patch);
@@ -129,23 +130,23 @@ export function MasterPlanningPage() {
           <div className="flex items-center gap-4">
             <span className="text-xs font-medium text-slate-500">便種:</span>
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
-              <input
-                type="checkbox"
-                checked={includeShortTurn}
-                onChange={(e) => handleScopeToggle({ tripSelection: { includeShortTurn: e.target.checked, includeDepotMoves, includeDeadhead: true } })}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
-              />
-              区間便
-            </label>
+                <input
+                  type="checkbox"
+                  checked={includeShortTurn}
+                  onChange={(e) => handleScopeToggle({ tripSelection: { includeShortTurn: e.target.checked, includeDepotMoves, includeDeadhead } })}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
+                />
+                区間便
+              </label>
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
-              <input
-                type="checkbox"
-                checked={includeDepotMoves}
-                onChange={(e) => handleScopeToggle({ tripSelection: { includeShortTurn, includeDepotMoves: e.target.checked, includeDeadhead: true } })}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
-              />
-              入出庫便
-            </label>
+                <input
+                  type="checkbox"
+                  checked={includeDepotMoves}
+                  onChange={(e) => handleScopeToggle({ tripSelection: { includeShortTurn, includeDepotMoves: e.target.checked, includeDeadhead } })}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
+                />
+                入出庫便
+              </label>
           </div>
           {/* Swap permissions */}
           <div className="flex items-center gap-4">

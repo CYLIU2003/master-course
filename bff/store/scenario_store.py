@@ -2952,6 +2952,14 @@ def set_dispatch_scope(scenario_id: str, scope: Dict[str, Any]) -> Dict[str, Any
         "routeSelection": route_selection,
         "serviceSelection": service_selection,
         "tripSelection": trip_selection,
+        "allowIntraDepotRouteSwap": scope.get(
+            "allowIntraDepotRouteSwap",
+            current.get("allowIntraDepotRouteSwap", False),
+        ),
+        "allowInterDepotSwap": scope.get(
+            "allowInterDepotSwap",
+            current.get("allowInterDepotSwap", False),
+        ),
         "depotId": depot_selection.get("primaryDepotId"),
         "serviceId": (
             (service_selection.get("serviceIds") or [current.get("serviceId") or "WEEKDAY"])[0]

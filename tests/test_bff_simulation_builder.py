@@ -428,3 +428,83 @@ def test_prepare_and_run_prepared_simulation_builder_flow_uses_tokyu_shards(
 
     assert job["status"] == "pending"
     assert job["metadata"]["prepared_input_id"] == prepare_result["preparedInputId"]
+
+
+def test_prepare_keeps_existing_scope_flags_when_body_does_not_override(
+    temp_store_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from src import tokyu_shard_loader
+
+    monkeypatch.setattr(tokyu_shard_loader, "TOKYU_SHARD_ROOT", tmp_path / "missing_shards")
+    meta = scenarios.create_scenario(scenarios.CreateScenarioBody(name="Builder scope flags"))
+    bootstrap = scenarios.get_editor_bootstrap(meta["id"])
+    selected_depot_id = bootstrap["builderDefaults"]["selectedDepotIds"][0]
+    selected_route_id = bootstrap["depotRouteIndex"][selected_depot_id][0]
+    built_dir, routes_df = _make_built_dir(
+        tmp_path,
+        route_id=selected_route_id,
+        depot_id=selected_depot_id,
+    )
+    prepared_root = tmp_path / "prepared_inputs"
+    monkeypatch.setattr(simulation, "_prepared_inputs_root", lambda: prepared_root)
+
+    scenario_store.set_dispatch_scope(
+        meta["id"],
+        {
+            "depotSelection": {
+                "depotIds": [selected_depot_id],
+                "primaryDepotId": selected_depot_id,
+            },
+            "tripSelection": {
+                "includeShortTurn": False,
+                "includeDepotMoves": False,
+                "includeDeadhead": True,
+            },
+            "allowIntraDepotRouteSwap": True,
+            "allowInterDepotSwap": True,
+        },
+    )
+
+    prepare_result = simulation.prepare_simulation(
+        meta["id"],
+        simulation.PrepareSimulationBody(
+            selected_depot_ids=[selected_depot_id],
+            selected_route_ids=[selected_route_id],
+            day_type="WEEKDAY",
+        ),
+        _app_state={"built_dir": built_dir, "routes_df": routes_df, "built_ready": True},
+    )
+
+    assert prepare_result["ready"] is True
+    persisted = scenario_store.get_scenario_document(meta["id"], repair_missing_master=False)
+    assert persisted["dispatch_scope"]["tripSelection"]["includeShortTurn"] is False
+    assert persisted["dispatch_scope"]["tripSelection"]["includeDepotMoves"] is False
+    assert persisted["dispatch_scope"]["allowIntraDepotRouteSwap"] is True
+    assert persisted["dispatch_scope"]["allowInterDepotSwap"] is True
+
+
+def test_update_dispatch_scope_router_preserves_unspecified_swap_flags(
+    temp_store_dir: Path,
+):
+    meta = scenarios.create_scenario(scenarios.CreateScenarioBody(name="Dispatch scope router"))
+
+    scope = scenarios.update_dispatch_scope(
+        meta["id"],
+        scenarios.UpdateDispatchScopeBody(
+            allowIntraDepotRouteSwap=True,
+            allowInterDepotSwap=True,
+        ),
+    )
+    assert scope["allowIntraDepotRouteSwap"] is True
+    assert scope["allowInterDepotSwap"] is True
+
+    scope = scenarios.update_dispatch_scope(
+        meta["id"],
+        scenarios.UpdateDispatchScopeBody(
+            allowIntraDepotRouteSwap=False,
+        ),
+    )
+    assert scope["allowIntraDepotRouteSwap"] is False
+    assert scope["allowInterDepotSwap"] is True

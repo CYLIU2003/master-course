@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { useUIStore } from "@/stores/ui-store";
+import { useSelectedDepotId, useScenarioDraftStore } from "@/stores/scenario-draft-store";
 import { useCreateDepot, useDeleteDepot, scenarioKeys } from "@/hooks";
 import { EmptyState } from "@/features/common";
 import type { Depot } from "@/types";
@@ -13,8 +13,8 @@ interface DepotListPanelProps {
 export function DepotListPanel({ scenarioId, depots: propDepots }: DepotListPanelProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const selectedDepotId = useUIStore((s) => s.selectedDepotId);
-  const setSelectedDepotId = useUIStore((s) => s.setSelectedDepotId);
+  const selectedDepotId = useSelectedDepotId(scenarioId);
+  const setSelectedDepotId = useScenarioDraftStore((s) => s.setSelectedDepotId);
   const createDepot = useCreateDepot(scenarioId);
   const deleteDepot = useDeleteDepot(scenarioId);
 
@@ -28,7 +28,7 @@ export function DepotListPanel({ scenarioId, depots: propDepots }: DepotListPane
       },
       {
         onSuccess: (newDepot) => {
-          setSelectedDepotId(newDepot.id);
+          setSelectedDepotId(scenarioId, newDepot.id);
           queryClient.invalidateQueries({ queryKey: scenarioKeys.editorBootstrap(scenarioId) });
         },
       },
@@ -40,7 +40,7 @@ export function DepotListPanel({ scenarioId, depots: propDepots }: DepotListPane
     if (!confirm(t("depots.delete_confirm"))) return;
     deleteDepot.mutate(depotId, {
       onSuccess: () => {
-        if (selectedDepotId === depotId) setSelectedDepotId(null);
+        if (selectedDepotId === depotId) setSelectedDepotId(scenarioId, null);
         queryClient.invalidateQueries({ queryKey: scenarioKeys.editorBootstrap(scenarioId) });
       },
     });
@@ -76,7 +76,7 @@ export function DepotListPanel({ scenarioId, depots: propDepots }: DepotListPane
             {depots.map((depot) => (
               <li key={depot.id}>
                 <button
-                  onClick={() => setSelectedDepotId(depot.id)}
+                  onClick={() => setSelectedDepotId(scenarioId, depot.id)}
                   className={`flex w-full items-center justify-between px-3 py-2.5 text-left transition-colors ${
                     selectedDepotId === depot.id
                       ? "bg-primary-50 text-primary-700"
