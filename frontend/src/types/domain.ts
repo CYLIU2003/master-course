@@ -26,6 +26,13 @@ export interface Scenario {
   scenarioOverlay?: ScenarioOverlay | null;
   datasetStatus?: ResearchDatasetStatus | null;
   feedContext?: FeedContext | null;
+  stats?: {
+    routeCount?: number;
+    stopCount?: number;
+    timetableRowCount?: number;
+    tripCount?: number;
+    dutyCount?: number;
+  };
 }
 
 export interface FleetConfig {
@@ -393,6 +400,8 @@ export interface Route {
   distanceCoverageRatio?: number;
   stopSequence?: string[];
   tripCount?: number;
+  stopCount?: number;
+  serviceTypes?: string[];
   durationSource?: string;
   distanceSource?: string;
   /** Link state: how completely this route is linked to stops/trips */

@@ -39,6 +39,56 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-15] Master Data の体感速度を改善（営業所編集の即時反映 + ルート一覧軽量化）
+
+- **背景課題**:
+  - 「営業所・車両・路線」画面で、営業所編集後の一覧反映が遅い。
+  - Header / map 周辺で重い query が先に走り、初期表示と切り替えが重い。
+  - `/scenarios/{id}/routes` が一覧用途に対して過剰な enrich 経路を通っていた。
+
+- **対応（Backend）**:
+  - `bff/store/scenario_store.py`
+    - master-data 操作（depot/vehicle/route update 系）向けに `_save_master_only()` を追加。
+      - master DB (`master_data.sqlite`) と slim meta のみ更新。
+      - dispatch 無効化が必要な場合は artifact 側をクリアして整合を維持。
+      - full `_save()` を回避し、編集応答を短縮。
+    - `summarize_route_service_trip_counts()` を追加。
+      - timetable sqlite から `route_id x service_id` 集計のみ取得（軽量）。
+      - `list_routes()` に `stopCount` を付与。
+  - `bff/store/trip_store.py`
+    - `summarize_timetable_routes()` を追加（SQL GROUP BY 集計）。
+  - `bff/routers/master_data.py`
+    - `GET /depots`: `list_routes()` を depot ごとに N 回呼ばない構成へ変更（N+1 解消）。
+    - `GET /routes`: 一覧専用の軽量 summary payload に変更。
+      - route family 派生情報は保持。
+      - `tripCount/serviceTypes/stopCount` は軽量集計で補完。
+      - route detail (`GET /routes/{id}`) 側の link 詳細は維持。
+
+- **対応（Frontend）**:
+  - `frontend/src/hooks/use-master-data.ts`
+    - `useDepots/useStops/useRoute` に `enabled` オプションを追加。
+    - `useUpdateDepot` に optimistic update を追加。
+      - 保存直後に depots list/detail を即時更新し、反映遅延を解消。
+  - `frontend/src/features/planning/RouteMapPanel.tsx`
+    - tab / view / selection 条件で query を遅延。
+      - route 未選択時に route detail + stops を読まない。
+      - depots/vehicles tab で route 系 query を読まない。
+  - `frontend/src/pages/planning/MasterDataHeader.tsx`
+    - route/stop 件数を `useScenario().stats` 参照に切替。
+      - 起動時の `useRoutes/useStops` を除去し、ヘッダ描画を軽量化。
+  - `frontend/src/features/planning/RouteTableNew.tsx`
+    - 停留所数表示を `stopCount` 優先にし、一覧 API の軽量化に追従。
+  - `frontend/src/types/domain.ts`
+    - `Route.stopCount`, `Route.serviceTypes`, `Scenario.stats` を型定義に追加。
+
+- **検証**:
+  - `python -m pytest tests/test_bff_route_family.py tests/test_bff_scenario_store.py tests/test_architecture.py tests/test_performance_contracts.py -q`
+    - 結果: `79 passed`
+  - `npx eslint "frontend/src/hooks/use-master-data.ts" "frontend/src/pages/planning/MasterDataHeader.tsx" "frontend/src/features/planning/RouteMapPanel.tsx" "frontend/src/features/planning/RouteTableNew.tsx" "frontend/src/types/domain.ts"`
+    - 結果: pass
+  - `npm run build` (frontend)
+    - 結果: pass
+
 ### [DEV-2026-03-15] Scenario 一覧で dataset 表示名と複数削除を追加
 
 - **目的**:

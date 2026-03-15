@@ -91,11 +91,15 @@ function invalidateDispatchOutputs(qc: ReturnType<typeof useQueryClient>, scenar
 
 // ── Depot queries ─────────────────────────────────────────────
 
-export function useDepots(scenarioId: string) {
+export function useDepots(
+  scenarioId: string,
+  options?: { enabled?: boolean },
+) {
+  const enabled = options?.enabled ?? true;
   return useQuery({
     queryKey: depotKeys.all(scenarioId),
     queryFn: () => depotApi.list(scenarioId),
-    enabled: !!scenarioId,
+    enabled: !!scenarioId && enabled,
   });
 }
 
@@ -126,7 +130,59 @@ export function useUpdateDepot(scenarioId: string, depotId: string) {
   return useMutation({
     mutationFn: (data: UpdateDepotRequest) =>
       depotApi.update(scenarioId, depotId, data),
-    onSuccess: () => {
+    onMutate: async (patch) => {
+      await qc.cancelQueries({ queryKey: depotKeys.all(scenarioId) });
+      await qc.cancelQueries({ queryKey: depotKeys.detail(scenarioId, depotId) });
+
+      const prevList = qc.getQueryData<{ items: Array<Record<string, unknown>>; total: number }>(
+        depotKeys.all(scenarioId),
+      );
+      const prevDetail = qc.getQueryData<Record<string, unknown>>(
+        depotKeys.detail(scenarioId, depotId),
+      );
+
+      if (prevList?.items) {
+        qc.setQueryData(depotKeys.all(scenarioId), {
+          ...prevList,
+          items: prevList.items.map((item) =>
+            String(item.id ?? "") === depotId ? { ...item, ...patch } : item,
+          ),
+        });
+      }
+
+      if (prevDetail) {
+        qc.setQueryData(depotKeys.detail(scenarioId, depotId), {
+          ...prevDetail,
+          ...patch,
+        });
+      }
+
+      return { prevList, prevDetail };
+    },
+    onError: (_error, _patch, context) => {
+      if (context?.prevList) {
+        qc.setQueryData(depotKeys.all(scenarioId), context.prevList);
+      }
+      if (context?.prevDetail) {
+        qc.setQueryData(depotKeys.detail(scenarioId, depotId), context.prevDetail);
+      }
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(depotKeys.detail(scenarioId, depotId), updated);
+      qc.setQueryData<{ items: Array<Record<string, unknown>>; total: number }>(
+        depotKeys.all(scenarioId),
+        (current) => {
+          if (!current?.items) {
+            return current;
+          }
+          return {
+            ...current,
+            items: current.items.map((item) =>
+              String(item.id ?? "") === depotId ? { ...item, ...updated } : item,
+            ),
+          };
+        },
+      );
       qc.invalidateQueries({ queryKey: depotKeys.detail(scenarioId, depotId) });
       qc.invalidateQueries({ queryKey: depotKeys.all(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
@@ -331,11 +387,16 @@ export function useRoutes(
   });
 }
 
-export function useRoute(scenarioId: string, routeId: string) {
+export function useRoute(
+  scenarioId: string,
+  routeId: string,
+  options?: { enabled?: boolean },
+) {
+  const enabled = options?.enabled ?? true;
   return useQuery({
     queryKey: routeKeys.detail(scenarioId, routeId),
     queryFn: () => routeApi.get(scenarioId, routeId),
-    enabled: !!scenarioId && !!routeId,
+    enabled: !!scenarioId && !!routeId && enabled,
   });
 }
 
@@ -442,11 +503,15 @@ export function useImportGtfsRoutes(scenarioId: string) {
   });
 }
 
-export function useStops(scenarioId: string) {
+export function useStops(
+  scenarioId: string,
+  options?: { enabled?: boolean },
+) {
+  const enabled = options?.enabled ?? true;
   return useQuery({
     queryKey: stopKeys.all(scenarioId),
     queryFn: () => stopApi.list(scenarioId),
-    enabled: !!scenarioId,
+    enabled: !!scenarioId && enabled,
   });
 }
 

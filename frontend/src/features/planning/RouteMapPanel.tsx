@@ -76,16 +76,30 @@ function createViewport(points: PlotPoint[]) {
 export function RouteMapPanel({ scenarioId }: Props) {
   const { t } = useTranslation();
   const activeTab = useMasterUiStore((s) => s.activeTab);
+  const viewMode = useMasterUiStore((s) => s.viewMode);
   const selectedDepotId = useMasterUiStore((s) => s.selectedDepotId);
   const selectedRouteId = useMasterUiStore((s) => s.selectedRouteId);
 
-  const { data: depotsData } = useDepots(scenarioId);
+  const mapActive = viewMode === "map" || viewMode === "split";
+  const shouldLoadDepotData = mapActive && (activeTab === "depots" || activeTab === "vehicles");
+  const shouldLoadRoutesData = mapActive && activeTab === "routes";
+  const shouldLoadRouteDetail = shouldLoadRoutesData && !!selectedRouteId;
+  const shouldLoadStops = shouldLoadRoutesData && !!selectedRouteId;
+
+  const { data: depotsData } = useDepots(scenarioId, {
+    enabled: shouldLoadDepotData,
+  });
   const { data: routesData } = useRoutes(scenarioId, {
     depotId: selectedDepotId ?? undefined,
     groupByFamily: true,
+    enabled: shouldLoadRoutesData,
   });
-  const { data: routeDetail } = useRoute(scenarioId, selectedRouteId ?? "");
-  const { data: stopsData } = useStops(scenarioId);
+  const { data: routeDetail } = useRoute(scenarioId, selectedRouteId ?? "", {
+    enabled: shouldLoadRouteDetail,
+  });
+  const { data: stopsData } = useStops(scenarioId, {
+    enabled: shouldLoadStops,
+  });
 
   const depots = useMemo<Depot[]>(() => depotsData?.items ?? [], [depotsData]);
   const routes = useMemo<Route[]>(() => routesData?.items ?? [], [routesData]);

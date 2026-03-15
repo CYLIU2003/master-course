@@ -463,6 +463,12 @@ def _save_master_only(
         refs = _refs_for_scenario(scenario_id, doc)
         doc["refs"] = refs
 
+        in_memory_artifacts = {
+            field: doc.get(field)
+            for field in _ARTIFACT_REF_KEYS
+            if field in doc
+        }
+
         master_payload = {key: doc.get(key) for key in _MASTER_DATA_KEYS}
         master_data_store.save_master_data(Path(refs["masterData"]), master_payload)
 
@@ -490,6 +496,8 @@ def _save_master_only(
         }
         scenario_meta_store.save_meta(_STORE_DIR, scenario_id, slim_doc)
         doc["stats"] = stats
+        for field, value in in_memory_artifacts.items():
+            doc[field] = value
 
 
 def _scope_summary(scope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1057,7 +1065,11 @@ def _meta_payload(doc: Dict[str, Any]) -> Dict[str, Any]:
     if "refs" in doc:
         payload["refs"] = dict(doc.get("refs") or {})
     if "stats" in doc:
-        payload["stats"] = dict(doc.get("stats") or {})
+        payload["stats"] = _normalize_stats_payload(
+            doc,
+            fallback=dict(doc.get("stats") or {}),
+            dispatch_invalidated=False,
+        )
     return payload
 
 
@@ -1859,6 +1871,46 @@ def count_timetable_rows(scenario_id: str, *, service_id: Optional[str] = None) 
     return len(rows)
 
 
+def summarize_route_service_trip_counts(
+    scenario_id: str,
+) -> List[Dict[str, Any]]:
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    db_path = _artifact_store_path(refs)
+
+    summaries = trip_store.summarize_timetable_routes(db_path)
+    if summaries:
+        return [dict(item) for item in summaries]
+
+    if (
+        trip_store.count_timetable_rows(db_path) == 0
+        and trip_store.count_rows(db_path, "timetable_rows") == 0
+    ):
+        timetable_path = Path(refs["timetableRows"])
+        legacy_timetable_path = _legacy_timetable_path(scenario_id)
+        if not timetable_path.exists() and not legacy_timetable_path.exists():
+            return []
+
+    rows = _load(scenario_id).get("timetable_rows") or []
+    grouped: Dict[tuple[str, str], int] = {}
+    for row in rows:
+        route_id = str((row or {}).get("route_id") or "").strip()
+        if not route_id:
+            continue
+        service_id = str((row or {}).get("service_id") or "WEEKDAY")
+        key = (route_id, service_id)
+        grouped[key] = grouped.get(key, 0) + 1
+
+    return [
+        {
+            "route_id": route_id,
+            "service_id": service_id,
+            "trip_count": count,
+        }
+        for (route_id, service_id), count in sorted(grouped.items())
+    ]
+
+
 def get_field_summary(scenario_id: str, field: str) -> Optional[Dict[str, Any]]:
     scalar_name = _SUMMARY_SCALAR_NAMES.get(field)
     if not scalar_name:
@@ -2059,10 +2111,11 @@ def _get_item(
 
 
 def _create_item(scenario_id: str, field: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     item = dict(data)
     item["id"] = item.get("id") or _new_id()
     doc[field].append(item)
+    invalidate_dispatch = field in {"depots", "vehicles", "routes"}
     if field in {"depots", "vehicles", "routes"}:
         _invalidate_dispatch_artifacts(doc)
     if field in {"depots", "routes"}:
@@ -2071,17 +2124,18 @@ def _create_item(scenario_id: str, field: str, data: Dict[str, Any]) -> Dict[str
     if field in {"vehicles", "routes"}:
         _sync_vehicle_route_permissions(doc)
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=invalidate_dispatch)
     return item
 
 
 def _update_item(
     scenario_id: str, field: str, item_id_key: str, item_id: str, patch: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     for item in doc[field]:
         if item.get(item_id_key) == item_id:
             item.update({k: v for k, v in patch.items() if v is not None})
+            invalidate_dispatch = field in {"depots", "vehicles", "routes"}
             if field in {"depots", "vehicles", "routes"}:
                 _invalidate_dispatch_artifacts(doc)
             if field in {"depots", "routes"}:
@@ -2090,17 +2144,18 @@ def _update_item(
             if field in {"vehicles", "routes"}:
                 _sync_vehicle_route_permissions(doc)
             doc["meta"]["updatedAt"] = _now_iso()
-            _save(doc)
+            _save_master_only(doc, invalidate_dispatch=invalidate_dispatch)
             return item
     raise KeyError(item_id)
 
 
 def _delete_item(scenario_id: str, field: str, item_id_key: str, item_id: str) -> None:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     before = len(doc[field])
     doc[field] = [i for i in doc[field] if i.get(item_id_key) != item_id]
     if len(doc[field]) == before:
         raise KeyError(item_id)
+    invalidate_dispatch = field in {"depots", "vehicles", "routes"}
     if field in {"depots", "vehicles", "routes"}:
         _invalidate_dispatch_artifacts(doc)
     if field in {"depots", "routes"}:
@@ -2109,7 +2164,7 @@ def _delete_item(scenario_id: str, field: str, item_id_key: str, item_id: str) -
     if field in {"vehicles", "routes"}:
         _sync_vehicle_route_permissions(doc)
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=invalidate_dispatch)
 
 
 # ── Depot helpers ──────────────────────────────────────────────
@@ -2135,14 +2190,14 @@ def update_depot(
 
 def delete_depot(scenario_id: str, depot_id: str) -> None:
     _delete_item(scenario_id, "depots", "id", depot_id)
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     doc["route_depot_assignments"] = [
         item
         for item in doc.get("route_depot_assignments") or []
         if str(item.get("depotId")) != depot_id
     ]
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=True)
 
 
 def get_public_data_state(scenario_id: str) -> Dict[str, Any]:
@@ -2485,6 +2540,7 @@ def list_routes(
                 if assignment
                 else None,
                 "assignmentReason": assignment.get("reason") if assignment else None,
+                "stopCount": len(coerce_list(route.get("stopSequence"))),
             }
         )
     return items
@@ -2582,7 +2638,7 @@ def list_route_depot_assignments(
     operator: Optional[str] = None,
     unresolved_only: bool = False,
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     routes_by_id = {
         str(route.get("id")): dict(route)
         for route in doc.get("routes") or []
@@ -2636,7 +2692,7 @@ def upsert_route_depot_assignment(
     route_id: str,
     data: Dict[str, Any],
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     resolved_route_id = None
     for route in doc.get("routes") or []:
         route_keys = {
@@ -2685,7 +2741,7 @@ def upsert_route_depot_assignment(
         )
     _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=True)
     assignment = _route_assignment_map(doc).get(route_id)
     return {
         "routeId": route_id,
@@ -2742,29 +2798,29 @@ def get_stop_import_meta(
 def set_stop_import_meta(
     scenario_id: str, source: str, import_meta: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     stop_import_meta = doc.setdefault("stop_import_meta", {})
     stop_import_meta[source] = import_meta
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=False)
     return dict(import_meta)
 
 
 def set_timetable_import_meta(
     scenario_id: str, source: str, import_meta: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     timetable_import_meta = doc.setdefault("timetable_import_meta", {})
     timetable_import_meta[source] = import_meta
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=False)
     return dict(import_meta)
 
 
 def get_timetable_import_meta(
     scenario_id: str, source: Optional[str] = None
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     timetable_import_meta = doc.get("timetable_import_meta") or {}
     if source is None:
         return dict(timetable_import_meta)
@@ -2825,18 +2881,18 @@ def upsert_timetable_rows_from_source(
 def set_stop_timetable_import_meta(
     scenario_id: str, source: str, import_meta: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     stop_timetable_import_meta = doc.setdefault("stop_timetable_import_meta", {})
     stop_timetable_import_meta[source] = import_meta
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=False)
     return dict(import_meta)
 
 
 def get_stop_timetable_import_meta(
     scenario_id: str, source: Optional[str] = None
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     stop_timetable_import_meta = doc.get("stop_timetable_import_meta") or {}
     if source is None:
         return dict(stop_timetable_import_meta)
@@ -2882,14 +2938,14 @@ def upsert_stop_timetables_from_source(
 
 
 def get_depot_route_permissions(scenario_id: str) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     return list(doc.get("depot_route_permissions") or [])
 
 
 def set_depot_route_permissions(
     scenario_id: str, permissions: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     # Store permissions as given by the caller (may reference entities
     # not yet created, e.g. during cross-scenario setup). The _sync
     # helpers are called on entity lifecycle events to prune stale entries.
@@ -2906,7 +2962,7 @@ def set_depot_route_permissions(
     _invalidate_dispatch_artifacts(doc)
     _normalize_dispatch_scope(doc)
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=True)
     return list(sanitized)
 
 
@@ -2918,7 +2974,7 @@ def get_vehicle_route_permissions(scenario_id: str) -> List[Dict[str, Any]]:
 def set_vehicle_route_permissions(
     scenario_id: str, permissions: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     # Store permissions as given by the caller (may reference entities
     # not yet created). The _sync helpers are called on entity lifecycle
     # events to prune stale entries.
@@ -2934,7 +2990,7 @@ def set_vehicle_route_permissions(
     doc["vehicle_route_permissions"] = sanitized
     _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=True)
     return list(sanitized)
 
 

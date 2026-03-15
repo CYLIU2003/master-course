@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
-  useRoutes,
+  useScenario,
   useStopTimetablesSummary,
-  useStops,
   useTimetableSummary,
 } from "@/hooks";
 import { useMasterUiStore } from "@/stores/master-ui-store";
@@ -41,8 +40,7 @@ export function MasterDataHeader({ scenarioId }: Props) {
   const viewMode = useMasterUiStore((s) => s.viewMode);
   const setViewMode = useMasterUiStore((s) => s.setViewMode);
   const openDrawer = useMasterUiStore((s) => s.openDrawer);
-  const { data: routesData } = useRoutes(scenarioId);
-  const { data: stopsData } = useStops(scenarioId);
+  const { data: scenario } = useScenario(scenarioId);
   const { data: timetableSummary } = useTimetableSummary(scenarioId);
   const { data: stopTimetablesSummary } = useStopTimetablesSummary(scenarioId);
   const warmTabs = useTabWarmStore((state) => state.tabs);
@@ -62,8 +60,8 @@ export function MasterDataHeader({ scenarioId }: Props) {
 
   const canAdd = activeTab !== "stops";
   const summaryCards = [
-    { label: t("master.summary_routes", "路線"), value: routesData?.total ?? 0 },
-    { label: t("master.summary_stops", "停留所"), value: stopsData?.total ?? 0 },
+    { label: t("master.summary_routes", "路線"), value: scenario?.stats?.routeCount ?? 0 },
+    { label: t("master.summary_stops", "停留所"), value: scenario?.stats?.stopCount ?? 0 },
     {
       label: t("master.summary_timetable", "時刻表"),
       value: timetableSummary?.item.totalRows ?? 0,

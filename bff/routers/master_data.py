@@ -58,8 +58,8 @@ def _check_scenario(scenario_id: str) -> None:
         raise
 
 
-def _depot_summary(scenario_id: str, depot: Dict[str, Any]) -> Dict[str, Any]:
-    route_count = len(store.list_routes(scenario_id, depot_id=str(depot.get("id") or "")))
+def _depot_summary(depot: Dict[str, Any]) -> Dict[str, Any]:
+    route_count = int(depot.get("routeCount") or 0)
     return {
         "id": depot.get("id"),
         "name": depot.get("name"),
@@ -70,31 +70,46 @@ def _depot_summary(scenario_id: str, depot: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _route_summary(route: Dict[str, Any], schedule_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-    route_id = str(route.get("id") or "")
-    relevant_rows = [
-        row for row in schedule_rows if str(row.get("route_id") or row.get("routeId") or "") == route_id
-    ]
-    service_types = sorted(
-        {
-            canonical_service_id(row.get("service_id") or row.get("serviceId"))
-            for row in relevant_rows
-        }
-    )
-    return {
-        "id": route.get("id"),
-        "name": route.get("name"),
-        "routeCode": route.get("routeCode"),
-        "routeLabel": route.get("routeLabel"),
-        "depotId": route.get("depotId"),
-        "tripCount": route.get("tripCount") or len(relevant_rows),
-        "serviceTypes": service_types,
-        "routeFamilyId": route.get("routeFamilyId"),
-        "routeFamilyCode": route.get("routeFamilyCode"),
-        "routeFamilyLabel": route.get("routeFamilyLabel"),
-        "routeVariantType": route.get("routeVariantType"),
-        "canonicalDirection": route.get("canonicalDirection"),
-    }
+def _route_summaries_from_timetable(
+    scenario_id: str,
+    route_ids: Set[str],
+) -> Dict[str, Dict[str, Any]]:
+    by_route: Dict[str, Dict[str, Any]] = {}
+    if not route_ids:
+        return by_route
+
+    summary_rows = store.summarize_route_service_trip_counts(scenario_id)
+    if not summary_rows:
+        return by_route
+
+    for row in summary_rows:
+        route_id = str(row.get("route_id") or "").strip()
+        if not route_id or route_id not in route_ids:
+            continue
+        bucket = by_route.setdefault(
+            route_id,
+            {
+                "tripCount": 0,
+                "serviceTypes": set(),
+            },
+        )
+        bucket["tripCount"] += int(row.get("trip_count") or 0)
+        bucket["serviceTypes"].add(
+            canonical_service_id(row.get("service_id") or "WEEKDAY")
+        )
+
+    for bucket in by_route.values():
+        bucket["serviceTypes"] = sorted(bucket["serviceTypes"])
+    return by_route
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        if value in (None, ""):
+            return default
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
 
 
 # ── Depot Pydantic models ──────────────────────────────────────
@@ -279,7 +294,22 @@ def auto_assign_depots_endpoint(
 @router.get("/scenarios/{scenario_id}/depots")
 def list_depots(scenario_id: str) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    items = [_depot_summary(scenario_id, depot) for depot in store.list_depots(scenario_id)]
+    depots = store.list_depots(scenario_id)
+    routes = store.list_routes(scenario_id)
+    route_counts: Dict[str, int] = defaultdict(int)
+    for route in routes:
+        depot_id = str(route.get("depotId") or "").strip()
+        if depot_id:
+            route_counts[depot_id] += 1
+    items = [
+        _depot_summary(
+            {
+                **depot,
+                "routeCount": route_counts.get(str(depot.get("id") or ""), 0),
+            }
+        )
+        for depot in depots
+    ]
     return {"items": items, "total": len(items)}
 
 
@@ -652,8 +682,15 @@ def list_routes(
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     items = store.list_routes(scenario_id, depot_id=depot_id, operator=operator)
-    items = _enrich_routes_for_display(scenario_id, items)
-    schedule_rows = list(store.get_field(scenario_id, "timetable" "_rows") or [])
+    items = enrich_routes_with_family([dict(route) for route in items])
+
+    route_ids = {
+        str(route.get("id") or "").strip()
+        for route in items
+        if route.get("id") is not None
+    }
+    route_summaries = _route_summaries_from_timetable(scenario_id, route_ids)
+
     if group_by_family:
         items = sorted(
             items,
@@ -670,7 +707,40 @@ def list_routes(
             ),
         )
 
-    summarized_items = [_route_summary(route, schedule_rows) for route in items]
+    summarized_items = []
+    for route in items:
+        route_id = str(route.get("id") or "").strip()
+        summary = route_summaries.get(route_id)
+        service_types = list(summary.get("serviceTypes") or []) if summary else []
+        trip_count = int(summary.get("tripCount") or 0) if summary else 0
+        route_item = {
+            "id": route.get("id"),
+            "name": route.get("name"),
+            "routeCode": route.get("routeCode"),
+            "routeLabel": route.get("routeLabel"),
+            "startStop": route.get("startStop"),
+            "endStop": route.get("endStop"),
+            "distanceKm": route.get("distanceKm"),
+            "durationMin": route.get("durationMin"),
+            "color": route.get("color"),
+            "enabled": route.get("enabled"),
+            "source": route.get("source"),
+            "depotId": route.get("depotId"),
+            "assignmentType": route.get("assignmentType"),
+            "assignmentConfidence": route.get("assignmentConfidence"),
+            "assignmentReason": route.get("assignmentReason"),
+            "tripCount": _safe_int(route.get("tripCount")) or trip_count,
+            "serviceTypes": service_types,
+            "routeFamilyId": route.get("routeFamilyId"),
+            "routeFamilyCode": route.get("routeFamilyCode"),
+            "routeFamilyLabel": route.get("routeFamilyLabel"),
+            "routeVariantId": route.get("routeVariantId"),
+            "routeVariantType": route.get("routeVariantType"),
+            "canonicalDirection": route.get("canonicalDirection"),
+            "isPrimaryVariant": route.get("isPrimaryVariant"),
+            "familySortOrder": route.get("familySortOrder"),
+        }
+        summarized_items.append(route_item)
 
     return {
         "items": summarized_items,

@@ -165,6 +165,76 @@ def test_route_family_router_enriches_routes_and_returns_family_detail(
     assert detail["timetableDiagnostics"]["rawRouteCount"] == 2
 
 
+def test_route_list_summary_keeps_required_lightweight_fields(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Route list summary", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    scenario_store.set_field(
+        scenario_id,
+        "timetable_rows",
+        [
+            {
+                "trip_id": "trip-1",
+                "route_id": "route-1",
+                "service_id": "WEEKDAY",
+                "origin": "A",
+                "destination": "B",
+                "departure": "08:00",
+                "arrival": "08:20",
+                "distance_km": 8.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+            {
+                "trip_id": "trip-2",
+                "route_id": "route-1",
+                "service_id": "SAT",
+                "origin": "A",
+                "destination": "B",
+                "departure": "09:00",
+                "arrival": "09:20",
+                "distance_km": 8.0,
+                "allowed_vehicle_types": ["BEV"],
+            },
+        ],
+        invalidate_dispatch=True,
+    )
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [
+            {
+                "id": "route-1",
+                "name": "園01 (A -> B)",
+                "routeCode": "園01",
+                "routeLabel": "園01 (A -> B)",
+                "startStop": "A",
+                "endStop": "B",
+                "stopSequence": ["S1", "S2", "S3"],
+                "source": "odpt",
+                "tripCount": 2,
+            }
+        ],
+    )
+
+    routes_body = master_data.list_routes(
+        scenario_id,
+        depot_id=None,
+        operator=None,
+        group_by_family=True,
+    )
+
+    assert routes_body["total"] == 1
+    item = routes_body["items"][0]
+    assert item["id"] == "route-1"
+    assert item["tripCount"] == 2
+    assert item["serviceTypes"] == ["SAT", "WEEKDAY"]
+    assert item["routeFamilyCode"] == "園01"
+    assert "stopSequence" not in item
+    assert "resolvedStops" not in item
+
+
 def test_route_family_manual_override_takes_precedence():
     routes = [
         {

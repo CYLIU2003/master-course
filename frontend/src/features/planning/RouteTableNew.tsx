@@ -53,7 +53,7 @@ export function RouteTableNew({ scenarioId }: Props) {
     groupByFamily: true,
   });
 
-  const routes: Route[] = data?.items ?? [];
+  const routes = useMemo<Route[]>(() => data?.items ?? [], [data]);
   const total = data?.total ?? routes.length;
   const familyGroups = useGroupedRouteFamilies(routes);
   const rows = useMemo<RouteTableRow[]>(
@@ -211,7 +211,7 @@ export function RouteTableNew({ scenarioId }: Props) {
                 <div className="px-3 py-2 text-slate-600">{r.endStop || "-"}</div>
                 <div className="px-3 py-2 text-right text-slate-600">{r.distanceKm ?? "-"}</div>
                 <div className="px-3 py-2 text-right text-slate-600">{r.durationMin ?? "-"}</div>
-                <div className="px-3 py-2 text-right text-slate-600">{r.stopSequence?.length ?? "-"}</div>
+                <div className="px-3 py-2 text-right text-slate-600">{r.stopCount ?? r.stopSequence?.length ?? "-"}</div>
                 <div className="px-3 py-2 text-right text-slate-600">{r.tripCount ?? "-"}</div>
                 <div className="px-3 py-2 text-slate-600">
                   {r.depotId ? (
