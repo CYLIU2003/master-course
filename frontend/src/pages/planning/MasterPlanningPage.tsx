@@ -98,6 +98,7 @@ export function MasterPlanningPage() {
             <DepotDetailPanel
               scenarioId={scenarioId}
               depotId={selectedDepotId}
+              depotData={bootstrap.depots.find(d => d.id === selectedDepotId)}
             />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-slate-400">

@@ -2,27 +2,16 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchMaybeJson } from "@/api/client";
 import { scenarioApi } from "@/api/scenario";
-import {
-  vehicleApi,
-  vehicleTemplateApi,
-  routeApi,
-  stopApi,
-  permissionApi,
-  graphApi,
-  simulationApi,
-  optimizationApi,
-} from "@/api";
 import { scenarioKeys } from "@/hooks";
 import { useBootStore } from "@/stores/boot-store";
 import { useTabWarmStore } from "@/stores/tab-warm-store";
 import { measureAsyncStep } from "@/utils/perf/measureAsyncStep";
 
+// Boot steps reduced to minimal: context check + bootstrap only.
+// Heavy data (routes, vehicles, permissions, graph, …) is loaded on demand.
 const BOOT_STEPS = [
-  { id: "context", label: "App context 読込", weight: 5 },
-  { id: "cache", label: "Scenario cache 確認", weight: 10 },
-  { id: "master", label: "営業所 summary 読込", weight: 20 },
-  { id: "timetable", label: "時刻表 summary 構築", weight: 35 },
-  { id: "tabs", label: "タブ prewarm", weight: 30 },
+  { id: "context", label: "App context 読込", weight: 20 },
+  { id: "cache",   label: "Scenario bootstrap 読込", weight: 80 },
 ] as const;
 
 const BOOT_CACHE_KEY = "master-course:boot-manifest";
@@ -136,11 +125,12 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         },
       );
       resetWarmTabs();
-      setTabStatus("planning", "warming", "営業所 summary を準備中");
-      setTabStatus("timetable", "warming", "時刻表 summary を準備中");
-      setTabStatus("dispatch", "warming", "dispatch scope を準備中");
+      setTabStatus("planning", "warming", "bootstrap を読込中");
+      setTabStatus("timetable", "idle", "時刻表タブを開いた時に読込");
+      setTabStatus("dispatch", "idle", "dispatch 系は実行系画面で遅延読込");
       setTabStatus("explorer", "idle", "Explorer は開いた時だけ読込");
       try {
+        // Step 1: app/context — lightweight health check
         updateStep("context", {
           status: "running",
           progress: 20,
@@ -152,16 +142,19 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         if (cancelled) return;
         updateStep("context", { status: "success", progress: 100 });
 
+        // Step 2: editor-bootstrap — depots + summary only (no routes, no heavy artifacts)
         updateStep("cache", {
           status: "running",
           progress: 20,
-          detailMessage: "editor bootstrap を確認中",
+          detailMessage: "editor bootstrap (depots + summary) を読込中",
         });
-        await measureAsyncStep("boot:cache", async () => {
+        await measureAsyncStep("boot:bootstrap", async () => {
           const bootstrap = await queryClient.ensureQueryData({
             queryKey: scenarioKeys.editorBootstrap(currentScenarioId),
             queryFn: async () => scenarioApi.getEditorBootstrap(currentScenarioId),
           });
+          // Seed scenario detail and dispatch scope from bootstrap so
+          // other hooks can read them without an extra round-trip.
           queryClient.setQueryData(
             scenarioKeys.detail(currentScenarioId),
             bootstrap.scenario,
@@ -173,61 +166,14 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         });
         if (cancelled) return;
         updateStep("cache", { status: "success", progress: 100 });
-        // prewarm commonly-needed master & graph data for tabs
-        await measureAsyncStep("boot:prewarm_tabs", async () =>
-          Promise.all([
-            queryClient.ensureQueryData({
-              queryKey: ["vehicles", currentScenarioId],
-              queryFn: () => vehicleApi.list(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["vehicle-templates", currentScenarioId],
-              queryFn: () => vehicleTemplateApi.list(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["routes", currentScenarioId],
-              queryFn: () => routeApi.list(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["stops", currentScenarioId],
-              queryFn: () => stopApi.list(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["permissions", currentScenarioId, "depot-route"],
-              queryFn: () => permissionApi.getDepotRoutePermissions(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["deadhead-rules", currentScenarioId],
-              queryFn: () => scenarioApi.getDeadheadRules(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["graph", currentScenarioId, "trips-summary"],
-              queryFn: () => graphApi.getTripsSummary(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["graph", currentScenarioId, "graph-summary"],
-              queryFn: () => graphApi.getGraphSummary(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["graph", currentScenarioId, "duties-summary"],
-              queryFn: () => graphApi.getDutiesSummary(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["simulation", "capabilities"],
-              queryFn: () => simulationApi.getCapabilities(currentScenarioId),
-            }),
-            queryClient.ensureQueryData({
-              queryKey: ["optimization", "capabilities"],
-              queryFn: () => optimizationApi.getCapabilities(currentScenarioId),
-            }),
-          ]),
-        );
+
         const scenarioDetail = queryClient.getQueryData<{
           operatorId?: "tokyu" | "toei";
           feedContext?: {
             feedId?: string | null;
             snapshotId?: string | null;
             datasetId?: string | null;
+            datasetFingerprint?: string | null;
             source?: string | null;
           } | null;
         }>(scenarioKeys.detail(currentScenarioId));
@@ -239,29 +185,7 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         if (!restoreCandidate || cachedManifest?.manifestKey !== manifestKey) {
           setDisplayMode("full");
         }
-        updateStep("master", {
-          status: "success",
-          progress: 100,
-          detailMessage: "planning page で必要になった時だけ読込",
-        });
-        setTabStatus("planning", "ready", "planning page 側の query で必要データを読込");
-
-        updateStep("timetable", {
-          status: "success",
-          progress: 100,
-          detailMessage: "timetable / rules は tab open 時に遅延読込",
-        });
-        setTabStatus("timetable", "idle", "時刻表タブを開いた時に読込");
-
-        updateStep("tabs", {
-          status: "success",
-          progress: 100,
-          detailMessage: "dispatch / explorer は必要時のみ読込",
-          currentCount: 1,
-          totalCount: 1,
-        });
-        setTabStatus("dispatch", "idle", "dispatch 系は実行系画面で遅延読込");
-        setTabStatus("explorer", "ready", "Explorer は開いた時だけ読込");
+        setTabStatus("planning", "ready", "営業所を選択してください");
         complete();
         writeBootCache({
           scenarioId: currentScenarioId,
@@ -272,9 +196,9 @@ export function AppBootstrapManager({ scenarioId }: Props) {
         if (!cancelled) {
           clearBootCache();
           fail(error instanceof Error ? error.message : String(error));
-          setTabStatus("planning", "error", "起動時の先読みで失敗");
-          setTabStatus("timetable", "error", "起動時の先読みで失敗");
-          setTabStatus("dispatch", "error", "起動時の先読みで失敗");
+          setTabStatus("planning", "error", "起動時の読込で失敗");
+          setTabStatus("timetable", "error", "起動時の読込で失敗");
+          setTabStatus("dispatch", "error", "起動時の読込で失敗");
           setTabStatus("explorer", "ready", "Explorer はいつでも利用可能");
         }
       }

@@ -554,7 +554,87 @@ def _repair_missing_master_defaults(
     return repaired
 
 
+# Fields that are heavy and should NOT be loaded for lightweight operations
+# like editor-bootstrap.  These are populated on-demand by specific endpoints.
+_HEAVY_ARTIFACT_FIELDS = frozenset({
+    "timetable_rows",
+    "stop_timetables",
+    "trips",
+    "graph",
+    "blocks",
+    "duties",
+    "dispatch_plan",
+    "simulation_result",
+    "optimization_result",
+})
+
+
+def _load_shallow(
+    scenario_id: str,
+) -> Dict[str, Any]:
+    """Load only meta + master data (depots, vehicles, routes, etc.).
+
+    Does NOT load any heavy artifacts (timetable_rows, trips, graph, …).
+    Use this for editor-bootstrap and other lightweight reads.
+    """
+    if _incomplete_marker_path(scenario_id).exists() and not _complete_marker_path(scenario_id).exists():
+        raise RuntimeError(
+            f"Scenario '{scenario_id}' artifacts are incomplete. The previous save may have been interrupted."
+        )
+    doc = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, doc)
+    doc["refs"] = refs
+
+    has_inline_master = any(
+        key in doc
+        for key in (
+            "depots",
+            "vehicles",
+            "routes",
+            "stops",
+            "dispatch_scope",
+            "public_data",
+            "calendar",
+        )
+    )
+    if not has_inline_master:
+        master_payload = master_data_store.load_master_data(Path(refs["masterData"]))
+        doc.update(master_payload)
+
+    doc.setdefault("meta", {})
+    doc["meta"].setdefault("operatorId", "tokyu")
+    doc.setdefault("depots", [])
+    doc.setdefault("vehicles", [])
+    doc.setdefault("vehicle_templates", [])
+    doc.setdefault("routes", [])
+    doc.setdefault("route_depot_assignments", [])
+    doc.setdefault("depot_route_permissions", [])
+    doc.setdefault("vehicle_route_permissions", [])
+    doc.setdefault("route_import_meta", {})
+    doc.setdefault("stop_import_meta", {})
+    doc.setdefault("timetable_import_meta", {})
+    doc.setdefault("stop_timetable_import_meta", {})
+    doc.setdefault("stops", [])
+
+    # Heavy artifacts are left empty — callers must use get_field() to load them.
+    for field in _HEAVY_ARTIFACT_FIELDS:
+        doc.setdefault(field, _artifact_default(field))
+
+    doc.setdefault("calendar", _default_calendar())
+    doc.setdefault("calendar_dates", [])
+    doc.setdefault("simulation_config", None)
+    doc.setdefault("scenario_overlay", None)
+    doc.setdefault("dispatch_scope", _default_dispatch_scope())
+    doc.setdefault("public_data", _default_public_data_state())
+    _repair_missing_master_defaults(doc)
+    doc.setdefault("stats", _scenario_stats(doc))
+    for key, value in _default_v1_2_fields().items():
+        doc.setdefault(key, value)
+    return doc
+
+
 def _load(
+
     scenario_id: str,
     *,
     repair_missing_master: bool = True,
@@ -1436,8 +1516,17 @@ def get_scenario_document(
     return _load(scenario_id, repair_missing_master=repair_missing_master)
 
 
+def get_scenario_document_shallow(scenario_id: str) -> Dict[str, Any]:
+    """Lightweight load: master data only, no heavy artifacts.
+
+    Use for editor-bootstrap and other fast reads that do not need
+    timetable_rows, trips, graph, blocks, duties, or result artifacts.
+    """
+    return _load_shallow(scenario_id)
+
+
 def get_scenario(scenario_id: str) -> Dict[str, Any]:
-    return _meta_payload(_load(scenario_id))
+    return _meta_payload(_load_shallow(scenario_id))
 
 
 def update_scenario(
@@ -1509,7 +1598,51 @@ def duplicate_scenario(
 
 
 def get_field(scenario_id: str, field: str) -> Any:
-    return _load(scenario_id)[field]
+    """Return a single artifact field without loading the entire scenario doc.
+
+    For heavy artifact fields (trips, timetable_rows, graph, …) this reads
+    directly from the SQLite/Parquet artifact store instead of calling _load()
+    which would also load every other artifact.
+    """
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    artifact_db_path = _artifact_store_path(refs)
+
+    if field == "timetable_rows":
+        if trip_store.count_timetable_rows(artifact_db_path) > 0:
+            return trip_store.page_timetable_rows(artifact_db_path, offset=0, limit=None)
+        artifact_path = Path(refs["timetableRows"])
+        if artifact_path.exists():
+            return _load_json_list(artifact_path)
+        legacy = _legacy_timetable_path(scenario_id)
+        if legacy.exists():
+            return _load_json_list(legacy)
+        return []
+
+    if field in _PARQUET_ROW_ARTIFACT_FIELDS:
+        parquet_path = Path(refs[_ARTIFACT_REF_KEYS[field]])
+        if parquet_path.exists() and trip_store.count_parquet_rows(parquet_path) > 0:
+            return trip_store.load_parquet_rows(parquet_path)
+        if trip_store.count_rows(artifact_db_path, field) > 0:
+            return trip_store.load_rows(artifact_db_path, field)
+        return _artifact_default(field)
+
+    if field == "graph":
+        return _load_graph_artifact(artifact_db_path, Path(refs["graph"]))
+
+    if field in _SQLITE_ROW_ARTIFACT_FIELDS:
+        if trip_store.count_rows(artifact_db_path, field) > 0:
+            return trip_store.load_rows(artifact_db_path, field)
+        artifact_path = Path(refs[_ARTIFACT_REF_KEYS[field]])
+        if artifact_path.exists():
+            return _load_json_list(artifact_path)
+        return _artifact_default(field)
+
+    if field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
+        return trip_store.load_scalar(artifact_db_path, field, _artifact_default(field))
+
+    # For non-artifact fields, fall back to shallow load (master data only)
+    return _load_shallow(scenario_id).get(field)
 
 
 def count_field_rows(scenario_id: str, field: str) -> int:

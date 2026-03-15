@@ -829,7 +829,9 @@ def get_scenario(scenario_id: str) -> Dict[str, Any]:
 @router.get("/scenarios/{scenario_id}/editor-bootstrap")
 def get_editor_bootstrap(scenario_id: str) -> Dict[str, Any]:
     try:
-        doc = store.get_scenario_document(scenario_id)
+        # Use shallow load: skips timetable_rows, trips, graph, duties etc.
+        # Only meta + master data (depots, vehicles, routes, …) is loaded.
+        doc = store.get_scenario_document_shallow(scenario_id)
         scenario = store.get_scenario(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
@@ -838,24 +840,52 @@ def get_editor_bootstrap(scenario_id: str) -> Dict[str, Any]:
 
     dispatch_scope = store._normalize_dispatch_scope(doc)
     route_index = _depot_route_index(doc)
+
+    # Routes: return only the fields required by the SimulationBuilder and
+    # route-family grouping logic.  Heavy fields (resolvedStops, importMeta,
+    # classificationReasons, etc.) are omitted to keep the payload small.
+    _ROUTE_SLIM_KEYS = {
+        "id", "name", "routeCode", "routeLabel", "startStop", "endStop",
+        "distanceKm", "durationMin", "color", "enabled", "source",
+        "depotId", "assignmentType", "tripCount", "linkState",
+        "routeFamilyId", "routeFamilyCode", "routeFamilyLabel",
+        "routeVariantId", "routeVariantType", "canonicalDirection",
+        "isPrimaryVariant", "familySortOrder", "classificationConfidence",
+        "odptPatternId", "odptBusrouteId",
+    }
+
+    def _slim_route(route: dict) -> dict:
+        slimmed = {k: v for k, v in dict(route).items() if k in _ROUTE_SLIM_KEYS}
+        slimmed["displayName"] = _route_display_name(route)
+        return slimmed
+
+    # datasetStatus: strip heavy shard manifest to keep payload small.
+    # The full datasetStatus is available via GET /scenarios/{id} for detail views.
+    dataset_status = scenario.get("datasetStatus")
+    if isinstance(dataset_status, dict):
+        dataset_status = {
+            k: v for k, v in dataset_status.items()
+            if k not in ("shardManifest", "manifest", "paths")
+        }
+
+    # scenario object: strip heavy nested objects not needed for initial planning view
+    slim_scenario = {
+        k: v for k, v in scenario.items()
+        if k not in ("datasetStatus", "refs", "stats", "scenarioOverlay")
+    }
+
     return {
-        "scenario": scenario,
+        "scenario": slim_scenario,
         "dispatchScope": dispatch_scope,
         "depots": [dict(item) for item in doc.get("depots") or []],
-        "routes": [
-            {
-                **dict(route),
-                "displayName": _route_display_name(route),
-            }
-            for route in doc.get("routes") or []
-        ],
+        "routes": [_slim_route(r) for r in doc.get("routes") or []],
         "vehicleTemplates": [dict(item) for item in doc.get("vehicle_templates") or []],
         "depotRouteIndex": route_index,
         "depotRouteSummary": _depot_route_summary(doc, route_index, dispatch_scope),
         "availableDayTypes": _available_day_types(doc, dispatch_scope),
         "builderDefaults": _builder_defaults(doc, route_index, dispatch_scope),
         "datasetVersion": scenario.get("datasetVersion"),
-        "datasetStatus": scenario.get("datasetStatus"),
+        "datasetStatus": dataset_status,
         "warning": (scenario.get("datasetStatus") or {}).get("warning"),
     }
 

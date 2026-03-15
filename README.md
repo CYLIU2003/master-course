@@ -49,7 +49,8 @@ This repository is a research system for Tokyu Bus depot-level case studies, pri
 * [開発者向け / Development Reference / 开发参考](#開発者向け--development-reference--开发参考)
 * [ディレクトリ構成 / Directory Structure / 目录结构](#ディレクトリ構成--directory-structure--目录结构)
 * [ブランチ方針 / Branch Policy / 分支策略](#ブランチ方針--branch-policy--分支策略)
-* [ライセンス / License / 许可证](#ライセンス--license--许可证)
+* [ライセンス / License / 许可证](#ライセンス--license--许可証)
+* [データファイル構成 / USB 転送ガイド](#データファイル構成--usb-転送ガイド)
 
 ---
 
@@ -759,3 +760,166 @@ master-course/
 > 現時点では、このリポジトリに独立したライセンスファイルは含まれていません。
 > 维护者未明确发布许可证前，请将其视为 **作者保留权利的研究代码**。
 > No standalone license file is currently included. Unless the maintainers publish one explicitly, treat this codebase as **author-retained research code rather than a general open-source release**.
+
+---
+
+## データファイル構成 / USB 転送ガイド
+
+別 PC で作業を続けるためのデータ移送手順と、システムが実際にアクセスするファイルの一覧です。
+
+---
+
+### 1. ランタイムが実際にアクセスするファイル
+
+#### 必須（軽量・Git 管理外 `data/built/`）
+
+| ファイル | サイズ | 説明 |
+| --- | --- | --- |
+| `data/built/tokyu_core/manifest.json` | ~1 KB | ビルド来歴・契約バージョン |
+| `data/built/tokyu_core/routes.parquet` | ~27 KB | 正規化済み路線一覧（43 route codes） |
+| `data/built/tokyu_core/trips.parquet` | ~248 KB | trip 一覧 |
+| `data/built/tokyu_core/timetables.parquet` | ~248 KB | timetable-level trip rows |
+| `data/built/tokyu_core/stops.parquet` | ~31 KB | 停留所マスタ |
+| `data/built/tokyu_core/stop_timetables.parquet` | ~1.2 MB | 停留所時刻表 |
+| `data/built/tokyu_full/` | ~9 MB | 同上・全 12 営業所スコープ版 |
+
+> `data/built/` は `.gitignore` 対象。`data-prep` で再生成するか、そのまま USB にコピーする。
+
+#### 必須（Git 管理済み seed・常に存在）
+
+| ファイル | サイズ | 説明 |
+| --- | --- | --- |
+| `data/seed/tokyu/depots.json` | ~5 KB | 12 営業所マスタ |
+| `data/seed/tokyu/route_to_depot.csv` | ~8 KB | 系統→営業所対応表 |
+| `data/seed/tokyu/datasets/tokyu_core.json` | ~6 KB | 4 営業所コアスコープ定義 |
+| `data/seed/tokyu/datasets/tokyu_full.json` | ~14 KB | 全営業所スコープ定義 |
+| `data/vehicle_catalog.json` | ~8 KB | BEV / ICE 車両テンプレート seed |
+
+#### 運用マスタ（Git 管理済み）
+
+| ディレクトリ | サイズ | 説明 |
+| --- | --- | --- |
+| `data/operations/` | ~2 KB | deadhead / turnaround / 車両 / 勤務スケジュール CSV |
+| `data/fleet/` | ~6 KB | 車両型式・duty 定義 CSV |
+| `data/infra/` | ~1 KB | 充電器・営業所・電力 CSV |
+| `data/external/` | ~2 KB | 運賃・交通量・気象時系列 CSV |
+| `data/route_master/` | ~47 KB | 路線・停留所・サービスカレンダー CSV |
+| `data/cases/` | ~156 KB | ケーススタディ入力 JSON |
+| `config/` | ~60 KB | runtime_paths.json・solver 設定 JSON |
+| `constant/` | ~353 KB | 定数定義（読み取り専用） |
+
+#### カタログ DB（Git 管理外・大容量）
+
+| ファイル | サイズ | 生成元スクリプト | 説明 |
+| --- | --- | --- | --- |
+| `data/odpt_tokyu.db` | **969 MB** | `scripts/build_tokyu_full_db.py` | Tokyu Bus ODPT フルカタログ（routes / stops / timetables / trips） |
+| `data/gtfs_toei.db` | **786 MB** | `catalog_update_app.py refresh gtfs` | Toei Bus GTFS カタログ |
+| `data/tokyu_gtfs.sqlite` | **343 MB** | `scripts/build_tokyu_gtfs_db.py` | Tokyu Bus GTFS 形式 SQLite |
+| `data/tokyu_core_gtfs.sqlite` | **110 MB** | `scripts/build_tokyu_gtfs_db.py` | Tokyu core サブセット SQLite |
+| `outputs/transit_catalog.sqlite` | **590 MB** | `catalog_update_app.py refresh odpt` | 共有カタログ DB（cross-operator） |
+
+> `CATALOG_BACKEND=local_sqlite` 時は `data/tokyu_full.sqlite`（実体は `tokyu_gtfs.sqlite` と同等）を BFF が直接参照する。
+
+#### シナリオ結果（Git 管理外・NAS 管理推奨）
+
+| ディレクトリ | サイズ | 説明 |
+| --- | --- | --- |
+| `outputs/scenarios/` | **~2.7 GB**（84 シナリオ） | ソルバー実行結果（artifacts.sqlite / master_data.sqlite / *.parquet） |
+
+> ソルバー結果は再実行で再生成可能。別 PC への転送は不要だが、論文で使用したシナリオは **NAS** に保管して UUID で管理することを推奨。
+
+---
+
+### 2. データ生成ツール一覧
+
+| スクリプト | 出力先 | 説明 |
+| --- | --- | --- |
+| `scripts/build_tokyu_full_db.py` | `data/odpt_tokyu.db` | ODPT API から Tokyu Bus フルカタログを取得して SQLite に書き込む |
+| `scripts/build_tokyu_gtfs_db.py` | `data/tokyu_gtfs.sqlite` / `tokyu_core_gtfs.sqlite` | `GTFS/TokyuBus-GTFS/` から GTFS 形式 SQLite を構築する |
+| `scripts/export_tokyu_sqlite_to_built.py` | `data/built/<dataset>/*.parquet` | SQLite → Parquet へエクスポートする（built データの再生成） |
+| `data-prep/pipeline/build_all.py` | `data/built/<dataset>/*.parquet` | ODPT fetch → 正規化 → Parquet 書き出しを一括実行する |
+| `catalog_update_app.py refresh odpt` | `data/odpt_tokyu.db` + `outputs/transit_catalog.sqlite` | Tokyu ODPT データを取得してカタログ DB を更新する |
+| `catalog_update_app.py refresh gtfs` | `data/gtfs_toei.db` | `GTFS/ToeiBus-GTFS/` を取り込んで Toei DB を更新する |
+| `catalog_update_app.py refresh gtfs-pipeline` | `data/tokyubus/{raw,canonical,features}/` | 4 層 GTFS パイプラインを実行する |
+| `scripts/build_tokyu_subset_db.py` | `data/tokyu_subset_*.sqlite` | 営業所スコープを絞ったサブセット DB を生成する（テスト用） |
+
+---
+
+### 3. USB 転送手順（別 PC で即起動するための最小セット）
+
+以下のファイルを USB にコピーすることで、別 PC でもメインアプリを起動できます。
+
+```text
+[必須・軽量]
+data/built/               ← ~10 MB（Parquet 群）
+data/seed/                ← ~41 KB（Git 管理済みだが念のため）
+data/operations/          ← ~2 KB
+data/fleet/               ← ~6 KB
+data/infra/               ← ~1 KB
+data/external/            ← ~2 KB
+data/route_master/        ← ~47 KB
+data/cases/               ← ~156 KB
+data/vehicle_catalog.json ← ~8 KB
+config/                   ← ~60 KB
+constant/                 ← ~353 KB
+GTFS/                     ← GTFS feed（TokyuBus / ToeiBus）
+.env                      ← ODPT_CONSUMER_KEY（キーが必要な場合）
+
+[カタログ DB・大容量だが転送推奨]
+data/odpt_tokyu.db          969 MB
+data/gtfs_toei.db           786 MB
+data/tokyu_gtfs.sqlite      343 MB
+data/tokyu_core_gtfs.sqlite 110 MB
+outputs/transit_catalog.sqlite  590 MB
+```
+
+**除外してよいもの（再生成可能・またはキャッシュ）**
+
+```text
+data/cache/               ← ODPT HTTP キャッシュ（再フェッチで再生成）
+data/odpt_subset_cache/   ← 同上
+data/catalog-fast/        ← 中間キャッシュ
+data/tokyubus/            ← 4 層パイプライン中間成果物（再実行で再生成）
+data/gtfs_sqlite_export_test/ ← テスト用エクスポート
+outputs/scenarios/        ← NAS に別途保管（→ 後述）
+outputs/transit_catalog.sqlite ← 上記リストに含める場合は転送不要
+```
+
+**別 PC での起動手順**
+
+```bash
+# 1. Python / Node.js 依存をインストール
+python -m pip install -r requirements.txt
+cd frontend && npm install && cd ..
+
+# 2. .env を配置（ODPT_CONSUMER_KEY が必要な場合）
+# CATALOG_BACKEND=local_sqlite
+# TOKYU_DB_PATH=data/tokyu_gtfs.sqlite   ← USB からコピーした DB を指定
+# ODPT_CONSUMER_KEY=<your_key>
+
+# 3. built データが無い場合は再生成
+python -m data_prep.pipeline.build_all --dataset tokyu_core --no-fetch
+
+# 4. バックエンド起動
+uvicorn bff.main:app --reload --port 8000
+
+# 5. フロントエンド起動
+cd frontend && npm run dev
+```
+
+---
+
+### 4. outputs/scenarios/ の NAS 管理について
+
+`outputs/scenarios/` は 84 シナリオ・合計 **約 2.7 GB**（2026-03 時点）になっています。
+各ディレクトリは UUID で管理されており、ソルバー実行ごとに増加します。
+
+**NAS 移動時の注意点**
+
+- シナリオ UUID は `outputs/app_context.json` と BFF のジョブ管理で参照されているため、
+  UUID ディレクトリ名はそのまま保持する。
+- NAS にコピー後も `outputs/scenarios/<uuid>/` のパス構造を維持すること。
+- 論文で使用したシナリオは UUID と実験条件（`outputs/experiments/<uuid>/` の JSON/Markdown）を
+  セットで NAS に保存し、再現性を確保すること。
+- BFF が参照するパスは `config/runtime_paths.json` で変更可能。
+  NAS マウントポイントを `outputs/` の代わりに指定すれば、移行後もアプリを再起動するだけで動く。

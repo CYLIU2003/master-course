@@ -413,7 +413,20 @@ def _run_optimization(
         ):
             _rebuild_dispatch_artifacts(scenario_id, service_id, depot_id)
 
-        scenario = store._load(scenario_id)
+        # Use shallow load for base doc (avoids loading graph 100K+ arcs, etc.)
+        # then overlay the specific artifact fields needed for optimization.
+        scenario = store.get_scenario_document_shallow(scenario_id)
+        scenario["trips"] = store.get_field(scenario_id, "trips") or []
+        scenario["duties"] = store.get_field(scenario_id, "duties") or []
+        scenario["blocks"] = store.get_field(scenario_id, "blocks") or []
+        scenario["timetable_rows"] = store.get_field(scenario_id, "timetable_rows") or []
+        # graph summary only (arc count) - full arcs are not needed for optimization
+        graph_meta = store.get_field(scenario_id, "graph")
+        if isinstance(graph_meta, dict):
+            scenario["graph"] = {k: v for k, v in graph_meta.items() if k != "arcs"}
+            scenario["graph"]["arcs"] = []
+        else:
+            scenario["graph"] = None
         feed_context = _scenario_feed_context(scenario_id)
         job_store.update_job(
             job_id,

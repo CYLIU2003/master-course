@@ -543,8 +543,28 @@ def test_simulation_and_optimization_both_use_run_preparation_service():
 
 
 def test_app_bootstrap_manager_prewarms_setup_and_execute_tabs():
+    """AppBootstrapManager must use editor-bootstrap for initial load.
+
+    The boot sequence must NOT prewarm heavy data (vehicles, routes, stops,
+    permissions, graph, …) at startup.  All heavy data is loaded on-demand
+    after the user selects a depot or opens a specific tab.
+
+    The ONLY required API calls at boot are:
+      1. /api/app/context  (health check / session)
+      2. /scenarios/{id}/editor-bootstrap  (depots + summary, no heavy artifacts)
+    """
     source = pathlib.Path("frontend/src/app/AppBootstrapManager.tsx").read_text(encoding="utf-8")
-    required_tokens = [
+
+    # Must use bootstrap
+    assert "getEditorBootstrap" in source, (
+        "AppBootstrapManager must call scenarioApi.getEditorBootstrap for initial load."
+    )
+    assert "editorBootstrap" in source, (
+        "AppBootstrapManager must reference scenarioKeys.editorBootstrap."
+    )
+
+    # Must NOT bulk-prewarm heavy data at boot time
+    forbidden_tokens = [
         "vehicleApi.list",
         "vehicleTemplateApi.list",
         "routeApi.list",
@@ -557,9 +577,10 @@ def test_app_bootstrap_manager_prewarms_setup_and_execute_tabs():
         "simulationApi.getCapabilities",
         "optimizationApi.getCapabilities",
     ]
-    for token in required_tokens:
-        assert token in source, (
-            f"AppBootstrapManager must prewarm setup/execute data and reference '{token}'."
+    for token in forbidden_tokens:
+        assert token not in source, (
+            f"AppBootstrapManager must NOT prewarm '{token}' at boot. "
+            "Heavy data must be loaded on-demand after depot selection."
         )
 
 

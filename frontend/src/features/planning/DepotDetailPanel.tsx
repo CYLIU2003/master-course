@@ -1,13 +1,21 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useDepot } from "@/hooks";
-import { LoadingBlock, ErrorBlock, EmptyState } from "@/features/common";
-import { VehicleTable } from "./VehicleTable";
-import { DepotRouteMatrix } from "./DepotRouteMatrix";
+import { Suspense, lazy } from "react";
+import { LoadingBlock, EmptyState } from "@/features/common";
+import type { Depot } from "@/types";
+
+// Lazy load heavy components
+const VehicleTable = lazy(() => 
+  import("./VehicleTable").then(m => ({ default: m.VehicleTable }))
+);
+const DepotRouteMatrix = lazy(() =>
+  import("./DepotRouteMatrix").then(m => ({ default: m.DepotRouteMatrix }))
+);
 
 interface DepotDetailPanelProps {
   scenarioId: string;
   depotId: string;
+  depotData?: Depot;
 }
 
 type DetailSection = "info" | "vehicles" | "routes";
@@ -15,14 +23,17 @@ type DetailSection = "info" | "vehicles" | "routes";
 export function DepotDetailPanel({
   scenarioId,
   depotId,
+  depotData,
 }: DepotDetailPanelProps) {
   const { t } = useTranslation();
-  const [activeSection, setActiveSection] = useState<DetailSection>("vehicles");
-  const { data: depot, isLoading, error } = useDepot(scenarioId, depotId);
+  const [activeSection, setActiveSection] = useState<DetailSection>("info");
 
-  if (isLoading) return <LoadingBlock message={t("depots.loading")} />;
-  if (error) return <ErrorBlock message={error.message} />;
-  if (!depot) return <EmptyState title={t("depots.not_found")} />;
+  // Use provided depot data from bootstrap; if not available, show placeholder
+  const depot = depotData;
+
+  if (!depot) {
+    return <EmptyState title={t("depots.not_found")} />;
+  }
 
   const tabs: { key: DetailSection; label: string }[] = [
     { key: "info", label: t("depots.tab_info") },
@@ -65,10 +76,14 @@ export function DepotDetailPanel({
           />
         )}
         {activeSection === "vehicles" && (
-          <VehicleTable scenarioId={scenarioId} depotId={depotId} />
+          <Suspense fallback={<LoadingBlock message={t("depots.loading")} />}>
+            <VehicleTable scenarioId={scenarioId} depotId={depotId} />
+          </Suspense>
         )}
         {activeSection === "routes" && (
-          <DepotRouteMatrix scenarioId={scenarioId} depotId={depotId} />
+          <Suspense fallback={<LoadingBlock message={t("depots.loading")} />}>
+            <DepotRouteMatrix scenarioId={scenarioId} depotId={depotId} />
+          </Suspense>
         )}
       </div>
     </div>
@@ -80,7 +95,7 @@ export function DepotDetailPanel({
 function DepotInfoSection({
   depot,
 }: {
-  depot: NonNullable<ReturnType<typeof useDepot>["data"]>;
+  depot: Depot;
 }) {
   const { t } = useTranslation();
 

@@ -376,7 +376,7 @@ def _build_dispatch_context(
         str(route.get("id")): route for route in store.list_routes(scenario_id)
     }
     if not raw_trips or not timetable_rows:
-        scenario_doc = store.get_scenario_document(scenario_id)
+        scenario_doc = store.get_scenario_document_shallow(scenario_id)
         feed_context = dict(scenario_doc.get("feed_context") or {})
         overlay = dict(scenario_doc.get("scenario_overlay") or {})
         dataset_id = str(
