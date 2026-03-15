@@ -13,10 +13,10 @@ const STORAGE_KEY = "ev-bus-lang";
 
 const savedLang = localStorage.getItem(STORAGE_KEY);
 const detectedLang =
-  savedLang ?? navigator.language.split("-")[0] ?? "en";
+  savedLang ?? navigator.language.split("-")[0] ?? "ja";
 const initialLang = ["en", "ja", "zh"].includes(detectedLang)
   ? detectedLang
-  : "en";
+  : "ja";
 
 const loadedLanguages = new Set<string>();
 
@@ -45,7 +45,7 @@ const loadLanguage = async (lang: string) => {
 i18n.use(initReactI18next).init({
   resources: {},
   lng: initialLang,
-  fallbackLng: "en",
+  fallbackLng: "ja",
   interpolation: {
     escapeValue: false,
   },

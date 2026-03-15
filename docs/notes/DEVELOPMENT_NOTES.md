@@ -39,6 +39,57 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-15] Scenario 一覧で dataset 表示名と複数削除を追加
+
+- **目的**:
+  - `Tokyu Bus Research Cases` 画面で dataset ID だけでは判別しにくいため、
+    人間向けの表示名を追加して選択しやすくする。
+  - scenario 運用時に不要ケースをまとめて整理できるよう、複数同時削除を可能にする。
+
+- **対応** (`frontend/src/pages/scenario/ScenarioListPage.tsx`):
+  - Dataset カードに `datasetDisplayName` を導入。
+    - 例: `tokyu_core` → `Tokyu Core (4 depots)`
+    - 例: `tokyu_full` → `Tokyu Full (all depots)`
+    - 生ID (`datasetId`) も副表示として残し、技術的識別子も確認可能にした。
+  - Create 時の scenario 名も dataset ごとに自然なタイトルへ調整。
+  - Scenario 一覧に選択チェックボックスを追加。
+  - 上部に bulk action bar を追加:
+    - `Select all`
+    - `Clear selected`
+    - `Delete selected`
+  - 複数削除は `Promise.allSettled` で並列実行し、失敗IDのみ選択を維持して再試行しやすくした。
+
+- **性能配慮**:
+  - 選択状態は ID 配列 + `Set` (`useMemo`) で管理し、行単位の `includes` 連発を回避。
+  - 複数削除はネットワークI/Oを並列化し、一覧再取得は最後に 1 回の invalidate のみ。
+  - 追加した表示名マップは dataset 一覧から `useMemo` で計算。
+
+### [DEV-2026-03-15] Scenario 一覧でシナリオ表示名編集と初期日本語化
+
+- **要望反映**:
+  - 「複数削除」だけでなく、Scenario 一覧で **シナリオ表示名を編集可能** にした。
+  - `Tokyu Bus Research Cases` 画面の初期表示文言を日本語優先に変更。
+
+- **対応**:
+  - `frontend/src/pages/scenario/ScenarioListPage.tsx`
+    - 各 scenario 行に `表示名を編集` ボタンを追加。
+    - 上部に rename editor を表示し、`scenarioApi.update(id, { name })` で保存。
+    - 保存後は scenario query を invalidate して一覧へ即反映。
+    - 入力が空のときは保存不可。
+  - `frontend/src/i18n/index.ts`
+    - 初期言語フォールバックを `ja` に変更（保存済み言語がない場合に日本語で起動）。
+    - `fallbackLng` も `ja` に設定。
+  - `frontend/src/pages/scenario/ScenarioListPage.tsx`
+    - 見出し/サブテキストを日本語化:
+      - `東急バス研究ケース`
+      - `Step 1: 事前に用意した Tokyu dataset を選択し、シナリオを作成または開きます。`
+
+- **確認**:
+  - `npx eslint "src/pages/scenario/ScenarioListPage.tsx" "src/i18n/index.ts"`
+  - `npm run build`
+  - いずれも成功。
+
+
 ### [DEV-2026-03-15] Scenario builder に ParamEditor 風クイック導線を統合（最適化実行まで短縮）
 
 - **目的**:
