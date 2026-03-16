@@ -9,6 +9,7 @@ import {
   PageSection,
 } from "@/features/common";
 import { ScenarioQuickParamGuide } from "@/features/planning";
+import { getCanonicalDirectionLabel } from "@/features/planning/route-family-display";
 import {
   useDeleteScenario,
   useEditorBootstrap,
@@ -585,9 +586,11 @@ export function ScenarioOverviewPage() {
                                 ? "bg-blue-100 text-blue-700"
                                 : route.canonicalDirection === "inbound"
                                 ? "bg-purple-100 text-purple-700"
+                                : route.canonicalDirection === "circular"
+                                ? "bg-emerald-100 text-emerald-700"
                                 : "bg-slate-100 text-slate-500"
                             }`}>
-                              {route.canonicalDirection === "outbound" ? "↗ 上り" : "↙ 下り"}
+                              {getCanonicalDirectionLabel(route.canonicalDirection)}
                             </span>
                           )}
                           {route.routeVariantType && route.routeVariantType !== "unknown" && route.routeVariantType !== "main" && (

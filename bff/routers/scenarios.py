@@ -351,6 +351,15 @@ class UpdateQuickSetupBody(BaseModel):
     timeLimitSeconds: Optional[int] = None
     mipGap: Optional[float] = None
     alnsIterations: Optional[int] = None
+    allowPartialService: Optional[bool] = None
+    unservedPenalty: Optional[float] = None
+    gridFlatPricePerKwh: Optional[float] = None
+    gridSellPricePerKwh: Optional[float] = None
+    demandChargeCostPerKw: Optional[float] = None
+    dieselPricePerL: Optional[float] = None
+    gridCo2KgPerKwh: Optional[float] = None
+    co2PricePerKg: Optional[float] = None
+    depotPowerLimitKw: Optional[float] = None
 
 
 class TimetableRowBody(BaseModel):
@@ -909,6 +918,15 @@ def _build_quick_setup_payload(
             "chargerCount": int(builder_defaults.get("chargerCount") or 0),
             "chargerPowerKw": float(builder_defaults.get("chargerPowerKw") or 0.0),
             "includeDeadhead": bool(builder_defaults.get("includeDeadhead", True)),
+            "gridFlatPricePerKwh": builder_defaults.get("gridFlatPricePerKwh"),
+            "gridSellPricePerKwh": builder_defaults.get("gridSellPricePerKwh"),
+            "demandChargeCostPerKw": builder_defaults.get("demandChargeCostPerKw"),
+            "dieselPricePerL": builder_defaults.get("dieselPricePerL"),
+            "gridCo2KgPerKwh": builder_defaults.get("gridCo2KgPerKwh"),
+            "co2PricePerKg": builder_defaults.get("co2PricePerKg"),
+            "depotPowerLimitKw": builder_defaults.get("depotPowerLimitKw"),
+            "allowPartialService": bool(builder_defaults.get("allowPartialService", False)),
+            "unservedPenalty": float(builder_defaults.get("unservedPenalty") or 10000.0),
         },
     }
 
@@ -1244,8 +1262,36 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["mip_gap"] = float(body.mipGap)
         if body.alnsIterations is not None:
             solver_config["alns_iterations"] = int(body.alnsIterations)
+        if body.allowPartialService is not None:
+            solver_config["allow_partial_service"] = bool(body.allowPartialService)
+        if body.unservedPenalty is not None:
+            solver_config["unserved_penalty"] = float(body.unservedPenalty)
+
+        overlay_cost = dict(overlay.get("cost_coefficients") or {})
+        if body.gridFlatPricePerKwh is not None:
+            overlay_cost["grid_flat_price_per_kwh"] = float(body.gridFlatPricePerKwh)
+        if body.gridSellPricePerKwh is not None:
+            overlay_cost["grid_sell_price_per_kwh"] = float(body.gridSellPricePerKwh)
+        if body.demandChargeCostPerKw is not None:
+            overlay_cost["demand_charge_cost_per_kw"] = float(body.demandChargeCostPerKw)
+        if body.dieselPricePerL is not None:
+            overlay_cost["diesel_price_per_l"] = float(body.dieselPricePerL)
+        if body.gridCo2KgPerKwh is not None:
+            overlay_cost["grid_co2_kg_per_kwh"] = float(body.gridCo2KgPerKwh)
+        if body.co2PricePerKg is not None:
+            overlay_cost["co2_price_per_kg"] = float(body.co2PricePerKg)
+
+        overlay_charging = dict(overlay.get("charging_constraints") or {})
+        if body.depotPowerLimitKw is not None:
+            overlay_charging["depot_power_limit_kw"] = float(body.depotPowerLimitKw)
+
         if solver_config:
             overlay["solver_config"] = solver_config
+        if overlay_cost:
+            overlay["cost_coefficients"] = overlay_cost
+        if overlay_charging:
+            overlay["charging_constraints"] = overlay_charging
+        if solver_config or overlay_cost or overlay_charging:
             store.set_scenario_overlay(scenario_id, overlay)
 
         simulation_config = store.get_field(scenario_id, "simulation_config") or {}
@@ -1253,6 +1299,18 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config = {}
         if body.serviceDate is not None:
             simulation_config["service_date"] = body.serviceDate
+        if body.objectiveMode is not None:
+            simulation_config["objective_mode"] = body.objectiveMode
+        if body.timeLimitSeconds is not None:
+            simulation_config["time_limit_seconds"] = int(body.timeLimitSeconds)
+        if body.mipGap is not None:
+            simulation_config["mip_gap"] = float(body.mipGap)
+        if body.alnsIterations is not None:
+            simulation_config["alns_iterations"] = int(body.alnsIterations)
+        if body.allowPartialService is not None:
+            simulation_config["allow_partial_service"] = bool(body.allowPartialService)
+        if body.unservedPenalty is not None:
+            simulation_config["unserved_penalty"] = float(body.unservedPenalty)
         if simulation_config:
             store.set_field(scenario_id, "simulation_config", simulation_config)
 
@@ -1597,12 +1655,17 @@ def import_timetable_csv(scenario_id: str, body: ImportCsvBody) -> Dict[str, Any
         try:
             avt_raw = raw.get("allowed_vehicle_types", "BEV;ICE").strip()
             avt = [v.strip() for v in avt_raw.replace(",", ";").split(";") if v.strip()]
+            direction = _normalize_direction(raw.get("direction", "outbound").strip() or "outbound")
             row: Dict[str, Any] = {
                 "route_id": raw.get("route_id", "").strip(),
                 "service_id": raw.get("service_id", "WEEKDAY").strip() or "WEEKDAY",
-                "direction": raw.get("direction", "outbound").strip() or "outbound",
-                "canonicalDirection": raw.get("canonicalDirection", raw.get("canonical_direction", "")).strip() or None,
-                "routeVariantType": raw.get("routeVariantType", raw.get("route_variant_type", "")).strip() or None,
+                "direction": direction,
+                "canonicalDirection": _normalize_direction(
+                    raw.get("canonicalDirection", raw.get("canonical_direction", "")).strip() or direction
+                ),
+                "routeVariantType": _normalize_variant_type(
+                    raw.get("routeVariantType", raw.get("route_variant_type", "")).strip() or "unknown"
+                ),
                 "trip_index": i - 2,
                 "origin": raw.get("origin", raw.get("from_stop_id", "")).strip(),
                 "destination": raw.get(

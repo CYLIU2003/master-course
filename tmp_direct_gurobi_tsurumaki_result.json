@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-03-16T18:44:22.582624",
+  "scenario_id": "41c6872a-717a-4357-81b0-87f5812bf06d",
+  "depot_id": "tsurumaki",
+  "service_id": "WEEKDAY",
+  "vehicles": 160,
+  "tasks": 1204,
+  "status": "OPTIMAL",
+  "objective_value": 4995.211111111109,
+  "solve_time_sec": 26.399607600003947,
+  "mip_gap": 0.0,
+  "unserved_tasks": 0,
+  "infeasibility_info": "",
+  "dispatch_warnings": []
+}

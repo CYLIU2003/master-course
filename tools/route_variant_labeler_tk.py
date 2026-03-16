@@ -37,6 +37,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 import re
 import sys
+import unicodedata
 from typing import Any
 from tkinter import BOTH, END, HORIZONTAL, LEFT, RIGHT, VERTICAL, X, Y, BooleanVar, Scrollbar, StringVar, Tk, messagebox, filedialog
 from tkinter import ttk
@@ -53,6 +54,18 @@ except ModuleNotFoundError:
 DIRECTION_CHOICES = ["上り", "下り", "循環線"]
 ROUTE_VARIANT_CHOICES = ["本線", "区間便", "入出庫便"]
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_ROUTE_TO_DEPOT_CANDIDATES = (
+    _REPO_ROOT / "tokyu_bus_route_to_depot_full.csv",
+    _REPO_ROOT / "tokyu_bus_route_to_depot.csv",
+    _REPO_ROOT / "data" / "seed" / "tokyu" / "route_to_depot.csv",
+)
+_DEPOT_MASTER_CANDIDATES = (
+    _REPO_ROOT / "tokyu_bus_depots_master_full.json",
+    _REPO_ROOT / "tokyu_bus_depots_master.json",
+    _REPO_ROOT / "data" / "seed" / "tokyu" / "depots.json",
+)
+
 
 @dataclass
 class RouteLabelRow:
@@ -66,6 +79,8 @@ class RouteLabelRow:
     route_family_code: str
     route_family_label: str
     route_name: str
+    depot_id: str
+    depot_name: str
     route_variant_id: str
     direction: str
     canonicalDirection: str
@@ -92,8 +107,64 @@ class LabelerApp:
         self.keys: list[str] = []
         self.key_depot: dict[str, str] = {}
         self.skipped_missing_operator_count: int = 0
+        self.depot_names_by_code: dict[str, str] = {}
+        self.known_depot_labels: set[str] = set()
+        self.depot_id_by_name: dict[str, str] = {}
+        self.depot_name_by_id: dict[str, str] = {}
+
+        self._load_authority_depot_maps()
 
         self._build_ui()
+
+    @staticmethod
+    def _normalize_code(text: str) -> str:
+        return unicodedata.normalize("NFKC", str(text or "").strip())
+
+    @staticmethod
+    def _first_existing_path(candidates: tuple[Path, ...]) -> Path | None:
+        for path in candidates:
+            if path.exists():
+                return path
+        return None
+
+    def _load_authority_depot_maps(self) -> None:
+        route_map_path = self._first_existing_path(_ROUTE_TO_DEPOT_CANDIDATES)
+        if route_map_path:
+            try:
+                with route_map_path.open("r", encoding="utf-8-sig", newline="") as f:
+                    for row in csv.DictReader(f):
+                        route_code = self._normalize_code(row.get("route_code") or "")
+                        depot_id = str(row.get("depot_id") or "").strip()
+                        depot_name = str(row.get("depot_name") or "").strip()
+                        service_type = str(row.get("service_type") or "").strip().lower()
+                        if not route_code or not depot_name:
+                            continue
+                        if service_type and service_type != "route_code":
+                            continue
+                        self.depot_names_by_code.setdefault(route_code, depot_name)
+                        self.known_depot_labels.add(depot_name)
+                        if depot_id:
+                            self.depot_id_by_name.setdefault(depot_name, depot_id)
+                            self.depot_name_by_id.setdefault(depot_id, depot_name)
+            except Exception:
+                pass
+
+        depot_master_path = self._first_existing_path(_DEPOT_MASTER_CANDIDATES)
+        if depot_master_path:
+            try:
+                payload = json.loads(depot_master_path.read_text(encoding="utf-8"))
+                for depot in payload.get("depots") or []:
+                    if not isinstance(depot, dict):
+                        continue
+                    name = str(depot.get("name") or "").strip()
+                    depot_id = str(depot.get("depot_id") or depot.get("depotId") or depot.get("id") or "").strip()
+                    if name:
+                        self.known_depot_labels.add(name)
+                        if depot_id:
+                            self.depot_id_by_name.setdefault(name, depot_id)
+                            self.depot_name_by_id.setdefault(depot_id, name)
+            except Exception:
+                pass
 
     def _build_ui(self) -> None:
         top = ttk.Frame(self.root, padding=8)
@@ -199,6 +270,7 @@ class LabelerApp:
         self.route_id_var = StringVar(value="")
         self.route_code_var = StringVar(value="")
         self.route_name_var = StringVar(value="")
+        self.depot_var = StringVar(value="")
         self.variant_id_var = StringVar(value="")
         self.direction_var = StringVar(value="上り")
         self.variant_var = StringVar(value="本線")
@@ -213,6 +285,10 @@ class LabelerApp:
         self._add_readonly(form, row, "routeSeriesCode (系統)", self.series_code_var); row += 1
         self._add_readonly(form, row, "route_code", self.route_code_var); row += 1
         self._add_readonly(form, row, "route_name", self.route_name_var); row += 1
+        ttk.Label(form, text="depot (営業所)").grid(row=row, column=0, sticky="w", pady=4)
+        self.depot_combo = ttk.Combobox(form, textvariable=self.depot_var, values=[], state="readonly")
+        self.depot_combo.grid(row=row, column=1, sticky="ew", pady=4)
+        row += 1
         self._add_readonly(form, row, "routeVariantId", self.variant_id_var); row += 1
 
         ttk.Label(form, text="direction / canonicalDirection (方向)").grid(row=row, column=0, sticky="w", pady=4)
@@ -311,6 +387,16 @@ class LabelerApp:
         return "本線"
 
     def _extract_depot_label(self, row: dict[str, Any], operator_id: str) -> str:
+        depot_name = self._pick(
+            row,
+            "depot_name",
+            "depotName",
+            "depot_label",
+            default="",
+        )
+        if depot_name:
+            return depot_name
+
         depot = self._pick(
             row,
             "depot_id",
@@ -324,7 +410,7 @@ class LabelerApp:
             default="",
         )
         if depot:
-            return depot
+            return self.depot_name_by_id.get(depot, depot)
 
         for stop_key in ("startStop", "start_stop", "origin", "endStop", "end_stop", "destination"):
             stop_name = self._pick(row, stop_key, default="")
@@ -337,9 +423,34 @@ class LabelerApp:
             if match:
                 return match.group(1)
 
+        route_code = self._normalize_code(self._pick(row, "route_code", "routeCode", default=""))
+        if route_code:
+            mapped = self.depot_names_by_code.get(route_code)
+            if mapped:
+                return mapped
+
         if operator_id:
             return f"{operator_id}:未設定営業所"
         return "未設定営業所"
+
+    def _extract_depot_id(self, row: dict[str, Any]) -> str:
+        depot_id = self._pick(
+            row,
+            "depot_id",
+            "depotId",
+            "homeDepotId",
+            "home_depot_id",
+            default="",
+        )
+        if depot_id:
+            return depot_id
+
+        route_code = self._normalize_code(self._pick(row, "route_code", "routeCode", default=""))
+        if route_code:
+            mapped_name = self.depot_names_by_code.get(route_code)
+            if mapped_name:
+                return self.depot_id_by_name.get(mapped_name, "")
+        return ""
 
     def _on_depot_filter_changed(self, _event=None) -> None:
         self.refresh_tree()
@@ -419,6 +530,10 @@ class LabelerApp:
                 "odpt_pattern_id",
                 default="",
             )
+            depot_id = self._extract_depot_id(row)
+            depot_name = self._extract_depot_label(row, operator_id)
+            if depot_id and (not depot_name or "未設定営業所" in depot_name):
+                depot_name = self.depot_name_by_id.get(depot_id, depot_name)
             direction = self._normalize_direction(
                 self._pick(row, "direction", "canonicalDirection", "canonical_direction", default="")
             )
@@ -453,6 +568,8 @@ class LabelerApp:
                 route_family_code=route_series_code or route_code,
                 route_family_label=route_series_code or route_name or route_code,
                 route_name=route_name,
+                depot_id=depot_id,
+                depot_name=depot_name,
                 route_variant_id=route_variant_id,
                 direction=direction,
                 canonicalDirection=direction,
@@ -467,11 +584,13 @@ class LabelerApp:
             )
             self.labels[key] = label
             self.keys.append(key)
-            self.key_depot[key] = self._extract_depot_label(row, operator_id)
+            self.key_depot[key] = label.depot_name
 
         self.keys = self._sorted_keys()
         depot_values = sorted({value for value in self.key_depot.values() if value})
+        depot_values = sorted(set(depot_values).union(self.known_depot_labels))
         self.depot_filter_combo.configure(values=["all", *depot_values])
+        self.depot_combo.configure(values=depot_values)
         if self.depot_filter_var.get() not in ["all", *depot_values]:
             self.depot_filter_var.set("all")
 
@@ -622,6 +741,14 @@ class LabelerApp:
             return
         self.load_to_editor(first_leaf)
 
+    def _collect_leaf_keys(self, node_id: str) -> list[str]:
+        if node_id in self.labels:
+            return [node_id]
+        keys: list[str] = []
+        for child in self.tree.get_children(node_id):
+            keys.extend(self._collect_leaf_keys(child))
+        return keys
+
     def _on_tree_mouse_wheel(self, event) -> str:
         if event.delta:
             units = -1 if event.delta > 0 else 1
@@ -640,6 +767,7 @@ class LabelerApp:
         self.series_code_var.set(row.route_series_code)
         self.route_code_var.set(row.route_code)
         self.route_name_var.set(row.route_name)
+        self.depot_var.set(row.depot_name)
         self.variant_id_var.set(row.route_variant_id)
         self.direction_var.set(self._direction_to_choice(row.direction))
         self.variant_var.set(self._variant_to_choice(row.routeVariantType))
@@ -649,7 +777,18 @@ class LabelerApp:
 
     def apply_current(self) -> None:
         selected = self.tree.selection()
-        target_keys = [key for key in selected if key in self.labels]
+        target_keys: list[str] = []
+        for item in selected:
+            target_keys.extend(self._collect_leaf_keys(item))
+
+        # Keep selection order while removing duplicates.
+        target_keys = list(dict.fromkeys(target_keys))
+
+        if not target_keys:
+            focused = self.tree.focus()
+            if focused:
+                target_keys = self._collect_leaf_keys(focused)
+
         if not target_keys:
             key = self.key_var.get().strip()
             if key in self.labels:
@@ -667,6 +806,8 @@ class LabelerApp:
         confidence = max(0.0, min(1.0, confidence))
         direction = self._normalize_direction(self.direction_var.get())
         variant = self._normalize_variant(self.variant_var.get())
+        depot_name = self.depot_var.get().strip()
+        depot_id = self.depot_id_by_name.get(depot_name, "") if depot_name else ""
 
         for key in target_keys:
             row = self.labels[key]
@@ -677,6 +818,10 @@ class LabelerApp:
             row.route_variant_type = variant
             row.routeVariantTypeManual = variant
             row.canonicalDirectionManual = direction
+            if depot_name:
+                row.depot_name = depot_name
+                row.depot_id = depot_id
+                self.key_depot[key] = depot_name
             row.isPrimaryVariant = bool(self.primary_var.get())
             row.classificationConfidence = confidence
             row.classificationReasons = self.reasons_var.get().strip()
@@ -687,8 +832,7 @@ class LabelerApp:
         self.tree.focus(target_keys[0])
         self.tree.see(target_keys[0])
         self.load_to_editor(target_keys[0])
-        if len(target_keys) > 1:
-            messagebox.showinfo("一括反映", f"{len(target_keys)} 件の路線にラベルを反映しました。")
+        messagebox.showinfo("反映完了", f"{len(target_keys)} 件の路線にラベルを反映しました。")
 
     def _labels_as_rows(self) -> list[dict[str, object]]:
         rows: list[dict[str, object]] = []
@@ -774,6 +918,10 @@ class LabelerApp:
                         "routeVariantId": label.route_variant_id,
                         "route_variant_id": label.route_variant_id,
                         "operator_id": label.operator_id,
+                        "depot_id": label.depot_id,
+                        "depotId": label.depot_id,
+                        "depot_name": label.depot_name,
+                        "depotName": label.depot_name,
                         "routeSeriesCode": label.route_series_code,
                         "routeSeriesPrefix": label.route_series_prefix,
                         "routeSeriesNumber": label.route_series_number,
@@ -839,6 +987,10 @@ class LabelerApp:
                         "routeVariantId": label.route_variant_id,
                         "route_variant_id": label.route_variant_id,
                         "operator_id": label.operator_id,
+                        "depot_id": label.depot_id,
+                        "depotId": label.depot_id,
+                        "depot_name": label.depot_name,
+                        "depotName": label.depot_name,
                         "routeSeriesCode": label.route_series_code,
                         "routeSeriesPrefix": label.route_series_prefix,
                         "routeSeriesNumber": label.route_series_number,

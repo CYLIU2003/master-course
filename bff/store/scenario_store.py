@@ -324,7 +324,20 @@ def _legacy_stop_timetables_path(scenario_id: str) -> Path:
 def _refs_for_scenario(scenario_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     refs = scenario_meta_store.default_refs(_STORE_DIR, scenario_id)
     if isinstance(payload, dict):
-        refs.update({k: str(v) for k, v in (payload.get("refs") or {}).items() if v})
+        candidate_refs = payload.get("refs") or {}
+        safe_refs: Dict[str, str] = {}
+        for key, value in candidate_refs.items():
+            if not value:
+                continue
+            text = str(value)
+            # Prevent stale refs from other scenarios (e.g., duplicated docs carrying old refs).
+            try:
+                if Path(text).parent.name != scenario_id:
+                    continue
+            except Exception:
+                continue
+            safe_refs[str(key)] = text
+        refs.update(safe_refs)
     return refs
 
 
@@ -1795,6 +1808,8 @@ def duplicate_scenario(
     cloned["meta"]["createdAt"] = now
     cloned["meta"]["updatedAt"] = now
     cloned["meta"]["status"] = "draft"
+    cloned.pop("refs", None)
+    cloned.pop("scenarioId", None)
     _save(cloned)
     return _meta_payload(cloned)
 
@@ -2125,11 +2140,11 @@ def set_field(
 
 
 def get_feed_context(scenario_id: str) -> Optional[Dict[str, Any]]:
-    return _normalize_feed_context(_load(scenario_id).get("feed_context"))
+    return _normalize_feed_context(_load_shallow(scenario_id).get("feed_context"))
 
 
 def get_scenario_overlay(scenario_id: str) -> Optional[Dict[str, Any]]:
-    overlay = _load(scenario_id).get("scenario_overlay")
+    overlay = _load_shallow(scenario_id).get("scenario_overlay")
     if not isinstance(overlay, dict):
         return None
     return dict(overlay)
@@ -2139,10 +2154,12 @@ def set_scenario_overlay(
     scenario_id: str,
     overlay: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    doc = _load_shallow(scenario_id)
-    doc["scenario_overlay"] = dict(overlay) if isinstance(overlay, dict) else None
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    normalized_overlay = dict(overlay) if isinstance(overlay, dict) else None
+    _save_master_subset(
+        scenario_id,
+        updates={"scenario_overlay": normalized_overlay},
+        invalidate_dispatch=False,
+    )
     return get_scenario_overlay(scenario_id)
 
 
@@ -2210,11 +2227,13 @@ def set_feed_context(
     scenario_id: str,
     feed_context: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    doc = _load_shallow(scenario_id)
-    doc["feed_context"] = _normalize_feed_context(feed_context)
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
-    return doc["feed_context"]
+    normalized_feed_context = _normalize_feed_context(feed_context)
+    _save_master_subset(
+        scenario_id,
+        updates={"feed_context": normalized_feed_context},
+        invalidate_dispatch=False,
+    )
+    return normalized_feed_context
 
 
 # ── Master-data helpers ────────────────────────────────────────

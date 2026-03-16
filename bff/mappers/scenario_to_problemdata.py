@@ -414,6 +414,8 @@ def _filter_rows_for_scope(
             variant_type = _normalize_variant_type(
                 row.get("routeVariantType")
                 or row.get("route_variant_type")
+                or row.get("routeVariantTypeManual")
+                or route.get("routeVariantTypeManual")
                 or route.get("routeVariantType")
                 or "unknown"
             )
@@ -710,6 +712,7 @@ def _build_tasks(
     scenario_vehicles: List[Dict[str, Any]],
     start_time: str,
     delta_t_min: float,
+    service_id: str | None = None,
 ) -> List[Task]:
     # P1: タスクエネルギーフォールバック時の警告出力
     bev_values = [
@@ -731,16 +734,26 @@ def _build_tasks(
     bev_rate = _mean_consumption(scenario_vehicles, "BEV", 1.2)
     ice_rate = _mean_consumption(scenario_vehicles, "ICE", 0.4)
     tasks: List[Task] = []
+    trip_id_seen: Dict[str, int] = {}
+    duplicate_trip_id_count = 0
     for trip in trips:
         start_idx = _hhmm_to_idx(trip["departure"], start_time, delta_t_min)
         end_idx = _hhmm_to_idx(trip["arrival"], start_time, delta_t_min)
         if end_idx <= start_idx:
             end_idx = start_idx + 1
+        base_task_id = str(trip.get("trip_id") or "").strip()
+        if not base_task_id:
+            base_task_id = f"trip_{len(tasks):06d}"
+        seen = trip_id_seen.get(base_task_id, 0)
+        task_id = base_task_id if seen == 0 else f"{base_task_id}__dup{seen + 1}"
+        trip_id_seen[base_task_id] = seen + 1
+        if seen > 0:
+            duplicate_trip_id_count += 1
         allowed_types = [item.upper() for item in trip["allowed_vehicle_types"]]
         required_vehicle_type = allowed_types[0] if len(allowed_types) == 1 else None
         tasks.append(
             Task(
-                task_id=trip["trip_id"],
+                task_id=task_id,
                 start_time_idx=start_idx,
                 end_time_idx=end_idx,
                 origin=trip["origin"],
@@ -759,6 +772,11 @@ def _build_tasks(
                 route_series_number=_safe_int(trip.get("routeSeriesNumber"), default=0) or None,
                 service_id=str(trip.get("service_id") or service_id or "") or None,
             )
+        )
+    if duplicate_trip_id_count > 0:
+        logger.warning(
+            "Detected %d duplicate trip_id values while building tasks; generated unique task_id suffixes.",
+            duplicate_trip_id_count,
         )
     return tasks
 
@@ -1064,7 +1082,13 @@ def build_problem_data_from_scenario(
         vehicle_like = dict(item)
         vehicle_like.setdefault("fuelCostPerL", diesel_price_per_l)
         vehicles.append(_build_vehicle(vehicle_like))
-    tasks = _build_tasks(trips, scope_vehicles_raw, start_time, delta_t_min)
+    tasks = _build_tasks(
+        trips,
+        scope_vehicles_raw,
+        start_time,
+        delta_t_min,
+        service_id=service_id,
+    )
     num_periods = max(
         _safe_int(simulation_cfg.get("num_periods"), 0),
         max((task.end_time_idx for task in tasks), default=0) + 2,

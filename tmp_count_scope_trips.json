@@ -1,0 +1,26 @@
+{
+  "WEEKDAY": {
+    "with_scope": 0,
+    "depot_only": 0
+  },
+  "SAT": {
+    "with_scope": 0,
+    "depot_only": 0
+  },
+  "SUN_HOL": {
+    "with_scope": 0,
+    "depot_only": 0
+  },
+  "SAT_HOL": {
+    "with_scope": 0,
+    "depot_only": 0
+  },
+  "SUN": {
+    "with_scope": 0,
+    "depot_only": 0
+  },
+  "HOLIDAY": {
+    "with_scope": 0,
+    "depot_only": 0
+  }
+}

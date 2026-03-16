@@ -766,14 +766,38 @@ class App:
         if text in {"0", "false", "no", "n", "off"}:
             return False
         return None
+    @staticmethod
+    def _normalize_direction(value: Any, default: str = "outbound") -> str:
+        text = str(value or "").strip().lower()
+        if text in {"outbound", "out", "up", "上り", "上り便", "↗"}:
+            return "outbound"
+        if text in {"inbound", "in", "down", "下り", "下り便", "↙"}:
+            return "inbound"
+        if text in {"circular", "loop", "循環", "循環線"}:
+            return "circular"
+        return default
+
+    @staticmethod
+    def _normalize_variant_type(value: Any) -> str:
+        text = str(value or "").strip().lower()
+        if text in {"main", "main_outbound", "main_inbound", "本線"}:
+            return "main"
+        if text in {"short_turn", "区間", "区間便"}:
+            return "short_turn"
+        if text in {"depot", "depot_in", "depot_out", "入出庫", "入出庫便", "入庫", "出庫"}:
+            return "depot"
+        if text in {"branch", "枝線"}:
+            return "branch"
+        return "unknown"
 
     def pick_route_label_file(self) -> None:
         path = filedialog.askopenfilename(
             title="手動ラベルファイルを選択",
             filetypes=[
-                ("ラベルCSV/JSON", "*.csv *.json"),
+                ("ラベルCSV/JSON/JSONL", "*.csv *.json *.jsonl"),
                 ("CSV", "*.csv"),
                 ("JSON", "*.json"),
+                ("JSONL", "*.jsonl"),
                 ("すべて", "*.*"),
             ],
         )
@@ -790,6 +814,21 @@ class App:
             if isinstance(obj, list):
                 return [dict(item) for item in obj if isinstance(item, dict)]
             return []
+
+        if path.lower().endswith(".jsonl"):
+            rows: list[dict[str, Any]] = []
+            with open(path, "r", encoding="utf-8") as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(obj, dict):
+                        rows.append(dict(obj))
+            return rows
 
         with open(path, "r", encoding="utf-8-sig", newline="") as f:
             reader = csv.DictReader(f)
@@ -855,17 +894,23 @@ class App:
                     or ""
                 ).strip()
 
-                variant_manual = str(
+                variant_manual = self._normalize_variant_type(
                     row.get("routeVariantTypeManual")
                     or row.get("routeVariantType")
                     or row.get("route_variant_type")
-                    or ""
-                ).strip()
-                direction_manual = str(
+                    or "unknown"
+                )
+                direction_manual = self._normalize_direction(
                     row.get("canonicalDirectionManual")
                     or row.get("canonicalDirection")
                     or row.get("canonical_direction")
                     or row.get("direction")
+                    or "outbound"
+                )
+                depot_id = str(
+                    row.get("depotId")
+                    or row.get("depot_id")
+                    or row.get("homeDepotId")
                     or ""
                 ).strip()
 
@@ -880,12 +925,14 @@ class App:
                     payload["routeSeriesPrefix"] = route_series_prefix
                 if route_series_number is not None:
                     payload["routeSeriesNumber"] = route_series_number
-                if variant_manual:
+                if variant_manual and variant_manual != "unknown":
                     payload["routeVariantTypeManual"] = variant_manual
                     payload["routeVariantType"] = variant_manual
                 if direction_manual:
                     payload["canonicalDirectionManual"] = direction_manual
                     payload["canonicalDirection"] = direction_manual
+                if depot_id:
+                    payload["depotId"] = depot_id
 
                 is_primary = self._parse_bool(row.get("isPrimaryVariant"))
                 if is_primary is not None:

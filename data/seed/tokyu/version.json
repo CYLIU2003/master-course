@@ -2,6 +2,6 @@
   "operator_id": "tokyu",
   "seed_version": "2026-03-14",
   "dataset_version": "2026-03-14",
-  "source": "tokyu_bus_depots_master.json + tokyu_bus_route_to_depot.csv",
+  "source": "tokyu_bus_depots_master_full.json + tokyu_bus_route_to_depot_full.csv (fallback: legacy seed files)",
   "generated_at": "2026-03-14T00:00:00Z"
 }

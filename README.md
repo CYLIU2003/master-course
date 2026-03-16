@@ -25,8 +25,19 @@
 ## 更新履歴（2026-03-16）
 
 - optimization evaluator の算定式を修正（デマンド料金をピーク課金化、TOUのスロット単価反映、deadheadを距離換算で計算）。
+- 路線タグ付与の運用を簡素化し、`routeVariantType` は `main / short_turn / depot`、`canonicalDirection` は `outbound / inbound / circular` の3択中心へ統一。
+- タグ簡素化に合わせて BFF（quick-setup / routes / timetable import）と最適化入力・結果出力の正規化ロジックを更新し、旧値（`main_outbound` / `depot_in` など）と日本語入力（上り/下り/循環線）を互換吸収。
+- タグ付与アプリの営業所推定を強化し、`tokyu_bus_route_to_depot_full.csv` / `tokyu_bus_depots_master_full.json` を優先参照して `route_code -> 営業所` 補完と営業所プルダウン候補を拡張。
+- バックアップTkの「ラベルをシナリオへ反映」で CSV/JSON に加えて JSONL 読込に対応し、`depotId` を含む営業所タグも route 更新へ反映するよう更新。
+- `data/catalog-fast/normalized/routes.jsonl` 上書き後の再読込で、`depotId` と `depot_name` の混在により営業所表示が分裂する不具合を修正（営業所表示は `depot_name` 優先で統一）。
+- scenario_to_problemdata の `_build_tasks` で `service_id` 未定義参照により最適化が失敗する不具合を修正。
+- scenario_to_problemdata の task 生成時に重複 `trip_id` を検出した場合、`task_id` に `__dupN` サフィックスを付与して一意化するよう修正（Gurobi の `Duplicate keys in Model.addVars()` を回避）。
+- MILP モデル構築時、充電器が存在しないケースで `p_charge` 未生成でも落ちないように制約呼び出しガード（SOC/energy_balance/battery_degradation/v2g）を追加。
+- 弦巻営業所の指定条件（BYD K8 2.0 80台、三菱系ICE 40台、エルガICE 40台、制限時間600秒）で直列実行検証を実施し、`OPTIMAL` / 未割当0件を確認。
 - optimization problem の trip lookup をキャッシュ化し、反復評価時の辞書再生成を削減。
 - BFF mapper の logger 未定義クラッシュを修正（scenario_to_problemdata で logging 初期化）。
+- scenario overlay / feed context 更新時に重い成果物（trips/graph/duties/result）が意図せず再保存・欠落しうる保存経路を修正し、master subset 更新のみに限定。
+- シナリオ作成・更新時の入力ミス防止として、営業所/車両/テンプレートAPIに負値禁止と SOC 範囲（0〜1, min<=max）バリデーションを追加。
 - hybrid metadata から固定値化される generated_columns 指標を削除。
 - dispatch mapper の deadhead_distance_km を 0 固定から時間ベース推定に変更。
 - 距離推定を再設計し、route normalizer・stop_distances・trip_chains・BFF mapper で stop 座標/停留所連結/時刻表由来フォールバックを統合、渋41(約13km)・東98(約15km)のファミリー距離キャリブレーションを追加。
@@ -186,7 +197,7 @@ python tools/scenario_backup_tk.py
 2. `一覧更新` でシナリオ一覧を取得（必要なら `新規作成` で新規作成）
 3. 必要に応じて `複製` / `有効化` / `削除` / `App Context` を利用する
 4. `Quick Setup 読込` で営業所・路線・solver 設定を読み込む
-5. 必要に応じて `ラベルファイル選択` で `route_variant_manual_labels.csv/json` を選び、`ラベルをシナリオへ反映` を実行する
+5. 必要に応じて `ラベルファイル選択` で `route_variant_manual_labels.csv/json` または JSONL（例: `data/catalog-fast/normalized/routes.jsonl`）を選び、`ラベルをシナリオへ反映` を実行する
   - `routeFamilyCode` / `routeSeriesCode` / `routeVariantTypeManual` / `canonicalDirectionManual` を route マスタへ一括反映
   - 反映後は Quick Setup 路線一覧・配車（dispatch）・最適化入力に同一タグが伝搬
 6. 営業所/路線選択、便種フィルタ、トレード許可、solver 条件を調整して `Quick Setup 保存`
@@ -221,8 +232,9 @@ python tools/route_variant_labeler_tk.py
   - 縦スクロールバー / 横スクロールバーで一覧移動可能
   - `Ctrl`/`Shift` で複数行選択可能（複数路線の一括編集用）
 3. 右側で以下を編集する
-  - `direction / canonicalDirection`
-  - `routeVariantType`
+  - `depot (営業所)`: 未設定路線へ営業所を手動付与（`tokyu_bus_route_to_depot_full.csv` / `tokyu_bus_depots_master_full.json` を候補に反映）
+  - `routeVariantType`: `本線` / `区間便` / `入出庫便`
+  - `direction / canonicalDirection`: `上り` / `下り` / `循環線`
   - `isPrimaryVariant`
   - `classificationConfidence`
   - `classificationReasons`
@@ -250,7 +262,8 @@ python tools/route_variant_labeler_tk.py
 - `labeled_input.csv`（マージ保存時）
 - `labeled_input.jsonl`（JSONLマージ保存時）
 - 追加列: `routeSeriesCode`, `routeSeriesPrefix`, `routeSeriesNumber`
- - 追加列: `routeFamilyCode`, `routeFamilyLabel`
+- 追加列: `routeFamilyCode`, `routeFamilyLabel`
+- 追加列: `depot_id`, `depotId`, `depot_name`, `depotName`
 
 補足:
 - 系統番号抽出ロジックは `src/route_code_utils.py` に共通化され、
@@ -288,8 +301,8 @@ API で確認する場合（CATALOG_BACKEND=local_sqlite で有効）:
 本プロジェクトの実運用では、次の順序で実施する。
 
 1. `tools/route_variant_labeler_tk.py` で路線タグを手動付与する
-  - `routeVariantType`: `main` / `short_turn` / `depot_out` / `depot_in` など
-  - `canonicalDirection`: `outbound` / `inbound`
+  - `routeVariantType`: `main` / `short_turn` / `depot`
+  - `canonicalDirection`: `outbound` / `inbound` / `circular`
   - 必要に応じて `isPrimaryVariant`, `classificationConfidence`, `classificationReasons` を更新
 2. ラベル結果を保存し、必要なら `Save Merged CSV` / `Save Merged JSONL` で元データへ反映する
 3. `tools/scenario_backup_tk.py` を起動し、対象シナリオを作成または選択する
@@ -553,8 +566,7 @@ class Trip:
     distance_km: float
     allowed_vehicle_types: Tuple[str, ...]
     direction: str = "unknown"           # "outbound" | "inbound" | "unknown"
-    route_variant_type: str = "unknown"  # "main_outbound" | "main_inbound"
-                                         # | "short_turn" | "depot_in" | "depot_out"
+    route_variant_type: str = "unknown"  # "main" | "short_turn" | "depot"
 ```
 
 `direction` と `route_variant_type` は `_build_dispatch_context`（`bff/routers/graph.py`）で timetable_rows から伝搬される。

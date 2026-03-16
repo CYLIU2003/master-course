@@ -33,6 +33,20 @@ _DATA_ROOT = _REPO_ROOT / "data"
 _SEED_ROOT = _DATA_ROOT / "seed" / DEFAULT_OPERATOR_ID
 _BUILT_ROOT = _DATA_ROOT / "built"
 
+_DEPOT_MASTER_CANDIDATES = (
+    _REPO_ROOT / "tokyu_bus_depots_master_full.json",
+    _REPO_ROOT / "tokyu_bus_depots_master.json",
+    _SEED_ROOT / "sources" / "tokyu_bus_depots_master.json",
+    _SEED_ROOT / "depots.json",
+)
+
+_ROUTE_TO_DEPOT_CANDIDATES = (
+    _REPO_ROOT / "tokyu_bus_route_to_depot_full.csv",
+    _REPO_ROOT / "tokyu_bus_route_to_depot.csv",
+    _SEED_ROOT / "sources" / "tokyu_bus_route_to_depot.csv",
+    _SEED_ROOT / "route_to_depot.csv",
+)
+
 
 def _read_json(path: Path) -> Dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -42,6 +56,53 @@ def _read_json(path: Path) -> Dict[str, Any]:
 def _read_csv_rows(path: Path) -> List[Dict[str, Any]]:
     with path.open("r", encoding="utf-8-sig", newline="") as fh:
         return [dict(row) for row in csv.DictReader(fh)]
+
+
+def _first_existing_path(candidates: Iterable[Path]) -> Path | None:
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
+def _normalize_depot_master_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    depot_id = str(
+        row.get("id")
+        or row.get("depotId")
+        or row.get("depot_id")
+        or ""
+    ).strip()
+    route_codes = [
+        normalize_text_nfkc(code)
+        for code in coerce_list(row.get("routeCodes") or row.get("route_codes"))
+        if str(code or "").strip()
+    ]
+    return {
+        "id": depot_id,
+        "depotId": depot_id,
+        "name": row.get("name") or "",
+        "region": row.get("region") or "",
+        "address": row.get("address") or "",
+        "phone": row.get("phone") or "",
+        "location": row.get("location") or row.get("address") or "",
+        "lat": _safe_optional_float(row.get("lat") or row.get("latitude")),
+        "lon": _safe_optional_float(row.get("lon") or row.get("longitude")),
+        "normalChargerCount": _safe_int(row.get("normalChargerCount"), 0),
+        "normalChargerPowerKw": _safe_float(row.get("normalChargerPowerKw"), 0.0),
+        "fastChargerCount": _safe_int(row.get("fastChargerCount"), 0),
+        "fastChargerPowerKw": _safe_float(row.get("fastChargerPowerKw"), 0.0),
+        "hasFuelFacility": bool(row.get("hasFuelFacility", True)),
+        "parkingCapacity": _safe_int(row.get("parkingCapacity"), 0),
+        "overnightCharging": bool(row.get("overnightCharging", True)),
+        "enabled": bool(row.get("enabled", True)),
+        "researchTarget": bool(row.get("researchTarget", False)),
+        "routeMapPdf": row.get("routeMapPdf") or row.get("route_map_pdf") or "",
+        "routeMapAsOf": row.get("routeMapAsOf") or row.get("route_map_as_of") or "",
+        "routeCodes": route_codes,
+        "specialServices": coerce_str_list(row.get("specialServices") or row.get("special_services")),
+        "notes": row.get("notes") or row.get("transcription_note") or "",
+        "source": row.get("source") or "tokyu_bus_depots_master_full.json",
+    }
 
 
 def _normalize_parquet_value(value: Any) -> Any:
@@ -101,12 +162,37 @@ def load_seed_version() -> Dict[str, Any]:
 
 
 def load_seed_depots() -> List[Dict[str, Any]]:
-    payload = _read_json(_SEED_ROOT / "depots.json")
-    return [dict(item) for item in payload.get("depots") or [] if isinstance(item, dict)]
+    path = _first_existing_path(_DEPOT_MASTER_CANDIDATES)
+    if not path:
+        return []
+    payload = _read_json(path)
+    items = [dict(item) for item in payload.get("depots") or [] if isinstance(item, dict)]
+    if path.name == "depots.json":
+        return items
+    normalized = [_normalize_depot_master_row(item) for item in items]
+    return [item for item in normalized if str(item.get("id") or "").strip()]
 
 
 def load_route_to_depot_rows() -> List[Dict[str, Any]]:
-    return _read_csv_rows(_SEED_ROOT / "route_to_depot.csv")
+    path = _first_existing_path(_ROUTE_TO_DEPOT_CANDIDATES)
+    if not path:
+        return []
+    rows = _read_csv_rows(path)
+    normalized_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        route_code = normalize_text_nfkc(row.get("route_code") or "")
+        depot_id = str(row.get("depot_id") or "").strip()
+        if not route_code or not depot_id:
+            continue
+        service_type = str(row.get("service_type") or "").strip().lower()
+        if service_type and service_type != "route_code":
+            continue
+        normalized_rows.append({
+            **row,
+            "route_code": route_code,
+            "depot_id": depot_id,
+        })
+    return normalized_rows
 
 
 def load_dataset_definition(dataset_id: str) -> Dict[str, Any]:

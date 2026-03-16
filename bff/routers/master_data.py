@@ -22,7 +22,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from bff.services.route_family import (
     build_route_family_detail,
@@ -144,12 +144,12 @@ class CreateDepotBody(BaseModel):
     location: str = ""
     lat: float = 0.0
     lon: float = 0.0
-    normalChargerCount: int = 0
-    normalChargerPowerKw: float = 0.0
-    fastChargerCount: int = 0
-    fastChargerPowerKw: float = 0.0
+    normalChargerCount: int = Field(default=0, ge=0)
+    normalChargerPowerKw: float = Field(default=0.0, ge=0.0)
+    fastChargerCount: int = Field(default=0, ge=0)
+    fastChargerPowerKw: float = Field(default=0.0, ge=0.0)
     hasFuelFacility: bool = False
-    parkingCapacity: int = 0
+    parkingCapacity: int = Field(default=0, ge=0)
     overnightCharging: bool = False
     notes: str = ""
 
@@ -159,12 +159,12 @@ class UpdateDepotBody(BaseModel):
     location: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
-    normalChargerCount: Optional[int] = None
-    normalChargerPowerKw: Optional[float] = None
-    fastChargerCount: Optional[int] = None
-    fastChargerPowerKw: Optional[float] = None
+    normalChargerCount: Optional[int] = Field(default=None, ge=0)
+    normalChargerPowerKw: Optional[float] = Field(default=None, ge=0.0)
+    fastChargerCount: Optional[int] = Field(default=None, ge=0)
+    fastChargerPowerKw: Optional[float] = Field(default=None, ge=0.0)
     hasFuelFacility: Optional[bool] = None
-    parkingCapacity: Optional[int] = None
+    parkingCapacity: Optional[int] = Field(default=None, ge=0)
     overnightCharging: Optional[bool] = None
     notes: Optional[str] = None
 
@@ -381,15 +381,21 @@ class CreateVehicleBody(BaseModel):
     depotId: str
     type: str = "BEV"  # BEV | ICE
     modelName: str = ""
-    capacityPassengers: int = 0
-    batteryKwh: Optional[float] = None
-    fuelTankL: Optional[float] = None
-    energyConsumption: float = 0.0
-    chargePowerKw: Optional[float] = None
-    minSoc: Optional[float] = None
-    maxSoc: Optional[float] = None
-    acquisitionCost: float = 0.0
+    capacityPassengers: int = Field(default=0, ge=0)
+    batteryKwh: Optional[float] = Field(default=None, ge=0.0)
+    fuelTankL: Optional[float] = Field(default=None, ge=0.0)
+    energyConsumption: float = Field(default=0.0, ge=0.0)
+    chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
+    minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    acquisitionCost: float = Field(default=0.0, ge=0.0)
     enabled: bool = True
+
+    @model_validator(mode="after")
+    def validate_soc_range(self) -> "CreateVehicleBody":
+        if self.minSoc is not None and self.maxSoc is not None and self.minSoc > self.maxSoc:
+            raise ValueError("minSoc must be <= maxSoc")
+        return self
 
 
 class CreateVehicleBatchBody(CreateVehicleBody):
@@ -409,45 +415,63 @@ class UpdateVehicleBody(BaseModel):
     depotId: Optional[str] = None
     type: Optional[str] = None
     modelName: Optional[str] = None
-    capacityPassengers: Optional[int] = None
-    batteryKwh: Optional[float] = None
-    fuelTankL: Optional[float] = None
-    energyConsumption: Optional[float] = None
-    chargePowerKw: Optional[float] = None
-    minSoc: Optional[float] = None
-    maxSoc: Optional[float] = None
-    acquisitionCost: Optional[float] = None
+    capacityPassengers: Optional[int] = Field(default=None, ge=0)
+    batteryKwh: Optional[float] = Field(default=None, ge=0.0)
+    fuelTankL: Optional[float] = Field(default=None, ge=0.0)
+    energyConsumption: Optional[float] = Field(default=None, ge=0.0)
+    chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
+    minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    acquisitionCost: Optional[float] = Field(default=None, ge=0.0)
     enabled: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def validate_soc_range(self) -> "UpdateVehicleBody":
+        if self.minSoc is not None and self.maxSoc is not None and self.minSoc > self.maxSoc:
+            raise ValueError("minSoc must be <= maxSoc")
+        return self
 
 
 class CreateVehicleTemplateBody(BaseModel):
     name: str
     type: str = "BEV"
     modelName: str = ""
-    capacityPassengers: int = 0
-    batteryKwh: Optional[float] = None
-    fuelTankL: Optional[float] = None
-    energyConsumption: float = 0.0
-    chargePowerKw: Optional[float] = None
-    minSoc: Optional[float] = None
-    maxSoc: Optional[float] = None
-    acquisitionCost: float = 0.0
+    capacityPassengers: int = Field(default=0, ge=0)
+    batteryKwh: Optional[float] = Field(default=None, ge=0.0)
+    fuelTankL: Optional[float] = Field(default=None, ge=0.0)
+    energyConsumption: float = Field(default=0.0, ge=0.0)
+    chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
+    minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    acquisitionCost: float = Field(default=0.0, ge=0.0)
     enabled: bool = True
+
+    @model_validator(mode="after")
+    def validate_soc_range(self) -> "CreateVehicleTemplateBody":
+        if self.minSoc is not None and self.maxSoc is not None and self.minSoc > self.maxSoc:
+            raise ValueError("minSoc must be <= maxSoc")
+        return self
 
 
 class UpdateVehicleTemplateBody(BaseModel):
     name: Optional[str] = None
     type: Optional[str] = None
     modelName: Optional[str] = None
-    capacityPassengers: Optional[int] = None
-    batteryKwh: Optional[float] = None
-    fuelTankL: Optional[float] = None
-    energyConsumption: Optional[float] = None
-    chargePowerKw: Optional[float] = None
-    minSoc: Optional[float] = None
-    maxSoc: Optional[float] = None
-    acquisitionCost: Optional[float] = None
+    capacityPassengers: Optional[int] = Field(default=None, ge=0)
+    batteryKwh: Optional[float] = Field(default=None, ge=0.0)
+    fuelTankL: Optional[float] = Field(default=None, ge=0.0)
+    energyConsumption: Optional[float] = Field(default=None, ge=0.0)
+    chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
+    minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    acquisitionCost: Optional[float] = Field(default=None, ge=0.0)
     enabled: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def validate_soc_range(self) -> "UpdateVehicleTemplateBody":
+        if self.minSoc is not None and self.maxSoc is not None and self.minSoc > self.maxSoc:
+            raise ValueError("minSoc must be <= maxSoc")
+        return self
 
 
 # ── Stop Pydantic models ────────────────────────────────────────
@@ -631,6 +655,7 @@ class UpdateRouteBody(BaseModel):
     isPrimaryVariant: Optional[bool] = None
     routeVariantTypeManual: Optional[str] = None
     canonicalDirectionManual: Optional[str] = None
+    depotId: Optional[str] = None
 
 
 class UpsertRouteDepotAssignmentBody(BaseModel):
@@ -1213,6 +1238,9 @@ def update_route(
             patch["canonicalDirectionManual"] = (
                 _normalize_direction(raw_direction) if raw_direction not in (None, "") else None
             )
+        if "depotId" in patch:
+            raw_depot_id = str(patch.get("depotId") or "").strip()
+            patch["depotId"] = raw_depot_id or None
         return store.update_route(scenario_id, route_id, patch)
     except KeyError:
         raise _not_found("Route", route_id)

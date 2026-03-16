@@ -137,10 +137,12 @@ def export_summary_json(
 
 def _normalize_direction(direction: Optional[str]) -> str:
     value = str(direction or "").strip().lower()
-    if value in {"outbound", "out", "up", "0"}:
+    if value in {"outbound", "out", "up", "0", "上り", "上り便", "↗"}:
         return "outbound"
-    if value in {"inbound", "in", "down", "1"}:
+    if value in {"inbound", "in", "down", "1", "下り", "下り便", "↙"}:
         return "inbound"
+    if value in {"circular", "loop", "循環", "循環線"}:
+        return "circular"
     return "unknown"
 
 
@@ -150,8 +152,8 @@ def _variant_bucket(variant: Optional[str]) -> str:
         return "main"
     if value == "short_turn":
         return "short_turn"
-    if value in {"depot_in", "depot_out"}:
-        return value
+    if value in {"depot", "depot_in", "depot_out"}:
+        return "depot"
     return "unknown"
 
 
@@ -195,10 +197,11 @@ def export_trip_type_counts(run_dir: Path, data: ProblemData) -> None:
     counts = {
         "main_outbound": 0,
         "main_inbound": 0,
+        "main_circular": 0,
         "short_turn_outbound": 0,
         "short_turn_inbound": 0,
-        "depot_out": 0,
-        "depot_in": 0,
+        "short_turn_circular": 0,
+        "depot": 0,
         "unknown": 0,
     }
     by_route: Dict[str, int] = defaultdict(int)
@@ -210,15 +213,15 @@ def export_trip_type_counts(run_dir: Path, data: ProblemData) -> None:
         by_route[route_id] += 1
 
         if variant == "main":
-            key = f"main_{direction}" if direction in {"outbound", "inbound"} else "unknown"
+            key = f"main_{direction}" if direction in {"outbound", "inbound", "circular"} else "unknown"
         elif variant == "short_turn":
             key = (
                 f"short_turn_{direction}"
-                if direction in {"outbound", "inbound"}
+                if direction in {"outbound", "inbound", "circular"}
                 else "unknown"
             )
-        elif variant in {"depot_out", "depot_in"}:
-            key = variant
+        elif variant == "depot":
+            key = "depot"
         else:
             key = "unknown"
         counts[key] = counts.get(key, 0) + 1

@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-03-16T18:41:25.432641",
+  "scenario_id": "41c6872a-717a-4357-81b0-87f5812bf06d",
+  "depot_id": "tsurumaki",
+  "service_id": "WEEKDAY",
+  "status": "EXCEPTION",
+  "exception": "'p_charge'",
+  "traceback": "Traceback (most recent call last):\n  File \"C:\\master-course\\tmp_debug_milp_core.py\", line 50, in main\n    result, solve_time = _solve_milp_core(\n                         ~~~~~~~~~~~~~~~~^\n        cfg,\n        ^^^^\n    ...<4 lines>...\n        flag_overrides=None,\n        ^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"C:\\master-course\\src\\pipeline\\solve.py\", line 86, in _solve_milp_core\n    model, _vars = build_model_by_mode(\n                   ~~~~~~~~~~~~~~~~~~~^\n        run_mode,\n        ^^^^^^^^^\n    ...<4 lines>...\n        flag_overrides=flag_overrides,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"C:\\master-course\\src\\model_factory.py\", line 284, in build_model_by_mode\n    model, vars_ = build_milp_model(data, ms, dp, flags)\n                   ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\master-course\\src\\milp_model.py\", line 205, in build_milp_model\n    add_soc_constraints(model, data, ms, dp, vars)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\master-course\\src\\constraints\\charging.py\", line 122, in add_soc_constraints\n    p      = vars[\"p_charge\"]\n             ~~~~^^^^^^^^^^^^\nKeyError: 'p_charge'\n"
+}

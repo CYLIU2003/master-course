@@ -201,13 +201,13 @@ def build_milp_model(
     if flags.get("charging", True) and "z_charge" in vars:
         add_charging_constraints(model, data, ms, dp, vars)
 
-    if flags.get("soc", True) and "soc" in vars:
+    if flags.get("soc", True) and "soc" in vars and "p_charge" in vars:
         add_soc_constraints(model, data, ms, dp, vars)
 
     if flags.get("charger_capacity", True) and "z_charge" in vars:
         add_charger_capacity_constraints(model, data, ms, dp, vars)
 
-    if flags.get("energy_balance", True) and "p_grid_import" in vars:
+    if flags.get("energy_balance", True) and "p_grid_import" in vars and "p_charge" in vars:
         add_energy_balance_constraints(model, data, ms, dp, vars)
         if flags.get("demand_charge", False):
             add_demand_charge_constraints(model, data, ms, dp, vars)
@@ -215,10 +215,10 @@ def build_milp_model(
     if flags.get("pv_grid", False):
         add_pv_grid_constraints(model, data, ms, dp, vars)
 
-    if flags.get("battery_degradation", False):
+    if flags.get("battery_degradation", False) and "deg" in vars and "p_charge" in vars:
         add_battery_degradation_constraints(model, data, ms, dp, vars)
 
-    if flags.get("v2g", False):
+    if flags.get("v2g", False) and "p_discharge" in vars and "z_discharge" in vars and "p_charge" in vars:
         add_v2g_constraints(model, data, ms, dp, vars)
 
     # ===== §6 行路制約 (duty assignment) =====

@@ -15,9 +15,9 @@ import {
   useUpdateRoute,
   useDeleteRoute,
 } from "@/hooks";
-import type { Route, RouteResolvedStop, RouteVariantType } from "@/types";
+import type { Route, RouteCanonicalDirection, RouteResolvedStop, RouteVariantType } from "@/types";
 import type { CreateRouteRequest, UpdateRouteRequest } from "@/types/api";
-import { getRouteVariantLabel, ROUTE_VARIANT_LABELS } from "./route-family-display";
+import { getRouteVariantLabel } from "./route-family-display";
 
 interface Props {
   scenarioId: string;
@@ -34,6 +34,7 @@ type FormData = {
   color: string;
   enabled: boolean;
   routeVariantTypeManual: RouteVariantType | "";
+  canonicalDirectionManual: RouteCanonicalDirection | "";
 };
 
 const EMPTY_FORM: FormData = {
@@ -45,7 +46,20 @@ const EMPTY_FORM: FormData = {
   color: "#3b82f6",
   enabled: true,
   routeVariantTypeManual: "",
+  canonicalDirectionManual: "",
 };
+
+const MANUAL_VARIANT_OPTIONS: Array<{ value: RouteVariantType; label: string }> = [
+  { value: "main", label: "本線" },
+  { value: "short_turn", label: "区間便" },
+  { value: "depot", label: "入出庫便" },
+];
+
+const MANUAL_DIRECTION_OPTIONS: Array<{ value: RouteCanonicalDirection; label: string }> = [
+  { value: "outbound", label: "上り" },
+  { value: "inbound", label: "下り" },
+  { value: "circular", label: "循環線" },
+];
 
 const routeFormSchema = z
   .object({
@@ -57,6 +71,7 @@ const routeFormSchema = z
     color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, "色は #RRGGBB 形式で入力してください"),
     enabled: z.boolean(),
     routeVariantTypeManual: z.string(),
+    canonicalDirectionManual: z.string(),
   })
   .superRefine((value, ctx) => {
     const distance = Number(value.distanceKm || "0");
@@ -79,6 +94,7 @@ function routeToForm(r: Route): FormData {
     color: r.color || "#3b82f6",
     enabled: r.enabled,
     routeVariantTypeManual: r.routeVariantTypeManual ?? "",
+    canonicalDirectionManual: r.canonicalDirectionManual ?? "",
   };
 }
 
@@ -161,7 +177,7 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
         color: parsed.data.color,
         enabled: form.enabled,
         routeVariantTypeManual: form.routeVariantTypeManual || null,
-        canonicalDirectionManual: null,
+        canonicalDirectionManual: form.canonicalDirectionManual || null,
       };
       updateRoute.mutate(req, {
         onSuccess: () => setDirty(false),
@@ -289,9 +305,24 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
                   className="field-input"
                 >
                   <option value="">自動判定を使用</option>
-                  {(
-                    Object.entries(ROUTE_VARIANT_LABELS) as [RouteVariantType, string][]
-                  ).map(([value, label]) => (
+                  {MANUAL_VARIANT_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={form.canonicalDirectionManual}
+                  onChange={(e) =>
+                    updateField(
+                      "canonicalDirectionManual",
+                      e.target.value as FormData["canonicalDirectionManual"],
+                    )
+                  }
+                  className="field-input"
+                >
+                  <option value="">方向は自動判定を使用</option>
+                  {MANUAL_DIRECTION_OPTIONS.map(({ value, label }) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
@@ -301,10 +332,13 @@ export function RouteEditorDrawer({ scenarioId, routeId, isCreate }: Props) {
                   要確認や誤判定の variant はここで固定できます。route family はそのまま維持し、trip
                   ベースの配車判定は変えません。
                 </p>
-                {route.routeVariantTypeManual && (
+                {(route.routeVariantTypeManual || route.canonicalDirectionManual) && (
                   <button
                     type="button"
-                    onClick={() => updateField("routeVariantTypeManual", "")}
+                    onClick={() => {
+                      updateField("routeVariantTypeManual", "");
+                      updateField("canonicalDirectionManual", "");
+                    }}
                     className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
                   >
                     自動判定に戻す

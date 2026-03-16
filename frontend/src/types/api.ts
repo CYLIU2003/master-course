@@ -117,6 +117,15 @@ export interface QuickSetupResponse {
     chargerCount: number;
     chargerPowerKw: number;
     includeDeadhead: boolean;
+    gridFlatPricePerKwh?: number | null;
+    gridSellPricePerKwh?: number | null;
+    demandChargeCostPerKw?: number | null;
+    dieselPricePerL?: number | null;
+    gridCo2KgPerKwh?: number | null;
+    co2PricePerKg?: number | null;
+    depotPowerLimitKw?: number | null;
+    allowPartialService?: boolean;
+    unservedPenalty?: number;
   };
 }
 
@@ -135,6 +144,15 @@ export interface UpdateQuickSetupRequest {
   timeLimitSeconds?: number;
   mipGap?: number;
   alnsIterations?: number;
+  allowPartialService?: boolean;
+  unservedPenalty?: number;
+  gridFlatPricePerKwh?: number;
+  gridSellPricePerKwh?: number;
+  demandChargeCostPerKw?: number;
+  dieselPricePerL?: number;
+  gridCo2KgPerKwh?: number;
+  co2PricePerKg?: number;
+  depotPowerLimitKw?: number;
 }
 
 export interface CreateScenarioRequest {

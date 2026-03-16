@@ -385,6 +385,7 @@ export type RouteVariantType =
   | "main_inbound"
   | "short_turn"
   | "branch"
+  | "depot"
   | "depot_out"
   | "depot_in"
   | "unknown";

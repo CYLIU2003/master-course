@@ -9,6 +9,7 @@ import {
   useJob,
 } from "@/hooks";
 import { ErrorBlock, LoadingBlock, PageSection } from "@/features/common";
+import { getCanonicalDirectionLabel, getRouteVariantLabelByValue } from "@/features/planning/route-family-display";
 import type { SimulationBuilderSettings } from "@/types";
 
 const SOLVER_OPTIONS: Array<{
@@ -230,7 +231,7 @@ export function ScenarioQuickPage() {
             <label key={route.id} className="flex items-center justify-between rounded px-2 py-1 text-sm hover:bg-slate-50">
               <span className="truncate pr-2">
                 {route.displayName}
-                <span className="ml-2 text-xs text-slate-500">{route.routeVariantType || "unknown"} / {route.canonicalDirection || "unknown"} / {route.tripCount}便</span>
+                <span className="ml-2 text-xs text-slate-500">{getRouteVariantLabelByValue(route.routeVariantType)} / {getCanonicalDirectionLabel(route.canonicalDirection)} / {route.tripCount}便</span>
               </span>
               <input
                 type="checkbox"
