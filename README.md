@@ -22,6 +22,20 @@
 
 ---
 
+## 更新履歴（2026-03-16）
+
+- optimization evaluator の算定式を修正（デマンド料金をピーク課金化、TOUのスロット単価反映、deadheadを距離換算で計算）。
+- optimization problem の trip lookup をキャッシュ化し、反復評価時の辞書再生成を削減。
+- BFF mapper の logger 未定義クラッシュを修正（scenario_to_problemdata で logging 初期化）。
+- hybrid metadata から固定値化される generated_columns 指標を削除。
+- dispatch mapper の deadhead_distance_km を 0 固定から時間ベース推定に変更。
+- data_loader で duplicate task_id を検出・正規化し、compat / travel connection 参照を追従させる修正を追加。
+- run_case の --verbose 実行時に一時設定ファイルの相対パス解決が壊れる問題を修正。
+- result_exporter の Excel 出力で charger_utilization が dict の場合に失敗する問題を修正。
+- result_exporter の KPI シートで未割当タスクがリスト型のときに Excel 出力が失敗する問題を修正。
+- src/optimization/milp の solver_adapter を Gurobi 実接続に変更し、engine が baseline ではなく solver が返す plan を採用するよう修正。
+- src/optimization/milp/model_builder の SOC 遷移制約を placeholder からスロット遷移式ベースの定義へ更新。
+
 ## 1. 研究目的と概要
 
 **修士研究テーマ：PV 出力を考慮した BEV/ICE 混成フリートの充電・運行スケジューリング統合最適化**

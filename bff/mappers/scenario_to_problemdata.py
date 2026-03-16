@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
@@ -21,6 +22,9 @@ from src.preprocess.trip_converter import (
 from src.schemas.duty_entities import DutyLeg, VehicleDuty
 from src.value_normalization import coerce_list
 from bff.store import scenario_store
+
+
+logger = logging.getLogger(__name__)
 
 
 _DEFAULT_LIFETIME_YEAR = 12.0

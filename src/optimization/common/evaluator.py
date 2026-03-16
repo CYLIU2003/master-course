@@ -38,11 +38,16 @@ class CostEvaluator:
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
     ) -> CostBreakdown:
+        prep_time_min = 30
+        wage_regular_jpy_per_h = 2000.0
+        regular_hours_per_day = 8.0
+        overtime_factor = 1.25
+
         weights = problem.objective_weights
         vehicle_cost = 0.0
         driver_cost = 0.0
         energy_cost = 0.0
-        total_charge_kw = 0.0
+        demand_cost = 0.0
 
         # Create a lookup for vehicle profiles to get their fixed costs
         vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
@@ -58,15 +63,42 @@ class CostEvaluator:
                 first_trip = duty.legs[0].trip
                 last_trip = duty.legs[-1].trip
                 duty_duration_min = last_trip.arrival_min - first_trip.departure_min
-                duty_duration_hours = max(0, duty_duration_min) / 60.0
-                driver_cost += (duty_duration_hours + 1.0) * 2000.0
+                total_hours = (max(0, duty_duration_min) + prep_time_min) / 60.0
+                regular_hours = min(total_hours, regular_hours_per_day)
+                overtime_hours = max(0.0, total_hours - regular_hours_per_day)
+                driver_cost += (
+                    regular_hours * wage_regular_jpy_per_h
+                    + overtime_hours * wage_regular_jpy_per_h * overtime_factor
+                )
 
             for leg in duty.legs:
                 energy_cost += self._trip_energy_cost(problem, leg.trip.trip_id)
                 energy_cost += self._deadhead_energy_cost(problem, leg.deadhead_from_prev_min)
-        
+
+        slot_totals: Dict[int, float] = {}
         for slot in plan.charging_slots:
-            total_charge_kw += max(slot.charge_kw - slot.discharge_kw, 0.0)
+            net_kw = max(slot.charge_kw - slot.discharge_kw, 0.0)
+            slot_totals[slot.slot_index] = slot_totals.get(slot.slot_index, 0.0) + net_kw
+        peak_demand_kw = max(slot_totals.values(), default=0.0)
+        demand_cost = weights.demand * peak_demand_kw
+
+        switch_count = sum(
+            1
+            for index in range(1, len(plan.duties))
+            if plan.duties[index].vehicle_type != plan.duties[index - 1].vehicle_type
+        )
+        switch_cost = weights.switch * float(switch_count)
+
+        slot_hours = max(problem.scenario.timestep_min, 1) / 60.0
+        degradation_cycles = 0.0
+        for slot in plan.charging_slots:
+            vehicle = vehicle_by_id.get(slot.vehicle_id)
+            if vehicle is None:
+                continue
+            capacity_kwh = max(vehicle.battery_capacity_kwh or 300.0, 1.0)
+            charged_kwh = max(slot.charge_kw, 0.0) * slot_hours
+            degradation_cycles += charged_kwh / capacity_kwh
+        degradation_cost = weights.degradation * degradation_cycles * 50.0
 
         unserved_penalty = weights.unserved * len(plan.unserved_trip_ids)
 
@@ -76,22 +108,22 @@ class CostEvaluator:
 
         total_cost = (
             energy_cost
-            + weights.demand * total_charge_kw
+            + demand_cost
             + vehicle_cost
             + driver_cost
             + unserved_penalty
-            + weights.switch * 0.0
-            + weights.degradation * 0.0
+            + switch_cost
+            + degradation_cost
             + deviation_cost
         )
         return CostBreakdown(
             energy_cost=energy_cost,
-            demand_cost=weights.demand * total_charge_kw,
+            demand_cost=demand_cost,
             vehicle_cost=vehicle_cost,
             driver_cost=driver_cost,
             unserved_penalty=unserved_penalty,
-            switch_cost=0.0,
-            degradation_cost=0.0,
+            switch_cost=switch_cost,
+            degradation_cost=degradation_cost,
             deviation_cost=deviation_cost,
             total_cost=total_cost,
         )
@@ -104,25 +136,53 @@ class CostEvaluator:
         trip = problem.trip_by_id().get(trip_id)
         if trip is None:
             return 0.0
-        average_price = (
-            sum(slot.grid_buy_yen_per_kwh for slot in problem.price_slots) / len(problem.price_slots)
-            if problem.price_slots
-            else 0.0
-        )
+
+        slot_index = self._slot_index_for_departure(problem, trip.departure_min)
+        price_map = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
+        selected_price = price_map.get(slot_index)
+        if selected_price is None and problem.price_slots:
+            nearest_slot = min(problem.price_slots, key=lambda slot: abs(slot.slot_index - slot_index))
+            selected_price = nearest_slot.grid_buy_yen_per_kwh
+        if selected_price is None:
+            selected_price = 0.0
+
         pv_credit = (
             sum(slot.pv_available_kw for slot in problem.pv_slots) / max(len(problem.pv_slots), 1)
             if problem.pv_slots
             else 0.0
         )
-        return max(trip.energy_kwh * average_price - pv_credit * 0.05, 0.0)
+        return max(trip.energy_kwh * selected_price - pv_credit * 0.05, 0.0)
 
     def _deadhead_energy_cost(
         self,
         problem: CanonicalOptimizationProblem,
         deadhead_from_prev_min: int,
     ) -> float:
-        if not problem.price_slots:
+        if not problem.price_slots or deadhead_from_prev_min <= 0:
             return 0.0
         average_price = sum(slot.grid_buy_yen_per_kwh for slot in problem.price_slots) / len(problem.price_slots)
-        estimated_kwh = deadhead_from_prev_min * 0.2
-        return estimated_kwh * average_price
+        avg_speed_kmph = 20.0
+        distance_km = (deadhead_from_prev_min / 60.0) * avg_speed_kmph
+        energy_kwh = distance_km * 1.2
+        return max(energy_kwh * average_price, 0.0)
+
+    def _slot_index_for_departure(
+        self,
+        problem: CanonicalOptimizationProblem,
+        departure_min: int,
+    ) -> int:
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        horizon_start = problem.scenario.horizon_start
+        if not horizon_start:
+            return departure_min // timestep_min
+
+        try:
+            hour_str, minute_str = horizon_start.split(":")
+            start_min = int(hour_str) * 60 + int(minute_str)
+        except ValueError:
+            return departure_min // timestep_min
+
+        adjusted_departure = departure_min
+        if adjusted_departure < start_min:
+            adjusted_departure += 24 * 60
+        return (adjusted_departure - start_min) // timestep_min

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +35,69 @@ from .data_schema import (
     VehicleChargerCompat,
     VehicleTaskCompat,
 )
+
+
+def _deduplicate_task_ids(
+    tasks: List[Task],
+    vehicle_task_compat: List[VehicleTaskCompat],
+    travel_connections: List[TravelConnection],
+) -> int:
+    """Make task IDs unique and remap dependent references.
+
+    Returns number of duplicated base IDs found.
+    """
+    counts = Counter(task.task_id for task in tasks)
+    duplicated_ids = {task_id for task_id, count in counts.items() if count > 1}
+    if not duplicated_ids:
+        return 0
+
+    occurrence_index: Dict[str, int] = {}
+    old_to_new_ids: Dict[str, List[str]] = {}
+
+    for task in tasks:
+        old_id = task.task_id
+        if old_id not in duplicated_ids:
+            old_to_new_ids.setdefault(old_id, [old_id])
+            continue
+
+        occurrence = occurrence_index.get(old_id, 0) + 1
+        occurrence_index[old_id] = occurrence
+        new_id = f"{old_id}__dup{occurrence}"
+        task.task_id = new_id
+        old_to_new_ids.setdefault(old_id, []).append(new_id)
+
+    remapped_compat: List[VehicleTaskCompat] = []
+    for row in vehicle_task_compat:
+        target_ids = old_to_new_ids.get(row.task_id, [row.task_id])
+        for task_id in target_ids:
+            remapped_compat.append(
+                VehicleTaskCompat(
+                    vehicle_id=row.vehicle_id,
+                    task_id=task_id,
+                    feasible=row.feasible,
+                )
+            )
+
+    remapped_connections: List[TravelConnection] = []
+    for edge in travel_connections:
+        from_ids = old_to_new_ids.get(edge.from_task_id, [edge.from_task_id])
+        to_ids = old_to_new_ids.get(edge.to_task_id, [edge.to_task_id])
+        for from_task_id in from_ids:
+            for to_task_id in to_ids:
+                remapped_connections.append(
+                    TravelConnection(
+                        from_task_id=from_task_id,
+                        to_task_id=to_task_id,
+                        can_follow=edge.can_follow,
+                        deadhead_time_slot=edge.deadhead_time_slot,
+                        deadhead_distance_km=edge.deadhead_distance_km,
+                        deadhead_energy_kwh=edge.deadhead_energy_kwh,
+                    )
+                )
+
+    vehicle_task_compat[:] = remapped_compat
+    travel_connections[:] = remapped_connections
+    return len(duplicated_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +503,17 @@ def load_problem_data(config_path: str | Path) -> ProblemData:
     vehicle_charger_compat: List[VehicleChargerCompat] = []
     if compat_vehicle_charger_csv:
         vehicle_charger_compat = load_vehicle_charger_compat(compat_vehicle_charger_csv)
+
+    duplicate_task_id_count = _deduplicate_task_ids(
+        tasks,
+        vehicle_task_compat,
+        travel_connections,
+    )
+    if duplicate_task_id_count > 0:
+        print(
+            "  [warn] duplicate task_id detected. "
+            f"Renamed duplicates for {duplicate_task_id_count} base IDs."
+        )
 
     # --- パラメータ ---
     weights = cfg.get("objective_weights", {})

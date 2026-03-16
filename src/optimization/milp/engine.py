@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .model_builder import MILPModelBuilder
-from .solver_adapter import DispatchBaselineMILPAdapter
+from .solver_adapter import GurobiMILPAdapter
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
@@ -15,7 +15,7 @@ from src.optimization.common.problem import (
 class MILPOptimizer:
     def __init__(self) -> None:
         self._builder = MILPModelBuilder()
-        self._adapter = DispatchBaselineMILPAdapter()
+        self._adapter = GurobiMILPAdapter()
         self._feasibility = FeasibilityChecker()
         self._evaluator = CostEvaluator()
 
@@ -25,8 +25,7 @@ class MILPOptimizer:
         config: OptimizationConfig,
     ) -> OptimizationEngineResult:
         model = self._builder.build(problem)
-        outcome = self._adapter.solve(problem, config)
-        plan = problem.baseline_plan
+        outcome, plan = self._adapter.solve(problem, config)
         report = self._feasibility.evaluate(problem, plan)
         costs = self._evaluator.evaluate(problem, plan).to_dict()
         return OptimizationEngineResult(

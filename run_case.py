@@ -348,10 +348,14 @@ def main() -> int:
     if args.verbose:
         cfg["solver"] = cfg.get("solver", {})
         cfg["solver"]["verbose"] = True
-        import tempfile, os
+        import tempfile
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False, encoding="utf-8"
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",
+            dir=str(case_path.parent),
         ) as tmp:
             json.dump(cfg, tmp, ensure_ascii=False, indent=2)
             tmp_path = tmp.name

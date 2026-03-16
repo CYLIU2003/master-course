@@ -39,6 +39,9 @@ class MILPModelBuilder:
         variables: List[MILPVariableDefinition] = []
         constraints: List[MILPConstraintDefinition] = []
         trip_by_id = problem.trip_by_id()
+        slot_indices = sorted({slot.slot_index for slot in problem.price_slots})
+        slot_pos_map = {slot_index: pos for pos, slot_index in enumerate(slot_indices)}
+        timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
         bev_vehicle_ids = [
             vehicle.vehicle_id
             for vehicle in problem.vehicles
@@ -186,20 +189,28 @@ class MILPModelBuilder:
                 )
 
         for vehicle in problem.vehicles:
-            for slot in problem.price_slots:
-                if vehicle.vehicle_id not in bev_vehicle_ids:
-                    continue
+            if vehicle.vehicle_id not in bev_vehicle_ids:
+                continue
+            for pos in range(len(slot_indices) - 1):
+                slot_idx = slot_indices[pos]
+                next_slot_idx = slot_indices[pos + 1]
+                trip_energy_kwh = sum(
+                    trip.energy_kwh
+                    for trip in problem.trips
+                    if slot_pos_map.get(self._slot_index(problem, trip.departure_min)) == pos
+                )
                 constraints.append(
                     MILPConstraintDefinition(
-                        name=f"soc_transition[{vehicle.vehicle_id},{slot.slot_index}]",
+                        name=f"soc_transition[{vehicle.vehicle_id},{slot_idx}->{next_slot_idx}]",
                         sense="EQ",
-                        rhs="prev_soc + charge - discharge - trip_energy",
+                        rhs=-trip_energy_kwh,
                         terms=(
-                            f"s[{vehicle.vehicle_id},{slot.slot_index}]",
-                            f"c[{vehicle.vehicle_id},{slot.slot_index}]",
-                            f"d[{vehicle.vehicle_id},{slot.slot_index}]",
+                            f"s[{vehicle.vehicle_id},{next_slot_idx}]",
+                            f"-s[{vehicle.vehicle_id},{slot_idx}]",
+                            f"-0.95*{timestep_h}*c[{vehicle.vehicle_id},{slot_idx}]",
+                            f"+{timestep_h / 0.95}*d[{vehicle.vehicle_id},{slot_idx}]",
                         ),
-                        description="slot-based SOC dynamics placeholder",
+                        description="slot-based SOC dynamics: s_next - s_cur - eta_c*c + d/eta_d = -trip_energy",
                     )
                 )
 
@@ -270,7 +281,7 @@ class MILPModelBuilder:
                 "cover_each_trip": len(problem.trips),
                 "flow_in": len(assignment_pairs),
                 "flow_out": len(assignment_pairs),
-                "soc_transition": len(bev_vehicle_ids) * len(problem.price_slots),
+                "soc_transition": len(bev_vehicle_ids) * max(len(slot_indices) - 1, 0),
                 "charger_capacity": len(problem.price_slots) if problem.chargers else 0,
                 "depot_import_limit": len(problem.depots) * len(problem.price_slots),
                 "pv_limit": len(problem.pv_slots),
@@ -279,3 +290,17 @@ class MILPModelBuilder:
             constraints=tuple(constraints),
             objective_terms=objective_terms,
         )
+
+    def _slot_index(self, problem: CanonicalOptimizationProblem, departure_min: int) -> int:
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        if not problem.scenario.horizon_start:
+            return departure_min // timestep_min
+        try:
+            hh, mm = problem.scenario.horizon_start.split(":")
+            start_min = int(hh) * 60 + int(mm)
+        except ValueError:
+            return departure_min // timestep_min
+        adjusted = departure_min
+        if adjusted < start_min:
+            adjusted += 24 * 60
+        return (adjusted - start_min) // timestep_min

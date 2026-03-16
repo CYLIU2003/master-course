@@ -195,9 +195,17 @@ class CanonicalOptimizationProblem:
     )
     baseline_plan: Optional[AssignmentPlan] = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    _trip_by_id_cache: Dict[str, ProblemTrip] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "_trip_by_id_cache",
+            {trip.trip_id: trip for trip in self.trips},
+        )
 
     def trip_by_id(self) -> Dict[str, ProblemTrip]:
-        return {trip.trip_id: trip for trip in self.trips}
+        return self._trip_by_id_cache
 
     def eligible_trip_ids(self, vehicle_type: Optional[str] = None) -> List[str]:
         if vehicle_type is None:

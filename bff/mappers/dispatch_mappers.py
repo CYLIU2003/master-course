@@ -33,6 +33,15 @@ from src.dispatch.models import (
 )
 
 
+_DEADHEAD_FALLBACK_SPEED_KMPH = 20.0
+
+
+def _estimate_deadhead_distance_km(deadhead_time_min: int) -> float:
+    if deadhead_time_min <= 0:
+        return 0.0
+    return round((deadhead_time_min / 60.0) * _DEADHEAD_FALLBACK_SPEED_KMPH, 4)
+
+
 def min_to_hhmm(minutes: int) -> str:
     """Convert integer minutes-from-midnight back to HH:MM string."""
     h = minutes // 60
@@ -87,7 +96,7 @@ def deadhead_rule_to_dict(rule: DeadheadRule) -> Dict[str, Any]:
         "origin": rule.from_stop,
         "destination": rule.to_stop,
         "time_min": rule.travel_time_min,
-        "distance_km": 0.0,  # distance not tracked in current model
+        "distance_km": _estimate_deadhead_distance_km(rule.travel_time_min),
     }
 
 
@@ -98,10 +107,11 @@ def duty_leg_to_dict(
     leg: DutyLeg, route_distances: Dict[str, float] | None = None
 ) -> Dict[str, Any]:
     trip_dict = trip_to_dict(leg.trip)
+    deadhead_distance_km = _estimate_deadhead_distance_km(leg.deadhead_from_prev_min)
     return {
         "trip": trip_dict,
         "deadhead_time_min": leg.deadhead_from_prev_min,
-        "deadhead_distance_km": 0.0,
+        "deadhead_distance_km": deadhead_distance_km,
     }
 
 
@@ -156,7 +166,7 @@ def build_graph_response(
                 "to_trip_id": arc.to_trip_id,
                 "vehicle_type": arc.vehicle_type,
                 "deadhead_time_min": arc.deadhead_time_min,
-                "deadhead_distance_km": 0.0,
+                "deadhead_distance_km": _estimate_deadhead_distance_km(arc.deadhead_time_min),
                 "turnaround_time_min": arc.turnaround_time_min,
                 "slack_min": arc.slack_min,
                 "idle_time_min": max(0, arc.slack_min),

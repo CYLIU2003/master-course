@@ -25,6 +25,23 @@ from .parameter_builder import DerivedParams, get_grid_price
 from .simulator import SimulationResult
 
 
+def _to_scalar_metric(value: Any) -> float:
+    if isinstance(value, dict):
+        numeric_values = []
+        for raw in value.values():
+            try:
+                numeric_values.append(float(raw))
+            except (TypeError, ValueError):
+                continue
+        if not numeric_values:
+            return 0.0
+        return sum(numeric_values) / len(numeric_values)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _make_run_dir(output_root: str | Path) -> Path:
     """outputs/run_yyyymmdd_hhmm/ ディレクトリを作成して返す"""
     ts = datetime.now().strftime("%Y%m%d_%H%M")
@@ -403,6 +420,14 @@ def export_excel(
 
     # ---- Sheet 2: KPIs -----------------------------------------------------
     ws_kpi = wb.create_sheet("KPIs")
+    charger_utilization = _to_scalar_metric(sim_result.charger_utilization)
+
+    unserved_tasks_value = sim_result.unserved_tasks
+    if isinstance(unserved_tasks_value, list):
+        unmet_trips = len(unserved_tasks_value)
+    else:
+        unmet_trips = int(unserved_tasks_value or 0)
+
     kpi_rows: List[List[Any]] = [
         ["objective_value", milp_result.objective_value],
         ["total_energy_cost", round(sim_result.total_energy_cost, 2)],
@@ -412,9 +437,9 @@ def export_excel(
             "vehicle_fixed_cost",
             round(getattr(sim_result, "vehicle_fixed_cost", 0.0), 2),
         ],
-        ["unmet_trips", sim_result.unserved_tasks or 0],
+        ["unmet_trips", unmet_trips],
         ["soc_min_margin_kwh", round(getattr(sim_result, "soc_min_kwh", 0.0), 3)],
-        ["charger_utilization", round(sim_result.charger_utilization, 4)],
+        ["charger_utilization", round(charger_utilization, 4)],
         ["peak_grid_power_kw", round(sim_result.peak_demand_kw, 2)],
         ["solve_time_sec", round(milp_result.solve_time_sec, 3)],
     ]

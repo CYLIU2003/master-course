@@ -53,9 +53,6 @@ class HybridOptimizer:
             solver_metadata={
                 "milp_seed_status": milp_result.solver_status,
                 "partial_milp_calls": 1,
-                "generated_columns": len(
-                    self._pricing_problem.generate_columns({"baseline_objective": milp_result.objective_value})
-                ),
                 **dict(alns_result.solver_metadata),
             },
             operator_stats=alns_result.operator_stats,
