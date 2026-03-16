@@ -2,8 +2,6 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   useScenario,
-  useStopTimetablesSummary,
-  useTimetableSummary,
 } from "@/hooks";
 import { useMasterUiStore } from "@/stores/master-ui-store";
 import { useTabWarmStore } from "@/stores/tab-warm-store";
@@ -41,8 +39,6 @@ export function MasterDataHeader({ scenarioId }: Props) {
   const setViewMode = useMasterUiStore((s) => s.setViewMode);
   const openDrawer = useMasterUiStore((s) => s.openDrawer);
   const { data: scenario } = useScenario(scenarioId);
-  const { data: timetableSummary } = useTimetableSummary(scenarioId);
-  const { data: stopTimetablesSummary } = useStopTimetablesSummary(scenarioId);
   const warmTabs = useTabWarmStore((state) => state.tabs);
 
   const addLabel: Partial<Record<MasterTabKey, string>> = {
@@ -64,11 +60,11 @@ export function MasterDataHeader({ scenarioId }: Props) {
     { label: t("master.summary_stops", "停留所"), value: scenario?.stats?.stopCount ?? 0 },
     {
       label: t("master.summary_timetable", "時刻表"),
-      value: timetableSummary?.item.totalRows ?? 0,
+      value: scenario?.stats?.timetableRowCount ?? 0,
     },
     {
       label: t("master.summary_stop_timetables", "バス停時刻表"),
-      value: stopTimetablesSummary?.item.totalTimetables ?? 0,
+      value: "-",
     },
   ];
 
@@ -180,10 +176,12 @@ export function MasterDataHeader({ scenarioId }: Props) {
         </div>
       </div>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <ImportProgressPanel />
-        <ImportLogPanel />
-      </div>
+      {(activeTab === "routes" || activeTab === "stops") && (
+        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <ImportProgressPanel />
+          <ImportLogPanel />
+        </div>
+      )}
     </div>
   );
 }

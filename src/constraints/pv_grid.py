@@ -52,16 +52,7 @@ def add_pv_grid_constraints(
             pv_cap = get_pv_gen(dp, site_id, t)
 
             # §10.8 PV 出力 = 使用 + 抑制 (<= 発電量)
-            if p_pv_cur is not None:
-                model.addConstr(
-                    p_pv_used[site_id, t] + p_pv_cur[site_id, t] <= pv_cap,
-                    name=f"pv_total[{site_id},{t}]",
-                )
-            else:
-                model.addConstr(
-                    p_pv_used[site_id, t] <= pv_cap,
-                    name=f"pv_use_ub[{site_id},{t}]",
-                )
+            # NOTE: Removed redundant capacity constraints as they are now unified inside energy_balance.py
 
             # 逆潮流上限 (設定があれば)
             if p_grid_exp is not None and site is not None:

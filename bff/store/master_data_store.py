@@ -68,3 +68,43 @@ def save_master_data(path: Path, payload: Dict[str, Any]) -> None:
             ],
         )
         conn.commit()
+
+
+def load_master_collection(path: Path, name: str, default: Any) -> Any:
+    if not path.exists():
+        return default
+    with closing(_connect(path)) as conn:
+        _ensure_schema(conn)
+        row = conn.execute(
+            "SELECT payload_json FROM collections WHERE name = ?",
+            (name,),
+        ).fetchone()
+    if row is None:
+        return default
+    return json.loads(str(row["payload_json"]))
+
+
+def save_master_collections(path: Path, payload: Dict[str, Any]) -> None:
+    if not payload:
+        return
+    with closing(_connect(path)) as conn:
+        _ensure_schema(conn)
+        now = _now_iso()
+        conn.executemany(
+            """
+            INSERT INTO collections(name, payload_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+                payload_json=excluded.payload_json,
+                updated_at=excluded.updated_at
+            """,
+            [
+                (
+                    key,
+                    json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    now,
+                )
+                for key, value in payload.items()
+            ],
+        )
+        conn.commit()

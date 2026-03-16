@@ -339,6 +339,60 @@ def summarize_timetable_routes(db_path: Path) -> List[dict[str, Any]]:
     return summaries
 
 
+def summarize_timetable_routes_from_row_artifacts(db_path: Path) -> List[dict[str, Any]]:
+    if not db_path.exists():
+        return []
+
+    summaries: List[dict[str, Any]] = []
+    with closing(_connect(db_path)) as conn:
+        _ensure_schema(conn)
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    json_extract(payload_json, '$.route_id') AS route_id,
+                    COALESCE(json_extract(payload_json, '$.service_id'), 'WEEKDAY') AS service_id,
+                    COUNT(*) AS trip_count
+                FROM row_artifacts
+                WHERE name = 'timetable_rows'
+                GROUP BY route_id, service_id
+                ORDER BY route_id ASC, service_id ASC
+                """
+            ).fetchall()
+            for row in rows:
+                route_id = str(row["route_id"] or "").strip()
+                if not route_id:
+                    continue
+                summaries.append(
+                    {
+                        "route_id": route_id,
+                        "service_id": str(row["service_id"] or "WEEKDAY"),
+                        "trip_count": int(row["trip_count"] or 0),
+                    }
+                )
+            return summaries
+        except sqlite3.OperationalError:
+            pass
+
+    rows = load_rows(db_path, "timetable_rows")
+    grouped: dict[tuple[str, str], int] = {}
+    for item in rows:
+        route_id = str((item or {}).get("route_id") or "").strip()
+        if not route_id:
+            continue
+        service_id = str((item or {}).get("service_id") or "WEEKDAY")
+        key = (route_id, service_id)
+        grouped[key] = grouped.get(key, 0) + 1
+    return [
+        {
+            "route_id": route_id,
+            "service_id": service_id,
+            "trip_count": count,
+        }
+        for (route_id, service_id), count in sorted(grouped.items())
+    ]
+
+
 def save_graph_arcs(db_path: Path, rows: List[Any]) -> None:
     with closing(_connect(db_path)) as conn:
         _ensure_schema(conn)

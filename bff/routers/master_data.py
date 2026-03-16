@@ -1128,9 +1128,11 @@ def get_route(scenario_id: str, route_id: str) -> Dict[str, Any]:
 def list_route_families(
     scenario_id: str,
     operator: Optional[str] = Query(None),
+    depotId: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    items = store.list_routes(scenario_id, operator=operator)
+    depot_filter = depotId if isinstance(depotId, str) and depotId.strip() else None
+    items = store.list_routes(scenario_id, depot_id=depot_filter, operator=operator)
     items = _enrich_routes_for_display(scenario_id, items)
     families = build_route_family_summary(items)
     return {
@@ -1287,6 +1289,29 @@ def get_depot_route_family_permissions(scenario_id: str) -> Dict[str, Any]:
     return {"items": items, "total": len(items)}
 
 
+@router.get("/scenarios/{scenario_id}/depots/{depot_id}/route-family-permissions")
+def get_depot_scoped_route_family_permissions(
+    scenario_id: str,
+    depot_id: str,
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    principals = [
+        item
+        for item in store.list_depots(scenario_id)
+        if str(item.get("id") or "") == depot_id
+    ]
+    if not principals:
+        raise _not_found("Depot", depot_id)
+
+    items = _aggregate_route_family_permissions(
+        scenario_id=scenario_id,
+        principals=principals,
+        principal_key="depotId",
+        raw_permissions=store.get_depot_route_permissions(scenario_id),
+    )
+    return {"items": items, "total": len(items)}
+
+
 @router.put("/scenarios/{scenario_id}/depot-route-permissions")
 def update_depot_route_permissions(
     scenario_id: str, body: UpdateDepotRoutePermissionsBody
@@ -1336,6 +1361,25 @@ def get_vehicle_route_family_permissions(scenario_id: str) -> Dict[str, Any]:
     items = _aggregate_route_family_permissions(
         scenario_id=scenario_id,
         principals=store.list_vehicles(scenario_id),
+        principal_key="vehicleId",
+        raw_permissions=store.get_vehicle_route_permissions(scenario_id),
+    )
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/scenarios/{scenario_id}/depots/{depot_id}/vehicle-route-family-permissions")
+def get_depot_scoped_vehicle_route_family_permissions(
+    scenario_id: str,
+    depot_id: str,
+) -> Dict[str, Any]:
+    _check_scenario(scenario_id)
+    depots = store.list_depots(scenario_id)
+    if not any(str(item.get("id") or "") == depot_id for item in depots):
+        raise _not_found("Depot", depot_id)
+
+    items = _aggregate_route_family_permissions(
+        scenario_id=scenario_id,
+        principals=store.list_vehicles(scenario_id, depot_id=depot_id),
         principal_key="vehicleId",
         raw_permissions=store.get_vehicle_route_permissions(scenario_id),
     )

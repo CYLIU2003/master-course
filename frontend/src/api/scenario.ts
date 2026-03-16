@@ -3,6 +3,7 @@ import type {
   ScenarioListResponse,
   ScenarioDetailResponse,
   EditorBootstrapResponse,
+  EditorBootstrapLiteResponse,
   CreateScenarioRequest,
   UpdateScenarioRequest,
   TimetableResponse,
@@ -67,6 +68,9 @@ export const scenarioApi = {
 
   getEditorBootstrap: (id: string) =>
     api.get<EditorBootstrapResponse>(`/scenarios/${id}/editor-bootstrap`),
+
+  getEditorBootstrapLite: (id: string) =>
+    api.get<EditorBootstrapLiteResponse>(`/scenarios/${id}/editor-bootstrap-lite`),
 
   create: (data: CreateScenarioRequest) =>
     api.post<ScenarioDetailResponse>("/scenarios", data),

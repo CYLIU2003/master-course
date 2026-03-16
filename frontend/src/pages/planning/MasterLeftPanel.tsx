@@ -14,9 +14,19 @@ interface Props {
 
 export function MasterLeftPanel({ scenarioId }: Props) {
   const { t } = useTranslation();
-  const { data, isLoading, error } = useDepots(scenarioId);
+  const activeTab = useMasterUiStore((s) => s.activeTab);
+  const shouldLoadDepots = activeTab === "depots" || activeTab === "vehicles" || activeTab === "routes";
+  const { data, isLoading, error } = useDepots(scenarioId, { enabled: shouldLoadDepots });
   const selectedDepotId = useMasterUiStore((s) => s.selectedDepotId);
   const selectDepot = useMasterUiStore((s) => s.selectDepot);
+
+  if (activeTab === "stops") {
+    return (
+      <div className="flex h-full items-center justify-center px-4 text-center text-xs text-slate-500">
+        {t("master.depot_filter_not_used_in_stops", "停留所タブでは営業所フィルタを使用しません")}
+      </div>
+    );
+  }
 
   if (isLoading) return <LoadingBlock message={t("depots.loading")} />;
   if (error) return <ErrorBlock message={error.message} />;

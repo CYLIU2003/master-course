@@ -31,6 +31,7 @@ export function CostResultsPage() {
     ["Energy", result.cost_breakdown.energy_cost],
     ["Peak demand", result.cost_breakdown.peak_demand_cost],
     ["Vehicle", result.cost_breakdown.vehicle_cost],
+    ["Driver", result.cost_breakdown.driver_cost],
     ["Deadhead", result.cost_breakdown.deadhead_cost],
     ["Total", result.cost_breakdown.total_cost],
   ];

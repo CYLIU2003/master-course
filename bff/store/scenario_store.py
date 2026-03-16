@@ -300,6 +300,11 @@ def _path(scenario_id: str) -> Path:
     return scenario_meta_store.scenario_path(_STORE_DIR, scenario_id)
 
 
+def _master_data_path(scenario_id: str, meta: Optional[Dict[str, Any]] = None) -> Path:
+    refs = _refs_for_scenario(scenario_id, meta)
+    return Path(refs["masterData"])
+
+
 def _timetable_path(scenario_id: str) -> Path:
     return scenario_meta_store.artifact_dir(_STORE_DIR, scenario_id) / "timetable_rows.json"
 
@@ -500,6 +505,65 @@ def _save_master_only(
             doc[field] = value
 
 
+def _save_master_subset(
+    scenario_id: str,
+    *,
+    updates: Dict[str, Any],
+    invalidate_dispatch: bool,
+) -> None:
+    if not updates:
+        return
+
+    _ensure_dir()
+    with _scenario_lock(scenario_id):
+        meta_doc = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+        refs = _refs_for_scenario(scenario_id, meta_doc)
+        master_db_path = Path(refs["masterData"])
+
+        master_data_store.save_master_collections(master_db_path, updates)
+
+        if invalidate_dispatch:
+            _clear_dispatch_artifacts(refs)
+
+        now = _now_iso()
+        meta_payload = dict(meta_doc.get("meta") or {})
+        meta_payload["updatedAt"] = now
+
+        scope_source = updates.get("dispatch_scope")
+        if not isinstance(scope_source, dict):
+            scope_source = _load_shallow(scenario_id).get("dispatch_scope") or {}
+
+        merged_doc = {
+            "meta": meta_payload,
+            "dispatch_scope": scope_source,
+            **updates,
+        }
+        existing_stats = dict(meta_doc.get("stats") or {})
+        stats = _normalize_stats_payload(
+            merged_doc,
+            fallback=existing_stats,
+            dispatch_invalidated=invalidate_dispatch,
+        )
+
+        slim_doc = {
+            "scenarioId": scenario_id,
+            "name": meta_doc.get("name") or meta_payload.get("name"),
+            "meta": {
+                **meta_payload,
+                **_scope_summary(updates.get("dispatch_scope")),
+            },
+            "feed_context": meta_doc.get("feed_context"),
+            "refs": refs,
+            "stats": stats,
+        }
+        if "feed_context" in updates:
+            slim_doc["feed_context"] = updates.get("feed_context")
+
+        scenario_meta_store.save_meta(_STORE_DIR, scenario_id, slim_doc)
+
+        return
+
+
 def _scope_summary(scope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     normalized = scope if isinstance(scope, dict) else _default_dispatch_scope()
     depot_selection = dict(normalized.get("depotSelection") or {})
@@ -655,6 +719,18 @@ def _repair_missing_master_defaults(
     return repaired
 
 
+def _needs_master_repair(doc: Dict[str, Any]) -> bool:
+    return not all(
+        bool(doc.get(key))
+        for key in (
+            "depots",
+            "routes",
+            "vehicle_templates",
+            "route_depot_assignments",
+        )
+    )
+
+
 # Fields that are heavy and should NOT be loaded for lightweight operations
 # like editor-bootstrap.  These are populated on-demand by specific endpoints.
 _HEAVY_ARTIFACT_FIELDS = frozenset({
@@ -727,7 +803,8 @@ def _load_shallow(
     doc.setdefault("scenario_overlay", None)
     doc.setdefault("dispatch_scope", _default_dispatch_scope())
     doc.setdefault("public_data", _default_public_data_state())
-    _repair_missing_master_defaults(doc)
+    if _needs_master_repair(doc):
+        _repair_missing_master_defaults(doc)
     doc.setdefault("stats", _scenario_stats(doc))
     for key, value in _default_v1_2_fields().items():
         doc.setdefault(key, value)
@@ -844,7 +921,7 @@ def _load(
     doc.setdefault("scenario_overlay", None)
     doc.setdefault("dispatch_scope", _default_dispatch_scope())
     doc.setdefault("public_data", _default_public_data_state())
-    if repair_missing_master:
+    if repair_missing_master and _needs_master_repair(doc):
         _repair_missing_master_defaults(doc)
     doc.setdefault("stats", _scenario_stats(doc))
     for key, value in _default_v1_2_fields().items():
@@ -1665,7 +1742,7 @@ def update_scenario(
     operator_id: Optional[str] = None,
     status: Optional[str] = None,
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     if name is not None:
         doc["meta"]["name"] = name
     if description is not None:
@@ -1681,7 +1758,7 @@ def update_scenario(
     if status is not None:
         doc["meta"]["status"] = status
     doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _save_master_only(doc, invalidate_dispatch=False)
     return _meta_payload(doc)
 
 
@@ -1882,6 +1959,12 @@ def summarize_route_service_trip_counts(
     if summaries:
         return [dict(item) for item in summaries]
 
+    row_artifact_summaries = trip_store.summarize_timetable_routes_from_row_artifacts(
+        db_path
+    )
+    if row_artifact_summaries:
+        return [dict(item) for item in row_artifact_summaries]
+
     if (
         trip_store.count_timetable_rows(db_path) == 0
         and trip_store.count_rows(db_path, "timetable_rows") == 0
@@ -1992,6 +2075,47 @@ def page_graph_arcs(
 def set_field(
     scenario_id: str, field: str, value: Any, *, invalidate_dispatch: bool = False
 ) -> None:
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    refs = _refs_for_scenario(scenario_id, meta)
+    db_path = _artifact_store_path(refs)
+
+    # Directly update SQLite for scalar artifacts to avoid _save() wiping out row artifacts
+    if field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
+        trip_store.save_scalar(db_path, field, value)
+        return
+        
+    if field in _SQLITE_ROW_ARTIFACT_FIELDS:
+        if field == "timetable_rows":
+            trip_store.save_timetable_rows(db_path, value)
+        trip_store.save_rows(db_path, field, value)
+        # Update summary if needed
+        if field in _SUMMARY_SCALAR_NAMES:
+            doc = _load_shallow(scenario_id)
+            if field == "timetable_rows":
+                summary = _build_timetable_summary_artifact(value, doc.get("timetable_import_meta") or {})
+            elif field == "trips":
+                summary = _build_trips_summary_artifact(value)
+            elif field == "duties":
+                summary = _build_duties_summary_artifact(value)
+            else:
+                summary = None
+            if summary:
+                trip_store.save_scalar(db_path, _SUMMARY_SCALAR_NAMES[field], summary)
+        return
+        
+    if field == "graph":
+        _save_graph_artifact(db_path, value)
+        return
+
+    if field in ("optimization_audit", "simulation_audit", "problemdata_build_audit"):
+        doc = _load_shallow(scenario_id)
+        doc[field] = value
+        if invalidate_dispatch:
+            _invalidate_dispatch_artifacts(doc)
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save_master_only(doc, invalidate_dispatch=invalidate_dispatch)
+        return
+
     doc = _load(scenario_id, skip_graph_arcs=True)
     doc[field] = value
     if invalidate_dispatch:
@@ -2015,7 +2139,7 @@ def set_scenario_overlay(
     scenario_id: str,
     overlay: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     doc["scenario_overlay"] = dict(overlay) if isinstance(overlay, dict) else None
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
@@ -2086,7 +2210,7 @@ def set_feed_context(
     scenario_id: str,
     feed_context: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     doc["feed_context"] = _normalize_feed_context(feed_context)
     doc["meta"]["updatedAt"] = _now_iso()
     _save(doc)
@@ -2097,6 +2221,10 @@ def set_feed_context(
 
 
 def _list_items(scenario_id: str, field: str) -> List[Dict[str, Any]]:
+    master_path = _master_data_path(scenario_id)
+    payload = master_data_store.load_master_collection(master_path, field, [])
+    if isinstance(payload, list):
+        return [dict(item) for item in payload if isinstance(item, dict)]
     return list(get_field(scenario_id, field))
 
 
@@ -2124,7 +2252,16 @@ def _create_item(scenario_id: str, field: str, data: Dict[str, Any]) -> Dict[str
     if field in {"vehicles", "routes"}:
         _sync_vehicle_route_permissions(doc)
     doc["meta"]["updatedAt"] = _now_iso()
-    _save_master_only(doc, invalidate_dispatch=invalidate_dispatch)
+    _save_master_subset(
+        scenario_id,
+        updates={
+            field: list(doc[field]),
+            "dispatch_scope": doc.get("dispatch_scope"),
+            "depot_route_permissions": doc.get("depot_route_permissions"),
+            "vehicle_route_permissions": doc.get("vehicle_route_permissions"),
+        },
+        invalidate_dispatch=invalidate_dispatch,
+    )
     return item
 
 
@@ -2144,7 +2281,16 @@ def _update_item(
             if field in {"vehicles", "routes"}:
                 _sync_vehicle_route_permissions(doc)
             doc["meta"]["updatedAt"] = _now_iso()
-            _save_master_only(doc, invalidate_dispatch=invalidate_dispatch)
+            _save_master_subset(
+                scenario_id,
+                updates={
+                    field: list(doc[field]),
+                    "dispatch_scope": doc.get("dispatch_scope"),
+                    "depot_route_permissions": doc.get("depot_route_permissions"),
+                    "vehicle_route_permissions": doc.get("vehicle_route_permissions"),
+                },
+                invalidate_dispatch=invalidate_dispatch,
+            )
             return item
     raise KeyError(item_id)
 
@@ -2164,7 +2310,16 @@ def _delete_item(scenario_id: str, field: str, item_id_key: str, item_id: str) -
     if field in {"vehicles", "routes"}:
         _sync_vehicle_route_permissions(doc)
     doc["meta"]["updatedAt"] = _now_iso()
-    _save_master_only(doc, invalidate_dispatch=invalidate_dispatch)
+    _save_master_subset(
+        scenario_id,
+        updates={
+            field: list(doc[field]),
+            "dispatch_scope": doc.get("dispatch_scope"),
+            "depot_route_permissions": doc.get("depot_route_permissions"),
+            "vehicle_route_permissions": doc.get("vehicle_route_permissions"),
+        },
+        invalidate_dispatch=invalidate_dispatch,
+    )
 
 
 # ── Depot helpers ──────────────────────────────────────────────
@@ -2197,7 +2352,14 @@ def delete_depot(scenario_id: str, depot_id: str) -> None:
         if str(item.get("depotId")) != depot_id
     ]
     doc["meta"]["updatedAt"] = _now_iso()
-    _save_master_only(doc, invalidate_dispatch=True)
+    _save_master_subset(
+        scenario_id,
+        updates={
+            "route_depot_assignments": doc.get("route_depot_assignments"),
+            "dispatch_scope": doc.get("dispatch_scope"),
+        },
+        invalidate_dispatch=True,
+    )
 
 
 def get_public_data_state(scenario_id: str) -> Dict[str, Any]:
@@ -2211,7 +2373,7 @@ def get_public_data_state(scenario_id: str) -> Dict[str, Any]:
 
 
 def set_public_data_state(scenario_id: str, state: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
+    doc = _load_shallow(scenario_id)
     normalized = _default_public_data_state()
     normalized.update(state)
     doc["public_data"] = normalized

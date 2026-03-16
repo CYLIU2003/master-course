@@ -69,6 +69,17 @@ def add_energy_balance_constraints(
                 for c in site_chargers
                 if c in ms.vehicle_charger_feasible.get(k, set())
             )
+            
+            # 地点 site の全放電電力合計 [kW] (P0: V2G有効時のエネルギー収支)
+            total_discharge_kw = 0.0
+            if data.enable_v2g and p_dis is not None:
+                total_discharge_kw = gp.quicksum(
+                    p_dis[k, c, t]
+                    for k in K_BEV
+                    for c in site_chargers
+                    if c in ms.vehicle_charger_feasible.get(k, set())
+                )
+
             # 基礎負荷 [kW]
             base = get_base_load(dp, site_id, t)
 
@@ -81,18 +92,18 @@ def add_energy_balance_constraints(
                 )
                 # §10.8 自家消費優先
                 model.addConstr(
-                    p_pv_used[site_id, t] <= total_charge_kw + base,
+                    p_pv_used[site_id, t] <= total_charge_kw + base - total_discharge_kw,
                     name=f"pv_self_consume[{site_id},{t}]",
                 )
                 # 電力収支
                 model.addConstr(
-                    p_grid[site_id, t] + p_pv_used[site_id, t] == total_charge_kw + base,
+                    p_grid[site_id, t] + p_pv_used[site_id, t] + total_discharge_kw == total_charge_kw + base,
                     name=f"power_balance[{site_id},{t}]",
                 )
             else:
                 # PV なし: 系統受電 = 充電需要 + 基礎負荷
                 model.addConstr(
-                    p_grid[site_id, t] == total_charge_kw + base,
+                    p_grid[site_id, t] + total_discharge_kw == total_charge_kw + base,
                     name=f"power_balance_no_pv[{site_id},{t}]",
                 )
 

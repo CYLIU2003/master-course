@@ -79,6 +79,8 @@ class VehicleProfile:
     # Engine fields (optional)
     fuel_tank_capacity_l: Optional[float] = None
     fuel_consumption_l_per_km: Optional[float] = None
+    
+    fixed_use_cost_jpy: float = 0.0
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import copy
 import os
+from functools import lru_cache
 from typing import Any, Dict, Optional
 
 from src.research_dataset_loader import (
@@ -23,7 +25,8 @@ def _resolve_dataset_id(dataset_id: Optional[str] = None) -> str:
     return str(dataset_id or DEFAULT_PRELOAD_MASTER_DATASET_ID or DEFAULT_DATASET_ID)
 
 
-def get_preloaded_master_data(dataset_id: Optional[str] = None) -> Dict[str, Any]:
+@lru_cache(maxsize=16)
+def _cached_preloaded_master_data(dataset_id: str) -> Dict[str, Any]:
     target_dataset_id = _resolve_dataset_id(dataset_id)
     try:
         bootstrap = build_dataset_bootstrap(
@@ -58,6 +61,11 @@ def get_preloaded_master_data(dataset_id: Optional[str] = None) -> Dict[str, Any
     }
 
 
+def get_preloaded_master_data(dataset_id: Optional[str] = None) -> Dict[str, Any]:
+    target_dataset_id = _resolve_dataset_id(dataset_id)
+    return copy.deepcopy(_cached_preloaded_master_data(target_dataset_id))
+
+
 def repair_missing_master_data(
     doc: Dict[str, Any],
     *,
@@ -70,6 +78,41 @@ def repair_missing_master_data(
         or (doc.get("feed_context") or {}).get("dataset_id")
     )
     if not target_dataset_id:
+        return False
+
+    current_scope = doc.get("dispatch_scope") if isinstance(doc.get("dispatch_scope"), dict) else {}
+    current_depot_selection = dict(current_scope.get("depotSelection") or {})
+    current_route_selection = dict(current_scope.get("routeSelection") or {})
+    current_service_selection = dict(current_scope.get("serviceSelection") or {})
+
+    has_core_master_data = all(
+        bool(doc.get(key))
+        for key in (
+            "depots",
+            "routes",
+            "vehicle_templates",
+            "route_depot_assignments",
+        )
+    )
+
+    current_permissions = list(doc.get("depot_route_permissions") or [])
+    current_depots = list(doc.get("depots") or [])
+    current_routes = list(doc.get("routes") or [])
+    full_matrix_size = len(current_depots) * len(current_routes)
+    is_full_matrix_allow_all = (
+        bool(current_permissions)
+        and full_matrix_size > 0
+        and len(current_permissions) == full_matrix_size
+        and all(bool(item.get("allowed")) for item in current_permissions)
+    )
+
+    has_scope_selection = (
+        bool(list(current_depot_selection.get("depotIds") or []))
+        and bool(list(current_route_selection.get("includeRouteIds") or []))
+        and bool(list(current_service_selection.get("serviceIds") or []))
+    )
+
+    if has_core_master_data and current_permissions and not is_full_matrix_allow_all and has_scope_selection:
         return False
 
     payload = get_preloaded_master_data(str(target_dataset_id))

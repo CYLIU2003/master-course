@@ -24,6 +24,8 @@ export const scenarioKeys = {
   detail: (id: string) => ["scenarios", id] as const,
   editorBootstrap: (id: string) =>
     ["scenarios", id, "editor-bootstrap"] as const,
+  editorBootstrapLite: (id: string) =>
+    ["scenarios", id, "editor-bootstrap-lite"] as const,
   dispatchScope: (id: string) => ["scenarios", id, "dispatch-scope"] as const,
   timetable: (id: string, serviceId?: string) =>
     ["scenarios", id, "timetable", serviceId ?? "all"] as const,
@@ -125,6 +127,14 @@ export function useEditorBootstrap(id: string) {
   return useQuery({
     queryKey: scenarioKeys.editorBootstrap(id),
     queryFn: () => scenarioApi.getEditorBootstrap(id),
+    enabled: !!id,
+  });
+}
+
+export function useEditorBootstrapLite(id: string) {
+  return useQuery({
+    queryKey: scenarioKeys.editorBootstrapLite(id),
+    queryFn: () => scenarioApi.getEditorBootstrapLite(id),
     enabled: !!id,
   });
 }

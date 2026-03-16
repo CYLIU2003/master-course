@@ -530,6 +530,202 @@ def test_depot_route_family_permissions_aggregate_and_expand(
     assert raw_permissions == expected_permissions
 
 
+def test_depot_scoped_route_family_permissions_returns_single_depot(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Depot scoped family permissions", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Meguro Depot", "location": "Meguro"},
+    )
+    other_depot = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Seta Depot", "location": "Seta"},
+    )
+
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [
+            {
+                "id": "a-out",
+                "name": "A01 (X -> Y)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (X -> Y)",
+                "startStop": "X",
+                "endStop": "Y",
+                "stopSequence": ["S1", "S2"],
+                "tripCount": 6,
+                "source": "odpt",
+            },
+            {
+                "id": "a-in",
+                "name": "A01 (Y -> X)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (Y -> X)",
+                "startStop": "Y",
+                "endStop": "X",
+                "stopSequence": ["S2", "S1"],
+                "tripCount": 5,
+                "source": "odpt",
+            },
+        ],
+    )
+    scenario_store.set_depot_route_permissions(
+        scenario_id,
+        [
+            {"depotId": depot["id"], "routeId": "a-out", "allowed": True},
+            {"depotId": other_depot["id"], "routeId": "a-out", "allowed": False},
+        ],
+    )
+
+    scoped = master_data.get_depot_scoped_route_family_permissions(scenario_id, depot["id"])
+
+    assert scoped["total"] > 0
+    assert all(item["depotId"] == depot["id"] for item in scoped["items"])
+
+
+def test_list_route_families_supports_depot_filter(temp_store_dir: Path):
+    meta = scenario_store.create_scenario("Route family depot filter", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot_a = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Depot A", "location": "A"},
+    )
+    depot_b = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Depot B", "location": "B"},
+    )
+
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [
+            {
+                "id": "a-1",
+                "name": "A01 (X -> Y)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (X -> Y)",
+                "startStop": "X",
+                "endStop": "Y",
+                "stopSequence": ["S1", "S2"],
+                "tripCount": 4,
+                "source": "odpt",
+                "depotId": depot_a["id"],
+            },
+            {
+                "id": "b-1",
+                "name": "B02 (P -> Q)",
+                "routeCode": "B02",
+                "routeLabel": "B02 (P -> Q)",
+                "startStop": "P",
+                "endStop": "Q",
+                "stopSequence": ["S3", "S4"],
+                "tripCount": 3,
+                "source": "odpt",
+                "depotId": depot_b["id"],
+            },
+        ],
+    )
+
+    filtered = master_data.list_route_families(
+        scenario_id,
+        operator=None,
+        depotId=depot_a["id"],
+    )
+
+    assert filtered["total"] == 1
+    assert filtered["items"][0]["routeFamilyCode"] == "A01"
+
+
+def test_depot_scoped_vehicle_route_family_permissions_returns_only_depot_vehicles(
+    temp_store_dir: Path,
+):
+    meta = scenario_store.create_scenario("Depot scoped vehicle family permissions", "", "thesis_mode")
+    scenario_id = meta["id"]
+
+    depot_a = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Depot A", "location": "A"},
+    )
+    depot_b = scenario_store.create_depot(
+        scenario_id,
+        {"name": "Depot B", "location": "B"},
+    )
+
+    vehicle_a = scenario_store.create_vehicle(
+        scenario_id,
+        {
+            "depotId": depot_a["id"],
+            "type": "BEV",
+            "modelName": "A-vehicle",
+            "capacityPassengers": 70,
+            "batteryKwh": 300.0,
+            "fuelTankL": None,
+            "energyConsumption": 1.3,
+            "chargePowerKw": 60.0,
+            "minSoc": 0.2,
+            "maxSoc": 0.95,
+            "acquisitionCost": 0.0,
+            "enabled": True,
+        },
+    )
+    scenario_store.create_vehicle(
+        scenario_id,
+        {
+            "depotId": depot_b["id"],
+            "type": "BEV",
+            "modelName": "B-vehicle",
+            "capacityPassengers": 70,
+            "batteryKwh": 300.0,
+            "fuelTankL": None,
+            "energyConsumption": 1.3,
+            "chargePowerKw": 60.0,
+            "minSoc": 0.2,
+            "maxSoc": 0.95,
+            "acquisitionCost": 0.0,
+            "enabled": True,
+        },
+    )
+
+    scenario_store.replace_routes_from_source(
+        scenario_id,
+        "odpt",
+        [
+            {
+                "id": "a-out",
+                "name": "A01 (X -> Y)",
+                "routeCode": "A01",
+                "routeLabel": "A01 (X -> Y)",
+                "startStop": "X",
+                "endStop": "Y",
+                "stopSequence": ["S1", "S2"],
+                "tripCount": 4,
+                "source": "odpt",
+                "depotId": depot_a["id"],
+            }
+        ],
+    )
+
+    scenario_store.set_vehicle_route_permissions(
+        scenario_id,
+        [
+            {"vehicleId": vehicle_a["id"], "routeId": "a-out", "allowed": True},
+        ],
+    )
+
+    scoped = master_data.get_depot_scoped_vehicle_route_family_permissions(
+        scenario_id,
+        depot_a["id"],
+    )
+
+    assert scoped["total"] > 0
+    assert all(item["vehicleId"] == vehicle_a["id"] for item in scoped["items"])
+
+
 def test_vehicle_route_family_permissions_aggregate_and_expand(
     temp_store_dir: Path,
 ):

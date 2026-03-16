@@ -119,6 +119,14 @@ def create_job() -> Job:
 
 
 def get_job(job_id: str) -> Job:
+    # Always reload from disk if it exists, to get updates from worker processes
+    path = _job_path(job_id)
+    if path.exists():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            _jobs[job_id] = _job_from_payload(payload)
+        except Exception:
+            pass
     if job_id not in _jobs:
         raise KeyError(job_id)
     return _jobs[job_id]

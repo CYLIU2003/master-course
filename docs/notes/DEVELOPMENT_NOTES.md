@@ -39,6 +39,189 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-15] Simulation Input Builder 化の第1段（lite bootstrap + depot-scoped 権限 + invalidate 範囲縮小）
+
+- **背景課題**:
+  - Planning 画面の初期ロードが `editor-bootstrap` 前提で広すぎ、summary-first 設計と乖離していた。
+  - DepotRouteMatrix が depot 単位 UI にもかかわらず、全 depots / 全 route-families / 全 permissions を取得していた。
+  - 営業所・車両・permission 更新で dispatch/graph/simulation/optimization まで即 invalidate しており、
+    微小編集でも待ち時間が増える構造だった。
+
+- **対応（Backend）**:
+  - `bff/routers/scenarios.py`
+    - `GET /scenarios/{id}/editor-bootstrap-lite` を追加。
+    - 共通 builder `_build_editor_bootstrap_payload()` を導入し、
+      - full: `editor-bootstrap`
+      - lite: `editor-bootstrap-lite`
+      を同じ整形ロジックで返す構成に変更。
+    - lite では `routes`, `vehicleTemplates`, `depotRouteIndex`, `availableDayTypes`, `builderDefaults` を返さず、
+      `scenario + dispatchScope + depots + depotRouteSummary` 中心の summary payload に限定。
+  - `bff/routers/master_data.py`
+    - `GET /scenarios/{id}/route-families` に `depotId` query を追加（depot-scoped route family 取得）。
+    - `GET /scenarios/{id}/depots/{depotId}/route-family-permissions` を追加。
+
+- **対応（Frontend）**:
+  - `frontend/src/pages/planning/MasterPlanningPage.tsx`
+    - 初期取得を `useEditorBootstrapLite()` へ切替。
+  - `frontend/src/hooks/use-scenario.ts`, `frontend/src/api/scenario.ts`
+    - `editor-bootstrap-lite` 用の query key / API client / hook を追加。
+  - `frontend/src/features/planning/DepotRouteMatrix.tsx`
+    - 全体取得をやめ、`depotId` スコープの
+      - route families
+      - depot route-family permissions
+      のみ取得するよう変更。
+  - `frontend/src/hooks/use-master-data.ts`, `frontend/src/api/master-data.ts`
+    - `useRouteFamiliesScoped(...)` と depot-scoped permissions API を追加。
+    - 既存 update mutation（depot/vehicle/route/permission/stop import 等）から
+      `invalidateDispatchOutputs(...)` を除去し、即時の重い再同期を停止。
+
+- **型更新**:
+  - `frontend/src/types/domain.ts`
+    - `EditorBootstrapLite` 型を追加。
+  - `frontend/src/types/api.ts`, `frontend/src/types/index.ts`
+    - `EditorBootstrapLiteResponse` を追加。
+
+- **期待効果**:
+  - Planning 初期表示時の payload と query 本数を削減。
+  - 営業所タブの詳細操作が depot 単位に閉じ、全体取得を回避。
+  - 微小な master 編集で dispatch/optimization 系キャッシュを揺らさないため、
+    体感の待ち時間を大幅に減らす基盤を確立。
+
+### [DEV-2026-03-15] Simulation Input Builder 化の第2段（Dispatch Scope を draft→保存に変更）
+
+- **背景課題**:
+  - Planning の「配車スコープ設定」がトグル変更のたびに即 `PATCH /dispatch-scope` を発行していた。
+  - 微小編集でも network + invalidation が発生し、Builder 操作の連続性を損なっていた。
+
+- **対応（Frontend）**:
+  - `frontend/src/pages/planning/MasterPlanningPage.tsx`
+    - Dispatch Scope を即時保存から **local draft + 明示保存** に変更。
+    - トグルはローカル state (`scopeDraft`) のみ更新。
+    - `保存` ボタン押下時のみ `useUpdateDispatchScope().mutate(...)` を実行。
+    - `破棄` ボタンで bootstrap 起点値へ復元。
+    - `未保存の変更あり` / `保存済み` 表示を追加。
+
+- **関連改善**:
+  - `frontend/src/hooks/use-master-data.ts`
+    - `routeKeys.families` の key を `{ operator, depotId }` へ正規化。
+  - `bff/routers/master_data.py` + `frontend/src/api/master-data.ts`
+    - route family の depot filter (`depotId`) を利用する depot-scoped 流れに統一。
+
+- **期待効果**:
+  - スコープ調整中に不要な即時同期を発生させず、入力体験を builder 型に近づける。
+  - 保存タイミングをユーザー主導にし、1操作ごとの待ち時間を抑制。
+
+### [DEV-2026-03-15] Simulation Input Builder 化の第3段（Permission Matrix を draft→保存に変更）
+
+- **背景課題**:
+  - 営業所-路線許可 / 車両-路線許可の行列が、チェック1回ごとに即 mutation されていた。
+  - 「行列調整中に毎回保存」が発生し、操作体験が重くなる要因だった。
+
+- **対応（Frontend）**:
+  - `frontend/src/features/planning/DepotRouteMatrix.tsx`
+    - チェック操作を local draft に反映する方式へ変更。
+    - `保存` で dirty family 分だけ一括送信。
+    - `破棄` でサーバ状態へ復元。
+  - `frontend/src/features/planning/VehicleRouteMatrix.tsx`
+    - 同様に vehicle x routeFamily 行列を draft 方式へ変更。
+    - dirty pair（vehicleId:routeFamilyId）単位で保存 payload を構成。
+
+- **対応（API / Hook）**:
+  - `bff/routers/master_data.py`
+    - `GET /scenarios/{id}/depots/{depotId}/vehicle-route-family-permissions` 追加。
+  - `frontend/src/api/master-data.ts`
+    - depot-scoped vehicle-family permissions API client を追加。
+  - `frontend/src/hooks/use-master-data.ts`
+    - `useVehicleRouteFamilyPermissionsForDepot(...)` 追加。
+  - `frontend/src/hooks/index.ts`
+    - 上記 hook を export。
+
+- **期待効果**:
+  - permission matrix 編集中の即時同期を止め、入力の連続性を改善。
+  - depot-scoped 取得で読み込み範囲を局所化し、タブ体感速度を改善。
+
+### [DEV-2026-03-15] Simulation Input Builder 化の第4段（未保存変更の可視化と離脱ガード）
+
+- **背景課題**:
+  - scope / permission の draft 方式は導入済みだが、画面全体で「未保存状態」を横断把握しづらかった。
+  - ページ離脱時に未保存編集が失われるリスクがあった。
+
+- **対応（Frontend）**:
+  - `frontend/src/stores/planning-draft-store.ts` を新規追加。
+    - scenario 単位で以下の dirty flag を保持。
+      - `scope`
+      - `depotPermissions`
+      - `vehiclePermissions`
+    - `useHasPlanningDraftChanges(scenarioId)` を追加。
+  - `frontend/src/pages/planning/MasterPlanningPage.tsx`
+    - ページ上部に「未保存の変更があります」バナーを表示。
+    - `beforeunload` で未保存時の離脱ガードを追加。
+    - scope 保存/破棄で dirty flag を更新。
+  - `frontend/src/features/planning/DepotRouteMatrix.tsx`
+    - toggle/save/reset で `depotPermissions` dirty flag を更新。
+  - `frontend/src/features/planning/VehicleRouteMatrix.tsx`
+    - toggle/save/reset で `vehiclePermissions` dirty flag を更新。
+
+- **期待効果**:
+  - Builder 画面で draft が残っているかを常に把握できる。
+  - 誤離脱による設定ロストを防止できる。
+
+### [DEV-2026-03-15] Simulation Input Builder 化の第5段（DispatchScopePanel の draft-save 統一 + prepare 直前ガード）
+
+- **背景課題**:
+  - `DispatchScopePanel` は checkbox/select 変更ごとに `updateDispatchScope` を即時発火していた。
+  - ScenarioOverview 側の prepare 実行時に Planning の未保存 draft を見ずに進められてしまう状態だった。
+
+- **対応（Frontend）**:
+  - `frontend/src/features/planning/DispatchScopePanel.tsx`
+    - 即時 mutation を廃止し、panel 内 `scopeDraft` で編集。
+    - `保存` / `破棄` ボタンを追加。
+    - dirty 判定中は `planning-draft-store` の `scope` flag を更新。
+    - route/family の candidate + include/exclude から、表示用 effective 集合を draft ベースで再計算。
+  - `frontend/src/pages/scenario/ScenarioOverviewPage.tsx`
+    - `useHasPlanningDraftChanges(scenarioId)` を参照。
+    - 未保存 draft がある場合は prepare を無効化し、実行時も alert でブロック。
+
+- **Drawer dirty 集約（可能な範囲）**:
+  - `frontend/src/features/planning/DepotEditorDrawer.tsx`
+    - 入力変更時に `depotEditor` dirty を立てる。
+    - 保存/削除成功時に dirty を解除。
+  - `frontend/src/features/planning/VehicleEditorDrawer.tsx`
+    - 入力変更時に `vehicleEditor` dirty を立てる。
+    - 保存/削除成功時に dirty を解除。
+  - `frontend/src/stores/planning-draft-store.ts`
+    - `depotEditor` / `vehicleEditor` フラグを追加。
+
+- **期待効果**:
+  - DispatchScopePanel でも Builder の「下書き→保存」方針を一貫適用。
+  - 未保存入力のまま prepare へ進む事故を防止。
+  - drawer 編集を含め、未保存状態を横断的に把握可能。
+
+### [DEV-2026-03-15] Master tab の追加軽量化（不要 query 抑制 + summary API 呼び出し削減）
+
+- **背景課題**:
+  - backend 側の高速化後も、実ブラウザでは「depots / vehicles / routes」タブで体感遅延が残るケースがあった。
+  - 初期表示や tab 遷移時に、一覧操作に不要な query が走る余地が残っていた。
+
+- **対応（Frontend）**:
+  - `frontend/src/pages/planning/MasterDataHeader.tsx`
+    - `useTimetableSummary` を削除。
+    - Header の時刻表件数は `useScenario().stats.timetableRowCount` を使用。
+    - これにより master tab 表示時の `/timetable/summary` 呼び出しを削減。
+  - `frontend/src/hooks/use-master-data.ts`
+    - `useVehicles` に `enabled` オプションを追加。
+    - `useDepots/useVehicles/useRoutes/useStops` に `refetchOnWindowFocus: false` を設定し、
+      フォーカス復帰時の再取得バーストを抑制。
+  - `frontend/src/features/planning/VehicleTableNew.tsx`
+    - 営業所未選択時は `useVehicles(..., { enabled: false })` で車両一覧 query を停止。
+    - 「営業所を選択してから車両表示」の UX と fetch 条件を一致させた。
+  - `frontend/src/pages/planning/MasterLeftPanel.tsx`
+    - `activeTab` に応じて depots query を条件実行（stops タブでは読み込まない）。
+
+- **検証**:
+  - `npx eslint "src/pages/planning/MasterDataHeader.tsx" "src/hooks/use-master-data.ts" "src/pages/planning/MasterLeftPanel.tsx" "src/features/planning/VehicleTableNew.tsx"` → pass
+  - `npm run build` (frontend) → pass
+
 ### [DEV-2026-03-15] Master Data の体感速度を改善（営業所編集の即時反映 + ルート一覧軽量化）
 
 - **背景課題**:
@@ -76,10 +259,37 @@ tests/       回帰テスト
   - `frontend/src/pages/planning/MasterDataHeader.tsx`
     - route/stop 件数を `useScenario().stats` 参照に切替。
       - 起動時の `useRoutes/useStops` を除去し、ヘッダ描画を軽量化。
+    - import progress/log を routes/stops タブ時のみ描画（depots/vehicles の不要描画を回避）。
+  - `frontend/src/pages/planning/MasterDataPage.tsx`
+    - planning tab の warm gate を外して即時描画に変更。
   - `frontend/src/features/planning/RouteTableNew.tsx`
     - 停留所数表示を `stopCount` 優先にし、一覧 API の軽量化に追従。
   - `frontend/src/types/domain.ts`
     - `Route.stopCount`, `Route.serviceTypes`, `Scenario.stats` を型定義に追加。
+
+- **追加高速化（第二段）**:
+  - `bff/services/master_defaults.py`
+    - dataset bootstrap 補完処理に guard + cache を導入し、既に master が揃っている scenario で
+      毎回重い bootstrap 再構築を走らせないよう改善。
+  - `bff/store/master_data_store.py`
+    - `load_master_collection()` / `save_master_collections()` を追加して collection 単位 I/O を可能化。
+  - `bff/store/scenario_store.py`
+    - `_save_master_subset()` を追加し、depot/vehicle/route 等の変更で必要 collection のみ更新。
+    - `list_*` 系は master_data.sqlite の単一 collection 直接ロードを優先。
+    - timetable route集計は row_artifacts fallback まで対応し、summary計算で full load を回避。
+  - `bff/routers/scenarios.py`
+    - `GET /app/context` の active scenario 名取得を軽量化（meta fallback）。
+
+- **ローカル実測（代表シナリオ）**:
+  - `_load_shallow()`:
+    - 改善前: 約 4.0-4.5 秒
+    - 改善後: 約 0.008 秒
+  - `master_data.list_routes()`:
+    - 改善後: 約 0.36 秒（136 routes）
+  - `scenarios.get_editor_bootstrap()`:
+    - 改善後: 約 0.019 秒
+  - `scenarios.get_app_context()`:
+    - 改善後: 約 0.010 秒
 
 - **検証**:
   - `python -m pytest tests/test_bff_route_family.py tests/test_bff_scenario_store.py tests/test_architecture.py tests/test_performance_contracts.py -q`

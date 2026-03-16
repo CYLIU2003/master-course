@@ -51,6 +51,7 @@ class ProblemVehicleType:
     charge_power_max_kw: Optional[float] = None
     discharge_power_max_kw: Optional[float] = None
     reserve_soc: Optional[float] = None
+    fixed_use_cost_jpy: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,7 @@ class ProblemVehicle:
     battery_capacity_kwh: Optional[float] = None
     reserve_soc: Optional[float] = None
     available: bool = True
+    fixed_use_cost_jpy: float = 0.0
 
 
 @dataclass(frozen=True)

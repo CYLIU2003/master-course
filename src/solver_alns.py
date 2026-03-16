@@ -275,7 +275,7 @@ def _evaluate_with_gurobi(
     model = gp.Model("alns_inner")
     model.Params.OutputFlag = 0
     model.Params.TimeLimit = 30.0
-    model.Params.Seed = params.seed
+    model.Params.Seed = 42 # P0: params スコープ外エラーの修正
 
     # ---------- 変数 ----------
     # SOC: BEV のみ, t=0..num_periods
@@ -312,7 +312,7 @@ def _evaluate_with_gurobi(
 
     # デマンド料金
     if data.enable_demand_charge:
-        demand_rate = 1500.0
+        demand_rate = data.demand_charge_rate_per_kw # P0: demand_rate のハードコード修正
         for site_id in I_CHARGE:
             obj += demand_rate * peak[site_id]
 

@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchJson } from "@/api/client";
+import { usePlanningDraftStore } from "@/stores/planning-draft-store";
 import {
   useCalendar,
   useCatalogDepotRoutes,
@@ -60,14 +61,21 @@ export function DispatchScopePanel({
         : [];
   const { data: calendarData, isLoading: loadingCalendar } = useCalendar(scenarioId);
   const updateScope = useUpdateDispatchScope(scenarioId);
+  const setScopeDirty = usePlanningDraftStore((s) => s.setScopeDirty);
   const normalizedScope = useMemo<NormalizedDispatchScope>(
     () => normalizeScope(scope),
     [scope],
   );
+  const [scopeDraft, setScopeDraft] = useState<NormalizedDispatchScope>(normalizedScope);
 
-  const selectedDepotIds = normalizedScope.depotSelection.depotIds;
-  const selectedDepotId = normalizedScope.depotSelection.primaryDepotId;
-  const selectedServiceId = normalizedScope.serviceSelection.serviceIds[0] ?? "WEEKDAY";
+  useEffect(() => {
+    setScopeDraft(normalizedScope);
+    setScopeDirty(scenarioId, false);
+  }, [normalizedScope, scenarioId, setScopeDirty]);
+
+  const selectedDepotIds = scopeDraft.depotSelection.depotIds;
+  const selectedDepotId = scopeDraft.depotSelection.primaryDepotId;
+  const selectedServiceId = scopeDraft.serviceSelection.serviceIds[0] ?? "WEEKDAY";
   const calendarType = serviceIdToCalendarType(selectedServiceId);
   const {
     data: catalogDepots = [],
@@ -89,7 +97,7 @@ export function DispatchScopePanel({
 
   const depots: Array<CatalogDepotSummary | { id: string; name: string }> =
     catalogDepotsError ? (depotsData?.items ?? []) : catalogDepots;
-  const routes: Route[] = routesData?.items ?? [];
+  const routes = useMemo<Route[]>(() => routesData?.items ?? [], [routesData?.items]);
   const serviceOptions =
     calendarData?.items?.map((entry) => ({
       value: entry.service_id,
@@ -100,10 +108,42 @@ export function DispatchScopePanel({
       { value: "SAT_HOL", label: "土曜・休日" },
       { value: "SUN_HOL", label: t("timetable.filter_sun_hol", "日曜・休日") },
     ];
-  const effectiveRouteIds = new Set(normalizedScope.effectiveRouteIds);
-  const candidateRouteIds = new Set(normalizedScope.candidateRouteIds);
-  const effectiveRouteFamilyCodes = new Set(normalizedScope.effectiveRouteFamilyCodes);
-  const candidateRouteFamilyCodes = new Set(normalizedScope.candidateRouteFamilyCodes);
+  const candidateRouteIds = useMemo(
+    () => new Set(normalizedScope.candidateRouteIds),
+    [normalizedScope.candidateRouteIds],
+  );
+  const candidateRouteFamilyCodes = useMemo(
+    () => new Set(normalizedScope.candidateRouteFamilyCodes),
+    [normalizedScope.candidateRouteFamilyCodes],
+  );
+  const effectiveRouteIds = useMemo(() => {
+    const selected = new Set<string>();
+    for (const routeId of normalizedScope.candidateRouteIds) {
+      if (!scopeDraft.routeSelection.excludeRouteIds.includes(routeId)) {
+        selected.add(routeId);
+      }
+    }
+    for (const routeId of scopeDraft.routeSelection.includeRouteIds) {
+      selected.add(routeId);
+    }
+    return selected;
+  }, [normalizedScope.candidateRouteIds, scopeDraft.routeSelection.excludeRouteIds, scopeDraft.routeSelection.includeRouteIds]);
+  const effectiveRouteFamilyCodes = useMemo(() => {
+    const selected = new Set<string>();
+    for (const code of normalizedScope.candidateRouteFamilyCodes) {
+      if (!scopeDraft.routeSelection.excludeRouteFamilyCodes.includes(code)) {
+        selected.add(code);
+      }
+    }
+    for (const code of scopeDraft.routeSelection.includeRouteFamilyCodes) {
+      selected.add(code);
+    }
+    return selected;
+  }, [
+    normalizedScope.candidateRouteFamilyCodes,
+    scopeDraft.routeSelection.excludeRouteFamilyCodes,
+    scopeDraft.routeSelection.includeRouteFamilyCodes,
+  ]);
   const effectiveRouteFamilyIds = Array.from(effectiveRouteFamilyCodes);
 
   const routeRows = useMemo(
@@ -116,15 +156,19 @@ export function DispatchScopePanel({
     [candidateRouteIds, effectiveRouteIds, routes],
   );
 
+  const isScopeDirty = useMemo(() => {
+    return JSON.stringify(scopeDraft) !== JSON.stringify(normalizedScope);
+  }, [scopeDraft, normalizedScope]);
+
   const catalogRouteRows = useMemo(
     () =>
       catalogRoutes
         .map((route) => {
           const filteredPatterns = route.pattern_summary.filter((pattern) => {
-            if (!tripSelectionEnabled(normalizedScope.tripSelection.includeDepotMoves, pattern.patternType)) {
+            if (!tripSelectionEnabled(scopeDraft.tripSelection.includeDepotMoves, pattern.patternType)) {
               return false;
             }
-            if (!normalizedScope.tripSelection.includeShortTurn && pattern.patternType === "short_turn") {
+            if (!scopeDraft.tripSelection.includeShortTurn && pattern.patternType === "short_turn") {
               return false;
             }
             return true;
@@ -145,8 +189,8 @@ export function DispatchScopePanel({
       catalogRoutes,
       candidateRouteFamilyCodes,
       effectiveRouteFamilyCodes,
-      normalizedScope.tripSelection.includeDepotMoves,
-      normalizedScope.tripSelection.includeShortTurn,
+      scopeDraft.tripSelection.includeDepotMoves,
+      scopeDraft.tripSelection.includeShortTurn,
       selectedServiceId,
     ],
   );
@@ -166,50 +210,36 @@ export function DispatchScopePanel({
   const selectedServiceLabel =
     serviceOptions.find((option) => option.value === selectedServiceId)?.label ??
     selectedServiceId;
-  const tripSelection = normalizedScope.tripSelection;
+  const tripSelection = scopeDraft.tripSelection;
 
-  const saveScope = (patch: {
-    scopeId?: string | null;
-    operatorId?: string | null;
-    datasetVersion?: string | null;
-    depotId?: string | null;
-    serviceId?: string;
-    depotSelection?: Partial<NormalizedDispatchScope["depotSelection"]>;
-    routeSelection?: Partial<NormalizedDispatchScope["routeSelection"]>;
-    serviceSelection?: Partial<NormalizedDispatchScope["serviceSelection"]>;
-    tripSelection?: Partial<NormalizedDispatchScope["tripSelection"]>;
-    allowIntraDepotRouteSwap?: boolean;
-    allowInterDepotSwap?: boolean;
-  }) => {
-    updateScope.mutate({
-      scopeId: normalizedScope.scopeId,
-      operatorId: normalizedScope.operatorId,
-      datasetVersion: normalizedScope.datasetVersion,
-      depotSelection: {
-        ...normalizedScope.depotSelection,
-        ...(patch.depotSelection ?? {}),
+  const markScopeDirty = (dirty: boolean) => {
+    setScopeDirty(scenarioId, dirty);
+  };
+
+  const saveScope = () => {
+    updateScope.mutate(
+      {
+        scopeId: scopeDraft.scopeId,
+        operatorId: scopeDraft.operatorId,
+        datasetVersion: scopeDraft.datasetVersion,
+        depotSelection: scopeDraft.depotSelection,
+        routeSelection: scopeDraft.routeSelection,
+        serviceSelection: scopeDraft.serviceSelection,
+        tripSelection: scopeDraft.tripSelection,
+        allowIntraDepotRouteSwap: scopeDraft.allowIntraDepotRouteSwap,
+        allowInterDepotSwap: scopeDraft.allowInterDepotSwap,
+        depotId: scopeDraft.depotId,
+        serviceId: scopeDraft.serviceId,
       },
-      routeSelection: {
-        ...normalizedScope.routeSelection,
-        ...(patch.routeSelection ?? {}),
+      {
+        onSuccess: () => markScopeDirty(false),
       },
-      serviceSelection: {
-        ...normalizedScope.serviceSelection,
-        ...(patch.serviceSelection ?? {}),
-      },
-      tripSelection: {
-        ...normalizedScope.tripSelection,
-        ...(patch.tripSelection ?? {}),
-      },
-      allowIntraDepotRouteSwap:
-        patch.allowIntraDepotRouteSwap ??
-        normalizedScope.allowIntraDepotRouteSwap,
-      allowInterDepotSwap:
-        patch.allowInterDepotSwap ??
-        normalizedScope.allowInterDepotSwap,
-      depotId: patch.depotId ?? normalizedScope.depotId,
-      serviceId: patch.serviceId ?? normalizedScope.serviceId,
-    });
+    );
+  };
+
+  const resetScope = () => {
+    setScopeDraft(normalizedScope);
+    markScopeDirty(false);
   };
 
   const handlePrimaryDepotChange = (value: string) => {
@@ -217,14 +247,16 @@ export function DispatchScopePanel({
     const nextDepotIds = nextPrimary
       ? [nextPrimary, ...selectedDepotIds.filter((id) => id !== nextPrimary)]
       : [];
-    saveScope({
+    setScopeDraft((prev) => ({
+      ...prev,
       depotId: nextPrimary,
       depotSelection: {
         mode: "include",
         depotIds: nextDepotIds,
         primaryDepotId: nextPrimary,
       },
-    });
+    }));
+    markScopeDirty(true);
   };
 
   const handleDepotToggle = (depotId: string) => {
@@ -237,47 +269,55 @@ export function DispatchScopePanel({
         : nextDepotIds.includes(selectedDepotId ?? "")
           ? selectedDepotId
           : nextDepotIds[0];
-    saveScope({
+    setScopeDraft((prev) => ({
+      ...prev,
       depotId: nextPrimary ?? null,
       depotSelection: {
         mode: "include",
         depotIds: nextDepotIds,
         primaryDepotId: nextPrimary ?? null,
       },
-    });
+    }));
+    markScopeDirty(true);
   };
 
   const handleServiceChange = (value: string) => {
-    saveScope({
+    setScopeDraft((prev) => ({
+      ...prev,
       serviceId: value,
       serviceSelection: { serviceIds: [value] },
-    });
+    }));
+    markScopeDirty(true);
   };
 
   const handleTripFlagChange = (
     key: keyof NonNullable<DispatchScope["tripSelection"]>,
     value: boolean,
   ) => {
-    saveScope({
+    setScopeDraft((prev) => ({
+      ...prev,
       tripSelection: {
-        ...tripSelection,
+        ...prev.tripSelection,
         [key]: value,
       },
-    });
+    }));
+    markScopeDirty(true);
   };
 
   const handleSwapFlagChange = (
     key: "allowIntraDepotRouteSwap" | "allowInterDepotSwap",
     value: boolean,
   ) => {
-    saveScope({
+    setScopeDraft((prev) => ({
+      ...prev,
       [key]: value,
-    });
+    }));
+    markScopeDirty(true);
   };
 
   const handleRouteToggle = (routeId: string) => {
-    const includeRouteIds = new Set(normalizedScope.routeSelection.includeRouteIds);
-    const excludeRouteIds = new Set(normalizedScope.routeSelection.excludeRouteIds);
+    const includeRouteIds = new Set(scopeDraft.routeSelection.includeRouteIds);
+    const excludeRouteIds = new Set(scopeDraft.routeSelection.excludeRouteIds);
     const isCandidate = candidateRouteIds.has(routeId);
     const isSelected = effectiveRouteIds.has(routeId);
 
@@ -293,20 +333,22 @@ export function DispatchScopePanel({
       includeRouteIds.add(routeId);
     }
 
-    saveScope({
+    setScopeDraft((prev) => ({
+      ...prev,
       routeSelection: {
         mode: "refine",
         includeRouteIds: Array.from(includeRouteIds),
         excludeRouteIds: Array.from(excludeRouteIds),
-        includeRouteFamilyCodes: normalizedScope.routeSelection.includeRouteFamilyCodes,
-        excludeRouteFamilyCodes: normalizedScope.routeSelection.excludeRouteFamilyCodes,
+        includeRouteFamilyCodes: prev.routeSelection.includeRouteFamilyCodes,
+        excludeRouteFamilyCodes: prev.routeSelection.excludeRouteFamilyCodes,
       },
-    });
+    }));
+    markScopeDirty(true);
   };
 
   const handleCatalogRouteToggle = (routeFamilyCode: string) => {
-    const includeRouteFamilyCodes = new Set(normalizedScope.routeSelection.includeRouteFamilyCodes);
-    const excludeRouteFamilyCodes = new Set(normalizedScope.routeSelection.excludeRouteFamilyCodes);
+    const includeRouteFamilyCodes = new Set(scopeDraft.routeSelection.includeRouteFamilyCodes);
+    const excludeRouteFamilyCodes = new Set(scopeDraft.routeSelection.excludeRouteFamilyCodes);
     const isCandidate = candidateRouteFamilyCodes.has(routeFamilyCode);
     const isSelected = effectiveRouteFamilyCodes.has(routeFamilyCode);
 
@@ -322,7 +364,8 @@ export function DispatchScopePanel({
       includeRouteFamilyCodes.add(routeFamilyCode);
     }
 
-    saveScope({
+    setScopeDraft((prev) => ({
+      ...prev,
       routeSelection: {
         mode: "refine",
         includeRouteIds: [],
@@ -330,7 +373,8 @@ export function DispatchScopePanel({
         includeRouteFamilyCodes: Array.from(includeRouteFamilyCodes),
         excludeRouteFamilyCodes: Array.from(excludeRouteFamilyCodes),
       },
-    });
+    }));
+    markScopeDirty(true);
   };
 
   const handleExportSubset = async () => {
@@ -355,6 +399,29 @@ export function DispatchScopePanel({
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-surface-raised p-4">
+      <div className="flex items-center justify-end gap-2">
+        {isScopeDirty ? (
+          <span className="text-xs font-medium text-amber-600">未保存の変更あり</span>
+        ) : (
+          <span className="text-xs text-slate-400">保存済み</span>
+        )}
+        <button
+          type="button"
+          onClick={resetScope}
+          disabled={!isScopeDirty || updateScope.isPending}
+          className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          破棄
+        </button>
+        <button
+          type="button"
+          onClick={saveScope}
+          disabled={!isScopeDirty || updateScope.isPending}
+          className="rounded bg-primary-600 px-2 py-0.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {updateScope.isPending ? "保存中..." : "保存"}
+        </button>
+      </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <label className="space-y-1 text-sm">
           <span className="text-xs font-medium uppercase tracking-wide text-slate-500">

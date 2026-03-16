@@ -7,6 +7,7 @@ import { z } from "zod";
 import { EditorDrawer } from "@/features/common/EditorDrawer";
 import { DrawerTabs } from "@/features/common/DrawerTabs";
 import { useMasterUiStore } from "@/stores/master-ui-store";
+import { usePlanningDraftStore } from "@/stores/planning-draft-store";
 import {
   useDepot,
   useCreateDepot,
@@ -126,6 +127,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
   const closeDrawer = useMasterUiStore((s) => s.closeDrawer);
   const setDirty = useMasterUiStore((s) => s.setDirty);
   const isDirty = useMasterUiStore((s) => s.isDirty);
+  const setDepotEditorDirty = usePlanningDraftStore((s) => s.setDepotEditorDirty);
 
   const { data: depot } = useDepot(scenarioId, depotId ?? "");
   const createDepot = useCreateDepot(scenarioId);
@@ -153,8 +155,9 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
       setForm((prev) => ({ ...prev, [key]: value }));
       setErrors((prev) => ({ ...prev, [key]: undefined }));
       setDirty(true);
+      setDepotEditorDirty(scenarioId, true);
     },
-    [setDirty],
+    [scenarioId, setDepotEditorDirty, setDirty],
   );
 
   const handleSave = () => {
@@ -186,7 +189,10 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
         notes: form.notes,
       };
       createDepot.mutate(req, {
-        onSuccess: () => closeDrawer(),
+        onSuccess: () => {
+          setDepotEditorDirty(scenarioId, false);
+          closeDrawer();
+        },
       });
     } else if (depotId) {
       const req: UpdateDepotRequest = {
@@ -206,6 +212,7 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
       updateDepot.mutate(req, {
         onSuccess: () => {
           setDirty(false);
+          setDepotEditorDirty(scenarioId, false);
         },
       });
     }
@@ -215,7 +222,10 @@ export function DepotEditorDrawer({ scenarioId, depotId, isCreate }: Props) {
     if (!depotId) return;
     if (!confirm(t("depots.delete_confirm", "この営業所を削除しますか？"))) return;
     deleteDepot.mutate(depotId, {
-      onSuccess: () => closeDrawer(),
+      onSuccess: () => {
+        setDepotEditorDirty(scenarioId, false);
+        closeDrawer();
+      },
     });
   };
 

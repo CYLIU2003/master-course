@@ -262,6 +262,7 @@ class ProblemBuilder:
                     reserve_soc=profile.battery_capacity_kwh * 0.1
                     if profile.battery_capacity_kwh
                     else None,
+                    fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )
 
     def _build_vehicle_profiles(
@@ -271,6 +272,14 @@ class ProblemBuilder:
         profiles: Dict[str, VehicleProfile] = {}
         for vehicle in vehicles:
             vehicle_type = str(vehicle.get("type") or "BEV").upper()
+            
+            # Compute daily fixed use cost
+            purchase_cost = self._safe_float(vehicle.get("acquisitionCost")) or 0.0
+            residual_value = self._safe_float(vehicle.get("residualValueYen") or vehicle.get("residual_value_yen")) or 0.0
+            lifetime_year = max(self._safe_float(vehicle.get("lifetimeYear") or vehicle.get("lifetime_year")) or 12.0, 1.0)
+            operation_days = max(self._safe_float(vehicle.get("operationDaysPerYear") or vehicle.get("operation_days_per_year")) or 365.0, 1.0)
+            fixed_use_cost_jpy = (purchase_cost - residual_value) / (lifetime_year * operation_days)
+
             profiles.setdefault(
                 vehicle_type,
                 VehicleProfile(
@@ -279,6 +288,7 @@ class ProblemBuilder:
                     energy_consumption_kwh_per_km=self._safe_float(vehicle.get("energyConsumption")),
                     fuel_tank_capacity_l=self._safe_float(vehicle.get("fuelTankL")),
                     fuel_consumption_l_per_km=self._safe_float(vehicle.get("energyConsumption")),
+                    fixed_use_cost_jpy=fixed_use_cost_jpy,
                 ),
             )
         return profiles
@@ -307,6 +317,7 @@ class ProblemBuilder:
                     reserve_soc=profile.battery_capacity_kwh * 0.1
                     if profile.battery_capacity_kwh
                     else None,
+                    fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )
             )
         return tuple(items)
@@ -527,7 +538,7 @@ class ProblemBuilder:
             prices = build_electricity_prices_from_tariff(
                 rows,
                 site_ids=[depot_id or "depot_default"],
-                num_periods=max(1, len(self._build_time_slot_prices(context, ()))),
+                num_periods=max(1, len(list(self._build_time_slot_prices(context, ())))),
                 delta_t_min=30.0,
                 start_time=start_time,
             )
@@ -651,7 +662,7 @@ class ProblemBuilder:
                 objective_weights = {
                     "electricity_cost": 0.0,
                     "demand_charge_cost": 0.0,
-                    "vehicle_fixed_cost": 0.0,
+                    "vehicle_fixed_cost": 1.0,
                     "unserved_penalty": float(overlay_solver.get("unserved_penalty") or 10000.0),
                     "deviation_cost": 0.0,
                 }
@@ -659,7 +670,7 @@ class ProblemBuilder:
                 objective_weights = {
                     "electricity_cost": 1.0,
                     "demand_charge_cost": 1.0,
-                    "vehicle_fixed_cost": 0.0,
+                    "vehicle_fixed_cost": 1.0,
                     "unserved_penalty": float(overlay_solver.get("unserved_penalty") or 10000.0),
                     "deviation_cost": 0.0,
                 }

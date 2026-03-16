@@ -214,6 +214,8 @@ class SimulationResult:
     total_operating_cost: float = 0.0       # 総運行コスト [円]
     total_energy_cost: float = 0.0          # 電力量料金合計 [円]
     total_demand_charge: float = 0.0        # デマンド料金合計 [円]
+    total_vehicle_fixed_cost: float = 0.0   # 車両固定費合計 [円]
+    total_driver_cost: float = 0.0          # 運転士コスト合計 [円]
     total_degradation_cost: float = 0.0     # 電池劣化コスト合計 [円]
     total_fuel_cost: float = 0.0            # ICE 燃料費合計 [円]
     total_co2_kg: float = 0.0               # CO2 排出量 [kg]
@@ -349,20 +351,43 @@ def simulate(
                     sim.total_degradation_cost += coeff * kw * delta_h * veh.charge_efficiency
         sim.total_degradation_cost = round(sim.total_degradation_cost, 2)
 
+    # ===== タスク担当率 & 車両・運転士コスト =====
+    total_tasks = len(ms.R)
+    served = 0
+    total_fixed_cost = 0.0
+    total_driver_cost = 0.0
+
+    for k, tasks in milp_result.assignment.items():
+        if not tasks:
+            continue
+        served += len(tasks)
+        
+        veh = dp.vehicle_lut[k]
+        total_fixed_cost += veh.fixed_use_cost
+        
+        sorted_tasks = sorted(tasks, key=lambda r: dp.task_lut[r].start_time_idx)
+        first_task = dp.task_lut[sorted_tasks[0]]
+        last_task = dp.task_lut[sorted_tasks[-1]]
+        duty_duration_slots = last_task.end_time_idx - first_task.start_time_idx
+        duty_duration_hours = max(0, duty_duration_slots) * delta_h
+        total_driver_cost += (duty_duration_hours + 1.0) * 2000.0
+
+    sim.total_vehicle_fixed_cost = round(total_fixed_cost, 2)
+    sim.total_driver_cost = round(total_driver_cost, 2)
+
+    sim.unserved_tasks = milp_result.unserved_tasks[:]
+    sim.served_task_ratio = round(served / total_tasks, 4) if total_tasks > 0 else 0.0
+
     # ===== 総コスト =====
     sim.total_operating_cost = round(
         sim.total_energy_cost
         + sim.total_demand_charge
         + sim.total_fuel_cost
-        + sim.total_degradation_cost,
+        + sim.total_degradation_cost
+        + sim.total_vehicle_fixed_cost
+        + sim.total_driver_cost,
         2,
     )
-
-    # ===== タスク担当率 =====
-    total_tasks = len(ms.R)
-    served = sum(len(v) for v in milp_result.assignment.values())
-    sim.unserved_tasks = milp_result.unserved_tasks[:]
-    sim.served_task_ratio = round(served / total_tasks, 4) if total_tasks > 0 else 0.0
 
     # ===== 充電器利用率 =====
     for c in ms.C:

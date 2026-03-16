@@ -20,6 +20,7 @@ import {
 } from "@/hooks";
 import { isIncompleteArtifactError } from "@/api/client";
 import { runKeys } from "@/hooks/use-run";
+import { useHasPlanningDraftChanges } from "@/stores/planning-draft-store";
 import { useSimulationBuilderStore } from "@/stores/simulation-builder-store";
 import { useScenarioDraftStore } from "@/stores/scenario-draft-store";
 import type { Route, SimulationBuilderSettings } from "@/types";
@@ -103,6 +104,7 @@ export function ScenarioOverviewPage() {
   const setDraftSelectedDepotId = useScenarioDraftStore((s) => s.setSelectedDepotId);
   const { data: activeJob } = useJob(activeJobId);
   const { data: optimizationJob } = useJob(optimizationJobId);
+  const hasPlanningDraftChanges = useHasPlanningDraftChanges(scenarioId);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -294,7 +296,8 @@ export function ScenarioOverviewPage() {
   const prepareDisabled =
     prepareMutation.isPending ||
     !selectedDepotIds.length ||
-    !selectedRouteIds.length;
+    !selectedRouteIds.length ||
+    hasPlanningDraftChanges;
   const runDisabled =
     runPreparedMutation.isPending ||
     !preparedResult?.preparedInputId ||
@@ -307,6 +310,10 @@ export function ScenarioOverviewPage() {
     !canRun;
 
   async function handlePrepare() {
+    if (hasPlanningDraftChanges) {
+      window.alert("Planning 画面に未保存の変更があります。先に保存してから入力データ作成を実行してください。");
+      return;
+    }
     const result = await prepareMutation.mutateAsync({
       selected_depot_ids: [...selectedDepotIds],
       selected_route_ids: [...selectedRouteIds],

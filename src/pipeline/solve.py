@@ -163,6 +163,10 @@ def _solve_alns_milp(cfg, data, ms, dp, flag_overrides=None):
     # ---- Phase 2: MILP (割当固定) ----
     fixed_assignment = alns_result.assignment  # {vehicle_id: [task_id, ...]}
 
+    if not fixed_assignment:
+        print("  [ALNS+MILP] ALNS failed to find a valid assignment. Skipping MILP phase.")
+        return alns_result, alns_result, None, alns_time, 0.0, alns_params
+
     try:
         from src.model_factory import build_model_by_mode
         from src.milp_model import extract_result
@@ -289,7 +293,7 @@ def solve(
             data,
             ms,
             dp,
-            "thesis_mode",
+            run_mode,
             flag_overrides=flag_overrides,
         )
         print(

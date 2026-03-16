@@ -287,6 +287,21 @@ def test_editor_bootstrap_returns_builder_only_payload(temp_store_dir: Path):
     assert len(payload["builderDefaults"]["touPricing"]) == 3
 
 
+def test_editor_bootstrap_lite_returns_summary_only_payload(temp_store_dir: Path):
+    meta = scenarios.create_scenario(scenarios.CreateScenarioBody(name="Builder lite case"))
+
+    payload = scenarios.get_editor_bootstrap_lite(meta["id"])
+
+    assert payload["scenario"]["id"] == meta["id"]
+    assert payload["depots"]
+    assert "depotRouteSummary" in payload
+    assert "routes" not in payload
+    assert "vehicleTemplates" not in payload
+    assert "depotRouteIndex" not in payload
+    assert "availableDayTypes" not in payload
+    assert "builderDefaults" not in payload
+
+
 def test_prepare_and_run_prepared_simulation_builder_flow(
     temp_store_dir: Path,
     tmp_path: Path,

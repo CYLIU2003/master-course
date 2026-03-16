@@ -137,6 +137,14 @@ export function OptimizationRunPage() {
                     <span>{formatCurrency(result.cost_breakdown.peak_demand_cost)}</span>
                   </div>
                   <div className="flex items-center justify-between">
+                    <span>Vehicle</span>
+                    <span>{formatCurrency(result.cost_breakdown.vehicle_cost)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Driver</span>
+                    <span>{formatCurrency(result.cost_breakdown.driver_cost)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
                     <span>Fuel</span>
                     <span>{formatCurrency(result.cost_breakdown.fuel_cost ?? 0)}</span>
                   </div>

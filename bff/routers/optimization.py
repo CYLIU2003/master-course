@@ -187,6 +187,9 @@ def _submit_optimization_job(
 ) -> bool:
     global _OPTIMIZATION_FUTURE
     with _OPTIMIZATION_FUTURE_LOCK:
+        print(f"DEBUG: _OPTIMIZATION_FUTURE is {_OPTIMIZATION_FUTURE}", flush=True)
+        if _OPTIMIZATION_FUTURE is not None:
+            print(f"DEBUG: _OPTIMIZATION_FUTURE.done() is {_OPTIMIZATION_FUTURE.done()}", flush=True)
         if _OPTIMIZATION_FUTURE is not None and not _OPTIMIZATION_FUTURE.done():
             return False
         future = _get_optimization_executor().submit(fn, *args)
@@ -418,41 +421,35 @@ def _cost_breakdown(
     obj_breakdown = dict(result_payload.get("obj_breakdown") or {})
     return {
         "energy_cost": float(
-            obj_breakdown.get(
-                "electricity_cost",
-                (sim_payload or {}).get("total_energy_cost", 0.0),
-            )
+            (sim_payload or {}).get("total_energy_cost", obj_breakdown.get("electricity_cost", 0.0))
             or 0.0
         ),
         "peak_demand_cost": float(
-            obj_breakdown.get(
-                "demand_charge_cost",
-                (sim_payload or {}).get("total_demand_charge", 0.0),
-            )
+            (sim_payload or {}).get("total_demand_charge", obj_breakdown.get("demand_charge_cost", 0.0))
             or 0.0
         ),
-        "vehicle_cost": float(obj_breakdown.get("vehicle_fixed_cost", 0.0) or 0.0),
+        "vehicle_cost": float(
+            (sim_payload or {}).get("total_vehicle_fixed_cost", obj_breakdown.get("vehicle_cost", 0.0))
+            or 0.0
+        ),
+        "driver_cost": float(
+            (sim_payload or {}).get("total_driver_cost", obj_breakdown.get("driver_cost", 0.0))
+            or 0.0
+        ),
         "deadhead_cost": float(obj_breakdown.get("deadhead_cost", 0.0) or 0.0),
         "fuel_cost": float(
-            obj_breakdown.get(
-                "fuel_cost",
-                (sim_payload or {}).get("total_fuel_cost", 0.0),
-            )
+            (sim_payload or {}).get("total_fuel_cost", obj_breakdown.get("fuel_cost", 0.0))
             or 0.0
         ),
         "battery_degradation_cost": float(
-            obj_breakdown.get(
-                "battery_degradation_cost",
-                (sim_payload or {}).get("total_degradation_cost", 0.0),
-            )
+            (sim_payload or {}).get("total_degradation_cost", obj_breakdown.get("battery_degradation_cost", 0.0))
             or 0.0
         ),
         "co2_cost": float(obj_breakdown.get("emission_cost", 0.0) or 0.0),
         "penalty_unserved": float(obj_breakdown.get("unserved_penalty", 0.0) or 0.0),
         "total_co2_kg": float((sim_payload or {}).get("total_co2_kg", 0.0) or 0.0),
         "total_cost": float(
-            (sim_payload or {}).get("total_operating_cost", 0.0)
-            or result_payload.get("objective_value")
+            (sim_payload or {}).get("total_operating_cost", result_payload.get("objective_value", 0.0))
             or 0.0
         ),
     }
@@ -944,6 +941,7 @@ def run_optimization(
     body: Optional[RunOptimizationBody] = None,
     _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
+    print(f"DEBUG: run_optimization called for {scenario_id}", flush=True)
     _require_scenario(scenario_id)
     scenario = store.get_scenario(scenario_id)
     prep = get_or_build_run_preparation(

@@ -1,8 +1,12 @@
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
-import { useEditorBootstrap, useDispatchScope, useUpdateDispatchScope } from "@/hooks";
+import { useEditorBootstrapLite, useUpdateDispatchScope } from "@/hooks";
 import { useSelectedDepotId } from "@/stores/scenario-draft-store";
+import {
+  useHasPlanningDraftChanges,
+  usePlanningDraftStore,
+} from "@/stores/planning-draft-store";
 import { usePlanningDatasetStore } from "@/stores/planning-dataset-store";
 import { PageSection } from "@/features/common";
 import type { UpdateDispatchScopeRequest } from "@/types";
@@ -17,7 +21,7 @@ import {
 export function MasterPlanningPage() {
   const { t } = useTranslation();
   const { scenarioId } = useParams<{ scenarioId: string }>();
-  const { data: bootstrap, isLoading, error } = useEditorBootstrap(scenarioId ?? "");
+  const { data: bootstrap, isLoading, error } = useEditorBootstrapLite(scenarioId ?? "");
   const scenario = bootstrap?.scenario;
   const selectedDepotId = useSelectedDepotId(scenarioId);
   const [showAllRoutes, setShowAllRoutes] = useState(false);
@@ -27,18 +31,61 @@ export function MasterPlanningPage() {
   const setShowAllRoutesStore = usePlanningDatasetStore((s) => s.setShowAllRoutes);
   const setFeedContext = usePlanningDatasetStore((s) => s.setFeedContext);
   const syncDepots = usePlanningDatasetStore((s) => s.syncDepots);
+  const setScopeDraftDirty = usePlanningDraftStore((s) => s.setScopeDirty);
+  const hasPlanningDraftChanges = useHasPlanningDraftChanges(scenarioId);
 
-  // Dispatch scope — for reading/writing swap permissions and tripSelection
-  const { data: dispatchScope } = useDispatchScope(scenarioId ?? "");
+  // Dispatch scope draft — save explicitly (no immediate mutation on toggle)
   const updateScope = useUpdateDispatchScope(scenarioId ?? "");
-  const intraSwap = dispatchScope?.allowIntraDepotRouteSwap ?? false;
-  const interSwap = dispatchScope?.allowInterDepotSwap ?? false;
-  const includeShortTurn = dispatchScope?.tripSelection?.includeShortTurn ?? true;
-  const includeDepotMoves = dispatchScope?.tripSelection?.includeDepotMoves ?? true;
-  const includeDeadhead = dispatchScope?.tripSelection?.includeDeadhead ?? true;
+  const [scopeDraft, setScopeDraft] = useState({
+    includeShortTurn: true,
+    includeDepotMoves: true,
+    includeDeadhead: true,
+    allowIntraDepotRouteSwap: false,
+    allowInterDepotSwap: false,
+  });
+  const [scopeDirty, setScopeDirty] = useState(false);
 
-  function handleScopeToggle(patch: UpdateDispatchScopeRequest) {
-    updateScope.mutate(patch);
+  function applyScopePatch(patch: Partial<typeof scopeDraft>) {
+    setScopeDraft((prev) => ({ ...prev, ...patch }));
+    setScopeDirty(true);
+    if (scenarioId) {
+      setScopeDraftDirty(scenarioId, true);
+    }
+  }
+
+  function resetScopeDraft() {
+    const sourceScope = bootstrap?.dispatchScope;
+    setScopeDraft({
+      includeShortTurn: sourceScope?.tripSelection?.includeShortTurn ?? true,
+      includeDepotMoves: sourceScope?.tripSelection?.includeDepotMoves ?? true,
+      includeDeadhead: sourceScope?.tripSelection?.includeDeadhead ?? true,
+      allowIntraDepotRouteSwap: sourceScope?.allowIntraDepotRouteSwap ?? false,
+      allowInterDepotSwap: sourceScope?.allowInterDepotSwap ?? false,
+    });
+    setScopeDirty(false);
+    if (scenarioId) {
+      setScopeDraftDirty(scenarioId, false);
+    }
+  }
+
+  function saveScopeDraft() {
+    const patch: UpdateDispatchScopeRequest = {
+      tripSelection: {
+        includeShortTurn: scopeDraft.includeShortTurn,
+        includeDepotMoves: scopeDraft.includeDepotMoves,
+        includeDeadhead: scopeDraft.includeDeadhead,
+      },
+      allowIntraDepotRouteSwap: scopeDraft.allowIntraDepotRouteSwap,
+      allowInterDepotSwap: scopeDraft.allowInterDepotSwap,
+    };
+    updateScope.mutate(patch, {
+      onSuccess: () => {
+        setScopeDirty(false);
+        if (scenarioId) {
+          setScopeDraftDirty(scenarioId, false);
+        }
+      },
+    });
   }
 
   useEffect(() => {
@@ -58,6 +105,25 @@ export function MasterPlanningPage() {
   useEffect(() => {
     setFeedContext(scenario?.feedContext ?? null);
   }, [scenario?.feedContext, setFeedContext]);
+
+  useEffect(() => {
+    if (bootstrap) {
+      resetScopeDraft();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrap?.scenario?.id, bootstrap?.dispatchScope]);
+
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasPlanningDraftChanges) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [hasPlanningDraftChanges]);
 
   if (!scenarioId) return null;
 
@@ -87,6 +153,11 @@ export function MasterPlanningPage() {
         <p className="text-sm text-slate-500">
           {t("planning.description")}
         </p>
+        {hasPlanningDraftChanges && (
+          <p className="mt-2 inline-flex rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+            未保存の変更があります（保存後に prepare を実行してください）
+          </p>
+        )}
         {scenario?.feedContext && (
           <p className="mt-2 text-xs text-slate-500">
             {scenario.feedContext.feedId ?? "unscoped"}
@@ -124,7 +195,32 @@ export function MasterPlanningPage() {
 
       {/* Dispatch scope: swap permissions and trip selection */}
       <div className="rounded-lg border border-border bg-surface-raised px-4 py-3">
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">配車スコープ設定</h3>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">配車スコープ設定</h3>
+          <div className="flex items-center gap-2">
+            {scopeDirty ? (
+              <span className="text-xs font-medium text-amber-600">未保存の変更あり</span>
+            ) : (
+              <span className="text-xs text-slate-400">保存済み</span>
+            )}
+            <button
+              type="button"
+              onClick={resetScopeDraft}
+              disabled={!scopeDirty || updateScope.isPending}
+              className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              破棄
+            </button>
+            <button
+              type="button"
+              onClick={saveScopeDraft}
+              disabled={!scopeDirty || updateScope.isPending}
+              className="rounded bg-primary-600 px-2 py-0.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {updateScope.isPending ? "保存中..." : "保存"}
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           {/* Trip selection */}
           <div className="flex items-center gap-4">
@@ -132,8 +228,8 @@ export function MasterPlanningPage() {
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
                 <input
                   type="checkbox"
-                  checked={includeShortTurn}
-                  onChange={(e) => handleScopeToggle({ tripSelection: { includeShortTurn: e.target.checked, includeDepotMoves, includeDeadhead } })}
+                  checked={scopeDraft.includeShortTurn}
+                  onChange={(e) => applyScopePatch({ includeShortTurn: e.target.checked })}
                   className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
                 />
                 区間便
@@ -141,8 +237,8 @@ export function MasterPlanningPage() {
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
                 <input
                   type="checkbox"
-                  checked={includeDepotMoves}
-                  onChange={(e) => handleScopeToggle({ tripSelection: { includeShortTurn, includeDepotMoves: e.target.checked, includeDeadhead } })}
+                  checked={scopeDraft.includeDepotMoves}
+                  onChange={(e) => applyScopePatch({ includeDepotMoves: e.target.checked })}
                   className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
                 />
                 入出庫便
@@ -154,22 +250,22 @@ export function MasterPlanningPage() {
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
               <input
                 type="checkbox"
-                checked={intraSwap}
-                onChange={(e) => handleScopeToggle({ allowIntraDepotRouteSwap: e.target.checked })}
+                checked={scopeDraft.allowIntraDepotRouteSwap}
+                onChange={(e) => applyScopePatch({ allowIntraDepotRouteSwap: e.target.checked })}
                 className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500"
                 disabled={updateScope.isPending}
               />
-              <span className={intraSwap ? "font-semibold text-amber-700" : ""}>路線内</span>
+              <span className={scopeDraft.allowIntraDepotRouteSwap ? "font-semibold text-amber-700" : ""}>路線内</span>
             </label>
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
               <input
                 type="checkbox"
-                checked={interSwap}
-                onChange={(e) => handleScopeToggle({ allowInterDepotSwap: e.target.checked })}
+                checked={scopeDraft.allowInterDepotSwap}
+                onChange={(e) => applyScopePatch({ allowInterDepotSwap: e.target.checked })}
                 className="h-3.5 w-3.5 rounded border-slate-300 text-red-500"
                 disabled={updateScope.isPending}
               />
-              <span className={interSwap ? "font-semibold text-red-700" : ""}>営業所間</span>
+              <span className={scopeDraft.allowInterDepotSwap ? "font-semibold text-red-700" : ""}>営業所間</span>
             </label>
           </div>
         </div>

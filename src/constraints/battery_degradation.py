@@ -37,6 +37,7 @@ def add_battery_degradation_constraints(
         return
 
     p    = vars["p_charge"]
+    p_dis = vars.get("p_discharge") # P0: V2G対応
     deg  = vars.get("deg")
     if deg is None:
         return
@@ -49,17 +50,25 @@ def add_battery_degradation_constraints(
     for k in K_BEV:
         veh = dp.vehicle_lut[k]
         coeff = veh.battery_degradation_cost_coeff  # [円/kWh-throughput]
-        eff   = veh.charge_efficiency
+        eff_charge = veh.charge_efficiency
+        eff_discharge = veh.discharge_efficiency if hasattr(veh, "discharge_efficiency") else 0.95
 
         compatible_c = [c for c in C if c in ms.vehicle_charger_feasible.get(k, set())]
 
         for t in T:
-            # 充電エネルギー [kWh]
+            # 充電エネルギー (バッテリに入る量) [kWh]
             charge_kwh = gp.quicksum(
-                eff * p[k, c, t] * delta_h for c in compatible_c
+                eff_charge * p[k, c, t] * delta_h for c in compatible_c
             )
-            # deg[k,t] >= coeff * charge_kwh (線形近似)
+            # 放電エネルギー (バッテリから出る量) [kWh]
+            discharge_kwh = 0.0
+            if data.enable_v2g and p_dis is not None:
+                discharge_kwh = gp.quicksum(
+                    (1.0 / eff_discharge) * p_dis[k, c, t] * delta_h for c in compatible_c
+                )
+                
+            # deg[k,t] >= coeff * (charge_kwh + discharge_kwh) (線形近似)
             model.addConstr(
-                deg[k, t] >= coeff * charge_kwh,
-                name=f"deg_charge[{k},{t}]",
+                deg[k, t] >= coeff * (charge_kwh + discharge_kwh),
+                name=f"deg_charge_discharge[{k},{t}]",
             )

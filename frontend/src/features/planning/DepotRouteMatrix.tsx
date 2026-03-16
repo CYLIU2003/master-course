@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  useDepots,
-  useRouteFamilies,
-  useDepotRouteFamilyPermissions,
+  useRouteFamiliesScoped,
+  useDepotRouteFamilyPermissionsForDepot,
   useUpdateDepotRouteFamilyPermissions,
 } from "@/hooks";
 import { LoadingBlock, EmptyState } from "@/features/common";
-import type { Depot, RouteFamilySummary, DepotRouteFamilyPermission } from "@/types";
+import { usePlanningDraftStore } from "@/stores/planning-draft-store";
+import type { RouteFamilySummary, DepotRouteFamilyPermission } from "@/types";
 import { RouteFamilyInspectorCard } from "./RouteFamilyInspectorCard";
 
 interface DepotRouteMatrixProps {
@@ -54,19 +54,22 @@ export function DepotRouteMatrix({
 }: DepotRouteMatrixProps) {
   const { t } = useTranslation();
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
-  const { data: depotsData, isLoading: loadingDepots } = useDepots(scenarioId);
-  const { data: familiesData, isLoading: loadingFamilies } = useRouteFamilies(scenarioId);
+  const { data: familiesData, isLoading: loadingFamilies } = useRouteFamiliesScoped(
+    scenarioId,
+    undefined,
+    depotId,
+  );
   const { data: permsData, isLoading: loadingPerms } =
-    useDepotRouteFamilyPermissions(scenarioId);
+    useDepotRouteFamilyPermissionsForDepot(scenarioId, depotId ?? "");
   const updatePerms = useUpdateDepotRouteFamilyPermissions(scenarioId);
+  const setDepotPermissionsDirty = usePlanningDraftStore((s) => s.setDepotPermissionsDirty);
 
-  const depots: Depot[] = depotsData?.items ?? [];
   const families: RouteFamilySummary[] = familiesData?.items ?? [];
   const permissions = useMemo<DepotRouteFamilyPermission[]>(() => permsData?.items ?? [], [permsData?.items]);
 
   const displayDepots = useMemo(
-    () => (depotId ? depots.filter((item) => item.id === depotId) : depots),
-    [depotId, depots],
+    () => (depotId ? [{ id: depotId, name: depotId }] : []),
+    [depotId],
   );
 
   const permissionMap = useMemo(() => {
@@ -77,16 +80,18 @@ export function DepotRouteMatrix({
     return map;
   }, [permissions]);
 
+  const [draftAllowedByFamily, setDraftAllowedByFamily] = useState<Record<string, boolean>>({});
+
   const effectiveSelectedFamilyId =
     selectedFamilyId && families.some((item) => item.routeFamilyId === selectedFamilyId)
       ? selectedFamilyId
       : families[0]?.routeFamilyId ?? null;
 
-  if (loadingDepots || loadingFamilies || loadingPerms) {
+  if (loadingFamilies || loadingPerms) {
     return <LoadingBlock message={t("matrix.loading")} />;
   }
 
-  if (displayDepots.length === 0 || families.length === 0) {
+  if (!depotId || displayDepots.length === 0 || families.length === 0) {
     return (
       <EmptyState
         title={t("matrix.no_data")}
@@ -103,21 +108,77 @@ export function DepotRouteMatrix({
 
   const handleToggle = (currentDepotId: string, family: RouteFamilySummary) => {
     const current = getPermission(currentDepotId, family.routeFamilyId);
-    const nextAllowed = current?.partiallyAllowed ? true : !(current?.allowed ?? false);
+    const hasDraft = Object.prototype.hasOwnProperty.call(
+      draftAllowedByFamily,
+      family.routeFamilyId,
+    );
+    const currentAllowed = hasDraft
+      ? Boolean(draftAllowedByFamily[family.routeFamilyId])
+      : Boolean(current?.allowed ?? false);
+    const nextAllowed = current?.partiallyAllowed && !hasDraft ? true : !currentAllowed;
+    setDraftAllowedByFamily((prev) => ({
+      ...prev,
+      [family.routeFamilyId]: nextAllowed,
+    }));
+    setDepotPermissionsDirty(scenarioId, true);
+  };
 
-    updatePerms.mutate({
-      permissions: [
-        {
-          depotId: currentDepotId,
-          routeFamilyId: family.routeFamilyId,
-          allowed: nextAllowed,
+  const hasDirty = Object.keys(draftAllowedByFamily).length > 0;
+
+  const handleReset = () => {
+    setDraftAllowedByFamily({});
+    setDepotPermissionsDirty(scenarioId, false);
+  };
+
+  const handleSave = () => {
+    if (!depotId) {
+      return;
+    }
+    const payload = Object.keys(draftAllowedByFamily).map((routeFamilyId) => ({
+      depotId,
+      routeFamilyId,
+      allowed: Boolean(draftAllowedByFamily[routeFamilyId]),
+    }));
+    if (payload.length === 0) {
+      return;
+    }
+    updatePerms.mutate(
+      { permissions: payload },
+      {
+        onSuccess: () => {
+          setDraftAllowedByFamily({});
+          setDepotPermissionsDirty(scenarioId, false);
         },
-      ],
-    });
+      },
+    );
   };
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div className="space-y-2">
+      <div className="flex items-center justify-end gap-2">
+        {hasDirty ? (
+          <span className="text-xs font-medium text-amber-600">未保存の変更あり</span>
+        ) : (
+          <span className="text-xs text-slate-400">保存済み</span>
+        )}
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={!hasDirty || updatePerms.isPending}
+          className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          破棄
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!hasDirty || updatePerms.isPending}
+          className="rounded bg-primary-600 px-2 py-0.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {updatePerms.isPending ? "保存中..." : "保存"}
+        </button>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-slate-50">
@@ -159,9 +220,9 @@ export function DepotRouteMatrix({
         <tbody className="divide-y divide-border">
           {displayDepots.map((depot) => (
             <tr
-              key={depot.id}
+              key={depotId}
               className={
-                depotId === depot.id ? "bg-primary-50/50" : "hover:bg-slate-50/50"
+                "bg-primary-50/50"
               }
             >
               <td className="px-3 py-2 font-medium text-slate-700">
@@ -169,15 +230,19 @@ export function DepotRouteMatrix({
                 <div className="text-xs text-slate-500">route family 単位で一括許可</div>
               </td>
               {families.map((family) => {
-                const permission = getPermission(depot.id, family.routeFamilyId);
+                const permission = getPermission(depotId, family.routeFamilyId);
+                const hasDraft = Object.prototype.hasOwnProperty.call(
+                  draftAllowedByFamily,
+                  family.routeFamilyId,
+                );
                 return (
                   <td key={family.routeFamilyId} className="px-2 py-2 text-center">
                     <div className="flex flex-col items-center gap-1">
                       <FamilyPermissionCheckbox
-                        checked={permission?.allowed ?? false}
-                        indeterminate={permission?.partiallyAllowed ?? false}
+                        checked={hasDraft ? Boolean(draftAllowedByFamily[family.routeFamilyId]) : (permission?.allowed ?? false)}
+                        indeterminate={hasDraft ? false : (permission?.partiallyAllowed ?? false)}
                         disabled={updatePerms.isPending}
-                        onChange={() => handleToggle(depot.id, family)}
+                        onChange={() => handleToggle(depotId, family)}
                       />
                       <span className="text-[10px] text-slate-400">
                         {permission?.allowedRouteCount ?? 0}/{permission?.totalRouteCount ?? family.variantCount}
@@ -200,6 +265,7 @@ export function DepotRouteMatrix({
           />
         </div>
       )}
+      </div>
     </div>
   );
 }

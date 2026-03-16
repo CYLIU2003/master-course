@@ -2,6 +2,7 @@
 import type {
   Scenario,
   EditorBootstrap,
+  EditorBootstrapLite,
   ResearchDatasetStatus,
   Depot,
   Vehicle,
@@ -55,6 +56,7 @@ export interface ApiError {
 export type ScenarioListResponse = ApiListResponse<Scenario>;
 export type ScenarioDetailResponse = Scenario;
 export type EditorBootstrapResponse = EditorBootstrap;
+export type EditorBootstrapLiteResponse = EditorBootstrapLite;
 
 export interface CreateScenarioRequest {
   name: string;

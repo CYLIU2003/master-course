@@ -91,6 +91,14 @@ def build_derived_params(data: ProblemData, ms: ModelSets) -> DerivedParams:
     dp.site_lut    = {s.site_id: s for s in data.sites}
 
     # --- Big-M ---
+    # P0: 制約ごとにtightなBig-Mを計算
+    max_cap = max((v.battery_capacity or 0.0) for v in data.vehicles if v.vehicle_type == "BEV") if any(v.vehicle_type == "BEV" for v in data.vehicles) else 500.0
+    max_charge_kw = max((c.power_max_kw or 0.0) for c in data.chargers) if data.chargers else 150.0
+
+    data.BIG_M_SOC = max_cap * 1.1
+    data.BIG_M_CHARGE = max_charge_kw * data.delta_t_hour * 1.1
+    data.BIG_M_ASSIGN = max(1.0, float(len(data.tasks)))
+
     dp.BIG_M_ASSIGN = data.BIG_M_ASSIGN
     dp.BIG_M_CHARGE = data.BIG_M_CHARGE
     dp.BIG_M_SOC    = data.BIG_M_SOC

@@ -14,6 +14,7 @@ export type {
   SimulationBuilderDefaults,
   SimulationBuilderSettings,
   EditorBootstrap,
+  EditorBootstrapLite,
   HHMMTime,
   MinutesFromMidnight,
   // Master data
@@ -85,6 +86,7 @@ export type {
   ScenarioListResponse,
   ScenarioDetailResponse,
   EditorBootstrapResponse,
+  EditorBootstrapLiteResponse,
   CreateScenarioRequest,
   UpdateScenarioRequest,
   ResearchDatasetsResponse,

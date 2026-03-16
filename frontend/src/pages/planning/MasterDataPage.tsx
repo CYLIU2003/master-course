@@ -4,9 +4,10 @@
 // 3 view modes (table / map / node)
 // 3-pane layout: left filter | center content | right drawer
 
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { ThreePaneLayout } from "@/features/common/ThreePaneLayout";
-import { TabWarmBoundary } from "@/features/common";
+import { useTabWarmStore } from "@/stores/tab-warm-store";
 import { MasterDataHeader } from "./MasterDataHeader";
 import { MasterDataTabs } from "./MasterDataTabs";
 import { MasterLeftPanel } from "./MasterLeftPanel";
@@ -15,6 +16,17 @@ import { MasterEditorDrawerHost } from "./MasterEditorDrawerHost";
 
 export function MasterDataPage() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
+  const setTabStatus = useTabWarmStore((state) => state.setTabStatus);
+
+  useEffect(() => {
+    if (!scenarioId) {
+      return;
+    }
+    const planningStatus = useTabWarmStore.getState().tabs.planning.status;
+    if (planningStatus !== "ready") {
+      setTabStatus("planning", "ready", "master data を表示中");
+    }
+  }, [scenarioId, setTabStatus]);
 
   if (!scenarioId) return null;
 
@@ -26,13 +38,11 @@ export function MasterDataPage() {
 
       {/* 3-pane body */}
       <div className="min-h-0 flex-1">
-        <TabWarmBoundary tab="planning" title="Planning tab を準備しています">
-          <ThreePaneLayout
-            left={<MasterLeftPanel scenarioId={scenarioId} />}
-            center={<MasterCenterPanel scenarioId={scenarioId} />}
-            right={<MasterEditorDrawerHost scenarioId={scenarioId} />}
-          />
-        </TabWarmBoundary>
+        <ThreePaneLayout
+          left={<MasterLeftPanel scenarioId={scenarioId} />}
+          center={<MasterCenterPanel scenarioId={scenarioId} />}
+          right={<MasterEditorDrawerHost scenarioId={scenarioId} />}
+        />
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { z } from "zod";
 import { EditorDrawer } from "@/features/common/EditorDrawer";
 import { DrawerTabs } from "@/features/common/DrawerTabs";
 import { useMasterUiStore } from "@/stores/master-ui-store";
+import { usePlanningDraftStore } from "@/stores/planning-draft-store";
 import {
   useVehicle,
   useCreateVehicle,
@@ -158,6 +159,7 @@ export function VehicleEditorDrawer({
   const selectVehicle = useMasterUiStore((s) => s.selectVehicle);
   const setDirty = useMasterUiStore((s) => s.setDirty);
   const isDirty = useMasterUiStore((s) => s.isDirty);
+  const setVehicleEditorDirty = usePlanningDraftStore((s) => s.setVehicleEditorDirty);
 
   const { data: vehicle } = useVehicle(scenarioId, vehicleId ?? "");
   const { data: depotsData } = useDepots(scenarioId);
@@ -183,9 +185,15 @@ export function VehicleEditorDrawer({
 
   const templates = templatesData?.items ?? [];
   const depots = depotsData?.items ?? [];
-  const routes = routesData?.items ?? [];
-  const depotRoutePermissions = depotRoutePermissionsData?.items ?? [];
-  const vehicleRoutePermissions = vehicleRoutePermissionsData?.items ?? [];
+  const routes = useMemo(() => routesData?.items ?? [], [routesData?.items]);
+  const depotRoutePermissions = useMemo(
+    () => depotRoutePermissionsData?.items ?? [],
+    [depotRoutePermissionsData?.items],
+  );
+  const vehicleRoutePermissions = useMemo(
+    () => vehicleRoutePermissionsData?.items ?? [],
+    [vehicleRoutePermissionsData?.items],
+  );
 
   const apiType = resolveApiType(vehicleType, vehicle ?? undefined);
   const isEv = apiType === "BEV";
@@ -276,8 +284,9 @@ export function VehicleEditorDrawer({
       setForm((prev) => ({ ...prev, [key]: value }));
       setValidationError(null);
       setDirty(true);
+      setVehicleEditorDirty(scenarioId, true);
     },
-    [setDirty],
+    [scenarioId, setDirty, setVehicleEditorDirty],
   );
 
   const buildCreateVehicleRequest = useCallback((): CreateVehicleRequest => {
@@ -358,6 +367,7 @@ export function VehicleEditorDrawer({
           {
             onSuccess: () => {
               setDirty(false);
+              setVehicleEditorDirty(scenarioId, false);
               closeDrawer();
             },
           },
@@ -366,6 +376,7 @@ export function VehicleEditorDrawer({
         createVehicle.mutate(baseReq, {
           onSuccess: () => {
             setDirty(false);
+            setVehicleEditorDirty(scenarioId, false);
             closeDrawer();
           },
         });
@@ -385,7 +396,10 @@ export function VehicleEditorDrawer({
         enabled: baseReq.enabled,
       };
       updateVehicle.mutate(req, {
-        onSuccess: () => setDirty(false),
+        onSuccess: () => {
+          setDirty(false);
+          setVehicleEditorDirty(scenarioId, false);
+        },
       });
     }
   };
@@ -394,7 +408,10 @@ export function VehicleEditorDrawer({
     if (!vehicleId) return;
     if (!confirm(t("vehicles.delete_confirm", "この車両を削除しますか？"))) return;
     deleteVehicle.mutate(vehicleId, {
-      onSuccess: () => closeDrawer(),
+      onSuccess: () => {
+        setVehicleEditorDirty(scenarioId, false);
+        closeDrawer();
+      },
     });
   };
 

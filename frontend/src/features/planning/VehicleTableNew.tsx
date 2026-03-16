@@ -15,7 +15,9 @@ interface Props {
 
 export function VehicleTableNew({ scenarioId, depotId }: Props) {
   const { t } = useTranslation();
-  const { data, isLoading, error } = useVehicles(scenarioId, depotId);
+  const { data, isLoading, error } = useVehicles(scenarioId, depotId, {
+    enabled: !!depotId,
+  });
   const selectedVehicleId = useMasterUiStore((s) => s.selectedVehicleId);
   const selectVehicle = useMasterUiStore((s) => s.selectVehicle);
 

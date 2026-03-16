@@ -172,8 +172,11 @@ export const routeApi = {
 };
 
 export const routeFamilyApi = {
-  list: (scenarioId: string, operator?: string) => {
-    const query = operator ? `?operator=${operator}` : "";
+  list: (scenarioId: string, operator?: string, depotId?: string) => {
+    const queryParams = new URLSearchParams();
+    if (operator) queryParams.set("operator", operator);
+    if (depotId) queryParams.set("depotId", depotId);
+    const query = queryParams.size ? `?${queryParams.toString()}` : "";
     return api.get<RouteFamiliesResponse>(`/scenarios/${scenarioId}/route-families${query}`);
   },
 
@@ -222,6 +225,11 @@ export const permissionApi = {
       `/scenarios/${scenarioId}/depot-route-family-permissions`,
     ),
 
+  getDepotScopedRouteFamilyPermissions: (scenarioId: string, depotId: string) =>
+    api.get<DepotRouteFamilyPermissionsResponse>(
+      `/scenarios/${scenarioId}/depots/${depotId}/route-family-permissions`,
+    ),
+
   updateDepotRouteFamilyPermissions: (
     scenarioId: string,
     data: UpdateDepotRouteFamilyPermissionsRequest,
@@ -248,6 +256,11 @@ export const permissionApi = {
   getVehicleRouteFamilyPermissions: (scenarioId: string) =>
     api.get<VehicleRouteFamilyPermissionsResponse>(
       `/scenarios/${scenarioId}/vehicle-route-family-permissions`,
+    ),
+
+  getDepotScopedVehicleRouteFamilyPermissions: (scenarioId: string, depotId: string) =>
+    api.get<VehicleRouteFamilyPermissionsResponse>(
+      `/scenarios/${scenarioId}/depots/${depotId}/vehicle-route-family-permissions`,
     ),
 
   updateVehicleRouteFamilyPermissions: (

@@ -42,7 +42,7 @@ from src.pipeline.simulate import simulate_problem_data
 
 router = APIRouter(tags=["simulation"])
 _SIMULATION_EXECUTOR: Optional[ProcessPoolExecutor] = None
-_SIMULATION_FUTURE: Optional[Future[Any]] = None
+_SIMULATION_FUTURES: set[Future[Any]] = set()
 _SIMULATION_FUTURE_LOCK = threading.Lock()
 
 
@@ -137,23 +137,25 @@ def _simulation_capabilities() -> Dict[str, Any]:
     }
 
 
+_MAX_SIMULATION_WORKERS = max(1, multiprocessing.cpu_count() - 1)
+
 def _get_simulation_executor() -> ProcessPoolExecutor:
     global _SIMULATION_EXECUTOR
     with _SIMULATION_FUTURE_LOCK:
         if _SIMULATION_EXECUTOR is None:
             _SIMULATION_EXECUTOR = ProcessPoolExecutor(
-                max_workers=1,
+                max_workers=_MAX_SIMULATION_WORKERS,
                 mp_context=multiprocessing.get_context("spawn"),
             )
     return _SIMULATION_EXECUTOR
 
 
 def shutdown_simulation_executor() -> None:
-    global _SIMULATION_EXECUTOR, _SIMULATION_FUTURE
+    global _SIMULATION_EXECUTOR, _SIMULATION_FUTURES
     with _SIMULATION_FUTURE_LOCK:
         executor = _SIMULATION_EXECUTOR
         _SIMULATION_EXECUTOR = None
-        _SIMULATION_FUTURE = None
+        _SIMULATION_FUTURES.clear()
     if executor is not None:
         executor.shutdown(wait=False, cancel_futures=True)
 
@@ -204,12 +206,17 @@ def _submit_simulation_job(
     depot_id: Optional[str],
     source: str,
 ) -> bool:
-    global _SIMULATION_FUTURE
+    global _SIMULATION_FUTURES
     with _SIMULATION_FUTURE_LOCK:
-        if _SIMULATION_FUTURE is not None and not _SIMULATION_FUTURE.done():
+        # clear done futures
+        _SIMULATION_FUTURES = {f for f in _SIMULATION_FUTURES if not f.done()}
+        
+        executor = _get_simulation_executor()
+        if len(_SIMULATION_FUTURES) >= _MAX_SIMULATION_WORKERS:
             return False
-        future = _get_simulation_executor().submit(_run_simulation, *args)
-        _SIMULATION_FUTURE = future
+            
+        future = executor.submit(_run_simulation, *args)
+        _SIMULATION_FUTURES.add(future)
         _register_simulation_future(
             future,
             job_id=job_id,
@@ -366,18 +373,45 @@ def _result_from_duties(data, duties_raw: list[dict]) -> MILPResult:
     for vehicle in data.vehicles:
         if vehicle.vehicle_type != "BEV":
             continue
-        current_soc = (
-            vehicle.soc_init or vehicle.soc_max or vehicle.battery_capacity or 0.0
-        )
+        soc_max = vehicle.soc_max or vehicle.battery_capacity or 300.0
+        current_soc = vehicle.soc_init or soc_max
         series = [current_soc for _ in range(data.num_periods + 1)]
+        
+        # P1: SOC充電反映 (シミュレーション時のダミー充電)
+        assigned_tasks = []
         for task_id in result.assignment.get(vehicle.vehicle_id, []):
             task = task_lut.get(task_id)
-            if task is None:
-                continue
-            start = min(max(task.start_time_idx, 0), data.num_periods)
+            if task is not None:
+                assigned_tasks.append(task)
+        assigned_tasks.sort(key=lambda t: t.start_time_idx)
+
+        charge_kw = 50.0  # 仮の充電電力
+        eff = vehicle.charge_efficiency if hasattr(vehicle, "charge_efficiency") else 0.95
+        charge_kwh_per_slot = charge_kw * data.delta_t_hour * eff
+        
+        last_t = 0
+        for task in assigned_tasks:
+            start_t = min(max(task.start_time_idx, 0), data.num_periods)
+            end_t = min(max(task.end_time_idx, 0), data.num_periods)
+            
+            # 空き時間で充電
+            for t in range(last_t + 1, start_t + 1):
+                series[t] = min(soc_max, series[t - 1] + charge_kwh_per_slot)
+            
+            # タスク中の消費
             energy = task.energy_required_kwh_bev
-            for idx in range(start, data.num_periods + 1):
-                series[idx] = max(0.0, series[idx] - energy)
+            duration = max(1, end_t - start_t)
+            consume_per_slot = energy / duration
+            
+            for t in range(start_t + 1, end_t + 1):
+                series[t] = max(0.0, series[t - 1] - consume_per_slot)
+                
+            last_t = end_t
+            
+        # 最後のタスク以降の充電
+        for t in range(last_t + 1, data.num_periods + 1):
+            series[t] = min(soc_max, series[t - 1] + charge_kwh_per_slot)
+
         result.soc_series[vehicle.vehicle_id] = series
 
     return result

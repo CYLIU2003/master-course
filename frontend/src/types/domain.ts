@@ -232,6 +232,23 @@ export interface EditorBootstrap {
   warning?: string | null;
 }
 
+export interface EditorBootstrapLite {
+  scenario: Scenario;
+  dispatchScope: DispatchScope;
+  depots: Depot[];
+  depotRouteSummary: Array<{
+    depotId: string;
+    name: string;
+    routeCount: number;
+    selected: boolean;
+    selectedRouteCount: number;
+    tripCount: number;
+  }>;
+  datasetVersion?: string | null;
+  datasetStatus?: ResearchDatasetStatus | null;
+  warning?: string | null;
+}
+
 export type ScenarioStatus =
   | "draft"
   | "trips_built"
@@ -921,6 +938,7 @@ export interface CostBreakdown {
   energy_cost: number;
   peak_demand_cost: number;
   vehicle_cost: number;
+  driver_cost: number;
   deadhead_cost: number;
   fuel_cost?: number;
   battery_degradation_cost?: number;

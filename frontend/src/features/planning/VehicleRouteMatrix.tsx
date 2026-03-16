@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useVehicles,
-  useRouteFamilies,
-  useDepotRouteFamilyPermissions,
-  useVehicleRouteFamilyPermissions,
+  useRouteFamiliesScoped,
+  useDepotRouteFamilyPermissionsForDepot,
+  useVehicleRouteFamilyPermissionsForDepot,
   useUpdateVehicleRouteFamilyPermissions,
 } from "@/hooks";
 import { LoadingBlock, EmptyState } from "@/features/common";
+import { usePlanningDraftStore } from "@/stores/planning-draft-store";
 import type {
   Vehicle,
   RouteFamilySummary,
@@ -62,20 +63,26 @@ export function VehicleRouteMatrix({
   const { data: vehiclesData, isLoading: loadingVehicles } = useVehicles(
     scenarioId,
     depotId,
+    { enabled: !!depotId },
   );
-  const { data: familiesData, isLoading: loadingFamilies } = useRouteFamilies(scenarioId);
+  const { data: familiesData, isLoading: loadingFamilies } = useRouteFamiliesScoped(
+    scenarioId,
+    undefined,
+    depotId,
+  );
   const { data: depotFamilyPermsData, isLoading: loadingDepotFamilyPerms } =
-    useDepotRouteFamilyPermissions(scenarioId);
+    useDepotRouteFamilyPermissionsForDepot(scenarioId, depotId ?? "");
   const { data: permsData, isLoading: loadingPerms } =
-    useVehicleRouteFamilyPermissions(scenarioId);
+    useVehicleRouteFamilyPermissionsForDepot(scenarioId, depotId ?? "");
   const updatePerms = useUpdateVehicleRouteFamilyPermissions(scenarioId);
+  const setVehiclePermissionsDirty = usePlanningDraftStore((s) => s.setVehiclePermissionsDirty);
 
   const vehicles: Vehicle[] = vehiclesData?.items ?? [];
-  const families: RouteFamilySummary[] = familiesData?.items ?? [];
   const depotFamilyPermissions = useMemo(() => depotFamilyPermsData?.items ?? [], [depotFamilyPermsData?.items]);
   const permissions = useMemo<VehicleRouteFamilyPermission[]>(() => permsData?.items ?? [], [permsData?.items]);
 
   const visibleFamilies = useMemo(() => {
+    const families: RouteFamilySummary[] = familiesData?.items ?? [];
     if (!depotId) {
       return families;
     }
@@ -89,7 +96,7 @@ export function VehicleRouteMatrix({
         .map((item) => item.routeFamilyId),
     );
     return families.filter((family) => allowedFamilyIds.has(family.routeFamilyId));
-  }, [depotFamilyPermissions, depotId, families]);
+  }, [depotFamilyPermissions, depotId, familiesData?.items]);
 
   const permissionMap = useMemo(() => {
     const map = new Map<string, VehicleRouteFamilyPermission>();
@@ -98,6 +105,8 @@ export function VehicleRouteMatrix({
     }
     return map;
   }, [permissions]);
+
+  const [draftAllowedByPair, setDraftAllowedByPair] = useState<Record<string, boolean>>({});
 
   const effectiveSelectedFamilyId =
     selectedFamilyId && visibleFamilies.some((item) => item.routeFamilyId === selectedFamilyId)
@@ -127,21 +136,75 @@ export function VehicleRouteMatrix({
 
   const handleToggle = (vehicleId: string, family: RouteFamilySummary) => {
     const current = getPermission(vehicleId, family.routeFamilyId);
-    const nextAllowed = current?.partiallyAllowed ? true : !(current?.allowed ?? false);
+    const key = `${vehicleId}:${family.routeFamilyId}`;
+    const hasDraft = Object.prototype.hasOwnProperty.call(draftAllowedByPair, key);
+    const currentAllowed = hasDraft
+      ? Boolean(draftAllowedByPair[key])
+      : Boolean(current?.allowed ?? false);
+    const nextAllowed = current?.partiallyAllowed && !hasDraft ? true : !currentAllowed;
+    setDraftAllowedByPair((prev) => ({
+      ...prev,
+      [key]: nextAllowed,
+    }));
+    setVehiclePermissionsDirty(scenarioId, true);
+  };
 
-    updatePerms.mutate({
-      permissions: [
-        {
-          vehicleId,
-          routeFamilyId: family.routeFamilyId,
-          allowed: nextAllowed,
-        },
-      ],
+  const hasDirty = Object.keys(draftAllowedByPair).length > 0;
+
+  const handleReset = () => {
+    setDraftAllowedByPair({});
+    setVehiclePermissionsDirty(scenarioId, false);
+  };
+
+  const handleSave = () => {
+    const payload = Object.keys(draftAllowedByPair).map((key) => {
+      const [vehicleId, routeFamilyId] = key.split(":");
+      return {
+        vehicleId,
+        routeFamilyId,
+        allowed: Boolean(draftAllowedByPair[key]),
+      };
     });
+    if (payload.length === 0) {
+      return;
+    }
+    updatePerms.mutate(
+      { permissions: payload },
+      {
+        onSuccess: () => {
+          setDraftAllowedByPair({});
+          setVehiclePermissionsDirty(scenarioId, false);
+        },
+      },
+    );
   };
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div className="space-y-2">
+      <div className="flex items-center justify-end gap-2">
+        {hasDirty ? (
+          <span className="text-xs font-medium text-amber-600">未保存の変更あり</span>
+        ) : (
+          <span className="text-xs text-slate-400">保存済み</span>
+        )}
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={!hasDirty || updatePerms.isPending}
+          className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          破棄
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!hasDirty || updatePerms.isPending}
+          className="rounded bg-primary-600 px-2 py-0.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {updatePerms.isPending ? "保存中..." : "保存"}
+        </button>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-slate-50">
@@ -200,12 +263,14 @@ export function VehicleRouteMatrix({
               </td>
               {visibleFamilies.map((family) => {
                 const permission = getPermission(vehicle.id, family.routeFamilyId);
+                const pairKey = `${vehicle.id}:${family.routeFamilyId}`;
+                const hasDraft = Object.prototype.hasOwnProperty.call(draftAllowedByPair, pairKey);
                 return (
                   <td key={family.routeFamilyId} className="px-2 py-2 text-center">
                     <div className="flex flex-col items-center gap-1">
                       <FamilyPermissionCheckbox
-                        checked={permission?.allowed ?? false}
-                        indeterminate={permission?.partiallyAllowed ?? false}
+                        checked={hasDraft ? Boolean(draftAllowedByPair[pairKey]) : (permission?.allowed ?? false)}
+                        indeterminate={hasDraft ? false : (permission?.partiallyAllowed ?? false)}
                         disabled={updatePerms.isPending}
                         onChange={() => handleToggle(vehicle.id, family)}
                       />
@@ -230,6 +295,7 @@ export function VehicleRouteMatrix({
           />
         </div>
       )}
+      </div>
     </div>
   );
 }

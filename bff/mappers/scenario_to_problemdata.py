@@ -88,9 +88,16 @@ def _normalize_soc_value(
     if raw_value is None:
         return battery_kwh * default_ratio if default_ratio is not None else None
     value = _safe_float(raw_value, 0.0)
-    if 0.0 <= value <= 1.0:
-        return battery_kwh * value
-    return value
+    
+    # P0: SOC正規化のルール統一 (常に比率として解釈)
+    if value > 1.0:
+        logger.warning(f"SOC value {value} > 1.0. Assuming it is a percentage. Dividing by 100.")
+        value = value / 100.0
+        
+    # 比率が 0~1 に収まるようにクリップ
+    value = max(0.0, min(1.0, value))
+    
+    return battery_kwh * value
 
 
 def _scenario_overlay_costs(scenario: Dict[str, Any]) -> Dict[str, Any]:
@@ -177,7 +184,7 @@ def _objective_weights_from_scenario(scenario: Dict[str, Any]) -> Dict[str, floa
     )
     if objective_mode == "co2":
         weights: Dict[str, float] = {
-            "vehicle_fixed_cost": 0.0,
+            "vehicle_fixed_cost": 1.0,
             "electricity_cost": 0.0,
             "demand_charge_cost": 0.0,
             "fuel_cost": 0.0,
@@ -189,7 +196,7 @@ def _objective_weights_from_scenario(scenario: Dict[str, Any]) -> Dict[str, floa
         }
     elif objective_mode in {"balanced", "cost_co2_balanced", "multi_objective"}:
         weights = {
-            "vehicle_fixed_cost": 0.0,
+            "vehicle_fixed_cost": 1.0,
             "electricity_cost": 1.0,
             "demand_charge_cost": 1.0,
             "fuel_cost": 1.0,
@@ -201,7 +208,7 @@ def _objective_weights_from_scenario(scenario: Dict[str, Any]) -> Dict[str, floa
         }
     else:
         weights = {
-            "vehicle_fixed_cost": 0.0,
+            "vehicle_fixed_cost": 1.0,
             "electricity_cost": 1.0,
             "demand_charge_cost": 1.0,
             "fuel_cost": 1.0,
@@ -495,6 +502,23 @@ def _build_tasks(
     start_time: str,
     delta_t_min: float,
 ) -> List[Task]:
+    # P1: タスクエネルギーフォールバック時の警告出力
+    bev_values = [
+        _safe_float(item.get("energyConsumption"), 0.0)
+        for item in scenario_vehicles
+        if str(item.get("type") or "").upper() == "BEV" and item.get("energyConsumption") is not None
+    ]
+    if not bev_values:
+        logger.warning("No BEV energyConsumption found in scenario vehicles. Falling back to default BEV rate (1.2 kWh/km).")
+    
+    ice_values = [
+        _safe_float(item.get("energyConsumption"), 0.0)
+        for item in scenario_vehicles
+        if str(item.get("type") or "").upper() == "ICE" and item.get("energyConsumption") is not None
+    ]
+    if not ice_values:
+        logger.warning("No ICE energyConsumption found in scenario vehicles. Falling back to default ICE rate (0.4 L/km).")
+
     bev_rate = _mean_consumption(scenario_vehicles, "BEV", 1.2)
     ice_rate = _mean_consumption(scenario_vehicles, "ICE", 0.4)
     tasks: List[Task] = []
