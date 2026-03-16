@@ -11,7 +11,7 @@ import json
 import logging
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 _log = logging.getLogger(__name__)
 
@@ -42,11 +42,40 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pair_key(stop_a: str, stop_b: str) -> Tuple[str, str]:
+    return (stop_a, stop_b) if stop_a <= stop_b else (stop_b, stop_a)
+
+
+def _estimate_adjacent_distance_km(
+    stop_a: str,
+    stop_b: str,
+    stop_coords: Dict[str, Tuple[float, float]],
+    delta_m: Optional[float] = None,
+) -> Tuple[float, str]:
+    if delta_m is not None and delta_m > 0.0:
+        return (delta_m / 1000.0, "route_stops_delta")
+    coords_a = stop_coords.get(stop_a)
+    coords_b = stop_coords.get(stop_b)
+    if coords_a and coords_b:
+        return (_haversine_km(coords_a[0], coords_a[1], coords_b[0], coords_b[1]), "adjacent_haversine")
+    return (0.0, "unknown")
+
+
 def build_stop_distance_matrix(
     canonical_dir: Path,
     out_dir: Path,
     *,
     terminal_only: bool = True,
+    min_distance_km: float = 0.03,
 ) -> Dict[str, Any]:
     """
     Build a pairwise distance matrix for terminal stops.
@@ -69,6 +98,8 @@ def build_stop_distance_matrix(
     out_dir.mkdir(parents=True, exist_ok=True)
     stops = _read_jsonl(canonical_dir / "stops.jsonl")
     routes = _read_jsonl(canonical_dir / "routes.jsonl")
+    route_stops = _read_jsonl(canonical_dir / "route_stops.jsonl")
+    stop_times = _read_jsonl(canonical_dir / "stop_times.jsonl")
     warnings: List[str] = []
 
     if not stops:
@@ -83,38 +114,86 @@ def build_stop_distance_matrix(
         if sid and lat is not None and lon is not None:
             stop_coords[sid] = (float(lat), float(lon))
 
-    # Determine which stops to include
+    # Determine target terminals for optional filtering
+    terminal_ids: Set[str] = set()
     if terminal_only:
-        target_ids: Set[str] = set()
         for r in routes:
             for key in ("origin_stop_id", "destination_stop_id"):
                 sid = r.get(key, "")
                 if sid:
-                    target_ids.add(sid)
-        target_ids = target_ids & set(stop_coords.keys())
-    else:
-        target_ids = set(stop_coords.keys())
+                    terminal_ids.add(sid)
 
-    if not target_ids:
-        warnings.append("No geolocated terminal stops — skipping distance matrix")
-        return {"pair_count": 0, "warnings": warnings}
+    candidate_pairs: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
-    # Compute pairwise distances
-    sorted_ids = sorted(target_ids)
-    pairs: List[Dict[str, Any]] = []
-    for i, sid_a in enumerate(sorted_ids):
-        lat_a, lon_a = stop_coords[sid_a]
-        for sid_b in sorted_ids[i + 1 :]:
-            lat_b, lon_b = stop_coords[sid_b]
-            dist = _haversine_km(lat_a, lon_a, lat_b, lon_b)
-            pairs.append(
-                {
-                    "stop_a": sid_a,
-                    "stop_b": sid_b,
-                    "distance_km": round(dist, 3),
-                    "method": "haversine",
+    route_stops_by_pattern: Dict[str, List[Dict[str, Any]]] = {}
+    for row in route_stops:
+        pattern_id = str(row.get("pattern_id") or "")
+        if pattern_id:
+            route_stops_by_pattern.setdefault(pattern_id, []).append(row)
+
+    for pattern_id, rows in route_stops_by_pattern.items():
+        ordered = sorted(rows, key=lambda item: int(item.get("stop_sequence") or 0))
+        for idx in range(1, len(ordered)):
+            prev_row = ordered[idx - 1]
+            curr_row = ordered[idx]
+            stop_a = str(prev_row.get("stop_id") or "")
+            stop_b = str(curr_row.get("stop_id") or "")
+            if not stop_a or not stop_b or stop_a == stop_b:
+                continue
+            prev_m = _safe_float(prev_row.get("distance_from_start_m"))
+            curr_m = _safe_float(curr_row.get("distance_from_start_m"))
+            delta_m = (curr_m - prev_m) if prev_m is not None and curr_m is not None else None
+            dist_km, method = _estimate_adjacent_distance_km(stop_a, stop_b, stop_coords, delta_m)
+            if dist_km < min_distance_km:
+                continue
+            key = _pair_key(stop_a, stop_b)
+            current = candidate_pairs.get(key)
+            if current is None or dist_km < float(current.get("distance_km") or 0.0):
+                candidate_pairs[key] = {
+                    "stop_a": key[0],
+                    "stop_b": key[1],
+                    "distance_km": round(dist_km, 3),
+                    "method": method,
+                    "source": f"route_stops:{pattern_id}",
                 }
-            )
+
+    stop_times_by_trip: Dict[str, List[Dict[str, Any]]] = {}
+    for row in stop_times:
+        trip_id = str(row.get("trip_id") or "")
+        if trip_id:
+            stop_times_by_trip.setdefault(trip_id, []).append(row)
+
+    for trip_id, rows in stop_times_by_trip.items():
+        ordered = sorted(rows, key=lambda item: int(item.get("stop_sequence") or 0))
+        for idx in range(1, len(ordered)):
+            stop_a = str(ordered[idx - 1].get("stop_id") or "")
+            stop_b = str(ordered[idx].get("stop_id") or "")
+            if not stop_a or not stop_b or stop_a == stop_b:
+                continue
+            dist_km, method = _estimate_adjacent_distance_km(stop_a, stop_b, stop_coords)
+            if dist_km < min_distance_km:
+                continue
+            key = _pair_key(stop_a, stop_b)
+            current = candidate_pairs.get(key)
+            if current is None or dist_km < float(current.get("distance_km") or 0.0):
+                candidate_pairs[key] = {
+                    "stop_a": key[0],
+                    "stop_b": key[1],
+                    "distance_km": round(dist_km, 3),
+                    "method": method,
+                    "source": f"stop_times:{trip_id}",
+                }
+
+    pairs = sorted(candidate_pairs.values(), key=lambda item: (item["stop_a"], item["stop_b"]))
+    if terminal_only and terminal_ids:
+        pairs = [
+            row
+            for row in pairs
+            if row["stop_a"] in terminal_ids or row["stop_b"] in terminal_ids
+        ]
+
+    if not pairs:
+        warnings.append("No positive adjacent stop distances were generated")
 
     out_path = out_dir / "stop_distances.jsonl"
     with out_path.open("w", encoding="utf-8") as f:

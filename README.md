@@ -29,6 +29,7 @@
 - BFF mapper の logger 未定義クラッシュを修正（scenario_to_problemdata で logging 初期化）。
 - hybrid metadata から固定値化される generated_columns 指標を削除。
 - dispatch mapper の deadhead_distance_km を 0 固定から時間ベース推定に変更。
+- 距離推定を再設計し、route normalizer・stop_distances・trip_chains・BFF mapper で stop 座標/停留所連結/時刻表由来フォールバックを統合、渋41(約13km)・東98(約15km)のファミリー距離キャリブレーションを追加。
 - data_loader で duplicate task_id を検出・正規化し、compat / travel connection 参照を追従させる修正を追加。
 - run_case の --verbose 実行時に一時設定ファイルの相対パス解決が壊れる問題を修正。
 - result_exporter の Excel 出力で charger_utilization が dict の場合に失敗する問題を修正。
@@ -41,6 +42,9 @@
 - ALNS の soc_repair / partial_milp_repair / regret_k_insertion をスタブから実装に更新。
 - hybrid/column_generation の Placeholder 実装を dual-guided 候補生成へ更新。
 - optimization 回帰テストを追加し、arc-flow 連鎖許容・固定費二重計上防止・deadhead TOU・PV credit 算定を自動検証。
+- 最適化出力を output/run_YYYYMMDD_HHMM に統一し、対象便一覧・便種別本数・コスト内訳・CO2内訳・車両別タイムライン・目的関数内訳を JSON/CSV で自動出力。
+- 車両別タイムライン出力を拡張し、`vehicle_timeline_gantt.csv` / `vehicle_timelines.json` にイベントID・開始/終了時刻(HH:MM)・継続時間・運行/回送/充電区分・路線ラベル（route_id/direction/variant）・回送の前後便情報を含めて、全車両ガント可視化へ直接利用できる形式に更新。
+- 実行条件の監査用として `simulation_conditions.json` と補助CSV（車両導入費・燃料単価・TOU単価テーブル・契約電力上限）を `output/run_*/` に自動出力し、需要/契約関連単価と将来拡張向け係数（objective_weights 全項目）を保存するよう更新。
 
 ## 1. 研究目的と概要
 

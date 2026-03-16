@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -43,7 +44,7 @@ def _to_scalar_metric(value: Any) -> float:
 
 
 def _make_run_dir(output_root: str | Path) -> Path:
-    """outputs/run_yyyymmdd_hhmm/ ディレクトリを作成して返す"""
+    """output/run_yyyymmdd_hhmm/ ディレクトリを作成して返す"""
     ts = datetime.now().strftime("%Y%m%d_%H%M")
     run_dir = Path(output_root) / f"run_{ts}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -56,7 +57,7 @@ def export_all(
     dp: DerivedParams,
     milp_result: MILPResult,
     sim_result: SimulationResult,
-    output_root: str | Path = "outputs",
+    output_root: str | Path = "output",
     run_label: Optional[str] = None,
 ) -> Path:
     """
@@ -74,6 +75,13 @@ def export_all(
     export_charging_schedule(run_dir, ms, milp_result)
     export_site_power_balance(run_dir, ms, milp_result, sim_result, data)
     export_experiment_report(run_dir, data, ms, milp_result, sim_result, run_label)
+    export_targeted_trips(run_dir, data, milp_result)
+    export_trip_type_counts(run_dir, data)
+    export_cost_breakdown_detail(run_dir, sim_result)
+    export_co2_breakdown(run_dir, data, ms, dp, milp_result, sim_result)
+    export_vehicle_timelines(run_dir, data, ms, dp, milp_result)
+    export_objective_breakdown(run_dir, milp_result, sim_result)
+    export_simulation_conditions(run_dir, data, dp)
     try:
         export_excel(data, ms, dp, milp_result, sim_result, run_dir, run_label)
     except ImportError:
@@ -124,6 +132,514 @@ def export_summary_json(
     }
     with open(run_dir / "summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
+
+
+def _normalize_direction(direction: Optional[str]) -> str:
+    value = str(direction or "").strip().lower()
+    if value in {"outbound", "out", "up", "0"}:
+        return "outbound"
+    if value in {"inbound", "in", "down", "1"}:
+        return "inbound"
+    return "unknown"
+
+
+def _variant_bucket(variant: Optional[str]) -> str:
+    value = str(variant or "").strip().lower()
+    if value in {"main", "main_outbound", "main_inbound"}:
+        return "main"
+    if value == "short_turn":
+        return "short_turn"
+    if value in {"depot_in", "depot_out"}:
+        return value
+    return "unknown"
+
+
+def export_targeted_trips(run_dir: Path, data: ProblemData, milp: MILPResult) -> None:
+    served = {task_id for tasks in milp.assignment.values() for task_id in tasks}
+    rows: List[Dict[str, Any]] = []
+    for task in data.tasks:
+        rows.append(
+            {
+                "task_id": task.task_id,
+                "route_id": task.route_id or "",
+                "service_id": task.service_id or "",
+                "direction": _normalize_direction(task.direction),
+                "route_variant_type": task.route_variant_type or "unknown",
+                "origin": task.origin,
+                "destination": task.destination,
+                "start_time_idx": task.start_time_idx,
+                "end_time_idx": task.end_time_idx,
+                "distance_km": task.distance_km,
+                "served": task.task_id in served,
+            }
+        )
+
+    payload = {
+        "targeted_task_count": len(data.tasks),
+        "served_task_count": len(served),
+        "unserved_task_count": max(len(data.tasks) - len(served), 0),
+        "tasks": rows,
+    }
+    with open(run_dir / "targeted_trips.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _write_csv(run_dir / "targeted_trips.csv", rows)
+
+
+def export_trip_type_counts(run_dir: Path, data: ProblemData) -> None:
+    counts = {
+        "main_outbound": 0,
+        "main_inbound": 0,
+        "short_turn_outbound": 0,
+        "short_turn_inbound": 0,
+        "depot_out": 0,
+        "depot_in": 0,
+        "unknown": 0,
+    }
+    by_route: Dict[str, int] = defaultdict(int)
+
+    for task in data.tasks:
+        direction = _normalize_direction(task.direction)
+        variant = _variant_bucket(task.route_variant_type)
+        route_id = task.route_id or "(unknown_route)"
+        by_route[route_id] += 1
+
+        if variant == "main":
+            key = f"main_{direction}" if direction in {"outbound", "inbound"} else "unknown"
+        elif variant == "short_turn":
+            key = (
+                f"short_turn_{direction}"
+                if direction in {"outbound", "inbound"}
+                else "unknown"
+            )
+        elif variant in {"depot_out", "depot_in"}:
+            key = variant
+        else:
+            key = "unknown"
+        counts[key] = counts.get(key, 0) + 1
+
+    payload = {
+        "total_task_count": len(data.tasks),
+        "counts": counts,
+        "counts_by_route": dict(sorted(by_route.items())),
+    }
+    with open(run_dir / "trip_type_counts.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _write_csv(
+        run_dir / "trip_type_counts.csv",
+        [{"bucket": key, "count": value} for key, value in counts.items()],
+    )
+
+
+def export_cost_breakdown_detail(run_dir: Path, sim: SimulationResult) -> None:
+    rows = [
+        {"component": "total_operating_cost", "yen": sim.total_operating_cost},
+        {"component": "electricity_cost", "yen": sim.total_energy_cost},
+        {"component": "demand_charge", "yen": sim.total_demand_charge},
+        {"component": "vehicle_fixed_cost", "yen": sim.total_vehicle_fixed_cost},
+        {"component": "driver_cost", "yen": sim.total_driver_cost},
+        {"component": "fuel_cost", "yen": sim.total_fuel_cost},
+        {"component": "degradation_cost", "yen": sim.total_degradation_cost},
+    ]
+    with open(run_dir / "cost_breakdown_detail.json", "w", encoding="utf-8") as f:
+        json.dump({"cost_breakdown": rows}, f, ensure_ascii=False, indent=2)
+    _write_csv(run_dir / "cost_breakdown_detail.csv", rows)
+
+
+def export_co2_breakdown(
+    run_dir: Path,
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp: MILPResult,
+    sim: SimulationResult,
+) -> None:
+    co2_ice = 0.0
+    for vehicle_id in ms.K_ICE:
+        vehicle = dp.vehicle_lut.get(vehicle_id)
+        if vehicle is None:
+            continue
+        for task_id in milp.assignment.get(vehicle_id, []):
+            co2_ice += vehicle.co2_emission_coeff * dp.task_fuel_ice.get(task_id, 0.0)
+
+    has_grid_co2_factor = any(
+        value > 0.0
+        for site_map in dp.grid_co2_factor.values()
+        for value in site_map.values()
+    )
+    co2_grid = max(sim.total_co2_kg - co2_ice, 0.0) if has_grid_co2_factor else None
+
+    payload = {
+        "total_co2_kg": sim.total_co2_kg,
+        "engine_bus_co2_kg": round(co2_ice, 4),
+        "power_generation_co2_kg": round(co2_grid, 4) if co2_grid is not None else None,
+        "power_generation_co2_note": (
+            "Calculated from grid CO2 factors"
+            if co2_grid is not None
+            else "Not implemented yet (grid CO2 factor unavailable)"
+        ),
+    }
+    with open(run_dir / "co2_breakdown.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _write_csv(
+        run_dir / "co2_breakdown.csv",
+        [
+            {"component": "engine_bus_co2_kg", "value": payload["engine_bus_co2_kg"]},
+            {"component": "power_generation_co2_kg", "value": payload["power_generation_co2_kg"]},
+            {"component": "total_co2_kg", "value": payload["total_co2_kg"]},
+        ],
+    )
+
+
+def export_vehicle_timelines(
+    run_dir: Path,
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp: MILPResult,
+) -> None:
+    def _slot_to_minute(slot_idx: int) -> int:
+        return int(round(float(slot_idx) * float(data.delta_t_min)))
+
+    def _minute_to_hhmm(total_minute: int) -> str:
+        minute = int(total_minute) % (24 * 60)
+        return f"{minute // 60:02d}:{minute % 60:02d}"
+
+    def _direction_label(direction: Optional[str]) -> str:
+        normalized = _normalize_direction(direction)
+        return normalized if normalized != "unknown" else ""
+
+    def _service_label(task: Any) -> str:
+        route_id = (getattr(task, "route_id", None) or "").strip()
+        direction = _direction_label(getattr(task, "direction", None))
+        variant = (getattr(task, "route_variant_type", None) or "").strip()
+        parts = [part for part in [route_id, direction, variant] if part]
+        if parts:
+            return " | ".join(parts)
+        origin = getattr(task, "origin", "")
+        destination = getattr(task, "destination", "")
+        return f"{origin} -> {destination}".strip()
+
+    def _enrich_event(vehicle_id: str, event: Dict[str, Any], event_seq: int) -> Dict[str, Any]:
+        start_idx = int(event.get("start_time_idx", 0) or 0)
+        end_idx = int(event.get("end_time_idx", 0) or 0)
+        start_min = _slot_to_minute(start_idx)
+        end_min = _slot_to_minute(end_idx)
+        duration_slots = max(end_idx - start_idx, 0)
+        duration_min = max(end_min - start_min, 0)
+        event_type = str(event.get("event_type", ""))
+        if event_type == "service":
+            activity_group = "operation"
+        elif event_type == "deadhead":
+            activity_group = "deadhead"
+        elif event_type == "charging":
+            activity_group = "charging"
+        else:
+            activity_group = "other"
+
+        row = {
+            "vehicle_id": vehicle_id,
+            "event_id": f"{vehicle_id}:{event_seq:04d}",
+            "event_seq": event_seq,
+            "event_type": event_type,
+            "activity_group": activity_group,
+            "gantt_lane": vehicle_id,
+            "start_time_idx": start_idx,
+            "end_time_idx": end_idx,
+            "duration_slots": duration_slots,
+            "duration_min": duration_min,
+            "start_minute": start_min,
+            "end_minute": end_min,
+            "start_hhmm": _minute_to_hhmm(start_min),
+            "end_hhmm": _minute_to_hhmm(end_min),
+            "task_id": event.get("task_id") or "",
+            "route_id": event.get("route_id") or "",
+            "direction": _direction_label(event.get("direction")),
+            "route_variant_type": event.get("route_variant_type") or "",
+            "service_id": event.get("service_id") or "",
+            "service_label": event.get("service_label") or "",
+            "origin": event.get("origin") or "",
+            "destination": event.get("destination") or "",
+            "from_task_id": event.get("from_task_id") or "",
+            "to_task_id": event.get("to_task_id") or "",
+            "from_route_id": event.get("from_route_id") or "",
+            "to_route_id": event.get("to_route_id") or "",
+            "deadhead_time_slot": event.get("deadhead_time_slot") or 0,
+            "deadhead_distance_km": event.get("deadhead_distance_km") or 0.0,
+            "charger_id": event.get("charger_id") or "",
+            "avg_power_kw": event.get("avg_power_kw") or 0.0,
+            "distance_km": event.get("distance_km") or 0.0,
+            "timeline_note": event.get("timeline_note") or "",
+        }
+        return row
+
+    timeline_by_vehicle: Dict[str, List[Dict[str, Any]]] = {}
+    csv_rows: List[Dict[str, Any]] = []
+
+    for vehicle_id in ms.K_ALL:
+        events: List[Dict[str, Any]] = []
+        assigned = sorted(
+            milp.assignment.get(vehicle_id, []),
+            key=lambda task_id: dp.task_lut.get(task_id).start_time_idx if dp.task_lut.get(task_id) else 0,
+        )
+
+        previous_task_id: Optional[str] = None
+        for task_id in assigned:
+            task = dp.task_lut.get(task_id)
+            if task is None:
+                continue
+
+            if previous_task_id is not None:
+                dh_slots = dp.deadhead_time_slot.get(previous_task_id, {}).get(task_id, 0)
+                if dh_slots > 0:
+                    prev_task = dp.task_lut.get(previous_task_id)
+                    deadhead_event = {
+                        "event_type": "deadhead",
+                        "from_task_id": previous_task_id,
+                        "to_task_id": task_id,
+                        "from_route_id": getattr(prev_task, "route_id", None),
+                        "to_route_id": task.route_id,
+                        "timeline_note": "between services",
+                        "start_time_idx": max(task.start_time_idx - dh_slots, 0),
+                        "end_time_idx": task.start_time_idx,
+                        "deadhead_time_slot": dh_slots,
+                        "deadhead_distance_km": dp.deadhead_distance_km.get(previous_task_id, {}).get(task_id, 0.0),
+                    }
+                    events.append(deadhead_event)
+
+            service_event = {
+                "event_type": "service",
+                "task_id": task_id,
+                "route_id": task.route_id,
+                "direction": task.direction,
+                "route_variant_type": task.route_variant_type,
+                "service_id": task.service_id,
+                "service_label": _service_label(task),
+                "origin": task.origin,
+                "destination": task.destination,
+                "start_time_idx": task.start_time_idx,
+                "end_time_idx": task.end_time_idx,
+                "distance_km": task.distance_km,
+            }
+            events.append(service_event)
+            previous_task_id = task_id
+
+        for charger_id, flags in milp.charge_schedule.get(vehicle_id, {}).items():
+            powers = milp.charge_power_kw.get(vehicle_id, {}).get(charger_id, [0.0] * len(flags))
+            start_idx: Optional[int] = None
+            power_sum = 0.0
+            power_count = 0
+            for idx, flag in enumerate(flags):
+                active = idx < len(powers) and (flag > 0 or powers[idx] > 1e-6)
+                if active and start_idx is None:
+                    start_idx = idx
+                if active:
+                    power_sum += float(powers[idx]) if idx < len(powers) else 0.0
+                    power_count += 1
+                if not active and start_idx is not None:
+                    events.append(
+                        {
+                            "event_type": "charging",
+                            "charger_id": charger_id,
+                            "start_time_idx": start_idx,
+                            "end_time_idx": idx,
+                            "avg_power_kw": (power_sum / power_count) if power_count else 0.0,
+                            "timeline_note": "plug-in charging",
+                        }
+                    )
+                    start_idx = None
+                    power_sum = 0.0
+                    power_count = 0
+            if start_idx is not None:
+                events.append(
+                    {
+                        "event_type": "charging",
+                        "charger_id": charger_id,
+                        "start_time_idx": start_idx,
+                        "end_time_idx": len(flags),
+                        "avg_power_kw": (power_sum / power_count) if power_count else 0.0,
+                        "timeline_note": "plug-in charging",
+                    }
+                )
+
+        events.sort(key=lambda event: (event.get("start_time_idx", 0), event.get("event_type", "")))
+        enriched_events: List[Dict[str, Any]] = []
+        for seq, event in enumerate(events, start=1):
+            enriched = _enrich_event(vehicle_id, event, seq)
+            enriched_events.append(enriched)
+            csv_rows.append(enriched)
+
+        timeline_by_vehicle[vehicle_id] = enriched_events
+
+    with open(run_dir / "vehicle_timelines.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "timeline_schema_version": "2.0",
+                "delta_t_min": data.delta_t_min,
+                "vehicle_timelines": timeline_by_vehicle,
+                "vehicle_gantt_rows": csv_rows,
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+    _write_csv(run_dir / "vehicle_timelines.csv", csv_rows)
+    _write_csv(run_dir / "vehicle_timeline_gantt.csv", csv_rows)
+
+
+def export_objective_breakdown(run_dir: Path, milp: MILPResult, sim: SimulationResult) -> None:
+    breakdown = dict(milp.obj_breakdown or {})
+    if not breakdown:
+        breakdown = {
+            "electricity_cost": sim.total_energy_cost,
+            "demand_charge": sim.total_demand_charge,
+            "fuel_cost": sim.total_fuel_cost,
+            "degradation_cost": sim.total_degradation_cost,
+            "vehicle_fixed_cost": sim.total_vehicle_fixed_cost,
+            "driver_cost": sim.total_driver_cost,
+        }
+    with open(run_dir / "objective_breakdown.json", "w", encoding="utf-8") as f:
+        json.dump({"objective_breakdown": breakdown}, f, ensure_ascii=False, indent=2)
+    _write_csv(
+        run_dir / "objective_breakdown.csv",
+        [{"term": key, "value": value} for key, value in breakdown.items()],
+    )
+
+
+def export_simulation_conditions(run_dir: Path, data: ProblemData, dp: DerivedParams) -> None:
+    vehicle_rows: List[Dict[str, Any]] = []
+    for vehicle in data.vehicles:
+        vehicle_rows.append(
+            {
+                "vehicle_id": vehicle.vehicle_id,
+                "vehicle_type": vehicle.vehicle_type,
+                "fixed_use_cost_yen": vehicle.fixed_use_cost,
+                "fuel_cost_coeff_yen_per_liter": vehicle.fuel_cost_coeff,
+                "battery_degradation_cost_coeff_yen_per_kwh": vehicle.battery_degradation_cost_coeff,
+                "co2_emission_coeff_kg_per_liter": vehicle.co2_emission_coeff,
+            }
+        )
+
+    vehicle_cost_summary: Dict[str, Dict[str, float]] = {}
+    for row in vehicle_rows:
+        vtype = str(row["vehicle_type"])
+        bucket = vehicle_cost_summary.setdefault(
+            vtype,
+            {
+                "count": 0.0,
+                "avg_fixed_use_cost_yen": 0.0,
+                "avg_fuel_cost_coeff_yen_per_liter": 0.0,
+                "avg_battery_degradation_cost_coeff_yen_per_kwh": 0.0,
+            },
+        )
+        bucket["count"] += 1.0
+        bucket["avg_fixed_use_cost_yen"] += float(row["fixed_use_cost_yen"])
+        bucket["avg_fuel_cost_coeff_yen_per_liter"] += float(row["fuel_cost_coeff_yen_per_liter"])
+        bucket["avg_battery_degradation_cost_coeff_yen_per_kwh"] += float(
+            row["battery_degradation_cost_coeff_yen_per_kwh"]
+        )
+
+    for bucket in vehicle_cost_summary.values():
+        count = bucket["count"] if bucket["count"] > 0 else 1.0
+        bucket["avg_fixed_use_cost_yen"] = bucket["avg_fixed_use_cost_yen"] / count
+        bucket["avg_fuel_cost_coeff_yen_per_liter"] = (
+            bucket["avg_fuel_cost_coeff_yen_per_liter"] / count
+        )
+        bucket["avg_battery_degradation_cost_coeff_yen_per_kwh"] = (
+            bucket["avg_battery_degradation_cost_coeff_yen_per_kwh"] / count
+        )
+
+    tou_rows: List[Dict[str, Any]] = []
+    for site_id, by_time in dp.grid_price.items():
+        for time_idx in sorted(by_time.keys()):
+            tou_rows.append(
+                {
+                    "site_id": site_id,
+                    "time_idx": time_idx,
+                    "grid_energy_price_yen_per_kwh": by_time.get(time_idx, 0.0),
+                    "sell_back_price_yen_per_kwh": dp.sell_back_price.get(site_id, {}).get(time_idx, 0.0),
+                    "base_load_kw": dp.base_load_kw.get(site_id, {}).get(time_idx, 0.0),
+                    "grid_co2_factor_kg_per_kwh": dp.grid_co2_factor.get(site_id, {}).get(time_idx, 0.0),
+                }
+            )
+
+    price_values = [float(row["grid_energy_price_yen_per_kwh"]) for row in tou_rows]
+    electricity_price_summary = {
+        "has_tou_price_table": len(tou_rows) > 0,
+        "time_slot_count": len(price_values),
+        "grid_energy_price_min_yen_per_kwh": min(price_values) if price_values else None,
+        "grid_energy_price_max_yen_per_kwh": max(price_values) if price_values else None,
+        "grid_energy_price_avg_yen_per_kwh": (
+            sum(price_values) / len(price_values) if price_values else None
+        ),
+    }
+
+    contract_rows: List[Dict[str, Any]] = []
+    for site in data.sites:
+        contract_rows.append(
+            {
+                "site_id": site.site_id,
+                "site_type": site.site_type,
+                "contract_demand_limit_kw": site.contract_demand_limit_kw,
+                "grid_import_limit_kw": site.grid_import_limit_kw,
+                "site_transformer_limit_kw": site.site_transformer_limit_kw,
+            }
+        )
+
+    payload = {
+        "timestamp": datetime.now().isoformat(),
+        "time_settings": {
+            "delta_t_min": data.delta_t_min,
+            "num_periods": data.num_periods,
+            "planning_horizon_hours": data.planning_horizon_hours,
+        },
+        "flags": {
+            "enable_pv": data.enable_pv,
+            "enable_v2g": data.enable_v2g,
+            "enable_demand_charge": data.enable_demand_charge,
+            "enable_battery_degradation": data.enable_battery_degradation,
+            "allow_partial_service": data.allow_partial_service,
+        },
+        "unit_prices_and_costs": {
+            "vehicle_introduction_cost_source": "vehicle.fixed_use_cost",
+            "fuel_unit_price_source": "vehicle.fuel_cost_coeff",
+            "battery_degradation_unit_price_source": "vehicle.battery_degradation_cost_coeff",
+            "co2_price_per_kg": data.co2_price_per_kg,
+            "demand_charge_rate_per_kw": data.demand_charge_rate_per_kw,
+            "electricity_price_summary": electricity_price_summary,
+        },
+        "demand_and_contract_conditions": {
+            "demand_charge_rate_per_kw": data.demand_charge_rate_per_kw,
+            "objective_weight_demand_charge_cost": data.objective_weights.get(
+                "demand_charge_cost", 0.0
+            ),
+            "contract_limit_penalty_multiplier": data.objective_weights.get(
+                "contract_limit_penalty_multiplier"
+            ),
+            "contract_limit_penalty_note": (
+                "If null, no explicit penalty multiplier is configured in objective_weights"
+            ),
+            "contract_limits_by_site": contract_rows,
+        },
+        "extensible_coefficients": {
+            "objective_weights": dict(data.objective_weights),
+            "big_m": {
+                "BIG_M_ASSIGN": data.BIG_M_ASSIGN,
+                "BIG_M_CHARGE": data.BIG_M_CHARGE,
+                "BIG_M_SOC": data.BIG_M_SOC,
+                "EPSILON": data.EPSILON,
+            },
+        },
+        "vehicle_costs": vehicle_rows,
+        "vehicle_cost_summary_by_type": vehicle_cost_summary,
+        "tou_prices": tou_rows,
+    }
+
+    with open(run_dir / "simulation_conditions.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    _write_csv(run_dir / "simulation_conditions_vehicle_costs.csv", vehicle_rows)
+    _write_csv(run_dir / "simulation_conditions_tou_prices.csv", tou_rows)
+    _write_csv(run_dir / "simulation_conditions_contract_limits.csv", contract_rows)
 
 
 # ---------------------------------------------------------------------------

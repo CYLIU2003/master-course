@@ -296,6 +296,10 @@ def load_tasks(path: Path) -> List[Task]:
             required_vehicle_type=rt if rt else None,
             demand_cover=_bool_col(r.get("demand_cover", "true")),
             penalty_unserved=float(r.get("penalty_unserved") or 10000.0),
+            route_id=(r.get("route_id") or None),
+            direction=(r.get("direction") or r.get("canonical_direction") or None),
+            route_variant_type=(r.get("route_variant_type") or r.get("routeVariantType") or None),
+            service_id=(r.get("service_id") or None),
         )
         tasks.append(t)
     return tasks
@@ -331,7 +335,6 @@ def load_sites(path: Path) -> List[Site]:
         )
         sites.append(s)
     return sites
-
 
 def load_pv_profile(path: Path) -> List[PVProfile]:
     rows = _read_csv(path)

@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..constants import DEFAULT_DEADHEAD_SPEED_KMH, DEFAULT_TURNAROUND_SEC
 
@@ -30,6 +31,72 @@ def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
             if line:
                 items.append(json.loads(line))
     return items
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_km = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
+    )
+    return radius_km * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_stop_distance_lookup(feature_dir: Path) -> Dict[Tuple[str, str], float]:
+    lookup: Dict[Tuple[str, str], float] = {}
+    for row in _read_jsonl(feature_dir / "stop_distances.jsonl"):
+        stop_a = str(row.get("stop_a") or "")
+        stop_b = str(row.get("stop_b") or "")
+        distance_km = _safe_float(row.get("distance_km"))
+        if not stop_a or not stop_b or distance_km is None or distance_km <= 0.0:
+            continue
+        lookup[(stop_a, stop_b)] = distance_km
+        lookup[(stop_b, stop_a)] = distance_km
+    return lookup
+
+
+def _build_stop_coord_lookup(canonical_dir: Path) -> Dict[str, Tuple[float, float]]:
+    lookup: Dict[str, Tuple[float, float]] = {}
+    for row in _read_jsonl(canonical_dir / "stops.jsonl"):
+        stop_id = str(row.get("stop_id") or "")
+        lat = _safe_float(row.get("lat"))
+        lon = _safe_float(row.get("lon"))
+        if stop_id and lat is not None and lon is not None:
+            lookup[stop_id] = (lat, lon)
+    return lookup
+
+
+def _estimate_deadhead_distance_km(
+    from_stop: str,
+    to_stop: str,
+    stop_distance_lookup: Dict[Tuple[str, str], float],
+    stop_coords: Dict[str, Tuple[float, float]],
+) -> Tuple[float, str]:
+    if not from_stop or not to_stop:
+        return (0.0, "none")
+    lookup_distance = stop_distance_lookup.get((from_stop, to_stop))
+    if lookup_distance is not None and lookup_distance > 0.0:
+        return (lookup_distance, "stop_distance_lookup")
+    coords_from = stop_coords.get(from_stop)
+    coords_to = stop_coords.get(to_stop)
+    if coords_from and coords_to:
+        dist = _haversine_km(coords_from[0], coords_from[1], coords_to[0], coords_to[1])
+        if dist > 0.0:
+            return (dist, "haversine_fallback")
+    return (0.0, "none")
 
 
 def build_trip_chains(
@@ -70,6 +137,8 @@ def build_trip_chains(
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     trips = _read_jsonl(canonical_dir / "trips.jsonl")
+    stop_distance_lookup = _build_stop_distance_lookup(out_dir)
+    stop_coords = _build_stop_coord_lookup(canonical_dir)
     warnings: List[str] = []
 
     if not trips:
@@ -111,6 +180,21 @@ def build_trip_chains(
 
                 origin_j = t_j.get("origin_stop_id", "")
                 needs_deadhead = dest_i != origin_j
+                deadhead_distance_km = 0.0
+                deadhead_time_min = 0.0
+                deadhead_method = "none"
+                if needs_deadhead:
+                    deadhead_distance_km, deadhead_method = _estimate_deadhead_distance_km(
+                        str(dest_i),
+                        str(origin_j),
+                        stop_distance_lookup,
+                        stop_coords,
+                    )
+                    if deadhead_distance_km > 0.0 and deadhead_speed_kmh > 0.0:
+                        deadhead_time_min = (deadhead_distance_km / deadhead_speed_kmh) * 60.0
+
+                if gap_min < (turnaround_min + deadhead_time_min):
+                    continue
 
                 chain = {
                     "service_id": sid,
@@ -120,6 +204,9 @@ def build_trip_chains(
                     "trip_j_route": t_j.get("route_id"),
                     "gap_min": round(gap_min, 1),
                     "needs_deadhead": needs_deadhead,
+                    "deadhead_distance_km": round(deadhead_distance_km, 3),
+                    "deadhead_time_min": round(deadhead_time_min, 1),
+                    "deadhead_method": deadhead_method,
                     "dest_i": dest_i,
                     "origin_j": origin_j,
                     "feasible": True,

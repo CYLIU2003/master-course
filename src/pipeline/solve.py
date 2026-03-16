@@ -379,11 +379,12 @@ def solve(
         print(f"  [warn] シミュレータ検証スキップ: {e}")
 
     # ================================================================
-    # outputs/ に保存
+    # output/ に保存
     # ================================================================
-    out_root = Path(
-        cfg.get("output_dir", cfg.get("paths", {}).get("output_dir", "outputs"))
-    )
+    configured_output_root = cfg.get("output_dir", cfg.get("paths", {}).get("output_dir", "output"))
+    if not configured_output_root or str(configured_output_root).strip() == "outputs":
+        configured_output_root = "output"
+    out_root = Path(configured_output_root)
 
     try:
         from src.result_exporter import export_all
@@ -490,7 +491,7 @@ def solve_problem_data(
     time_limit_seconds: float = 300.0,
     mip_gap: float = 0.01,
     random_seed: int = 42,
-    output_dir: str = "outputs",
+    output_dir: str = "output",
 ) -> dict:
     """
     Execute the optimization pipeline directly from an in-memory ProblemData.
@@ -562,13 +563,17 @@ def solve_problem_data(
     except Exception:
         sim_result = None
 
+    normalized_output_dir = output_dir
+    if not normalized_output_dir or str(normalized_output_dir).strip() == "outputs":
+        normalized_output_dir = "output"
+
     try:
         from src.result_exporter import export_all
 
         if sim_result is not None:
-            export_all(data, ms, dp, result, sim_result, output_dir)
+            export_all(data, ms, dp, result, sim_result, normalized_output_dir)
         else:
-            _export_minimal(result, output_dir)
+            _export_minimal(result, normalized_output_dir)
     except Exception:
         pass
 

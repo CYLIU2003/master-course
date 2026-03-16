@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from src.data_schema import (
     Charger,
@@ -152,6 +152,111 @@ def _hhmm_to_minutes(time_str: str) -> int:
     except ValueError:
         return 0
     return max(0, hour * 60 + minute)
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_km = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
+    )
+    return radius_km * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _build_stop_coord_lookup(scenario: Dict[str, Any]) -> Dict[str, Tuple[float, float]]:
+    lookup: Dict[str, Tuple[float, float]] = {}
+    for stop in _as_list(scenario.get("stops")):
+        stop_id = str(stop.get("id") or stop.get("stop_id") or "").strip()
+        if not stop_id:
+            continue
+        lat = _safe_float(stop.get("lat"), 0.0)
+        lon = _safe_float(stop.get("lon"), 0.0)
+        if lat == 0.0 and lon == 0.0:
+            continue
+        lookup[stop_id] = (lat, lon)
+    return lookup
+
+
+def _variant_distance_factor(trip_like: Dict[str, Any], route_like: Dict[str, Any]) -> float:
+    variant = str(
+        trip_like.get("routeVariantType")
+        or trip_like.get("route_variant_type")
+        or route_like.get("routeVariantType")
+        or route_like.get("route_variant_type")
+        or "unknown"
+    ).lower()
+    factors = {
+        "main": 1.08,
+        "main_outbound": 1.08,
+        "main_inbound": 1.08,
+        "short_turn": 1.12,
+        "branch": 1.1,
+        "depot_out": 1.15,
+        "depot_in": 1.15,
+        "unknown": 1.1,
+    }
+    return float(factors.get(variant, factors["unknown"]))
+
+
+def _stop_sequence_from_trip_stop_times(trip_like: Dict[str, Any]) -> List[str]:
+    raw_stop_times = _as_list(trip_like.get("stop_times") or trip_like.get("stopTimes"))
+    if not raw_stop_times:
+        return []
+    ordered = sorted(raw_stop_times, key=lambda item: _safe_int((item or {}).get("stop_sequence"), 0))
+    stop_ids: List[str] = []
+    for row in ordered:
+        if not isinstance(row, dict):
+            continue
+        stop_id = str(row.get("stop_id") or row.get("stopId") or "").strip()
+        if stop_id:
+            stop_ids.append(stop_id)
+    return stop_ids
+
+
+def _distance_from_stop_sequence_km(
+    stop_ids: List[str],
+    stop_coords: Dict[str, Tuple[float, float]],
+    detour_factor: float,
+) -> float:
+    if len(stop_ids) < 2:
+        return 0.0
+    total = 0.0
+    for idx in range(1, len(stop_ids)):
+        prev_coords = stop_coords.get(stop_ids[idx - 1])
+        curr_coords = stop_coords.get(stop_ids[idx])
+        if not prev_coords or not curr_coords:
+            continue
+        total += _haversine_km(prev_coords[0], prev_coords[1], curr_coords[0], curr_coords[1])
+    return total * max(detour_factor, 1.0)
+
+
+def _estimate_distance_from_trip_stop_times_km(
+    trip_like: Dict[str, Any],
+    stop_coords: Dict[str, Tuple[float, float]],
+    detour_factor: float,
+) -> float:
+    stop_ids = _stop_sequence_from_trip_stop_times(trip_like)
+    return _distance_from_stop_sequence_km(stop_ids, stop_coords, detour_factor)
+
+
+def _route_stop_sequence(route_like: Dict[str, Any]) -> List[str]:
+    return [
+        str(item)
+        for item in coerce_list(route_like.get("stopSequence") or route_like.get("stop_sequence"))
+        if str(item or "").strip()
+    ]
+
+
+def _estimate_route_distance_from_sequence_km(
+    route_like: Dict[str, Any],
+    stop_coords: Dict[str, Tuple[float, float]],
+    detour_factor: float,
+) -> float:
+    return _distance_from_stop_sequence_km(_route_stop_sequence(route_like), stop_coords, detour_factor)
 
 
 def _slot_price_from_tou(
@@ -325,25 +430,34 @@ def _normalize_trip_allowed_types(
 def _estimate_trip_distance_km(
     trip_like: Dict[str, Any],
     route_like: Dict[str, Any],
+    stop_coords: Dict[str, Tuple[float, float]],
 ) -> float:
+    detour_factor = _variant_distance_factor(trip_like, route_like)
     explicit_distance = _safe_float(trip_like.get("distance_km"), 0.0)
     if explicit_distance > 0.0:
         return explicit_distance
+
+    stop_times_distance = _estimate_distance_from_trip_stop_times_km(
+        trip_like,
+        stop_coords,
+        detour_factor,
+    )
+    if stop_times_distance > 0.0:
+        return round(stop_times_distance, 4)
+
     base_distance = _safe_float(
         route_like.get("distanceKm", route_like.get("distance_km")),
         0.0,
     )
     if base_distance <= 0.0:
-        return 0.0
-    stop_sequence = [
-        str(item)
-        for item in coerce_list(route_like.get("stopSequence") or route_like.get("stop_sequence"))
-        if str(item or "").strip()
-    ]
+        base_distance = _estimate_route_distance_from_sequence_km(route_like, stop_coords, detour_factor)
+
+    stop_sequence = _route_stop_sequence(route_like)
     origin_stop_id = str(trip_like.get("origin_stop_id") or "").strip()
     destination_stop_id = str(trip_like.get("destination_stop_id") or "").strip()
     if (
-        origin_stop_id
+        base_distance > 0.0
+        and origin_stop_id
         and destination_stop_id
         and len(stop_sequence) >= 2
         and origin_stop_id in stop_sequence
@@ -355,7 +469,21 @@ def _estimate_trip_distance_km(
         total_span = max(len(stop_sequence) - 1, 1)
         if span > 0:
             return round(base_distance * (span / total_span), 4)
-    return base_distance
+    if base_distance > 0.0:
+        return round(base_distance, 4)
+
+    origin_coords = stop_coords.get(origin_stop_id)
+    destination_coords = stop_coords.get(destination_stop_id)
+    if origin_coords and destination_coords:
+        straight_km = _haversine_km(
+            origin_coords[0],
+            origin_coords[1],
+            destination_coords[0],
+            destination_coords[1],
+        )
+        if straight_km > 0.0:
+            return round(straight_km * detour_factor, 4)
+    return 0.0
 
 
 def _collect_trips_for_scope(
@@ -365,6 +493,7 @@ def _collect_trips_for_scope(
     analysis_scope: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     scoped_rows = _filter_rows_for_scope(scenario, depot_id, service_id, analysis_scope)
+    stop_coords = _build_stop_coord_lookup(scenario)
     scope = dict(analysis_scope or scenario.get("dispatch_scope") or {})
     effective_route_ids = {
         str(item)
@@ -444,9 +573,18 @@ def _collect_trips_for_scope(
                 "destination_stop_id": str(item.get("destination_stop_id") or ""),
                 "departure": str(item.get("departure")),
                 "arrival": str(item.get("arrival")),
-                "distance_km": _estimate_trip_distance_km(item, route_like),
+                "distance_km": _estimate_trip_distance_km(item, route_like, stop_coords),
                 "allowed_vehicle_types": allowed_types,
             }
+        )
+    zero_distance_count = sum(1 for trip in trips if _safe_float(trip.get("distance_km"), 0.0) <= 0.0)
+    zero_distance_ratio = (zero_distance_count / len(trips)) if trips else 0.0
+    if zero_distance_ratio >= 0.05:
+        logger.warning(
+            "Distance estimation audit: zero distance ratio is %.2f%% (%d/%d)",
+            zero_distance_ratio * 100.0,
+            zero_distance_count,
+            len(trips),
         )
     return trips
 
@@ -546,6 +684,10 @@ def _build_tasks(
                 required_vehicle_type=required_vehicle_type,
                 demand_cover=True,
                 penalty_unserved=10000.0,
+                route_id=str(trip.get("route_id") or "") or None,
+                direction=str(trip.get("direction") or "") or None,
+                route_variant_type=str(trip.get("routeVariantType") or "") or None,
+                service_id=str(trip.get("service_id") or service_id or "") or None,
             )
         )
     return tasks

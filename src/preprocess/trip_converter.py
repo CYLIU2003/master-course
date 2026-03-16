@@ -82,6 +82,10 @@ def convert_trips_to_tasks(
             required_vehicle_type=None,
             demand_cover=True,
             penalty_unserved=default_penalty,
+            route_id=trip.route_id,
+            direction=trip.canonical_direction,
+            route_variant_type=trip.route_variant_type,
+            service_id=trip.service_id,
         )
         tasks.append(task)
     return tasks

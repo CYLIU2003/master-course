@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import math
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -18,6 +19,116 @@ _log = logging.getLogger(__name__)
 
 _SPECIAL_FAMILY_PREFIXES = ("空港", "高速", "直行", "出入庫", "ハチ公")
 _DEPOT_KEYWORDS = ("営業所", "車庫", "操車所")
+_ROUTE_DISTANCE_TARGETS_KM = {
+    "渋41": 13.0,
+    "東98": 15.0,
+}
+_VARIANT_DETOUR_FACTORS = {
+    RouteVariantType.main: 1.08,
+    RouteVariantType.main_outbound: 1.08,
+    RouteVariantType.main_inbound: 1.08,
+    RouteVariantType.short_turn: 1.12,
+    RouteVariantType.branch: 1.1,
+    RouteVariantType.depot_out: 1.15,
+    RouteVariantType.depot_in: 1.15,
+    RouteVariantType.unknown: 1.1,
+}
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_km = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
+    )
+    return radius_km * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _to_float(value: Any) -> Optional[float]:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _variant_detour_factor(variant: RouteVariantType) -> float:
+    return float(_VARIANT_DETOUR_FACTORS.get(variant, _VARIANT_DETOUR_FACTORS[RouteVariantType.unknown]))
+
+
+def _normalized_route_code(value: str) -> str:
+    return nfkc_normalize(value or "").strip()
+
+
+def _build_cumulative_distances_m(
+    stop_sequence: List[str],
+    raw_distance_values: List[Optional[float]],
+    stops: Dict[str, Dict[str, Any]],
+    detour_factor: float,
+) -> List[float]:
+    if len(stop_sequence) < 2:
+        return [0.0 for _ in stop_sequence]
+
+    raw_values: List[Optional[float]] = raw_distance_values[: len(stop_sequence)]
+    has_positive_raw = any((value or 0.0) > 0.0 for value in raw_values)
+    raw_non_decreasing = True
+    previous: Optional[float] = None
+    for value in raw_values:
+        if value is None:
+            continue
+        if previous is not None and value < previous:
+            raw_non_decreasing = False
+            break
+        previous = value
+
+    if has_positive_raw and raw_non_decreasing and len(raw_values) == len(stop_sequence):
+        base = raw_values[0] or 0.0
+        cumulative_from_raw: List[float] = []
+        for value in raw_values:
+            cumulative_from_raw.append(max(0.0, (value or 0.0) - base))
+        if cumulative_from_raw[-1] > 0.0:
+            return cumulative_from_raw
+
+    cumulative_distances: List[float] = [0.0]
+    cumulative = 0.0
+    for idx in range(1, len(stop_sequence)):
+        prev_stop = str(stop_sequence[idx - 1])
+        curr_stop = str(stop_sequence[idx])
+        prev_info = stops.get(prev_stop) or {}
+        curr_info = stops.get(curr_stop) or {}
+        prev_lat = _to_float(prev_info.get("lat"))
+        prev_lon = _to_float(prev_info.get("lon"))
+        curr_lat = _to_float(curr_info.get("lat"))
+        curr_lon = _to_float(curr_info.get("lon"))
+
+        segment_m = 0.0
+        if None not in (prev_lat, prev_lon, curr_lat, curr_lon):
+            segment_m = _haversine_km(
+                float(prev_lat),
+                float(prev_lon),
+                float(curr_lat),
+                float(curr_lon),
+            ) * 1000.0 * max(detour_factor, 1.0)
+
+        cumulative += max(segment_m, 0.0)
+        cumulative_distances.append(cumulative)
+
+    if cumulative_distances[-1] > 0.0:
+        return cumulative_distances
+
+    cumulative = 0.0
+    cumulative_from_incremental_raw: List[float] = [0.0]
+    for idx in range(1, len(stop_sequence)):
+        raw_increment = raw_values[idx]
+        if raw_increment is not None and raw_increment > 0.0:
+            cumulative += raw_increment
+        cumulative_from_incremental_raw.append(cumulative)
+    return cumulative_from_incremental_raw
 
 
 def _load_manual_route_family_map(path: Path = ROUTE_FAMILY_MAP_PATH) -> Dict[str, Dict[str, str]]:
@@ -120,8 +231,7 @@ def normalize_busroute_patterns(
 
         busstop_order = item.get("odpt:busstopPoleOrder") or []
         stop_sequence: List[str] = []
-        cumulative_distances: List[Optional[float]] = []
-        cumulative = 0.0
+        raw_distance_values: List[Optional[float]] = []
         for bs in busstop_order:
             if not isinstance(bs, dict):
                 continue
@@ -129,13 +239,7 @@ def normalize_busroute_patterns(
             if not pole:
                 continue
             stop_sequence.append(str(pole))
-            dist = bs.get("odpt:distance")
-            if dist is not None:
-                try:
-                    cumulative += float(dist)
-                except (TypeError, ValueError):
-                    pass
-            cumulative_distances.append(cumulative)
+            raw_distance_values.append(_to_float(bs.get("odpt:distance")))
 
         if len(stop_sequence) < 2:
             warnings.append(f"Pattern {odpt_pattern_id} has < 2 stops, skipped")
@@ -152,9 +256,16 @@ def normalize_busroute_patterns(
         family_id = str(manual.get("gtfs_route_family_id") or _infer_family_id(route_short_name, origin_name, destination_name))
         family_short_name = str(manual.get("gtfs_route_short_name") or route_short_name)
         family_long_name = str(manual.get("gtfs_route_long_name") or family_short_name)
-        distance_km = round(cumulative / 1000.0, 3) if cumulative > 0 else 0.0
         inferred_role = _infer_pattern_role(origin_name, destination_name)
         pattern_role = _coerce_variant(manual.get("pattern_role"), inferred_role)
+        detour_factor = _variant_detour_factor(pattern_role)
+        cumulative_distances = _build_cumulative_distances_m(
+            stop_sequence,
+            raw_distance_values,
+            stops,
+            detour_factor,
+        )
+        distance_km = round((cumulative_distances[-1] / 1000.0), 3) if cumulative_distances else 0.0
         include_in_public_gtfs = _as_bool(manual.get("include_in_gtfs"), True)
         direction_bucket_raw = manual.get("direction_bucket")
         direction_bucket = None
@@ -206,6 +317,19 @@ def normalize_busroute_patterns(
         )
         trunk_origin = primary["origin_name"]
         trunk_destination = primary["destination_name"]
+        family_code = _normalized_route_code(
+            extract_route_family_code(primary["route_code"]) or primary["route_code"]
+        )
+        target_km = _ROUTE_DISTANCE_TARGETS_KM.get(family_code)
+        if target_km and target_km > 0.0:
+            current_max = max((float(rec.get("distance_km") or 0.0) for rec in records), default=0.0)
+            if current_max > 0.0:
+                scale = target_km / current_max
+                for rec in records:
+                    rec["distance_km"] = round(float(rec.get("distance_km") or 0.0) * scale, 3)
+                    cumulative = rec.get("cumulative_distances") or []
+                    if cumulative:
+                        rec["cumulative_distances"] = [float(value) * scale for value in cumulative]
 
         for record in records:
             if record["direction_bucket"] is None:
