@@ -15,8 +15,19 @@ type ParsedRouteCode = {
   normalized: string;
 };
 
+const jpLeadingPattern = /^([\u3040-\u309f\u30a0-\u30ff\u3400-\u4dbf\u4e00-\u9fff]+)\s*(\d+)?/u;
+
 function parseRouteCode(value?: string | null): ParsedRouteCode {
   const normalized = normalizeRouteCode(value);
+  const jp = normalized.match(jpLeadingPattern);
+  if (jp) {
+    return {
+      prefix: jp[1] ?? "",
+      number: jp[2] ? Number(jp[2]) : null,
+      suffix: normalized.slice(jp[0].length),
+      normalized,
+    };
+  }
   const match = normalized.match(/^([^\d]*?)(\d+)?([^\d]*)$/u);
   if (!match) {
     return {
@@ -63,4 +74,17 @@ export function compareRouteCodeLike(
   }
 
   return a.normalized.localeCompare(b.normalized, "ja");
+}
+
+export function extractRouteSeries(value?: string | null): {
+  seriesCode: string;
+  seriesPrefix: string;
+  seriesNumber: number | null;
+} {
+  const parsed = parseRouteCode(value);
+  return {
+    seriesCode: parsed.number === null ? parsed.prefix : `${parsed.prefix}${parsed.number.toString().padStart(2, "0")}`,
+    seriesPrefix: parsed.prefix,
+    seriesNumber: parsed.number,
+  };
 }

@@ -1,0 +1,5 @@
+term,value
+vehicle_fixed_cost,15000.0
+electricity_cost,0.0
+demand_charge_cost,0.0
+deadhead_cost,0.0

@@ -58,6 +58,85 @@ export type ScenarioDetailResponse = Scenario;
 export type EditorBootstrapResponse = EditorBootstrap;
 export type EditorBootstrapLiteResponse = EditorBootstrapLite;
 
+export interface QuickSetupDepotItem {
+  id: string;
+  name: string;
+  location?: string;
+  routeCount: number;
+  vehicleCount: number;
+  selected: boolean;
+}
+
+export interface QuickSetupRouteItem {
+  id: string;
+  displayName: string;
+  routeCode?: string | null;
+  routeLabel?: string | null;
+  depotId?: string | null;
+  tripCount: number;
+  routeVariantType?: string | null;
+  canonicalDirection?: string | null;
+  selected: boolean;
+}
+
+export interface QuickSetupResponse {
+  scenario: {
+    id: string;
+    name: string;
+    operatorId: Scenario["operatorId"];
+    datasetVersion?: string | null;
+    status?: Scenario["status"];
+    feedContext?: Scenario["feedContext"];
+    stats?: Scenario["stats"];
+  };
+  selectedDepotIds: string[];
+  selectedRouteIds: string[];
+  depots: QuickSetupDepotItem[];
+  routes: QuickSetupRouteItem[];
+  dispatchScope: {
+    dayType: string;
+    tripSelection: {
+      includeShortTurn?: boolean;
+      includeDepotMoves?: boolean;
+      includeDeadhead?: boolean;
+    };
+    allowIntraDepotRouteSwap: boolean;
+    allowInterDepotSwap: boolean;
+  };
+  solverSettings: {
+    solverMode: SimulationBuilderSettings["solverMode"];
+    objectiveMode?: "total_cost" | "co2" | "balanced";
+    timeLimitSeconds: number;
+    mipGap: number;
+    alnsIterations: number;
+  };
+  simulationSettings: {
+    serviceDate?: string | null;
+    vehicleTemplateId?: string | null;
+    vehicleCount: number;
+    chargerCount: number;
+    chargerPowerKw: number;
+    includeDeadhead: boolean;
+  };
+}
+
+export interface UpdateQuickSetupRequest {
+  selectedDepotIds?: string[];
+  selectedRouteIds?: string[];
+  dayType?: string;
+  serviceDate?: string | null;
+  includeShortTurn?: boolean;
+  includeDepotMoves?: boolean;
+  includeDeadhead?: boolean;
+  allowIntraDepotRouteSwap?: boolean;
+  allowInterDepotSwap?: boolean;
+  solverMode?: SimulationBuilderSettings["solverMode"];
+  objectiveMode?: "total_cost" | "co2" | "balanced";
+  timeLimitSeconds?: number;
+  mipGap?: number;
+  alnsIterations?: number;
+}
+
 export interface CreateScenarioRequest {
   name: string;
   description: string;

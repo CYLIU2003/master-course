@@ -1,0 +1,7 @@
+site_id,site_type,contract_demand_limit_kw,grid_import_limit_kw,site_transformer_limit_kw
+meguro_depot,depot,500.0,500.0,500.0
+大岡山小学校前,terminal,9999.0,9999.0,9999.0
+権之助坂,terminal,9999.0,9999.0,9999.0
+清水,terminal,9999.0,9999.0,9999.0
+目黒郵便局,terminal,9999.0,9999.0,9999.0
+目黒駅前,terminal,9999.0,9999.0,9999.0

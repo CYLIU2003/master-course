@@ -7,14 +7,14 @@
 // "Rendered more hooks than during the previous render" error.
 
 import { useTranslation } from "react-i18next";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRoutes } from "@/hooks";
 import { useGroupedRouteFamilies } from "@/hooks/useGroupedRouteFamilies";
 import { useMasterUiStore } from "@/stores/master-ui-store";
 import { LoadingBlock, ErrorBlock, EmptyState, VirtualizedList } from "@/features/common";
 import type { Route } from "@/types";
 import { getRouteVariantLabel } from "./route-family-display";
-import { normalizeRouteCode } from "@/lib/route-code";
+import { extractRouteSeries, normalizeRouteCode } from "@/lib/route-code";
 
 interface Props {
   scenarioId: string;
@@ -23,9 +23,18 @@ interface Props {
 type RouteTableRow =
   | {
       key: string;
+      kind: "series";
+      seriesPrefix: string;
+      familyCount: number;
+      routeCount: number;
+      collapsed: boolean;
+    }
+  | {
+      key: string;
       kind: "family";
       familyCode: string;
       familyLabel: string;
+      seriesPrefix: string;
       variantCount: number;
     }
   | {
@@ -56,23 +65,68 @@ export function RouteTableNew({ scenarioId }: Props) {
   const routes = useMemo<Route[]>(() => data?.items ?? [], [data]);
   const total = data?.total ?? routes.length;
   const familyGroups = useGroupedRouteFamilies(routes);
+  const [collapsedSeriesPrefixes, setCollapsedSeriesPrefixes] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setCollapsedSeriesPrefixes(new Set());
+  }, [scenarioId, selectedDepotId, operatorFilter]);
+
   const rows = useMemo<RouteTableRow[]>(
-    () =>
-      familyGroups.flatMap((group) => [
-        {
-          key: `family:${group.familyId}`,
-          kind: "family",
-          familyCode: normalizeRouteCode(group.familyCode),
-          familyLabel: group.familyLabel,
-          variantCount: group.members.length,
-        } satisfies RouteTableRow,
-        ...group.members.map((route) => ({
-          key: `route:${route.id}`,
-          kind: "route" as const,
-          route,
-        })),
-      ]),
-    [familyGroups],
+    () => {
+      const groupedBySeries = new Map<string, typeof familyGroups>();
+      for (const group of familyGroups) {
+        const seriesPrefix = extractRouteSeries(group.familyCode).seriesPrefix || "その他";
+        const bucket = groupedBySeries.get(seriesPrefix);
+        if (bucket) {
+          bucket.push(group);
+        } else {
+          groupedBySeries.set(seriesPrefix, [group]);
+        }
+      }
+
+      const orderedPrefixes = Array.from(groupedBySeries.keys()).sort((a, b) =>
+        a.localeCompare(b, "ja"),
+      );
+
+      const nextRows: RouteTableRow[] = [];
+      for (const prefix of orderedPrefixes) {
+        const familyList = groupedBySeries.get(prefix) ?? [];
+        const collapsed = collapsedSeriesPrefixes.has(prefix);
+        nextRows.push({
+          key: `series:${prefix}`,
+          kind: "series",
+          seriesPrefix: prefix,
+          familyCount: familyList.length,
+          routeCount: familyList.reduce((acc, item) => acc + item.members.length, 0),
+          collapsed,
+        });
+
+        if (collapsed) {
+          continue;
+        }
+
+        for (const group of familyList) {
+          nextRows.push({
+            key: `family:${group.familyId}`,
+            kind: "family",
+            familyCode: normalizeRouteCode(group.familyCode),
+            familyLabel: group.familyLabel,
+            seriesPrefix: prefix,
+            variantCount: group.members.length,
+          });
+          nextRows.push(
+            ...group.members.map((route) => ({
+              key: `route:${route.id}`,
+              kind: "route" as const,
+              route,
+            })),
+          );
+        }
+      }
+
+      return nextRows;
+    },
+    [collapsedSeriesPrefixes, familyGroups],
   );
 
   useEffect(() => {
@@ -91,6 +145,18 @@ export function RouteTableNew({ scenarioId }: Props) {
 
   const handleRowClick = (routeId: string) => {
     selectRoute(routeId);
+  };
+
+  const toggleSeriesCollapse = (seriesPrefix: string) => {
+    setCollapsedSeriesPrefixes((prev) => {
+      const next = new Set(prev);
+      if (next.has(seriesPrefix)) {
+        next.delete(seriesPrefix);
+      } else {
+        next.add(seriesPrefix);
+      }
+      return next;
+    });
   };
 
   if (isLoading) {
@@ -152,6 +218,28 @@ export function RouteTableNew({ scenarioId }: Props) {
           perfLabel="master-routes-table"
           getKey={(row) => row.key}
           renderItem={(row) => {
+            if (row.kind === "series") {
+              return (
+                <button
+                  type="button"
+                  onClick={() => toggleSeriesCollapse(row.seriesPrefix)}
+                  className="w-full border-b border-slate-200 bg-slate-200/60 px-3 py-2 text-left hover:bg-slate-200"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-700">{row.collapsed ? "▶" : "▼"}</span>
+                      <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700">
+                        {row.seriesPrefix}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-600">
+                      {row.familyCount} family / {row.routeCount} routes
+                    </span>
+                  </div>
+                </button>
+              );
+            }
+
             if (row.kind === "family") {
               return (
                 <div className="border-b border-border bg-slate-100/80 px-3 py-2.5">

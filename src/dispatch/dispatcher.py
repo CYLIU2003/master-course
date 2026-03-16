@@ -52,6 +52,11 @@ def _opposite_direction(d: str) -> str:
     return ""
 
 
+def _route_group_key(trip: Trip) -> str:
+    family = str(getattr(trip, "route_family_code", "") or "").strip()
+    return family or str(trip.route_id)
+
+
 def _connection_score(
     last_trip: Trip,
     next_trip: Trip,
@@ -73,7 +78,7 @@ def _connection_score(
     # ── Return-leg bonus: same route, reversed direction ──────────────────────
     # This implements the "vehicle runs back on the same line" preference.
     # Real buses in Japan typically do this unless the depot is in the way.
-    same_route = last_trip.route_id == next_trip.route_id
+    same_route = _route_group_key(last_trip) == _route_group_key(next_trip)
     last_dir = last_trip.direction
     next_dir = next_trip.direction
     if (

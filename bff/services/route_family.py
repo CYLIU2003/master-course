@@ -19,6 +19,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
+from src.route_code_utils import extract_route_series_from_candidates, normalize_route_code, route_code_sort_key
 from src.value_normalization import coerce_str_list
 
 # ── Type aliases ───────────────────────────────────────────────
@@ -86,6 +87,9 @@ class RouteDerivedMeta:
     canonical_direction: DirectionType
     is_primary_variant: bool
     family_sort_order: int
+    route_series_code: str = ""
+    route_series_prefix: str = ""
+    route_series_number: Optional[int] = None
     classification_confidence: float = 0.0
     classification_reasons: List[str] = field(default_factory=list)
 
@@ -99,6 +103,9 @@ class RouteDerivedMeta:
             "canonicalDirection": self.canonical_direction,
             "isPrimaryVariant": self.is_primary_variant,
             "familySortOrder": self.family_sort_order,
+            "routeSeriesCode": self.route_series_code,
+            "routeSeriesPrefix": self.route_series_prefix,
+            "routeSeriesNumber": self.route_series_number,
             "classificationConfidence": round(self.classification_confidence, 3),
             "classificationReasons": self.classification_reasons,
         }
@@ -140,21 +147,22 @@ def extract_route_family_code(route: RawRoute) -> str:
     Priority: routeCode > routeLabel > name (first token).
     Full-width digits are → half-width (via NFKC).
     """
-    candidates = [
-        normalize_text(route.route_code),
-        normalize_text(route.route_label),
-        normalize_text(route.name),
-    ]
+    series_code, _prefix, _num, _source = extract_route_series_from_candidates(
+        route.route_code,
+        route.route_label,
+        route.name,
+    )
+    if series_code:
+        return series_code
 
+    candidates = [normalize_text(route.route_code), normalize_text(route.route_label), normalize_text(route.name)]
     for text in candidates:
         if not text:
             continue
         for pattern in _ROUTE_CODE_PATTERNS:
             m = re.search(pattern, text)
             if m:
-                code = m.group(1)
-                code = code.replace("\u2212", "-").replace("\u30fc", "-")
-                return code
+                return normalize_route_code(m.group(1)).replace("\u2212", "-").replace("\u30fc", "-")
 
     return f"UNCLASSIFIED:{route.route_id}"
 
@@ -359,6 +367,11 @@ def classify_family(routes: List[RawRoute]) -> Dict[str, RouteDerivedMeta]:
         return {}
 
     family_code = extract_route_family_code(routes[0])
+    series_code, series_prefix, series_number, _series_source = extract_route_series_from_candidates(
+        routes[0].route_code,
+        routes[0].route_label,
+        routes[0].name,
+    )
     family_id = _stable_id("routefam", family_code)
 
     main_out, main_in = _determine_main_pair(routes)
@@ -483,6 +496,9 @@ def classify_family(routes: List[RawRoute]) -> Dict[str, RouteDerivedMeta]:
             canonical_direction=direction,
             is_primary_variant=is_primary,
             family_sort_order=sort_order,
+            route_series_code=series_code or family_code,
+            route_series_prefix=series_prefix,
+            route_series_number=series_number,
             classification_confidence=confidence,
             classification_reasons=reasons,
         )
@@ -581,6 +597,9 @@ def build_route_family_summary(
             "routeFamilyId": family_id,
             "routeFamilyCode": first.get("routeFamilyCode", ""),
             "routeFamilyLabel": first.get("routeFamilyLabel", ""),
+            "routeSeriesCode": first.get("routeSeriesCode", ""),
+            "routeSeriesPrefix": first.get("routeSeriesPrefix", ""),
+            "routeSeriesNumber": first.get("routeSeriesNumber"),
             "primaryColor": first.get("color"),
             "variantCount": len(members),
             "mainVariantCount": main_count,
@@ -594,7 +613,10 @@ def build_route_family_summary(
             **agg,
         })
 
-    return sorted(summaries, key=lambda s: s.get("routeFamilyCode", ""))
+    return sorted(
+        summaries,
+        key=lambda s: route_code_sort_key(str(s.get("routeFamilyCode") or "")),
+    )
 
 
 def build_route_family_detail(
@@ -639,6 +661,9 @@ def build_route_family_detail(
         "routeFamilyId": family_id,
         "routeFamilyCode": first.get("routeFamilyCode", ""),
         "routeFamilyLabel": first.get("routeFamilyLabel", ""),
+        "routeSeriesCode": first.get("routeSeriesCode", ""),
+        "routeSeriesPrefix": first.get("routeSeriesPrefix", ""),
+        "routeSeriesNumber": first.get("routeSeriesNumber"),
         "summary": summary_item,
         "variants": sorted_variants,
         "canonicalMainPair": canonical_pair,

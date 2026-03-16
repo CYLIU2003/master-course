@@ -1,0 +1,1544 @@
+{
+  "timestamp": "2026-03-16T15:47:12.421868",
+  "time_settings": {
+    "delta_t_min": 15.0,
+    "num_periods": 80,
+    "planning_horizon_hours": 20.0
+  },
+  "timeSettings": {
+    "deltaTMin": 15.0,
+    "numPeriods": 80,
+    "planningHorizonHours": 20.0
+  },
+  "flags": {
+    "enable_pv": false,
+    "enable_v2g": false,
+    "enable_demand_charge": true,
+    "enable_battery_degradation": false,
+    "allow_partial_service": false
+  },
+  "flagsCamel": {
+    "enablePv": false,
+    "enableV2g": false,
+    "enableDemandCharge": true,
+    "enableBatteryDegradation": false,
+    "allowPartialService": false
+  },
+  "unit_prices_and_costs": {
+    "vehicle_introduction_cost_source": "vehicle.fixed_use_cost",
+    "fuel_unit_price_source": "vehicle.fuel_cost_coeff",
+    "battery_degradation_unit_price_source": "vehicle.battery_degradation_cost_coeff",
+    "co2_price_per_kg": 1.0,
+    "demand_charge_rate_per_kw": 1500.0,
+    "electricity_price_summary": {
+      "has_tou_price_table": true,
+      "time_slot_count": 80,
+      "grid_energy_price_min_yen_per_kwh": 15.0,
+      "grid_energy_price_max_yen_per_kwh": 40.0,
+      "grid_energy_price_avg_yen_per_kwh": 27.0
+    }
+  },
+  "unitPricesAndCosts": {
+    "vehicleIntroductionCostSource": "vehicle.fixed_use_cost",
+    "fuelUnitPriceSource": "vehicle.fuel_cost_coeff",
+    "batteryDegradationUnitPriceSource": "vehicle.battery_degradation_cost_coeff",
+    "co2PricePerKg": 1.0,
+    "demandChargeRatePerKw": 1500.0,
+    "electricityPriceSummary": {
+      "hasTouPriceTable": true,
+      "timeSlotCount": 80,
+      "gridEnergyPriceMinYenPerKwh": 15.0,
+      "gridEnergyPriceMaxYenPerKwh": 40.0,
+      "gridEnergyPriceAvgYenPerKwh": 27.0
+    }
+  },
+  "demand_and_contract_conditions": {
+    "demand_charge_rate_per_kw": 1500.0,
+    "objective_weight_demand_charge_cost": 1.0,
+    "contract_limit_penalty_multiplier": null,
+    "contract_limit_penalty_note": "If null, no explicit penalty multiplier is configured in objective_weights",
+    "contract_limits_by_site": [
+      {
+        "site_id": "meguro_depot",
+        "site_type": "depot",
+        "contract_demand_limit_kw": 500.0,
+        "grid_import_limit_kw": 500.0,
+        "site_transformer_limit_kw": 500.0
+      },
+      {
+        "site_id": "大岡山小学校前",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      },
+      {
+        "site_id": "権之助坂",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      },
+      {
+        "site_id": "清水",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      },
+      {
+        "site_id": "目黒郵便局",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      },
+      {
+        "site_id": "目黒駅前",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      }
+    ]
+  },
+  "demandAndContractConditions": {
+    "demandChargeRatePerKw": 1500.0,
+    "objectiveWeightDemandChargeCost": 1.0,
+    "contractLimitPenaltyMultiplier": null,
+    "contractLimitsBySite": [
+      {
+        "site_id": "meguro_depot",
+        "site_type": "depot",
+        "contract_demand_limit_kw": 500.0,
+        "grid_import_limit_kw": 500.0,
+        "site_transformer_limit_kw": 500.0
+      },
+      {
+        "site_id": "大岡山小学校前",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      },
+      {
+        "site_id": "権之助坂",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      },
+      {
+        "site_id": "清水",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      },
+      {
+        "site_id": "目黒郵便局",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      },
+      {
+        "site_id": "目黒駅前",
+        "site_type": "terminal",
+        "contract_demand_limit_kw": 9999.0,
+        "grid_import_limit_kw": 9999.0,
+        "site_transformer_limit_kw": 9999.0
+      }
+    ]
+  },
+  "extensible_coefficients": {
+    "objective_weights": {
+      "vehicle_fixed_cost": 1.0,
+      "electricity_cost": 1.0,
+      "demand_charge_cost": 1.0,
+      "fuel_cost": 0.0,
+      "deadhead_cost": 1.0,
+      "battery_degradation_cost": 0.0,
+      "emission_cost": 0.0,
+      "unserved_penalty": 10000.0,
+      "slack_penalty": 1000000.0
+    },
+    "big_m": {
+      "BIG_M_ASSIGN": 225.0,
+      "BIG_M_CHARGE": 24.750000000000004,
+      "BIG_M_SOC": 330.0,
+      "EPSILON": 1e-06
+    }
+  },
+  "extensibleCoefficients": {
+    "objectiveWeights": {
+      "vehicle_fixed_cost": 1.0,
+      "electricity_cost": 1.0,
+      "demand_charge_cost": 1.0,
+      "fuel_cost": 0.0,
+      "deadhead_cost": 1.0,
+      "battery_degradation_cost": 0.0,
+      "emission_cost": 0.0,
+      "unserved_penalty": 10000.0,
+      "slack_penalty": 1000000.0
+    },
+    "bigM": {
+      "bigMAssign": 225.0,
+      "bigMCharge": 24.750000000000004,
+      "bigMSoc": 330.0,
+      "epsilon": 1e-06
+    }
+  },
+  "vehicle_costs": [
+    {
+      "vehicle_id": "BEV_01",
+      "vehicle_type": "BEV",
+      "fixed_use_cost_yen": 5000.0,
+      "fuel_cost_coeff_yen_per_liter": 145.0,
+      "battery_degradation_cost_coeff_yen_per_kwh": 0.0,
+      "co2_emission_coeff_kg_per_liter": 2.58
+    },
+    {
+      "vehicle_id": "BEV_02",
+      "vehicle_type": "BEV",
+      "fixed_use_cost_yen": 5000.0,
+      "fuel_cost_coeff_yen_per_liter": 145.0,
+      "battery_degradation_cost_coeff_yen_per_kwh": 0.0,
+      "co2_emission_coeff_kg_per_liter": 2.58
+    },
+    {
+      "vehicle_id": "BEV_03",
+      "vehicle_type": "BEV",
+      "fixed_use_cost_yen": 5000.0,
+      "fuel_cost_coeff_yen_per_liter": 145.0,
+      "battery_degradation_cost_coeff_yen_per_kwh": 0.0,
+      "co2_emission_coeff_kg_per_liter": 2.58
+    }
+  ],
+  "vehicleCosts": [
+    {
+      "vehicle_id": "BEV_01",
+      "vehicle_type": "BEV",
+      "fixed_use_cost_yen": 5000.0,
+      "fuel_cost_coeff_yen_per_liter": 145.0,
+      "battery_degradation_cost_coeff_yen_per_kwh": 0.0,
+      "co2_emission_coeff_kg_per_liter": 2.58
+    },
+    {
+      "vehicle_id": "BEV_02",
+      "vehicle_type": "BEV",
+      "fixed_use_cost_yen": 5000.0,
+      "fuel_cost_coeff_yen_per_liter": 145.0,
+      "battery_degradation_cost_coeff_yen_per_kwh": 0.0,
+      "co2_emission_coeff_kg_per_liter": 2.58
+    },
+    {
+      "vehicle_id": "BEV_03",
+      "vehicle_type": "BEV",
+      "fixed_use_cost_yen": 5000.0,
+      "fuel_cost_coeff_yen_per_liter": 145.0,
+      "battery_degradation_cost_coeff_yen_per_kwh": 0.0,
+      "co2_emission_coeff_kg_per_liter": 2.58
+    }
+  ],
+  "vehicle_cost_summary_by_type": {
+    "BEV": {
+      "count": 3.0,
+      "avg_fixed_use_cost_yen": 5000.0,
+      "avg_fuel_cost_coeff_yen_per_liter": 145.0,
+      "avg_battery_degradation_cost_coeff_yen_per_kwh": 0.0
+    }
+  },
+  "vehicleCostSummaryByType": {
+    "BEV": {
+      "count": 3.0,
+      "avg_fixed_use_cost_yen": 5000.0,
+      "avg_fuel_cost_coeff_yen_per_liter": 145.0,
+      "avg_battery_degradation_cost_coeff_yen_per_kwh": 0.0
+    }
+  },
+  "tou_prices": [
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 0,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 1,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 2,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 3,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 4,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 5,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 6,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 7,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 8,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 9,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 10,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 11,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 12,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 13,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 14,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 15,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 16,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 17,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 18,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 19,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 20,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 21,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 22,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 23,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 24,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 25,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 26,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 27,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 28,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 29,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 30,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 31,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 32,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 33,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 34,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 35,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 36,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 37,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 38,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 39,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 40,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 41,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 42,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 43,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 44,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 45,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 46,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 47,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 48,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 49,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 50,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 51,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 52,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 53,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 54,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 55,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 56,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 57,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 58,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 59,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 60,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 61,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 62,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 63,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 64,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 65,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 66,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 67,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 68,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 69,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 70,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 71,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 72,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 73,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 74,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 75,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 76,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 77,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 78,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 79,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    }
+  ],
+  "touPrices": [
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 0,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 1,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 2,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 3,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 4,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 5,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 6,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 7,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 8,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 9,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 10,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 11,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 12,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 13,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 14,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 15,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 16,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 17,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 18,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 19,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 20,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 21,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 22,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 23,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 24,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 25,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 26,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 27,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 28,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 29,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 30,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 31,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 32,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 33,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 34,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 35,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 36,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 37,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 38,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 39,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 40,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 41,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 42,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 43,
+      "grid_energy_price_yen_per_kwh": 40.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 44,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 45,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 46,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 47,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 48,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 49,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 50,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 51,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 52,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 53,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 54,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 55,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 56,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 57,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 58,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 59,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 60,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 61,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 62,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 63,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 64,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 65,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 66,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 67,
+      "grid_energy_price_yen_per_kwh": 30.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 68,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 69,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 70,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 71,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 72,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 73,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 74,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 75,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 76,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 77,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 78,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    },
+    {
+      "site_id": "meguro_depot",
+      "time_idx": 79,
+      "grid_energy_price_yen_per_kwh": 15.0,
+      "sell_back_price_yen_per_kwh": 0.0,
+      "base_load_kw": 0.0,
+      "grid_co2_factor_kg_per_kwh": 0.0
+    }
+  ]
+}

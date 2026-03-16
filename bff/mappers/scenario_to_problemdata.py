@@ -20,6 +20,7 @@ from src.preprocess.trip_converter import (
     build_vehicle_task_compat,
 )
 from src.schemas.duty_entities import DutyLeg, VehicleDuty
+from src.route_code_utils import extract_route_series_from_candidates
 from src.value_normalization import coerce_list
 from bff.store import scenario_store
 
@@ -70,6 +71,34 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return default
+
+
+def _normalize_direction(value: Any, default: str = "outbound") -> str:
+    text = str(value or "").strip().lower()
+    if text in {"outbound", "out", "up", "上り", "上り便", "↗"}:
+        return "outbound"
+    if text in {"inbound", "in", "down", "下り", "下り便", "↙"}:
+        return "inbound"
+    if text in {"circular", "loop", "循環", "循環線"}:
+        return "circular"
+    return default
+
+
+def _normalize_variant_type(value: Any, *, direction: str = "outbound") -> str:
+    text = str(value or "").strip().lower()
+    if text in {"main", "main_outbound", "main_inbound", "本線"}:
+        return "main"
+    if text in {"short_turn", "区間", "区間便"}:
+        return "short_turn"
+    if text in {"depot", "depot_in", "depot_out", "入出庫", "入出庫便", "入庫", "出庫"}:
+        return "depot"
+    if text in {"branch", "枝線"}:
+        return "branch"
+    if text == "unknown":
+        return "unknown"
+    if direction == "circular":
+        return "main"
+    return "main"
 
 
 def _hhmm_to_idx(time_str: str, start_time: str, delta_t_min: float) -> int:
@@ -182,21 +211,27 @@ def _build_stop_coord_lookup(scenario: Dict[str, Any]) -> Dict[str, Tuple[float,
 
 
 def _variant_distance_factor(trip_like: Dict[str, Any], route_like: Dict[str, Any]) -> float:
-    variant = str(
+    direction = _normalize_direction(
+        trip_like.get("direction")
+        or trip_like.get("canonicalDirection")
+        or trip_like.get("canonical_direction")
+        or route_like.get("canonicalDirection")
+        or route_like.get("canonical_direction")
+        or "outbound"
+    )
+    variant = _normalize_variant_type(
         trip_like.get("routeVariantType")
         or trip_like.get("route_variant_type")
         or route_like.get("routeVariantType")
         or route_like.get("route_variant_type")
-        or "unknown"
-    ).lower()
+        or "unknown",
+        direction=direction,
+    )
     factors = {
         "main": 1.08,
-        "main_outbound": 1.08,
-        "main_inbound": 1.08,
         "short_turn": 1.12,
         "branch": 1.1,
-        "depot_out": 1.15,
-        "depot_in": 1.15,
+        "depot": 1.15,
         "unknown": 1.1,
     }
     return float(factors.get(variant, factors["unknown"]))
@@ -376,7 +411,7 @@ def _filter_rows_for_scope(
         filtered_rows: List[Dict[str, Any]] = []
         for row in timetable_rows:
             route = route_lookup.get(str(row.get("route_id")) or "") or {}
-            variant_type = str(
+            variant_type = _normalize_variant_type(
                 row.get("routeVariantType")
                 or row.get("route_variant_type")
                 or route.get("routeVariantType")
@@ -386,7 +421,7 @@ def _filter_rows_for_scope(
                 continue
             if (
                 not trip_selection.get("includeDepotMoves", True)
-                and variant_type in {"depot_in", "depot_out"}
+                and variant_type == "depot"
             ):
                 continue
             filtered_rows.append(row)
@@ -547,6 +582,12 @@ def _collect_trips_for_scope(
         if not allowed_types:
             continue
         route_like = route_lookup.get(route_id) or {}
+        route_series_code, route_series_prefix, route_series_number, _series_source = extract_route_series_from_candidates(
+            str(item.get("routeSeriesCode") or item.get("route_series_code") or ""),
+            str(route_like.get("routeCode") or ""),
+            str(route_like.get("routeFamilyCode") or ""),
+            str(route_like.get("routeLabel") or route_like.get("name") or ""),
+        )
         trips.append(
             {
                 "trip_id": str(
@@ -554,19 +595,45 @@ def _collect_trips_for_scope(
                     or f"trip_{route_id}_{item.get('direction', 'out')}_{index:03d}"
                 ),
                 "route_id": route_id,
-                "direction": str(
+                "direction": _normalize_direction(
                     item.get("direction")
                     or item.get("direction_id")
                     or item.get("canonicalDirection")
                     or item.get("canonical_direction")
+                    or item.get("canonicalDirectionManual")
+                    or route_like.get("canonicalDirectionManual")
+                    or route_like.get("canonicalDirection")
                     or "outbound"
                 ),
-                "routeVariantType": str(
+                "routeVariantType": _normalize_variant_type(
                     item.get("routeVariantType")
                     or item.get("route_variant_type")
+                    or item.get("routeVariantTypeManual")
+                    or route_like.get("routeVariantTypeManual")
                     or route_like.get("routeVariantType")
-                    or "unknown"
+                    or "unknown",
+                    direction=_normalize_direction(
+                        item.get("direction")
+                        or item.get("direction_id")
+                        or item.get("canonicalDirection")
+                        or item.get("canonical_direction")
+                        or item.get("canonicalDirectionManual")
+                        or route_like.get("canonicalDirectionManual")
+                        or route_like.get("canonicalDirection")
+                        or "outbound"
+                    ),
                 ),
+                "routeFamilyCode": str(
+                    item.get("routeFamilyCode")
+                    or item.get("route_family_code")
+                    or item.get("routeSeriesCode")
+                    or item.get("route_series_code")
+                    or route_like.get("routeFamilyCode")
+                    or route_series_code
+                    or ""
+                ),
+                "routeSeriesPrefix": route_series_prefix,
+                "routeSeriesNumber": route_series_number,
                 "origin": str(item.get("origin")),
                 "destination": str(item.get("destination")),
                 "origin_stop_id": str(item.get("origin_stop_id") or ""),
@@ -687,6 +754,9 @@ def _build_tasks(
                 route_id=str(trip.get("route_id") or "") or None,
                 direction=str(trip.get("direction") or "") or None,
                 route_variant_type=str(trip.get("routeVariantType") or "") or None,
+                route_family_code=str(trip.get("routeFamilyCode") or "") or None,
+                route_series_prefix=str(trip.get("routeSeriesPrefix") or "") or None,
+                route_series_number=_safe_int(trip.get("routeSeriesNumber"), default=0) or None,
                 service_id=str(trip.get("service_id") or service_id or "") or None,
             )
         )

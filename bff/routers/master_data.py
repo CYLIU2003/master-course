@@ -112,6 +112,30 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _normalize_direction(value: Any, default: str = "outbound") -> str:
+    text = str(value or "").strip().lower()
+    if text in {"outbound", "out", "up", "上り", "上り便", "↗"}:
+        return "outbound"
+    if text in {"inbound", "in", "down", "下り", "下り便", "↙"}:
+        return "inbound"
+    if text in {"circular", "loop", "循環", "循環線"}:
+        return "circular"
+    return default
+
+
+def _normalize_variant_type(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"main", "main_outbound", "main_inbound", "本線"}:
+        return "main"
+    if text in {"short_turn", "区間", "区間便"}:
+        return "short_turn"
+    if text in {"depot", "depot_in", "depot_out", "入出庫", "入出庫便", "入庫", "出庫"}:
+        return "depot"
+    if text in {"branch", "枝線"}:
+        return "branch"
+    return "unknown"
+
+
 # ── Depot Pydantic models ──────────────────────────────────────
 
 
@@ -597,6 +621,14 @@ class UpdateRouteBody(BaseModel):
     durationMin: Optional[int] = None
     color: Optional[str] = None
     enabled: Optional[bool] = None
+    routeFamilyCode: Optional[str] = None
+    routeFamilyLabel: Optional[str] = None
+    routeSeriesCode: Optional[str] = None
+    routeSeriesPrefix: Optional[str] = None
+    routeSeriesNumber: Optional[int] = None
+    routeVariantType: Optional[str] = None
+    canonicalDirection: Optional[str] = None
+    isPrimaryVariant: Optional[bool] = None
     routeVariantTypeManual: Optional[str] = None
     canonicalDirectionManual: Optional[str] = None
 
@@ -734,9 +766,14 @@ def list_routes(
             "routeFamilyId": route.get("routeFamilyId"),
             "routeFamilyCode": route.get("routeFamilyCode"),
             "routeFamilyLabel": route.get("routeFamilyLabel"),
+            "routeSeriesCode": route.get("routeSeriesCode"),
+            "routeSeriesPrefix": route.get("routeSeriesPrefix"),
+            "routeSeriesNumber": route.get("routeSeriesNumber"),
             "routeVariantId": route.get("routeVariantId"),
-            "routeVariantType": route.get("routeVariantType"),
-            "canonicalDirection": route.get("canonicalDirection"),
+            "routeVariantType": _normalize_variant_type(route.get("routeVariantType")),
+            "routeVariantTypeManual": _normalize_variant_type(route.get("routeVariantTypeManual")) if route.get("routeVariantTypeManual") else None,
+            "canonicalDirection": _normalize_direction(route.get("canonicalDirection") or "outbound"),
+            "canonicalDirectionManual": _normalize_direction(route.get("canonicalDirectionManual")) if route.get("canonicalDirectionManual") else None,
             "isPrimaryVariant": route.get("isPrimaryVariant"),
             "familySortOrder": route.get("familySortOrder"),
         }
@@ -1162,6 +1199,20 @@ def update_route(
     _check_scenario(scenario_id)
     try:
         patch = body.model_dump(exclude_unset=True)
+        if "routeVariantType" in patch:
+            patch["routeVariantType"] = _normalize_variant_type(patch.get("routeVariantType"))
+        if "routeVariantTypeManual" in patch:
+            raw_manual = patch.get("routeVariantTypeManual")
+            patch["routeVariantTypeManual"] = (
+                _normalize_variant_type(raw_manual) if raw_manual not in (None, "") else None
+            )
+        if "canonicalDirection" in patch:
+            patch["canonicalDirection"] = _normalize_direction(patch.get("canonicalDirection") or "outbound")
+        if "canonicalDirectionManual" in patch:
+            raw_direction = patch.get("canonicalDirectionManual")
+            patch["canonicalDirectionManual"] = (
+                _normalize_direction(raw_direction) if raw_direction not in (None, "") else None
+            )
         return store.update_route(scenario_id, route_id, patch)
     except KeyError:
         raise _not_found("Route", route_id)

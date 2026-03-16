@@ -50,6 +50,7 @@ from src.dispatch.models import (
     DeadheadRule,
     VehicleProfile,
 )
+from src.route_code_utils import extract_route_series_from_candidates
 from src.dispatch.pipeline import TimetableDispatchPipeline
 from src.tokyu_shard_loader import (
     load_dispatch_trip_rows_for_scope,
@@ -318,6 +319,34 @@ def _normalize_allowed_types(
     return tuple(item for item in allowed if item in route_allowed_types)
 
 
+def _normalize_direction(value: Any, default: str = "outbound") -> str:
+    text = str(value or "").strip().lower()
+    if text in {"outbound", "out", "up", "上り", "上り便", "↗"}:
+        return "outbound"
+    if text in {"inbound", "in", "down", "下り", "下り便", "↙"}:
+        return "inbound"
+    if text in {"circular", "loop", "循環", "循環線"}:
+        return "circular"
+    return default
+
+
+def _normalize_variant_type(value: Any, *, direction: str = "outbound") -> str:
+    text = str(value or "").strip().lower()
+    if text in {"main", "main_outbound", "main_inbound", "本線"}:
+        return "main"
+    if text in {"short_turn", "区間", "区間便"}:
+        return "short_turn"
+    if text in {"depot", "depot_in", "depot_out", "入出庫", "入出庫便", "入庫", "出庫"}:
+        return "depot"
+    if text in {"branch", "枝線"}:
+        return "branch"
+    if text == "unknown":
+        return "unknown"
+    if direction == "circular":
+        return "main"
+    return "main"
+
+
 def _build_turnaround_rules(
     scenario_id: str,
 ) -> Dict[str, TurnaroundRule]:
@@ -440,12 +469,16 @@ def _build_dispatch_context(
 
     def _trip_allowed_by_variant(route_id: str) -> bool:
         route = route_lookup.get(route_id) or {}
-        variant_type = str(route.get("routeVariantType") or "unknown")
+        variant_type = _normalize_variant_type(
+            route.get("routeVariantTypeManual")
+            or route.get("routeVariantType")
+            or "unknown"
+        )
         if not trip_selection.get("includeShortTurn", True) and variant_type == "short_turn":
             return False
         if (
             not trip_selection.get("includeDepotMoves", True)
-            and variant_type in {"depot_in", "depot_out"}
+            and variant_type == "depot"
         ):
             return False
         return True
@@ -480,20 +513,47 @@ def _build_dispatch_context(
         # per trip previously triggered a full _load() on every iteration.
         _permissions_cache = store.get_vehicle_route_permissions(scenario_id)
         for td in raw_trips:
+            route_id = str(td["route_id"])
+            route_like = route_lookup.get(route_id) or {}
+            route_series_code, _route_series_prefix, _route_series_number, _series_source = extract_route_series_from_candidates(
+                str(route_like.get("routeCode") or ""),
+                str(route_like.get("routeFamilyCode") or ""),
+                str(route_like.get("routeLabel") or route_like.get("name") or ""),
+            )
+            route_family_code = str(
+                td.get("routeFamilyCode")
+                or td.get("route_family_code")
+                or td.get("routeSeriesCode")
+                or td.get("route_series_code")
+                or route_like.get("routeFamilyCode")
+                or route_series_code
+                or route_id
+            )
             route_allowed_types = _allowed_vehicle_types_for_route(
                 scenario_id,
                 depot_id,
-                str(td["route_id"]),
+                route_id,
                 vehicles,
                 _permissions_cache=_permissions_cache,
             )
             # Preserve direction and variant type from the stored trip dict
             # so the greedy dispatcher can prefer return-leg connections.
-            direction = str(td.get("direction") or td.get("canonicalDirection") or "unknown")
-            variant = str(
+            direction = _normalize_direction(
+                td.get("direction")
+                or td.get("canonicalDirection")
+                or td.get("canonicalDirectionManual")
+                or route_like.get("canonicalDirectionManual")
+                or route_like.get("canonicalDirection")
+                or "outbound"
+            )
+            variant = _normalize_variant_type(
                 td.get("routeVariantType")
                 or td.get("route_variant_type")
-                or "unknown"
+                or td.get("routeVariantTypeManual")
+                or route_like.get("routeVariantTypeManual")
+                or route_like.get("routeVariantType")
+                or "unknown",
+                direction=direction,
             )
             trips.append(dict_to_trip(td))
             trips[-1] = Trip(
@@ -508,6 +568,7 @@ def _build_dispatch_context(
                     td.get("allowed_vehicle_types"),
                     route_allowed_types,
                 ),
+                route_family_code=route_family_code,
                 direction=direction,
                 route_variant_type=variant,
             )
@@ -515,6 +576,22 @@ def _build_dispatch_context(
         # Build trips from timetable rows
         _permissions_cache = store.get_vehicle_route_permissions(scenario_id)
         for i, row in enumerate(timetable_rows):
+            route_id = str(row["route_id"])
+            route_like = route_lookup.get(route_id) or {}
+            route_series_code, _route_series_prefix, _route_series_number, _series_source = extract_route_series_from_candidates(
+                str(route_like.get("routeCode") or ""),
+                str(route_like.get("routeFamilyCode") or ""),
+                str(route_like.get("routeLabel") or route_like.get("name") or ""),
+            )
+            route_family_code = str(
+                row.get("routeFamilyCode")
+                or row.get("route_family_code")
+                or row.get("routeSeriesCode")
+                or row.get("route_series_code")
+                or route_like.get("routeFamilyCode")
+                or route_series_code
+                or route_id
+            )
             trip_id = str(
                 row.get("trip_id")
                 or f"trip_{row['route_id']}_{row.get('direction', 'out')}_{i:03d}"
@@ -522,24 +599,31 @@ def _build_dispatch_context(
             route_allowed_types = _allowed_vehicle_types_for_route(
                 scenario_id,
                 depot_id,
-                str(row["route_id"]),
+                route_id,
                 vehicles,
                 _permissions_cache=_permissions_cache,
             )
-            direction = str(
+            direction = _normalize_direction(
                 row.get("direction")
                 or row.get("canonicalDirection")
-                or "unknown"
+                or row.get("canonicalDirectionManual")
+                or route_like.get("canonicalDirectionManual")
+                or route_like.get("canonicalDirection")
+                or "outbound"
             )
-            variant = str(
+            variant = _normalize_variant_type(
                 row.get("routeVariantType")
                 or row.get("route_variant_type")
-                or "unknown"
+                or row.get("routeVariantTypeManual")
+                or route_like.get("routeVariantTypeManual")
+                or route_like.get("routeVariantType")
+                or "unknown",
+                direction=direction,
             )
             trips.append(
                 Trip(
                     trip_id=trip_id,
-                    route_id=row["route_id"],
+                    route_id=route_id,
                     origin=row["origin"],
                     destination=row["destination"],
                     departure_time=row["departure"],
@@ -549,6 +633,7 @@ def _build_dispatch_context(
                         row.get("allowed_vehicle_types"),
                         route_allowed_types,
                     ),
+                    route_family_code=route_family_code,
                     direction=direction,
                     route_variant_type=variant,
                 )

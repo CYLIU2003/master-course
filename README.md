@@ -45,6 +45,14 @@
 - 最適化出力を output/run_YYYYMMDD_HHMM に統一し、対象便一覧・便種別本数・コスト内訳・CO2内訳・車両別タイムライン・目的関数内訳を JSON/CSV で自動出力。
 - 車両別タイムライン出力を拡張し、`vehicle_timeline_gantt.csv` / `vehicle_timelines.json` にイベントID・開始/終了時刻(HH:MM)・継続時間・運行/回送/充電区分・路線ラベル（route_id/direction/variant）・回送の前後便情報を含めて、全車両ガント可視化へ直接利用できる形式に更新。
 - 実行条件の監査用として `simulation_conditions.json` と補助CSV（車両導入費・燃料単価・TOU単価テーブル・契約電力上限）を `output/run_*/` に自動出力し、需要/契約関連単価と将来拡張向け係数（objective_weights 全項目）を保存するよう更新。
+- `tools/route_variant_labeler_tk.py` を追加し、路線ごとの手動ラベリング（本線上り/下り・区間便・入出庫便・方向）を GUI で編集して `routeVariantType` / `canonicalDirection` / Manual override 列を CSV/JSON へ保存できるよう更新。
+- `tools/route_variant_labeler_tk.py` のUI文言を日本語化し、タグ付与運用時の操作ラベル・警告・保存ダイアログを日本語表示に統一。
+- フロントエンドに軽量導線 `ScenarioQuickPage` を追加し、対象営業所・対象路線・便種フィルタ・路線間/営業所間トレード許可・ソルバー選択・Prepare/Run 実行を1画面で完結できるよう更新（`/scenarios/:id/quick`）。
+- BFF に `GET/PUT /scenarios/{id}/quick-setup` を追加し、重い editor bootstrap を使わずに軽量サマリ取得と一括設定保存（dispatch scope + solver 設定）を可能化。
+- バックアップ運用向けに `tools/scenario_backup_tk.py` を追加し、シナリオ作成・quick-setup 保存・営業所BEV台数調整・simulation prepare/run・optimization 実行・job 監視を単体GUIで実行可能に。
+- 路線系統番号抽出ロジックを `src/route_code_utils.py` に共通化し、`tools/route_variant_labeler_tk.py` / BFF route family 集約 / 最適化入力（Task メタデータ）で共通利用するよう更新。タグ付与アプリでは文頭の漢字/ひらがな/カタカナプレフィックス単位でグループ化し、番号の昇順/降順ソートを切替可能に。
+- Planning の路線一覧と Public Data Explorer の route family 一覧で `routeSeriesPrefix` 単位の折りたたみ表示を追加。
+- 最適化結果CSV（`targeted_trips.csv` / `vehicle_schedule.csv` / `vehicle_timeline_gantt.csv`）に `route_series_code` 列を追加し、系統単位分析を容易化。
 
 ## 1. 研究目的と概要
 
@@ -160,6 +168,141 @@ npm run dev
 ```
 
 ブラウザで `http://localhost:5173` を開く。
+
+### 3.1 予備アプリ（バックアップ用 Tkinter）の使い方
+
+対象ファイル: `tools/scenario_backup_tk.py`
+
+```bash
+# リポジトリルートで
+python tools/scenario_backup_tk.py
+```
+
+前提:
+- バックエンド（FastAPI）が起動済みであること（`http://127.0.0.1:8000`）
+
+基本手順:
+1. 上部の `BFF URL` を確認し、`接続確認` を押す
+2. `一覧更新` でシナリオ一覧を取得（必要なら `新規作成` で新規作成）
+3. 必要に応じて `複製` / `有効化` / `削除` / `App Context` を利用する
+4. `Quick Setup 読込` で営業所・路線・solver 設定を読み込む
+5. 必要に応じて `ラベルファイル選択` で `route_variant_manual_labels.csv/json` を選び、`ラベルをシナリオへ反映` を実行する
+  - `routeFamilyCode` / `routeSeriesCode` / `routeVariantTypeManual` / `canonicalDirectionManual` を route マスタへ一括反映
+  - 反映後は Quick Setup 路線一覧・配車（dispatch）・最適化入力に同一タグが伝搬
+6. 営業所/路線選択、便種フィルタ、トレード許可、solver 条件を調整して `Quick Setup 保存`
+7. 右側 `車両管理` タブで営業所単位の車両一覧取得、車両の新規作成/更新/削除、単体/一括複製、テンプレート導入を実行する
+8. 右側 `テンプレート管理` タブでテンプレートの新規作成/更新/削除を実行する
+9. `Cost / Tariff Parameters` で車両導入費（車両/テンプレート個別設定）、燃料単価、電力単価、TOU帯、需要単価、契約上限、契約超過罰金係数、将来拡張用 `objective_weights` を設定する
+10. `Advanced Options` ボタンを押した場合のみ、`solver_mode` / `objective_mode` / `time_limit_seconds` / `mip_gap` / `alns_iterations` などの詳細設定を編集する
+11. `入力データ作成 (Prepare)` → `Prepared実行` または `最適化実行` を実行する
+12. 必要に応じて `シミュレーション実行(legacy)` / `再最適化` を実行する
+13. `ジョブ監視` で `job_id` の状態を確認し、`機能情報` / `Simulation結果` / `Optimization結果` で結果を確認する
+
+補足:
+- ログは画面下部に逐次出力される
+- `Prepare` 後に取得した `prepared_input_id` がシミュレーション実行に使われる
+
+### 3.2 路線タグ割り振りアプリ（Tkinter）の使い方
+
+対象ファイル: `tools/route_variant_labeler_tk.py`
+
+```bash
+# リポジトリルートで
+python tools/route_variant_labeler_tk.py
+```
+
+基本手順:
+1. `Open File (CSV/JSONL)` で路線情報を含む CSV/JSONL を読み込む
+  - `operator_id` がデータに無い場合は、画面上部の `operator_id 補完`（`tokyu` / `toei`）を選択して読込する
+2. 左側リストで対象行を選択する
+  - 画面上部 `営業所表示` プルダウンで対象営業所を選択可能（`all` は全営業所）
+  - 左リストは `営業所 → family(系統番号) → 路線` の折りたたみ表示
+  - マウスホイールで上下スクロール可能
+  - 縦スクロールバー / 横スクロールバーで一覧移動可能
+  - `Ctrl`/`Shift` で複数行選択可能（複数路線の一括編集用）
+3. 右側で以下を編集する
+  - `direction / canonicalDirection`
+  - `routeVariantType`
+  - `isPrimaryVariant`
+  - `classificationConfidence`
+  - `classificationReasons`
+4. `Series number order` を `asc` / `desc` で切り替え、`Apply Sort` で系統番号順に並び替える
+  - 文頭の漢字/ひらがな/カタカナプレフィックスでまとまり
+  - 同一プレフィックス内で数字を昇順または降順で整列
+5. `Apply Label`（選択行へラベル反映）で選択中の1件または複数件に一括反映する
+6. `Save Labels CSV/JSON` で手動ラベル定義を保存する
+7. 必要に応じて `Save Merged CSV` または `Save Merged JSONL` で元データにラベル列を反映したファイルを出力する
+
+直接読込に対応する主な路線データ:
+- `data/catalog-fast/normalized/routes.jsonl`（正規化済み路線）
+- `data/tokyubus/canonical/*/routes.jsonl`（スナップショット別 canonical）
+
+補足（normalized routes の読込）:
+- `data/catalog-fast/normalized/routes.jsonl` は `operator_id` 列が無いケースがあるため、通常は `operator_id 補完 = tokyu` を選択してから読み込む
+
+互換性ルール:
+- `operator_id` が無い行は、`operator_id 補完` が指定されていればその値で補完して読込する
+- `operator_id 補完` が空の場合は、`operator_id` 欠損行を読み込み時にスキップする（operator 境界不整合を防ぐため）
+
+主な出力:
+- `route_variant_manual_labels.csv`
+- `route_variant_manual_labels.json`
+- `labeled_input.csv`（マージ保存時）
+- `labeled_input.jsonl`（JSONLマージ保存時）
+- 追加列: `routeSeriesCode`, `routeSeriesPrefix`, `routeSeriesNumber`
+ - 追加列: `routeFamilyCode`, `routeFamilyLabel`
+
+補足:
+- 系統番号抽出ロジックは `src/route_code_utils.py` に共通化され、
+  tkinterツール（手動ラベル）、BFF route family 集約、最適化入力生成（Task メタデータ）で共通利用される。
+- 最適化前段の配車（dispatch）では、`routeFamilyCode` / `routeSeriesCode` が同じ便同士を同一路線扱いとして接続優先スコアに反映する（未設定時は `route_id` ベース）。
+
+### 3.3 シナリオに依存せず路線情報を確認する
+
+路線情報はシナリオを作成しなくても、以下のフォルダ/データから直接確認できます。
+
+- `data/route_master/routes.csv`（基本の路線マスタ）
+- `data/catalog-fast/normalized/routes.jsonl`（正規化済み路線）
+- `data/tokyubus/canonical/*/routes.jsonl`（スナップショット別 canonical）
+
+CLI で確認する場合:
+
+```bash
+# リポジトリルートで（シナリオ不要）
+python query_routes.py --limit 30
+
+# キーワード検索
+python query_routes.py --q 渋41 --limit 20
+
+# ソース固定（csv / normalized / canonical）
+python query_routes.py --source normalized --limit 20
+```
+
+API で確認する場合（CATALOG_BACKEND=local_sqlite で有効）:
+
+- `GET /api/catalog/operators/{operator_id}/route-families`
+- 例: `GET /api/catalog/operators/tokyu/route-families`
+
+### 3.4 推奨運用フロー（タグ付与 → シナリオ作成 → 最適化）
+
+本プロジェクトの実運用では、次の順序で実施する。
+
+1. `tools/route_variant_labeler_tk.py` で路線タグを手動付与する
+  - `routeVariantType`: `main` / `short_turn` / `depot_out` / `depot_in` など
+  - `canonicalDirection`: `outbound` / `inbound`
+  - 必要に応じて `isPrimaryVariant`, `classificationConfidence`, `classificationReasons` を更新
+2. ラベル結果を保存し、必要なら `Save Merged CSV` / `Save Merged JSONL` で元データへ反映する
+3. `tools/scenario_backup_tk.py` を起動し、対象シナリオを作成または選択する
+4. `Quick Setup` で対象営業所・対象路線・便種条件を設定して保存する
+5. 車両管理/テンプレート管理で営業所別の保有車両を調整する
+6. `Cost / Tariff Parameters` と必要時の `Advanced Options` を設定する
+7. `入力データ作成 (Prepare)` 実行後、`Prepared実行` または `最適化実行` を実行する
+8. `ジョブ監視` と `Optimization結果` で結果を確認する
+
+OK 判定（この一連が成功したとみなす条件）:
+- タグ付与アプリで対象路線の `routeVariantType` と `canonicalDirection` を保存できる
+- バックアップTkでシナリオ作成・quick-setup保存・車両編集が実行できる
+- 最適化ジョブが `failed` にならず完了し、結果APIで KPI / cost breakdown を確認できる
 
 ### ビルド確認
 

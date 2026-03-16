@@ -15,6 +15,7 @@ import type {
   UpdateCalendarDatesRequest,
   UpsertCalendarDateRequest,
   UpdateDispatchScopeRequest,
+  UpdateQuickSetupRequest,
 } from "@/types";
 
 // ── Query keys ────────────────────────────────────────────────
@@ -26,6 +27,8 @@ export const scenarioKeys = {
     ["scenarios", id, "editor-bootstrap"] as const,
   editorBootstrapLite: (id: string) =>
     ["scenarios", id, "editor-bootstrap-lite"] as const,
+  quickSetup: (id: string, depotIdsKey: string, routeLimit: number) =>
+    ["scenarios", id, "quick-setup", depotIdsKey, routeLimit] as const,
   dispatchScope: (id: string) => ["scenarios", id, "dispatch-scope"] as const,
   timetable: (id: string, serviceId?: string) =>
     ["scenarios", id, "timetable", serviceId ?? "all"] as const,
@@ -136,6 +139,24 @@ export function useEditorBootstrapLite(id: string) {
     queryKey: scenarioKeys.editorBootstrapLite(id),
     queryFn: () => scenarioApi.getEditorBootstrapLite(id),
     enabled: !!id,
+  });
+}
+
+export function useQuickSetup(
+  scenarioId: string,
+  options?: { depotIds?: string[]; routeLimit?: number },
+) {
+  const depotIds = options?.depotIds ?? [];
+  const routeLimit = options?.routeLimit ?? 300;
+  const depotIdsKey = depotIds.join(",") || "default";
+  return useQuery({
+    queryKey: scenarioKeys.quickSetup(scenarioId, depotIdsKey, routeLimit),
+    queryFn: () =>
+      scenarioApi.getQuickSetup(scenarioId, {
+        depotIds,
+        routeLimit,
+      }),
+    enabled: !!scenarioId,
   });
 }
 
@@ -308,6 +329,22 @@ export function useUpdateDispatchScope(scenarioId: string) {
       qc.invalidateQueries({
         queryKey: scenarioKeys.editorBootstrap(scenarioId),
       });
+      invalidateDispatchOutputs(qc, scenarioId);
+    },
+  });
+}
+
+export function useUpdateQuickSetup(scenarioId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateQuickSetupRequest) =>
+      scenarioApi.updateQuickSetup(scenarioId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: scenarioKeys.detail(scenarioId) });
+      qc.invalidateQueries({ queryKey: ["scenarios", scenarioId, "quick-setup"] });
+      qc.invalidateQueries({ queryKey: scenarioKeys.dispatchScope(scenarioId) });
+      qc.invalidateQueries({ queryKey: scenarioKeys.editorBootstrap(scenarioId) });
+      qc.invalidateQueries({ queryKey: scenarioKeys.editorBootstrapLite(scenarioId) });
       invalidateDispatchOutputs(qc, scenarioId);
     },
   });

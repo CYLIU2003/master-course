@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchJson } from "@/api/client";
 import { publicDataApi, type PublicDataSummary } from "@/api/public-data";
 import { RouteFamilyDetailPanel, TabWarmBoundary, VirtualizedList } from "@/features/common";
@@ -10,6 +10,7 @@ import {
 import type { ExplorerDetailTab } from "@/stores/public-data-explorer-store";
 import type { OperatorId } from "@/api/public-data";
 import type { RouteFamilyDetail } from "@/types";
+import { extractRouteSeries } from "@/lib/route-code";
 
 // ── DB Visualization Types (reused from OdptExplorerPage) ─────────────────
 
@@ -31,6 +32,22 @@ type DbRouteFamily = {
 };
 
 type DbRouteFamilyDetail = RouteFamilyDetail;
+
+type RouteFamilyListRow =
+  | {
+      kind: "series";
+      key: string;
+      seriesPrefix: string;
+      familyCount: number;
+      tripCount: number;
+      collapsed: boolean;
+    }
+  | {
+      kind: "family";
+      key: string;
+      seriesPrefix: string;
+      item: DbRouteFamily;
+    };
 
 type DbStop = {
   stop_id: string;
@@ -553,6 +570,7 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
   const [routeOffset, setRouteOffset] = useState(0);
   const [routeQuery, setRouteQuery] = useState("");
   const [selectedRouteFamilyId, setSelectedRouteFamilyId] = useState<string | null>(null);
+  const [collapsedSeriesPrefixes, setCollapsedSeriesPrefixes] = useState<Set<string>>(new Set());
   const [routeFamilyDetail, setRouteFamilyDetail] = useState<DbRouteFamilyDetail | null>(null);
   const [routeDetailLoading, setRouteDetailLoading] = useState(false);
   const [routesLoaded, setRoutesLoaded] = useState(false);
@@ -684,6 +702,7 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
     setRouteQuery("");
     setRoutesLoaded(false);
     setSelectedRouteFamilyId(null);
+    setCollapsedSeriesPrefixes(new Set());
     setRouteFamilyDetail(null);
     setStops([]);
     setStopsTotal(0);
@@ -699,6 +718,58 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
     setError(null);
     setDetailTab(preferredDetailTab ?? consumePreferredDetailTab() ?? "routes");
   }, [consumePreferredDetailTab, operatorId]);
+
+  const groupedRouteRows = useMemo<RouteFamilyListRow[]>(() => {
+    const grouped = new Map<string, DbRouteFamily[]>();
+    for (const item of routeFamilies) {
+      const prefix = extractRouteSeries(item.routeFamilyCode).seriesPrefix || "その他";
+      const bucket = grouped.get(prefix);
+      if (bucket) {
+        bucket.push(item);
+      } else {
+        grouped.set(prefix, [item]);
+      }
+    }
+
+    const prefixes = Array.from(grouped.keys()).sort((a, b) => a.localeCompare(b, "ja"));
+    const rows: RouteFamilyListRow[] = [];
+    for (const prefix of prefixes) {
+      const members = grouped.get(prefix) ?? [];
+      const collapsed = collapsedSeriesPrefixes.has(prefix);
+      rows.push({
+        kind: "series",
+        key: `series:${prefix}`,
+        seriesPrefix: prefix,
+        familyCount: members.length,
+        tripCount: members.reduce((acc, x) => acc + Number(x.tripCount || 0), 0),
+        collapsed,
+      });
+      if (collapsed) {
+        continue;
+      }
+      for (const item of members) {
+        rows.push({
+          kind: "family",
+          key: `family:${item.routeFamilyId}`,
+          seriesPrefix: prefix,
+          item,
+        });
+      }
+    }
+    return rows;
+  }, [collapsedSeriesPrefixes, routeFamilies]);
+
+  const toggleSeriesPrefix = useCallback((prefix: string) => {
+    setCollapsedSeriesPrefixes((prev) => {
+      const next = new Set(prev);
+      if (next.has(prefix)) {
+        next.delete(prefix);
+      } else {
+        next.add(prefix);
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!preferredDetailTab) {
@@ -815,49 +886,71 @@ function DetailPanel({ operatorId }: { operatorId: OperatorId }) {
                 <span className="text-right">patterns</span><span className="text-right">trips</span>
                 <span className="text-right">stops</span><span>first</span><span>last</span>
               </div>
-              <VirtualizedList
-                items={routeFamilies}
+              <VirtualizedList<RouteFamilyListRow>
+                items={groupedRouteRows}
                 height={420}
                 itemHeight={54}
                 className="bg-white"
-                getKey={(routeFamily) => routeFamily.routeFamilyId}
-                renderItem={(routeFamily) => (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRouteFamilyId(routeFamily.routeFamilyId)}
-                    className={`grid h-full w-full grid-cols-[0.9fr_1.4fr_0.7fr_0.6fr_0.6fr_0.7fr_0.8fr_0.8fr] gap-3 border-b border-slate-100 px-3 py-2 text-left text-xs hover:bg-slate-50 ${
-                      selectedRouteFamilyId === routeFamily.routeFamilyId ? "bg-primary-50" : "bg-white"
-                    }`}
-                  >
-                    <div className="truncate font-mono" title={routeFamily.routeFamilyCode}>
-                      {routeFamily.routeFamilyCode}
-                    </div>
-                    <div className="truncate" title={routeFamily.routeFamilyLabel}>
-                      <div className="truncate">{routeFamily.routeFamilyLabel}</div>
-                      <div className="truncate text-[10px] text-slate-400">
-                        {[
-                          routeFamily.hasShortTurn ? "short-turn" : null,
-                          routeFamily.hasBranch ? "branch" : null,
-                          routeFamily.hasDepotVariant ? "depot" : null,
-                        ].filter(Boolean).join(" / ") || "main"}
+                getKey={(row) => row.key}
+                renderItem={(row) => {
+                  if (row.kind === "series") {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => toggleSeriesPrefix(row.seriesPrefix)}
+                        className="grid h-full w-full grid-cols-[0.9fr_1.4fr_0.7fr_0.6fr_0.6fr_0.7fr_0.8fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-200/50 px-3 py-2 text-left text-xs hover:bg-slate-200"
+                      >
+                        <div className="truncate font-mono">{row.collapsed ? "▶" : "▼"} {row.seriesPrefix}</div>
+                        <div className="truncate text-slate-600">series group</div>
+                        <div className="text-slate-600">-</div>
+                        <div className="text-right text-slate-600">{row.familyCount}</div>
+                        <div className="text-right text-slate-600">{row.tripCount}</div>
+                        <div className="text-right text-slate-600">-</div>
+                        <div className="text-slate-600">-</div>
+                        <div className="text-slate-600">-</div>
+                      </button>
+                    );
+                  }
+
+                  const routeFamily = row.item;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRouteFamilyId(routeFamily.routeFamilyId)}
+                      className={`grid h-full w-full grid-cols-[0.9fr_1.4fr_0.7fr_0.6fr_0.6fr_0.7fr_0.8fr_0.8fr] gap-3 border-b border-slate-100 px-3 py-2 text-left text-xs hover:bg-slate-50 ${
+                        selectedRouteFamilyId === routeFamily.routeFamilyId ? "bg-primary-50" : "bg-white"
+                      }`}
+                    >
+                      <div className="truncate font-mono" title={routeFamily.routeFamilyCode}>
+                        {routeFamily.routeFamilyCode}
                       </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1 py-0.5">
-                      {routeFamily.serviceIds.length > 0 ? routeFamily.serviceIds.slice(0, 3).map((serviceId) => (
-                        <span key={serviceId} className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600">
-                          {serviceId}
-                        </span>
-                      )) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </div>
-                    <div className="text-right">{routeFamily.patternCount}</div>
-                    <div className="text-right">{routeFamily.tripCount}</div>
-                    <div className="text-right">{routeFamily.stopCount}</div>
-                    <div className="font-mono">{routeFamily.firstDeparture ?? "-"}</div>
-                    <div className="font-mono">{routeFamily.lastArrival ?? "-"}</div>
-                  </button>
-                )}
+                      <div className="truncate" title={routeFamily.routeFamilyLabel}>
+                        <div className="truncate">{routeFamily.routeFamilyLabel}</div>
+                        <div className="truncate text-[10px] text-slate-400">
+                          {[
+                            routeFamily.hasShortTurn ? "short-turn" : null,
+                            routeFamily.hasBranch ? "branch" : null,
+                            routeFamily.hasDepotVariant ? "depot" : null,
+                          ].filter(Boolean).join(" / ") || "main"}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1 py-0.5">
+                        {routeFamily.serviceIds.length > 0 ? routeFamily.serviceIds.slice(0, 3).map((serviceId: string) => (
+                          <span key={serviceId} className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600">
+                            {serviceId}
+                          </span>
+                        )) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </div>
+                      <div className="text-right">{routeFamily.patternCount}</div>
+                      <div className="text-right">{routeFamily.tripCount}</div>
+                      <div className="text-right">{routeFamily.stopCount}</div>
+                      <div className="font-mono">{routeFamily.firstDeparture ?? "-"}</div>
+                      <div className="font-mono">{routeFamily.lastArrival ?? "-"}</div>
+                    </button>
+                  );
+                }}
               />
               </div>
 

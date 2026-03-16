@@ -19,6 +19,11 @@ const ScenarioOverviewPage = lazy(() =>
     default: module.ScenarioOverviewPage,
   })),
 );
+const ScenarioQuickPage = lazy(() =>
+  import("@/pages/scenario/ScenarioQuickPage").then((module) => ({
+    default: module.ScenarioQuickPage,
+  })),
+);
 const SimulationBuilderPage = lazy(() =>
   import("@/pages/planning/SimulationBuilderPage").then((module) => ({
     default: module.SimulationBuilderPage,
@@ -127,7 +132,9 @@ const router = createBrowserRouter([
     ),
     errorElement: <RouteErrorPage />,
     children: [
-      { index: true, element: <LazyPage><ScenarioOverviewPage /></LazyPage> },
+      { index: true, element: <LazyPage><ScenarioQuickPage /></LazyPage> },
+      { path: "quick", element: <LazyPage><ScenarioQuickPage /></LazyPage> },
+      { path: "overview", element: <LazyPage><ScenarioOverviewPage /></LazyPage> },
       { path: "simulation-builder", element: <LazyPage><SimulationBuilderPage /></LazyPage> },
 
       // ── Tab 1: Planning (master data) ─────────────────────

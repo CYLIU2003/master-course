@@ -1,0 +1,32 @@
+{
+  "cost_breakdown": [
+    {
+      "component": "total_operating_cost",
+      "yen": 127500.0
+    },
+    {
+      "component": "electricity_cost",
+      "yen": 0.0
+    },
+    {
+      "component": "demand_charge",
+      "yen": 0.0
+    },
+    {
+      "component": "vehicle_fixed_cost",
+      "yen": 15000.0
+    },
+    {
+      "component": "driver_cost",
+      "yen": 112500.0
+    },
+    {
+      "component": "fuel_cost",
+      "yen": 0.0
+    },
+    {
+      "component": "degradation_cost",
+      "yen": 0.0
+    }
+  ]
+}

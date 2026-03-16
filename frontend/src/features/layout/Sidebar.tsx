@@ -99,8 +99,8 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
   const simulationNavItems: NavItem[] = [
     {
       labelKey: "sidebar.simulation_builder",
-      to: "simulation-builder",
-      fallbackLabel: "シミュレーション設定",
+      to: "quick",
+      fallbackLabel: "クイック実行",
     },
     { labelKey: "sidebar.environment_config", to: "simulation-env" },
   ];
@@ -133,7 +133,7 @@ export function Sidebar({ open, scenarioId }: SidebarProps) {
       {/* Overview link */}
       <div className="px-3 pt-3 pb-2">
         <NavLink
-          to={`/scenarios/${scenarioId}`}
+          to={`/scenarios/${scenarioId}/quick`}
           end
           className={({ isActive }) =>
             `block rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${

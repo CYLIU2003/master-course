@@ -23,6 +23,7 @@ from .data_schema import ProblemData
 from .milp_model import MILPResult
 from .model_sets import ModelSets
 from .parameter_builder import DerivedParams, get_grid_price
+from .route_code_utils import extract_route_series_from_candidates
 from .simulator import SimulationResult
 
 
@@ -158,10 +159,15 @@ def export_targeted_trips(run_dir: Path, data: ProblemData, milp: MILPResult) ->
     served = {task_id for tasks in milp.assignment.values() for task_id in tasks}
     rows: List[Dict[str, Any]] = []
     for task in data.tasks:
+        route_series_code, _route_series_prefix, _route_series_number, _series_source = extract_route_series_from_candidates(
+            task.route_family_code,
+            task.route_id,
+        )
         rows.append(
             {
                 "task_id": task.task_id,
                 "route_id": task.route_id or "",
+                "route_series_code": route_series_code,
                 "service_id": task.service_id or "",
                 "direction": _normalize_direction(task.direction),
                 "route_variant_type": task.route_variant_type or "unknown",
@@ -353,6 +359,7 @@ def export_vehicle_timelines(
             "end_hhmm": _minute_to_hhmm(end_min),
             "task_id": event.get("task_id") or "",
             "route_id": event.get("route_id") or "",
+            "route_series_code": event.get("route_series_code") or "",
             "direction": _direction_label(event.get("direction")),
             "route_variant_type": event.get("route_variant_type") or "",
             "service_id": event.get("service_id") or "",
@@ -410,6 +417,9 @@ def export_vehicle_timelines(
                 "event_type": "service",
                 "task_id": task_id,
                 "route_id": task.route_id,
+                "route_series_code": (
+                    extract_route_series_from_candidates(task.route_family_code, task.route_id)[0]
+                ),
                 "direction": task.direction,
                 "route_variant_type": task.route_variant_type,
                 "service_id": task.service_id,
@@ -592,12 +602,24 @@ def export_simulation_conditions(run_dir: Path, data: ProblemData, dp: DerivedPa
             "num_periods": data.num_periods,
             "planning_horizon_hours": data.planning_horizon_hours,
         },
+        "timeSettings": {
+            "deltaTMin": data.delta_t_min,
+            "numPeriods": data.num_periods,
+            "planningHorizonHours": data.planning_horizon_hours,
+        },
         "flags": {
             "enable_pv": data.enable_pv,
             "enable_v2g": data.enable_v2g,
             "enable_demand_charge": data.enable_demand_charge,
             "enable_battery_degradation": data.enable_battery_degradation,
             "allow_partial_service": data.allow_partial_service,
+        },
+        "flagsCamel": {
+            "enablePv": data.enable_pv,
+            "enableV2g": data.enable_v2g,
+            "enableDemandCharge": data.enable_demand_charge,
+            "enableBatteryDegradation": data.enable_battery_degradation,
+            "allowPartialService": data.allow_partial_service,
         },
         "unit_prices_and_costs": {
             "vehicle_introduction_cost_source": "vehicle.fixed_use_cost",
@@ -606,6 +628,26 @@ def export_simulation_conditions(run_dir: Path, data: ProblemData, dp: DerivedPa
             "co2_price_per_kg": data.co2_price_per_kg,
             "demand_charge_rate_per_kw": data.demand_charge_rate_per_kw,
             "electricity_price_summary": electricity_price_summary,
+        },
+        "unitPricesAndCosts": {
+            "vehicleIntroductionCostSource": "vehicle.fixed_use_cost",
+            "fuelUnitPriceSource": "vehicle.fuel_cost_coeff",
+            "batteryDegradationUnitPriceSource": "vehicle.battery_degradation_cost_coeff",
+            "co2PricePerKg": data.co2_price_per_kg,
+            "demandChargeRatePerKw": data.demand_charge_rate_per_kw,
+            "electricityPriceSummary": {
+                "hasTouPriceTable": electricity_price_summary["has_tou_price_table"],
+                "timeSlotCount": electricity_price_summary["time_slot_count"],
+                "gridEnergyPriceMinYenPerKwh": electricity_price_summary[
+                    "grid_energy_price_min_yen_per_kwh"
+                ],
+                "gridEnergyPriceMaxYenPerKwh": electricity_price_summary[
+                    "grid_energy_price_max_yen_per_kwh"
+                ],
+                "gridEnergyPriceAvgYenPerKwh": electricity_price_summary[
+                    "grid_energy_price_avg_yen_per_kwh"
+                ],
+            },
         },
         "demand_and_contract_conditions": {
             "demand_charge_rate_per_kw": data.demand_charge_rate_per_kw,
@@ -620,6 +662,16 @@ def export_simulation_conditions(run_dir: Path, data: ProblemData, dp: DerivedPa
             ),
             "contract_limits_by_site": contract_rows,
         },
+        "demandAndContractConditions": {
+            "demandChargeRatePerKw": data.demand_charge_rate_per_kw,
+            "objectiveWeightDemandChargeCost": data.objective_weights.get(
+                "demand_charge_cost", 0.0
+            ),
+            "contractLimitPenaltyMultiplier": data.objective_weights.get(
+                "contract_limit_penalty_multiplier"
+            ),
+            "contractLimitsBySite": contract_rows,
+        },
         "extensible_coefficients": {
             "objective_weights": dict(data.objective_weights),
             "big_m": {
@@ -629,9 +681,21 @@ def export_simulation_conditions(run_dir: Path, data: ProblemData, dp: DerivedPa
                 "EPSILON": data.EPSILON,
             },
         },
+        "extensibleCoefficients": {
+            "objectiveWeights": dict(data.objective_weights),
+            "bigM": {
+                "bigMAssign": data.BIG_M_ASSIGN,
+                "bigMCharge": data.BIG_M_CHARGE,
+                "bigMSoc": data.BIG_M_SOC,
+                "epsilon": data.EPSILON,
+            },
+        },
         "vehicle_costs": vehicle_rows,
+        "vehicleCosts": vehicle_rows,
         "vehicle_cost_summary_by_type": vehicle_cost_summary,
+        "vehicleCostSummaryByType": vehicle_cost_summary,
         "tou_prices": tou_rows,
+        "touPrices": tou_rows,
     }
 
     with open(run_dir / "simulation_conditions.json", "w", encoding="utf-8") as f:
@@ -665,6 +729,11 @@ def export_vehicle_schedule(
                         "vehicle_id": k,
                         "vehicle_type": dp.vehicle_lut[k].vehicle_type,
                         "task_id": r_id,
+                        "route_series_code": (
+                            extract_route_series_from_candidates(task.route_family_code if task else None, task.route_id if task else None)[0]
+                            if task
+                            else ""
+                        ),
                         "start_time_idx": task.start_time_idx if task else "",
                         "end_time_idx": task.end_time_idx if task else "",
                         "origin": task.origin if task else "",
@@ -679,6 +748,7 @@ def export_vehicle_schedule(
                     "vehicle_id": k,
                     "vehicle_type": dp.vehicle_lut[k].vehicle_type,
                     "task_id": "(unassigned)",
+                    "route_series_code": "",
                     "start_time_idx": "",
                     "end_time_idx": "",
                     "origin": "",

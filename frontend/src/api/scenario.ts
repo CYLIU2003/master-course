@@ -4,6 +4,8 @@ import type {
   ScenarioDetailResponse,
   EditorBootstrapResponse,
   EditorBootstrapLiteResponse,
+  QuickSetupResponse,
+  UpdateQuickSetupRequest,
   CreateScenarioRequest,
   UpdateScenarioRequest,
   TimetableResponse,
@@ -71,6 +73,24 @@ export const scenarioApi = {
 
   getEditorBootstrapLite: (id: string) =>
     api.get<EditorBootstrapLiteResponse>(`/scenarios/${id}/editor-bootstrap-lite`),
+
+  getQuickSetup: (
+    id: string,
+    options?: { depotIds?: string[]; routeLimit?: number },
+  ) => {
+    const query = new URLSearchParams();
+    if (options?.depotIds?.length) {
+      query.set("depotIds", options.depotIds.join(","));
+    }
+    if (typeof options?.routeLimit === "number") {
+      query.set("routeLimit", String(options.routeLimit));
+    }
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return api.get<QuickSetupResponse>(`/scenarios/${id}/quick-setup${suffix}`);
+  },
+
+  updateQuickSetup: (id: string, data: UpdateQuickSetupRequest) =>
+    api.put<QuickSetupResponse>(`/scenarios/${id}/quick-setup`, data),
 
   create: (data: CreateScenarioRequest) =>
     api.post<ScenarioDetailResponse>("/scenarios", data),

@@ -1,1 +1,1 @@
-export { ScenarioOverviewPage as SimulationBuilderPage } from "@/pages/scenario/ScenarioOverviewPage";
+export { ScenarioQuickPage as SimulationBuilderPage } from "@/pages/scenario/ScenarioQuickPage";

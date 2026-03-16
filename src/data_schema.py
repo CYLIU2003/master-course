@@ -74,6 +74,9 @@ class Task:
     demand_cover: bool = True          # 必ずカバーが必要か
     penalty_unserved: float = 10000.0  # 未割当ペナルティ [円]
     route_id: Optional[str] = None
+    route_family_code: Optional[str] = None
+    route_series_prefix: Optional[str] = None
+    route_series_number: Optional[int] = None
     direction: Optional[str] = None
     route_variant_type: Optional[str] = None
     service_id: Optional[str] = None

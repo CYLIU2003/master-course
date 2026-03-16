@@ -336,6 +336,23 @@ class UpdateDispatchScopeBody(BaseModel):
     allowInterDepotSwap: Optional[bool] = None
 
 
+class UpdateQuickSetupBody(BaseModel):
+    selectedDepotIds: Optional[List[str]] = None
+    selectedRouteIds: Optional[List[str]] = None
+    dayType: Optional[str] = None
+    serviceDate: Optional[str] = None
+    includeShortTurn: Optional[bool] = None
+    includeDepotMoves: Optional[bool] = None
+    includeDeadhead: Optional[bool] = None
+    allowIntraDepotRouteSwap: Optional[bool] = None
+    allowInterDepotSwap: Optional[bool] = None
+    solverMode: Optional[str] = None
+    objectiveMode: Optional[str] = None
+    timeLimitSeconds: Optional[int] = None
+    mipGap: Optional[float] = None
+    alnsIterations: Optional[int] = None
+
+
 class TimetableRowBody(BaseModel):
     route_id: str
     service_id: str = "WEEKDAY"
@@ -498,6 +515,30 @@ def _route_trip_count(route: Dict[str, Any]) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _normalize_direction(value: Any, default: str = "outbound") -> str:
+    text = str(value or "").strip().lower()
+    if text in {"outbound", "out", "up", "上り", "上り便", "↗"}:
+        return "outbound"
+    if text in {"inbound", "in", "down", "下り", "下り便", "↙"}:
+        return "inbound"
+    if text in {"circular", "loop", "循環", "循環線"}:
+        return "circular"
+    return default
+
+
+def _normalize_variant_type(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"main", "main_outbound", "main_inbound", "本線"}:
+        return "main"
+    if text in {"short_turn", "区間", "区間便"}:
+        return "short_turn"
+    if text in {"depot", "depot_in", "depot_out", "入出庫", "入出庫便", "入庫", "出庫"}:
+        return "depot"
+    if text in {"branch", "枝線"}:
+        return "branch"
+    return "unknown"
 
 
 def _depot_route_index(doc: Dict[str, Any]) -> Dict[str, List[str]]:
@@ -720,6 +761,158 @@ def _builder_defaults(
     }
 
 
+def _quick_route_items(
+    doc: Dict[str, Any],
+    selected_depot_ids: List[str],
+    selected_route_ids: List[str],
+    *,
+    route_limit: int,
+) -> List[Dict[str, Any]]:
+    selected_depot_set = {
+        str(item).strip() for item in selected_depot_ids if str(item).strip()
+    }
+    selected_route_set = {
+        str(item).strip() for item in selected_route_ids if str(item).strip()
+    }
+
+    routes = [dict(route) for route in doc.get("routes") or []]
+    if selected_depot_set:
+        routes = [
+            route
+            for route in routes
+            if str(route.get("depotId") or "").strip() in selected_depot_set
+        ]
+
+    routes.sort(
+        key=lambda route: (
+            str(
+                route.get("routeFamilyCode")
+                or route.get("routeCode")
+                or route.get("name")
+                or ""
+            ),
+            int(route.get("familySortOrder") or 999),
+            str(route.get("routeLabel") or route.get("name") or ""),
+            str(route.get("id") or ""),
+        )
+    )
+
+    items: List[Dict[str, Any]] = []
+    for route in routes[: max(1, route_limit)]:
+        route_id = str(route.get("id") or "").strip()
+        if not route_id:
+            continue
+        trip_count = _route_trip_count(route)
+        items.append(
+            {
+                "id": route_id,
+                "displayName": _route_display_name(route),
+                "routeCode": route.get("routeCode"),
+                "routeLabel": route.get("routeLabel"),
+                "routeFamilyCode": route.get("routeFamilyCode"),
+                "routeSeriesCode": route.get("routeSeriesCode"),
+                "depotId": route.get("depotId"),
+                "tripCount": trip_count,
+                "routeVariantType": _normalize_variant_type(
+                    route.get("routeVariantTypeManual")
+                    or route.get("routeVariantType")
+                ),
+                "canonicalDirection": _normalize_direction(
+                    route.get("canonicalDirectionManual")
+                    or route.get("canonicalDirection")
+                    or "outbound"
+                ),
+                "selected": route_id in selected_route_set,
+            }
+        )
+    return items
+
+
+def _build_quick_setup_payload(
+    scenario: Dict[str, Any],
+    doc: Dict[str, Any],
+    dispatch_scope: Dict[str, Any],
+    *,
+    selected_depot_ids: List[str],
+    route_limit: int,
+) -> Dict[str, Any]:
+    route_index = _depot_route_index(doc)
+    builder_defaults = _builder_defaults(doc, route_index, dispatch_scope)
+    selected_route_ids = list(dispatch_scope.get("effectiveRouteIds") or [])
+    vehicles = [dict(item) for item in doc.get("vehicles") or []]
+    vehicle_count_by_depot: Dict[str, int] = {}
+    for vehicle in vehicles:
+        depot_id = str(vehicle.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        vehicle_count_by_depot[depot_id] = vehicle_count_by_depot.get(depot_id, 0) + 1
+
+    depots: List[Dict[str, Any]] = []
+    selected_depot_set = {
+        str(item).strip() for item in selected_depot_ids if str(item).strip()
+    }
+    for depot in doc.get("depots") or []:
+        depot_id = str(depot.get("id") or "").strip()
+        if not depot_id:
+            continue
+        depots.append(
+            {
+                "id": depot_id,
+                "name": depot.get("name") or depot_id,
+                "location": depot.get("location") or "",
+                "routeCount": len(route_index.get(depot_id) or []),
+                "vehicleCount": vehicle_count_by_depot.get(depot_id, 0),
+                "selected": depot_id in selected_depot_set,
+            }
+        )
+
+    return {
+        "scenario": {
+            "id": scenario.get("id"),
+            "name": scenario.get("name"),
+            "operatorId": scenario.get("operatorId"),
+            "datasetVersion": scenario.get("datasetVersion"),
+            "status": scenario.get("status"),
+            "feedContext": scenario.get("feedContext"),
+            "stats": scenario.get("stats"),
+        },
+        "selectedDepotIds": selected_depot_ids,
+        "selectedRouteIds": selected_route_ids,
+        "depots": depots,
+        "routes": _quick_route_items(
+            doc,
+            selected_depot_ids,
+            selected_route_ids,
+            route_limit=route_limit,
+        ),
+        "dispatchScope": {
+            "dayType": str(dispatch_scope.get("serviceId") or "WEEKDAY"),
+            "tripSelection": dict(dispatch_scope.get("tripSelection") or {}),
+            "allowIntraDepotRouteSwap": bool(
+                dispatch_scope.get("allowIntraDepotRouteSwap", False)
+            ),
+            "allowInterDepotSwap": bool(
+                dispatch_scope.get("allowInterDepotSwap", False)
+            ),
+        },
+        "solverSettings": {
+            "solverMode": builder_defaults.get("solverMode") or "mode_milp_only",
+            "objectiveMode": builder_defaults.get("objectiveMode") or "total_cost",
+            "timeLimitSeconds": int(builder_defaults.get("timeLimitSeconds") or 300),
+            "mipGap": float(builder_defaults.get("mipGap") or 0.01),
+            "alnsIterations": int(builder_defaults.get("alnsIterations") or 500),
+        },
+        "simulationSettings": {
+            "serviceDate": builder_defaults.get("serviceDate"),
+            "vehicleTemplateId": builder_defaults.get("vehicleTemplateId"),
+            "vehicleCount": int(builder_defaults.get("vehicleCount") or 0),
+            "chargerCount": int(builder_defaults.get("chargerCount") or 0),
+            "chargerPowerKw": float(builder_defaults.get("chargerPowerKw") or 0.0),
+            "includeDeadhead": bool(builder_defaults.get("includeDeadhead", True)),
+        },
+    }
+
+
 def _build_editor_bootstrap_payload(
     doc: Dict[str, Any],
     scenario: Dict[str, Any],
@@ -936,6 +1129,151 @@ def get_editor_bootstrap_lite(scenario_id: str) -> Dict[str, Any]:
         scenario,
         include_routes=False,
         include_builder=False,
+    )
+
+
+@router.get("/scenarios/{scenario_id}/quick-setup")
+def get_quick_setup(
+    scenario_id: str,
+    depot_ids: Optional[str] = Query(default=None, alias="depotIds"),
+    route_limit: int = Query(default=300, ge=50, le=1000, alias="routeLimit"),
+) -> Dict[str, Any]:
+    try:
+        doc = store.get_scenario_document_shallow(scenario_id)
+        scenario = store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
+
+    dispatch_scope = store._normalize_dispatch_scope(doc)
+    selected_depot_ids = [
+        str(item).strip()
+        for item in (dispatch_scope.get("depotSelection") or {}).get("depotIds") or []
+        if str(item).strip()
+    ]
+    if depot_ids:
+        parsed_depots = [
+            item.strip()
+            for item in depot_ids.split(",")
+            if isinstance(item, str) and item.strip()
+        ]
+        if parsed_depots:
+            selected_depot_ids = parsed_depots
+
+    return _build_quick_setup_payload(
+        scenario,
+        doc,
+        dispatch_scope,
+        selected_depot_ids=selected_depot_ids,
+        route_limit=route_limit,
+    )
+
+
+@router.put("/scenarios/{scenario_id}/quick-setup")
+def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str, Any]:
+    try:
+        current_scope = store.get_dispatch_scope(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
+
+    selected_depot_ids = [
+        str(item).strip() for item in (body.selectedDepotIds or []) if str(item).strip()
+    ]
+    selected_route_ids = [
+        str(item).strip() for item in (body.selectedRouteIds or []) if str(item).strip()
+    ]
+    day_type = str(body.dayType or current_scope.get("serviceId") or "WEEKDAY")
+
+    patch: Dict[str, Any] = {
+        "serviceId": day_type,
+        "serviceSelection": {"serviceIds": [day_type]},
+        "depotSelection": {
+            **dict(current_scope.get("depotSelection") or {}),
+            "mode": "include",
+            "depotIds": selected_depot_ids,
+            "primaryDepotId": selected_depot_ids[0] if selected_depot_ids else None,
+        },
+        "routeSelection": {
+            **dict(current_scope.get("routeSelection") or {}),
+            "mode": "refine",
+            "includeRouteIds": selected_route_ids,
+            "excludeRouteIds": [],
+        },
+    }
+    if selected_depot_ids:
+        patch["depotId"] = selected_depot_ids[0]
+    if body.includeShortTurn is not None or body.includeDepotMoves is not None or body.includeDeadhead is not None:
+        patch["tripSelection"] = {
+            **dict(current_scope.get("tripSelection") or {}),
+            **(
+                {"includeShortTurn": bool(body.includeShortTurn)}
+                if body.includeShortTurn is not None
+                else {}
+            ),
+            **(
+                {"includeDepotMoves": bool(body.includeDepotMoves)}
+                if body.includeDepotMoves is not None
+                else {}
+            ),
+            **(
+                {"includeDeadhead": bool(body.includeDeadhead)}
+                if body.includeDeadhead is not None
+                else {}
+            ),
+        }
+    if body.allowIntraDepotRouteSwap is not None:
+        patch["allowIntraDepotRouteSwap"] = bool(body.allowIntraDepotRouteSwap)
+    if body.allowInterDepotSwap is not None:
+        patch["allowInterDepotSwap"] = bool(body.allowInterDepotSwap)
+
+    try:
+        normalized_scope = store.set_dispatch_scope(scenario_id, patch)
+
+        overlay = store.get_scenario_overlay(scenario_id) or {}
+        solver_config = dict(overlay.get("solver_config") or {})
+        if body.solverMode is not None:
+            solver_config["mode"] = body.solverMode
+        if body.objectiveMode is not None:
+            solver_config["objective_mode"] = body.objectiveMode
+        if body.timeLimitSeconds is not None:
+            solver_config["time_limit_seconds"] = int(body.timeLimitSeconds)
+        if body.mipGap is not None:
+            solver_config["mip_gap"] = float(body.mipGap)
+        if body.alnsIterations is not None:
+            solver_config["alns_iterations"] = int(body.alnsIterations)
+        if solver_config:
+            overlay["solver_config"] = solver_config
+            store.set_scenario_overlay(scenario_id, overlay)
+
+        simulation_config = store.get_field(scenario_id, "simulation_config") or {}
+        if not isinstance(simulation_config, dict):
+            simulation_config = {}
+        if body.serviceDate is not None:
+            simulation_config["service_date"] = body.serviceDate
+        if simulation_config:
+            store.set_field(scenario_id, "simulation_config", simulation_config)
+
+        doc = store.get_scenario_document_shallow(scenario_id)
+        scenario = store.get_scenario(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
+
+    selected_depot_ids_payload = [
+        str(item).strip()
+        for item in (normalized_scope.get("depotSelection") or {}).get("depotIds") or []
+        if str(item).strip()
+    ]
+    return _build_quick_setup_payload(
+        scenario,
+        doc,
+        normalized_scope,
+        selected_depot_ids=selected_depot_ids_payload,
+        route_limit=300,
     )
 
 
