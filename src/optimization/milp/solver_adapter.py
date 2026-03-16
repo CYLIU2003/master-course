@@ -14,6 +14,7 @@ except Exception:  # pragma: no cover
     _GUROBI_AVAILABLE = False
 
 from src.dispatch.models import DutyLeg, VehicleDuty
+from src.optimization.milp.model_builder import MILPModelBuilder
 
 from src.optimization.common.problem import (
     AssignmentPlan,
@@ -84,17 +85,35 @@ class GurobiMILPAdapter:
         model.Params.MIPGap = max(float(config.mip_gap), 0.0)
         model.Params.Seed = int(config.random_seed)
 
+        builder = MILPModelBuilder()
         trip_by_id = problem.trip_by_id()
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
+        assignment_pairs = builder.enumerate_assignment_pairs(problem)
+        arc_pairs = builder.enumerate_arc_pairs(problem, trip_by_id)
 
         y: Dict[Tuple[str, str], gp.Var] = {}
-        for vehicle in problem.vehicles:
-            for trip in problem.trips:
-                if vehicle.vehicle_type in trip.allowed_vehicle_types:
-                    y[(vehicle.vehicle_id, trip.trip_id)] = model.addVar(
-                        vtype=GRB.BINARY,
-                        name=f"y[{vehicle.vehicle_id},{trip.trip_id}]",
-                    )
+        for vehicle_id, trip_id in assignment_pairs:
+            y[(vehicle_id, trip_id)] = model.addVar(
+                vtype=GRB.BINARY,
+                name=f"y[{vehicle_id},{trip_id}]",
+            )
+
+        x: Dict[Tuple[str, str, str], gp.Var] = {
+            (vehicle_id, from_trip_id, to_trip_id): model.addVar(
+                vtype=GRB.BINARY,
+                name=f"x[{vehicle_id},{from_trip_id},{to_trip_id}]",
+            )
+            for vehicle_id, from_trip_id, to_trip_id in arc_pairs
+        }
+
+        start_arc: Dict[Tuple[str, str], gp.Var] = {
+            (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY, name=f"start[{vehicle_id},{trip_id}]")
+            for vehicle_id, trip_id in assignment_pairs
+        }
+        end_arc: Dict[Tuple[str, str], gp.Var] = {
+            (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY, name=f"end[{vehicle_id},{trip_id}]")
+            for vehicle_id, trip_id in assignment_pairs
+        }
 
         unserved: Dict[str, gp.Var] = {
             trip.trip_id: model.addVar(vtype=GRB.BINARY, name=f"u[{trip.trip_id}]")
@@ -119,21 +138,32 @@ class GurobiMILPAdapter:
         for (vehicle_id, trip_id), var in y.items():
             model.addConstr(var <= used_vehicle[vehicle_id])
 
-        # Pairwise incompatibility on each vehicle.
+        outgoing_by_node: Dict[Tuple[str, str], List[gp.Var]] = {}
+        incoming_by_node: Dict[Tuple[str, str], List[gp.Var]] = {}
+        for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
+            outgoing_by_node.setdefault((vehicle_id, from_trip_id), []).append(var)
+            incoming_by_node.setdefault((vehicle_id, to_trip_id), []).append(var)
+            if (vehicle_id, from_trip_id) in y:
+                model.addConstr(var <= y[(vehicle_id, from_trip_id)])
+            if (vehicle_id, to_trip_id) in y:
+                model.addConstr(var <= y[(vehicle_id, to_trip_id)])
+
+        # Arc-flow constraints: one predecessor/successor with explicit start/end indicators.
         for vehicle in problem.vehicles:
-            eligible = [trip for trip in problem.trips if (vehicle.vehicle_id, trip.trip_id) in y]
-            for i in range(len(eligible)):
-                trip_i = eligible[i]
-                for j in range(i + 1, len(eligible)):
-                    trip_j = eligible[j]
-                    i_to_j = trip_j.trip_id in problem.feasible_connections.get(trip_i.trip_id, ())
-                    j_to_i = trip_i.trip_id in problem.feasible_connections.get(trip_j.trip_id, ())
-                    if not i_to_j and not j_to_i:
-                        model.addConstr(
-                            y[(vehicle.vehicle_id, trip_i.trip_id)]
-                            + y[(vehicle.vehicle_id, trip_j.trip_id)]
-                            <= 1
-                        )
+            vehicle_terms_start: List[gp.Var] = []
+            vehicle_terms_end: List[gp.Var] = []
+            for trip in problem.trips:
+                key = (vehicle.vehicle_id, trip.trip_id)
+                if key not in y:
+                    continue
+                incoming = gp.quicksum(incoming_by_node.get(key, []))
+                outgoing = gp.quicksum(outgoing_by_node.get(key, []))
+                model.addConstr(incoming + start_arc[key] == y[key])
+                model.addConstr(outgoing + end_arc[key] == y[key])
+                vehicle_terms_start.append(start_arc[key])
+                vehicle_terms_end.append(end_arc[key])
+            model.addConstr(gp.quicksum(vehicle_terms_start) <= 1)
+            model.addConstr(gp.quicksum(vehicle_terms_end) <= 1)
 
         bev_ids = [
             vehicle.vehicle_id
@@ -231,11 +261,10 @@ class GurobiMILPAdapter:
 
         objective = gp.LinExpr()
         for (vehicle_id, trip_id), var in y.items():
-            vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
             trip = trip_by_id.get(trip_id)
-            if vehicle is None or trip is None:
+            if trip is None:
                 continue
-            objective += (vehicle.fixed_use_cost_jpy * 0.05 + trip.energy_kwh * avg_price) * var
+            objective += trip.energy_kwh * avg_price * var
         for vehicle in problem.vehicles:
             objective += vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
         for trip in problem.trips:

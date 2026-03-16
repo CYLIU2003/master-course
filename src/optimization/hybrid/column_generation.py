@@ -24,10 +24,18 @@ class PricingProblem:
     def generate_columns(self, master_duals: Dict[str, float]) -> List[Column]:
         if not master_duals:
             return []
-        return [
-            Column(
-                column_id="cg-seed-001",
-                description="Placeholder column generated from master dual summary",
-                reduced_cost_hint=float(next(iter(master_duals.values()))),
+
+        ranked = sorted(master_duals.items(), key=lambda item: item[1])
+        candidates: List[Column] = []
+        for idx, (dual_key, dual_value) in enumerate(ranked[:5]):
+            reduced_cost_hint = float(dual_value)
+            if reduced_cost_hint >= 0.0:
+                continue
+            candidates.append(
+                Column(
+                    column_id=f"cg-{idx + 1:03d}-{str(dual_key).replace(' ', '_')}",
+                    description=f"Dual-guided candidate for {dual_key}",
+                    reduced_cost_hint=reduced_cost_hint,
+                )
             )
-        ]
+        return candidates

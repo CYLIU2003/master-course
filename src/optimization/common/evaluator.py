@@ -73,7 +73,11 @@ class CostEvaluator:
 
             for leg in duty.legs:
                 energy_cost += self._trip_energy_cost(problem, leg.trip.trip_id)
-                energy_cost += self._deadhead_energy_cost(problem, leg.deadhead_from_prev_min)
+                energy_cost += self._deadhead_energy_cost(
+                    problem,
+                    leg.deadhead_from_prev_min,
+                    leg.trip.departure_min,
+                )
 
         slot_totals: Dict[int, float] = {}
         for slot in plan.charging_slots:
@@ -82,10 +86,12 @@ class CostEvaluator:
         peak_demand_kw = max(slot_totals.values(), default=0.0)
         demand_cost = weights.demand * peak_demand_kw
 
+        baseline_map = self._trip_vehicle_type_map(problem.baseline_plan) if problem.baseline_plan else {}
+        current_map = self._trip_vehicle_type_map(plan)
         switch_count = sum(
             1
-            for index in range(1, len(plan.duties))
-            if plan.duties[index].vehicle_type != plan.duties[index - 1].vehicle_type
+            for trip_id, vehicle_type in current_map.items()
+            if trip_id in baseline_map and baseline_map[trip_id] != vehicle_type
         )
         switch_cost = weights.switch * float(switch_count)
 
@@ -138,33 +144,61 @@ class CostEvaluator:
             return 0.0
 
         slot_index = self._slot_index_for_departure(problem, trip.departure_min)
-        price_map = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
-        selected_price = price_map.get(slot_index)
-        if selected_price is None and problem.price_slots:
-            nearest_slot = min(problem.price_slots, key=lambda slot: abs(slot.slot_index - slot_index))
-            selected_price = nearest_slot.grid_buy_yen_per_kwh
-        if selected_price is None:
-            selected_price = 0.0
+        selected_buy_price = self._slot_buy_price(problem, slot_index)
+        selected_sell_price = self._slot_sell_price(problem, slot_index)
 
-        pv_credit = (
-            sum(slot.pv_available_kw for slot in problem.pv_slots) / max(len(problem.pv_slots), 1)
-            if problem.pv_slots
-            else 0.0
-        )
-        return max(trip.energy_kwh * selected_price - pv_credit * 0.05, 0.0)
+        timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
+        pv_kw_map = {slot.slot_index: slot.pv_available_kw for slot in problem.pv_slots}
+        pv_kw = pv_kw_map.get(slot_index, 0.0)
+        pv_kwh_available = max(pv_kw, 0.0) * timestep_h
+        pv_self_consumed_kwh = min(max(trip.energy_kwh, 0.0), pv_kwh_available)
+
+        # Self-consumed PV avoids buying from grid but forgoes sell-back revenue.
+        pv_credit = pv_self_consumed_kwh * max(selected_buy_price - selected_sell_price, 0.0)
+        return max(trip.energy_kwh * selected_buy_price - pv_credit, 0.0)
 
     def _deadhead_energy_cost(
         self,
         problem: CanonicalOptimizationProblem,
         deadhead_from_prev_min: int,
+        next_trip_departure_min: int,
     ) -> float:
         if not problem.price_slots or deadhead_from_prev_min <= 0:
             return 0.0
-        average_price = sum(slot.grid_buy_yen_per_kwh for slot in problem.price_slots) / len(problem.price_slots)
+
+        deadhead_departure_min = max(0, next_trip_departure_min - deadhead_from_prev_min)
+        slot_index = self._slot_index_for_departure(problem, deadhead_departure_min)
+        price = self._slot_buy_price(problem, slot_index)
+
         avg_speed_kmph = 20.0
         distance_km = (deadhead_from_prev_min / 60.0) * avg_speed_kmph
         energy_kwh = distance_km * 1.2
-        return max(energy_kwh * average_price, 0.0)
+        return max(energy_kwh * price, 0.0)
+
+    def _slot_buy_price(self, problem: CanonicalOptimizationProblem, slot_index: int) -> float:
+        price_map = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
+        selected_price = price_map.get(slot_index)
+        if selected_price is None and problem.price_slots:
+            nearest_slot = min(problem.price_slots, key=lambda slot: abs(slot.slot_index - slot_index))
+            selected_price = nearest_slot.grid_buy_yen_per_kwh
+        return selected_price or 0.0
+
+    def _slot_sell_price(self, problem: CanonicalOptimizationProblem, slot_index: int) -> float:
+        price_map = {slot.slot_index: slot.grid_sell_yen_per_kwh for slot in problem.price_slots}
+        selected_price = price_map.get(slot_index)
+        if selected_price is None and problem.price_slots:
+            nearest_slot = min(problem.price_slots, key=lambda slot: abs(slot.slot_index - slot_index))
+            selected_price = nearest_slot.grid_sell_yen_per_kwh
+        return selected_price or 0.0
+
+    def _trip_vehicle_type_map(self, plan: AssignmentPlan | None) -> Dict[str, str]:
+        mapping: Dict[str, str] = {}
+        if plan is None:
+            return mapping
+        for duty in plan.duties:
+            for trip_id in duty.trip_ids:
+                mapping[trip_id] = duty.vehicle_type
+        return mapping
 
     def _slot_index_for_departure(
         self,

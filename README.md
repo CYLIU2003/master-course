@@ -35,6 +35,12 @@
 - result_exporter の KPI シートで未割当タスクがリスト型のときに Excel 出力が失敗する問題を修正。
 - src/optimization/milp の solver_adapter を Gurobi 実接続に変更し、engine が baseline ではなく solver が返す plan を採用するよう修正。
 - src/optimization/milp/model_builder の SOC 遷移制約を placeholder からスロット遷移式ベースの定義へ更新。
+- solver_adapter の pairwise incompatibility を廃止し、arc-flow 制約（x/start/end）へ置換。
+- solver_adapter の目的関数で発生していた固定費二重計上を修正。
+- evaluator の deadhead コストを TOU 価格参照に変更し、PV credit と switch_cost の定義を運用可能な形へ修正。
+- ALNS の soc_repair / partial_milp_repair / regret_k_insertion をスタブから実装に更新。
+- hybrid/column_generation の Placeholder 実装を dual-guided 候補生成へ更新。
+- optimization 回帰テストを追加し、arc-flow 連鎖許容・固定費二重計上防止・deadhead TOU・PV credit 算定を自動検証。
 
 ## 1. 研究目的と概要
 

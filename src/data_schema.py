@@ -73,6 +73,10 @@ class Task:
     required_vehicle_type: Optional[str] = None  # None=どちらでも可
     demand_cover: bool = True          # 必ずカバーが必要か
     penalty_unserved: float = 10000.0  # 未割当ペナルティ [円]
+    route_id: Optional[str] = None
+    direction: Optional[str] = None
+    route_variant_type: Optional[str] = None
+    service_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

@@ -35,6 +35,36 @@ class MILPModelDescription:
 
 
 class MILPModelBuilder:
+    def enumerate_assignment_pairs(
+        self,
+        problem: CanonicalOptimizationProblem,
+    ) -> List[Tuple[str, str]]:
+        pairs: List[Tuple[str, str]] = []
+        for vehicle in problem.vehicles:
+            for trip in problem.trips:
+                if vehicle.vehicle_type in trip.allowed_vehicle_types:
+                    pairs.append((vehicle.vehicle_id, trip.trip_id))
+        return pairs
+
+    def enumerate_arc_pairs(
+        self,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Dict[str, object],
+    ) -> List[Tuple[str, str, str]]:
+        pairs: List[Tuple[str, str, str]] = []
+        for vehicle in problem.vehicles:
+            for trip_i in problem.trips:
+                if vehicle.vehicle_type not in trip_i.allowed_vehicle_types:
+                    continue
+                for trip_j_id in problem.feasible_connections.get(trip_i.trip_id, ()):  # feasible edges only
+                    trip_j = trip_by_id.get(trip_j_id)
+                    if trip_j is None:
+                        continue
+                    if vehicle.vehicle_type not in getattr(trip_j, "allowed_vehicle_types", ()):  # type-safe edge
+                        continue
+                    pairs.append((vehicle.vehicle_id, trip_i.trip_id, trip_j_id))
+        return pairs
+
     def build(self, problem: CanonicalOptimizationProblem) -> MILPModelDescription:
         variables: List[MILPVariableDefinition] = []
         constraints: List[MILPConstraintDefinition] = []
@@ -48,37 +78,26 @@ class MILPModelBuilder:
             if vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}
         ]
 
-        assignment_pairs: List[Tuple[str, str]] = []
-        arc_pairs: List[Tuple[str, str, str]] = []
-        for vehicle in problem.vehicles:
-            for trip in problem.trips:
-                if vehicle.vehicle_type in trip.allowed_vehicle_types:
-                    assignment_pairs.append((vehicle.vehicle_id, trip.trip_id))
-                    variables.append(
-                        MILPVariableDefinition(
-                            name=f"y[{vehicle.vehicle_id},{trip.trip_id}]",
-                            var_type="BINARY",
-                            index=(vehicle.vehicle_id, trip.trip_id),
-                            description="vehicle-trip assignment",
-                        )
-                    )
-
-            for trip_i in problem.trips:
-                if vehicle.vehicle_type not in trip_i.allowed_vehicle_types:
-                    continue
-                for trip_j_id in problem.feasible_connections.get(trip_i.trip_id, ()):
-                    trip_j = trip_by_id.get(trip_j_id)
-                    if trip_j is None or vehicle.vehicle_type not in trip_j.allowed_vehicle_types:
-                        continue
-                    arc_pairs.append((vehicle.vehicle_id, trip_i.trip_id, trip_j_id))
-                    variables.append(
-                        MILPVariableDefinition(
-                            name=f"x[{vehicle.vehicle_id},{trip_i.trip_id},{trip_j_id}]",
-                            var_type="BINARY",
-                            index=(vehicle.vehicle_id, trip_i.trip_id, trip_j_id),
-                            description="vehicle uses feasible trip connection arc",
-                        )
-                    )
+        assignment_pairs = self.enumerate_assignment_pairs(problem)
+        arc_pairs = self.enumerate_arc_pairs(problem, trip_by_id)
+        for vehicle_id, trip_id in assignment_pairs:
+            variables.append(
+                MILPVariableDefinition(
+                    name=f"y[{vehicle_id},{trip_id}]",
+                    var_type="BINARY",
+                    index=(vehicle_id, trip_id),
+                    description="vehicle-trip assignment",
+                )
+            )
+        for vehicle_id, trip_i_id, trip_j_id in arc_pairs:
+            variables.append(
+                MILPVariableDefinition(
+                    name=f"x[{vehicle_id},{trip_i_id},{trip_j_id}]",
+                    var_type="BINARY",
+                    index=(vehicle_id, trip_i_id, trip_j_id),
+                    description="vehicle uses feasible trip connection arc",
+                )
+            )
 
         for trip in problem.trips:
             variables.append(
@@ -194,23 +213,25 @@ class MILPModelBuilder:
             for pos in range(len(slot_indices) - 1):
                 slot_idx = slot_indices[pos]
                 next_slot_idx = slot_indices[pos + 1]
-                trip_energy_kwh = sum(
-                    trip.energy_kwh
+                trip_energy_terms = tuple(
+                    f"-{trip.energy_kwh}*y[{vehicle.vehicle_id},{trip.trip_id}]"
                     for trip in problem.trips
-                    if slot_pos_map.get(self._slot_index(problem, trip.departure_min)) == pos
+                    if (vehicle.vehicle_id, trip.trip_id) in assignment_pairs
+                    and slot_pos_map.get(self._slot_index(problem, trip.departure_min)) == pos
                 )
                 constraints.append(
                     MILPConstraintDefinition(
                         name=f"soc_transition[{vehicle.vehicle_id},{slot_idx}->{next_slot_idx}]",
                         sense="EQ",
-                        rhs=-trip_energy_kwh,
+                        rhs=0.0,
                         terms=(
                             f"s[{vehicle.vehicle_id},{next_slot_idx}]",
                             f"-s[{vehicle.vehicle_id},{slot_idx}]",
                             f"-0.95*{timestep_h}*c[{vehicle.vehicle_id},{slot_idx}]",
                             f"+{timestep_h / 0.95}*d[{vehicle.vehicle_id},{slot_idx}]",
-                        ),
-                        description="slot-based SOC dynamics: s_next - s_cur - eta_c*c + d/eta_d = -trip_energy",
+                        )
+                        + trip_energy_terms,
+                        description="slot-based SOC dynamics with assignment-linked trip energy",
                     )
                 )
 
