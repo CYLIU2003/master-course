@@ -274,8 +274,17 @@ class App:
         self.last_job_id = ""
         self.vehicle_rows: list[dict[str, Any]] = []
         self.template_rows: list[dict[str, Any]] = []
-        self.advanced_visible = False
+        self.advanced_visible = True
         self.route_label_file_var = tk.StringVar(value="")
+        self.scope_depots: list[dict[str, Any]] = []
+        self.scope_routes: list[dict[str, Any]] = []
+        self.scope_routes_by_depot: dict[str, list[str]] = {}
+        self.scope_route_by_id: dict[str, dict[str, Any]] = {}
+        self.scope_depot_by_id: dict[str, dict[str, Any]] = {}
+        self.scope_selected_depot_ids: set[str] = set()
+        self.scope_selected_route_ids: set[str] = set()
+        self.scope_tree_depot_item_ids: dict[str, str] = {}
+        self.scope_tree_route_item_ids: dict[str, str] = {}
 
         self._build_ui()
 
@@ -346,21 +355,15 @@ class App:
         ttk.Button(label_ops, text="ラベルをシナリオへ反映", command=self.apply_route_labels_to_scenario).pack(side=tk.LEFT, padx=6)
         ttk.Entry(label_ops, textvariable=self.route_label_file_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 0))
 
-        list_wrap = ttk.Frame(scope)
-        list_wrap.pack(fill=tk.BOTH, expand=True)
-
-        dep_col = ttk.Frame(list_wrap)
-        route_col = ttk.Frame(list_wrap)
-        dep_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        route_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0))
-
-        ttk.Label(dep_col, text="営業所").pack(anchor="w")
-        self.depot_list = tk.Listbox(dep_col, selectmode=tk.MULTIPLE, height=14, exportselection=False)
-        self.depot_list.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(route_col, text="路線").pack(anchor="w")
-        self.route_list = tk.Listbox(route_col, selectmode=tk.MULTIPLE, height=14, exportselection=False)
-        self.route_list.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(scope, text="営業所ごとに折りたたみ表示（左クリックで対象ON/OFF）").pack(anchor="w", pady=(0, 4))
+        tree_wrap = ttk.Frame(scope)
+        tree_wrap.pack(fill=tk.BOTH, expand=True)
+        self.scope_tree = ttk.Treeview(tree_wrap, show="tree", selectmode="none", height=14)
+        self.scope_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scope_ysb = ttk.Scrollbar(tree_wrap, orient=tk.VERTICAL, command=self.scope_tree.yview)
+        scope_ysb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.scope_tree.configure(yscrollcommand=scope_ysb.set)
+        self.scope_tree.bind("<Button-1>", self.on_scope_tree_click)
 
         flags = ttk.Frame(scope)
         flags.pack(fill=tk.X, pady=8)
@@ -427,7 +430,7 @@ class App:
         self._labeled_entry(costs, "CO2単価 co2_price_per_kg", self.co2_price_var)
         self._labeled_entry(costs, "拡張係数 objective_weights(JSON)", self.objective_weights_json_var)
 
-        self.advanced_btn = ttk.Button(ops, text="Advanced Options", command=self.toggle_advanced)
+        self.advanced_btn = ttk.Button(ops, text="Hide Advanced Options", command=self.toggle_advanced)
         self.advanced_btn.pack(anchor="w", pady=(8, 4))
 
         self.advanced_frame = ttk.LabelFrame(ops, text="Advanced Options", padding=6)
@@ -449,7 +452,7 @@ class App:
             variable=self.allow_partial_service_var,
         ).pack(anchor="w")
 
-        self.advanced_frame.pack_forget()
+        self.advanced_frame.pack(fill=tk.X, pady=4)
 
         btn_row = ttk.Frame(ops)
         btn_row.pack(fill=tk.X, pady=8)
@@ -676,12 +679,154 @@ class App:
             return ""
         return str(self.scenarios[idx].get("id") or "")
 
-    def _selected_ids_from_list(self, listbox: tk.Listbox) -> list[str]:
-        out: list[str] = []
-        for idx in listbox.curselection():
-            raw = listbox.get(idx)
-            out.append(raw.split("|", 1)[0].strip())
-        return out
+    @staticmethod
+    def _checkbox_prefix(state: str) -> str:
+        if state == "checked":
+            return "[x]"
+        if state == "partial":
+            return "[~]"
+        return "[ ]"
+
+    def _depot_check_state(self, depot_id: str) -> str:
+        route_ids = self.scope_routes_by_depot.get(depot_id, [])
+        if not route_ids:
+            return "checked" if depot_id in self.scope_selected_depot_ids else "unchecked"
+        selected_count = sum(1 for rid in route_ids if rid in self.scope_selected_route_ids)
+        if selected_count <= 0:
+            return "unchecked"
+        if selected_count >= len(route_ids):
+            return "checked"
+        return "partial"
+
+    def _sync_depot_selection_from_routes(self) -> None:
+        next_selected: set[str] = {
+            depot_id
+            for depot_id in self.scope_selected_depot_ids
+            if not self.scope_routes_by_depot.get(depot_id)
+        }
+        for depot_id, route_ids in self.scope_routes_by_depot.items():
+            if any(rid in self.scope_selected_route_ids for rid in route_ids):
+                next_selected.add(depot_id)
+        self.scope_selected_depot_ids = next_selected
+
+    def _render_scope_tree(self) -> None:
+        self.scope_tree.delete(*self.scope_tree.get_children())
+        self.scope_tree_depot_item_ids = {}
+        self.scope_tree_route_item_ids = {}
+
+        for depot in self.scope_depots:
+            depot_id = str(depot.get("id") or "").strip()
+            if not depot_id:
+                continue
+            depot_name = str(depot.get("name") or depot_id)
+            state = self._depot_check_state(depot_id)
+            route_ids = self.scope_routes_by_depot.get(depot_id, [])
+            selected_count = sum(1 for rid in route_ids if rid in self.scope_selected_route_ids)
+            depot_text = f"{self._checkbox_prefix(state)} {depot_id} | {depot_name} ({selected_count}/{len(route_ids)}路線)"
+            depot_item = self.scope_tree.insert("", tk.END, text=depot_text, open=False)
+            self.scope_tree_depot_item_ids[depot_item] = depot_id
+
+            for route_id in route_ids:
+                route = self.scope_route_by_id.get(route_id) or {}
+                display_name = str(route.get("displayName") or route.get("name") or route_id)
+                route_checked = route_id in self.scope_selected_route_ids
+                route_text = f"{self._checkbox_prefix('checked' if route_checked else 'unchecked')} {route_id} | {display_name}"
+                route_item = self.scope_tree.insert(depot_item, tk.END, text=route_text)
+                self.scope_tree_route_item_ids[route_item] = route_id
+
+    def _set_scope_data(
+        self,
+        depots: list[dict[str, Any]],
+        routes: list[dict[str, Any]],
+        selected_depots: set[str],
+        selected_routes: set[str],
+    ) -> None:
+        self.scope_depots = list(depots)
+        self.scope_routes = routes
+        self.scope_depot_by_id = {
+            str(item.get("id") or "").strip(): item
+            for item in self.scope_depots
+            if str(item.get("id") or "").strip()
+        }
+        self.scope_route_by_id = {
+            str(item.get("id") or "").strip(): item
+            for item in routes
+            if str(item.get("id") or "").strip()
+        }
+        self.scope_routes_by_depot = {}
+        for route in routes:
+            route_id = str(route.get("id") or "").strip()
+            if not route_id:
+                continue
+            depot_id = str(route.get("depotId") or "").strip()
+            if not depot_id or depot_id not in self.scope_depot_by_id:
+                depot_id = "__unassigned__"
+                if depot_id not in self.scope_depot_by_id:
+                    unassigned = {
+                        "id": "__unassigned__",
+                        "name": "未割当営業所",
+                    }
+                    self.scope_depots.append(unassigned)
+                    self.scope_depot_by_id[depot_id] = unassigned
+            self.scope_routes_by_depot.setdefault(depot_id, []).append(route_id)
+
+        for depot in depots:
+            depot_id = str(depot.get("id") or "").strip()
+            if depot_id and depot_id not in self.scope_routes_by_depot:
+                self.scope_routes_by_depot[depot_id] = []
+
+        self.scope_selected_route_ids = {
+            rid for rid in selected_routes if rid in self.scope_route_by_id
+        }
+        self.scope_selected_depot_ids = {
+            did for did in selected_depots if did in self.scope_depot_by_id
+        }
+
+        self._sync_depot_selection_from_routes()
+        self._render_scope_tree()
+
+    def on_scope_tree_click(self, event: tk.Event) -> str | None:
+        element = self.scope_tree.identify("element", event.x, event.y)
+        if element and "indicator" in element:
+            return None
+
+        item_id = self.scope_tree.identify_row(event.y)
+        if not item_id:
+            return None
+
+        if item_id in self.scope_tree_depot_item_ids:
+            depot_id = self.scope_tree_depot_item_ids[item_id]
+            route_ids = self.scope_routes_by_depot.get(depot_id, [])
+            currently_checked = self._depot_check_state(depot_id) != "unchecked"
+            if currently_checked:
+                self.scope_selected_depot_ids.discard(depot_id)
+                for rid in route_ids:
+                    self.scope_selected_route_ids.discard(rid)
+            else:
+                self.scope_selected_depot_ids.add(depot_id)
+                for rid in route_ids:
+                    self.scope_selected_route_ids.add(rid)
+            self._sync_depot_selection_from_routes()
+            self._render_scope_tree()
+            return "break"
+
+        if item_id in self.scope_tree_route_item_ids:
+            route_id = self.scope_tree_route_item_ids[item_id]
+            if route_id in self.scope_selected_route_ids:
+                self.scope_selected_route_ids.discard(route_id)
+            else:
+                self.scope_selected_route_ids.add(route_id)
+            self._sync_depot_selection_from_routes()
+            self._render_scope_tree()
+            return "break"
+
+        return None
+
+    def _selected_depot_ids(self) -> list[str]:
+        return sorted(self.scope_selected_depot_ids)
+
+    def _selected_route_ids(self) -> list[str]:
+        return sorted(self.scope_selected_route_ids)
 
     def _parse_int(self, value: str, default: int = 0) -> int:
         try:
@@ -1099,36 +1244,34 @@ class App:
             routes = list(resp.get("routes") or [])
             selected_depots = set(resp.get("selectedDepotIds") or [])
             selected_routes = set(resp.get("selectedRouteIds") or [])
+            self._set_scope_data(depots, routes, selected_depots, selected_routes)
 
-            self.depot_list.delete(0, tk.END)
-            for idx, depot in enumerate(depots):
-                did = str(depot.get("id") or "")
-                self.depot_list.insert(tk.END, f"{did} | {depot.get('name', '')}")
-                if did in selected_depots:
-                    self.depot_list.selection_set(idx)
-
-            self.route_list.delete(0, tk.END)
-            for idx, route in enumerate(routes):
-                rid = str(route.get("id") or "")
-                self.route_list.insert(tk.END, f"{rid} | {route.get('name', '')}")
-                if rid in selected_routes:
-                    self.route_list.selection_set(idx)
-
-            trip = dict(resp.get("tripSelection") or {})
+            dispatch_scope = dict(resp.get("dispatchScope") or {})
+            trip = dict(dispatch_scope.get("tripSelection") or {})
             self.include_short_turn_var.set(bool(trip.get("includeShortTurn", True)))
             self.include_depot_moves_var.set(bool(trip.get("includeDepotMoves", True)))
             self.include_deadhead_var.set(bool(trip.get("includeDeadhead", True)))
-            self.allow_intra_var.set(bool(resp.get("allowIntraDepotRouteSwap", False)))
-            self.allow_inter_var.set(bool(resp.get("allowInterDepotSwap", False)))
+            self.allow_intra_var.set(bool(dispatch_scope.get("allowIntraDepotRouteSwap", False)))
+            self.allow_inter_var.set(bool(dispatch_scope.get("allowInterDepotSwap", False)))
 
-            solver = dict(resp.get("solver") or {})
-            self.day_type_var.set(str(resp.get("dayType") or "WEEKDAY"))
-            self.service_date_var.set(str(resp.get("serviceDate") or ""))
-            self.solver_mode_var.set(str(solver.get("mode") or "hybrid"))
+            solver = dict(resp.get("solverSettings") or {})
+            sim = dict(resp.get("simulationSettings") or {})
+            self.day_type_var.set(str(dispatch_scope.get("dayType") or "WEEKDAY"))
+            self.service_date_var.set(str(sim.get("serviceDate") or ""))
+            self.solver_mode_var.set(str(solver.get("solverMode") or "hybrid"))
             self.objective_mode_var.set(str(solver.get("objectiveMode") or "total_cost"))
             self.time_limit_var.set(str(solver.get("timeLimitSeconds") or 300))
             self.mip_gap_var.set(str(solver.get("mipGap") if solver.get("mipGap") is not None else 0.01))
             self.alns_iter_var.set(str(solver.get("alnsIterations") or 500))
+            self.allow_partial_service_var.set(bool(sim.get("allowPartialService", False)))
+            self.unserved_penalty_var.set(str(sim.get("unservedPenalty") or 10000))
+            self.grid_flat_price_var.set(str(sim.get("gridFlatPricePerKwh") or 30))
+            self.grid_sell_price_var.set(str(sim.get("gridSellPricePerKwh") or 0))
+            self.demand_charge_var.set(str(sim.get("demandChargeCostPerKw") or 1500))
+            self.diesel_price_var.set(str(sim.get("dieselPricePerL") or 145))
+            self.grid_co2_var.set(str(sim.get("gridCo2KgPerKwh") or 0))
+            self.co2_price_var.set(str(sim.get("co2PricePerKg") or 1))
+            self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
 
             if depots and not self.fleet_depot_var.get().strip():
                 self.fleet_depot_var.set(str(depots[0].get("id") or ""))
@@ -1143,8 +1286,8 @@ class App:
             return
 
         payload = {
-            "selectedDepotIds": self._selected_ids_from_list(self.depot_list),
-            "selectedRouteIds": self._selected_ids_from_list(self.route_list),
+            "selectedDepotIds": self._selected_depot_ids(),
+            "selectedRouteIds": self._selected_route_ids(),
             "dayType": self.day_type_var.get().strip(),
             "serviceDate": self.service_date_var.get().strip() or None,
             "includeShortTurn": self.include_short_turn_var.get(),
@@ -1157,6 +1300,15 @@ class App:
             "timeLimitSeconds": self._parse_int(self.time_limit_var.get(), 300),
             "mipGap": self._parse_float(self.mip_gap_var.get(), 0.01),
             "alnsIterations": self._parse_int(self.alns_iter_var.get(), 500),
+            "allowPartialService": self.allow_partial_service_var.get(),
+            "unservedPenalty": self._parse_float(self.unserved_penalty_var.get(), 10000.0),
+            "gridFlatPricePerKwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
+            "gridSellPricePerKwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
+            "demandChargeCostPerKw": self._parse_float(self.demand_charge_var.get(), 0.0),
+            "dieselPricePerL": self._parse_float(self.diesel_price_var.get(), 145.0),
+            "gridCo2KgPerKwh": self._parse_float(self.grid_co2_var.get(), 0.0),
+            "co2PricePerKg": self._parse_float(self.co2_price_var.get(), 1.0),
+            "depotPowerLimitKw": self._parse_float(self.depot_power_limit_var.get(), 500.0),
         }
         self.run_bg(
             lambda: self.client.put_quick_setup(scenario_id, payload),
@@ -1473,8 +1625,8 @@ class App:
             objective_weights.setdefault("slack_penalty", contract_penalty)
 
         return {
-            "selected_depot_ids": self._selected_ids_from_list(self.depot_list),
-            "selected_route_ids": self._selected_ids_from_list(self.route_list),
+            "selected_depot_ids": self._selected_depot_ids(),
+            "selected_route_ids": self._selected_route_ids(),
             "day_type": self.day_type_var.get().strip(),
             "service_date": self.service_date_var.get().strip() or None,
             "include_short_turn": self.include_short_turn_var.get(),
@@ -1545,7 +1697,7 @@ class App:
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
-        depots = self._selected_ids_from_list(self.depot_list)
+        depots = self._selected_depot_ids()
         payload = {
             "mode": self.solver_mode_var.get().strip(),
             "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
@@ -1564,7 +1716,7 @@ class App:
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
-        depots = self._selected_ids_from_list(self.depot_list)
+        depots = self._selected_depot_ids()
         payload = {
             "service_id": self.day_type_var.get().strip() or None,
             "depot_id": depots[0] if depots else None,
@@ -1580,7 +1732,7 @@ class App:
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
-        depots = self._selected_ids_from_list(self.depot_list)
+        depots = self._selected_depot_ids()
         payload = {
             "mode": self.solver_mode_var.get().strip(),
             "current_time": datetime.now().strftime("%H:%M"),

@@ -24,6 +24,15 @@ const SOLVER_OPTIONS: Array<{
   { value: "abc", label: "ABC" },
 ];
 
+const OBJECTIVE_OPTIONS: Array<{
+  value: NonNullable<SimulationBuilderSettings["objectiveMode"]>;
+  label: string;
+}> = [
+  { value: "total_cost", label: "Cost最小" },
+  { value: "co2", label: "CO2最小" },
+  { value: "balanced", label: "Cost+CO2バランス" },
+];
+
 export function ScenarioQuickPage() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const [selectedDepotIds, setSelectedDepotIds] = useState<string[]>([]);
@@ -36,9 +45,16 @@ export function ScenarioQuickPage() {
   const [allowInterDepotSwap, setAllowInterDepotSwap] = useState(false);
 
   const [solverMode, setSolverMode] = useState<SimulationBuilderSettings["solverMode"]>("mode_milp_only");
+  const [objectiveMode, setObjectiveMode] = useState<NonNullable<SimulationBuilderSettings["objectiveMode"]>>("total_cost");
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(300);
   const [mipGap, setMipGap] = useState(0.01);
   const [alnsIterations, setAlnsIterations] = useState(500);
+  const [allowPartialService, setAllowPartialService] = useState(false);
+  const [unservedPenalty, setUnservedPenalty] = useState(10000);
+  const [gridFlatPricePerKwh, setGridFlatPricePerKwh] = useState(30);
+  const [demandChargeCostPerKw, setDemandChargeCostPerKw] = useState(1200);
+  const [dieselPricePerL, setDieselPricePerL] = useState(150);
+  const [co2PricePerKg, setCo2PricePerKg] = useState(1);
 
   const [vehicleCount, setVehicleCount] = useState(10);
   const [chargerCount, setChargerCount] = useState(4);
@@ -75,11 +91,18 @@ export function ScenarioQuickPage() {
     setAllowInterDepotSwap(Boolean(payload.dispatchScope.allowInterDepotSwap));
     setSolverMode(payload.solverSettings.solverMode || "mode_milp_only");
     setTimeLimitSeconds(payload.solverSettings.timeLimitSeconds || 300);
-    setMipGap(payload.solverSettings.mipGap ?? 0.01);
+      setMipGap(payload.solverSettings.mipGap ?? 0.01);
+      setObjectiveMode(payload.solverSettings.objectiveMode || "total_cost");
     setAlnsIterations(payload.solverSettings.alnsIterations || 500);
     setVehicleCount(payload.simulationSettings.vehicleCount || 10);
     setChargerCount(payload.simulationSettings.chargerCount || 4);
     setChargerPowerKw(payload.simulationSettings.chargerPowerKw || 90);
+      setAllowPartialService(Boolean(payload.simulationSettings.allowPartialService ?? false));
+      setUnservedPenalty(payload.simulationSettings.unservedPenalty ?? 10000);
+      setGridFlatPricePerKwh(payload.simulationSettings.gridFlatPricePerKwh ?? 30);
+      setDemandChargeCostPerKw(payload.simulationSettings.demandChargeCostPerKw ?? 1200);
+      setDieselPricePerL(payload.simulationSettings.dieselPricePerL ?? 150);
+      setCo2PricePerKg(payload.simulationSettings.co2PricePerKg ?? 1);
   }, [quickSetupQuery.data?.scenario.id]);
 
   const routeItems = quickSetupQuery.data?.routes ?? [];
@@ -125,8 +148,8 @@ export function ScenarioQuickPage() {
     });
   }
 
-  async function saveQuickSetup() {
-    await updateQuickSetup.mutateAsync({
+  function buildQuickSetupPatch() {
+    return {
       selectedDepotIds,
       selectedRouteIds,
       dayType,
@@ -136,10 +159,21 @@ export function ScenarioQuickPage() {
       allowIntraDepotRouteSwap,
       allowInterDepotSwap,
       solverMode,
+      objectiveMode,
       timeLimitSeconds,
       mipGap,
       alnsIterations,
-    });
+      allowPartialService,
+      unservedPenalty,
+      gridFlatPricePerKwh,
+      demandChargeCostPerKw,
+      dieselPricePerL,
+      co2PricePerKg,
+    };
+  }
+
+  async function saveQuickSetup() {
+    await updateQuickSetup.mutateAsync(buildQuickSetupPatch());
   }
 
   async function prepareInput() {
@@ -158,13 +192,17 @@ export function ScenarioQuickPage() {
         charger_count: chargerCount,
         charger_power_kw: chargerPowerKw,
         solver_mode: solverMode,
-        objective_mode: "total_cost",
-        allow_partial_service: false,
-        unserved_penalty: 10000,
+        objective_mode: objectiveMode,
+        allow_partial_service: allowPartialService,
+        unserved_penalty: unservedPenalty,
         time_limit_seconds: timeLimitSeconds,
         mip_gap: mipGap,
         include_deadhead: includeDeadhead,
         alns_iterations: alnsIterations,
+        grid_flat_price_per_kwh: gridFlatPricePerKwh,
+        demand_charge_cost_per_kw: demandChargeCostPerKw,
+        diesel_price_per_l: dieselPricePerL,
+        co2_price_per_kg: co2PricePerKg,
       },
     });
     if (result.preparedInputId) {
@@ -184,6 +222,7 @@ export function ScenarioQuickPage() {
   }
 
   async function runOptimization() {
+    await updateQuickSetup.mutateAsync(buildQuickSetupPatch());
     const job = await runOptimizationMutation.mutateAsync({
       mode: solverMode,
       time_limit_seconds: timeLimitSeconds,
@@ -262,6 +301,13 @@ export function ScenarioQuickPage() {
               ))}
             </select>
           </label>
+          <label className="text-sm">Objective
+            <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1" value={objectiveMode} onChange={(e) => setObjectiveMode(e.target.value as NonNullable<SimulationBuilderSettings["objectiveMode"]>)}>
+              {OBJECTIVE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
           <label className="text-sm">Time limit (sec)
             <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="number" min={30} value={timeLimitSeconds} onChange={(e) => setTimeLimitSeconds(Number(e.target.value) || 300)} />
           </label>
@@ -283,7 +329,29 @@ export function ScenarioQuickPage() {
           <label className="text-sm">Service type
             <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1" value={dayType} onChange={(e) => setDayType(e.target.value || "WEEKDAY")} />
           </label>
+          <label className="text-sm">Allow partial service
+            <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1" value={allowPartialService ? "1" : "0"} onChange={(e) => setAllowPartialService(e.target.value === "1")}>
+              <option value="0">No</option>
+              <option value="1">Yes</option>
+            </select>
+          </label>
+          <label className="text-sm">Unserved penalty
+            <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="number" min={0} step={1000} value={unservedPenalty} onChange={(e) => setUnservedPenalty(Number(e.target.value) || 10000)} />
+          </label>
+          <label className="text-sm">Grid flat price (JPY/kWh)
+            <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="number" min={0} step={0.1} value={gridFlatPricePerKwh} onChange={(e) => setGridFlatPricePerKwh(Number(e.target.value) || 0)} />
+          </label>
+          <label className="text-sm">Demand charge (JPY/kW)
+            <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="number" min={0} step={1} value={demandChargeCostPerKw} onChange={(e) => setDemandChargeCostPerKw(Number(e.target.value) || 0)} />
+          </label>
+          <label className="text-sm">Diesel price (JPY/L)
+            <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="number" min={0} step={1} value={dieselPricePerL} onChange={(e) => setDieselPricePerL(Number(e.target.value) || 0)} />
+          </label>
+          <label className="text-sm">CO2 price (JPY/kg)
+            <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="number" min={0} step={0.1} value={co2PricePerKg} onChange={(e) => setCo2PricePerKg(Number(e.target.value) || 0)} />
+          </label>
         </div>
+        <p className="mt-2 text-xs text-slate-500">注: ここで指定した値は quick-setup 保存時と最適化実行直前に scenario 設定へ反映されます。</p>
       </PageSection>
 
       <div className="rounded-xl border border-border bg-white p-4">

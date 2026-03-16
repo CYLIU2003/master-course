@@ -24,6 +24,8 @@
 
 ## 更新履歴（2026-03-16）
 
+- `tools/scenario_backup_tk.py` の Quick Setup 画面で、営業所/路線の2分割リストを廃止し、営業所配下に路線をまとめた折りたたみツリーへ変更。営業所のチェック解除で配下路線も自動解除されるよう同期ロジックを追加。
+- Webの `ScenarioQuickPage` と `tools/scenario_backup_tk.py` で、最適化結果に影響する条件（objective_mode / time_limit_seconds / mip_gap / alns_iterations / allow_partial_service / unserved_penalty / 単価系）を設定・保存できるよう拡張。最適化実行時は quick-setup の最新値を先に反映するよう更新。
 - optimization evaluator の算定式を修正（デマンド料金をピーク課金化、TOUのスロット単価反映、deadheadを距離換算で計算）。
 - 路線タグ付与の運用を簡素化し、`routeVariantType` は `main / short_turn / depot`、`canonicalDirection` は `outbound / inbound / circular` の3択中心へ統一。
 - タグ簡素化に合わせて BFF（quick-setup / routes / timetable import）と最適化入力・結果出力の正規化ロジックを更新し、旧値（`main_outbound` / `depot_in` など）と日本語入力（上り/下り/循環線）を互換吸収。
@@ -200,11 +202,11 @@ python tools/scenario_backup_tk.py
 5. 必要に応じて `ラベルファイル選択` で `route_variant_manual_labels.csv/json` または JSONL（例: `data/catalog-fast/normalized/routes.jsonl`）を選び、`ラベルをシナリオへ反映` を実行する
   - `routeFamilyCode` / `routeSeriesCode` / `routeVariantTypeManual` / `canonicalDirectionManual` を route マスタへ一括反映
   - 反映後は Quick Setup 路線一覧・配車（dispatch）・最適化入力に同一タグが伝搬
-6. 営業所/路線選択、便種フィルタ、トレード許可、solver 条件を調整して `Quick Setup 保存`
+6. 営業所配下の路線ツリー（折りたたみ）で対象営業所/対象路線を左チェックで選択し、便種フィルタ・トレード許可・solver 条件を調整して `Quick Setup 保存`
 7. 右側 `車両管理` タブで営業所単位の車両一覧取得、車両の新規作成/更新/削除、単体/一括複製、テンプレート導入を実行する
 8. 右側 `テンプレート管理` タブでテンプレートの新規作成/更新/削除を実行する
 9. `Cost / Tariff Parameters` で車両導入費（車両/テンプレート個別設定）、燃料単価、電力単価、TOU帯、需要単価、契約上限、契約超過罰金係数、将来拡張用 `objective_weights` を設定する
-10. `Advanced Options` ボタンを押した場合のみ、`solver_mode` / `objective_mode` / `time_limit_seconds` / `mip_gap` / `alns_iterations` などの詳細設定を編集する
+10. `Advanced Options` で、`solver_mode` / `objective_mode` / `time_limit_seconds` / `mip_gap` / `alns_iterations` などの詳細設定を編集する（初期表示で展開済み）
 11. `入力データ作成 (Prepare)` → `Prepared実行` または `最適化実行` を実行する
 12. 必要に応じて `シミュレーション実行(legacy)` / `再最適化` を実行する
 13. `ジョブ監視` で `job_id` の状態を確認し、`機能情報` / `Simulation結果` / `Optimization結果` で結果を確認する
