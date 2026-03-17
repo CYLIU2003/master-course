@@ -207,3 +207,92 @@ $$
 - 可行接続アークは dispatch 由来の `feasible_connections` を厳守する。
 - 便未充足は `u[j]` で許容されるため、理論式 C1 の厳密等式は「罰則付き緩和」として実装されている。
 - solver_status が ERROR/INFEASIBLE の場合、最適化結果ファイルが生成されないことがある。job completed はジョブ管理完了を意味し、数理最適化成功とは同義ではない。
+
+## 11. システム全体の使い方（運用手順）
+
+### 11.1 初回セットアップ
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+### 11.2 起動
+
+```powershell
+# Terminal 1: BFF
+python -m uvicorn bff.main:app --host 127.0.0.1 --port 8000
+
+# Terminal 2: Tkinter
+.\.venv\Scripts\Activate.ps1
+python tools/scenario_backup_tk.py
+```
+
+### 11.3 標準オペレーション
+
+1. Tk で接続確認（Connect）
+2. Scenario を作成または複製
+3. Quick Setup 読込・編集・保存
+4. Route label が必要なら `tools/route_variant_labeler_tk.py` で編集
+5. Vehicle/Template を整備
+6. `入力データ作成 (Prepare)` を実行
+7. `最適化実行` を実行
+8. `ジョブ監視` で completed 確認
+9. `Optimization結果` を確認
+
+### 11.4 主な API 導線（Tk が呼び出す先）
+
+- `/api/app/context`
+- `/api/scenarios/*`（scenario CRUD）
+- `/api/scenarios/{id}/quick-setup`
+- `/api/scenarios/{id}/simulation/prepare`
+- `/api/scenarios/{id}/run-optimization`
+- `/api/jobs/{job_id}`
+
+## 12. constant 参照と実装トレーサビリティ
+
+### 12.1 参照した constant 文書
+
+| constant ファイル | 採用目的 | 反映先 |
+|---|---|---|
+| `constant/formulation.md` | C1-C21, O1-O4 の定式正本 | 本README 10章、`src/optimization/milp/*` |
+| `constant/AGENTS_ev_route_cost.md` | EV/ICE 混成、運行+コスト統合方針 | `bff/routers/optimization.py`, `tools/scenario_backup_tk.py` |
+| `constant/AGENTS.md` | timetable-first と feasibility の不変条件 | `src/dispatch/*`, `bff/routers/graph.py` |
+| `constant/ebus_prototype_model_gurobi.md` | Gurobi 実装指針 | `src/optimization/milp/solver_adapter.py` |
+| `constant/ebus_constraints_table.md` | 制約棚卸し | 本README 10章の実装状況表 |
+| `constant/README.md` | 文書の正本候補整理 | レビュー時の参照順序ガイド |
+
+### 12.2 どのようなアプリを構築したか
+
+- UI: Tkinter
+  - `tools/scenario_backup_tk.py`（シナリオ/Quick Setup/Prepare/Optimization）
+  - `tools/route_variant_labeler_tk.py`（路線バリアント手動ラベル）
+- API/BFF: FastAPI
+  - `bff/routers/graph.py`（dispatch artifact 生成）
+  - `bff/routers/optimization.py`（最適化ジョブ）
+  - `bff/services/run_preparation.py`（prepare入力生成）
+- Core: dispatch + optimization
+  - `src/dispatch/feasibility.py`
+  - `src/dispatch/graph_builder.py`
+  - `src/optimization/milp/model_builder.py`
+  - `src/optimization/milp/solver_adapter.py`
+
+### 12.3 バス運行ルール（実装されている数理的ルール）
+
+dispatch の接続可否は次を満たす場合のみ許可する。
+
+$$
+arrival(i) + turnaround(dest_i) + deadhead(dest_i, origin_j) \le departure(j)
+$$
+
+実装位置:
+- `src/dispatch/feasibility.py`（可否判定）
+- `src/dispatch/graph_builder.py`（可行アーク生成）
+- `src/dispatch/dispatcher.py`（可行アーク上の duty 構築）
+
+### 12.4 教員レビュー向け詳細ガイド
+
+以下に、constant 参照元、アプリ構成、パラメータ、制約、実装差分を詳細にまとめた。
+
+- `docs/professor_system_model_guide.md`

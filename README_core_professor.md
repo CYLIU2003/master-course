@@ -12,6 +12,7 @@
 
 - 実行手順と検証: README.md
 - 制約定式と実装対応（C1-C21, 記号表付き）: README.md の「10. 先生レビュー用: 最適化定式と実装対応」
+- constant参照元と実装トレーサビリティ詳細: docs/professor_system_model_guide.md
 - パラメータ保全: docs/core_parameter_preservation_manifest.md
 - 非Tkフロント機能の移植バックログ: docs/tkinter_feature_parity_backlog.md
 - 最終検証レポート（3→2→1）: docs/core_final_validation_report_20260317.md
