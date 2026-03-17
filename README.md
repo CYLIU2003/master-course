@@ -24,6 +24,9 @@
 
 ## 更新履歴（2026-03-16）
 
+- 外部レビュー向けの実行・評価ガイドとして `README_core_professor.md` を追加（coreブランチ運用を想定）。
+- `constant/bus_hino_jh25.xlsx` / `constant/bus_isuzu_jh25.xlsx` / `constant/mitsubishifuso_bus_jh25.xlsx`（いずれも `3-1` シート）から東急で多用する3車種（`2KG-KV290N4` / `2KG-LV290N4` / `2KG-MP38FK`）の参照値を抽出し、`bff/services/ice_vehicle_reference.py` として実装。ICE車両/テンプレート作成・更新時に、燃費(km/L)・CO2(g/km)・車両重量/総重量・排気量・最大トルク/出力を自動補完し、`energyConsumption(L/km)` と `co2EmissionKgPerL` の補完計算へ反映。
+- Web（`VehicleTemplatesPage` / `VehicleEditorDrawer`）と Tk（`tools/scenario_backup_tk.py`）の車両編集フォームを拡張し、ICE新規追加時に型式コード・燃費・環境性能・重量・エンジンスペックを編集/保存できるよう更新。
 - `tools/scenario_backup_tk.py` の Quick Setup 画面で、営業所/路線の2分割リストを廃止し、営業所配下に路線をまとめた折りたたみツリーへ変更。営業所のチェック解除で配下路線も自動解除されるよう同期ロジックを追加。
 - Webの `ScenarioQuickPage` と `tools/scenario_backup_tk.py` で、最適化結果に影響する条件（objective_mode / time_limit_seconds / mip_gap / alns_iterations / allow_partial_service / unserved_penalty / 単価系）を設定・保存できるよう拡張。最適化実行時は quick-setup の最新値を先に反映するよう更新。
 - optimization evaluator の算定式を修正（デマンド料金をピーク課金化、TOUのスロット単価反映、deadheadを距離換算で計算）。

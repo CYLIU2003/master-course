@@ -22,6 +22,7 @@ from src.preprocess.trip_converter import (
 from src.schemas.duty_entities import DutyLeg, VehicleDuty
 from src.route_code_utils import extract_route_series_from_candidates
 from src.value_normalization import coerce_list
+from bff.services.ice_vehicle_reference import apply_ice_reference_defaults
 from bff.store import scenario_store
 
 
@@ -670,6 +671,7 @@ def _vehicles_for_scope(
 
 
 def _build_vehicle(vehicle_like: Dict[str, Any]) -> Vehicle:
+    vehicle_like = apply_ice_reference_defaults(vehicle_like)
     vehicle_type = str(vehicle_like.get("type") or "BEV").upper()
     battery_kwh = _safe_float(vehicle_like.get("batteryKwh"), 0.0) or None
     fuel_cost_coeff = _safe_float(vehicle_like.get("fuelCostPerL"), 145.0)
@@ -1075,7 +1077,10 @@ def build_problem_data_from_scenario(
         service_id,
         analysis_scope=analysis_scope,
     )
-    scope_vehicles_raw = _vehicles_for_scope(scenario, depot_id)
+    scope_vehicles_raw = [
+        apply_ice_reference_defaults(item)
+        for item in _vehicles_for_scope(scenario, depot_id)
+    ]
     diesel_price_per_l = _safe_float(cost_cfg.get("diesel_price_per_l"), 145.0)
     vehicles = []
     for item in scope_vehicles_raw:

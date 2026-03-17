@@ -538,11 +538,19 @@ class App:
         self.v_id_var = tk.StringVar(value="")
         self.v_depot_var = tk.StringVar(value="")
         self.v_type_var = tk.StringVar(value="BEV")
+        self.v_model_code_var = tk.StringVar(value="")
         self.v_model_var = tk.StringVar(value="")
         self.v_cap_var = tk.StringVar(value="0")
         self.v_battery_var = tk.StringVar(value="300")
         self.v_fuel_tank_var = tk.StringVar(value="")
         self.v_energy_var = tk.StringVar(value="1.2")
+        self.v_km_per_l_var = tk.StringVar(value="")
+        self.v_co2_gpkm_var = tk.StringVar(value="")
+        self.v_curb_weight_var = tk.StringVar(value="")
+        self.v_gross_weight_var = tk.StringVar(value="")
+        self.v_engine_disp_var = tk.StringVar(value="")
+        self.v_max_torque_var = tk.StringVar(value="")
+        self.v_max_power_var = tk.StringVar(value="")
         self.v_charge_kw_var = tk.StringVar(value="90")
         self.v_min_soc_var = tk.StringVar(value="")
         self.v_max_soc_var = tk.StringVar(value="")
@@ -552,11 +560,19 @@ class App:
         self._labeled_entry(form, "id", self.v_id_var, readonly=True)
         self._labeled_entry(form, "depotId", self.v_depot_var)
         self._labeled_entry(form, "type (BEV/ICE)", self.v_type_var)
+        self._labeled_entry(form, "modelCode", self.v_model_code_var)
         self._labeled_entry(form, "modelName", self.v_model_var)
         self._labeled_entry(form, "capacityPassengers", self.v_cap_var)
         self._labeled_entry(form, "batteryKwh", self.v_battery_var)
         self._labeled_entry(form, "fuelTankL", self.v_fuel_tank_var)
         self._labeled_entry(form, "energyConsumption", self.v_energy_var)
+        self._labeled_entry(form, "fuelEfficiencyKmPerL", self.v_km_per_l_var)
+        self._labeled_entry(form, "co2EmissionGPerKm", self.v_co2_gpkm_var)
+        self._labeled_entry(form, "curbWeightKg", self.v_curb_weight_var)
+        self._labeled_entry(form, "grossVehicleWeightKg", self.v_gross_weight_var)
+        self._labeled_entry(form, "engineDisplacementL", self.v_engine_disp_var)
+        self._labeled_entry(form, "maxTorqueNm", self.v_max_torque_var)
+        self._labeled_entry(form, "maxPowerKw", self.v_max_power_var)
         self._labeled_entry(form, "chargePowerKw", self.v_charge_kw_var)
         self._labeled_entry(form, "minSoc", self.v_min_soc_var)
         self._labeled_entry(form, "maxSoc", self.v_max_soc_var)
@@ -615,11 +631,19 @@ class App:
         self.t_id_var = tk.StringVar(value="")
         self.t_name_var = tk.StringVar(value="")
         self.t_type_var = tk.StringVar(value="BEV")
+        self.t_model_code_var = tk.StringVar(value="")
         self.t_model_var = tk.StringVar(value="")
         self.t_cap_var = tk.StringVar(value="0")
         self.t_battery_var = tk.StringVar(value="300")
         self.t_fuel_tank_var = tk.StringVar(value="")
         self.t_energy_var = tk.StringVar(value="1.2")
+        self.t_km_per_l_var = tk.StringVar(value="")
+        self.t_co2_gpkm_var = tk.StringVar(value="")
+        self.t_curb_weight_var = tk.StringVar(value="")
+        self.t_gross_weight_var = tk.StringVar(value="")
+        self.t_engine_disp_var = tk.StringVar(value="")
+        self.t_max_torque_var = tk.StringVar(value="")
+        self.t_max_power_var = tk.StringVar(value="")
         self.t_charge_var = tk.StringVar(value="90")
         self.t_min_soc_var = tk.StringVar(value="")
         self.t_max_soc_var = tk.StringVar(value="")
@@ -629,11 +653,19 @@ class App:
         self._labeled_entry(form, "id", self.t_id_var, readonly=True)
         self._labeled_entry(form, "name", self.t_name_var)
         self._labeled_entry(form, "type", self.t_type_var)
+        self._labeled_entry(form, "modelCode", self.t_model_code_var)
         self._labeled_entry(form, "modelName", self.t_model_var)
         self._labeled_entry(form, "capacityPassengers", self.t_cap_var)
         self._labeled_entry(form, "batteryKwh", self.t_battery_var)
         self._labeled_entry(form, "fuelTankL", self.t_fuel_tank_var)
         self._labeled_entry(form, "energyConsumption", self.t_energy_var)
+        self._labeled_entry(form, "fuelEfficiencyKmPerL", self.t_km_per_l_var)
+        self._labeled_entry(form, "co2EmissionGPerKm", self.t_co2_gpkm_var)
+        self._labeled_entry(form, "curbWeightKg", self.t_curb_weight_var)
+        self._labeled_entry(form, "grossVehicleWeightKg", self.t_gross_weight_var)
+        self._labeled_entry(form, "engineDisplacementL", self.t_engine_disp_var)
+        self._labeled_entry(form, "maxTorqueNm", self.t_max_torque_var)
+        self._labeled_entry(form, "maxPowerKw", self.t_max_power_var)
         self._labeled_entry(form, "chargePowerKw", self.t_charge_var)
         self._labeled_entry(form, "minSoc", self.t_min_soc_var)
         self._labeled_entry(form, "maxSoc", self.t_max_soc_var)
@@ -850,11 +882,19 @@ class App:
         return {
             "depotId": self.v_depot_var.get().strip(),
             "type": self.v_type_var.get().strip().upper() or "BEV",
+            "modelCode": self.v_model_code_var.get().strip() or None,
             "modelName": self.v_model_var.get().strip(),
             "capacityPassengers": self._parse_int(self.v_cap_var.get(), 0),
             "batteryKwh": self._parse_optional_float(self.v_battery_var.get()),
             "fuelTankL": self._parse_optional_float(self.v_fuel_tank_var.get()),
             "energyConsumption": self._parse_float(self.v_energy_var.get(), 0.0),
+            "fuelEfficiencyKmPerL": self._parse_optional_float(self.v_km_per_l_var.get()),
+            "co2EmissionGPerKm": self._parse_optional_float(self.v_co2_gpkm_var.get()),
+            "curbWeightKg": self._parse_optional_float(self.v_curb_weight_var.get()),
+            "grossVehicleWeightKg": self._parse_optional_float(self.v_gross_weight_var.get()),
+            "engineDisplacementL": self._parse_optional_float(self.v_engine_disp_var.get()),
+            "maxTorqueNm": self._parse_optional_float(self.v_max_torque_var.get()),
+            "maxPowerKw": self._parse_optional_float(self.v_max_power_var.get()),
             "chargePowerKw": self._parse_optional_float(self.v_charge_kw_var.get()),
             "minSoc": self._parse_optional_float(self.v_min_soc_var.get()),
             "maxSoc": self._parse_optional_float(self.v_max_soc_var.get()),
@@ -866,11 +906,19 @@ class App:
         return {
             "name": self.t_name_var.get().strip(),
             "type": self.t_type_var.get().strip().upper() or "BEV",
+            "modelCode": self.t_model_code_var.get().strip() or None,
             "modelName": self.t_model_var.get().strip(),
             "capacityPassengers": self._parse_int(self.t_cap_var.get(), 0),
             "batteryKwh": self._parse_optional_float(self.t_battery_var.get()),
             "fuelTankL": self._parse_optional_float(self.t_fuel_tank_var.get()),
             "energyConsumption": self._parse_float(self.t_energy_var.get(), 0.0),
+            "fuelEfficiencyKmPerL": self._parse_optional_float(self.t_km_per_l_var.get()),
+            "co2EmissionGPerKm": self._parse_optional_float(self.t_co2_gpkm_var.get()),
+            "curbWeightKg": self._parse_optional_float(self.t_curb_weight_var.get()),
+            "grossVehicleWeightKg": self._parse_optional_float(self.t_gross_weight_var.get()),
+            "engineDisplacementL": self._parse_optional_float(self.t_engine_disp_var.get()),
+            "maxTorqueNm": self._parse_optional_float(self.t_max_torque_var.get()),
+            "maxPowerKw": self._parse_optional_float(self.t_max_power_var.get()),
             "chargePowerKw": self._parse_optional_float(self.t_charge_var.get()),
             "minSoc": self._parse_optional_float(self.t_min_soc_var.get()),
             "maxSoc": self._parse_optional_float(self.t_max_soc_var.get()),
@@ -1357,11 +1405,19 @@ class App:
             self.v_id_var.set(str(v.get("id") or ""))
             self.v_depot_var.set(str(v.get("depotId") or ""))
             self.v_type_var.set(str(v.get("type") or "BEV"))
+            self.v_model_code_var.set(str(v.get("modelCode") or ""))
             self.v_model_var.set(str(v.get("modelName") or ""))
             self.v_cap_var.set(str(v.get("capacityPassengers") or 0))
             self.v_battery_var.set("" if v.get("batteryKwh") is None else str(v.get("batteryKwh")))
             self.v_fuel_tank_var.set("" if v.get("fuelTankL") is None else str(v.get("fuelTankL")))
             self.v_energy_var.set(str(v.get("energyConsumption") or 0.0))
+            self.v_km_per_l_var.set("" if v.get("fuelEfficiencyKmPerL") is None else str(v.get("fuelEfficiencyKmPerL")))
+            self.v_co2_gpkm_var.set("" if v.get("co2EmissionGPerKm") is None else str(v.get("co2EmissionGPerKm")))
+            self.v_curb_weight_var.set("" if v.get("curbWeightKg") is None else str(v.get("curbWeightKg")))
+            self.v_gross_weight_var.set("" if v.get("grossVehicleWeightKg") is None else str(v.get("grossVehicleWeightKg")))
+            self.v_engine_disp_var.set("" if v.get("engineDisplacementL") is None else str(v.get("engineDisplacementL")))
+            self.v_max_torque_var.set("" if v.get("maxTorqueNm") is None else str(v.get("maxTorqueNm")))
+            self.v_max_power_var.set("" if v.get("maxPowerKw") is None else str(v.get("maxPowerKw")))
             self.v_charge_kw_var.set("" if v.get("chargePowerKw") is None else str(v.get("chargePowerKw")))
             self.v_min_soc_var.set("" if v.get("minSoc") is None else str(v.get("minSoc")))
             self.v_max_soc_var.set("" if v.get("maxSoc") is None else str(v.get("maxSoc")))
@@ -1455,11 +1511,19 @@ class App:
         payload = {
             "depotId": depot_id,
             "type": str(template.get("type") or "BEV"),
+            "modelCode": template.get("modelCode"),
             "modelName": str(template.get("modelName") or template.get("name") or "TemplateVehicle"),
             "capacityPassengers": int(template.get("capacityPassengers") or 0),
             "batteryKwh": template.get("batteryKwh"),
             "fuelTankL": template.get("fuelTankL"),
             "energyConsumption": float(template.get("energyConsumption") or 0.0),
+            "fuelEfficiencyKmPerL": template.get("fuelEfficiencyKmPerL"),
+            "co2EmissionGPerKm": template.get("co2EmissionGPerKm"),
+            "curbWeightKg": template.get("curbWeightKg"),
+            "grossVehicleWeightKg": template.get("grossVehicleWeightKg"),
+            "engineDisplacementL": template.get("engineDisplacementL"),
+            "maxTorqueNm": template.get("maxTorqueNm"),
+            "maxPowerKw": template.get("maxPowerKw"),
             "chargePowerKw": template.get("chargePowerKw"),
             "minSoc": template.get("minSoc"),
             "maxSoc": template.get("maxSoc"),
@@ -1514,11 +1578,19 @@ class App:
         self.t_id_var.set(str(row.get("id") or ""))
         self.t_name_var.set(str(row.get("name") or ""))
         self.t_type_var.set(str(row.get("type") or "BEV"))
+        self.t_model_code_var.set(str(row.get("modelCode") or ""))
         self.t_model_var.set(str(row.get("modelName") or ""))
         self.t_cap_var.set(str(row.get("capacityPassengers") or 0))
         self.t_battery_var.set("" if row.get("batteryKwh") is None else str(row.get("batteryKwh")))
         self.t_fuel_tank_var.set("" if row.get("fuelTankL") is None else str(row.get("fuelTankL")))
         self.t_energy_var.set(str(row.get("energyConsumption") or 0.0))
+        self.t_km_per_l_var.set("" if row.get("fuelEfficiencyKmPerL") is None else str(row.get("fuelEfficiencyKmPerL")))
+        self.t_co2_gpkm_var.set("" if row.get("co2EmissionGPerKm") is None else str(row.get("co2EmissionGPerKm")))
+        self.t_curb_weight_var.set("" if row.get("curbWeightKg") is None else str(row.get("curbWeightKg")))
+        self.t_gross_weight_var.set("" if row.get("grossVehicleWeightKg") is None else str(row.get("grossVehicleWeightKg")))
+        self.t_engine_disp_var.set("" if row.get("engineDisplacementL") is None else str(row.get("engineDisplacementL")))
+        self.t_max_torque_var.set("" if row.get("maxTorqueNm") is None else str(row.get("maxTorqueNm")))
+        self.t_max_power_var.set("" if row.get("maxPowerKw") is None else str(row.get("maxPowerKw")))
         self.t_charge_var.set("" if row.get("chargePowerKw") is None else str(row.get("chargePowerKw")))
         self.t_min_soc_var.set("" if row.get("minSoc") is None else str(row.get("minSoc")))
         self.t_max_soc_var.set("" if row.get("maxSoc") is None else str(row.get("maxSoc")))

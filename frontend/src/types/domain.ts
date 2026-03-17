@@ -304,6 +304,7 @@ export interface Vehicle {
   /** Required: every vehicle belongs to exactly one depot */
   depotId: string;
   type: VehiclePowerType;
+  modelCode?: string | null;
   modelName: string;
   /** Passenger capacity */
   capacityPassengers: number;
@@ -313,6 +314,22 @@ export interface Vehicle {
   fuelTankL: number | null;
   /** Energy consumption [kWh/km] for BEV, [L/km] for ICE */
   energyConsumption: number;
+  /** Fuel efficiency [km/L] — ICE only */
+  fuelEfficiencyKmPerL?: number | null;
+  /** Tailpipe CO2 [g/km] — ICE only */
+  co2EmissionGPerKm?: number | null;
+  /** Tailpipe CO2 coefficient [kg/L] — ICE only */
+  co2EmissionKgPerL?: number | null;
+  /** Curb weight [kg] */
+  curbWeightKg?: number | null;
+  /** Gross vehicle weight [kg] */
+  grossVehicleWeightKg?: number | null;
+  /** Engine displacement [L] — ICE only */
+  engineDisplacementL?: number | null;
+  /** Max torque [Nm] — ICE only */
+  maxTorqueNm?: number | null;
+  /** Max power [kW] — ICE only */
+  maxPowerKw?: number | null;
   /** Max charging power [kW] — BEV only */
   chargePowerKw: number | null;
   /** Minimum SOC constraint [0-1] — BEV only */
@@ -329,11 +346,20 @@ export interface VehicleTemplate {
   id: string;
   name: string;
   type: VehiclePowerType;
+  modelCode?: string | null;
   modelName: string;
   capacityPassengers: number;
   batteryKwh: number | null;
   fuelTankL: number | null;
   energyConsumption: number;
+  fuelEfficiencyKmPerL?: number | null;
+  co2EmissionGPerKm?: number | null;
+  co2EmissionKgPerL?: number | null;
+  curbWeightKg?: number | null;
+  grossVehicleWeightKg?: number | null;
+  engineDisplacementL?: number | null;
+  maxTorqueNm?: number | null;
+  maxPowerKw?: number | null;
   chargePowerKw: number | null;
   minSoc: number | null;
   maxSoc: number | null;

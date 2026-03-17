@@ -29,6 +29,7 @@ from bff.services.route_family import (
     build_route_family_summary,
     enrich_routes_with_family,
 )
+from bff.services.ice_vehicle_reference import apply_ice_reference_defaults
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 from src.value_normalization import coerce_list
@@ -380,11 +381,20 @@ def delete_depot(scenario_id: str, depot_id: str) -> Response:
 class CreateVehicleBody(BaseModel):
     depotId: str
     type: str = "BEV"  # BEV | ICE
+    modelCode: Optional[str] = None
     modelName: str = ""
     capacityPassengers: int = Field(default=0, ge=0)
     batteryKwh: Optional[float] = Field(default=None, ge=0.0)
     fuelTankL: Optional[float] = Field(default=None, ge=0.0)
     energyConsumption: float = Field(default=0.0, ge=0.0)
+    fuelEfficiencyKmPerL: Optional[float] = Field(default=None, ge=0.0)
+    co2EmissionGPerKm: Optional[float] = Field(default=None, ge=0.0)
+    co2EmissionKgPerL: Optional[float] = Field(default=None, ge=0.0)
+    curbWeightKg: Optional[float] = Field(default=None, ge=0.0)
+    grossVehicleWeightKg: Optional[float] = Field(default=None, ge=0.0)
+    engineDisplacementL: Optional[float] = Field(default=None, ge=0.0)
+    maxTorqueNm: Optional[float] = Field(default=None, ge=0.0)
+    maxPowerKw: Optional[float] = Field(default=None, ge=0.0)
     chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
     minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
@@ -414,11 +424,20 @@ class DuplicateVehicleBody(BaseModel):
 class UpdateVehicleBody(BaseModel):
     depotId: Optional[str] = None
     type: Optional[str] = None
+    modelCode: Optional[str] = None
     modelName: Optional[str] = None
     capacityPassengers: Optional[int] = Field(default=None, ge=0)
     batteryKwh: Optional[float] = Field(default=None, ge=0.0)
     fuelTankL: Optional[float] = Field(default=None, ge=0.0)
     energyConsumption: Optional[float] = Field(default=None, ge=0.0)
+    fuelEfficiencyKmPerL: Optional[float] = Field(default=None, ge=0.0)
+    co2EmissionGPerKm: Optional[float] = Field(default=None, ge=0.0)
+    co2EmissionKgPerL: Optional[float] = Field(default=None, ge=0.0)
+    curbWeightKg: Optional[float] = Field(default=None, ge=0.0)
+    grossVehicleWeightKg: Optional[float] = Field(default=None, ge=0.0)
+    engineDisplacementL: Optional[float] = Field(default=None, ge=0.0)
+    maxTorqueNm: Optional[float] = Field(default=None, ge=0.0)
+    maxPowerKw: Optional[float] = Field(default=None, ge=0.0)
     chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
     minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
@@ -435,11 +454,20 @@ class UpdateVehicleBody(BaseModel):
 class CreateVehicleTemplateBody(BaseModel):
     name: str
     type: str = "BEV"
+    modelCode: Optional[str] = None
     modelName: str = ""
     capacityPassengers: int = Field(default=0, ge=0)
     batteryKwh: Optional[float] = Field(default=None, ge=0.0)
     fuelTankL: Optional[float] = Field(default=None, ge=0.0)
     energyConsumption: float = Field(default=0.0, ge=0.0)
+    fuelEfficiencyKmPerL: Optional[float] = Field(default=None, ge=0.0)
+    co2EmissionGPerKm: Optional[float] = Field(default=None, ge=0.0)
+    co2EmissionKgPerL: Optional[float] = Field(default=None, ge=0.0)
+    curbWeightKg: Optional[float] = Field(default=None, ge=0.0)
+    grossVehicleWeightKg: Optional[float] = Field(default=None, ge=0.0)
+    engineDisplacementL: Optional[float] = Field(default=None, ge=0.0)
+    maxTorqueNm: Optional[float] = Field(default=None, ge=0.0)
+    maxPowerKw: Optional[float] = Field(default=None, ge=0.0)
     chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
     minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
@@ -456,11 +484,20 @@ class CreateVehicleTemplateBody(BaseModel):
 class UpdateVehicleTemplateBody(BaseModel):
     name: Optional[str] = None
     type: Optional[str] = None
+    modelCode: Optional[str] = None
     modelName: Optional[str] = None
     capacityPassengers: Optional[int] = Field(default=None, ge=0)
     batteryKwh: Optional[float] = Field(default=None, ge=0.0)
     fuelTankL: Optional[float] = Field(default=None, ge=0.0)
     energyConsumption: Optional[float] = Field(default=None, ge=0.0)
+    fuelEfficiencyKmPerL: Optional[float] = Field(default=None, ge=0.0)
+    co2EmissionGPerKm: Optional[float] = Field(default=None, ge=0.0)
+    co2EmissionKgPerL: Optional[float] = Field(default=None, ge=0.0)
+    curbWeightKg: Optional[float] = Field(default=None, ge=0.0)
+    grossVehicleWeightKg: Optional[float] = Field(default=None, ge=0.0)
+    engineDisplacementL: Optional[float] = Field(default=None, ge=0.0)
+    maxTorqueNm: Optional[float] = Field(default=None, ge=0.0)
+    maxPowerKw: Optional[float] = Field(default=None, ge=0.0)
     chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
     minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
@@ -493,7 +530,8 @@ def list_vehicles(
 @router.post("/scenarios/{scenario_id}/vehicles", status_code=201)
 def create_vehicle(scenario_id: str, body: CreateVehicleBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    return store.create_vehicle(scenario_id, body.model_dump())
+    payload = apply_ice_reference_defaults(body.model_dump())
+    return store.create_vehicle(scenario_id, payload)
 
 
 @router.post("/scenarios/{scenario_id}/vehicles/bulk", status_code=201)
@@ -501,7 +539,7 @@ def create_vehicle_batch(
     scenario_id: str, body: CreateVehicleBatchBody
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    payload = body.model_dump()
+    payload = apply_ice_reference_defaults(body.model_dump())
     quantity = payload.pop("quantity", 1)
     items = store.create_vehicle_batch(scenario_id, payload, quantity)
     return {"items": items, "total": len(items)}
@@ -523,6 +561,30 @@ def update_vehicle(
     _check_scenario(scenario_id)
     try:
         patch = {k: v for k, v in body.model_dump().items() if v is not None}
+        existing = store.get_vehicle(scenario_id, vehicle_id)
+        patch_for_defaults = dict(patch)
+        patch_for_defaults.setdefault("type", existing.get("type"))
+        normalized = apply_ice_reference_defaults(patch_for_defaults)
+        if "type" not in patch:
+            normalized.pop("type", None)
+        derived_fields = {
+            "modelCode",
+            "fuelEfficiencyKmPerL",
+            "co2EmissionGPerKm",
+            "co2EmissionKgPerL",
+            "curbWeightKg",
+            "grossVehicleWeightKg",
+            "engineDisplacementL",
+            "maxTorqueNm",
+            "maxPowerKw",
+            "energyConsumption",
+            "capacityPassengers",
+        }
+        patch = {
+            key: value
+            for key, value in normalized.items()
+            if key in patch or key in derived_fields
+        }
         return store.update_vehicle(scenario_id, vehicle_id, patch)
     except KeyError:
         raise _not_found("Vehicle", vehicle_id)
@@ -588,7 +650,8 @@ def create_vehicle_template(
     scenario_id: str, body: CreateVehicleTemplateBody
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    return store.create_vehicle_template(scenario_id, body.model_dump())
+    payload = apply_ice_reference_defaults(body.model_dump())
+    return store.create_vehicle_template(scenario_id, payload)
 
 
 @router.get("/scenarios/{scenario_id}/vehicle-templates/{template_id}")
@@ -607,6 +670,30 @@ def update_vehicle_template(
     _check_scenario(scenario_id)
     try:
         patch = {k: v for k, v in body.model_dump().items() if v is not None}
+        existing = store.get_vehicle_template(scenario_id, template_id)
+        patch_for_defaults = dict(patch)
+        patch_for_defaults.setdefault("type", existing.get("type"))
+        normalized = apply_ice_reference_defaults(patch_for_defaults)
+        if "type" not in patch:
+            normalized.pop("type", None)
+        derived_fields = {
+            "modelCode",
+            "fuelEfficiencyKmPerL",
+            "co2EmissionGPerKm",
+            "co2EmissionKgPerL",
+            "curbWeightKg",
+            "grossVehicleWeightKg",
+            "engineDisplacementL",
+            "maxTorqueNm",
+            "maxPowerKw",
+            "energyConsumption",
+            "capacityPassengers",
+        }
+        patch = {
+            key: value
+            for key, value in normalized.items()
+            if key in patch or key in derived_fields
+        }
         return store.update_vehicle_template(scenario_id, template_id, patch)
     except KeyError:
         raise _not_found("Vehicle template", template_id)

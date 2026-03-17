@@ -25,11 +25,19 @@ import type {
 type TemplateFormState = {
   name: string;
   type: "BEV" | "ICE";
+  modelCode: string;
   modelName: string;
   capacityPassengers: string;
   batteryKwh: string;
   fuelTankL: string;
   energyConsumption: string;
+  fuelEfficiencyKmPerL: string;
+  co2EmissionGPerKm: string;
+  curbWeightKg: string;
+  grossVehicleWeightKg: string;
+  engineDisplacementL: string;
+  maxTorqueNm: string;
+  maxPowerKw: string;
   chargePowerKw: string;
   minSoc: string;
   maxSoc: string;
@@ -40,11 +48,19 @@ type TemplateFormState = {
 const EMPTY_FORM: TemplateFormState = {
   name: "",
   type: "BEV",
+  modelCode: "",
   modelName: "",
   capacityPassengers: "70",
   batteryKwh: "",
   fuelTankL: "",
   energyConsumption: "1.2",
+  fuelEfficiencyKmPerL: "",
+  co2EmissionGPerKm: "",
+  curbWeightKg: "",
+  grossVehicleWeightKg: "",
+  engineDisplacementL: "",
+  maxTorqueNm: "",
+  maxPowerKw: "",
   chargePowerKw: "",
   minSoc: "0.2",
   maxSoc: "0.9",
@@ -56,11 +72,23 @@ function templateToForm(template: VehicleTemplate): TemplateFormState {
   return {
     name: template.name,
     type: template.type,
+    modelCode: template.modelCode != null ? String(template.modelCode) : "",
     modelName: template.modelName,
     capacityPassengers: String(template.capacityPassengers),
     batteryKwh: template.batteryKwh != null ? String(template.batteryKwh) : "",
     fuelTankL: template.fuelTankL != null ? String(template.fuelTankL) : "",
     energyConsumption: String(template.energyConsumption),
+    fuelEfficiencyKmPerL:
+      template.fuelEfficiencyKmPerL != null ? String(template.fuelEfficiencyKmPerL) : "",
+    co2EmissionGPerKm:
+      template.co2EmissionGPerKm != null ? String(template.co2EmissionGPerKm) : "",
+    curbWeightKg: template.curbWeightKg != null ? String(template.curbWeightKg) : "",
+    grossVehicleWeightKg:
+      template.grossVehicleWeightKg != null ? String(template.grossVehicleWeightKg) : "",
+    engineDisplacementL:
+      template.engineDisplacementL != null ? String(template.engineDisplacementL) : "",
+    maxTorqueNm: template.maxTorqueNm != null ? String(template.maxTorqueNm) : "",
+    maxPowerKw: template.maxPowerKw != null ? String(template.maxPowerKw) : "",
     chargePowerKw: template.chargePowerKw != null ? String(template.chargePowerKw) : "",
     minSoc: template.minSoc != null ? String(template.minSoc) : "",
     maxSoc: template.maxSoc != null ? String(template.maxSoc) : "",
@@ -156,11 +184,19 @@ export function VehicleTemplatesPage() {
   const buildTemplatePayload = (): CreateVehicleTemplateRequest => ({
     name: form.name.trim() || form.modelName || t("vehicles.default_template_name", "新規テンプレート"),
     type: form.type,
+    modelCode: form.modelCode.trim() || null,
     modelName: form.modelName.trim() || t("vehicles.default_vehicle_name", "新規車両"),
     capacityPassengers: Number(form.capacityPassengers) || 70,
     batteryKwh: form.type === "BEV" ? Number(form.batteryKwh) || null : null,
     fuelTankL: form.type === "ICE" ? Number(form.fuelTankL) || null : null,
     energyConsumption: Number(form.energyConsumption) || 0,
+    fuelEfficiencyKmPerL: form.type === "ICE" ? Number(form.fuelEfficiencyKmPerL) || null : null,
+    co2EmissionGPerKm: form.type === "ICE" ? Number(form.co2EmissionGPerKm) || null : null,
+    curbWeightKg: form.type === "ICE" ? Number(form.curbWeightKg) || null : null,
+    grossVehicleWeightKg: form.type === "ICE" ? Number(form.grossVehicleWeightKg) || null : null,
+    engineDisplacementL: form.type === "ICE" ? Number(form.engineDisplacementL) || null : null,
+    maxTorqueNm: form.type === "ICE" ? Number(form.maxTorqueNm) || null : null,
+    maxPowerKw: form.type === "ICE" ? Number(form.maxPowerKw) || null : null,
     chargePowerKw: form.type === "BEV" ? Number(form.chargePowerKw) || null : null,
     minSoc: form.type === "BEV" ? Number(form.minSoc) || null : null,
     maxSoc: form.type === "BEV" ? Number(form.maxSoc) || null : null,
@@ -211,11 +247,20 @@ export function VehicleTemplatesPage() {
     const request: CreateVehicleBatchRequest = {
       depotId: targetDepotId,
       type: payload.type,
+      modelCode: payload.modelCode,
       modelName: payload.modelName,
       capacityPassengers: payload.capacityPassengers,
       batteryKwh: payload.batteryKwh,
       fuelTankL: payload.fuelTankL,
       energyConsumption: payload.energyConsumption,
+      fuelEfficiencyKmPerL: payload.fuelEfficiencyKmPerL,
+      co2EmissionGPerKm: payload.co2EmissionGPerKm,
+      co2EmissionKgPerL: payload.co2EmissionKgPerL,
+      curbWeightKg: payload.curbWeightKg,
+      grossVehicleWeightKg: payload.grossVehicleWeightKg,
+      engineDisplacementL: payload.engineDisplacementL,
+      maxTorqueNm: payload.maxTorqueNm,
+      maxPowerKw: payload.maxPowerKw,
       chargePowerKw: payload.chargePowerKw,
       minSoc: payload.minSoc,
       maxSoc: payload.maxSoc,
@@ -368,6 +413,14 @@ export function VehicleTemplatesPage() {
                   className="field-input"
                 />
               </Field>
+              <Field label={t("vehicles.field_model_code", "型式コード") }>
+                <input
+                  value={form.modelCode}
+                  onChange={(e) => setForm((prev) => ({ ...prev, modelCode: e.target.value }))}
+                  className="field-input"
+                  placeholder="例: 2KG-KV290N4"
+                />
+              </Field>
               <Field label={t("vehicles.field_capacity", "乗客定員")}>
                 <input
                   type="number"
@@ -427,16 +480,96 @@ export function VehicleTemplatesPage() {
                   </Field>
                 </>
               ) : (
-                <Field label={t("vehicles.field_fuel_tank", "燃料タンク容量 (L)")}>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={form.fuelTankL}
-                    onChange={(e) => setForm((prev) => ({ ...prev, fuelTankL: e.target.value }))}
-                    className="field-input"
-                  />
-                </Field>
+                <>
+                  <Field label={t("vehicles.field_fuel_tank", "燃料タンク容量 (L)")}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={form.fuelTankL}
+                      onChange={(e) => setForm((prev) => ({ ...prev, fuelTankL: e.target.value }))}
+                      className="field-input"
+                    />
+                  </Field>
+                  <Field label={t("vehicles.field_km_per_l", "燃費 (km/L)")}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={form.fuelEfficiencyKmPerL}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, fuelEfficiencyKmPerL: e.target.value }))
+                      }
+                      className="field-input"
+                    />
+                  </Field>
+                  <Field label={t("vehicles.field_co2_gpkm", "CO2排出量 (g/km)")}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={form.co2EmissionGPerKm}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, co2EmissionGPerKm: e.target.value }))
+                      }
+                      className="field-input"
+                    />
+                  </Field>
+                  <Field label={t("vehicles.field_curb_weight", "車両重量(空車) (kg)")}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={form.curbWeightKg}
+                      onChange={(e) => setForm((prev) => ({ ...prev, curbWeightKg: e.target.value }))}
+                      className="field-input"
+                    />
+                  </Field>
+                  <Field label={t("vehicles.field_gross_weight", "車両総重量(満車) (kg)")}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={form.grossVehicleWeightKg}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, grossVehicleWeightKg: e.target.value }))
+                      }
+                      className="field-input"
+                    />
+                  </Field>
+                  <Field label={t("vehicles.field_engine_displacement", "排気量 (L)")}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={form.engineDisplacementL}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, engineDisplacementL: e.target.value }))
+                      }
+                      className="field-input"
+                    />
+                  </Field>
+                  <Field label={t("vehicles.field_max_torque", "最大トルク (Nm)")}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={form.maxTorqueNm}
+                      onChange={(e) => setForm((prev) => ({ ...prev, maxTorqueNm: e.target.value }))}
+                      className="field-input"
+                    />
+                  </Field>
+                  <Field label={t("vehicles.field_max_power", "最高出力 (kW)")}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={form.maxPowerKw}
+                      onChange={(e) => setForm((prev) => ({ ...prev, maxPowerKw: e.target.value }))}
+                      className="field-input"
+                    />
+                  </Field>
+                </>
               )}
               <Field
                 label={

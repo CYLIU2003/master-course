@@ -41,6 +41,7 @@ interface Props {
 
 type FormData = {
   quantity: string;
+  modelCode: string;
   modelName: string;
   capacityPassengers: string;
   // BEV fields
@@ -52,6 +53,13 @@ type FormData = {
   // ICE fields
   fuelTankL: string;
   energyConsumptionIce: string;
+  fuelEfficiencyKmPerL: string;
+  co2EmissionGPerKm: string;
+  curbWeightKg: string;
+  grossVehicleWeightKg: string;
+  engineDisplacementL: string;
+  maxTorqueNm: string;
+  maxPowerKw: string;
   // Common
   acquisitionCost: string;
   enabled: boolean;
@@ -59,6 +67,7 @@ type FormData = {
 
 const EMPTY_FORM: FormData = {
   quantity: "1",
+  modelCode: "",
   modelName: "",
   capacityPassengers: "70",
   batteryKwh: "",
@@ -68,6 +77,13 @@ const EMPTY_FORM: FormData = {
   maxSoc: "0.9",
   fuelTankL: "",
   energyConsumptionIce: "",
+  fuelEfficiencyKmPerL: "",
+  co2EmissionGPerKm: "",
+  curbWeightKg: "",
+  grossVehicleWeightKg: "",
+  engineDisplacementL: "",
+  maxTorqueNm: "",
+  maxPowerKw: "",
   acquisitionCost: "0",
   enabled: true,
 };
@@ -75,6 +91,7 @@ const EMPTY_FORM: FormData = {
 const vehicleFormSchema = z
   .object({
     quantity: z.string().trim(),
+    modelCode: z.string().trim(),
     modelName: z.string().trim().min(1, "車両名/モデル名は必須です"),
     capacityPassengers: z.string().trim(),
     batteryKwh: z.string().trim(),
@@ -84,6 +101,13 @@ const vehicleFormSchema = z
     maxSoc: z.string().trim(),
     fuelTankL: z.string().trim(),
     energyConsumptionIce: z.string().trim(),
+    fuelEfficiencyKmPerL: z.string().trim(),
+    co2EmissionGPerKm: z.string().trim(),
+    curbWeightKg: z.string().trim(),
+    grossVehicleWeightKg: z.string().trim(),
+    engineDisplacementL: z.string().trim(),
+    maxTorqueNm: z.string().trim(),
+    maxPowerKw: z.string().trim(),
     acquisitionCost: z.string().trim(),
     enabled: z.boolean(),
   })
@@ -102,6 +126,7 @@ const vehicleFormSchema = z
 function vehicleToForm(v: Vehicle): FormData {
   return {
     quantity: "1",
+    modelCode: v.modelCode != null ? String(v.modelCode) : "",
     modelName: v.modelName,
     capacityPassengers: String(v.capacityPassengers),
     batteryKwh: v.batteryKwh != null ? String(v.batteryKwh) : "",
@@ -111,6 +136,16 @@ function vehicleToForm(v: Vehicle): FormData {
     maxSoc: v.maxSoc != null ? String(v.maxSoc) : "",
     fuelTankL: v.fuelTankL != null ? String(v.fuelTankL) : "",
     energyConsumptionIce: v.type === "ICE" ? String(v.energyConsumption) : "",
+    fuelEfficiencyKmPerL:
+      v.fuelEfficiencyKmPerL != null ? String(v.fuelEfficiencyKmPerL) : "",
+    co2EmissionGPerKm: v.co2EmissionGPerKm != null ? String(v.co2EmissionGPerKm) : "",
+    curbWeightKg: v.curbWeightKg != null ? String(v.curbWeightKg) : "",
+    grossVehicleWeightKg:
+      v.grossVehicleWeightKg != null ? String(v.grossVehicleWeightKg) : "",
+    engineDisplacementL:
+      v.engineDisplacementL != null ? String(v.engineDisplacementL) : "",
+    maxTorqueNm: v.maxTorqueNm != null ? String(v.maxTorqueNm) : "",
+    maxPowerKw: v.maxPowerKw != null ? String(v.maxPowerKw) : "",
     acquisitionCost: String(v.acquisitionCost),
     enabled: v.enabled,
   };
@@ -119,6 +154,7 @@ function vehicleToForm(v: Vehicle): FormData {
 function templateToForm(template: VehicleTemplate): FormData {
   return {
     quantity: "1",
+    modelCode: template.modelCode != null ? String(template.modelCode) : "",
     modelName: template.modelName,
     capacityPassengers: String(template.capacityPassengers),
     batteryKwh: template.batteryKwh != null ? String(template.batteryKwh) : "",
@@ -131,6 +167,26 @@ function templateToForm(template: VehicleTemplate): FormData {
     fuelTankL: template.fuelTankL != null ? String(template.fuelTankL) : "",
     energyConsumptionIce:
       template.type === "ICE" ? String(template.energyConsumption) : "",
+    fuelEfficiencyKmPerL:
+      template.fuelEfficiencyKmPerL != null
+        ? String(template.fuelEfficiencyKmPerL)
+        : "",
+    co2EmissionGPerKm:
+      template.co2EmissionGPerKm != null ? String(template.co2EmissionGPerKm) : "",
+    curbWeightKg:
+      template.curbWeightKg != null ? String(template.curbWeightKg) : "",
+    grossVehicleWeightKg:
+      template.grossVehicleWeightKg != null
+        ? String(template.grossVehicleWeightKg)
+        : "",
+    engineDisplacementL:
+      template.engineDisplacementL != null
+        ? String(template.engineDisplacementL)
+        : "",
+    maxTorqueNm:
+      template.maxTorqueNm != null ? String(template.maxTorqueNm) : "",
+    maxPowerKw:
+      template.maxPowerKw != null ? String(template.maxPowerKw) : "",
     acquisitionCost: String(template.acquisitionCost),
     enabled: template.enabled,
   };
@@ -297,11 +353,19 @@ export function VehicleEditorDrawer({
     return {
       depotId: depotId ?? "",
       type: apiType,
+      modelCode: form.modelCode.trim() || null,
       modelName: form.modelName || t("vehicles.default_vehicle_name", "新規車両"),
       capacityPassengers: Number(form.capacityPassengers) || 70,
       batteryKwh: isEv ? (Number(form.batteryKwh) || null) : null,
       fuelTankL: !isEv ? (Number(form.fuelTankL) || null) : null,
       energyConsumption,
+      fuelEfficiencyKmPerL: !isEv ? (Number(form.fuelEfficiencyKmPerL) || null) : null,
+      co2EmissionGPerKm: !isEv ? (Number(form.co2EmissionGPerKm) || null) : null,
+      curbWeightKg: !isEv ? (Number(form.curbWeightKg) || null) : null,
+      grossVehicleWeightKg: !isEv ? (Number(form.grossVehicleWeightKg) || null) : null,
+      engineDisplacementL: !isEv ? (Number(form.engineDisplacementL) || null) : null,
+      maxTorqueNm: !isEv ? (Number(form.maxTorqueNm) || null) : null,
+      maxPowerKw: !isEv ? (Number(form.maxPowerKw) || null) : null,
       chargePowerKw: isEv ? (Number(form.chargePowerKw) || null) : null,
       minSoc: isEv ? (Number(form.minSoc) || null) : null,
       maxSoc: isEv ? (Number(form.maxSoc) || null) : null,
@@ -384,11 +448,20 @@ export function VehicleEditorDrawer({
     } else if (vehicleId) {
       const req: UpdateVehicleRequest = {
         type: apiType,
+        modelCode: baseReq.modelCode,
         modelName: baseReq.modelName,
         capacityPassengers: baseReq.capacityPassengers,
         batteryKwh: baseReq.batteryKwh,
         fuelTankL: baseReq.fuelTankL,
         energyConsumption: baseReq.energyConsumption,
+        fuelEfficiencyKmPerL: baseReq.fuelEfficiencyKmPerL,
+        co2EmissionGPerKm: baseReq.co2EmissionGPerKm,
+        co2EmissionKgPerL: baseReq.co2EmissionKgPerL,
+        curbWeightKg: baseReq.curbWeightKg,
+        grossVehicleWeightKg: baseReq.grossVehicleWeightKg,
+        engineDisplacementL: baseReq.engineDisplacementL,
+        maxTorqueNm: baseReq.maxTorqueNm,
+        maxPowerKw: baseReq.maxPowerKw,
         chargePowerKw: baseReq.chargePowerKw,
         minSoc: baseReq.minSoc,
         maxSoc: baseReq.maxSoc,
@@ -542,6 +615,15 @@ export function VehicleEditorDrawer({
               onChange={(e) => updateField("modelName", e.target.value)}
               className="field-input"
               placeholder="例: BYD K9"
+            />
+          </Field>
+          <Field label={t("vehicles.field_model_code", "型式コード")}>
+            <input
+              type="text"
+              value={form.modelCode}
+              onChange={(e) => updateField("modelCode", e.target.value)}
+              className="field-input"
+              placeholder="例: 2KG-LV290N4"
             />
           </Field>
           <Field label={t("vehicles.field_capacity", "乗客定員")}>
@@ -716,6 +798,17 @@ export function VehicleEditorDrawer({
 
       {activeTab === "engine" && !isEv && (
         <div className="space-y-4">
+          <Field label={t("vehicles.field_km_per_l", "燃費 (km/L)")}>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={form.fuelEfficiencyKmPerL}
+              onChange={(e) => updateField("fuelEfficiencyKmPerL", e.target.value)}
+              className="field-input"
+              placeholder="例: 5.35"
+            />
+          </Field>
           <Field label={t("vehicles.field_fuel_tank", "燃料タンク容量 (L)")}>
             <input
               type="number"
@@ -725,6 +818,17 @@ export function VehicleEditorDrawer({
               onChange={(e) => updateField("fuelTankL", e.target.value)}
               className="field-input"
               placeholder="例: 200"
+            />
+          </Field>
+          <Field label={t("vehicles.field_co2_gpkm", "CO2排出量 (g/km)")}>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={form.co2EmissionGPerKm}
+              onChange={(e) => updateField("co2EmissionGPerKm", e.target.value)}
+              className="field-input"
+              placeholder="例: 483.4"
             />
           </Field>
           <Field label={t("vehicles.field_ice_consumption", "燃費 (L/km)")}>
@@ -738,6 +842,65 @@ export function VehicleEditorDrawer({
               placeholder="例: 0.35"
             />
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t("vehicles.field_curb_weight", "車両重量(空車) (kg)")}>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.curbWeightKg}
+                onChange={(e) => updateField("curbWeightKg", e.target.value)}
+                className="field-input"
+                placeholder="例: 8654"
+              />
+            </Field>
+            <Field label={t("vehicles.field_gross_weight", "車両総重量(満車) (kg)")}>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.grossVehicleWeightKg}
+                onChange={(e) => updateField("grossVehicleWeightKg", e.target.value)}
+                className="field-input"
+                placeholder="例: 12889"
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label={t("vehicles.field_engine_displacement", "排気量 (L)")}>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.engineDisplacementL}
+                onChange={(e) => updateField("engineDisplacementL", e.target.value)}
+                className="field-input"
+                placeholder="例: 8.86"
+              />
+            </Field>
+            <Field label={t("vehicles.field_max_torque", "最大トルク (Nm)")}>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.maxTorqueNm}
+                onChange={(e) => updateField("maxTorqueNm", e.target.value)}
+                className="field-input"
+                placeholder="例: 1275"
+              />
+            </Field>
+            <Field label={t("vehicles.field_max_power", "最高出力 (kW)")}>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.maxPowerKw}
+                onChange={(e) => updateField("maxPowerKw", e.target.value)}
+                className="field-input"
+                placeholder="例: 191"
+              />
+            </Field>
+          </div>
         </div>
       )}
 

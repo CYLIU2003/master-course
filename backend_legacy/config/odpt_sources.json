@@ -1,8 +1,0 @@
-{
-  "endpoints": {
-    "routePatterns": "https://api.odpt.org/api/v4/odpt:BusroutePattern?odpt:operator=odpt.Operator:TokyuBus&acl:consumerKey={{TOKEN}}",
-    "stops": "https://api.odpt.org/api/v4/odpt:BusstopPole?odpt:operator=odpt.Operator:TokyuBus&acl:consumerKey={{TOKEN}}",
-    "busTimetables": "https://api.odpt.org/api/v4/odpt:BusTimetable?odpt:operator=odpt.Operator:TokyuBus&acl:consumerKey={{TOKEN}}",
-    "stopTimetables": "https://api.odpt.org/api/v4/odpt:BusstopPoleTimetable?odpt:operator=odpt.Operator:TokyuBus&acl:consumerKey={{TOKEN}}"
-  }
-}
