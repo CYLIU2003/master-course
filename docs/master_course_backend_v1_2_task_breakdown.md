@@ -28,7 +28,7 @@
 - `src/dispatch/` に BFF 依存を入れない
 - scenario を BFF の唯一の入力源とし、solver 用 CSV/config は内部互換レイヤとして扱う
 - 3月前半は `mode_milp_only` と最小 audit/export までを完成条件にする
-- `constant/` は触らない
+- `docs/constant/` は触らない
 
 ## 3. フェーズ別タスク
 

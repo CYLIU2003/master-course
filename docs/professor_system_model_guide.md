@@ -13,13 +13,13 @@
 
 | 参照ファイル | 位置づけ | 本システムでの利用 |
 |---|---|---|
-| constant/README.md | constant 文書群の索引 | 正本候補/参考資料/アーカイブ候補の整理に使用 |
-| constant/formulation.md | 混成フリート + PV の MILP 定式化（C1-C21, O1-O4） | 制約式・目的関数の正本として、実装対応表の基準に使用 |
-| constant/AGENTS_ev_route_cost.md | route-profile driven の運行・充電・コスト統合方針 | EV/ICE 混成、TOU、契約電力、運行整合の設計方針として採用 |
-| constant/AGENTS.md | 全体の設計不変条件（timetable-first, operator境界等） | dispatch feasibility のハード制約と境界条件の遵守に使用 |
-| constant/ebus_prototype_model_gurobi.md | 試作段階の Gurobi 実装指針 | 変数設計と MILP 実装の参考（現行では一部のみ採用） |
-| constant/ebus_constraints_table.md | 制約一覧の簡易表 | 実装済み/未実装の棚卸し確認に使用 |
-| constant/masters_thesis_simulation_spec_v3.md | route editable と推定拡張の設計論点 | 将来拡張（路線詳細層・推定層）としての設計方向確認 |
+| docs/constant/README.md | constant 文書群の索引 | 正本候補/参考資料/アーカイブ候補の整理に使用 |
+| docs/constant/formulation.md | 混成フリート + PV の MILP 定式化（C1-C21, O1-O4） | 制約式・目的関数の正本として、実装対応表の基準に使用 |
+| docs/constant/AGENTS_ev_route_cost.md | route-profile driven の運行・充電・コスト統合方針 | EV/ICE 混成、TOU、契約電力、運行整合の設計方針として採用 |
+| docs/constant/AGENTS.md | 全体の設計不変条件（timetable-first, operator境界等） | dispatch feasibility のハード制約と境界条件の遵守に使用 |
+| docs/constant/ebus_prototype_model_gurobi.md | 試作段階の Gurobi 実装指針 | 変数設計と MILP 実装の参考（現行では一部のみ採用） |
+| docs/constant/ebus_constraints_table.md | 制約一覧の簡易表 | 実装済み/未実装の棚卸し確認に使用 |
+| docs/constant/masters_thesis_simulation_spec_v3.md | route editable と推定拡張の設計論点 | 将来拡張（路線詳細層・推定層）としての設計方向確認 |
 
 ## 3. どのようなアプリを作ったか（構成）
 
@@ -110,31 +110,34 @@ $$
 詳細表は README.md の対応表を正本とし、本節では要点のみ示す。
 
 - 実装済み/部分実装
-  - C1, C2, C3, C4, C6, C7, C9, C10, C13, C14
-- 未実装（実行ソルバ側）
-  - C8, C11, C12, C15, C16, C17, C18, C19, C20, C21
+  - C1, C2, C3, C4, C5(部分), C6, C7, C8(近似), C9, C10, C11, C12, C13, C14, C15, C16, C17, C18, C19, C20(価格帯近似), C21(価格帯近似)
 
 ### 6.3 目的関数
 
 現行の実行系（solver_adapter）は以下を最小化。
 
 $$
-\min \sum_{k,j}(energy_kwh_j\cdot avgPrice) y_j^k + \sum_k fixedUseCost_k z_k + \sum_j penalty_{unserved} u_j
+\min \sum_t price_t \cdot g_t
++ \sum_{k,j \in ICE} dieselPrice \cdot fuel_{k,j} \cdot y_j^k
++ \sum_{(i,j),k \in ICE} dieselPrice \cdot fuel^{dh}_{k,i,j} \cdot x_{i,j}^k
++ demandOn \cdot W^{on} + demandOff \cdot W^{off}
++ \sum_k fixedUseCost_k z_k
++ \sum_j penalty_{unserved} u_j
 $$
 
-- O1 ICE燃料費: 未実装
-- O2 TOU買電費: 平均単価近似で部分実装
-- O3 デマンド料金: 未実装
+- O1 ICE燃料費: 実装（便 + deadhead）
+- O2 TOU買電費: 実装（スロット別）
+- O3 デマンド料金: 実装（オン/オフピーク）
 - O4 車両固定費: 実装
 
 ## 7. 制約・ルール・実装のトレーサビリティ
 
 | 観点 | 仕様起点 | 実装ファイル |
 |---|---|---|
-| timetable-first dispatch | constant/AGENTS.md | src/dispatch/feasibility.py, src/dispatch/graph_builder.py |
-| EV/ICE混成運行とコスト | constant/AGENTS_ev_route_cost.md | bff/routers/optimization.py, src/optimization/milp/solver_adapter.py |
-| C1-C21 制約体系 | constant/formulation.md | src/optimization/milp/model_builder.py, src/optimization/milp/solver_adapter.py |
-| Gurobi実装方針 | constant/ebus_prototype_model_gurobi.md | src/optimization/milp/solver_adapter.py |
+| timetable-first dispatch | docs/constant/AGENTS.md | src/dispatch/feasibility.py, src/dispatch/graph_builder.py |
+| EV/ICE混成運行とコスト | docs/constant/AGENTS_ev_route_cost.md | bff/routers/optimization.py, src/optimization/milp/solver_adapter.py |
+| C1-C21 制約体系 | docs/constant/formulation.md | src/optimization/milp/model_builder.py, src/optimization/milp/solver_adapter.py |
+| Gurobi実装方針 | docs/constant/ebus_prototype_model_gurobi.md | src/optimization/milp/solver_adapter.py |
 
 ## 8. システム全体の使い方（教員レビュー向け）
 
@@ -168,4 +171,4 @@ $$
 3. C8（deadhead energy）を SOC 遷移に統合
 4. C19-C21（デマンド計算）を導入
 
-この順で実装すると、constant/formulation.md との対応が大幅に向上する。
+この順で実装すると、docs/constant/formulation.md との対応が大幅に向上する。

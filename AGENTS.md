@@ -143,8 +143,8 @@ Coverage integrity must also be checked:
    `frontend/` calls `/api`; `bff/` orchestrates and calls `src.dispatch.*` / `src.pipeline.*`.
    Dispatch logic must not be reimplemented in UI components or API DTO glue.
 
-4. **`constant/` is read-only**
-   Never modify files under `constant/` unless explicitly instructed.
+4. **`docs/constant/` is read-only**
+   Never modify files under `docs/constant/` unless explicitly instructed.
 
 5. **All pre-existing tests must stay green**
    Current baseline: **245 passing tests** (verified 2026-03-09).

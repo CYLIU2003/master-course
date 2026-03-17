@@ -42,8 +42,13 @@
 
 直近の技術原因候補
 - C1 が unserved 付き緩和で、罰則とのトレードオフ次第で解品質が不安定
-- C8/C11/C12/C15-C21 など、constant/formulation.md の制約群が実行ソルバに未反映
+- C8/C11/C12/C15-C21 など、docs/constant/formulation.md の制約群が実行ソルバに未反映
 - 目的関数が TOU 平均単価近似で、電力需給制約群と整合した厳密モデルではない
+
+更新メモ（2026-03-17 追記）
+- `src/optimization/milp/solver_adapter.py` に C8/C11/C12/C15-C21 を追加実装
+- 目的関数 O1/O2/O3（ICE燃料・TOU買電・デマンド料金）を実装
+- ALNS/GA/ABC も `src/optimization/common/evaluator.py` の共通評価で O1/O2/O3 を反映
 
 次アクション（修正候補）
 1. solver_adapter.py に電力バランス系（g_t, pv_t, contract, demand）を実装
@@ -53,7 +58,7 @@
 
 ## 1) GitHub同期前の最終確認
 
-- README.md に constant/formulation.md の C1-C21 対応表を記載済み
+- README.md に docs/constant/formulation.md の C1-C21 対応表を記載済み
 - docs/core_parameter_preservation_manifest.md は追加済み
 - docs/tkinter_feature_parity_backlog.md は追加済み
 - 本レポートを添付し、レビュー時の検証証跡として利用可能

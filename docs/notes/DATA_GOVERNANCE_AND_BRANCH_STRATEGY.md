@@ -239,13 +239,13 @@ stored inside current scenario JSON documents.
 Even before introducing separate storage files or tables, the code should start
 thinking in these layers.
 
-## Documentation Rule For `constant/`
+## Documentation Rule For `docs/constant/`
 
-The `constant/` directory contains valuable but overlapping research and agent
+The `docs/constant/` directory contains valuable but overlapping research and agent
 documents. To reduce confusion:
 
-- treat `constant/README.md` as the index for current document status
+- treat `docs/constant/README.md` as the index for current document status
 - avoid deleting historical specs without explicit review
 - identify canonical vs reference vs archive-candidate documents clearly
 
-See `constant/README.md` for the current non-destructive consolidation view.
+See `docs/constant/README.md` for the current non-destructive consolidation view.
