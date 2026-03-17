@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Protocol, Tuple
+from typing import Any, Dict, List, Protocol, Tuple
 
 try:
     import gurobipy as gp
@@ -91,14 +91,14 @@ class GurobiMILPAdapter:
         assignment_pairs = builder.enumerate_assignment_pairs(problem)
         arc_pairs = builder.enumerate_arc_pairs(problem, trip_by_id)
 
-        y: Dict[Tuple[str, str], gp.Var] = {}
+        y: Dict[Tuple[str, str], Any] = {}
         for vehicle_id, trip_id in assignment_pairs:
             y[(vehicle_id, trip_id)] = model.addVar(
                 vtype=GRB.BINARY,
                 name=f"y[{vehicle_id},{trip_id}]",
             )
 
-        x: Dict[Tuple[str, str, str], gp.Var] = {
+        x: Dict[Tuple[str, str, str], Any] = {
             (vehicle_id, from_trip_id, to_trip_id): model.addVar(
                 vtype=GRB.BINARY,
                 name=f"x[{vehicle_id},{from_trip_id},{to_trip_id}]",
@@ -106,21 +106,21 @@ class GurobiMILPAdapter:
             for vehicle_id, from_trip_id, to_trip_id in arc_pairs
         }
 
-        start_arc: Dict[Tuple[str, str], gp.Var] = {
+        start_arc: Dict[Tuple[str, str], Any] = {
             (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY, name=f"start[{vehicle_id},{trip_id}]")
             for vehicle_id, trip_id in assignment_pairs
         }
-        end_arc: Dict[Tuple[str, str], gp.Var] = {
+        end_arc: Dict[Tuple[str, str], Any] = {
             (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY, name=f"end[{vehicle_id},{trip_id}]")
             for vehicle_id, trip_id in assignment_pairs
         }
 
-        unserved: Dict[str, gp.Var] = {
+        unserved: Dict[str, Any] = {
             trip.trip_id: model.addVar(vtype=GRB.BINARY, name=f"u[{trip.trip_id}]")
             for trip in problem.trips
         }
 
-        used_vehicle: Dict[str, gp.Var] = {
+        used_vehicle: Dict[str, Any] = {
             vehicle.vehicle_id: model.addVar(vtype=GRB.BINARY, name=f"z[{vehicle.vehicle_id}]")
             for vehicle in problem.vehicles
         }
@@ -138,8 +138,8 @@ class GurobiMILPAdapter:
         for (vehicle_id, trip_id), var in y.items():
             model.addConstr(var <= used_vehicle[vehicle_id])
 
-        outgoing_by_node: Dict[Tuple[str, str], List[gp.Var]] = {}
-        incoming_by_node: Dict[Tuple[str, str], List[gp.Var]] = {}
+        outgoing_by_node: Dict[Tuple[str, str], List[Any]] = {}
+        incoming_by_node: Dict[Tuple[str, str], List[Any]] = {}
         for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
             outgoing_by_node.setdefault((vehicle_id, from_trip_id), []).append(var)
             incoming_by_node.setdefault((vehicle_id, to_trip_id), []).append(var)
@@ -150,8 +150,8 @@ class GurobiMILPAdapter:
 
         # Arc-flow constraints: one predecessor/successor with explicit start/end indicators.
         for vehicle in problem.vehicles:
-            vehicle_terms_start: List[gp.Var] = []
-            vehicle_terms_end: List[gp.Var] = []
+            vehicle_terms_start: List[Any] = []
+            vehicle_terms_end: List[Any] = []
             for trip in problem.trips:
                 key = (vehicle.vehicle_id, trip.trip_id)
                 if key not in y:
@@ -173,9 +173,14 @@ class GurobiMILPAdapter:
         slot_indices = sorted({slot.slot_index for slot in problem.price_slots})
         timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
 
-        c_var: Dict[Tuple[str, int], gp.Var] = {}
-        d_var: Dict[Tuple[str, int], gp.Var] = {}
-        s_var: Dict[Tuple[str, int], gp.Var] = {}
+        c_var: Dict[Tuple[str, int], Any] = {}
+        d_var: Dict[Tuple[str, int], Any] = {}
+        s_var: Dict[Tuple[str, int], Any] = {}
+        g_var: Dict[int, Any] = {}
+        pv_ch_var: Dict[int, Any] = {}
+        p_avg_var: Dict[int, Any] = {}
+        w_on_var = None
+        w_off_var = None
 
         if bev_ids and slot_indices:
             for vehicle in problem.vehicles:
@@ -224,6 +229,10 @@ class GurobiMILPAdapter:
                 first_slot = slot_indices[0]
                 model.addConstr(s_var[(vehicle.vehicle_id, first_slot)] == initial_kwh)
 
+                # C11: terminal SOC lower bound for used vehicles.
+                last_slot = slot_indices[-1]
+                model.addConstr(s_var[(vehicle.vehicle_id, last_slot)] >= soc_min * used_vehicle[vehicle.vehicle_id])
+
                 for pos in range(len(slot_indices) - 1):
                     slot_idx = slot_indices[pos]
                     next_slot_idx = slot_indices[pos + 1]
@@ -233,13 +242,34 @@ class GurobiMILPAdapter:
                         if (vehicle.vehicle_id, trip.trip_id) in y
                         and self._slot_index(problem, trip.departure_min) == slot_idx
                     )
+                    # C8: deadhead energy consumption linked with selected connection arcs.
+                    deadhead_energy_expr = gp.quicksum(
+                        self._deadhead_energy_kwh(problem, vehicle.vehicle_type, from_trip_id, to_trip_id)
+                        * x[(vehicle.vehicle_id, from_trip_id, to_trip_id)]
+                        for from_trip_id, to_trip_id in [
+                            (f_trip, t_trip)
+                            for v_id, f_trip, t_trip in arc_pairs
+                            if v_id == vehicle.vehicle_id
+                        ]
+                        if self._slot_index(problem, trip_by_id[to_trip_id].departure_min) == slot_idx
+                    )
                     model.addConstr(
                         s_var[(vehicle.vehicle_id, next_slot_idx)]
                         == s_var[(vehicle.vehicle_id, slot_idx)]
                         + 0.95 * c_var[(vehicle.vehicle_id, slot_idx)] * timestep_h
                         - d_var[(vehicle.vehicle_id, slot_idx)] * timestep_h / 0.95
                         - trip_energy_expr
+                        - deadhead_energy_expr
                     )
+
+                    # C12: no charging while vehicle is operating a trip in this slot.
+                    running_expr = gp.quicksum(
+                        y[(vehicle.vehicle_id, trip.trip_id)]
+                        for trip in problem.trips
+                        if (vehicle.vehicle_id, trip.trip_id) in y
+                        and self._trip_active_in_slot(problem, trip.departure_min, trip.arrival_min, slot_idx)
+                    )
+                    model.addConstr(c_var[(vehicle.vehicle_id, slot_idx)] <= charge_max_kw * (1 - running_expr))
 
             if problem.chargers:
                 total_kw = sum(
@@ -252,19 +282,85 @@ class GurobiMILPAdapter:
                         <= total_kw
                     )
 
-        avg_price = (
-            sum(slot.grid_buy_yen_per_kwh for slot in problem.price_slots) / len(problem.price_slots)
-            if problem.price_slots
-            else 0.0
-        )
+        # C15-C21: grid/PV balance, non-backflow, contract limit and demand charges.
+        if slot_indices:
+            for slot in problem.price_slots:
+                slot_idx = slot.slot_index
+                g_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"g[{slot_idx}]")
+                pv_ch_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"pv_ch[{slot_idx}]")
+                p_avg_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"p_avg[{slot_idx}]")
+
+            w_on_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_on")
+            w_off_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_off")
+
+            pv_by_slot = {slot.slot_index: slot.pv_available_kw for slot in problem.pv_slots}
+            contract_limit_kw = max((depot.import_limit_kw for depot in problem.depots), default=1.0e6)
+            price_values = [slot.grid_buy_yen_per_kwh for slot in problem.price_slots]
+            median_price = sorted(price_values)[len(price_values) // 2] if price_values else 0.0
+
+            for slot in problem.price_slots:
+                slot_idx = slot.slot_index
+                charge_kwh_expr = gp.quicksum(
+                    c_var[(vehicle_id, slot_idx)] * timestep_h
+                    for vehicle_id in bev_ids
+                    if (vehicle_id, slot_idx) in c_var
+                )
+                model.addConstr(g_var[slot_idx] + pv_ch_var[slot_idx] == charge_kwh_expr)  # C15
+                model.addConstr(pv_ch_var[slot_idx] <= max(pv_by_slot.get(slot_idx, 0.0), 0.0) * timestep_h)  # C16
+                model.addConstr(g_var[slot_idx] <= contract_limit_kw * timestep_h)  # C18
+
+                # C19: period average demand (one slot period).
+                model.addConstr(p_avg_var[slot_idx] == g_var[slot_idx] / timestep_h)
+
+                # C20/C21: on/off peak maximum demand.
+                if slot.grid_buy_yen_per_kwh >= median_price:
+                    model.addConstr(w_on_var >= p_avg_var[slot_idx])
+                else:
+                    model.addConstr(w_off_var >= p_avg_var[slot_idx])
+
         unserved_penalty_weight = max(problem.objective_weights.unserved, 10000.0)
 
         objective = gp.LinExpr()
+        # O2: strict TOU energy purchase cost.
+        price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
+        for slot_idx, g in g_var.items():
+            objective += price_by_slot.get(slot_idx, 0.0) * g
+
+        # O1: ICE fuel cost (revenue + deadhead).
+        diesel_price = max(problem.scenario.diesel_price_yen_per_l, 0.0)
         for (vehicle_id, trip_id), var in y.items():
+            vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
+            if vehicle is None or vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
+                continue
             trip = trip_by_id.get(trip_id)
             if trip is None:
                 continue
-            objective += trip.energy_kwh * avg_price * var
+            fuel_l = max(trip.fuel_l, 0.0)
+            if fuel_l <= 0 and vehicle.fuel_consumption_l_per_km:
+                fuel_l = max(trip.distance_km, 0.0) * vehicle.fuel_consumption_l_per_km
+            objective += diesel_price * fuel_l * var
+
+        for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
+            vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
+            if vehicle is None or vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
+                continue
+            fuel_rate = vehicle.fuel_consumption_l_per_km or 0.0
+            if fuel_rate <= 0:
+                continue
+            deadhead_min = problem.dispatch_context.get_deadhead_min(
+                trip_by_id[from_trip_id].destination,
+                trip_by_id[to_trip_id].origin,
+            )
+            deadhead_km = (deadhead_min / 60.0) * 20.0
+            objective += diesel_price * deadhead_km * fuel_rate * var
+
+        # O3: demand charge cost.
+        if w_on_var is not None and w_off_var is not None:
+            objective += max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on_var
+            objective += max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off_var
+
+        for (vehicle_id, trip_id), var in y.items():
+            _ = vehicle_id, trip_id, var
         for vehicle in problem.vehicles:
             objective += vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
         for trip in problem.trips:
@@ -389,3 +485,56 @@ class GurobiMILPAdapter:
         if vt and vt.discharge_power_max_kw is not None:
             return max(vt.discharge_power_max_kw, 0.0)
         return self._charge_power_max_kw(problem, vehicle_type)
+
+    def _trip_active_in_slot(
+        self,
+        problem: CanonicalOptimizationProblem,
+        departure_min: int,
+        arrival_min: int,
+        slot_idx: int,
+    ) -> bool:
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        slot_start = self._slot_absolute_min(problem, slot_idx)
+        slot_end = slot_start + timestep_min
+        dep = departure_min
+        arr = arrival_min
+        if arr < dep:
+            arr += 24 * 60
+        if dep < slot_start - 24 * 60:
+            dep += 24 * 60
+            arr += 24 * 60
+        return dep < slot_end and arr > slot_start
+
+    def _slot_absolute_min(self, problem: CanonicalOptimizationProblem, slot_idx: int) -> int:
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        if not problem.scenario.horizon_start:
+            return slot_idx * timestep_min
+        try:
+            hh, mm = problem.scenario.horizon_start.split(":")
+            start_min = int(hh) * 60 + int(mm)
+        except ValueError:
+            start_min = 0
+        return start_min + slot_idx * timestep_min
+
+    def _deadhead_energy_kwh(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle_type: str,
+        from_trip_id: str,
+        to_trip_id: str,
+    ) -> float:
+        from_trip = problem.trip_by_id().get(from_trip_id)
+        to_trip = problem.trip_by_id().get(to_trip_id)
+        if from_trip is None or to_trip is None:
+            return 0.0
+        deadhead_min = problem.dispatch_context.get_deadhead_min(
+            from_trip.destination,
+            to_trip.origin,
+        )
+        deadhead_km = (deadhead_min / 60.0) * 20.0
+        vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type), None)
+        if vt and vt.powertrain_type.upper() in {"BEV", "PHEV", "FCEV"}:
+            drive_rate = max((from_trip.energy_kwh / max(from_trip.distance_km, 1e-6)), 0.0)
+            return deadhead_km * drive_rate
+        return 0.0
+

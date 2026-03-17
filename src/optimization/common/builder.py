@@ -58,6 +58,16 @@ class ProblemBuilder:
         vehicle_counts = self._vehicle_counts_from_scenario(scenario, depot_id)
         weights = self._objective_weights_from_scenario(scenario)
         baseline = self._build_baseline_plan_from_scenario(scenario, context)
+        charging_cfg = ((scenario.get("scenario_overlay") or {}).get("charging_constraints") or {})
+        cost_cfg = ((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {})
+        depot_import_limit_kw = self._safe_float(
+            charging_cfg.get("depot_power_limit_kw")
+            or charging_cfg.get("depotPowerLimitKw")
+            or cost_cfg.get("depot_power_limit_kw")
+            or cost_cfg.get("depotPowerLimitKw")
+        )
+        demand_charge = float(cost_cfg.get("demand_charge_cost_per_kw") or 0.0)
+        diesel_price = float(cost_cfg.get("diesel_price_per_l") or 0.0)
         return self.build_from_dispatch(
             context,
             scenario_id=str((scenario.get("meta") or {}).get("id") or ""),
@@ -68,6 +78,10 @@ class ProblemBuilder:
             pv_slots=pv_slots,
             objective_weights=weights,
             baseline_plan=baseline,
+            depot_import_limit_kw=depot_import_limit_kw,
+            diesel_price_yen_per_l=diesel_price,
+            demand_charge_on_peak_yen_per_kw=demand_charge,
+            demand_charge_off_peak_yen_per_kw=demand_charge,
         )
 
     def build_from_dispatch(
@@ -82,6 +96,10 @@ class ProblemBuilder:
         pv_slots: Sequence[PVSlot] = (),
         objective_weights: Optional[OptimizationObjectiveWeights] = None,
         baseline_plan: Optional[AssignmentPlan] = None,
+        depot_import_limit_kw: Optional[float] = None,
+        diesel_price_yen_per_l: float = 0.0,
+        demand_charge_on_peak_yen_per_kw: float = 0.0,
+        demand_charge_off_peak_yen_per_kw: float = 0.0,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -96,6 +114,7 @@ class ProblemBuilder:
                 distance_km=trip.distance_km,
                 allowed_vehicle_types=trip.allowed_vehicle_types,
                 energy_kwh=self._estimate_trip_energy(trip.distance_km, context),
+                fuel_l=self._estimate_trip_fuel(trip.distance_km, context),
                 service_id=context.service_date,
             )
             for trip in context.trips
@@ -108,11 +127,17 @@ class ProblemBuilder:
                 vehicle_counts,
             )
         )
+        inferred_import_limit = depot_import_limit_kw
+        if inferred_import_limit is None:
+            charger_capacity = sum(charger.power_kw * max(charger.simultaneous_ports, 1) for charger in chargers)
+            inferred_import_limit = charger_capacity if charger_capacity > 0 else 1000.0
+
         depots = (
             ProblemDepot(
                 depot_id="depot_default",
                 name="Default Depot",
                 charger_ids=tuple(charger.charger_id for charger in chargers),
+                import_limit_kw=float(inferred_import_limit),
             ),
         )
         time_slots = tuple(self._build_time_slot_prices(context, price_slots))
@@ -132,6 +157,9 @@ class ProblemBuilder:
                 horizon_start=self._min_hhmm(context),
                 horizon_end=self._max_hhmm(context),
                 timestep_min=30,
+                diesel_price_yen_per_l=float(diesel_price_yen_per_l),
+                demand_charge_on_peak_yen_per_kw=float(demand_charge_on_peak_yen_per_kw),
+                demand_charge_off_peak_yen_per_kw=float(demand_charge_off_peak_yen_per_kw),
             ),
             dispatch_context=context,
             trips=trip_nodes,
@@ -262,6 +290,7 @@ class ProblemBuilder:
                     reserve_soc=profile.battery_capacity_kwh * 0.1
                     if profile.battery_capacity_kwh
                     else None,
+                    fuel_consumption_l_per_km=profile.fuel_consumption_l_per_km,
                     fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )
 
@@ -272,6 +301,13 @@ class ProblemBuilder:
         profiles: Dict[str, VehicleProfile] = {}
         for vehicle in vehicles:
             vehicle_type = str(vehicle.get("type") or "BEV").upper()
+            fuel_eff_km_per_l = self._safe_float(vehicle.get("fuelEfficiencyKmPerL") or vehicle.get("fuel_efficiency_km_per_l"))
+            fuel_l_per_km = None
+            if fuel_eff_km_per_l and fuel_eff_km_per_l > 0:
+                fuel_l_per_km = 1.0 / fuel_eff_km_per_l
+            explicit_fuel_l_per_km = self._safe_float(vehicle.get("fuelConsumptionLPerKm") or vehicle.get("fuel_consumption_l_per_km"))
+            if explicit_fuel_l_per_km is not None:
+                fuel_l_per_km = explicit_fuel_l_per_km
             
             # Compute daily fixed use cost
             purchase_cost = self._safe_float(vehicle.get("acquisitionCost")) or 0.0
@@ -287,7 +323,7 @@ class ProblemBuilder:
                     battery_capacity_kwh=self._safe_float(vehicle.get("batteryKwh")),
                     energy_consumption_kwh_per_km=self._safe_float(vehicle.get("energyConsumption")),
                     fuel_tank_capacity_l=self._safe_float(vehicle.get("fuelTankL")),
-                    fuel_consumption_l_per_km=self._safe_float(vehicle.get("energyConsumption")),
+                    fuel_consumption_l_per_km=fuel_l_per_km,
                     fixed_use_cost_jpy=fixed_use_cost_jpy,
                 ),
             )
@@ -317,6 +353,7 @@ class ProblemBuilder:
                     reserve_soc=profile.battery_capacity_kwh * 0.1
                     if profile.battery_capacity_kwh
                     else None,
+                    fuel_consumption_l_per_km=profile.fuel_consumption_l_per_km,
                     fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )
             )
@@ -424,6 +461,16 @@ class ProblemBuilder:
         if not bev or bev.energy_consumption_kwh_per_km is None:
             return 0.0
         return distance_km * bev.energy_consumption_kwh_per_km
+
+    def _estimate_trip_fuel(self, distance_km: float, context: DispatchContext) -> float:
+        fuel_rates = [
+            profile.fuel_consumption_l_per_km
+            for profile in context.vehicle_profiles.values()
+            if profile.fuel_consumption_l_per_km is not None and profile.fuel_consumption_l_per_km > 0
+        ]
+        if not fuel_rates:
+            return 0.0
+        return distance_km * min(fuel_rates)
 
     def _build_chargers_from_scenario(
         self,

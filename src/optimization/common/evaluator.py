@@ -72,19 +72,24 @@ class CostEvaluator:
                 )
 
             for leg in duty.legs:
-                energy_cost += self._trip_energy_cost(problem, leg.trip.trip_id)
-                energy_cost += self._deadhead_energy_cost(
-                    problem,
-                    leg.deadhead_from_prev_min,
-                    leg.trip.departure_min,
-                )
+                # O1: apply fuel cost for non-electric powertrains.
+                if self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
+                    energy_cost += self._trip_fuel_cost(problem, duty.vehicle_type, leg.trip.trip_id)
+                    energy_cost += self._deadhead_fuel_cost(
+                        problem,
+                        duty.vehicle_type,
+                        leg.deadhead_from_prev_min,
+                    )
 
         slot_totals: Dict[int, float] = {}
         for slot in plan.charging_slots:
             net_kw = max(slot.charge_kw - slot.discharge_kw, 0.0)
             slot_totals[slot.slot_index] = slot_totals.get(slot.slot_index, 0.0) + net_kw
-        peak_demand_kw = max(slot_totals.values(), default=0.0)
-        demand_cost = weights.demand * peak_demand_kw
+        # O2: strict TOU charge energy cost with PV self-consumption.
+        energy_cost += self._charging_energy_cost(problem, slot_totals)
+
+        # O3: on/off peak demand charge.
+        demand_cost = self._demand_charge_cost(problem, slot_totals)
 
         baseline_map = self._trip_vehicle_type_map(problem.baseline_plan) if problem.baseline_plan else {}
         current_map = self._trip_vehicle_type_map(plan)
@@ -134,46 +139,100 @@ class CostEvaluator:
             total_cost=total_cost,
         )
 
-    def _trip_energy_cost(
+    def _trip_fuel_cost(
         self,
         problem: CanonicalOptimizationProblem,
+        vehicle_type: str,
         trip_id: str,
     ) -> float:
         trip = problem.trip_by_id().get(trip_id)
         if trip is None:
             return 0.0
 
-        slot_index = self._slot_index_for_departure(problem, trip.departure_min)
-        selected_buy_price = self._slot_buy_price(problem, slot_index)
-        selected_sell_price = self._slot_sell_price(problem, slot_index)
+        fuel_rate = self._fuel_rate_l_per_km(problem, vehicle_type)
+        fuel_l = max(trip.fuel_l, 0.0)
+        if fuel_l <= 0.0 and fuel_rate > 0.0:
+            fuel_l = max(trip.distance_km, 0.0) * fuel_rate
+        return max(problem.scenario.diesel_price_yen_per_l, 0.0) * fuel_l
 
-        timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
-        pv_kw_map = {slot.slot_index: slot.pv_available_kw for slot in problem.pv_slots}
-        pv_kw = pv_kw_map.get(slot_index, 0.0)
-        pv_kwh_available = max(pv_kw, 0.0) * timestep_h
-        pv_self_consumed_kwh = min(max(trip.energy_kwh, 0.0), pv_kwh_available)
-
-        # Self-consumed PV avoids buying from grid but forgoes sell-back revenue.
-        pv_credit = pv_self_consumed_kwh * max(selected_buy_price - selected_sell_price, 0.0)
-        return max(trip.energy_kwh * selected_buy_price - pv_credit, 0.0)
-
-    def _deadhead_energy_cost(
+    def _deadhead_fuel_cost(
         self,
         problem: CanonicalOptimizationProblem,
+        vehicle_type: str,
         deadhead_from_prev_min: int,
-        next_trip_departure_min: int,
     ) -> float:
-        if not problem.price_slots or deadhead_from_prev_min <= 0:
+        if deadhead_from_prev_min <= 0:
             return 0.0
 
-        deadhead_departure_min = max(0, next_trip_departure_min - deadhead_from_prev_min)
-        slot_index = self._slot_index_for_departure(problem, deadhead_departure_min)
-        price = self._slot_buy_price(problem, slot_index)
+        fuel_rate = self._fuel_rate_l_per_km(problem, vehicle_type)
+        if fuel_rate <= 0.0:
+            return 0.0
 
         avg_speed_kmph = 20.0
         distance_km = (deadhead_from_prev_min / 60.0) * avg_speed_kmph
-        energy_kwh = distance_km * 1.2
-        return max(energy_kwh * price, 0.0)
+        fuel_l = distance_km * fuel_rate
+        return max(problem.scenario.diesel_price_yen_per_l, 0.0) * fuel_l
+
+    def _charging_energy_cost(
+        self,
+        problem: CanonicalOptimizationProblem,
+        slot_totals_kw: Dict[int, float],
+    ) -> float:
+        if not slot_totals_kw:
+            return 0.0
+
+        timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
+        pv_kw_map = {slot.slot_index: slot.pv_available_kw for slot in problem.pv_slots}
+        total_cost = 0.0
+        for slot_idx, kw in slot_totals_kw.items():
+            buy_price = self._slot_buy_price(problem, slot_idx)
+            charge_kwh = max(kw, 0.0) * timestep_h
+            pv_kwh = max(pv_kw_map.get(slot_idx, 0.0), 0.0) * timestep_h
+            grid_kwh = max(charge_kwh - min(charge_kwh, pv_kwh), 0.0)
+            total_cost += grid_kwh * buy_price
+        return total_cost
+
+    def _demand_charge_cost(
+        self,
+        problem: CanonicalOptimizationProblem,
+        slot_totals_kw: Dict[int, float],
+    ) -> float:
+        if not slot_totals_kw:
+            return 0.0
+
+        price_slots = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
+        if not price_slots:
+            return 0.0
+
+        sorted_prices = sorted(price_slots.values())
+        threshold = sorted_prices[len(sorted_prices) // 2]
+        on_peak = [kw for idx, kw in slot_totals_kw.items() if price_slots.get(idx, 0.0) >= threshold]
+        off_peak = [kw for idx, kw in slot_totals_kw.items() if price_slots.get(idx, 0.0) < threshold]
+        w_on = max(on_peak, default=0.0)
+        w_off = max(off_peak, default=0.0)
+        return (
+            max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on
+            + max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off
+        )
+
+    def _is_non_electric_powertrain(
+        self,
+        vehicle_type: str,
+        vehicle_type_by_id: Dict[str, object],
+    ) -> bool:
+        vt = vehicle_type_by_id.get(vehicle_type)
+        powertrain = getattr(vt, "powertrain_type", "") if vt else ""
+        return str(powertrain).upper() not in {"BEV", "PHEV", "FCEV"}
+
+    def _fuel_rate_l_per_km(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle_type: str,
+    ) -> float:
+        vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type), None)
+        if vt and vt.fuel_consumption_l_per_km is not None:
+            return max(vt.fuel_consumption_l_per_km, 0.0)
+        return 0.0
 
     def _slot_buy_price(self, problem: CanonicalOptimizationProblem, slot_index: int) -> float:
         price_map = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}

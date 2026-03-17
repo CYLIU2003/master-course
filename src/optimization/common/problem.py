@@ -10,6 +10,8 @@ from src.dispatch.models import VehicleDuty
 class OptimizationMode(str, Enum):
     MILP = "milp"
     ALNS = "alns"
+    GA = "ga"
+    ABC = "abc"
     HYBRID = "hybrid"
 
 
@@ -24,6 +26,7 @@ class ProblemTrip:
     distance_km: float
     allowed_vehicle_types: Tuple[str, ...]
     energy_kwh: float = 0.0
+    fuel_l: float = 0.0
     service_id: Optional[str] = None
 
 
@@ -51,6 +54,7 @@ class ProblemVehicleType:
     charge_power_max_kw: Optional[float] = None
     discharge_power_max_kw: Optional[float] = None
     reserve_soc: Optional[float] = None
+    fuel_consumption_l_per_km: Optional[float] = None
     fixed_use_cost_jpy: float = 0.0
 
 
@@ -63,6 +67,7 @@ class ProblemVehicle:
     battery_capacity_kwh: Optional[float] = None
     reserve_soc: Optional[float] = None
     available: bool = True
+    fuel_consumption_l_per_km: Optional[float] = None
     fixed_use_cost_jpy: float = 0.0
 
 
@@ -117,6 +122,9 @@ class OptimizationScenario:
     horizon_start: Optional[str] = None
     horizon_end: Optional[str] = None
     timestep_min: int = 30
+    diesel_price_yen_per_l: float = 0.0
+    demand_charge_on_peak_yen_per_kw: float = 0.0
+    demand_charge_off_peak_yen_per_kw: float = 0.0
     fixed_operations_before_t0: Tuple[LockedOperation, ...] = ()
     uncertainty_flags: Mapping[str, bool] = field(default_factory=dict)
 

@@ -775,8 +775,12 @@ def _parse_optimization_mode(mode: str) -> OptimizationMode:
     normalized = (mode or "").strip().lower()
     if normalized in {"milp", "mode_milp_only", "exact"}:
         return OptimizationMode.MILP
-    if normalized in {"alns", "mode_alns_only", "heuristic", "ga", "abc"}:
+    if normalized in {"alns", "mode_alns_only", "heuristic"}:
         return OptimizationMode.ALNS
+    if normalized in {"ga", "mode_ga_only"}:
+        return OptimizationMode.GA
+    if normalized in {"abc", "mode_abc_only"}:
+        return OptimizationMode.ABC
     return OptimizationMode.HYBRID
 
 
@@ -792,8 +796,8 @@ def _normalize_solver_mode(mode: str) -> str:
         "alns": "mode_alns_only",
         "heuristic": "mode_alns_only",
         "hybrid": "mode_alns_milp",
-        "ga": "mode_alns_only",
-        "abc": "mode_alns_only",
+        "ga": "mode_ga_only",
+        "abc": "mode_abc_only",
     }
     return alias_map.get(normalized, mode)
 
