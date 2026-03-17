@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
+from src.value_normalization import normalize_for_python
 
 
 log = logging.getLogger("run_prep")
@@ -79,7 +80,7 @@ def _as_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     if frame.empty:
         return []
     return [
-        {str(key): value for key, value in record.items()}
+        {str(key): normalize_for_python(value) for key, value in record.items()}
         for record in frame.to_dict(orient="records")
     ]
 
@@ -462,7 +463,7 @@ def _build_run_preparation(
             warnings.append("Prepared input was assembled from Tokyu shard runtime artifacts.")
 
         prepared_input_id = _prepared_input_id(scenario_hash)
-        solver_input = _build_canonical_input(
+        solver_input = normalize_for_python(_build_canonical_input(
             scenario=scenario,
             prepared_input_id=prepared_input_id,
             scenario_id=scenario_id,
@@ -472,7 +473,7 @@ def _build_run_preparation(
             trips_df=trips_df,
             timetables_df=timetables_df,
             stops=stops,
-        )
+        ))
         scenario_dir = _prepared_input_dir(scenarios_dir, scenario_id)
         scenario_dir.mkdir(parents=True, exist_ok=True)
         solver_input_path = scenario_dir / f"{prepared_input_id}.json"

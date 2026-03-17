@@ -13,7 +13,8 @@ import traceback
 import json
 import threading
 import multiprocessing
-from concurrent.futures import Future, ProcessPoolExecutor
+import os
+from concurrent.futures import Executor, Future, ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -49,7 +50,7 @@ from src.optimization.rolling.reoptimizer import RollingReoptimizer
 from src.pipeline.solve import solve_problem_data
 
 router = APIRouter(tags=["optimization"])
-_OPTIMIZATION_EXECUTOR: Optional[ProcessPoolExecutor] = None
+_OPTIMIZATION_EXECUTOR: Optional[Executor] = None
 _OPTIMIZATION_FUTURE: Optional[Future[Any]] = None
 _OPTIMIZATION_FUTURE_LOCK = threading.RLock()
 
@@ -103,7 +104,7 @@ def _optimization_capabilities() -> Dict[str, Any]:
         ],
         "supports_reoptimization": True,
         "max_concurrent_jobs": 1,
-        "execution_model": "process_pool",
+        "execution_model": f"{_executor_mode()}_pool",
         "notes": [
             "Optimization runs against canonical ProblemData built from the scenario snapshot.",
             "Dispatch artifacts can be rebuilt before solve when requested.",
@@ -114,14 +115,25 @@ def _optimization_capabilities() -> Dict[str, Any]:
     }
 
 
-def _get_optimization_executor() -> ProcessPoolExecutor:
+def _executor_mode() -> str:
+    mode = (os.getenv("BFF_OPT_EXECUTOR") or "").strip().lower()
+    if mode in {"process", "thread"}:
+        return mode
+    # Windows + spawn で worker が即死するケースがあるため既定は thread。
+    return "thread" if os.name == "nt" else "process"
+
+
+def _get_optimization_executor() -> Executor:
     global _OPTIMIZATION_EXECUTOR
     with _OPTIMIZATION_FUTURE_LOCK:
         if _OPTIMIZATION_EXECUTOR is None:
-            _OPTIMIZATION_EXECUTOR = ProcessPoolExecutor(
-                max_workers=1,
-                mp_context=multiprocessing.get_context("spawn"),
-            )
+            if _executor_mode() == "thread":
+                _OPTIMIZATION_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+            else:
+                _OPTIMIZATION_EXECUTOR = ProcessPoolExecutor(
+                    max_workers=1,
+                    mp_context=multiprocessing.get_context("spawn"),
+                )
     return _OPTIMIZATION_EXECUTOR
 
 
@@ -469,6 +481,7 @@ def _run_optimization(
     alns_iterations: int,
 ) -> None:
     try:
+        solver_mode = _normalize_solver_mode(mode)
         job_store.update_job(
             job_id,
             status="running",
@@ -530,7 +543,7 @@ def _run_optimization(
             scenario,
             depot_id=depot_id,
             service_id=service_id,
-            mode=mode,
+            mode=solver_mode,
             use_existing_duties=use_existing_duties,
             analysis_scope=store.get_dispatch_scope(scenario_id),
         )
@@ -572,7 +585,7 @@ def _run_optimization(
         )
         solve_output = solve_problem_data(
             data,
-            mode=mode,
+            mode=solver_mode,
             time_limit_seconds=time_limit_seconds,
             mip_gap=mip_gap,
             random_seed=random_seed,
@@ -625,6 +638,7 @@ def _run_optimization(
             "scope": {"serviceId": service_id, "depotId": depot_id},
             "solver_status": result_payload["status"],
             "mode": mode,
+            "solver_mode": solver_mode,
             "objective_mode": objective_mode,
             "objective_value": result_payload.get("objective_value"),
             "solve_time_seconds": result_payload.get("solve_time_seconds", 0.0),
@@ -681,6 +695,7 @@ def _run_optimization(
             "warnings": build_report.warnings,
             "errors": build_report.errors,
             "solver_mode": mode,
+            "solver_mode_effective": solver_mode,
             "time_limit": time_limit_seconds,
             "mip_gap": mip_gap,
             "random_seed": random_seed,
@@ -767,6 +782,20 @@ def _parse_optimization_mode(mode: str) -> OptimizationMode:
 
 def _parse_mode(mode: str) -> OptimizationMode:
     return _parse_optimization_mode(mode)
+
+
+def _normalize_solver_mode(mode: str) -> str:
+    normalized = (mode or "").strip().lower()
+    alias_map = {
+        "milp": "mode_milp_only",
+        "exact": "mode_milp_only",
+        "alns": "mode_alns_only",
+        "heuristic": "mode_alns_only",
+        "hybrid": "mode_alns_milp",
+        "ga": "mode_alns_only",
+        "abc": "mode_alns_only",
+    }
+    return alias_map.get(normalized, mode)
 
 
 def _apply_reoptimization_inputs(
