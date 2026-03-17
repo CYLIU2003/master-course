@@ -128,6 +128,9 @@ def build_milp_model(
         }
 
     model = gp.Model("ebus_milp")
+    # Long route/trip identifiers can exceed Gurobi's 255-char name limit.
+    # Ignore explicit variable/constraint names to keep model construction robust.
+    model.Params.IgnoreNames = 1
 
     K_ALL = ms.K_ALL
     K_BEV = ms.K_BEV

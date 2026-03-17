@@ -285,6 +285,8 @@ class App:
         self.scope_selected_route_ids: set[str] = set()
         self.scope_tree_depot_item_ids: dict[str, str] = {}
         self.scope_tree_route_item_ids: dict[str, str] = {}
+        self.compare_scenario_a_var = tk.StringVar(value="")
+        self.compare_scenario_b_var = tk.StringVar(value="")
 
         self._build_ui()
 
@@ -479,6 +481,23 @@ class App:
         ttk.Button(info_btn_row, text="機能情報", command=self.show_capabilities).pack(side=tk.LEFT, padx=4)
         ttk.Button(info_btn_row, text="Simulation結果", command=self.show_simulation_result).pack(side=tk.LEFT, padx=4)
         ttk.Button(info_btn_row, text="Optimization結果", command=self.show_optimization_result).pack(side=tk.LEFT, padx=4)
+
+        compare = ttk.LabelFrame(ops, text="Scenario Compare", padding=6)
+        compare.pack(fill=tk.X, pady=4)
+        row = ttk.Frame(compare)
+        row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="Scenario A", width=16).pack(side=tk.LEFT)
+        self.compare_a_combo = ttk.Combobox(row, state="readonly", textvariable=self.compare_scenario_a_var)
+        self.compare_a_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        row2 = ttk.Frame(compare)
+        row2.pack(fill=tk.X, pady=2)
+        ttk.Label(row2, text="Scenario B", width=16).pack(side=tk.LEFT)
+        self.compare_b_combo = ttk.Combobox(row2, state="readonly", textvariable=self.compare_scenario_b_var)
+        self.compare_b_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        row3 = ttk.Frame(compare)
+        row3.pack(fill=tk.X, pady=4)
+        ttk.Button(row3, text="Optimization比較", command=self.compare_optimization_results).pack(side=tk.LEFT, padx=4)
+        ttk.Button(row3, text="Simulation比較", command=self.compare_simulation_results).pack(side=tk.LEFT, padx=4)
 
     def _build_fleet_panel(self, parent: ttk.Frame) -> None:
         panel = ttk.Notebook(parent)
@@ -1208,10 +1227,203 @@ class App:
             self.scenarios = list(resp.get("items") or [])
             labels = [f"{i.get('name', '(名称なし)')} [{i.get('id', '')}]" for i in self.scenarios]
             self.scenario_combo["values"] = labels
+            self.compare_a_combo["values"] = labels
+            self.compare_b_combo["values"] = labels
             if labels:
                 self.scenario_combo.current(0)
                 self.on_scenario_changed()
+                if not self.compare_scenario_a_var.get():
+                    self.compare_a_combo.current(0)
+                if len(labels) > 1 and not self.compare_scenario_b_var.get():
+                    self.compare_b_combo.current(1)
+                elif len(labels) == 1 and not self.compare_scenario_b_var.get():
+                    self.compare_b_combo.current(0)
             self.log_line(f"シナリオ取得: {len(self.scenarios)} 件")
+
+        self.run_bg(action, done)
+
+    @staticmethod
+    def _extract_id_from_label(label: str) -> str:
+        text = str(label or "").strip()
+        if not text:
+            return ""
+        if "[" not in text or "]" not in text:
+            return ""
+        return text.rsplit("[", 1)[-1].rstrip("]").strip()
+
+    def _compare_ids(self) -> tuple[str, str]:
+        scenario_a = self._extract_id_from_label(self.compare_scenario_a_var.get())
+        scenario_b = self._extract_id_from_label(self.compare_scenario_b_var.get())
+        return scenario_a, scenario_b
+
+    @staticmethod
+    def _pick_number(*values: Any) -> float | None:
+        for value in values:
+            if value is None:
+                continue
+            try:
+                return float(value)
+            except Exception:
+                continue
+        return None
+
+    @staticmethod
+    def _pick_text(*values: Any) -> str:
+        for value in values:
+            text = str(value or "").strip()
+            if text:
+                return text
+        return ""
+
+    def _extract_result_summary(self, resp: dict[str, Any]) -> dict[str, Any]:
+        solver_result = dict(resp.get("solver_result") or {})
+        kpi = dict(resp.get("kpi") or {})
+        costs = dict(resp.get("cost_breakdown") or {})
+        summary = {
+            "status": self._pick_text(resp.get("status"), solver_result.get("status"), "unknown"),
+            "objective": self._pick_number(resp.get("objective_value"), solver_result.get("objective_value")),
+            "solve_time_seconds": self._pick_number(
+                solver_result.get("solve_time_seconds"),
+                kpi.get("solve_time_sec"),
+                resp.get("solve_time_seconds"),
+            ),
+            "unmet_trips": self._pick_number(kpi.get("unmet_trips"), resp.get("unmet_trips")),
+            "energy_cost": self._pick_number(
+                costs.get("total_energy_cost"),
+                costs.get("energy_cost"),
+                resp.get("total_energy_cost"),
+            ),
+            "fuel_cost": self._pick_number(
+                costs.get("total_fuel_cost"),
+                costs.get("fuel_cost"),
+                resp.get("total_fuel_cost"),
+            ),
+            "demand_charge": self._pick_number(
+                costs.get("total_demand_charge"),
+                costs.get("demand_charge"),
+                resp.get("total_demand_charge"),
+            ),
+        }
+        return summary
+
+    def _open_kv_window(self, title: str, data: dict[str, Any]) -> None:
+        win = tk.Toplevel(self.root)
+        win.title(title)
+        win.geometry("860x620")
+        notebook = ttk.Notebook(win)
+        notebook.pack(fill=tk.BOTH, expand=True)
+
+        summary_tab = ttk.Frame(notebook, padding=6)
+        details_tab = ttk.Frame(notebook, padding=6)
+        raw_tab = ttk.Frame(notebook, padding=6)
+        notebook.add(summary_tab, text="Summary")
+        notebook.add(details_tab, text="Details")
+        notebook.add(raw_tab, text="Raw JSON")
+
+        summary_tree = ttk.Treeview(summary_tab, columns=("key", "value"), show="headings")
+        summary_tree.heading("key", text="key")
+        summary_tree.heading("value", text="value")
+        summary_tree.column("key", width=260, anchor="w")
+        summary_tree.column("value", width=540, anchor="w")
+        summary_tree.pack(fill=tk.BOTH, expand=True)
+
+        summary = self._extract_result_summary(data)
+        for key, value in summary.items():
+            summary_tree.insert("", tk.END, values=(key, "" if value is None else value))
+
+        detail_tree = ttk.Treeview(details_tab, columns=("section", "key", "value"), show="headings")
+        detail_tree.heading("section", text="section")
+        detail_tree.heading("key", text="key")
+        detail_tree.heading("value", text="value")
+        detail_tree.column("section", width=160, anchor="w")
+        detail_tree.column("key", width=220, anchor="w")
+        detail_tree.column("value", width=420, anchor="w")
+        detail_tree.pack(fill=tk.BOTH, expand=True)
+
+        for section in ("kpi", "cost_breakdown", "solver_result"):
+            block = data.get(section)
+            if isinstance(block, dict):
+                for key, value in block.items():
+                    if isinstance(value, (dict, list, tuple)):
+                        shown = json.dumps(value, ensure_ascii=False, default=str)
+                    else:
+                        shown = value
+                    detail_tree.insert("", tk.END, values=(section, key, shown))
+
+        raw = ScrolledText(raw_tab)
+        raw.pack(fill=tk.BOTH, expand=True)
+        raw.insert(tk.END, json.dumps(data, ensure_ascii=False, indent=2, default=str))
+        raw.configure(state="disabled")
+
+    def _open_compare_window(self, title: str, scenario_a: str, scenario_b: str, a_data: dict[str, Any], b_data: dict[str, Any]) -> None:
+        a_summary = self._extract_result_summary(a_data)
+        b_summary = self._extract_result_summary(b_data)
+
+        win = tk.Toplevel(self.root)
+        win.title(title)
+        win.geometry("980x620")
+
+        tree = ttk.Treeview(win, columns=("metric", "scenario_a", "scenario_b", "delta"), show="headings")
+        tree.heading("metric", text="metric")
+        tree.heading("scenario_a", text=f"A: {scenario_a}")
+        tree.heading("scenario_b", text=f"B: {scenario_b}")
+        tree.heading("delta", text="delta(B-A)")
+        tree.column("metric", width=260, anchor="w")
+        tree.column("scenario_a", width=230, anchor="w")
+        tree.column("scenario_b", width=230, anchor="w")
+        tree.column("delta", width=220, anchor="w")
+        tree.pack(fill=tk.BOTH, expand=True)
+
+        metrics = [
+            "status",
+            "objective",
+            "solve_time_seconds",
+            "unmet_trips",
+            "energy_cost",
+            "fuel_cost",
+            "demand_charge",
+        ]
+        for key in metrics:
+            av = a_summary.get(key)
+            bv = b_summary.get(key)
+            delta: Any = ""
+            if isinstance(av, (int, float)) and isinstance(bv, (int, float)):
+                delta = float(bv) - float(av)
+            tree.insert("", tk.END, values=(key, av, bv, delta))
+
+    def compare_optimization_results(self) -> None:
+        scenario_a, scenario_b = self._compare_ids()
+        if not scenario_a or not scenario_b:
+            messagebox.showwarning("入力不足", "比較する2つのシナリオを選択してください")
+            return
+
+        def action() -> dict[str, Any]:
+            return {
+                "a": self.client.get_optimization_result(scenario_a),
+                "b": self.client.get_optimization_result(scenario_b),
+            }
+
+        def done(resp: dict[str, Any]) -> None:
+            self._open_compare_window("Optimization Compare", scenario_a, scenario_b, resp.get("a") or {}, resp.get("b") or {})
+            self.log_line(f"Optimization比較を表示: A={scenario_a}, B={scenario_b}")
+
+        self.run_bg(action, done)
+
+    def compare_simulation_results(self) -> None:
+        scenario_a, scenario_b = self._compare_ids()
+        if not scenario_a or not scenario_b:
+            messagebox.showwarning("入力不足", "比較する2つのシナリオを選択してください")
+            return
+
+        def action() -> dict[str, Any]:
+            return {
+                "a": self.client.get_simulation_result(scenario_a),
+                "b": self.client.get_simulation_result(scenario_b),
+            }
+
+        def done(resp: dict[str, Any]) -> None:
+            self._open_compare_window("Simulation Compare", scenario_a, scenario_b, resp.get("a") or {}, resp.get("b") or {})
+            self.log_line(f"Simulation比較を表示: A={scenario_a}, B={scenario_b}")
 
         self.run_bg(action, done)
 
@@ -1840,13 +2052,8 @@ class App:
             return
 
         def done(resp: dict[str, Any]) -> None:
-            summary = {
-                "status": resp.get("status"),
-                "objective": resp.get("objective_value"),
-                "cost_breakdown": resp.get("cost_breakdown"),
-                "kpi": resp.get("kpi"),
-            }
-            self.log_line("Simulation結果: " + json.dumps(summary, ensure_ascii=False))
+            self._open_kv_window(f"Simulation結果: {scenario_id}", resp)
+            self.log_line("Simulation結果を詳細ウィンドウで表示しました")
 
         self.run_bg(lambda: self.client.get_simulation_result(scenario_id), done)
 
@@ -1857,13 +2064,8 @@ class App:
             return
 
         def done(resp: dict[str, Any]) -> None:
-            summary = {
-                "status": resp.get("status"),
-                "objective": resp.get("objective_value"),
-                "cost_breakdown": resp.get("cost_breakdown"),
-                "kpi": resp.get("kpi"),
-            }
-            self.log_line("Optimization結果: " + json.dumps(summary, ensure_ascii=False))
+            self._open_kv_window(f"Optimization結果: {scenario_id}", resp)
+            self.log_line("Optimization結果を詳細ウィンドウで表示しました")
 
         self.run_bg(lambda: self.client.get_optimization_result(scenario_id), done)
 

@@ -132,6 +132,8 @@ python tools/scenario_backup_tk.py
 - Windowsでは最適化実行器の既定が thread です。
 - 必要に応じて環境変数 BFF_OPT_EXECUTOR で process へ切替できます。
 - ポート衝突時は 8000 以外のポートで起動し、Tkinter側の接続先を合わせてください。
+- `mode_milp_only` で `ERROR: Name too long (maximum name length is 255 characters)` が出る場合は、MILP変数名長が原因です。
+  2026-03-17時点で `src/optimization/milp/solver_adapter.py` は長い可読名を使わず自動命名に変更済みです。
 
 ## 9. 完成判定チェック
 
@@ -147,7 +149,7 @@ python tools/scenario_backup_tk.py
 実装上の完全対応・部分対応・未対応を分けて明記します。
 GA/ABC は独立モードとして起動し、評価器は ALNS と同一の `src/optimization/common/evaluator.py` を共有します。
 
-### 10.1 記号・実装変数 対応表
+### 10.1 記号・実装変数 対応表（制約式で使う主変数）
 
 | 数式記号 | 意味 | 実装変数（主） | 実装場所 |
 |---|---|---|---|
@@ -162,10 +164,71 @@ GA/ABC は独立モードとして起動し、評価器は ALNS と同一の `sr
 | $s_{k,t}$ | SOC（kWh） | `s_var[(vehicle_id, slot_idx)]` | src/optimization/milp/solver_adapter.py |
 | $g_t$ | 系統買電量 | `g_var[slot_idx]` | src/optimization/milp/solver_adapter.py |
 | $pv_t^{ch}$ | PV自家消費 | `pv_ch_var[slot_idx]` | src/optimization/milp/solver_adapter.py |
+| $\bar{p}_t$ | スロット平均需要電力 | `p_avg_var[slot_idx]` | src/optimization/milp/solver_adapter.py |
 | $W^{on}, W^{off}$ | 需要電力ピーク | `w_on_var`, `w_off_var` | src/optimization/milp/solver_adapter.py |
 | $\\mathcal{A}$ | 可行接続アーク集合 | `problem.feasible_connections` 由来の `arc_pairs` | src/optimization/milp/model_builder.py |
 | $e_k(j)$ | 便走行エネルギー | `trip.energy_kwh` | src/optimization/milp/solver_adapter.py |
 | $P^{contract}$ | 契約電力上限 | `contract_limit_kw`（depot import limit由来） | src/optimization/milp/solver_adapter.py |
+
+### 10.1.1 実装変数一覧（制約式・目的関数・後処理で使用）
+
+以下は `src/optimization/milp/solver_adapter.py` の `GurobiMILPAdapter.solve()` 内で使用される変数を、用途別に網羅した一覧です。
+
+| 区分 | 変数名 | 用途 |
+|---|---|---|
+| モデル/前処理 | `model` | Gurobiモデル本体 |
+| モデル/前処理 | `builder` | MILP用の接続候補生成ヘルパ |
+| モデル/前処理 | `trip_by_id` | 便ID→便オブジェクト参照 |
+| モデル/前処理 | `dispatch_trip_by_id` | dispatch trip参照 |
+| モデル/前処理 | `assignment_pairs` | `(vehicle_id, trip_id)` 候補集合 |
+| モデル/前処理 | `arc_pairs` | `(vehicle_id, from_trip_id, to_trip_id)` 候補集合 |
+| 決定変数 | `y` | 便被覆（二値） |
+| 決定変数 | `x` | 便間接続アーク（二値） |
+| 決定変数 | `start_arc` | 便鎖開始フラグ（二値） |
+| 決定変数 | `end_arc` | 便鎖終端フラグ（二値） |
+| 決定変数 | `unserved` | 未充足便フラグ（二値） |
+| 決定変数 | `used_vehicle` | 車両使用フラグ（二値） |
+| 充放電/SOC変数 | `c_var` | 充電電力（連続） |
+| 充放電/SOC変数 | `d_var` | 放電電力（連続） |
+| 充放電/SOC変数 | `s_var` | SOC（連続） |
+| 系統/PV/需要変数 | `g_var` | 系統買電量（連続） |
+| 系統/PV/需要変数 | `pv_ch_var` | PV自己消費量（連続） |
+| 系統/PV/需要変数 | `p_avg_var` | 平均需要電力（連続） |
+| 系統/PV/需要変数 | `w_on_var` | オンピーク最大需要（連続） |
+| 系統/PV/需要変数 | `w_off_var` | オフピーク最大需要（連続） |
+| 集合/インデックス | `bev_ids` | BEV/PHEV/FCEV車両ID集合 |
+| 集合/インデックス | `slot_indices` | 時間スロットID集合 |
+| 集合/インデックス | `outgoing_by_node` | ノード別出アーク辞書 |
+| 集合/インデックス | `incoming_by_node` | ノード別入アーク辞書 |
+| 制約中間式 | `assign_terms` | C1被覆制約の左辺和 |
+| 制約中間式 | `incoming`, `outgoing` | C2流量保存の入出流量 |
+| 制約中間式 | `vehicle_terms_start`, `vehicle_terms_end` | C3始終点回数制約用リスト |
+| 制約中間式 | `trip_energy_expr` | C7便走行消費エネルギー式 |
+| 制約中間式 | `deadhead_energy_expr` | C8 deadhead消費エネルギー式 |
+| 制約中間式 | `running_expr` | C12走行中フラグ相当式 |
+| 制約中間式 | `charge_kwh_expr` | C15充電電力量合計式 |
+| 制約パラメータ | `timestep_h` | 時間刻み（hour） |
+| 制約パラメータ | `cap` | 車両バッテリー容量 |
+| 制約パラメータ | `soc_min` | SOC下限 |
+| 制約パラメータ | `charge_max_kw` | 車両充電上限 |
+| 制約パラメータ | `discharge_max_kw` | 車両放電上限 |
+| 制約パラメータ | `initial_kwh` | 初期SOC（kWh換算） |
+| 制約パラメータ | `total_kw` | 全充電器の総kW上限 |
+| 制約パラメータ | `pv_by_slot` | スロット別PV上限辞書 |
+| 制約パラメータ | `contract_limit_kw` | 契約電力上限 |
+| 制約パラメータ | `price_values`, `median_price` | C20/C21のピーク帯判定用 |
+| 目的関数構成 | `objective` | 目的関数線形式 |
+| 目的関数構成 | `price_by_slot` | TOU単価辞書 |
+| 目的関数構成 | `diesel_price` | 燃料単価 |
+| 目的関数構成 | `fuel_l` | 便ごとの燃料消費量 |
+| 目的関数構成 | `fuel_rate` | deadhead燃費係数 |
+| 目的関数構成 | `deadhead_min`, `deadhead_km` | deadhead時間/距離 |
+| 目的関数構成 | `unserved_penalty_weight` | 未充足ペナルティ係数 |
+| 求解結果/後処理 | `status_map`, `solver_status` | Gurobi終了ステータス正規化 |
+| 求解結果/後処理 | `empty` | 解なし時の空割当プラン |
+| 求解結果/後処理 | `duties`, `legs` | 出力行路構築 |
+| 求解結果/後処理 | `served_trip_ids`, `served_set`, `unserved_trip_ids` | 供給/未供給便集計 |
+| 求解結果/後処理 | `plan` | 最終 `AssignmentPlan` |
 
 ### 10.2 制約式 C1-C21 と実装対応
 
@@ -220,6 +283,65 @@ $$
   - O1: ICE燃料費（便 + deadhead）
   - O2: TOU買電費（充電スロット別、PV自己消費差引き）
   - O3: デマンド料金（オン/オフピーク最大需要）
+
+### 10.3.2 ALNS / GA / ABC（evaluator.py）変数一覧
+
+以下は `src/optimization/common/evaluator.py` の `CostEvaluator.evaluate()` と関連メソッドで使用する変数の一覧です。
+
+| 区分 | 変数名 | 用途 |
+|---|---|---|
+| 入力 | `problem` | 正規化済み問題（シナリオ/車両/便/価格帯） |
+| 入力 | `plan` | ALNS/GA/ABC が生成した割当・充放電計画 |
+| 固定パラメータ | `prep_time_min` | 乗務員準備時間（分） |
+| 固定パラメータ | `wage_regular_jpy_per_h` | 通常時給 |
+| 固定パラメータ | `regular_hours_per_day` | 所定労働時間 |
+| 固定パラメータ | `overtime_factor` | 残業割増係数 |
+| 重み | `weights` | 目的重み（vehicle/unserved/deviation等） |
+| コスト集計 | `vehicle_cost` | 車両固定費累積 |
+| コスト集計 | `driver_cost` | 乗務員費累積 |
+| コスト集計 | `energy_cost` | 燃料費+買電費累積 |
+| コスト集計 | `demand_cost` | デマンド費累積 |
+| 参照辞書 | `vehicle_by_id` | `vehicle_id -> vehicle` |
+| 参照辞書 | `vehicle_type_by_id` | `vehicle_type_id -> vehicle_type` |
+| ループ変数 | `duty` | 行路単位の走査変数 |
+| ループ変数 | `leg` | 行路内の便レッグ |
+| 中間変数 | `v_type` | 車両タイプ情報 |
+| 中間変数 | `fixed_use_cost` | 行路に対する固定車両費 |
+| 中間変数 | `first_trip`, `last_trip` | 行路先頭/末尾便 |
+| 中間変数 | `duty_duration_min` | 行路所要時間（分） |
+| 中間変数 | `total_hours` | 準備時間込み拘束時間（h） |
+| 中間変数 | `regular_hours`, `overtime_hours` | 通常/残業時間 |
+| 充放電集約 | `slot_totals` | `slot_index -> net_kw` |
+| 充放電集約 | `slot` | `plan.charging_slots` の要素 |
+| 充放電集約 | `net_kw` | 各スロット純充電電力 |
+| O3関連 | `demand_cost` | `_demand_charge_cost()` の戻り値 |
+| スイッチ関連 | `baseline_map` | 基準計画の trip->vehicle_type |
+| スイッチ関連 | `current_map` | 現計画の trip->vehicle_type |
+| スイッチ関連 | `switch_count` | 車種切替件数 |
+| スイッチ関連 | `switch_cost` | 切替ペナルティ費 |
+| 劣化関連 | `slot_hours` | 1スロット時間（h） |
+| 劣化関連 | `degradation_cycles` | 劣化サイクル推定量 |
+| 劣化関連 | `vehicle` | 充放電スロット対応車両 |
+| 劣化関連 | `capacity_kwh` | 車両電池容量 |
+| 劣化関連 | `charged_kwh` | スロット内充電量 |
+| 劣化関連 | `degradation_cost` | 劣化費 |
+| 未充足関連 | `unserved_penalty` | 未配車ペナルティ |
+| 乖離関連 | `baseline_ids` | 基準計画の配車便集合 |
+| 乖離関連 | `deviation_count` | 対基準差分便数 |
+| 乖離関連 | `deviation_cost` | 乖離ペナルティ |
+| 合算 | `total_cost` | 最終評価値 |
+| 戻り値 | `CostBreakdown(...)` | 各コスト内訳を返すデータクラス |
+
+補助メソッド側の主要変数:
+
+| メソッド | 変数名 | 用途 |
+|---|---|---|
+| `_trip_fuel_cost` | `trip`, `fuel_rate`, `fuel_l` | 便ごとの燃料費算出 |
+| `_deadhead_fuel_cost` | `deadhead_from_prev_min`, `distance_km`, `fuel_l` | deadhead燃料費算出 |
+| `_charging_energy_cost` | `timestep_h`, `pv_kw_map`, `slot_idx`, `buy_price`, `charge_kwh`, `pv_kwh`, `grid_kwh`, `total_cost` | TOU買電費算出 |
+| `_demand_charge_cost` | `price_slots`, `sorted_prices`, `threshold`, `on_peak`, `off_peak`, `w_on`, `w_off` | オン/オフピークデマンド費算出 |
+| `_slot_buy_price` | `price_map`, `selected_price`, `nearest_slot` | スロット単価補間 |
+| `_trip_vehicle_type_map` | `mapping`, `trip_id` | 便→車種写像作成 |
 
 ### 10.4 実装上の重要補足
 

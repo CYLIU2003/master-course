@@ -1431,3 +1431,16 @@ master-course/
   - 確認:
     - `python -m pytest tests/test_bff_scenario_store.py tests/test_bff_research_scenario_bootstrap.py -q` → 26 passed
     - `TestClient(bff.main:app)` 経由の `GET /api/scenarios/e2379614-2885-40c4-b064-6982bdf57e31` → 200
+
+- 2026-03-17 (Solver mode benchmark script + Tk compare/results parity)
+  - `scripts/benchmark_solver_modes.py` を追加し、`mode_milp_only` / `mode_alns_only` / `ga` / `abc` をBFF API経由で順次実行して、runtime/objective比較をJSON/CSV出力できるようにした。
+  - 比較値は top-level だけでなく `solver_result.objective_value` / `solver_result.solve_time_seconds` を優先参照する実装にした。
+  - `tools/scenario_backup_tk.py` に以下を追加した。
+    - 結果詳細ビュー: Simulation/Optimization結果を Summary/Details/Raw JSON で表示。
+    - シナリオ比較ビュー: Scenario A/B の Optimization比較・Simulation比較を表示し、主要指標の `delta(B-A)` を確認可能にした。
+  - 運用手順書として `readme_operation.md` を追加し、比較実行コマンドと確認項目を明文化した。
+
+- 2026-03-17 (MILP only ERROR pinpoint fix)
+  - `mode_milp_only` 実行時の `solver_result.infeasibility_info = "Name too long (maximum name length is 255 characters)"` を確認。
+  - 原因は `src/optimization/milp/solver_adapter.py` の Gurobi 変数名に `vehicle_id/trip_id` を長文字列で埋め込んでいたこと。
+  - 対策として MILP変数生成時の `name=...` 指定を除去し、自動命名へ変更して名称長制限を回避した。

@@ -478,7 +478,7 @@ def _build_run_preparation(
         scenario_dir.mkdir(parents=True, exist_ok=True)
         solver_input_path = scenario_dir / f"{prepared_input_id}.json"
         solver_input_path.write_text(
-            json.dumps(solver_input, ensure_ascii=False, indent=2),
+            json.dumps(solver_input, ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",
         )
         return RunPreparation(

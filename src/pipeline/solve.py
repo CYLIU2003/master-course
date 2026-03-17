@@ -535,6 +535,14 @@ def solve_problem_data(
             method = "ALNS"
             result, alns_params_used = _solve_alns_core(cfg, data, ms, dp)
             alns_time = result.solve_time_sec
+        elif run_mode == "mode_ga_only":
+            method = "GA"
+            result, alns_params_used = _solve_alns_core(cfg, data, ms, dp)
+            alns_time = result.solve_time_sec
+        elif run_mode == "mode_abc_only":
+            method = "ABC"
+            result, alns_params_used = _solve_alns_core(cfg, data, ms, dp)
+            alns_time = result.solve_time_sec
         elif run_mode == "mode_alns_milp":
             method = "ALNS+MILP"
             result, _alns_r, _milp_r, alns_time, milp_time, alns_params_used = (

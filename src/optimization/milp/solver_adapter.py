@@ -93,35 +93,29 @@ class GurobiMILPAdapter:
 
         y: Dict[Tuple[str, str], Any] = {}
         for vehicle_id, trip_id in assignment_pairs:
-            y[(vehicle_id, trip_id)] = model.addVar(
-                vtype=GRB.BINARY,
-                name=f"y[{vehicle_id},{trip_id}]",
-            )
+            y[(vehicle_id, trip_id)] = model.addVar(vtype=GRB.BINARY)
 
         x: Dict[Tuple[str, str, str], Any] = {
-            (vehicle_id, from_trip_id, to_trip_id): model.addVar(
-                vtype=GRB.BINARY,
-                name=f"x[{vehicle_id},{from_trip_id},{to_trip_id}]",
-            )
+            (vehicle_id, from_trip_id, to_trip_id): model.addVar(vtype=GRB.BINARY)
             for vehicle_id, from_trip_id, to_trip_id in arc_pairs
         }
 
         start_arc: Dict[Tuple[str, str], Any] = {
-            (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY, name=f"start[{vehicle_id},{trip_id}]")
+            (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
             for vehicle_id, trip_id in assignment_pairs
         }
         end_arc: Dict[Tuple[str, str], Any] = {
-            (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY, name=f"end[{vehicle_id},{trip_id}]")
+            (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
             for vehicle_id, trip_id in assignment_pairs
         }
 
         unserved: Dict[str, Any] = {
-            trip.trip_id: model.addVar(vtype=GRB.BINARY, name=f"u[{trip.trip_id}]")
+            trip.trip_id: model.addVar(vtype=GRB.BINARY)
             for trip in problem.trips
         }
 
         used_vehicle: Dict[str, Any] = {
-            vehicle.vehicle_id: model.addVar(vtype=GRB.BINARY, name=f"z[{vehicle.vehicle_id}]")
+            vehicle.vehicle_id: model.addVar(vtype=GRB.BINARY)
             for vehicle in problem.vehicles
         }
 

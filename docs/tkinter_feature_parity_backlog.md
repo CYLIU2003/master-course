@@ -51,7 +51,12 @@ Tkinter parity status notes
   - Full planning 3-pane parity (map/node views)
   - Dedicated results views parity (dispatch/energy/cost detailed pages)
   - Compare workflow parity
-  - Public data explorer parity
+
+Scope decision (2026-03-17)
+- Public data explorer parity is out of scope for the current migration phase.
+- Prioritize only:
+  - Result detail inspectability parity
+  - Scenario compare workflow parity
 
 Non-negotiable migration rule
 - Do not drop backend endpoints, schema fields, or config/data artifacts that are currently consumed by non-Tk frontend routes unless equivalent Tkinter capability is implemented and verified.
