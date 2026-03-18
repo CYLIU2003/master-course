@@ -497,6 +497,11 @@ class App:
         ttk.Button(btn_row, text="Prepared実行", command=self.run_prepared).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_row, text="最適化実行", command=self.run_optimization).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_row, text="再最適化", command=self.run_reoptimize).pack(side=tk.LEFT, padx=4)
+        ttk.Label(
+            ops,
+            text="推奨手順: シナリオ設定保存 → 入力データ作成(Prepare) → 最適化実行",
+            foreground="#555",
+        ).pack(anchor="w", pady=(0, 6))
 
         self.prepared_var = tk.StringVar(value="prepared_input_id: -")
         ttk.Label(ops, textvariable=self.prepared_var).pack(anchor="w", pady=4)
@@ -2505,6 +2510,9 @@ class App:
             self.log_line(
                 f"Prepare完了: ready={resp.get('ready')} / tripCount={resp.get('tripCount')} / primaryDepot={resp.get('primaryDepotId')}"
             )
+            self.log_line(
+                f"Prepare採用台数: vehicles={resp.get('vehicleCount', '-')} / chargers={resp.get('chargerCount', '-')}"
+            )
             for warning in resp.get("warnings") or []:
                 self.log_line(f"警告: {warning}")
             messagebox.showinfo("Prepare完了", f"prepared_input_id: {self.prepared_input_id or '-'}")
@@ -2537,6 +2545,8 @@ class App:
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
+        if not self.prepared_input_id:
+            self.log_line("推奨: 最適化実行前に『入力データ作成(Prepare)』を実行してください")
         self.open_optimization_window()
 
     def _effective_optimization_time_limit_seconds(self) -> int:

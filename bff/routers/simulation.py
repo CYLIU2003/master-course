@@ -659,10 +659,14 @@ def prepare_simulation(
     warnings = list(prep.warnings)
     if not prep.scope_summary.get("primary_depot_id"):
         warnings.append("A primary depot is required before simulation can run.")
+    vehicle_count = len(scenario_doc.get("vehicles") or [])
+    charger_count = len(scenario_doc.get("chargers") or [])
     return {
         "preparedInputId": prep.prepared_input_id,
         "ready": bool(prep.is_valid and prep.scope_summary.get("trip_count", 0) > 0 and prep.scope_summary.get("primary_depot_id")),
         "tripCount": prep.scope_summary.get("trip_count", 0),
+        "vehicleCount": vehicle_count,
+        "chargerCount": charger_count,
         "blockCount": 0,
         "routeCount": len(prep.scope_summary.get("route_ids") or []),
         "depotCount": len(prep.scope_summary.get("depot_ids") or []),

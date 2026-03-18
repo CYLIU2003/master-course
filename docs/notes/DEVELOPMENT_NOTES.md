@@ -65,6 +65,12 @@ tests/       回帰テスト
   - シミュレーション車両台数・充電器台数は「選択営業所に設定済みの実在庫」に自動一致。
   - 初期SOCとバッファSOC下限/上限を同一UI群で設定でき、運用が単純化。
 
+- **追加対応（同日）**:
+  - `POST /scenarios/{id}/simulation/prepare` のレスポンスに
+    `vehicleCount` / `chargerCount` を追加。
+  - Tk の Prepare完了ログに `Prepare採用台数: vehicles=... / chargers=...` を表示。
+  - Tk 実行パネルに推奨手順（保存→Prepare→最適化）を明記し、Prepare未実行で最適化画面を開く際はログで注意を表示。
+
 ### [DEV-2026-03-18] BUILT_DATASET_REQUIRED の復旧導線を catalog-fast 基準へ更新
 
 - **背景課題**:
