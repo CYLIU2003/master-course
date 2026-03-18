@@ -19,7 +19,7 @@ async def require_built(app_state: Dict[str, Any] = Depends(get_app_state)) -> D
         status_code=503,
         detail=make_error(
             AppErrorCode.BUILT_DATASET_REQUIRED,
-            "Built dataset is not available. Run data-prep to generate built datasets first.",
+            "Built dataset is not available. If data/catalog-fast is prepared, rebuild built datasets with: python catalog_update_app.py refresh gtfs-pipeline --source-dir data/catalog-fast --built-datasets tokyu_core,tokyu_full",
             missing_artifacts=list(app_state.get("missing_artifacts") or []),
             integrity_error=app_state.get("integrity_error"),
         ),

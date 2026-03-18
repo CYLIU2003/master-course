@@ -808,6 +808,13 @@ class App:
                 def _show_error(msg: str = err_msg) -> None:
                     if "Dataset '" in msg and "not found" in msg and self.available_dataset_ids:
                         msg = msg + "\n\n利用可能 datasetId: " + ", ".join(self.available_dataset_ids)
+                    if "BUILT_DATASET_REQUIRED" in msg or "Built dataset is not available" in msg:
+                        msg = (
+                            msg
+                            + "\n\n対処: data/catalog-fast がある場合は次を実行してください。"
+                            + "\npython catalog_update_app.py refresh gtfs-pipeline --source-dir data/catalog-fast --built-datasets tokyu_core,tokyu_full"
+                            + "\n完了後にBFFを再起動してください。"
+                        )
                     self.log_line(f"エラー: {msg}")
                     messagebox.showerror("エラー", msg)
 

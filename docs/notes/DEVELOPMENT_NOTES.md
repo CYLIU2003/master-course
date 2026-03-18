@@ -39,6 +39,21 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-18] BUILT_DATASET_REQUIRED の復旧導線を catalog-fast 基準へ更新
+
+- **背景課題**:
+  - 他PC clone 環境で `BUILT_DATASET_REQUIRED` が発生した際、`tokyu_core` 固定の案内だけでは復旧が遅れた。
+  - 実際には `data/catalog-fast` に再構築元が存在するケースがある。
+
+- **対応**:
+  - `bff/dependencies.py` の 503メッセージを更新し、
+    `data/catalog-fast` からの built 再生成コマンドを明示。
+  - `tools/scenario_backup_tk.py` のエラーダイアログにも同コマンドを表示。
+  - `README.md` の 503対処手順に catalog-fast 起点の再生成手順を追加。
+
+- **効果**:
+  - `tokyu_core` が未配置でも、`data/catalog-fast` があれば復旧手順を即実行できる。
+
 ### [DEV-2026-03-18] Tkinter UI/UX 改善 + Tk/BFF 不整合の解消
 
 - **背景課題**:
@@ -71,6 +86,9 @@ tests/       回帰テスト
   - 最適化開始APIのクライアント側タイムアウトを延長し、開始時タイムアウトを低減。
   - `PUT /quick-setup` 保存時、Windowsのファイルロックにより rename が失敗するケースに対し、
     `bff/store/scenario_store.py` に WinError 5/32 用の非原子的フォールバック保存を追加。
+  - 他PC clone 環境での `simulation/prepare`・`run-optimization` の 503 は
+    `BUILT_DATASET_REQUIRED` が主因になり得るため、READMEに `built_ready` 確認手順を追記。
+  - READMEに Gurobi (MILP) の最小動作確認コマンドを追記。
 
 - **確認**:
   - `python -m py_compile tools/scenario_backup_tk.py` で構文エラーなし。

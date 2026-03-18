@@ -155,6 +155,29 @@ python tools/route_variant_labeler_tk.py
 - ポート衝突時は 8000 以外のポートで起動し、Tkinter側の接続先を合わせてください。
 - `mode_milp_only` で `ERROR: Name too long (maximum name length is 255 characters)` が出る場合は、MILP変数名長が原因です。
   2026-03-17時点で `src/optimization/milp/solver_adapter.py` は長い可読名を使わず自動命名に変更済みです。
+- `POST /simulation/prepare` / `POST /run-optimization` が 503 の場合:
+  - 多くは `BUILT_DATASET_REQUIRED`（`data/built/tokyu_core` 未準備）です。
+  - `GET /api/app/context` の `built_ready` と `missing_artifacts` を確認してください。
+  - `data/catalog-fast` が既にある場合は、以下で built を再生成できます。
+
+```powershell
+python catalog_update_app.py refresh gtfs-pipeline --source-dir data/catalog-fast --built-datasets tokyu_core,tokyu_full
+```
+
+  - builtデータを配置/生成後、BFFを再起動してください。
+
+### 8.1 Gurobi 利用確認（MILP）
+
+他PCで MILP + Gurobi が有効かは、以下で確認できます。
+
+```powershell
+python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.setObjective(x, gp.GRB.MINIMIZE); m.optimize(); print('gurobi_ok', gp.gurobi.version())"
+```
+
+補足:
+
+- 上記で import / optimize が通れば、Python側の Gurobi は利用可能です。
+- ライセンス未設定の場合は optimize 時にライセンスエラーになります。
 
 ## 9. 完成判定チェック
 
