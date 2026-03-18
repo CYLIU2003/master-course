@@ -68,6 +68,8 @@ class ProblemBuilder:
         )
         demand_charge = float(cost_cfg.get("demand_charge_cost_per_kw") or 0.0)
         diesel_price = float(cost_cfg.get("diesel_price_per_l") or 0.0)
+        co2_price_per_kg = float(cost_cfg.get("co2_price_per_kg") or 0.0)
+        ice_co2_kg_per_l = float(cost_cfg.get("ice_co2_kg_per_l") or 2.64)
         return self.build_from_dispatch(
             context,
             scenario_id=str((scenario.get("meta") or {}).get("id") or ""),
@@ -82,6 +84,8 @@ class ProblemBuilder:
             diesel_price_yen_per_l=diesel_price,
             demand_charge_on_peak_yen_per_kw=demand_charge,
             demand_charge_off_peak_yen_per_kw=demand_charge,
+            co2_price_per_kg=co2_price_per_kg,
+            ice_co2_kg_per_l=ice_co2_kg_per_l,
         )
 
     def build_from_dispatch(
@@ -100,6 +104,8 @@ class ProblemBuilder:
         diesel_price_yen_per_l: float = 0.0,
         demand_charge_on_peak_yen_per_kw: float = 0.0,
         demand_charge_off_peak_yen_per_kw: float = 0.0,
+        co2_price_per_kg: float = 0.0,
+        ice_co2_kg_per_l: float = 2.64,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -160,6 +166,8 @@ class ProblemBuilder:
                 diesel_price_yen_per_l=float(diesel_price_yen_per_l),
                 demand_charge_on_peak_yen_per_kw=float(demand_charge_on_peak_yen_per_kw),
                 demand_charge_off_peak_yen_per_kw=float(demand_charge_off_peak_yen_per_kw),
+                co2_price_per_kg=float(co2_price_per_kg),
+                ice_co2_kg_per_l=float(ice_co2_kg_per_l),
             ),
             dispatch_context=context,
             trips=trip_nodes,
@@ -727,6 +735,8 @@ class ProblemBuilder:
             vehicle=float(objective_weights.get("vehicle_fixed_cost", 1.0)),
             unserved=float(objective_weights.get("unserved_penalty", 10000.0)),
             deviation=float(objective_weights.get("deviation_cost", 0.0)),
+            switch=float(objective_weights.get("switch_cost", 0.0)),
+            degradation=float(objective_weights.get("degradation", 0.0)),
         )
 
     def _safe_float(self, value: Any) -> Optional[float]:

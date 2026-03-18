@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Protocol, Tuple
+from typing import Any, Dict, List, Protocol, Set, Tuple
 
 try:
     import gurobipy as gp
@@ -20,6 +20,7 @@ from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
     OptimizationConfig,
+    ProblemTrip,
 )
 
 
@@ -159,6 +160,23 @@ class GurobiMILPAdapter:
             model.addConstr(gp.quicksum(vehicle_terms_start) <= 1)
             model.addConstr(gp.quicksum(vehicle_terms_end) <= 1)
 
+        # C5: Explicit time-overlap prohibition.
+        # For each vehicle k and each overlapping trip pair (i, j) add y[k,i] + y[k,j] <= 1.
+        trip_list = list(problem.trips)
+        for veh in problem.vehicles:
+            for a_idx in range(len(trip_list)):
+                t_a = trip_list[a_idx]
+                key_a = (veh.vehicle_id, t_a.trip_id)
+                if key_a not in y:
+                    continue
+                for b_idx in range(a_idx + 1, len(trip_list)):
+                    t_b = trip_list[b_idx]
+                    key_b = (veh.vehicle_id, t_b.trip_id)
+                    if key_b not in y:
+                        continue
+                    if self._trips_overlap(t_a, t_b):
+                        model.addConstr(y[key_a] + y[key_b] <= 1)
+
         bev_ids = [
             vehicle.vehicle_id
             for vehicle in problem.vehicles
@@ -169,6 +187,7 @@ class GurobiMILPAdapter:
 
         c_var: Dict[Tuple[str, int], Any] = {}
         d_var: Dict[Tuple[str, int], Any] = {}
+        charge_on_var: Dict[Tuple[str, int], Any] = {}
         s_var: Dict[Tuple[str, int], Any] = {}
         g_var: Dict[int, Any] = {}
         pv_ch_var: Dict[int, Any] = {}
@@ -193,24 +212,10 @@ class GurobiMILPAdapter:
                 discharge_max_kw = self._discharge_power_max_kw(problem, vehicle.vehicle_type)
 
                 for slot_idx in slot_indices:
-                    c_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(
-                        lb=0.0,
-                        ub=charge_max_kw,
-                        vtype=GRB.CONTINUOUS,
-                        name=f"c[{vehicle.vehicle_id},{slot_idx}]",
-                    )
-                    d_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(
-                        lb=0.0,
-                        ub=discharge_max_kw,
-                        vtype=GRB.CONTINUOUS,
-                        name=f"d[{vehicle.vehicle_id},{slot_idx}]",
-                    )
-                    s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(
-                        lb=soc_min,
-                        ub=cap,
-                        vtype=GRB.CONTINUOUS,
-                        name=f"s[{vehicle.vehicle_id},{slot_idx}]",
-                    )
+                    charge_on_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(vtype=GRB.BINARY)
+                    c_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=charge_max_kw, vtype=GRB.CONTINUOUS)
+                    d_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=discharge_max_kw, vtype=GRB.CONTINUOUS)
+                    s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=soc_min, ub=cap, vtype=GRB.CONTINUOUS)
 
                 initial_soc = vehicle.initial_soc
                 if initial_soc is None:
@@ -263,14 +268,23 @@ class GurobiMILPAdapter:
                         if (vehicle.vehicle_id, trip.trip_id) in y
                         and self._trip_active_in_slot(problem, trip.departure_min, trip.arrival_min, slot_idx)
                     )
-                    model.addConstr(c_var[(vehicle.vehicle_id, slot_idx)] <= charge_max_kw * (1 - running_expr))
+                    model.addConstr(charge_on_var[(vehicle.vehicle_id, slot_idx)] <= 1 - running_expr)
+                    model.addConstr(
+                        c_var[(vehicle.vehicle_id, slot_idx)]
+                        <= charge_max_kw * charge_on_var[(vehicle.vehicle_id, slot_idx)]
+                    )
 
             if problem.chargers:
+                total_ports = sum(max(charger.simultaneous_ports, 1) for charger in problem.chargers)
                 total_kw = sum(
                     charger.power_kw * max(charger.simultaneous_ports, 1)
                     for charger in problem.chargers
                 )
                 for slot_idx in slot_indices:
+                    model.addConstr(
+                        gp.quicksum(charge_on_var[(vehicle_id, slot_idx)] for vehicle_id in bev_ids)
+                        <= total_ports
+                    )
                     model.addConstr(
                         gp.quicksum(c_var[(vehicle_id, slot_idx)] for vehicle_id in bev_ids)
                         <= total_kw
@@ -280,17 +294,16 @@ class GurobiMILPAdapter:
         if slot_indices:
             for slot in problem.price_slots:
                 slot_idx = slot.slot_index
-                g_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"g[{slot_idx}]")
-                pv_ch_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"pv_ch[{slot_idx}]")
-                p_avg_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"p_avg[{slot_idx}]")
+                g_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                pv_ch_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                p_avg_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
 
-            w_on_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_on")
-            w_off_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_off")
+            w_on_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+            w_off_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
 
             pv_by_slot = {slot.slot_index: slot.pv_available_kw for slot in problem.pv_slots}
             contract_limit_kw = max((depot.import_limit_kw for depot in problem.depots), default=1.0e6)
-            price_values = [slot.grid_buy_yen_per_kwh for slot in problem.price_slots]
-            median_price = sorted(price_values)[len(price_values) // 2] if price_values else 0.0
+            on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
 
             for slot in problem.price_slots:
                 slot_idx = slot.slot_index
@@ -307,9 +320,9 @@ class GurobiMILPAdapter:
                 model.addConstr(p_avg_var[slot_idx] == g_var[slot_idx] / timestep_h)
 
                 # C20/C21: on/off peak maximum demand.
-                if slot.grid_buy_yen_per_kwh >= median_price:
+                if slot_idx in on_peak_slots:
                     model.addConstr(w_on_var >= p_avg_var[slot_idx])
-                else:
+                if slot_idx in off_peak_slots:
                     model.addConstr(w_off_var >= p_avg_var[slot_idx])
 
         unserved_penalty_weight = max(problem.objective_weights.unserved, 10000.0)
@@ -353,10 +366,62 @@ class GurobiMILPAdapter:
             objective += max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on_var
             objective += max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off_var
 
-        for (vehicle_id, trip_id), var in y.items():
-            _ = vehicle_id, trip_id, var
         for vehicle in problem.vehicles:
             objective += vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
+
+        # CO₂ cost: added to objective when co2_price_per_kg > 0.
+        co2_price = max(problem.scenario.co2_price_per_kg, 0.0)
+        ice_co2_kg_per_l = max(problem.scenario.ice_co2_kg_per_l, 0.0)
+        if co2_price > 0:
+            # ICE CO₂ from trip fuel consumption.
+            for (vehicle_id, trip_id), var in y.items():
+                vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
+                if vehicle is None or vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
+                    continue
+                trip = trip_by_id.get(trip_id)
+                if trip is None:
+                    continue
+                fuel_l = max(trip.fuel_l, 0.0)
+                if fuel_l <= 0 and vehicle.fuel_consumption_l_per_km:
+                    fuel_l = max(trip.distance_km, 0.0) * vehicle.fuel_consumption_l_per_km
+                objective += co2_price * ice_co2_kg_per_l * fuel_l * var
+            # ICE CO₂ from deadhead fuel consumption.
+            for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
+                vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
+                if vehicle is None or vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
+                    continue
+                fuel_rate = vehicle.fuel_consumption_l_per_km or 0.0
+                if fuel_rate <= 0:
+                    continue
+                dh_min = problem.dispatch_context.get_deadhead_min(
+                    trip_by_id[from_trip_id].destination,
+                    trip_by_id[to_trip_id].origin,
+                )
+                dh_km = (dh_min / 60.0) * 20.0
+                objective += co2_price * ice_co2_kg_per_l * dh_km * fuel_rate * var
+            # Grid CO₂ from electricity purchase (co2_factor is kg/kWh; g_var is kWh).
+            co2_by_slot = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
+            for slot_idx, g in g_var.items():
+                co2_factor = co2_by_slot.get(slot_idx, 0.0)
+                if co2_factor > 0:
+                    objective += co2_price * co2_factor * g
+
+        # Battery degradation cost: added when weights.degradation > 0.
+        # degradation_cost ≈ (charged_kwh / capacity_kwh) * unit_cost_per_cycle
+        degradation_weight = problem.objective_weights.degradation
+        if degradation_weight > 0:
+            unit_cost_per_cycle = 50.0
+            for vehicle in problem.vehicles:
+                if vehicle.vehicle_id not in bev_ids:
+                    continue
+                cap = max(vehicle.battery_capacity_kwh or 300.0, 1.0)
+                for slot_idx in slot_indices:
+                    if (vehicle.vehicle_id, slot_idx) not in c_var:
+                        continue
+                    # charged_kwh = c_var * timestep_h; cycles = charged_kwh / cap
+                    coeff = degradation_weight * unit_cost_per_cycle * timestep_h / cap
+                    objective += coeff * c_var[(vehicle.vehicle_id, slot_idx)]
+
         for trip in problem.trips:
             objective += unserved_penalty_weight * unserved[trip.trip_id]
 
@@ -531,4 +596,41 @@ class GurobiMILPAdapter:
             drive_rate = max((from_trip.energy_kwh / max(from_trip.distance_km, 1e-6)), 0.0)
             return deadhead_km * drive_rate
         return 0.0
+
+    def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
+        if not problem.price_slots:
+            return set(), set()
+
+        explicit_slots = [
+            slot for slot in problem.price_slots if abs(float(slot.demand_charge_weight or 0.0)) > 1.0e-9
+        ]
+        if explicit_slots:
+            on_peak = {
+                slot.slot_index
+                for slot in problem.price_slots
+                if float(slot.demand_charge_weight or 0.0) > 0.0
+            }
+            off_peak = {slot.slot_index for slot in problem.price_slots if slot.slot_index not in on_peak}
+            return on_peak, off_peak
+
+        price_values = [slot.grid_buy_yen_per_kwh for slot in problem.price_slots]
+        median_price = sorted(price_values)[len(price_values) // 2] if price_values else 0.0
+        on_peak = {
+            slot.slot_index
+            for slot in problem.price_slots
+            if float(slot.grid_buy_yen_per_kwh or 0.0) >= median_price
+        }
+        off_peak = {slot.slot_index for slot in problem.price_slots if slot.slot_index not in on_peak}
+        return on_peak, off_peak
+
+    def _trips_overlap(self, t_a: ProblemTrip, t_b: ProblemTrip) -> bool:
+        """Return True if trips t_a and t_b have overlapping operating time intervals."""
+        dep_a, arr_a = t_a.departure_min, t_a.arrival_min
+        dep_b, arr_b = t_b.departure_min, t_b.arrival_min
+        # Wrap midnight crossings within the same 24-hour window.
+        if arr_a <= dep_a:
+            arr_a += 24 * 60
+        if arr_b <= dep_b:
+            arr_b += 24 * 60
+        return dep_a < arr_b and dep_b < arr_a
 

@@ -1,162 +1,365 @@
 # master-course core
 
-この core は、Tkinter と BFF だけで東急バス全体の最適化を再現実行するための最終パッケージです。
+東急バスの BEV（電気バス）/ICE（エンジンバス）混成車両群を対象とした、
+便割当・充電計画・電力調達の統合最適化システムです。
+Tkinter + FastAPI BFF のみで東急全体の最適化を再現実行できます。
 
 ---
 
-## 0. このシステムが最小化しているもの（非専門家向け）
+## 目次
 
-### 0.1 一言で言うと
+1. [このシステムが解く問題（先生向け概要）](#1-このシステムが解く問題先生向け概要)
+2. [最適化モデルの説明](#2-最適化モデルの説明)
+3. [実装状況と研究フェーズ](#3-実装状況と研究フェーズ)
+4. [セットアップと実行手順](#4-セットアップと実行手順)
+5. [東急全体最適化の推奨フロー](#5-東急全体最適化の推奨フロー)
+6. [システム構成](#6-システム構成)
+7. [既知の注意事項とトラブルシューティング](#7-既知の注意事項とトラブルシューティング)
+8. [パラメータ保全リスト](#8-パラメータ保全リスト)
+9. [実装詳細（技術リファレンス）](#9-実装詳細技術リファレンス)
+10. [実測監査](#10-実測監査)
 
-「BEV（電気バス）と ICE（エンジンバス）が混在する車両群を使って、
-**どの便をどの車両に任せるか**、**BEV をいつどれだけ充電するか**、
-**充電電力を PV（太陽光）と系統電力からどう調達するか** を同時に決め、
-1日の総費用を最小にする」最適化モデルです。
+---
 
-### 0.2 最小化する費用の内訳
+## 1. このシステムが解く問題（先生向け概要）
 
-| 費目 | 内容 | 実装状況 |
-|------|------|----------|
-| エンジンバスの燃料費 | ICE 便ごとの燃料消費量 × 単価 | 実装済み（O1） |
-| 電気バス充電の買電費 | 時間帯別電力単価（TOU）× 系統買電量 | 実装済み（O2） |
-| デマンド料金 | 最大需要電力 × 需要単価（on/off peak） | 実装済み（O3） |
-| 車両固定費 | 使用車両に対する日割り固定費（設定がある場合） | 実装済み（O4） |
-| 欠便ペナルティ | 担当不能便への大きなペナルティ | 実装済み |
-| CO₂ 費用 | 排出量 × CO₂ 価格 | **評価指標のみ・目的関数外** |
-| 電池劣化費 | サイクル数に基づく劣化コスト | **評価指標のみ・目的関数外** |
+### 1.1 一言で言うと
 
-### 0.3 モデルが「守る」主な条件
+東急バスの1日の運行計画において、
 
-- 時刻表上の全便を、原則として必ず担当車両に割り当てる（欠便は大ペナルティ）
-- BEV は走行中に充電できない（デポ滞在中のみ充電可能）
-- SOC が下限を下回らない（電欠禁止）
-- 充電設備の総容量を超える受電はしない
-- 系統受電量が契約電力を超えない
+- **どの便をどの車両（BEV or ICE）に任せるか**
+- **BEV をいつ・どれだけ充電するか**
+- **充電に使う電力を PV（太陽光）と系統電力からどう調達するか**
 
-### 0.4 研究計画との対応（3層構造）
+の3つを同時に決定し、**1日の総費用を最小化**します。
 
-| 層 | 内容 |
-|----|------|
-| **研究として最終的に目指す定式化** | `docs/constant/formulation.md` の C1〜C21 / O1〜O4 全体 |
-| **2026-03-18 時点で実装済みの範囲** | `docs/constant/implementation_status.md` の「実装済み」行 |
-| **今後の修論フェーズで追加する範囲** | CO₂ 目的関数化・劣化費・多目的化（ε制約法） |
+### 1.2 入力・決定・出力の流れ
 
-### 0.5 現行実装の目的関数（数式）
-
-$$
-\min \sum_t p_t^{grid} \cdot g_t
-+ \sum_{k \in ICE,\, j} c_f \cdot f_k(j) \cdot y_j^k
-+ \sum_{k \in ICE,\, (i,j)} c_f \cdot f_k^{dh}(i,j) \cdot x_{ij}^k
-+ p^{dem,on} \cdot W^{on} + p^{dem,off} \cdot W^{off}
-+ \sum_k c_k^{veh} \cdot z_k
-+ \sum_j \pi \cdot u_j
-$$
-
-実装場所: `src/optimization/milp/solver_adapter.py`（MILP）、`src/optimization/common/evaluator.py`（ALNS/GA/ABC）
-
-### 0.6 完全版モデルと現在の実装の差分（重要）
-
-本研究の目標定式化は `docs/constant/formulation.md` に記述してあります。
-**現行 core の実装はその一部先行・一部未達成** です。詳細は `docs/constant/implementation_status.md` を参照してください。
-
-主な未達成点（2026-03-18 時点）：
-
-- C5（同時刻重複禁止）：可行アークと便鎖の構造で間接抑止、明示制約なし
-- C10（出庫時満充電）：`initial_soc` パラメータ依存（満充電固定ではない）
-- C13（充電 ON/OFF 二値変数 $\xi$）：連続変数のみ、ON/OFF フラグ未導入
-- C14（同時充電台数制約）：台数ではなく総 kW 容量で近似
-- CO₂・劣化：目的関数ではなく評価指標として計算
-
-### 0.7 2026-03-18 時点での実装済み目的関数・制約一覧（要約）
-
-- 目的関数（一次目的）
-  - 実装済み: O1（ICE燃料費）, O2（TOU買電費）, O3（デマンド料金）, O4（車両固定費）, 欠便ペナルティ
-  - 未実装（評価指標扱い）: CO₂費用, 電池劣化費
-- 制約（要点）
-  - 実装済み中心: C2, C3, C4, C9, C11, C12, C15-C19
-  - 近似/部分対応: C1, C5-C8, C10, C13, C14, C20, C21
-
-詳細な対応表は `docs/constant/implementation_status.md` を参照してください。
-
-### 0.8 先生向け説明図（入力 → 決定 → 制約 → 出力）
-
-```text
-入力（時刻表・車両諸元・電力単価・PV予測・契約電力）
-  ↓
-決定（どの便をどの車両に割当てるか / いつ何kW充電するか / PVと系統電力の配分）
-  ↓
-制約（運行成立, SOC上下限, 走行中充電禁止, 充電設備上限, 契約電力上限）
-  ↓
-出力（車両ごとの運行計画, 充電計画, 費用内訳, 未充足便）
+```
+【入力】
+  時刻表（便ごとの出発・到着・走行距離）
+  車両諸元（BEV: バッテリー容量・充電出力 / ICE: 燃費・燃料単価）
+  電力料金（時間帯別単価・デマンド料金・契約電力上限）
+  PV 発電予測（時間帯別の太陽光発電量）
+        ↓
+【決定】（モデルが自動で決める項目）
+  ① 各便をどの車両に割り当てるか
+  ② 各 BEV をいつ・何 kW 充電するか
+  ③ 充電電力を PV と系統電力からどう分配するか
+        ↓
+【守るべき条件（制約）】
+  ✔ 時刻表の全便を必ず担当車両に割り当てる（欠便は大きなペナルティ）
+  ✔ BEV は走行中に充電しない（デポ滞在中のみ充電可能）
+  ✔ バッテリー残量（SOC）が下限を下回らない（電欠禁止）
+  ✔ 充電器の台数・出力の上限を超えない
+  ✔ 系統受電量が契約電力を超えない
+        ↓
+【出力】
+  車両ごとの運行スケジュール（どの便を担当するか）
+  充電スケジュール（いつ・何 kW 充電するか）
+  費用内訳（燃料費・電気代・デマンド料金・CO₂費・劣化費）
+  担当不能な未充足便のリスト
 ```
 
-### 0.9 非専門向けの言い換え
+### 1.3 最小化する費用の内訳
 
-- 目的関数: モデルが最終的に一番小さくしたい合計費用
-- 制約: 現実の運行で破ってはいけない条件
-- 決定変数: モデルが自分で決める項目
+| 費目 | 内容 | 設定 |
+|------|------|------|
+| ICE 燃料費 | エンジンバスの燃料消費量 × 燃料単価 | 常時有効 |
+| 電気代（TOU） | 時間帯別電力単価 × 系統買電量 | 常時有効 |
+| デマンド料金 | 「最大需要電力（ピーク電力）× デマンド単価」 | 常時有効 |
+| 車両固定費 | 使用車両に対する日割り固定費 | 車両設定がある場合 |
+| 欠便ペナルティ | 担当不能便への大きなペナルティ（実質禁止） | 常時有効 |
+| CO₂ 費用 | CO₂ 排出量 × CO₂ 価格（ICE 燃料由来 + 系統電力由来） | `co2_price_per_kg > 0` で有効 |
+| 電池劣化費 | 充電量 ÷ バッテリー容量 × 劣化単価 | `degradation > 0` で有効 |
 
-### 0.10 修論計画に合わせた実装優先順位（Phase 1-4）
-
-| Phase | 位置づけ | 優先実装項目 |
-|---|---|---|
-| Phase 1（今すぐ） | 説明責務の明確化 | README 冒頭説明の整備、`formulation.md` と実装範囲の分離明記、`implementation_status.md` 維持、先生向け説明図の提示 |
-| Phase 2（修論前半） | 定式と実装の整合性向上 | 充電器台数制約の分離、充電 ON/OFF 二値導入、オン/オフピーク時間帯の tariff 厳密定義、CO2 結果の JSON/UI 明示 |
-| Phase 3（修論中盤） | 目的関数の拡張 | CO2 の目的関数化（重み付き和または $\epsilon$ 制約）、電池劣化費の簡易線形モデル導入、deterministic MILP 妥当性確認 |
-| Phase 4（修論後半） | 研究拡張 | ALNS 外側探索 + MILP 内側評価のハイブリッド本格導入、rolling horizon / uncertainty 導入検討 |
-
-### 0.11 一文で言うなら
-
-master-course core の現行 MILP は、BEV/ICE 混成バスの便割当と BEV の充電・買電/PV 利用を連動させ、欠便を避けながら 1 日の総費用を最小化するベースモデルであり、CO2・劣化・多目的化は今後の修論フェーズで追加します。
+> **デマンド料金について**：電力会社との契約では、その月の「最大需要電力（30分ごとの平均電力の最大値）」に応じた基本料金が発生します。
+> BEV の充電タイミングを分散させると最大需要電力を抑えられ、デマンド料金が下がります。
+> この効果を定量化するために O3 として目的関数に含めています。
 
 ---
 
-## 実装ステータス（要点）
+## 2. 最適化モデルの説明
 
-- MILP: C8/C11/C12/C15-C21 と O1/O2/O3 を `src/optimization/milp/solver_adapter.py` に実装済み
-- ALNS/GA/ABC: 共通評価器 `src/optimization/common/evaluator.py` で O1/O2/O3 を同等評価
-- モード: GA/ABC は独立選択可能（ALNS alias ではない）
-- 文書: 旧 `constant/*.md` は `docs/constant/` へ統合済み
+本システムは **MILP（混合整数線形計画）** で定式化されています。
+ソルバーは [Gurobi](https://www.gurobi.com/) を使用します。
 
-## 1. coreの目的
+> **MILP とは**：0/1 の整数変数（「便 j を車両 k に割り当てるか否か」など）と
+> 連続変数（「充電電力 c kW」など）を混在させた最適化問題の総称です。
+> 線形式で書けるため、Gurobi などの商用ソルバーで大規模な実問題を解くことができます。
 
-- 目的は「第三者が clone 後に最短で東急全体最適化を実行できること」です。
-- 実行導線は Tkinter と FastAPI BFF のみです。
-- 最適化に渡るパラメータは削除・簡略化しません。
+### 2.1 モデルが決める変数（決定変数）
 
-## 2. coreに含まれるもの
+> ソルバーが値を決定する変数です。制約と目的関数の中で使われます。
+> 実装ファイル：[`src/optimization/milp/solver_adapter.py`](src/optimization/milp/solver_adapter.py)
 
-- Tkinter
-  - tools/scenario_backup_tk.py
-  - tools/route_variant_labeler_tk.py
-- Backend
-  - bff/
-- Core logic
-  - src/dispatch/
-  - src/optimization/
-  - src/pipeline/
-  - src/route_code_utils.py
-- Config and constants
-  - config/
-  - docs/constant/
-  - requirements.txt
-- Dataset (Tokyu full optimization ready)
-  - data/seed/tokyu/
-  - data/built/tokyu_core/
+#### 主要決定変数
 
-## 3. coreから除外したもの
+| 記号 | 意味 | 型・範囲 | Python コード変数 | 定義行 |
+|------|------|---------|-----------------|--------|
+| $y_j^k$ | 車両 $k$ が便 $j$ を担当する（1）か否（0）か | 0/1 整数 | `y[(vehicle_id, trip_id)]` | [L97](src/optimization/milp/solver_adapter.py#L97) |
+| $x_{ij}^k$ | 車両 $k$ が便 $i$ の直後に便 $j$ を担当（1）か否（0）か | 0/1 整数 | `x[(vehicle_id, from_trip_id, to_trip_id)]` | [L100](src/optimization/milp/solver_adapter.py#L100) |
+| $u_j$ | 便 $j$ が未充足（担当不能）である（1）か否（0）か | 0/1 整数 | `unserved[trip_id]` | [L114](src/optimization/milp/solver_adapter.py#L114) |
+| $z_k$ | 車両 $k$ が1日に1便以上使用される（1）か否（0）か | 0/1 整数 | `used_vehicle[vehicle_id]` | [L119](src/optimization/milp/solver_adapter.py#L119) |
+| $\xi_{k,t}$ | 車両 $k$ がスロット $t$ に充電 ON（1）か OFF（0）か | 0/1 整数 | `charge_on_var[(vehicle_id, slot_idx)]` | [L215](src/optimization/milp/solver_adapter.py#L215) |
+| $c_{k,t}$ | 車両 $k$ のスロット $t$ での充電電力（kW） | 連続 $[0,\, c_{\max}]$ | `c_var[(vehicle_id, slot_idx)]` | [L216](src/optimization/milp/solver_adapter.py#L216) |
+| $s_{k,t}$ | 車両 $k$ のスロット $t$ でのバッテリー残量 SOC（kWh） | 連続 $[SOC_{\min},\, cap_k]$ | `s_var[(vehicle_id, slot_idx)]` | [L218](src/optimization/milp/solver_adapter.py#L218) |
+| $g_t$ | スロット $t$ での系統買電量（kWh） | 連続 $\geq 0$ | `g_var[slot_idx]` | [L297](src/optimization/milp/solver_adapter.py#L297) |
+| $pv_t^{ch}$ | スロット $t$ での PV 自家消費量（kWh） | 連続 $\geq 0$ | `pv_ch_var[slot_idx]` | [L298](src/optimization/milp/solver_adapter.py#L298) |
+| $\bar{p}_t$ | スロット $t$ の平均需要電力（kW）= $g_t / \Delta t$ | 連続 $\geq 0$ | `p_avg_var[slot_idx]` | [L299](src/optimization/milp/solver_adapter.py#L299) |
+| $W^{on}$ | オンピーク期間中の最大需要電力（kW） | 連続 $\geq 0$ | `w_on_var` | [L301](src/optimization/milp/solver_adapter.py#L301) |
+| $W^{off}$ | オフピーク期間中の最大需要電力（kW） | 連続 $\geq 0$ | `w_off_var` | [L302](src/optimization/milp/solver_adapter.py#L302) |
 
-- React frontend
-- tests
-- 一時検証py、tmp系スクリプト
-- __pycache__ / .pyc
-- ログと一時成果物
+#### 補助変数（制約式のみに使用）
 
-## 4. 実行手順
+| 用途 | Python コード変数 | 定義行 | 備考 |
+|------|-----------------|--------|------|
+| 便鎖の先頭フラグ | `start_arc[(vehicle_id, trip_id)]` | [L105](src/optimization/milp/solver_adapter.py#L105) | C2/C3 の流量保存で使用 |
+| 便鎖の末尾フラグ | `end_arc[(vehicle_id, trip_id)]` | [L109](src/optimization/milp/solver_adapter.py#L109) | C2/C3 の流量保存で使用 |
+| 放電電力（kW） | `d_var[(vehicle_id, slot_idx)]` | [L217](src/optimization/milp/solver_adapter.py#L217) | V2G 対応用・現行は SOC 遷移に組み込み |
+
+### 2.2 守るべき条件（制約）の説明
+
+制約には C1〜C21 の番号を付けて管理しています（詳細は `docs/constant/formulation.md`）。
+以下では非専門家向けに意味を説明します。
+
+#### 便割当の制約（C1〜C5）
+
+- **C1：各便には必ず1台の担当車両を割り当てる**
+  実装では「担当不能な便」を $u_j$（欠便フラグ）で許容し、大きなペナルティを課すことで実質的に禁止します。
+
+- **C2：車両の行路は連続した便の鎖になる**
+  便 $j$ を担当したら、その前後の便との「接続」が整合的でなければなりません（流量保存）。
+
+- **C3：各車両の出庫・入庫は1日1回まで**
+
+- **C4：時刻的に接続不可能な便への移動は禁止**
+  便 $i$ の到着後、転換時間＋回送時間以内に便 $j$ の出発地へ到着できない組み合わせは最初から排除します。
+
+- **C5：同じ車両が同時刻に2つの便を担当することを明示禁止**
+  重複する時間帯の便ペア $(i, j)$ に対し $y_i^k + y_j^k \leq 1$ を直接追加します。
+
+#### バッテリー残量（SOC）の制約（C6〜C11）
+
+> **SOC（State of Charge）**：バッテリーの残量を指します。ここでは kWh 単位で管理します。
+
+- **C6〜C8：SOC の時系列遷移**（充電で増加、走行・回送で減少）
+
+  $$s_{k,t+1} = s_{k,t} + \eta \cdot c_{k,t} \cdot \Delta t - e_k(j) \cdot y_j^k - e_k^{dh} \cdot x_{ij}^k$$
+
+  $\eta$：充電効率（≈ 0.95）、$e_k(j)$：便 $j$ の走行エネルギー（kWh）、$\Delta t$：時間刻み（h）
+
+- **C9：SOC は常に上下限の範囲内**（電欠禁止・過充電禁止）
+
+  $$SOC_{\min} \leq s_{k,t} \leq cap_k$$
+
+- **C10：出庫時の SOC 設定**（パラメータ `initial_soc` で指定）
+
+- **C11：帰庫後の SOC は翌日確保用の下限以上**
+
+#### 充電設備の制約（C12〜C14）
+
+- **C12：走行中は充電しない**
+
+  $$c_{k,t} \leq c_{\max} \cdot (1 - \text{running}_{k,t})$$
+
+- **C13：1台あたりの充電電力は充電器定格以下**（ON/OFF 二値変数 $\xi_{k,t}$ を導入して厳密化）
+
+- **C14：同時充電台数と総 kW 容量の両方の上限**
+
+  $$\sum_k \xi_{k,t} \leq N_c^{\max}, \quad \sum_k c_{k,t} \leq P_c^{\max}$$
+
+#### 電力システムの制約（C15〜C21）
+
+- **C15：電力バランス**（系統 + PV = 充電需要を常に成立させる）
+
+  $$g_t + pv_t^{ch} = \sum_k c_{k,t} \cdot \Delta t$$
+
+- **C16：PV 自家消費量は発電量以内**
+
+- **C17：系統への逆潮流禁止**（$g_t \geq 0$）
+
+- **C18：系統受電量は契約電力以内**
+
+- **C19〜C21：デマンド料金計算用のピーク電力定義**
+
+#### 制約コード対応表（C1〜C21）
+
+| No. | 内容 | 実装コード式（抜粋） | 実装行 |
+|-----|------|-------------------|--------|
+| C1 | 各便一意割当（罰則付き緩和） | `sum(y[k,j]) + unserved[j] == 1` | [L130](src/optimization/milp/solver_adapter.py#L130) |
+| C2 | フロー保存（便鎖整合性） | `incoming + start_arc[key] == y[key]` | [L156–157](src/optimization/milp/solver_adapter.py#L156) |
+| C3 | 出庫・入庫は高々1回 | `sum(start_arc) <= 1`, `sum(end_arc) <= 1` | [L160–161](src/optimization/milp/solver_adapter.py#L160) |
+| C4 | 可行アークのみ利用 | `arc_pairs` を `feasible_connections` から生成 | [model_builder.py](src/optimization/milp/model_builder.py) |
+| C5 | 重複運行禁止（明示制約） | `y[key_a] + y[key_b] <= 1` （重複ペア全列挙） | [L163–178](src/optimization/milp/solver_adapter.py#L163) |
+| C6–C8 | SOC 時系列遷移 | `s[next] == s[cur] + 0.95*c*Δt - trip_energy - dh_energy` | [L255–262](src/optimization/milp/solver_adapter.py#L255) |
+| C9 | SOC 上下限（変数の lb/ub） | `lb=soc_min, ub=cap` | [L218](src/optimization/milp/solver_adapter.py#L218) |
+| C10 | 出庫時 SOC 固定 | `s_var[first_slot] == initial_kwh` | [L229](src/optimization/milp/solver_adapter.py#L229) |
+| C11 | 帰庫後 SOC 下限 | `s_var[last_slot] >= soc_min * used_vehicle[k]` | [L233](src/optimization/milp/solver_adapter.py#L233) |
+| C12 | 走行中充電禁止 | `charge_on_var[k,t] <= 1 - running_expr` | [L271](src/optimization/milp/solver_adapter.py#L271) |
+| C13 | 充電電力上限（充電器定格） | `c_var[k,t] <= charge_max_kw * charge_on_var[k,t]` | [L272–275](src/optimization/milp/solver_adapter.py#L272) |
+| C14 | 同時充電台数・容量上限 | `sum(charge_on_var) <= total_ports`, `sum(c_var) <= total_kw` | [L284–291](src/optimization/milp/solver_adapter.py#L284) |
+| C15 | 電力バランス | `g_var[t] + pv_ch_var[t] == charge_kwh_expr` | [L315](src/optimization/milp/solver_adapter.py#L315) |
+| C16 | PV 自家消費上限 | `pv_ch_var[t] <= pv_available * Δt` | [L316](src/optimization/milp/solver_adapter.py#L316) |
+| C17 | 非逆潮流 | `lb=0.0` （g_var の変数定義） | [L297](src/optimization/milp/solver_adapter.py#L297) |
+| C18 | 契約電力上限 | `g_var[t] <= contract_limit_kw * Δt` | [L317](src/optimization/milp/solver_adapter.py#L317) |
+| C19 | 平均需要電力の定義 | `p_avg_var[t] == g_var[t] / Δt` | [L320](src/optimization/milp/solver_adapter.py#L320) |
+| C20 | オンピーク最大需要 | `w_on_var >= p_avg_var[t]` （on_peak スロット） | [L324](src/optimization/milp/solver_adapter.py#L324) |
+| C21 | オフピーク最大需要 | `w_off_var >= p_avg_var[t]` （off_peak スロット） | [L326](src/optimization/milp/solver_adapter.py#L326) |
+
+### 2.3 目的関数（最小化する式）
+
+$$
+\min \quad
+\underbrace{\vphantom{\sum_t}\sum_{k \in \text{ICE},\,j} c_f \cdot f_k(j) \cdot y_j^k
+           + \sum_{k \in \text{ICE},\,(i,j)} c_f \cdot f_k^{dh}(i,j) \cdot x_{ij}^k}_{\text{O1：ICE 燃料費（便走行 + 回送）}}
+\;+\;
+\underbrace{\sum_t p_t^{grid} \cdot g_t}_{\text{O2：TOU 電気代}}
+$$
+
+$$
++\;
+\underbrace{p^{dem,on} \cdot W^{on} + p^{dem,off} \cdot W^{off}}_{\text{O3：デマンド料金}}
+\;+\;
+\underbrace{\sum_k c_k^{veh} \cdot z_k}_{\text{O4：車両固定費}}
+\;+\;
+\underbrace{\sum_j \pi \cdot u_j}_{\text{欠便ペナルティ}}
+$$
+
+$$
++\;
+\underbrace{p^{CO_2} \cdot \Bigl(
+  \alpha_{ICE} \sum_{k,j} f_k(j) \cdot y_j^k
+  + \alpha_{grid} \sum_t g_t
+\Bigr)}_{\text{CO₂ 費用（}p^{CO_2} > 0 \text{ のとき有効）}}
+\;+\;
+\underbrace{w^{degr} \cdot \sum_{k \in \text{BEV},\,t} \frac{c_{k,t}}{cap_k} \cdot \beta}_{\text{電池劣化費（}w^{degr} > 0\text{ のとき有効）}}
+$$
+
+#### 記号・コード・データ源 対応表（決定変数）
+
+目的関数に登場する決定変数と、コード上の対応を示します。
+
+| 記号 | 意味 | Python コード変数 | 定義行 |
+|------|------|-----------------|--------|
+| $y_j^k$ | 便割当（1 = 担当） | `y[(vehicle_id, trip_id)]` | [L97](src/optimization/milp/solver_adapter.py#L97) |
+| $x_{ij}^k$ | 便間接続アーク | `x[(vehicle_id, from_trip_id, to_trip_id)]` | [L100](src/optimization/milp/solver_adapter.py#L100) |
+| $u_j$ | 欠便フラグ | `unserved[trip_id]` | [L114](src/optimization/milp/solver_adapter.py#L114) |
+| $z_k$ | 車両使用フラグ | `used_vehicle[vehicle_id]` | [L119](src/optimization/milp/solver_adapter.py#L119) |
+| $g_t$ | 系統買電量（kWh） | `g_var[slot_idx]` | [L297](src/optimization/milp/solver_adapter.py#L297) |
+| $W^{on}$ | オンピーク最大需要（kW） | `w_on_var` | [L301](src/optimization/milp/solver_adapter.py#L301) |
+| $W^{off}$ | オフピーク最大需要（kW） | `w_off_var` | [L302](src/optimization/milp/solver_adapter.py#L302) |
+| $c_{k,t}$ | 充電電力（kW）— CO₂費・劣化費にも登場 | `c_var[(vehicle_id, slot_idx)]` | [L216](src/optimization/milp/solver_adapter.py#L216) |
+
+#### 記号・コード・データ源 対応表（パラメータ）
+
+目的関数の係数・定数として与えられる値と、コード上の参照先を示します。
+
+| 記号 | 意味 | 単位 | Python コード式 | データ源（問題定義） | コード行 |
+|------|------|------|----------------|-------------------|---------|
+| $c_f$ | 軽油単価 | 円/L | `diesel_price` | `problem.scenario.diesel_price_yen_per_l` | [L337](src/optimization/milp/solver_adapter.py#L337) |
+| $f_k(j)$ | 便 $j$ の燃料消費量 | L | `fuel_l` | `trip.fuel_l`（なければ距離×燃費） | [L345](src/optimization/milp/solver_adapter.py#L345) |
+| $f_k^{dh}(i,j)$ | 回送の燃料消費量 | L | `deadhead_km * fuel_rate` | `dispatch_context.get_deadhead_min(...)` | [L357–362](src/optimization/milp/solver_adapter.py#L357) |
+| $p_t^{grid}$ | 系統電力単価（TOU） | 円/kWh | `price_by_slot[slot_idx]` | `slot.grid_buy_yen_per_kwh` | [L332](src/optimization/milp/solver_adapter.py#L332) |
+| $p^{dem,on}$ | オンピーク・デマンド単価 | 円/kW | `problem.scenario.demand_charge_on_peak_yen_per_kw` | `scenario_overlay.cost_coefficients` | [L366](src/optimization/milp/solver_adapter.py#L366) |
+| $p^{dem,off}$ | オフピーク・デマンド単価 | 円/kW | `problem.scenario.demand_charge_off_peak_yen_per_kw` | `scenario_overlay.cost_coefficients` | [L367](src/optimization/milp/solver_adapter.py#L367) |
+| $c_k^{veh}$ | 車両固定費（日割） | 円/日 | `vehicle.fixed_use_cost_jpy` | 車両マスタ `fixed_use_cost_jpy` | [L370](src/optimization/milp/solver_adapter.py#L370) |
+| $\pi$ | 欠便ペナルティ | 円/便 | `unserved_penalty_weight` | `problem.objective_weights.unserved`（最小 10,000） | [L328](src/optimization/milp/solver_adapter.py#L328) |
+| $p^{CO_2}$ | CO₂ 価格 | 円/kg | `co2_price` | `problem.scenario.co2_price_per_kg` | [L373](src/optimization/milp/solver_adapter.py#L373) |
+| $\alpha_{ICE}$ | 軽油の CO₂ 排出係数 | kg/L | `ice_co2_kg_per_l` | `problem.scenario.ice_co2_kg_per_l`（既定 2.64） | [L374](src/optimization/milp/solver_adapter.py#L374) |
+| $\alpha_{grid}$ | 系統電力の CO₂ 排出係数 | kg/kWh | `co2_factor` | `slot.co2_factor`（スロット別） | [L405](src/optimization/milp/solver_adapter.py#L405) |
+| $w^{degr}$ | 劣化費の重み | 無次元 | `degradation_weight` | `problem.objective_weights.degradation` | [L411](src/optimization/milp/solver_adapter.py#L411) |
+| $\beta$ | 劣化費係数（1サイクルあたり） | 円/cycle | `unit_cost_per_cycle` | ハードコード `50.0`（将来パラメータ化予定） | [L413](src/optimization/milp/solver_adapter.py#L413) |
+| $cap_k$ | バッテリー容量 | kWh | `cap` | `vehicle.battery_capacity_kwh`（既定 300） | [L202](src/optimization/milp/solver_adapter.py#L202) |
+| $\Delta t$ | 時間スロット幅 | h | `timestep_h` | `problem.scenario.timestep_min / 60.0` | [L186](src/optimization/milp/solver_adapter.py#L186) |
+
+> **データの流れ：** Tkinter UI → Quick Setup 保存 → BFF `PUT /quick-setup` → `scenario_overlay` に保存 →
+> `src/optimization/common/builder.py` で `CanonicalOptimizationProblem` に変換 → `solver_adapter.py` に渡る
+
+#### 目的関数の直感的な理解
+
+O1（燃料費）と O2（電気代）は「実際のエネルギーコスト」です。
+O3（デマンド料金）は「ピーク需要を抑えるインセンティブ」を与えます。BEV の充電を分散させれば O3 が下がります。
+CO₂費・劣化費はデフォルト 0（無効）で、パラメータを設定することで目的関数に加算されます。
+
+### 2.4 解法モード
+
+| モード | アルゴリズム | 用途 |
+|--------|-------------|------|
+| `mode_milp_only` | Gurobi MILP（厳密解） | 小〜中規模の厳密最適解 |
+| `mode_alns_only` | ALNS（適応型大規模近傍探索） | 大規模の近似解・高速探索 |
+| `mode_ga` | GA（遺伝的アルゴリズム） | 大規模の近似解 |
+| `mode_abc` | ABC（人工蜂コロニー） | 大規模の近似解 |
+
+ALNS・GA・ABC は共通評価器 `src/optimization/common/evaluator.py` で O1〜O4 および CO₂費・劣化費を評価します。
+
+---
+
+## 3. 実装状況と研究フェーズ
+
+### 3.1 定式化・実装・今後の3層構造
+
+| 層 | 内容 | 参照先 |
+|----|------|--------|
+| 目標定式化 | 研究として最終的に目指す C1〜C21 / O1〜O4 の完全モデル | `docs/constant/formulation.md` |
+| 実装済み範囲 | 2026-03-18 時点で core に実装された範囲 | `docs/constant/implementation_status.md` |
+| 今後の計画 | ε制約法による多目的化・MILP 妥当性確認（Phase 3-4） | 本章 3.3 節 |
+
+### 3.2 制約の実装状況（C1〜C21）
+
+| No. | 内容 | 状態 | 備考 |
+|-----|------|------|------|
+| C1 | 各便の一意割当 | 🔶 部分対応 | 欠便を罰則付き緩和で許容（意図的設計） |
+| C2 | フロー保存（便鎖の整合性） | ✅ 対応 | |
+| C3 | 各車両の出庫・入庫は高々1回 | ✅ 対応 | |
+| C4 | 接続可能アークのみ利用 | ✅ 対応 | 不可アークは変数自体を作らない |
+| C5 | 同時刻の重複運行禁止 | ✅ 対応 | 重複ペア明示制約 `y[k,i]+y[k,j]≤1` を実装済み |
+| C6 | SOC 遷移（デポ滞在中充電） | 🔶 部分対応 | 連続遷移による近似（厳密 Big-M なし） |
+| C7 | SOC 遷移（便走行消費） | 🔶 部分対応 | 同上 |
+| C8 | SOC 遷移（回送消費） | 🔶 部分対応（近似） | 距離→エネルギー換算に近似あり |
+| C9 | SOC 上下限（常時） | ✅ 対応 | |
+| C10 | 出庫時 SOC | 🔶 部分対応 | 満充電固定ではなく `initial_soc` パラメータ依存 |
+| C11 | 帰庫後 SOC 下限 | ✅ 対応 | |
+| C12 | 走行中充電禁止 | ✅ 対応 | |
+| C13 | 充電電力上限（定格） | ✅ 対応 | ON/OFF 二値変数 $\xi_{k,t}$ を導入 |
+| C14 | 同時充電台数・容量上限 | ✅ 対応 | 台数と kW 容量を分離実装 |
+| C15 | 電力バランス | ✅ 対応 | |
+| C16 | PV 供給上限 | ✅ 対応 | |
+| C17 | 非逆潮流 | ✅ 対応 | |
+| C18 | 系統受電容量上限（契約電力） | ✅ 対応 | |
+| C19 | 平均需要電力の定義 | ✅ 対応 | |
+| C20 | オンピーク最大需要電力 | 🔶 改善対応 | tariff 設定がある場合は優先適用、未設定時は中央値フォールバック |
+| C21 | オフピーク最大需要電力 | 🔶 改善対応 | 同上 |
+
+### 3.3 目的関数の実装状況
+
+| 費目 | 状態 | 条件 |
+|------|------|------|
+| O1：ICE 燃料費（便 + 回送） | ✅ 実装済み | 常時有効 |
+| O2：TOU 電気代 | ✅ 実装済み | 常時有効 |
+| O3：デマンド料金 | ✅ 実装済み | 常時有効 |
+| O4：車両固定費 | ✅ 実装済み | 車両設定がある場合 |
+| 欠便ペナルティ | ✅ 実装済み | 常時有効 |
+| CO₂ 費用 | ✅ 実装済み | `co2_price_per_kg > 0` で有効 |
+| 電池劣化費 | ✅ 実装済み | `weights.degradation > 0` で有効 |
+| PV 余剰売電 | ❌ 未実装 | 将来拡張 |
+
+MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同一条件で同一費目を計算します。
+
+### 3.4 研究フェーズ別の実装計画
+
+| Phase | 位置づけ | 状態 |
+|-------|---------|------|
+| Phase 1（説明責務） | README・formulation.md・implementation_status.md の整備、先生向け説明図 | ✅ 完了 |
+| Phase 2（定式整合） | 充電器台数制約分離・充電 ON/OFF 二値・tariff 優先ピーク判定・C5 明示制約 | ✅ 完了 |
+| Phase 3（目的関数拡張） | CO₂ 費用の目的関数化・電池劣化費の目的関数化 | ✅ 完了 / deterministic MILP 妥当性確認・ε制約法は 🔲 未 |
+| Phase 4（研究拡張） | ALNS + MILP ハイブリッド本格導入・Rolling horizon / 不確実性対応 | 🔲 未 |
+
+---
+
+## 4. セットアップと実行手順
 
 ### 4.1 環境構築
-
-PowerShell
 
 ```powershell
 python -m venv .venv
@@ -164,507 +367,239 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 4.2 BFF起動
+### 4.2 起動（2ターミナル）
 
 ```powershell
+# ターミナル 1: BFF（バックエンド API）
 python -m uvicorn bff.main:app --host 127.0.0.1 --port 8000
-```
 
-### 4.3 Tkinter起動
-
-別ターミナルで
-
-```powershell
+# ターミナル 2: Tkinter UI
 .\.venv\Scripts\Activate.ps1
 python tools/scenario_backup_tk.py
 ```
 
-### 4.4 タグ付与アプリ起動（Route Variant Labeler）
+### 4.3 Route Variant Labeler（路線タグ付与）
 
-Route family / variant の手動タグ付与を行う場合は、別ターミナルで以下を実行します。
+路線バリアントの手動タグ付与が必要な場合のみ使用します。
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 python tools/route_variant_labeler_tk.py
 ```
 
-最小操作手順:
-
+操作手順：
 1. 対象 Scenario を選択
 2. Route family / variant を選択
-3. 必要なタグ（variant type / canonical direction など）を編集
-4. 保存して `tools/scenario_backup_tk.py` 側で `ラベルをシナリオへ反映` を実行
+3. タグ（variant type / canonical direction 等）を編集・保存
+4. `tools/scenario_backup_tk.py` 側で `ラベルをシナリオへ反映` を実行
 
-メモ:
-
-- タグ付与は路線分類の運用補助であり、dispatch/optimization の物理可行性判定そのものを置き換えるものではありません。
-- 反映後は Quick Setup を再読込して表示内容を確認してください。
+---
 
 ## 5. 東急全体最適化の推奨フロー
 
 1. シナリオ作成
 2. Quick Setup 読込
 3. 営業所と路線を選択
-4. パラメータを設定
-5. シナリオ設定を保存（Quick Setup保存）
-6. 入力データ作成 (Prepare)
-7. Prepareログで tripCount と採用台数（vehicleCount / chargerCount）を確認
+4. パラメータを設定（費用・ソルバー・SOC 等）
+5. **シナリオ設定を保存（Quick Setup 保存）**
+6. **`入力データ作成 (Prepare)` を実行**（← 必ず保存後に実行）
+7. Prepare ログで `tripCount` と車両台数・充電器台数を確認
 8. 最適化実行
-9. Job completed と Optimization結果を確認
+9. Job completed と Optimization 結果を確認
 
-重要:
+> **重要：** `保存` の直後に必ず `Prepare` を実行してください。
+> Prepare を飛ばすと、最新の営業所・路線・SOC 設定が最適化入力に反映されません。
 
-- 保存直後にそのまま最適化を押さず、必ず `入力データ作成 (Prepare)` を先に実行してください。
-- Prepareを飛ばすと、最新の営業所選択・路線選択・SOC設定が最適化入力に反映されない可能性があります。
+> **台数について：** Prepare 時は「選択した営業所に登録済みの車両台数・充電器台数」をそのまま利用します。
+> 手入力は不要です。SOC 設定は `Cost / Tariff Parameters` で `initial_soc` / `soc_min` / `soc_max` を指定します。
 
-補足（Prepare時の台数決定）:
+---
 
-- `tools/scenario_backup_tk.py` の実行パラメータでは、車両台数/充電器台数の手入力は行いません。
-- Prepare時は「選択した営業所」に登録済みの車両台数・充電器台数をそのまま利用します。
-- SOC設定は `Cost / Tariff Parameters` で `initial_soc`, `soc_min`, `soc_max` を指定します。
+## 6. システム構成
 
-## 6. 削除してはいけないパラメータ
+### 6.1 ファイル構成
 
-最適化計算に直接関与するため、以下は core で必ず保持します。
+| カテゴリ | パス |
+|---------|------|
+| Tkinter UI | `tools/scenario_backup_tk.py`, `tools/route_variant_labeler_tk.py` |
+| FastAPI BFF | `bff/` |
+| Dispatch（運行可行性） | `src/dispatch/` |
+| 最適化ソルバー | `src/optimization/` |
+| パイプライン | `src/pipeline/` |
+| 設定・定数 | `config/`, `docs/constant/` |
+| データセット | `data/seed/tokyu/`, `data/built/tokyu_core/` |
 
-- Solver and objective
-  - solverMode, mode
-  - objectiveMode
-  - timeLimitSeconds, time_limit_seconds
-  - mipGap, mip_gap
-  - alnsIterations, alns_iterations
-  - randomSeed
-- Scope
-  - selectedDepotIds, selectedRouteIds
-  - dayType, service_id, service_date
-  - includeShortTurn, includeDepotMoves, includeDeadhead
-  - allowIntraDepotRouteSwap, allowInterDepotSwap
-- Simulation and penalties
-  - allowPartialService, unservedPenalty
-- Tariff and emissions
-  - gridFlatPricePerKwh, gridSellPricePerKwh
-  - demandChargeCostPerKw
-  - dieselPricePerL
-  - gridCo2KgPerKwh
-  - co2PricePerKg
-  - depotPowerLimitKw
-  - tou_pricing
-- Vehicle and template
-  - type, modelCode, modelName
-  - capacityPassengers
-  - batteryKwh, fuelTankL
-  - energyConsumption, fuelEfficiencyKmPerL
-  - co2EmissionGPerKm, co2EmissionKgPerL
-  - curbWeightKg, grossVehicleWeightKg
-  - engineDisplacementL, maxTorqueNm, maxPowerKw
-  - chargePowerKw, minSoc, maxSoc
-  - acquisitionCost, enabled
+### 6.2 除外したもの
 
-詳細な保全定義は docs/core_parameter_preservation_manifest.md を参照してください。
+React frontend、テスト、一時検証スクリプト、`__pycache__`、ログ・一時成果物
 
-## 7. 非Tkフロント機能の移植メモ
+### 6.3 主な API 導線
 
-非Tkフロントで実現済み機能を、今後 Tkinter に移植するための棚卸しを保存しています。
+| エンドポイント | 用途 |
+|--------------|------|
+| `GET /api/app/context` | データセット準備状態の確認 |
+| `POST/GET /api/scenarios/*` | シナリオ CRUD |
+| `GET/PUT /api/scenarios/{id}/quick-setup` | Quick Setup の読込・保存 |
+| `POST /api/scenarios/{id}/simulation/prepare` | 最適化入力の生成（Prepare） |
+| `POST /api/scenarios/{id}/run-optimization` | 最適化ジョブの開始 |
+| `GET /api/jobs/{job_id}` | ジョブ状態の確認 |
 
-- docs/tkinter_feature_parity_backlog.md
+---
 
-このファイルを移植バックログの正本として扱います。
+## 7. 既知の注意事項とトラブルシューティング
 
-## 8. 既知の実行注意
+### 7.1 実行環境
 
-- Windowsでは最適化実行器の既定が thread です。
-- 必要に応じて環境変数 BFF_OPT_EXECUTOR で process へ切替できます。
-- ポート衝突時は 8000 以外のポートで起動し、Tkinter側の接続先を合わせてください。
-- `mode_milp_only` で `ERROR: Name too long (maximum name length is 255 characters)` が出る場合は、MILP変数名長が原因です。
-  2026-03-17時点で `src/optimization/milp/solver_adapter.py` は長い可読名を使わず自動命名に変更済みです。
-- `POST /simulation/prepare` / `POST /run-optimization` が 503 の場合:
-  - 多くは `BUILT_DATASET_REQUIRED`（`data/built/tokyu_full` 未準備）です。
-  - `GET /api/app/context` の `built_ready` と `missing_artifacts` を確認してください。
-  - `data/catalog-fast` が既にある場合は、以下で `tokyu_full` を再生成できます。
+- Windows では最適化実行器の既定が `thread` モードです。
+  必要に応じて環境変数 `BFF_OPT_EXECUTOR=process` で切り替えられます。
+- ポート衝突時は 8000 以外のポートで起動し、Tkinter 側の接続先を合わせてください。
+
+### 7.2 503 エラー（`BUILT_DATASET_REQUIRED`）
+
+`data/built/tokyu_full` が未準備の場合に発生します。
 
 ```powershell
-python catalog_update_app.py refresh gtfs-pipeline --source-dir data/catalog-fast --built-datasets tokyu_full
+python catalog_update_app.py refresh gtfs-pipeline `
+  --source-dir data/catalog-fast `
+  --built-datasets tokyu_full
 ```
 
-  - coreパッケージで `No module named 'tokyubus_gtfs'` が出る環境でも、
-    上記コマンドは `data/catalog-fast/normalized/*.jsonl` から built 再生成へ自動フォールバックします。
-  - 実行結果に `"pipeline_fallback": true` が出ていれば、built-only フォールバックで完了しています。
-  - core 既定datasetは `tokyu_full` です（`DEFAULT_DATASET_ID` 未指定時）。
+- `No module named 'tokyubus_gtfs'` の環境でも、`data/catalog-fast/normalized/*.jsonl` から自動フォールバックします。
+- 出力に `"pipeline_fallback": true` があれば完了しています。
+- データ配置・生成後、BFF を再起動してください。
 
-  - builtデータを配置/生成後、BFFを再起動してください。
+### 7.3 MILP 変数名の長さエラー
 
-### 8.1 Gurobi 利用確認（MILP）
+`ERROR: Name too long (maximum name length is 255 characters)` が出た場合は MILP 変数名長が原因です。
+2026-03-18 時点で `src/optimization/milp/solver_adapter.py` は全変数を自動命名（`name=` 省略）に変更済みです。
 
-他PCで MILP + Gurobi が有効かは、以下で確認できます。
+### 7.4 Gurobi の動作確認
 
 ```powershell
 python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.setObjective(x, gp.GRB.MINIMIZE); m.optimize(); print('gurobi_ok', gp.gurobi.version())"
 ```
 
-補足:
+`gurobi_ok` が出力されれば Python 側の Gurobi は利用可能です。
+ライセンス未設定の場合は `optimize()` でライセンスエラーになります。
 
-- 上記で import / optimize が通れば、Python側の Gurobi は利用可能です。
-- ライセンス未設定の場合は optimize 時にライセンスエラーになります。
+### 7.5 job completed ≠ 最適化成功
 
-## 9. 完成判定チェック
+`job completed` はジョブ管理システム上の完了を意味し、数理最適化の成功とは別です。
+`solver_status` が `ERROR` / `INFEASIBLE` の場合、最適化結果ファイルが生成されないことがあります。
 
-- BFF起動と /api/app/context 応答
-- Tkinterから Prepare 成功
-- Tkinterから最適化Jobが完走
-- core内に frontend/tests/tmp/cache/log が存在しない
-- パラメータ保全マニフェストに挙げた契約が保持されている
+---
 
-## 10. 先生レビュー用: 最適化定式と実装対応（constant反映）
+## 8. パラメータ保全リスト
 
-この章は docs/constant/formulation.md を正本として、制約式 C1-C21 を core 実装へ対応付けた一覧です。
-実装上の完全対応・部分対応・未対応を分けて明記します。
-GA/ABC は独立モードとして起動し、評価器は ALNS と同一の `src/optimization/common/evaluator.py` を共有します。
+最適化計算に直接関与するため、以下は削除しないでください。
+詳細は `docs/core_parameter_preservation_manifest.md` を参照してください。
 
-### 10.1 記号・実装変数 対応表（制約式で使う主変数）
+**ソルバー設定**
+`solverMode`, `objectiveMode`, `timeLimitSeconds`, `mipGap`, `alnsIterations`, `randomSeed`
 
-| 数式記号 | 意味 | 実装変数（主） | 実装場所 |
-|---|---|---|---|
-| $x_{ij}^k$ | 車両 $k$ が便 $i$ の次に便 $j$ を担当 | `x[(vehicle_id, from_trip_id, to_trip_id)]` | src/optimization/milp/solver_adapter.py |
-| $y_j^k$（被覆用） | 車両 $k$ が便 $j$ を担当 | `y[(vehicle_id, trip_id)]` | src/optimization/milp/solver_adapter.py |
-| $u_j$ | 便 $j$ 未充足フラグ | `unserved[trip_id]` | src/optimization/milp/solver_adapter.py |
-| $z_k$ | 車両 $k$ 使用フラグ | `used_vehicle[vehicle_id]` | src/optimization/milp/solver_adapter.py |
-| $start_j^k$ | 便鎖の開始フラグ | `start_arc[(vehicle_id, trip_id)]` | src/optimization/milp/solver_adapter.py |
-| $end_j^k$ | 便鎖の終端フラグ | `end_arc[(vehicle_id, trip_id)]` | src/optimization/milp/solver_adapter.py |
-| $c_{k,t}$ | 充電電力 | `c_var[(vehicle_id, slot_idx)]` | src/optimization/milp/solver_adapter.py |
-| $d_{k,t}$ | 放電電力 | `d_var[(vehicle_id, slot_idx)]` | src/optimization/milp/solver_adapter.py |
-| $s_{k,t}$ | SOC（kWh） | `s_var[(vehicle_id, slot_idx)]` | src/optimization/milp/solver_adapter.py |
-| $g_t$ | 系統買電量 | `g_var[slot_idx]` | src/optimization/milp/solver_adapter.py |
-| $pv_t^{ch}$ | PV自家消費 | `pv_ch_var[slot_idx]` | src/optimization/milp/solver_adapter.py |
-| $\bar{p}_t$ | スロット平均需要電力 | `p_avg_var[slot_idx]` | src/optimization/milp/solver_adapter.py |
-| $W^{on}, W^{off}$ | 需要電力ピーク | `w_on_var`, `w_off_var` | src/optimization/milp/solver_adapter.py |
-| $\\mathcal{A}$ | 可行接続アーク集合 | `problem.feasible_connections` 由来の `arc_pairs` | src/optimization/milp/model_builder.py |
-| $e_k(j)$ | 便走行エネルギー | `trip.energy_kwh` | src/optimization/milp/solver_adapter.py |
-| $P^{contract}$ | 契約電力上限 | `contract_limit_kw`（depot import limit由来） | src/optimization/milp/solver_adapter.py |
+**スコープ設定**
+`selectedDepotIds`, `selectedRouteIds`, `dayType`, `service_id`, `service_date`,
+`includeShortTurn`, `includeDepotMoves`, `includeDeadhead`,
+`allowIntraDepotRouteSwap`, `allowInterDepotSwap`
 
-### 10.1.1 実装変数一覧（制約式・目的関数・後処理で使用）
+**ペナルティ**
+`allowPartialService`, `unservedPenalty`
 
-以下は `src/optimization/milp/solver_adapter.py` の `GurobiMILPAdapter.solve()` 内で使用される変数を、用途別に網羅した一覧です。
+**料金・排出係数**
+`gridFlatPricePerKwh`, `gridSellPricePerKwh`, `demandChargeCostPerKw`,
+`dieselPricePerL`, `gridCo2KgPerKwh`, `co2PricePerKg`, `iceCo2KgPerL`,
+`depotPowerLimitKw`, `degradationWeight`, `tou_pricing`
 
-| 区分 | 変数名 | 用途 |
-|---|---|---|
-| モデル/前処理 | `model` | Gurobiモデル本体 |
-| モデル/前処理 | `builder` | MILP用の接続候補生成ヘルパ |
-| モデル/前処理 | `trip_by_id` | 便ID→便オブジェクト参照 |
-| モデル/前処理 | `dispatch_trip_by_id` | dispatch trip参照 |
-| モデル/前処理 | `assignment_pairs` | `(vehicle_id, trip_id)` 候補集合 |
-| モデル/前処理 | `arc_pairs` | `(vehicle_id, from_trip_id, to_trip_id)` 候補集合 |
-| 決定変数 | `y` | 便被覆（二値） |
-| 決定変数 | `x` | 便間接続アーク（二値） |
-| 決定変数 | `start_arc` | 便鎖開始フラグ（二値） |
-| 決定変数 | `end_arc` | 便鎖終端フラグ（二値） |
-| 決定変数 | `unserved` | 未充足便フラグ（二値） |
-| 決定変数 | `used_vehicle` | 車両使用フラグ（二値） |
-| 充放電/SOC変数 | `c_var` | 充電電力（連続） |
-| 充放電/SOC変数 | `d_var` | 放電電力（連続） |
-| 充放電/SOC変数 | `s_var` | SOC（連続） |
-| 系統/PV/需要変数 | `g_var` | 系統買電量（連続） |
-| 系統/PV/需要変数 | `pv_ch_var` | PV自己消費量（連続） |
-| 系統/PV/需要変数 | `p_avg_var` | 平均需要電力（連続） |
-| 系統/PV/需要変数 | `w_on_var` | オンピーク最大需要（連続） |
-| 系統/PV/需要変数 | `w_off_var` | オフピーク最大需要（連続） |
-| 集合/インデックス | `bev_ids` | BEV/PHEV/FCEV車両ID集合 |
-| 集合/インデックス | `slot_indices` | 時間スロットID集合 |
-| 集合/インデックス | `outgoing_by_node` | ノード別出アーク辞書 |
-| 集合/インデックス | `incoming_by_node` | ノード別入アーク辞書 |
-| 制約中間式 | `assign_terms` | C1被覆制約の左辺和 |
-| 制約中間式 | `incoming`, `outgoing` | C2流量保存の入出流量 |
-| 制約中間式 | `vehicle_terms_start`, `vehicle_terms_end` | C3始終点回数制約用リスト |
-| 制約中間式 | `trip_energy_expr` | C7便走行消費エネルギー式 |
-| 制約中間式 | `deadhead_energy_expr` | C8 deadhead消費エネルギー式 |
-| 制約中間式 | `running_expr` | C12走行中フラグ相当式 |
-| 制約中間式 | `charge_kwh_expr` | C15充電電力量合計式 |
-| 制約パラメータ | `timestep_h` | 時間刻み（hour） |
-| 制約パラメータ | `cap` | 車両バッテリー容量 |
-| 制約パラメータ | `soc_min` | SOC下限 |
-| 制約パラメータ | `charge_max_kw` | 車両充電上限 |
-| 制約パラメータ | `discharge_max_kw` | 車両放電上限 |
-| 制約パラメータ | `initial_kwh` | 初期SOC（kWh換算） |
-| 制約パラメータ | `total_kw` | 全充電器の総kW上限 |
-| 制約パラメータ | `pv_by_slot` | スロット別PV上限辞書 |
-| 制約パラメータ | `contract_limit_kw` | 契約電力上限 |
-| 制約パラメータ | `price_values`, `median_price` | C20/C21のピーク帯判定用 |
-| 目的関数構成 | `objective` | 目的関数線形式 |
-| 目的関数構成 | `price_by_slot` | TOU単価辞書 |
-| 目的関数構成 | `diesel_price` | 燃料単価 |
-| 目的関数構成 | `fuel_l` | 便ごとの燃料消費量 |
-| 目的関数構成 | `fuel_rate` | deadhead燃費係数 |
-| 目的関数構成 | `deadhead_min`, `deadhead_km` | deadhead時間/距離 |
-| 目的関数構成 | `unserved_penalty_weight` | 未充足ペナルティ係数 |
-| 求解結果/後処理 | `status_map`, `solver_status` | Gurobi終了ステータス正規化 |
-| 求解結果/後処理 | `empty` | 解なし時の空割当プラン |
-| 求解結果/後処理 | `duties`, `legs` | 出力行路構築 |
-| 求解結果/後処理 | `served_trip_ids`, `served_set`, `unserved_trip_ids` | 供給/未供給便集計 |
-| 求解結果/後処理 | `plan` | 最終 `AssignmentPlan` |
+**車両・テンプレート**
+`type`, `modelCode`, `modelName`, `capacityPassengers`,
+`batteryKwh`, `fuelTankL`, `energyConsumption`, `fuelEfficiencyKmPerL`,
+`co2EmissionGPerKm`, `co2EmissionKgPerL`,
+`curbWeightKg`, `grossVehicleWeightKg`, `engineDisplacementL`, `maxTorqueNm`, `maxPowerKw`,
+`chargePowerKw`, `minSoc`, `maxSoc`, `acquisitionCost`, `enabled`
 
-### 10.2 制約式 C1-C21 と実装対応
+---
 
-| No. | 数式（docs/constant/formulation.md） | 実装状況 | 実装場所 | 実装の式・変数 |
-|---|---|---|---|---|
-| C1 | $\\sum_k y_j^k = 1$（各便一意割当） | 部分対応 | src/optimization/milp/solver_adapter.py | `sum(y[(k,j)]) + unserved[j] == 1`（未充足許容つき） |
-| C2 | 便ノード流量保存（入流=出流） | 対応 | src/optimization/milp/solver_adapter.py | `incoming + start_arc == y`, `outgoing + end_arc == y` |
-| C3 | 各車両の出庫・入庫は高々1回 | 対応 | src/optimization/milp/solver_adapter.py | `sum(start_arc)<=1`, `sum(end_arc)<=1` |
-| C4 | 可行アークのみ利用 | 対応 | src/optimization/milp/model_builder.py, src/optimization/milp/solver_adapter.py | `arc_pairs` を feasible_connections から生成し、そのみ `x` を作成 |
-| C5 | 同時刻の重複運行禁止 | 部分対応 | src/optimization/milp/model_builder.py, src/optimization/milp/solver_adapter.py | 時間可行アークと単一便鎖制約で間接抑止（重複ペア明示制約は未実装） |
-| C6 | SOC遷移（デポ滞在中の充電） | 部分対応 | src/optimization/milp/solver_adapter.py | `s[t+1]=s[t]+0.95*c[t]*Δt-...` で時系列遷移を実装 |
-| C7 | SOC遷移（便走行消費） | 部分対応 | src/optimization/milp/solver_adapter.py | `-trip_energy_expr`（`trip.energy_kwh * y`）を遷移式に加算 |
-| C8 | SOC遷移（deadhead消費） | 対応（近似） | src/optimization/milp/solver_adapter.py | `deadhead_energy_expr` を SOC 遷移に投入 |
-| C9 | SOC上下限 | 対応 | src/optimization/milp/solver_adapter.py | `s_var` の `lb=soc_min`, `ub=cap` |
-| C10 | 出庫時SOC満充電 | 部分対応 | src/optimization/milp/solver_adapter.py | `s[first_slot] == initial_kwh`（満充電固定ではなく初期SOCパラメータ） |
-| C11 | 帰庫後SOC下限 | 対応 | src/optimization/milp/solver_adapter.py | `s[last_slot] >= soc_min * used_vehicle` |
-| C12 | 走行中充電禁止 | 対応 | src/optimization/milp/solver_adapter.py | `c[k,t] <= chargeMax * (1 - running_expr)` |
-| C13 | 充電電力上限 | 部分対応 | src/optimization/milp/solver_adapter.py | `c_var` の `ub=charge_max_kw`（ON/OFF二値 `xi` なし） |
-| C14 | 同時充電台数/容量上限 | 部分対応 | src/optimization/milp/solver_adapter.py | `sum_k c[k,t] <= total_kw`（台数ではなく総kW容量） |
-| C15 | 電力バランス $g_t+pv_t^{ch}=\sum_k c_{k,t}Δt$ | 対応 | src/optimization/milp/solver_adapter.py | `g_var + pv_ch_var == sum(c)*Δt` |
-| C16 | PV上限 $pv_t^{ch} \le PV_tΔt$ | 対応 | src/optimization/milp/solver_adapter.py | `pv_ch_var <= pv_available * Δt` |
-| C17 | 非逆潮流 $g_t \ge 0$ | 対応 | src/optimization/milp/solver_adapter.py | `g_var` を `lb=0` で生成 |
-| C18 | 契約電力上限 $g_t/Δt \le P^{contract}$ | 対応 | src/optimization/milp/solver_adapter.py | `g_var <= contract_limit_kw * Δt` |
-| C19 | 期間平均需要電力定義 | 対応 | src/optimization/milp/solver_adapter.py | `p_avg_var[t] = g_var[t] / Δt` |
-| C20 | オンピーク最大需要 | 対応（価格帯近似） | src/optimization/milp/solver_adapter.py | `w_on >= p_avg_var[t]`（高単価帯） |
-| C21 | オフピーク最大需要 | 対応（価格帯近似） | src/optimization/milp/solver_adapter.py | `w_off >= p_avg_var[t]`（低単価帯） |
+## 9. 実装詳細（技術リファレンス）
 
-### 10.3 目的関数（参考）
+この章は開発者・指導教員向けの詳細情報です。
 
-docs/constant/formulation.md の O1-O4 に対し、現行実装の目的は以下です。
+### 9.1 数式記号と実装変数の対応
 
-$$
-\\min \sum_t price_t \cdot g_t
-+ \sum_{k,j \in ICE} dieselPrice \cdot fuel_{k,j} \cdot y_j^k
-+ \sum_{(i,j),k \in ICE} dieselPrice \cdot fuel^{dh}_{k,i,j} \cdot x_{i,j}^k
-+ demandOn \cdot W^{on} + demandOff \cdot W^{off}
-+ \sum_k fixedUseCost_k z_k
-+ \sum_j penalty_{unserved} u_j
-$$
+| 数式記号 | 意味 | 実装変数（Python） |
+|---------|------|-------------------|
+| $y_j^k$ | 便割当 | `y[(vehicle_id, trip_id)]` |
+| $x_{ij}^k$ | 便間接続アーク | `x[(vehicle_id, from_trip_id, to_trip_id)]` |
+| $u_j$ | 欠便フラグ | `unserved[trip_id]` |
+| $z_k$ | 車両使用フラグ | `used_vehicle[vehicle_id]` |
+| $\xi_{k,t}$ | 充電 ON/OFF | `charge_on_var[(vehicle_id, slot_idx)]` |
+| $c_{k,t}$ | 充電電力 | `c_var[(vehicle_id, slot_idx)]` |
+| $s_{k,t}$ | SOC | `s_var[(vehicle_id, slot_idx)]` |
+| $g_t$ | 系統買電量 | `g_var[slot_idx]` |
+| $pv_t^{ch}$ | PV 自家消費 | `pv_ch_var[slot_idx]` |
+| $\bar{p}_t$ | 平均需要電力 | `p_avg_var[slot_idx]` |
+| $W^{on}, W^{off}$ | ピーク需要 | `w_on_var`, `w_off_var` |
+| $P^{contract}$ | 契約電力上限 | `contract_limit_kw` |
 
-実装場所: src/optimization/milp/solver_adapter.py
+実装ファイル: `src/optimization/milp/solver_adapter.py`（MILP）、`src/optimization/common/evaluator.py`（ALNS/GA/ABC）
 
-- O1（ICE燃料費）: 実装（便燃料 + deadhead燃料）
-- O2（TOU買電費）: 実装（スロット別 `g_t` 課金）
-- O3（デマンド料金）: 実装（`W^{on}`, `W^{off}`）
-- O4（車両固定費）: 実装
+### 9.2 C1〜C21 詳細実装表
 
-### 10.3.1 ALNS / GA / ABC の同等対応
+詳細は `docs/constant/implementation_status.md` を参照してください。
+本 README の 3.2 節が要約版です。
 
-- GA/ABC は `src/optimization/ga/engine.py`, `src/optimization/abc/engine.py` から独立モードで起動し、探索カーネルは ALNS を利用。
-- 3モード共通で `src/optimization/common/evaluator.py` を使用し、以下を同一評価する。
-  - O1: ICE燃料費（便 + deadhead）
-  - O2: TOU買電費（充電スロット別、PV自己消費差引き）
-  - O3: デマンド料金（オン/オフピーク最大需要）
+### 9.3 dispatch 接続可否の判定式
 
-### 10.3.2 ALNS / GA / ABC（evaluator.py）変数一覧
+便 $i$ の後に便 $j$ を接続するには以下を満たす必要があります。
 
-以下は `src/optimization/common/evaluator.py` の `CostEvaluator.evaluate()` と関連メソッドで使用する変数の一覧です。
+$$arrival(i) + turnaround(dest_i) + deadhead(dest_i, origin_j) \leq departure(j)$$
 
-| 区分 | 変数名 | 用途 |
-|---|---|---|
-| 入力 | `problem` | 正規化済み問題（シナリオ/車両/便/価格帯） |
-| 入力 | `plan` | ALNS/GA/ABC が生成した割当・充放電計画 |
-| 固定パラメータ | `prep_time_min` | 乗務員準備時間（分） |
-| 固定パラメータ | `wage_regular_jpy_per_h` | 通常時給 |
-| 固定パラメータ | `regular_hours_per_day` | 所定労働時間 |
-| 固定パラメータ | `overtime_factor` | 残業割増係数 |
-| 重み | `weights` | 目的重み（vehicle/unserved/deviation等） |
-| コスト集計 | `vehicle_cost` | 車両固定費累積 |
-| コスト集計 | `driver_cost` | 乗務員費累積 |
-| コスト集計 | `energy_cost` | 燃料費+買電費累積 |
-| コスト集計 | `demand_cost` | デマンド費累積 |
-| 参照辞書 | `vehicle_by_id` | `vehicle_id -> vehicle` |
-| 参照辞書 | `vehicle_type_by_id` | `vehicle_type_id -> vehicle_type` |
-| ループ変数 | `duty` | 行路単位の走査変数 |
-| ループ変数 | `leg` | 行路内の便レッグ |
-| 中間変数 | `v_type` | 車両タイプ情報 |
-| 中間変数 | `fixed_use_cost` | 行路に対する固定車両費 |
-| 中間変数 | `first_trip`, `last_trip` | 行路先頭/末尾便 |
-| 中間変数 | `duty_duration_min` | 行路所要時間（分） |
-| 中間変数 | `total_hours` | 準備時間込み拘束時間（h） |
-| 中間変数 | `regular_hours`, `overtime_hours` | 通常/残業時間 |
-| 充放電集約 | `slot_totals` | `slot_index -> net_kw` |
-| 充放電集約 | `slot` | `plan.charging_slots` の要素 |
-| 充放電集約 | `net_kw` | 各スロット純充電電力 |
-| O3関連 | `demand_cost` | `_demand_charge_cost()` の戻り値 |
-| スイッチ関連 | `baseline_map` | 基準計画の trip->vehicle_type |
-| スイッチ関連 | `current_map` | 現計画の trip->vehicle_type |
-| スイッチ関連 | `switch_count` | 車種切替件数 |
-| スイッチ関連 | `switch_cost` | 切替ペナルティ費 |
-| 劣化関連 | `slot_hours` | 1スロット時間（h） |
-| 劣化関連 | `degradation_cycles` | 劣化サイクル推定量 |
-| 劣化関連 | `vehicle` | 充放電スロット対応車両 |
-| 劣化関連 | `capacity_kwh` | 車両電池容量 |
-| 劣化関連 | `charged_kwh` | スロット内充電量 |
-| 劣化関連 | `degradation_cost` | 劣化費 |
-| 未充足関連 | `unserved_penalty` | 未配車ペナルティ |
-| 乖離関連 | `baseline_ids` | 基準計画の配車便集合 |
-| 乖離関連 | `deviation_count` | 対基準差分便数 |
-| 乖離関連 | `deviation_cost` | 乖離ペナルティ |
-| 合算 | `total_cost` | 最終評価値 |
-| 戻り値 | `CostBreakdown(...)` | 各コスト内訳を返すデータクラス |
+実装: `src/dispatch/feasibility.py`、`src/dispatch/graph_builder.py`
 
-補助メソッド側の主要変数:
+### 9.4 定数文書トレーサビリティ
 
-| メソッド | 変数名 | 用途 |
-|---|---|---|
-| `_trip_fuel_cost` | `trip`, `fuel_rate`, `fuel_l` | 便ごとの燃料費算出 |
-| `_deadhead_fuel_cost` | `deadhead_from_prev_min`, `distance_km`, `fuel_l` | deadhead燃料費算出 |
-| `_charging_energy_cost` | `timestep_h`, `pv_kw_map`, `slot_idx`, `buy_price`, `charge_kwh`, `pv_kwh`, `grid_kwh`, `total_cost` | TOU買電費算出 |
-| `_demand_charge_cost` | `price_slots`, `sorted_prices`, `threshold`, `on_peak`, `off_peak`, `w_on`, `w_off` | オン/オフピークデマンド費算出 |
-| `_slot_buy_price` | `price_map`, `selected_price`, `nearest_slot` | スロット単価補間 |
-| `_trip_vehicle_type_map` | `mapping`, `trip_id` | 便→車種写像作成 |
-
-### 10.4 実装上の重要補足
-
-- 可行接続アークは dispatch 由来の `feasible_connections` を厳守する。
-- 便未充足は `u[j]` で許容されるため、理論式 C1 の厳密等式は「罰則付き緩和」として実装されている。
-- solver_status が ERROR/INFEASIBLE の場合、最適化結果ファイルが生成されないことがある。job completed はジョブ管理完了を意味し、数理最適化成功とは同義ではない。
-
-## 11. システム全体の使い方（運用手順）
-
-### 11.1 初回セットアップ
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-### 11.2 起動
-
-```powershell
-# Terminal 1: BFF
-python -m uvicorn bff.main:app --host 127.0.0.1 --port 8000
-
-# Terminal 2: Tkinter
-.\.venv\Scripts\Activate.ps1
-python tools/scenario_backup_tk.py
-```
-
-### 11.3 標準オペレーション
-
-1. Tk で接続確認（Connect）
-2. Scenario を作成または複製
-3. Quick Setup 読込・編集・保存
-4. Route label が必要なら `tools/route_variant_labeler_tk.py` で編集
-5. Vehicle/Template を整備
-6. `入力データ作成 (Prepare)` を実行
-7. `最適化実行` を実行
-8. `ジョブ監視` で completed 確認
-9. `Optimization結果` を確認
-
-### 11.5 Tk UI/UX 改善（2026-03-18）
-
-- シナリオ作成の `datasetId` は `/api/app/datasets` の候補から選択する方式に変更。
-  - 無効ID時は候補一覧を含むエラー表示で原因を明示。
-  - 既定値は `tokyu_full`（東急バス全体）を優先。
-- 路線一覧は `quick-setup` の `routeLimit` 依存表示ではなく、`/api/scenarios/{id}/routes` を優先して取得。
-  - タグ付与アプリとの件数乖離を抑制。
-- 対象営業所・路線の選択は、営業所折りたたみ + 実チェックボックス方式へ変更。
-  - 営業所配下の路線は1文字インデント表示。
-- メイン画面に `営業所別車両管理` ボタンを追加。
-  - 専用画面で営業所選択と充電器設定（普通/急速の台数・出力）編集が可能。
-- 右側の車両管理タブにある営業所選択は、入力欄ではなくプルダウン選択に変更。
-- スコープ設定の運行種別 (`day_type`) はプルダウン選択に変更。
-- ソルバー設定は `詳細設定画面を開く` ボタンから別画面で編集。
-  - プルダウンでモード選択し、モードに応じて項目を出し分け。
-  - 旧 Advanced 設定も同じ別画面へ集約し、メイン画面の混在を解消。
-- 車両管理/テンプレート管理で新規追加は専用ダイアログ（別画面）に変更。
-  - 車両追加時は営業所・台数・詳細パラメータを別画面で指定。
-  - テンプレート追加時は詳細パラメータに加え、作成後に営業所へ何台追加するかを同画面で指定可能。
-- 車両編集・テンプレート編集は日本語表示へ統一し、EV/ICE で該当パラメータのみ表示。
-- シナリオ選択時に「シナリオ選択完了」メッセージを表示。
-- 画面上部のシナリオ行に `シナリオ設定を保存` ボタンを追加（Quick Setup保存を即実行）。
-- `入力データ作成 (Prepare)` / `Prepared実行` / `最適化実行` の開始時にメッセージ表示を追加。
-- `最適化実行` は専用モニター画面を開く方式に変更。
-  - 進捗%バー、ステータス表示、PowerShell風ログ表示で実行状況を確認可能。
-- `シミュレーション実行(legacy)` ボタンは通常運用では非表示化。
-- 最適化設定に `終了まで待つ（大規模向け）` を追加。
-  - ON時は実質無制限に近い長時間タイムリミットで実行。
-- 最適化設定に `実行前にdispatchを再構築する（重い）` を追加。
-  - 既存dispatchを使う軽量実行を選べるようにし、開始時timeoutを回避しやすくした。
-- 最適化開始API呼び出しのクライアント側タイムアウトを延長し、
-  大規模シナリオでも開始要求が落ちにくいよう安定化。
-- Windows環境で `シナリオ設定を保存` 時にディレクトリrenameが失敗する場合に備え、
-  非原子的フォールバック保存を追加（WinError 5/32 の500を回避）。
-
-### 11.4 主な API 導線（Tk が呼び出す先）
-
-- `/api/app/context`
-- `/api/scenarios/*`（scenario CRUD）
-- `/api/scenarios/{id}/quick-setup`
-- `/api/scenarios/{id}/simulation/prepare`
-- `/api/scenarios/{id}/run-optimization`
-- `/api/jobs/{job_id}`
-
-## 12. constant 参照と実装トレーサビリティ
-
-### 12.1 参照した constant 文書
-
-| constant ファイル | 採用目的 | 反映先 |
-|---|---|---|
-| `docs/constant/formulation.md` | C1-C21, O1-O4 の定式正本 | 本README 10章、`src/optimization/milp/*` |
-| `docs/constant/AGENTS_ev_route_cost.md` | EV/ICE 混成、運行+コスト統合方針 | `bff/routers/optimization.py`, `tools/scenario_backup_tk.py` |
-| `docs/constant/AGENTS.md` | timetable-first と feasibility の不変条件 | `src/dispatch/*`, `bff/routers/graph.py` |
+| 定数文書 | 採用目的 | 反映先 |
+|---------|---------|--------|
+| `docs/constant/formulation.md` | C1-C21 / O1-O4 定式の正本 | 本 README、`src/optimization/milp/*` |
+| `docs/constant/implementation_status.md` | 実装状況一覧 | 本 README 3章 |
+| `docs/constant/AGENTS_ev_route_cost.md` | EV/ICE 混成・コスト統合方針 | `bff/routers/optimization.py` |
+| `docs/constant/AGENTS.md` | timetable-first の不変条件 | `src/dispatch/*` |
 | `docs/constant/ebus_prototype_model_gurobi.md` | Gurobi 実装指針 | `src/optimization/milp/solver_adapter.py` |
-| `docs/constant/ebus_constraints_table.md` | 制約棚卸し | 本README 10章の実装状況表 |
-| `docs/constant/README.md` | 文書の正本候補整理 | レビュー時の参照順序ガイド |
 
-### 12.2 どのようなアプリを構築したか
+### 9.5 非 Tk フロント機能の移植バックログ
 
-- UI: Tkinter
-  - `tools/scenario_backup_tk.py`（シナリオ/Quick Setup/Prepare/Optimization）
-  - `tools/route_variant_labeler_tk.py`（路線バリアント手動ラベル）
-- API/BFF: FastAPI
-  - `bff/routers/graph.py`（dispatch artifact 生成）
-  - `bff/routers/optimization.py`（最適化ジョブ）
-  - `bff/services/run_preparation.py`（prepare入力生成）
-- Core: dispatch + optimization
-  - `src/dispatch/feasibility.py`
-  - `src/dispatch/graph_builder.py`
-  - `src/optimization/milp/model_builder.py`
-  - `src/optimization/milp/solver_adapter.py`
+`docs/tkinter_feature_parity_backlog.md` を正本として管理しています。
 
-### 12.3 バス運行ルール（実装されている数理的ルール）
+### 9.6 完成判定チェックリスト
 
-dispatch の接続可否は次を満たす場合のみ許可する。
+- BFF 起動と `/api/app/context` 応答
+- Tkinter から Prepare 成功
+- Tkinter から最適化 Job が完走
+- core 内に `frontend/tests/tmp/cache/log` が存在しない
+- パラメータ保全マニフェストに挙げた項目が保持されている
 
-$$
-arrival(i) + turnaround(dest_i) + deadhead(dest_i, origin_j) \le departure(j)
-$$
+---
 
-実装位置:
-- `src/dispatch/feasibility.py`（可否判定）
-- `src/dispatch/graph_builder.py`（可行アーク生成）
-- `src/dispatch/dispatcher.py`（可行アーク上の duty 構築）
+## 10. 実測監査
 
-### 12.4 教員レビュー向け詳細ガイド
-
-以下に、constant 参照元、アプリ構成、パラメータ、制約、実装差分を詳細にまとめた。
-
-- `docs/professor_system_model_guide.md`
-
-## 13. 実測監査（timetable_rows / unserved / departure-arrival一致率）
-
-第三者が追試できるよう、以下の監査スクリプトと成果物を追加しました。
+第三者が追試できるよう、監査スクリプトと成果物を追加しています。
 
 - スクリプト: `scripts/audit_timetable_alignment.py`
 - 提出版レポート: `docs/reproduction/timetable_alignment_audit_20260318.md`
 - 監査成果物（WEEKDAY）: `outputs/audit/bbe1e1bd/timetable_alignment_audit.{json,csv,md}`
-- 監査成果物（SAT比較）: `outputs/audit/bbe1e1bd_sat/timetable_alignment_audit.{json,csv,md}`
 
-### 13.1 監査対象KPI
+### 10.1 監査 KPI
 
-- `timetable_rows_count`
-- `unserved_trip_count`
-- `departure_arrival_match_rate`
+| KPI | 意味 |
+|-----|------|
+| `timetable_rows_count` | 時刻表行数（便数） |
+| `unserved_trip_count` | 担当不能便数 |
+| `departure_arrival_match_rate` | 出発・到着一致率 |
+| `checked_coverage_rate` | 一致率算出に使えた便の割合 |
+| `day_tag_match` | prepared input と最適化結果の曜日タグ整合性 |
 
-加えて、監査の妥当性確認のために以下を併記します。
+`day_tag_match = false` の場合、サービス日種別が異なるため `departure_arrival_match_rate` を品質判定に使わないでください。
 
-- `checked_coverage_rate`（一致率算出に使えた便の割合）
-- `prepared_day_tag`, `result_day_tag`, `day_tag_match`（曜日タグ整合性）
-
-### 13.2 再現コマンド
+### 10.2 再現コマンド
 
 ```powershell
 python scripts/audit_timetable_alignment.py `
@@ -673,7 +608,3 @@ python scripts/audit_timetable_alignment.py `
   --optimization-result-path outputs/tokyu/2026-03-14/optimization/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/meguro/WEEKDAY/optimization_result.json `
   --out-dir outputs/audit/bbe1e1bd
 ```
-
-`day_tag_match=false` の場合は、prepared input と最適化結果のサービス日種別が異なるため、
-`departure_arrival_match_rate` を品質判定に用いてはいけません。
-

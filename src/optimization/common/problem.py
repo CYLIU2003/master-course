@@ -125,6 +125,8 @@ class OptimizationScenario:
     diesel_price_yen_per_l: float = 0.0
     demand_charge_on_peak_yen_per_kw: float = 0.0
     demand_charge_off_peak_yen_per_kw: float = 0.0
+    co2_price_per_kg: float = 0.0
+    ice_co2_kg_per_l: float = 2.64
     fixed_operations_before_t0: Tuple[LockedOperation, ...] = ()
     uncertainty_flags: Mapping[str, bool] = field(default_factory=dict)
 

@@ -359,7 +359,9 @@ class UpdateQuickSetupBody(BaseModel):
     dieselPricePerL: Optional[float] = None
     gridCo2KgPerKwh: Optional[float] = None
     co2PricePerKg: Optional[float] = None
+    iceCo2KgPerL: Optional[float] = None
     depotPowerLimitKw: Optional[float] = None
+    degradationWeight: Optional[float] = None
 
 
 class TimetableRowBody(BaseModel):
@@ -735,7 +737,9 @@ def _builder_defaults(
         "dieselPricePerL": overlay_cost.get("diesel_price_per_l"),
         "gridCo2KgPerKwh": overlay_cost.get("grid_co2_kg_per_kwh"),
         "co2PricePerKg": overlay_cost.get("co2_price_per_kg"),
+        "iceCo2KgPerL": overlay_cost.get("ice_co2_kg_per_l"),
         "depotPowerLimitKw": overlay_charging.get("depot_power_limit_kw"),
+        "degradationWeight": (overlay_solver.get("objective_weights") or {}).get("degradation"),
         "touPricing": list(overlay_cost.get("tou_pricing") or []),
         "fleetTemplates": fleet_templates,
         "timeLimitSeconds": int(overlay_solver.get("time_limit_seconds") or 300),
@@ -924,7 +928,9 @@ def _build_quick_setup_payload(
             "dieselPricePerL": builder_defaults.get("dieselPricePerL"),
             "gridCo2KgPerKwh": builder_defaults.get("gridCo2KgPerKwh"),
             "co2PricePerKg": builder_defaults.get("co2PricePerKg"),
+            "iceCo2KgPerL": builder_defaults.get("iceCo2KgPerL"),
             "depotPowerLimitKw": builder_defaults.get("depotPowerLimitKw"),
+            "degradationWeight": builder_defaults.get("degradationWeight"),
             "allowPartialService": bool(builder_defaults.get("allowPartialService", False)),
             "unservedPenalty": float(builder_defaults.get("unservedPenalty") or 10000.0),
         },
@@ -1280,6 +1286,13 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             overlay_cost["grid_co2_kg_per_kwh"] = float(body.gridCo2KgPerKwh)
         if body.co2PricePerKg is not None:
             overlay_cost["co2_price_per_kg"] = float(body.co2PricePerKg)
+        if body.iceCo2KgPerL is not None:
+            overlay_cost["ice_co2_kg_per_l"] = float(body.iceCo2KgPerL)
+
+        if body.degradationWeight is not None:
+            obj_weights = dict(solver_config.get("objective_weights") or {})
+            obj_weights["degradation"] = float(body.degradationWeight)
+            solver_config["objective_weights"] = obj_weights
 
         overlay_charging = dict(overlay.get("charging_constraints") or {})
         if body.depotPowerLimitKw is not None:

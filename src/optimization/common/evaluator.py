@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Set, Tuple
 
 from .problem import AssignmentPlan, CanonicalOptimizationProblem
 
@@ -16,6 +16,7 @@ class CostBreakdown:
     switch_cost: float = 0.0
     degradation_cost: float = 0.0
     deviation_cost: float = 0.0
+    co2_cost: float = 0.0
     total_cost: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
@@ -28,6 +29,7 @@ class CostBreakdown:
             "switch_cost": self.switch_cost,
             "degradation_cost": self.degradation_cost,
             "deviation_cost": self.deviation_cost,
+            "co2_cost": self.co2_cost,
             "total_cost": self.total_cost,
         }
 
@@ -117,6 +119,9 @@ class CostEvaluator:
         deviation_count = len(set(plan.served_trip_ids).symmetric_difference(baseline_ids))
         deviation_cost = weights.deviation * deviation_count
 
+        # CO₂ cost: calculate from ICE fuel and grid electricity.
+        co2_cost = self._co2_cost(problem, plan, slot_totals)
+
         total_cost = (
             energy_cost
             + demand_cost
@@ -126,6 +131,7 @@ class CostEvaluator:
             + switch_cost
             + degradation_cost
             + deviation_cost
+            + co2_cost
         )
         return CostBreakdown(
             energy_cost=energy_cost,
@@ -136,6 +142,7 @@ class CostEvaluator:
             switch_cost=switch_cost,
             degradation_cost=degradation_cost,
             deviation_cost=deviation_cost,
+            co2_cost=co2_cost,
             total_cost=total_cost,
         )
 
@@ -200,20 +207,44 @@ class CostEvaluator:
         if not slot_totals_kw:
             return 0.0
 
-        price_slots = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
-        if not price_slots:
+        if not problem.price_slots:
             return 0.0
 
-        sorted_prices = sorted(price_slots.values())
-        threshold = sorted_prices[len(sorted_prices) // 2]
-        on_peak = [kw for idx, kw in slot_totals_kw.items() if price_slots.get(idx, 0.0) >= threshold]
-        off_peak = [kw for idx, kw in slot_totals_kw.items() if price_slots.get(idx, 0.0) < threshold]
+        on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
+        on_peak = [kw for idx, kw in slot_totals_kw.items() if idx in on_peak_slots]
+        off_peak = [kw for idx, kw in slot_totals_kw.items() if idx in off_peak_slots]
         w_on = max(on_peak, default=0.0)
         w_off = max(off_peak, default=0.0)
         return (
             max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on
             + max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off
         )
+
+    def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
+        if not problem.price_slots:
+            return set(), set()
+
+        explicit_slots = [
+            slot for slot in problem.price_slots if abs(float(slot.demand_charge_weight or 0.0)) > 1.0e-9
+        ]
+        if explicit_slots:
+            on_peak = {
+                slot.slot_index
+                for slot in problem.price_slots
+                if float(slot.demand_charge_weight or 0.0) > 0.0
+            }
+            off_peak = {slot.slot_index for slot in problem.price_slots if slot.slot_index not in on_peak}
+            return on_peak, off_peak
+
+        sorted_prices = sorted(float(slot.grid_buy_yen_per_kwh or 0.0) for slot in problem.price_slots)
+        threshold = sorted_prices[len(sorted_prices) // 2] if sorted_prices else 0.0
+        on_peak = {
+            slot.slot_index
+            for slot in problem.price_slots
+            if float(slot.grid_buy_yen_per_kwh or 0.0) >= threshold
+        }
+        off_peak = {slot.slot_index for slot in problem.price_slots if slot.slot_index not in on_peak}
+        return on_peak, off_peak
 
     def _is_non_electric_powertrain(
         self,
@@ -279,3 +310,56 @@ class CostEvaluator:
         if adjusted_departure < start_min:
             adjusted_departure += 24 * 60
         return (adjusted_departure - start_min) // timestep_min
+
+    def _co2_cost(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        slot_totals_kw: Dict[int, float],
+    ) -> float:
+        """Return total CO₂ cost [JPY] based on ICE fuel + grid electricity.
+
+        The cost is zero when co2_price_per_kg is zero (default), so this has
+        no effect unless the parameter is explicitly set in the scenario config.
+        """
+        co2_price = max(problem.scenario.co2_price_per_kg, 0.0)
+        if co2_price <= 0:
+            return 0.0
+
+        ice_co2_kg_per_l = max(problem.scenario.ice_co2_kg_per_l, 0.0)
+        vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
+        total_co2_kg = 0.0
+
+        # ICE trip and deadhead fuel CO₂.
+        for duty in plan.duties:
+            if not self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
+                continue
+            for leg in duty.legs:
+                fuel_rate = self._fuel_rate_l_per_km(problem, duty.vehicle_type)
+                # Trip fuel CO₂.
+                trip = problem.trip_by_id().get(leg.trip.trip_id)
+                if trip is not None:
+                    fuel_l = max(trip.fuel_l, 0.0)
+                    if fuel_l <= 0 and fuel_rate > 0:
+                        fuel_l = max(trip.distance_km, 0.0) * fuel_rate
+                    total_co2_kg += ice_co2_kg_per_l * fuel_l
+                # Deadhead fuel CO₂.
+                if leg.deadhead_from_prev_min > 0 and fuel_rate > 0:
+                    dh_km = (leg.deadhead_from_prev_min / 60.0) * 20.0
+                    total_co2_kg += ice_co2_kg_per_l * dh_km * fuel_rate
+
+        # Grid electricity CO₂.
+        if slot_totals_kw and problem.price_slots:
+            timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
+            pv_kw_map = {slot.slot_index: slot.pv_available_kw for slot in problem.pv_slots}
+            co2_factor_map = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
+            for slot_idx, kw in slot_totals_kw.items():
+                co2_factor = co2_factor_map.get(slot_idx, 0.0)
+                if co2_factor <= 0:
+                    continue
+                charge_kwh = max(kw, 0.0) * timestep_h
+                pv_kwh = max(pv_kw_map.get(slot_idx, 0.0), 0.0) * timestep_h
+                grid_kwh = max(charge_kwh - min(charge_kwh, pv_kwh), 0.0)
+                total_co2_kg += co2_factor * grid_kwh
+
+        return co2_price * total_co2_kg

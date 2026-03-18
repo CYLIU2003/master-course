@@ -455,7 +455,9 @@ class App:
         self.demand_charge_var = tk.StringVar(value="1500")
         self.diesel_price_var = tk.StringVar(value="145")
         self.grid_co2_var = tk.StringVar(value="0")
-        self.co2_price_var = tk.StringVar(value="1")
+        self.co2_price_var = tk.StringVar(value="0")
+        self.ice_co2_kg_per_l_var = tk.StringVar(value="2.64")
+        self.degradation_weight_var = tk.StringVar(value="0")
         self.depot_power_limit_var = tk.StringVar(value="500")
         self.contract_penalty_coeff_var = tk.StringVar(value="1000000")
         self.unserved_penalty_var = tk.StringVar(value="10000")
@@ -476,7 +478,9 @@ class App:
         self._labeled_entry(costs, "契約超過罰金係数(slack_penalty)", self.contract_penalty_coeff_var)
         self._labeled_entry(costs, "未配車罰金 unserved_penalty", self.unserved_penalty_var)
         self._labeled_entry(costs, "CO2原単位 grid_co2_kg_per_kwh", self.grid_co2_var)
-        self._labeled_entry(costs, "CO2単価 co2_price_per_kg", self.co2_price_var)
+        self._labeled_entry(costs, "CO2単価 co2_price_per_kg (0=無効)", self.co2_price_var)
+        self._labeled_entry(costs, "軽油CO2係数 ice_co2_kg_per_l", self.ice_co2_kg_per_l_var)
+        self._labeled_entry(costs, "劣化重み degradation_weight (0=無効)", self.degradation_weight_var)
         self._labeled_entry(costs, "拡張係数 objective_weights(JSON)", self.objective_weights_json_var)
 
         self.solver_mode_var = tk.StringVar(value="hybrid")
@@ -1483,6 +1487,21 @@ class App:
                 costs.get("demand_charge"),
                 resp.get("total_demand_charge"),
             ),
+            "battery_degradation_cost": self._pick_number(
+                costs.get("total_degradation_cost"),
+                costs.get("battery_degradation_cost"),
+                costs.get("degradation_cost"),
+                resp.get("total_degradation_cost"),
+            ),
+            "total_co2_kg": self._pick_number(
+                costs.get("total_co2_kg"),
+                resp.get("total_co2_kg"),
+                (resp.get("simulation_summary") or {}).get("total_co2_kg"),
+            ),
+            "co2_cost": self._pick_number(
+                costs.get("co2_cost"),
+                resp.get("co2_cost"),
+            ),
         }
         return summary
 
@@ -1719,7 +1738,9 @@ class App:
             self.demand_charge_var.set(str(sim.get("demandChargeCostPerKw") or 1500))
             self.diesel_price_var.set(str(sim.get("dieselPricePerL") or 145))
             self.grid_co2_var.set(str(sim.get("gridCo2KgPerKwh") or 0))
-            self.co2_price_var.set(str(sim.get("co2PricePerKg") or 1))
+            self.co2_price_var.set(str(sim.get("co2PricePerKg") or 0))
+            self.ice_co2_kg_per_l_var.set(str(sim.get("iceCo2KgPerL") or 2.64))
+            self.degradation_weight_var.set(str(sim.get("degradationWeight") or 0))
             self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
 
             self._refresh_depot_dropdowns(depots)
@@ -1755,8 +1776,10 @@ class App:
             "demandChargeCostPerKw": self._parse_float(self.demand_charge_var.get(), 0.0),
             "dieselPricePerL": self._parse_float(self.diesel_price_var.get(), 145.0),
             "gridCo2KgPerKwh": self._parse_float(self.grid_co2_var.get(), 0.0),
-            "co2PricePerKg": self._parse_float(self.co2_price_var.get(), 1.0),
+            "co2PricePerKg": self._parse_float(self.co2_price_var.get(), 0.0),
+            "iceCo2KgPerL": self._parse_float(self.ice_co2_kg_per_l_var.get(), 2.64),
             "depotPowerLimitKw": self._parse_float(self.depot_power_limit_var.get(), 500.0),
+            "degradationWeight": self._parse_float(self.degradation_weight_var.get(), 0.0),
         }
         self.run_bg(
             lambda: self.client.put_quick_setup(scenario_id, payload),
@@ -2458,6 +2481,9 @@ class App:
         contract_penalty = self._parse_float(self.contract_penalty_coeff_var.get(), 1000000.0)
         if contract_penalty > 0:
             objective_weights.setdefault("slack_penalty", contract_penalty)
+        degradation_w = self._parse_float(self.degradation_weight_var.get(), 0.0)
+        if degradation_w > 0:
+            objective_weights.setdefault("degradation", degradation_w)
 
         return {
             "selected_depot_ids": self._selected_depot_ids(),
@@ -2489,7 +2515,8 @@ class App:
                 "demand_charge_cost_per_kw": self._parse_float(self.demand_charge_var.get(), 0.0),
                 "diesel_price_per_l": self._parse_float(self.diesel_price_var.get(), 145.0),
                 "grid_co2_kg_per_kwh": self._parse_float(self.grid_co2_var.get(), 0.0),
-                "co2_price_per_kg": self._parse_float(self.co2_price_var.get(), 1.0),
+                "co2_price_per_kg": self._parse_float(self.co2_price_var.get(), 0.0),
+                "ice_co2_kg_per_l": self._parse_float(self.ice_co2_kg_per_l_var.get(), 2.64),
                 "depot_power_limit_kw": self._parse_float(self.depot_power_limit_var.get(), 500.0),
                 "tou_pricing": self._parse_tou_text(),
                 "objective_weights": objective_weights,

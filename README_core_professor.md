@@ -1,28 +1,200 @@
-# Core Review Note
+# 教員レビューガイド — master-course core
 
-このファイルは簡易メモです。core の正本手順は README.md を参照してください。
+> [!NOTE]
+> このファイルは **指導教員（中島先生）向けのレビューガイド** です。
+> システムの完全な技術仕様は [README.md](README.md) を参照してください。
 
-## coreの前提
+---
 
-- 実行導線は Tkinter と BFF のみ
-- 東急全体最適化を再現できる最小構成
-- 最適化入力パラメータは削除しない
+## このドキュメントの目的
 
-## 主要参照
+本研究では、東急バスの BEV（電気バス）/ICE（エンジンバス）混成車両群を対象に、
+**便割当・充電計画・電力調達を同時に最適化する MILP モデル** を実装しています。
 
-- 実行手順と検証: README.md
-- 制約定式と実装対応（C1-C21, 記号表付き）: README.md の「10. 先生レビュー用: 最適化定式と実装対応」
-- constant参照元と実装トレーサビリティ詳細: docs/professor_system_model_guide.md
-- パラメータ保全: docs/core_parameter_preservation_manifest.md
-- 非Tkフロント機能の移植バックログ: docs/tkinter_feature_parity_backlog.md
-- 最終検証レポート（3→2→1）: docs/core_final_validation_report_20260317.md
+このファイルでは以下を説明します。
 
-## レビュー時の観点
+1. 研究として何を解こうとしているか
+2. どこまで実装できているか（定式と実装の対応）
+3. 先生にレビューしていただきたい観点
+4. 重要ファイルへの案内
 
-- Dispatch feasibility が崩れていないか
-- Solver mode/objective/penalty/tariff の契約が保持されているか
-- Tkinter で prepare と optimization が完走するか
-- MILP/ALNS/hybrid architecture adequacy
-- experiment reproducibility and reporting integrity
+---
 
-This document is meant to be sufficient for independent setup and technical review without prior project context.
+## 1. 研究概要（3行で）
+
+| 項目 | 内容 |
+|------|------|
+| **対象** | 東急バス全営業所の BEV/ICE 混成車両群 |
+| **決定内容** | 便割当 + BEV 充電スケジュール + 電力調達（系統/PV） |
+| **最小化** | 燃料費 + 電気代 + デマンド料金 + 固定費 + CO₂費 + 劣化費 |
+
+---
+
+## 2. モデルの構造（全体像）
+
+```
+【入力データ】
+  時刻表 / 車両諸元 / 電力料金（TOU・デマンド）/ PV 発電予測 / 契約電力上限
+                            ↓
+          ┌─────────────────────────────────────────────┐
+          │           MILP 最適化モデル（Gurobi）          │
+          │                                               │
+          │  決定変数                                      │
+          │  ・y_j^k   : 便 j を車両 k に割り当てるか      │
+          │  ・c_{k,t} : 車両 k をスロット t に何 kW 充電  │
+          │  ・g_t     : スロット t の系統買電量            │
+          │                                               │
+          │  制約（C1〜C21）                               │
+          │  ・全便を必ず担当（欠便は大ペナルティ）          │
+          │  ・走行中充電禁止 / SOC 上下限                 │
+          │  ・充電器台数・出力の上限                       │
+          │  ・系統受電量が契約電力以内                     │
+          │                                               │
+          │  目的関数（O1〜O4 + CO₂費 + 劣化費）           │
+          └─────────────────────────────────────────────┘
+                            ↓
+【出力】
+  車両ごとの運行スケジュール / 充電計画 / 費用内訳 / 未充足便リスト
+```
+
+---
+
+## 3. 目的関数の説明
+
+### 3.1 最小化する式（全体）
+
+$$
+\min \quad
+\underbrace{c_f \sum_{k \in \text{ICE}} \bigl( \sum_j f_k(j) y_j^k + \sum_{(i,j)} f_k^{dh}(i,j) x_{ij}^k \bigr)}_{\text{O1：ICE 燃料費（便走行 + 回送）}}
++
+\underbrace{\sum_t p_t^{grid} \cdot g_t}_{\text{O2：TOU 電気代}}
+$$
+
+$$
++\;
+\underbrace{p^{dem,on} W^{on} + p^{dem,off} W^{off}}_{\text{O3：デマンド料金}}
++
+\underbrace{\sum_k c_k^{veh} z_k}_{\text{O4：車両固定費}}
++
+\underbrace{\sum_j \pi \cdot u_j}_{\text{欠便ペナルティ}}
+$$
+
+$$
++\;
+\underbrace{p^{CO_2} \Bigl( \alpha_{ICE} \sum_{k,j} f_k(j) y_j^k + \alpha_{grid} \sum_t g_t \Bigr)}_{\text{CO₂費（}p^{CO_2}>0\text{ のとき有効）}}
++
+\underbrace{w^{degr} \sum_{k \in \text{BEV},t} \frac{c_{k,t}}{cap_k} \beta}_{\text{劣化費（}w^{degr}>0\text{ のとき有効）}}
+$$
+
+### 3.2 各費目の直感的な意味
+
+| 費目 | なぜ最小化に含めるか |
+|------|-------------------|
+| **O1 燃料費** | ICE バスの走行コスト。BEV で代替できれば削減可能 |
+| **O2 電気代（TOU）** | 充電時刻をずらすと安い時間帯に充電でき、コストが下がる |
+| **O3 デマンド料金** | 電力会社との契約では「その月の最大需要電力 × 単価」が基本料金となる。充電を分散させると最大需要が抑えられ、この料金が下がる |
+| **O4 固定費** | 使用台数を減らすと削減できる。BEV 1台で複数便をつなぐ効果を評価する |
+| **欠便ペナルティ** | 担当不能な便を実質的に禁止するための大きな罰則（通常 10,000 円/便） |
+| **CO₂費** | 排出量に価格を付けることで、CO₂ の少ない充電時間帯・車種選択を誘導する |
+| **劣化費** | 充電量が多いほど電池が劣化する。この費用を入れることで過充電を抑制する |
+
+### 3.3 デフォルト設定について
+
+CO₂費・劣化費は `co2_price_per_kg = 0`（無効）がデフォルトです。
+パラメータに正の値を設定すると目的関数に加算されます。
+これにより、単純コスト最小化 / CO₂考慮 / 劣化考慮 を切り替えられます。
+
+---
+
+## 4. 定式化と実装の対応（3層構造）
+
+本研究では、「目標定式化」と「実装済み範囲」を明確に分離して管理しています。
+
+| 層 | 内容 | 参照先 |
+|----|------|--------|
+| **① 目標定式化** | 研究として最終的に目指す C1〜C21 / O1〜O4 の完全モデル | [`docs/constant/formulation.md`](docs/constant/formulation.md) |
+| **② 実装済み範囲** | 2026-03-18 時点で実際に実装されている範囲 | [`docs/constant/implementation_status.md`](docs/constant/implementation_status.md) |
+| **③ 今後の計画** | 修論フェーズで追加予定の機能 | 下表参照 |
+
+### 制約の実装状況（要約）
+
+| 分類 | 実装済み | 近似・部分対応 | 未実装 |
+|------|---------|--------------|--------|
+| 便割当（C1〜C5） | C2, C3, C4, C5 | C1（罰則付き緩和） | — |
+| SOC 管理（C6〜C11） | C9, C11 | C6, C7, C8（連続近似）, C10（初期SOCパラメータ） | — |
+| 充電設備（C12〜C14） | C12, C13, C14 | — | — |
+| 電力システム（C15〜C21） | C15, C16, C17, C18, C19 | C20, C21（tariff 優先判定） | — |
+
+> [!NOTE]
+> **C1 について**：理論式では「各便に必ず1台を割り当てる（等式）」ですが、
+> 実装では欠便変数 $u_j$ を導入し、大きなペナルティを課す「罰則付き緩和」として実装しています。
+> これは「解なし（infeasible）」を避けるための意図的な設計です。
+
+---
+
+## 5. 修論フェーズ別の進捗
+
+| Phase | 位置づけ | 状態 |
+|-------|---------|------|
+| Phase 1 | 説明責務の明確化（README・定式文書の整備） | ✅ 完了 |
+| Phase 2 | 定式と実装の整合性向上（ON/OFF 二値・台数制約・C5 明示） | ✅ 完了 |
+| Phase 3 | 目的関数拡張（CO₂費・劣化費の目的関数化） | ✅ 完了（ε制約法は未着手） |
+| Phase 4 | 研究拡張（ハイブリッド化・Rolling horizon） | 🔲 未着手 |
+
+---
+
+## 6. レビュー観点
+
+先生にご確認いただきたい点を整理します。
+
+### 6.1 モデルの妥当性
+
+- [ ] 目的関数 O1〜O4 の設定は研究目的に対して適切か
+- [ ] C1（欠便の罰則付き緩和）は論文の主張として妥当か
+- [ ] CO₂費・劣化費を目的関数に入れる設計（重み付き和）で良いか、ε制約法の方が適切か
+- [ ] SOC 遷移（C6〜C8）の連続近似は修論の議論として許容できる精度か
+
+### 6.2 実装の健全性
+
+- [ ] `入力データ作成 (Prepare)` → `最適化実行` が完走するか
+- [ ] 欠便数（`unserved_trip_count`）が許容範囲に収まっているか
+- [ ] MILP・ALNS・GA・ABC の結果比較が同一条件で行われているか
+
+### 6.3 再現性
+
+- [ ] 監査スクリプト（`scripts/audit_timetable_alignment.py`）の出力と時刻表が整合しているか
+  - 成果物: `docs/reproduction/timetable_alignment_audit_20260318.md`
+
+---
+
+## 7. 重要ファイル一覧
+
+| ファイル | 内容 |
+|---------|------|
+| [`README.md`](README.md) | システム全体の説明（セットアップ・実行・モデル詳細） |
+| [`docs/constant/formulation.md`](docs/constant/formulation.md) | 目標定式化の正本（C1〜C21 / O1〜O4） |
+| [`docs/constant/implementation_status.md`](docs/constant/implementation_status.md) | 実装状況の詳細対応表（✅/🔶/❌） |
+| [`src/optimization/milp/solver_adapter.py`](src/optimization/milp/solver_adapter.py) | MILP 実装本体（Gurobi） |
+| [`src/optimization/common/evaluator.py`](src/optimization/common/evaluator.py) | ALNS/GA/ABC 共通評価器 |
+| [`src/optimization/common/builder.py`](src/optimization/common/builder.py) | シナリオ → 最適化問題の変換 |
+| [`docs/core_parameter_preservation_manifest.md`](docs/core_parameter_preservation_manifest.md) | 削除禁止パラメータの定義 |
+| [`docs/reproduction/timetable_alignment_audit_20260318.md`](docs/reproduction/timetable_alignment_audit_20260318.md) | 実測監査レポート |
+
+---
+
+## 8. 用語対応表
+
+数理最適化に慣れていない方向けに、用語を整理します。
+
+| 数理用語 | 直感的な意味 |
+|---------|------------|
+| 目的関数 | モデルが最終的に一番小さくしたい「合計費用の計算式」 |
+| 制約 | 現実の運行で絶対に破ってはいけない条件 |
+| 決定変数 | モデルが自動で決める項目（便割当・充電量など） |
+| MILP | 整数変数（0 or 1）と連続変数が混在する線形最適化問題の総称 |
+| SOC | バッテリー残量（State of Charge）。ここでは kWh 単位 |
+| TOU | 時間帯別料金（Time of Use）。電気代が時間帯によって異なる料金体系 |
+| デマンド料金 | 月の最大需要電力（ピーク電力）に応じた基本料金 |
+| ALNS | 適応型大規模近傍探索（近似解法。大規模問題向け） |
+| deadhead | バスが乗客なしで移動すること（回送） |
+| feasible connection | 時刻的に接続可能な便の組み合わせ |

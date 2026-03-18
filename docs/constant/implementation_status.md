@@ -41,7 +41,7 @@
 | C2 | フロー保存（便ノードで入流 = 出流） | ✅ 対応 | `incoming + start_arc == y`、`outgoing + end_arc == y` |
 | C3 | 各車両の出庫・入庫は高々1回 | ✅ 対応 | `sum(start_arc) <= 1`、`sum(end_arc) <= 1` |
 | C4 | 接続可能アークのみ利用可 | ✅ 対応 | `arc_pairs` を `feasible_connections` から生成。不可アークは変数すら作らない |
-| C5 | 同時刻の重複運行禁止 | 🔶 部分対応 | 時間可行アーク（C4）と単一便鎖（C3）の構造で間接抑止。重複ペアの明示制約は未実装 |
+| C5 | 同時刻の重複運行禁止 | ✅ 対応 | 各車両の重複便ペア `(i,j)` に対し `y[k,i] + y[k,j] <= 1` を明示追加（`_trips_overlap` で区間重複を判定）。C4/C3 の間接抑止に加えて完全実装 |
 | C6 | SOC 遷移（デポ滞在中：充電） | 🔶 部分対応 | `s[t+1] = s[t] + η·c[t]·Δt - ...` で時系列遷移を実装。走行/回送/充電の扱いに近似を含む |
 | C7 | SOC 遷移（便走行消費） | 🔶 部分対応 | `trip.energy_kwh * y` を SOC 遷移に減算。Big-M 形式ではなく連続遷移で近似 |
 | C8 | SOC 遷移（deadhead 消費） | 🔶 部分対応（近似） | `deadhead_energy_expr` を SOC 遷移に投入。距離→エネルギー換算に近似あり |
@@ -49,15 +49,15 @@
 | C10 | 出庫時 SOC（満充電） | 🔶 部分対応 | `s[first_slot] == initial_kwh`。満充電固定ではなく `initial_soc` パラメータ依存 |
 | C11 | 帰庫後 SOC 下限（翌日用確保） | ✅ 対応 | `s[last_slot] >= soc_min * used_vehicle` |
 | C12 | 走行中充電禁止（運行と充電の排他） | ✅ 対応 | `c[k,t] <= chargeMax * (1 - running_expr)`（走行中フラグで充電上限をゼロに） |
-| C13 | 充電電力上限（充電器定格） | 🔶 部分対応 | `c_var` の `ub = charge_max_kw`。ON/OFF 二値変数 $\xi$ は未導入（連続変数のみ） |
-| C14 | 同時充電台数制約（充電器台数上限） | 🔶 部分対応 | `sum_k c[k,t] <= total_kw`（台数ではなく総 kW 容量で近似。$\xi$ なしのため台数カウント不可） |
+| C13 | 充電電力上限（充電器定格） | ✅ 対応（MILP adapter経路） | `chi[k,t]`（ON/OFF二値）を導入し、`c[k,t] <= chargeMax * chi[k,t]` を実装 |
+| C14 | 同時充電台数制約（充電器台数上限） | ✅ 対応（MILP adapter経路） | `sum_k chi[k,t] <= total_ports`（台数）と `sum_k c[k,t] <= total_kw`（容量）を分離実装 |
 | C15 | 電力バランス（系統 + PV = 充電需要） | ✅ 対応 | `g_var + pv_ch_var == sum(c) * Δt` |
 | C16 | PV 供給上限（PV 発電量以内） | ✅ 対応 | `pv_ch_var <= pv_available * Δt` |
 | C17 | 非逆潮流（系統への注入禁止） | ✅ 対応 | `g_var` の `lb = 0` |
 | C18 | 系統受電容量上限（契約電力） | ✅ 対応 | `g_var <= contract_limit_kw * Δt` |
 | C19 | デマンド計測期間の平均需要電力定義 | ✅ 対応 | `p_avg_var[t] = g_var[t] / Δt` |
-| C20 | オンピーク最大需要電力 | 🔶 対応（近似） | `w_on >= p_avg_var[t]`（高単価スロット帯で適用）。単価中央値ベースの近似判定 |
-| C21 | オフピーク最大需要電力 | 🔶 対応（近似） | `w_off >= p_avg_var[t]`（低単価スロット帯で適用）。単価中央値ベースの近似判定 |
+| C20 | オンピーク最大需要電力 | 🔶 対応（改善） | `demand_charge_weight` が設定された tariff slot を優先して `w_on >= p_avg_var[t]` を適用。未設定時は中央値フォールバック |
+| C21 | オフピーク最大需要電力 | 🔶 対応（改善） | `demand_charge_weight` が設定された tariff slot を優先して `w_off >= p_avg_var[t]` を適用。未設定時は中央値フォールバック |
 
 ---
 
@@ -70,8 +70,8 @@
 | O3 | デマンド料金（最大需要電力） | ✅ 実装済み | `demand_on * W^on + demand_off * W^off` |
 | O4 | 車両固定費 | ✅ 実装済み | `fixed_use_cost_k * z_k`（`fixed_use_cost_jpy` 設定がある場合のみ有効） |
 | —   | 欠便ペナルティ | ✅ 実装済み | `unserved_penalty * sum_j u_j`（大きな重みで欠便を強く抑制） |
-| —   | CO₂ 費用 | ❌ 未実装 | `evaluator.py` では計算・集計するが**目的関数には加算していない**（評価指標のみ） |
-| —   | 電池劣化費 | ❌ 未実装 | `evaluator.py` で `degradation_cost` を計算するが**目的関数には加算していない** |
+| —   | CO₂ 費用 | ✅ 実装済み | `co2_price_per_kg > 0` のとき MILP 目的関数・evaluator.py 両方に加算。ICE 燃料由来 + 系統電力由来を個別計算 |
+| —   | 電池劣化費 | ✅ 実装済み | `weights.degradation > 0` のとき MILP・evaluator.py 両方で目的関数に加算。充電 kWh / 容量 × 単価/cycle × 重み |
 | —   | PV 余剰売電 / 逆潮流 | ❌ 未実装 | `pv_t^{sell}` 変数・売電益の定式化は将来拡張 |
 
 ---
@@ -87,8 +87,8 @@
 | O3 デマンド料金 | ✅ | ✅ |
 | O4 車両固定費 | ✅ | ✅ |
 | 欠便ペナルティ | ✅ | ✅ |
-| CO₂ 費用 | ❌ | 計算のみ（目的外） |
-| 電池劣化費 | ❌ | 計算のみ（目的外） |
+| CO₂ 費用 | ✅（`co2_price_per_kg > 0` 時） | ✅（同条件、`co2_cost` フィールドに分離） |
+| 電池劣化費 | ✅（`weights.degradation > 0` 時） | ✅（同条件、`degradation_cost` フィールド） |
 
 ---
 
@@ -97,17 +97,18 @@
 ### Phase 1（2026-03-18 ～ 修論前半）
 - ✅ 本文書の新設（仕様書と実装の分離明記）
 - ✅ README・formulation.md に注意書き追加
-- 🔲 CO₂ 計算結果を結果 JSON・出力画面に明示
-- 🔲 充電器台数制約を総 kW と分離（`N_c^max` による台数カウント）
+- ✅ CO₂ 計算結果を結果 JSON・出力画面に明示（JSON既存 + Tk結果Summaryへ表示追加）
+- ✅ 充電器台数制約を総 kW と分離（`N_c^max` による台数カウント）
 
 ### Phase 2（修論前半）
-- 🔲 充電 ON/OFF 二値変数 $\xi_{k,t}$ の導入（C13/C14 の厳密化）
-- 🔲 オンピーク/オフピーク時間帯を tariff テーブルで厳密定義（C20/C21 の改善）
-- 🔲 C5（重複禁止）明示制約の実装検討
+- ✅ 充電 ON/OFF 二値変数 $\xi_{k,t}$ の導入（C13/C14 の厳密化）
+- ✅ オンピーク/オフピーク時間帯を tariff テーブル優先で定義（C20/C21 の改善、未設定時フォールバックあり）
+- ✅ C5（重複禁止）明示制約を追加（`_trips_overlap` + `y[k,i] + y[k,j] <= 1`）
 
 ### Phase 3（修論中盤）
-- 🔲 CO₂ を ε 制約法または重み付きで目的関数化
-- 🔲 劣化費の簡易線形モデル導入（O 追加）
+- ✅ CO₂ を重み付き和で目的関数化（`co2_price_per_kg > 0` のとき有効）
+- ✅ 劣化費の簡易線形モデルを目的関数に追加（`weights.degradation > 0` のとき有効）
+- 🔲 ε 制約法による多目的化（CO₂ を上限制約として扱う形式）
 - 🔲 deterministic MILP の妥当性確認完了
 
 ### Phase 4（修論後半）
