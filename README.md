@@ -156,17 +156,18 @@ python tools/route_variant_labeler_tk.py
 - `mode_milp_only` で `ERROR: Name too long (maximum name length is 255 characters)` が出る場合は、MILP変数名長が原因です。
   2026-03-17時点で `src/optimization/milp/solver_adapter.py` は長い可読名を使わず自動命名に変更済みです。
 - `POST /simulation/prepare` / `POST /run-optimization` が 503 の場合:
-  - 多くは `BUILT_DATASET_REQUIRED`（`data/built/tokyu_core` 未準備）です。
+  - 多くは `BUILT_DATASET_REQUIRED`（`data/built/tokyu_full` 未準備）です。
   - `GET /api/app/context` の `built_ready` と `missing_artifacts` を確認してください。
-  - `data/catalog-fast` が既にある場合は、以下で built を再生成できます。
+  - `data/catalog-fast` が既にある場合は、以下で `tokyu_full` を再生成できます。
 
 ```powershell
-python catalog_update_app.py refresh gtfs-pipeline --source-dir data/catalog-fast --built-datasets tokyu_core,tokyu_full
+python catalog_update_app.py refresh gtfs-pipeline --source-dir data/catalog-fast --built-datasets tokyu_full
 ```
 
   - coreパッケージで `No module named 'tokyubus_gtfs'` が出る環境でも、
     上記コマンドは `data/catalog-fast/normalized/*.jsonl` から built 再生成へ自動フォールバックします。
   - 実行結果に `"pipeline_fallback": true` が出ていれば、built-only フォールバックで完了しています。
+  - core 既定datasetは `tokyu_full` です（`DEFAULT_DATASET_ID` 未指定時）。
 
   - builtデータを配置/生成後、BFFを再起動してください。
 

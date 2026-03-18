@@ -62,6 +62,8 @@ tests/       回帰テスト
     `data/catalog-fast/normalized/*.jsonl` から `data/built/{dataset}` の parquet + manifest を
     直接再生成できるようにした。
   - 実行結果に `pipeline_fallback=true` を付与して、fallback経路での成功を判別可能にした。
+  - 既定datasetを `tokyu_core` 依存から外すため、
+    `src/research_dataset_loader.py` と `bff/services/app_cache.py` の default を `tokyu_full` へ変更。
 
 ### [DEV-2026-03-18] Tkinter UI/UX 改善 + Tk/BFF 不整合の解消
 

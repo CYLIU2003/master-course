@@ -33,7 +33,7 @@ _CACHE: Dict[str, Dict[str, Any]] = {}
 _DEFAULT_TTL_SEC = 3600
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILT_ROOT = Path(os.environ.get("BUILT_ROOT", str(_REPO_ROOT / "data" / "built")))
-DEFAULT_DATASET_ID = os.environ.get("DEFAULT_DATASET_ID", "tokyu_core")
+DEFAULT_DATASET_ID = os.environ.get("DEFAULT_DATASET_ID", "tokyu_full")
 _cached_state: Dict[str, Any] | None = None
 
 

@@ -25,7 +25,7 @@ from src.value_normalization import (
 
 
 DEFAULT_OPERATOR_ID = "tokyu"
-DEFAULT_DATASET_ID = "tokyu_core"
+DEFAULT_DATASET_ID = "tokyu_full"
 MISSING_BUILT_DATA_MESSAGE = "Timetable/trip data not found. Run data-prep first."
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
