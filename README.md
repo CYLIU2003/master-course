@@ -164,6 +164,10 @@ python tools/route_variant_labeler_tk.py
 python catalog_update_app.py refresh gtfs-pipeline --source-dir data/catalog-fast --built-datasets tokyu_core,tokyu_full
 ```
 
+  - coreパッケージで `No module named 'tokyubus_gtfs'` が出る環境でも、
+    上記コマンドは `data/catalog-fast/normalized/*.jsonl` から built 再生成へ自動フォールバックします。
+  - 実行結果に `"pipeline_fallback": true` が出ていれば、built-only フォールバックで完了しています。
+
   - builtデータを配置/生成後、BFFを再起動してください。
 
 ### 8.1 Gurobi 利用確認（MILP）

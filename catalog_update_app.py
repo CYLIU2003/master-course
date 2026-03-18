@@ -11,10 +11,13 @@ heavy public-data refresh work can be run on demand.
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
 import importlib.util
 import json
 import sys
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -93,32 +96,328 @@ def _parse_dataset_ids(value: Optional[str]) -> List[str]:
     return [item.strip() for item in str(value).split(",") if item.strip()]
 
 
+def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            payload = json.loads(line)
+            if isinstance(payload, dict):
+                rows.append(payload)
+    return rows
+
+
+def _normalize_route_code(value: Any) -> str:
+    return unicodedata.normalize("NFKC", str(value or "")).strip()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _read_dataset_scope(dataset_id: str) -> Dict[str, Any]:
+    path = Path("data") / "seed" / "tokyu" / "datasets" / f"{dataset_id}.json"
+    if not path.exists():
+        return {"included_depots": [], "included_routes": "ALL"}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return {"included_depots": [], "included_routes": "ALL"}
+    return {
+        "included_depots": [str(x).strip() for x in payload.get("included_depots") or [] if str(x).strip()],
+        "included_routes": payload.get("included_routes", "ALL"),
+    }
+
+
+def _read_route_to_depot_map() -> Dict[str, set[str]]:
+    path = Path("data") / "seed" / "tokyu" / "route_to_depot.csv"
+    mapping: Dict[str, set[str]] = {}
+    if not path.exists():
+        return mapping
+    with path.open("r", encoding="utf-8-sig", newline="") as fh:
+        for row in csv.DictReader(fh):
+            route_code = _normalize_route_code(row.get("route_code"))
+            depot_id = str(row.get("depot_id") or "").strip()
+            if not route_code or not depot_id:
+                continue
+            mapping.setdefault(route_code, set()).add(depot_id)
+    return mapping
+
+
+def _route_allowed_for_dataset(
+    route: Dict[str, Any],
+    *,
+    included_depots: set[str],
+    included_routes: set[str] | None,
+    route_to_depot: Dict[str, set[str]],
+    dataset_id: str,
+) -> bool:
+    route_code = _normalize_route_code(
+        route.get("routeCode")
+        or route.get("routeFamilyCode")
+        or route.get("routeLabel")
+        or route.get("name")
+    )
+    if included_routes is not None and route_code not in included_routes:
+        return False
+    if not included_depots:
+        return True
+    mapped = route_to_depot.get(route_code) or set()
+    if not mapped:
+        # unknown mapping is kept for full dataset and dropped for scoped datasets
+        return dataset_id == "tokyu_full"
+    return len(mapped.intersection(included_depots)) > 0
+
+
+def _rebuild_from_catalog_fast(
+    *,
+    dataset_id: str,
+    source_dir: Path,
+) -> Dict[str, Any]:
+    import pandas as pd
+
+    normalized_dir = source_dir / "normalized"
+    required = [
+        normalized_dir / "routes.jsonl",
+        normalized_dir / "trips.jsonl",
+        normalized_dir / "stops.jsonl",
+        normalized_dir / "stop_times.jsonl",
+        normalized_dir / "busstop_pole_timetables.jsonl",
+    ]
+    missing = [str(path) for path in required if not path.exists()]
+    if missing:
+        raise RuntimeError(
+            "catalog-fast normalized files are missing: " + ", ".join(missing)
+        )
+
+    route_to_depot = _read_route_to_depot_map()
+    scope = _read_dataset_scope(dataset_id)
+    included_depots = set(scope["included_depots"])
+    included_routes_raw = scope["included_routes"]
+    included_routes = None if included_routes_raw == "ALL" else set(str(x).strip() for x in (included_routes_raw or []) if str(x).strip())
+
+    routes_raw = _read_jsonl(normalized_dir / "routes.jsonl")
+    trips_raw = _read_jsonl(normalized_dir / "trips.jsonl")
+    stops_raw = _read_jsonl(normalized_dir / "stops.jsonl")
+    stop_times_raw = _read_jsonl(normalized_dir / "stop_times.jsonl")
+    stop_timetables_raw = _read_jsonl(normalized_dir / "busstop_pole_timetables.jsonl")
+
+    routes_scoped = [
+        row for row in routes_raw
+        if _route_allowed_for_dataset(
+            row,
+            included_depots=included_depots,
+            included_routes=included_routes,
+            route_to_depot=route_to_depot,
+            dataset_id=dataset_id,
+        )
+    ]
+    route_ids = {str(row.get("id") or "").strip() for row in routes_scoped if str(row.get("id") or "").strip()}
+
+    trips_scoped = [row for row in trips_raw if str(row.get("route_id") or "").strip() in route_ids]
+    scope_relaxed = False
+    if routes_scoped and not trips_scoped:
+        # normalized sources may use route/depot classifications that differ from seed mapping;
+        # avoid generating an empty runnable dataset.
+        routes_scoped = list(routes_raw)
+        route_ids = {str(row.get("id") or "").strip() for row in routes_scoped if str(row.get("id") or "").strip()}
+        trips_scoped = [row for row in trips_raw if str(row.get("route_id") or "").strip() in route_ids]
+        scope_relaxed = True
+    trip_ids = {str(row.get("trip_id") or "").strip() for row in trips_scoped if str(row.get("trip_id") or "").strip()}
+
+    stop_times_scoped = [row for row in stop_times_raw if str(row.get("trip_id") or "").strip() in trip_ids]
+    used_stop_ids = {
+        str(row.get("stop_id") or "").strip()
+        for row in stop_times_scoped
+        if str(row.get("stop_id") or "").strip()
+    }
+    for row in trips_scoped:
+        origin = str(row.get("origin") or "").strip()
+        destination = str(row.get("destination") or "").strip()
+        if origin:
+            used_stop_ids.add(origin)
+        if destination:
+            used_stop_ids.add(destination)
+
+    stops_scoped = [row for row in stops_raw if str(row.get("id") or "").strip() in used_stop_ids]
+    stop_timetables_scoped = [
+        row for row in stop_timetables_raw if str(row.get("stopId") or row.get("stop_id") or "").strip() in used_stop_ids
+    ]
+
+    routes_rows = [
+        {
+            "id": str(row.get("id") or "").strip(),
+            "routeCode": str(row.get("routeCode") or "").strip(),
+            "routeLabel": str(row.get("routeLabel") or row.get("name") or row.get("routeCode") or "").strip(),
+            "name": str(row.get("name") or row.get("routeLabel") or row.get("routeCode") or "").strip(),
+            "source": str(row.get("source") or "catalog_fast").strip(),
+            "depotId": row.get("depotId") or row.get("depot_id"),
+            "stopSequence": list(row.get("stopSequence") or []),
+        }
+        for row in routes_scoped
+    ]
+
+    trips_rows = [
+        {
+            "trip_id": str(row.get("trip_id") or "").strip(),
+            "route_id": str(row.get("route_id") or "").strip(),
+            "service_id": str(row.get("service_id") or "WEEKDAY").strip() or "WEEKDAY",
+            "departure": str(row.get("departure") or "").strip(),
+            "arrival": str(row.get("arrival") or "").strip(),
+            "origin": str(row.get("origin") or "").strip(),
+            "destination": str(row.get("destination") or "").strip(),
+            "distance_km": float(row.get("distance_km") or 0.0),
+            "direction": str(row.get("direction") or "outbound").strip() or "outbound",
+            "allowed_vehicle_types": list(row.get("allowed_vehicle_types") or ["BEV", "ICE"]),
+            "source": str(row.get("source") or "catalog_fast").strip(),
+        }
+        for row in trips_scoped
+    ]
+
+    timetables_rows = [dict(row) for row in trips_rows]
+
+    stops_rows = [
+        {
+            "id": str(row.get("id") or "").strip(),
+            "code": str(row.get("code") or row.get("id") or "").strip(),
+            "name": str(row.get("name") or row.get("id") or "").strip(),
+            "lat": row.get("lat"),
+            "lon": row.get("lon"),
+            "poleNumber": row.get("poleNumber"),
+            "source": str(row.get("source") or "catalog_fast").strip(),
+        }
+        for row in stops_scoped
+    ]
+
+    stop_times_rows = [
+        {
+            "trip_id": str(row.get("trip_id") or "").strip(),
+            "stop_id": str(row.get("stop_id") or "").strip(),
+            "stop_name": str(row.get("stop_name") or "").strip(),
+            "sequence": row.get("sequence"),
+            "departure": str(row.get("departure") or "").strip(),
+            "arrival": str(row.get("arrival") or "").strip(),
+            "source": str(row.get("source") or "catalog_fast").strip(),
+        }
+        for row in stop_times_scoped
+    ]
+
+    stop_timetables_rows = [
+        {
+            "id": str(row.get("id") or "").strip(),
+            "stopId": str(row.get("stopId") or row.get("stop_id") or "").strip(),
+            "calendar": str(row.get("calendar") or "").strip(),
+            "service_id": str(row.get("service_id") or "WEEKDAY").strip() or "WEEKDAY",
+            "items": list(row.get("items") or []),
+            "source": str(row.get("source") or "catalog_fast").strip(),
+        }
+        for row in stop_timetables_scoped
+    ]
+
+    built_dir = Path("data") / "built" / dataset_id
+    built_dir.mkdir(parents=True, exist_ok=True)
+
+    pd.DataFrame(routes_rows).to_parquet(built_dir / "routes.parquet", index=False)
+    pd.DataFrame(trips_rows).to_parquet(built_dir / "trips.parquet", index=False)
+    pd.DataFrame(timetables_rows).to_parquet(built_dir / "timetables.parquet", index=False)
+    pd.DataFrame(stops_rows).to_parquet(built_dir / "stops.parquet", index=False)
+    pd.DataFrame(stop_times_rows).to_parquet(built_dir / "stop_times.parquet", index=False)
+    pd.DataFrame(stop_timetables_rows).to_parquet(built_dir / "stop_timetables.parquet", index=False)
+
+    summary_payload = {
+        "dataset_id": dataset_id,
+        "source_dir": str(source_dir.resolve()),
+        "counts": {
+            "routes": len(routes_rows),
+            "trips": len(trips_rows),
+            "timetables": len(timetables_rows),
+            "stops": len(stops_rows),
+            "stop_times": len(stop_times_rows),
+            "stop_timetables": len(stop_timetables_rows),
+        },
+    }
+    (built_dir / "summary.json").write_text(json.dumps(summary_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    artifact_files = [
+        "routes.parquet",
+        "trips.parquet",
+        "timetables.parquet",
+        "stops.parquet",
+        "stop_times.parquet",
+        "stop_timetables.parquet",
+        "summary.json",
+    ]
+    artifact_hashes = {
+        name: _sha256_file(built_dir / name)
+        for name in artifact_files
+        if (built_dir / name).exists()
+    }
+
+    manifest = {
+        "schema_version": "v1",
+        "dataset_id": dataset_id,
+        "dataset_version": f"catalog-fast-{int(time.time())}",
+        "producer_version": "catalog_fast_fallback",
+        "min_runtime_version": "0.1.0",
+        "artifact_hashes": artifact_hashes,
+        "source": "catalog-fast-normalized",
+    }
+    (built_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "exitCode": 0,
+        "builtDir": str(built_dir.resolve()),
+        "fallback": True,
+        "scopeRelaxed": scope_relaxed,
+        "sourceDir": str(source_dir.resolve()),
+        "counts": summary_payload["counts"],
+    }
+
+
 def _rebuild_tokyu_built_datasets(
     *,
     dataset_ids: Sequence[str],
     feed_path: str,
     strict_gtfs_reconciliation: bool,
+    source_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
-    build_all = _data_prep_build_all()
+    try:
+        build_all = _data_prep_build_all()
+    except Exception:
+        build_all = None
     results: Dict[str, Any] = {}
+    fallback_source_dir = Path(source_dir or "data/catalog-fast")
     for dataset_id in dataset_ids:
-        exit_code = int(
-            build_all.build_dataset(
-                dataset_id,
-                no_fetch=True,
-                force=True,
-                feed_path=feed_path,
-                strict_gtfs_reconciliation=strict_gtfs_reconciliation,
+        if build_all is not None:
+            exit_code = int(
+                build_all.build_dataset(
+                    dataset_id,
+                    no_fetch=True,
+                    force=True,
+                    feed_path=feed_path,
+                    strict_gtfs_reconciliation=strict_gtfs_reconciliation,
+                )
             )
+            results[dataset_id] = {
+                "exitCode": exit_code,
+                "builtDir": str((Path("data") / "built" / dataset_id).resolve()),
+                "fallback": False,
+            }
+            if exit_code != 0:
+                raise RuntimeError(
+                    f"Built dataset rebuild failed for '{dataset_id}' with exit code {exit_code}."
+                )
+            continue
+
+        results[dataset_id] = _rebuild_from_catalog_fast(
+            dataset_id=dataset_id,
+            source_dir=fallback_source_dir,
         )
-        results[dataset_id] = {
-            "exitCode": exit_code,
-            "builtDir": str((Path("data") / "built" / dataset_id).resolve()),
-        }
-        if exit_code != 0:
-            raise RuntimeError(
-                f"Built dataset rebuild failed for '{dataset_id}' with exit code {exit_code}."
-            )
     return results
 
 
@@ -498,24 +797,34 @@ def _cmd_list_snapshots(_: argparse.Namespace) -> int:
 
 def _cmd_refresh(args: argparse.Namespace) -> int:
     if args.source == "gtfs-pipeline":
-        PipelineConfig, run_pipeline = _tokyubus_gtfs_pipeline()
-
-        result = run_pipeline(
-            PipelineConfig(
-                source_dir=Path(args.source_dir).resolve(),
-                snapshot_id=args.snapshot_id,
-                gtfs_out_dir=Path(args.feed_path).resolve(),
-                skip_archive=args.skip_archive,
-                skip_gtfs=args.skip_gtfs,
-                skip_features=args.skip_features,
-                profile=args.profile,
+        result: Dict[str, Any] = {}
+        try:
+            PipelineConfig, run_pipeline = _tokyubus_gtfs_pipeline()
+            result = run_pipeline(
+                PipelineConfig(
+                    source_dir=Path(args.source_dir).resolve(),
+                    snapshot_id=args.snapshot_id,
+                    gtfs_out_dir=Path(args.feed_path).resolve(),
+                    skip_archive=args.skip_archive,
+                    skip_gtfs=args.skip_gtfs,
+                    skip_features=args.skip_features,
+                    profile=args.profile,
+                )
             )
-        )
+            result["pipeline_fallback"] = False
+        except ModuleNotFoundError as exc:
+            # core package may exclude full data-prep modules; keep built rebuild available.
+            result = {
+                "pipeline_fallback": True,
+                "pipeline_warning": str(exc),
+                "message": "tokyubus_gtfs pipeline is unavailable in this package. Running built rebuild only.",
+            }
         if not args.skip_built_datasets:
             result["built_datasets"] = _rebuild_tokyu_built_datasets(
                 dataset_ids=_parse_dataset_ids(args.built_datasets),
                 feed_path=str(Path(args.feed_path).resolve()),
                 strict_gtfs_reconciliation=args.strict_gtfs_reconciliation,
+                source_dir=str(Path(args.source_dir).resolve()),
             )
         if args.build_gtfs_db:
             result["gtfs_db"] = _build_gtfs_sqlite_catalog(
@@ -559,6 +868,7 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
                 dataset_ids=_parse_dataset_ids(args.built_datasets),
                 feed_path=str(Path(args.feed_path).resolve()),
                 strict_gtfs_reconciliation=args.strict_gtfs_reconciliation,
+                source_dir=str(Path(out_dir).resolve()),
             )
         if args.build_gtfs_db:
             result["gtfs_db"] = _build_gtfs_sqlite_catalog(

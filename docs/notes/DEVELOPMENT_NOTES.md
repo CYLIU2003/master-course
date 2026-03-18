@@ -54,6 +54,15 @@ tests/       回帰テスト
 - **効果**:
   - `tokyu_core` が未配置でも、`data/catalog-fast` があれば復旧手順を即実行できる。
 
+- **追加対応（同日）**:
+  - coreパッケージに `data-prep` / `tokyubus_gtfs` が同梱されていない環境で
+    `python catalog_update_app.py refresh gtfs-pipeline --source-dir data/catalog-fast ...` が
+    `ModuleNotFoundError: tokyubus_gtfs` で停止する問題を修正。
+  - `catalog_update_app.py` に fallback を実装し、
+    `data/catalog-fast/normalized/*.jsonl` から `data/built/{dataset}` の parquet + manifest を
+    直接再生成できるようにした。
+  - 実行結果に `pipeline_fallback=true` を付与して、fallback経路での成功を判別可能にした。
+
 ### [DEV-2026-03-18] Tkinter UI/UX 改善 + Tk/BFF 不整合の解消
 
 - **背景課題**:
