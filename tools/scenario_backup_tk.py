@@ -57,6 +57,7 @@ class BFFClient:
         body: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
         prefix: str | None = None,
+        timeout_seconds: float = 45.0,
     ) -> dict[str, Any]:
         data = None
         headers = {"Accept": "application/json"}
@@ -70,7 +71,7 @@ class BFFClient:
             headers=headers,
         )
         try:
-            with request.urlopen(req, timeout=45) as resp:
+            with request.urlopen(req, timeout=timeout_seconds) as resp:
                 raw = resp.read().decode("utf-8")
                 return json.loads(raw) if raw else {}
         except error.HTTPError as exc:
@@ -86,9 +87,10 @@ class BFFClient:
         body: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
         allow_prefix_fallback: bool = True,
+        timeout_seconds: float = 45.0,
     ) -> dict[str, Any]:
         try:
-            return self._request_once(method, path, body=body, query=query)
+            return self._request_once(method, path, body=body, query=query, timeout_seconds=timeout_seconds)
         except RuntimeError as exc:
             if not allow_prefix_fallback:
                 raise
@@ -102,6 +104,7 @@ class BFFClient:
                 body=body,
                 query=query,
                 prefix=alt_prefix,
+                timeout_seconds=timeout_seconds,
             )
             self.api_prefix = alt_prefix
             return result
@@ -253,10 +256,10 @@ class BFFClient:
         )
 
     def run_optimization(self, scenario_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._request("POST", f"/scenarios/{scenario_id}/run-optimization", payload)
+        return self._request("POST", f"/scenarios/{scenario_id}/run-optimization", payload, timeout_seconds=180.0)
 
     def reoptimize(self, scenario_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._request("POST", f"/scenarios/{scenario_id}/reoptimize", payload)
+        return self._request("POST", f"/scenarios/{scenario_id}/reoptimize", payload, timeout_seconds=180.0)
 
     def get_simulation_capabilities(self, scenario_id: str) -> dict[str, Any]:
         return self._request("GET", f"/scenarios/{scenario_id}/simulation/capabilities")
@@ -308,6 +311,8 @@ class App:
         self.optimization_job_id = ""
         self.optimization_polling = False
         self.optimization_last_message = ""
+        self.wait_until_finish_var = tk.BooleanVar(value=False)
+        self.rebuild_dispatch_before_opt_var = tk.BooleanVar(value=False)
         self.compare_scenario_a_var = tk.StringVar(value="")
         self.compare_scenario_b_var = tk.StringVar(value="")
 
@@ -493,7 +498,6 @@ class App:
         btn_row.pack(fill=tk.X, pady=8)
         ttk.Button(btn_row, text="入力データ作成 (Prepare)", command=self.prepare).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_row, text="Prepared実行", command=self.run_prepared).pack(side=tk.LEFT, padx=4)
-        ttk.Button(btn_row, text="シミュレーション実行(legacy)", command=self.run_simulation_legacy).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_row, text="最適化実行", command=self.run_optimization).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_row, text="再最適化", command=self.run_reoptimize).pack(side=tk.LEFT, padx=4)
 
@@ -2529,6 +2533,12 @@ class App:
             return
         self.open_optimization_window()
 
+    def _effective_optimization_time_limit_seconds(self) -> int:
+        if self.wait_until_finish_var.get():
+            # Practically-unbounded wait for large scenarios.
+            return 60 * 60 * 24 * 7
+        return self._parse_int(self.time_limit_var.get(), 300)
+
     def _extract_job_progress_percent(self, job: dict[str, Any]) -> float:
         raw = job.get("progress")
         if isinstance(raw, dict):
@@ -2589,18 +2599,24 @@ class App:
 
         def start_optimization() -> None:
             depots = self._selected_depot_ids()
+            effective_time_limit = self._effective_optimization_time_limit_seconds()
             payload = {
                 "mode": self.solver_mode_var.get().strip(),
-                "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
+                "time_limit_seconds": effective_time_limit,
                 "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
                 "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
                 "service_id": self.day_type_var.get().strip() or None,
                 "depot_id": depots[0] if depots else None,
+                "rebuild_dispatch": bool(self.rebuild_dispatch_before_opt_var.get()),
             }
             self.optimization_progress_var.set(0.0)
             self.optimization_status_var.set("送信中")
             self.optimization_last_message = ""
             self._optimization_console_log("最適化計算を開始します")
+            if self.wait_until_finish_var.get():
+                self._optimization_console_log("モード: 終了まで待機 (time_limit_seconds=604800)")
+            if not self.rebuild_dispatch_before_opt_var.get():
+                self._optimization_console_log("軽量化: dispatch再構築をスキップして開始")
             self._optimization_console_log("payload=" + json.dumps(payload, ensure_ascii=False))
             self.log_line("最適化計算を開始します（専用画面）")
             messagebox.showinfo("最適化実行", "最適化計算を開始します。進捗は専用画面で確認できます。")
@@ -2750,6 +2766,22 @@ class App:
         row_tl.pack(fill=tk.X, pady=3)
         ttk.Label(row_tl, text="時間上限(秒)", width=24).pack(side=tk.LEFT)
         ttk.Entry(row_tl, textvariable=self.time_limit_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row_wait = ttk.Frame(solver_box)
+        row_wait.pack(fill=tk.X, pady=3)
+        ttk.Checkbutton(
+            row_wait,
+            text="終了まで待つ（大規模向け・長時間実行）",
+            variable=self.wait_until_finish_var,
+        ).pack(side=tk.LEFT)
+
+        row_rebuild = ttk.Frame(sim_box)
+        row_rebuild.pack(fill=tk.X, pady=3)
+        ttk.Checkbutton(
+            row_rebuild,
+            text="実行前にdispatchを再構築する（重い）",
+            variable=self.rebuild_dispatch_before_opt_var,
+        ).pack(side=tk.LEFT)
 
         row_gap = ttk.Frame(solver_box)
         row_gap.pack(fill=tk.X, pady=3)
