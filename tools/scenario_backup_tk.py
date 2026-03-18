@@ -136,6 +136,9 @@ class BFFClient:
     def get_app_context(self) -> dict[str, Any]:
         return self._request("GET", "/app/context")
 
+    def get_app_datasets(self) -> dict[str, Any]:
+        return self._request("GET", "/app/datasets")
+
     def create_scenario(
         self,
         name: str,
@@ -176,6 +179,15 @@ class BFFClient:
     def list_routes(self, scenario_id: str, depot_id: str | None = None) -> dict[str, Any]:
         query = {"depotId": depot_id} if depot_id else None
         return self._request("GET", f"/scenarios/{scenario_id}/routes", query=query)
+
+    def list_depots(self, scenario_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/scenarios/{scenario_id}/depots")
+
+    def get_depot(self, scenario_id: str, depot_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/scenarios/{scenario_id}/depots/{depot_id}")
+
+    def update_depot(self, scenario_id: str, depot_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("PUT", f"/scenarios/{scenario_id}/depots/{depot_id}", payload)
 
     def update_route(self, scenario_id: str, route_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("PUT", f"/scenarios/{scenario_id}/routes/{route_id}", payload)
@@ -274,7 +286,6 @@ class App:
         self.last_job_id = ""
         self.vehicle_rows: list[dict[str, Any]] = []
         self.template_rows: list[dict[str, Any]] = []
-        self.advanced_visible = True
         self.route_label_file_var = tk.StringVar(value="")
         self.scope_depots: list[dict[str, Any]] = []
         self.scope_routes: list[dict[str, Any]] = []
@@ -283,8 +294,20 @@ class App:
         self.scope_depot_by_id: dict[str, dict[str, Any]] = {}
         self.scope_selected_depot_ids: set[str] = set()
         self.scope_selected_route_ids: set[str] = set()
-        self.scope_tree_depot_item_ids: dict[str, str] = {}
-        self.scope_tree_route_item_ids: dict[str, str] = {}
+        self.scope_depot_vars: dict[str, tk.BooleanVar] = {}
+        self.scope_route_vars: dict[str, tk.BooleanVar] = {}
+        self.scope_depot_open_vars: dict[str, tk.BooleanVar] = {}
+        self.available_dataset_ids: list[str] = []
+        self.day_type_options = ["WEEKDAY", "SATURDAY", "SUNDAY", "HOLIDAY", "SUN_HOL"]
+        self.default_dataset_id: str = "tokyu_full"
+        self.depot_manager_window: tk.Toplevel | None = None
+        self.optimization_window: tk.Toplevel | None = None
+        self.optimization_console: ScrolledText | None = None
+        self.optimization_progress_var = tk.DoubleVar(value=0.0)
+        self.optimization_status_var = tk.StringVar(value="待機中")
+        self.optimization_job_id = ""
+        self.optimization_polling = False
+        self.optimization_last_message = ""
         self.compare_scenario_a_var = tk.StringVar(value="")
         self.compare_scenario_b_var = tk.StringVar(value="")
 
@@ -312,17 +335,20 @@ class App:
         ttk.Entry(scenario_frame, textvariable=self.new_name_var, width=22).pack(side=tk.LEFT)
 
         ttk.Label(scenario_frame, text="datasetId").pack(side=tk.LEFT, padx=(8, 4))
-        self.dataset_id_var = tk.StringVar(value="tokyu_bus_full")
-        ttk.Entry(scenario_frame, textvariable=self.dataset_id_var, width=16).pack(side=tk.LEFT)
+        self.dataset_id_var = tk.StringVar(value=self.default_dataset_id)
+        self.dataset_combo = ttk.Combobox(scenario_frame, textvariable=self.dataset_id_var, width=18)
+        self.dataset_combo.pack(side=tk.LEFT)
 
         ttk.Label(scenario_frame, text="seed").pack(side=tk.LEFT, padx=(8, 4))
         self.random_seed_var = tk.StringVar(value="42")
         ttk.Entry(scenario_frame, textvariable=self.random_seed_var, width=8).pack(side=tk.LEFT)
 
         ttk.Button(scenario_frame, text="新規作成", command=self.create_scenario).pack(side=tk.LEFT, padx=6)
+        ttk.Button(scenario_frame, text="シナリオ設定を保存", command=self.save_quick_setup).pack(side=tk.LEFT, padx=2)
         ttk.Button(scenario_frame, text="複製", command=self.duplicate_scenario).pack(side=tk.LEFT, padx=2)
         ttk.Button(scenario_frame, text="有効化", command=self.activate_scenario).pack(side=tk.LEFT, padx=2)
         ttk.Button(scenario_frame, text="削除", command=self.delete_scenario).pack(side=tk.LEFT, padx=2)
+        ttk.Button(scenario_frame, text="営業所別車両管理", command=self.open_vehicle_depot_manager).pack(side=tk.LEFT, padx=2)
         ttk.Button(scenario_frame, text="App Context", command=self.show_app_context).pack(side=tk.LEFT, padx=2)
 
         main = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
@@ -357,15 +383,23 @@ class App:
         ttk.Button(label_ops, text="ラベルをシナリオへ反映", command=self.apply_route_labels_to_scenario).pack(side=tk.LEFT, padx=6)
         ttk.Entry(label_ops, textvariable=self.route_label_file_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 0))
 
-        ttk.Label(scope, text="営業所ごとに折りたたみ表示（左クリックで対象ON/OFF）").pack(anchor="w", pady=(0, 4))
-        tree_wrap = ttk.Frame(scope)
-        tree_wrap.pack(fill=tk.BOTH, expand=True)
-        self.scope_tree = ttk.Treeview(tree_wrap, show="tree", selectmode="none", height=14)
-        self.scope_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scope_ysb = ttk.Scrollbar(tree_wrap, orient=tk.VERTICAL, command=self.scope_tree.yview)
+        ttk.Label(scope, text="営業所ごとに折りたたみ表示（チェックボックス選択）").pack(anchor="w", pady=(0, 4))
+        scope_ops = ttk.Frame(scope)
+        scope_ops.pack(fill=tk.X, pady=(0, 4))
+        ttk.Button(scope_ops, text="全営業所ON", command=lambda: self._set_all_depots_checked(True)).pack(side=tk.LEFT)
+        ttk.Button(scope_ops, text="全営業所OFF", command=lambda: self._set_all_depots_checked(False)).pack(side=tk.LEFT, padx=4)
+        ttk.Button(scope_ops, text="全展開", command=lambda: self._set_all_depots_open(True)).pack(side=tk.LEFT, padx=4)
+        ttk.Button(scope_ops, text="全折りたたみ", command=lambda: self._set_all_depots_open(False)).pack(side=tk.LEFT, padx=4)
+
+        self.scope_canvas = tk.Canvas(scope, highlightthickness=0, height=320)
+        self.scope_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scope_ysb = ttk.Scrollbar(scope, orient=tk.VERTICAL, command=self.scope_canvas.yview)
         scope_ysb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.scope_tree.configure(yscrollcommand=scope_ysb.set)
-        self.scope_tree.bind("<Button-1>", self.on_scope_tree_click)
+        self.scope_canvas.configure(yscrollcommand=scope_ysb.set)
+        self.scope_inner = ttk.Frame(self.scope_canvas)
+        self.scope_inner_window = self.scope_canvas.create_window((0, 0), window=self.scope_inner, anchor="nw")
+        self.scope_inner.bind("<Configure>", lambda _e: self.scope_canvas.configure(scrollregion=self.scope_canvas.bbox("all")))
+        self.scope_canvas.bind("<Configure>", lambda e: self.scope_canvas.itemconfigure(self.scope_inner_window, width=e.width))
 
         flags = ttk.Frame(scope)
         flags.pack(fill=tk.X, pady=8)
@@ -385,9 +419,20 @@ class App:
         self.day_type_var = tk.StringVar(value="WEEKDAY")
         self.service_date_var = tk.StringVar(value="")
         self.route_limit_var = tk.StringVar(value="600")
-        self._labeled_entry(base, "運行種別 (day_type)", self.day_type_var)
+
+        day_row = ttk.Frame(base)
+        day_row.pack(fill=tk.X, pady=2)
+        ttk.Label(day_row, text="運行種別 (day_type)", width=36).pack(side=tk.LEFT)
+        self.day_type_combo = ttk.Combobox(
+            day_row,
+            textvariable=self.day_type_var,
+            state="readonly",
+            values=self.day_type_options,
+        )
+        self.day_type_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
         self._labeled_entry(base, "運行日 (YYYY-MM-DD)", self.service_date_var)
-        self._labeled_entry(base, "路線読み込み上限(route_limit)", self.route_limit_var)
+        self._labeled_entry(base, "路線読み込み上限(route_limit) ※一覧表示は/routes優先", self.route_limit_var)
 
     def _build_run_panel(self, parent: ttk.Frame) -> None:
         ops = ttk.LabelFrame(parent, text="実行パラメータ / 実行", padding=8)
@@ -432,10 +477,6 @@ class App:
         self._labeled_entry(costs, "CO2単価 co2_price_per_kg", self.co2_price_var)
         self._labeled_entry(costs, "拡張係数 objective_weights(JSON)", self.objective_weights_json_var)
 
-        self.advanced_btn = ttk.Button(ops, text="Hide Advanced Options", command=self.toggle_advanced)
-        self.advanced_btn.pack(anchor="w", pady=(8, 4))
-
-        self.advanced_frame = ttk.LabelFrame(ops, text="Advanced Options", padding=6)
         self.solver_mode_var = tk.StringVar(value="hybrid")
         self.objective_mode_var = tk.StringVar(value="total_cost")
         self.time_limit_var = tk.StringVar(value="300")
@@ -443,18 +484,10 @@ class App:
         self.alns_iter_var = tk.StringVar(value="500")
         self.allow_partial_service_var = tk.BooleanVar(value=False)
 
-        self._labeled_entry(self.advanced_frame, "solver_mode", self.solver_mode_var)
-        self._labeled_entry(self.advanced_frame, "objective_mode", self.objective_mode_var)
-        self._labeled_entry(self.advanced_frame, "time_limit_seconds", self.time_limit_var)
-        self._labeled_entry(self.advanced_frame, "mip_gap", self.mip_gap_var)
-        self._labeled_entry(self.advanced_frame, "alns_iterations", self.alns_iter_var)
-        ttk.Checkbutton(
-            self.advanced_frame,
-            text="allow_partial_service",
-            variable=self.allow_partial_service_var,
-        ).pack(anchor="w")
-
-        self.advanced_frame.pack(fill=tk.X, pady=4)
+        settings_box = ttk.LabelFrame(ops, text="詳細設定", padding=6)
+        settings_box.pack(fill=tk.X, pady=(8, 4))
+        ttk.Label(settings_box, text="Advanced/ソルバー設定は別画面で編集します。", foreground="#444").pack(anchor="w")
+        ttk.Button(settings_box, text="詳細設定画面を開く", command=self.open_solver_settings_window).pack(anchor="w", pady=(4, 0))
 
         btn_row = ttk.Frame(ops)
         btn_row.pack(fill=tk.X, pady=8)
@@ -516,8 +549,11 @@ class App:
         top.pack(fill=tk.X)
         self.fleet_depot_var = tk.StringVar(value="")
         ttk.Label(top, text="営業所ID").pack(side=tk.LEFT)
-        ttk.Entry(top, textvariable=self.fleet_depot_var, width=14).pack(side=tk.LEFT, padx=4)
+        self.fleet_depot_combo = ttk.Combobox(top, textvariable=self.fleet_depot_var, state="readonly", width=20)
+        self.fleet_depot_combo.pack(side=tk.LEFT, padx=4)
         ttk.Button(top, text="車両一覧更新", command=self.refresh_vehicles).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top, text="車両を追加...", command=self.open_vehicle_create_window).pack(side=tk.LEFT, padx=(12, 4))
+        ttk.Button(top, text="テンプレートから営業所へ追加...", command=self.open_template_apply_window).pack(side=tk.LEFT, padx=4)
 
         self.target_bev_count_var = tk.StringVar(value="10")
         self.default_energy_var = tk.StringVar(value="1.2")
@@ -541,8 +577,18 @@ class App:
             "enabled",
         )
         self.vehicle_tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=12)
+        heading_map = {
+            "id": "車両ID",
+            "depotId": "営業所",
+            "type": "車種",
+            "modelName": "車両名",
+            "acquisitionCost": "導入費(円)",
+            "energyConsumption": "電費/燃費係数",
+            "chargePowerKw": "充電出力(kW)",
+            "enabled": "有効",
+        }
         for c in cols:
-            self.vehicle_tree.heading(c, text=c)
+            self.vehicle_tree.heading(c, text=heading_map.get(c, c))
             self.vehicle_tree.column(c, width=120, anchor="w")
         self.vehicle_tree.column("modelName", width=180, anchor="w")
         self.vehicle_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -576,31 +622,43 @@ class App:
         self.v_acq_cost_var = tk.StringVar(value="0")
         self.v_enabled_var = tk.BooleanVar(value=True)
 
-        self._labeled_entry(form, "id", self.v_id_var, readonly=True)
-        self._labeled_entry(form, "depotId", self.v_depot_var)
-        self._labeled_entry(form, "type (BEV/ICE)", self.v_type_var)
-        self._labeled_entry(form, "modelCode", self.v_model_code_var)
-        self._labeled_entry(form, "modelName", self.v_model_var)
-        self._labeled_entry(form, "capacityPassengers", self.v_cap_var)
-        self._labeled_entry(form, "batteryKwh", self.v_battery_var)
-        self._labeled_entry(form, "fuelTankL", self.v_fuel_tank_var)
-        self._labeled_entry(form, "energyConsumption", self.v_energy_var)
-        self._labeled_entry(form, "fuelEfficiencyKmPerL", self.v_km_per_l_var)
-        self._labeled_entry(form, "co2EmissionGPerKm", self.v_co2_gpkm_var)
-        self._labeled_entry(form, "curbWeightKg", self.v_curb_weight_var)
-        self._labeled_entry(form, "grossVehicleWeightKg", self.v_gross_weight_var)
-        self._labeled_entry(form, "engineDisplacementL", self.v_engine_disp_var)
-        self._labeled_entry(form, "maxTorqueNm", self.v_max_torque_var)
-        self._labeled_entry(form, "maxPowerKw", self.v_max_power_var)
-        self._labeled_entry(form, "chargePowerKw", self.v_charge_kw_var)
-        self._labeled_entry(form, "minSoc", self.v_min_soc_var)
-        self._labeled_entry(form, "maxSoc", self.v_max_soc_var)
-        self._labeled_entry(form, "acquisitionCost", self.v_acq_cost_var)
-        ttk.Checkbutton(form, text="enabled", variable=self.v_enabled_var).pack(anchor="w")
+        self._labeled_entry(form, "車両ID", self.v_id_var, readonly=True)
+        self._labeled_entry(form, "営業所ID", self.v_depot_var)
+
+        type_row = ttk.Frame(form)
+        type_row.pack(fill=tk.X, pady=2)
+        ttk.Label(type_row, text="車種", width=36).pack(side=tk.LEFT)
+        self.vehicle_type_combo = ttk.Combobox(type_row, textvariable=self.v_type_var, state="readonly", values=["BEV", "ICE"])
+        self.vehicle_type_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self._labeled_entry(form, "モデルコード", self.v_model_code_var)
+        self._labeled_entry(form, "車両名", self.v_model_var)
+        self._labeled_entry(form, "定員(人)", self.v_cap_var)
+        self._labeled_entry(form, "消費係数", self.v_energy_var)
+        self._labeled_entry(form, "車重(kg)", self.v_curb_weight_var)
+        self._labeled_entry(form, "総重量(kg)", self.v_gross_weight_var)
+        self._labeled_entry(form, "導入費(円)", self.v_acq_cost_var)
+
+        self.vehicle_ev_box = ttk.LabelFrame(form, text="EV専用パラメータ", padding=4)
+        self.vehicle_ev_box.pack(fill=tk.X, pady=(4, 2))
+        self._labeled_entry(self.vehicle_ev_box, "電池容量(kWh)", self.v_battery_var)
+        self._labeled_entry(self.vehicle_ev_box, "充電出力(kW)", self.v_charge_kw_var)
+        self._labeled_entry(self.vehicle_ev_box, "最小SOC(0-1)", self.v_min_soc_var)
+        self._labeled_entry(self.vehicle_ev_box, "最大SOC(0-1)", self.v_max_soc_var)
+
+        self.vehicle_ice_box = ttk.LabelFrame(form, text="エンジン車専用パラメータ", padding=4)
+        self.vehicle_ice_box.pack(fill=tk.X, pady=(2, 2))
+        self._labeled_entry(self.vehicle_ice_box, "燃料タンク(L)", self.v_fuel_tank_var)
+        self._labeled_entry(self.vehicle_ice_box, "燃費(km/L)", self.v_km_per_l_var)
+        self._labeled_entry(self.vehicle_ice_box, "CO2排出(g/km)", self.v_co2_gpkm_var)
+        self._labeled_entry(self.vehicle_ice_box, "排気量(L)", self.v_engine_disp_var)
+        self._labeled_entry(self.vehicle_ice_box, "最大トルク(Nm)", self.v_max_torque_var)
+        self._labeled_entry(self.vehicle_ice_box, "最大出力(kW)", self.v_max_power_var)
+
+        ttk.Checkbutton(form, text="有効", variable=self.v_enabled_var).pack(anchor="w")
 
         action = ttk.Frame(form)
         action.pack(fill=tk.X, pady=4)
-        ttk.Button(action, text="新規作成", command=self.create_vehicle_from_form).pack(side=tk.LEFT, padx=3)
         ttk.Button(action, text="更新", command=self.update_vehicle_from_form).pack(side=tk.LEFT, padx=3)
         ttk.Button(action, text="削除", command=self.delete_selected_vehicle).pack(side=tk.LEFT, padx=3)
 
@@ -609,23 +667,25 @@ class App:
         ttk.Label(action, text="複製数").pack(side=tk.LEFT, padx=(12, 2))
         ttk.Entry(action, textvariable=self.dup_count_var, width=5).pack(side=tk.LEFT)
         ttk.Label(action, text="複製先営業所").pack(side=tk.LEFT, padx=(8, 2))
-        ttk.Entry(action, textvariable=self.dup_target_depot_var, width=10).pack(side=tk.LEFT)
+        self.dup_target_depot_combo = ttk.Combobox(
+            action,
+            textvariable=self.dup_target_depot_var,
+            state="readonly",
+            width=14,
+        )
+        self.dup_target_depot_combo.pack(side=tk.LEFT)
         ttk.Button(action, text="複製", command=self.duplicate_selected_vehicle).pack(side=tk.LEFT, padx=3)
-
-        tmpl = ttk.Frame(form)
-        tmpl.pack(fill=tk.X, pady=4)
         self.apply_template_id_var = tk.StringVar(value="")
         self.apply_template_qty_var = tk.StringVar(value="1")
-        ttk.Label(tmpl, text="テンプレートID").pack(side=tk.LEFT)
-        ttk.Entry(tmpl, textvariable=self.apply_template_id_var, width=20).pack(side=tk.LEFT, padx=3)
-        ttk.Label(tmpl, text="導入台数").pack(side=tk.LEFT)
-        ttk.Entry(tmpl, textvariable=self.apply_template_qty_var, width=6).pack(side=tk.LEFT, padx=3)
-        ttk.Button(tmpl, text="テンプレート導入", command=self.apply_template_to_depot).pack(side=tk.LEFT, padx=4)
+
+        self.vehicle_type_combo.bind("<<ComboboxSelected>>", self._update_vehicle_form_visibility)
+        self._update_vehicle_form_visibility()
 
     def _build_template_tab(self, tab: ttk.Frame) -> None:
         top = ttk.Frame(tab)
         top.pack(fill=tk.X)
         ttk.Button(top, text="テンプレート一覧更新", command=self.refresh_templates).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top, text="テンプレートを追加...", command=self.open_template_create_window).pack(side=tk.LEFT, padx=4)
 
         cols = (
             "id",
@@ -637,8 +697,17 @@ class App:
             "chargePowerKw",
         )
         self.template_tree = ttk.Treeview(tab, columns=cols, show="headings", height=12)
+        heading_map = {
+            "id": "テンプレートID",
+            "name": "名称",
+            "type": "車種",
+            "modelName": "車両名",
+            "acquisitionCost": "導入費(円)",
+            "energyConsumption": "消費係数",
+            "chargePowerKw": "充電出力(kW)",
+        }
         for c in cols:
-            self.template_tree.heading(c, text=c)
+            self.template_tree.heading(c, text=heading_map.get(c, c))
             self.template_tree.column(c, width=130, anchor="w")
         self.template_tree.column("name", width=180)
         self.template_tree.pack(fill=tk.BOTH, expand=True, pady=6)
@@ -669,40 +738,56 @@ class App:
         self.t_acq_cost_var = tk.StringVar(value="0")
         self.t_enabled_var = tk.BooleanVar(value=True)
 
-        self._labeled_entry(form, "id", self.t_id_var, readonly=True)
-        self._labeled_entry(form, "name", self.t_name_var)
-        self._labeled_entry(form, "type", self.t_type_var)
-        self._labeled_entry(form, "modelCode", self.t_model_code_var)
-        self._labeled_entry(form, "modelName", self.t_model_var)
-        self._labeled_entry(form, "capacityPassengers", self.t_cap_var)
-        self._labeled_entry(form, "batteryKwh", self.t_battery_var)
-        self._labeled_entry(form, "fuelTankL", self.t_fuel_tank_var)
-        self._labeled_entry(form, "energyConsumption", self.t_energy_var)
-        self._labeled_entry(form, "fuelEfficiencyKmPerL", self.t_km_per_l_var)
-        self._labeled_entry(form, "co2EmissionGPerKm", self.t_co2_gpkm_var)
-        self._labeled_entry(form, "curbWeightKg", self.t_curb_weight_var)
-        self._labeled_entry(form, "grossVehicleWeightKg", self.t_gross_weight_var)
-        self._labeled_entry(form, "engineDisplacementL", self.t_engine_disp_var)
-        self._labeled_entry(form, "maxTorqueNm", self.t_max_torque_var)
-        self._labeled_entry(form, "maxPowerKw", self.t_max_power_var)
-        self._labeled_entry(form, "chargePowerKw", self.t_charge_var)
-        self._labeled_entry(form, "minSoc", self.t_min_soc_var)
-        self._labeled_entry(form, "maxSoc", self.t_max_soc_var)
-        self._labeled_entry(form, "acquisitionCost", self.t_acq_cost_var)
-        ttk.Checkbutton(form, text="enabled", variable=self.t_enabled_var).pack(anchor="w")
+        self._labeled_entry(form, "テンプレートID", self.t_id_var, readonly=True)
+        self._labeled_entry(form, "名称", self.t_name_var)
+
+        t_type_row = ttk.Frame(form)
+        t_type_row.pack(fill=tk.X, pady=2)
+        ttk.Label(t_type_row, text="車種", width=36).pack(side=tk.LEFT)
+        self.template_type_combo = ttk.Combobox(t_type_row, textvariable=self.t_type_var, state="readonly", values=["BEV", "ICE"])
+        self.template_type_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self._labeled_entry(form, "モデルコード", self.t_model_code_var)
+        self._labeled_entry(form, "車両名", self.t_model_var)
+        self._labeled_entry(form, "定員(人)", self.t_cap_var)
+        self._labeled_entry(form, "消費係数", self.t_energy_var)
+        self._labeled_entry(form, "車重(kg)", self.t_curb_weight_var)
+        self._labeled_entry(form, "総重量(kg)", self.t_gross_weight_var)
+        self._labeled_entry(form, "導入費(円)", self.t_acq_cost_var)
+
+        self.template_ev_box = ttk.LabelFrame(form, text="EV専用パラメータ", padding=4)
+        self.template_ev_box.pack(fill=tk.X, pady=(4, 2))
+        self._labeled_entry(self.template_ev_box, "電池容量(kWh)", self.t_battery_var)
+        self._labeled_entry(self.template_ev_box, "充電出力(kW)", self.t_charge_var)
+        self._labeled_entry(self.template_ev_box, "最小SOC(0-1)", self.t_min_soc_var)
+        self._labeled_entry(self.template_ev_box, "最大SOC(0-1)", self.t_max_soc_var)
+
+        self.template_ice_box = ttk.LabelFrame(form, text="エンジン車専用パラメータ", padding=4)
+        self.template_ice_box.pack(fill=tk.X, pady=(2, 2))
+        self._labeled_entry(self.template_ice_box, "燃料タンク(L)", self.t_fuel_tank_var)
+        self._labeled_entry(self.template_ice_box, "燃費(km/L)", self.t_km_per_l_var)
+        self._labeled_entry(self.template_ice_box, "CO2排出(g/km)", self.t_co2_gpkm_var)
+        self._labeled_entry(self.template_ice_box, "排気量(L)", self.t_engine_disp_var)
+        self._labeled_entry(self.template_ice_box, "最大トルク(Nm)", self.t_max_torque_var)
+        self._labeled_entry(self.template_ice_box, "最大出力(kW)", self.t_max_power_var)
+
+        ttk.Checkbutton(form, text="有効", variable=self.t_enabled_var).pack(anchor="w")
 
         action = ttk.Frame(form)
         action.pack(fill=tk.X, pady=4)
-        ttk.Button(action, text="新規作成", command=self.create_template_from_form).pack(side=tk.LEFT, padx=3)
         ttk.Button(action, text="更新", command=self.update_template_from_form).pack(side=tk.LEFT, padx=3)
         ttk.Button(action, text="削除", command=self.delete_selected_template).pack(side=tk.LEFT, padx=3)
 
-    def _labeled_entry(self, parent: ttk.Frame, label: str, var: tk.StringVar, readonly: bool = False) -> None:
+        self.template_type_combo.bind("<<ComboboxSelected>>", self._update_template_form_visibility)
+        self._update_template_form_visibility()
+
+    def _labeled_entry(self, parent: ttk.Frame, label: str, var: tk.StringVar, readonly: bool = False) -> ttk.Frame:
         row = ttk.Frame(parent)
         row.pack(fill=tk.X, pady=2)
         ttk.Label(row, text=label, width=36).pack(side=tk.LEFT)
         state = "readonly" if readonly else "normal"
         ttk.Entry(row, textvariable=var, state=state).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        return row
 
     def log_line(self, msg: str) -> None:
         self.log.insert(tk.END, msg + "\n")
@@ -717,6 +802,8 @@ class App:
                 err_msg = str(exc)
 
                 def _show_error(msg: str = err_msg) -> None:
+                    if "Dataset '" in msg and "not found" in msg and self.available_dataset_ids:
+                        msg = msg + "\n\n利用可能 datasetId: " + ", ".join(self.available_dataset_ids)
                     self.log_line(f"エラー: {msg}")
                     messagebox.showerror("エラー", msg)
 
@@ -729,14 +816,6 @@ class App:
         if idx < 0 or idx >= len(self.scenarios):
             return ""
         return str(self.scenarios[idx].get("id") or "")
-
-    @staticmethod
-    def _checkbox_prefix(state: str) -> str:
-        if state == "checked":
-            return "[x]"
-        if state == "partial":
-            return "[~]"
-        return "[ ]"
 
     def _depot_check_state(self, depot_id: str) -> str:
         route_ids = self.scope_routes_by_depot.get(depot_id, [])
@@ -760,30 +839,92 @@ class App:
                 next_selected.add(depot_id)
         self.scope_selected_depot_ids = next_selected
 
-    def _render_scope_tree(self) -> None:
-        self.scope_tree.delete(*self.scope_tree.get_children())
-        self.scope_tree_depot_item_ids = {}
-        self.scope_tree_route_item_ids = {}
+    def _set_all_depots_checked(self, checked: bool) -> None:
+        if checked:
+            self.scope_selected_depot_ids = set(self.scope_depot_by_id.keys())
+            self.scope_selected_route_ids = set(self.scope_route_by_id.keys())
+        else:
+            self.scope_selected_depot_ids.clear()
+            self.scope_selected_route_ids.clear()
+        self._render_scope_checklist()
+
+    def _set_all_depots_open(self, is_open: bool) -> None:
+        for depot_id in self.scope_depot_by_id:
+            var = self.scope_depot_open_vars.get(depot_id)
+            if var is not None:
+                var.set(is_open)
+        self._render_scope_checklist()
+
+    def _on_toggle_depot(self, depot_id: str) -> None:
+        checked = bool((self.scope_depot_vars.get(depot_id) or tk.BooleanVar(value=False)).get())
+        route_ids = self.scope_routes_by_depot.get(depot_id, [])
+        if checked:
+            self.scope_selected_depot_ids.add(depot_id)
+            for route_id in route_ids:
+                self.scope_selected_route_ids.add(route_id)
+        else:
+            self.scope_selected_depot_ids.discard(depot_id)
+            for route_id in route_ids:
+                self.scope_selected_route_ids.discard(route_id)
+        self._sync_depot_selection_from_routes()
+        self._render_scope_checklist()
+
+    def _on_toggle_route(self, depot_id: str, route_id: str) -> None:
+        checked = bool((self.scope_route_vars.get(route_id) or tk.BooleanVar(value=False)).get())
+        if checked:
+            self.scope_selected_route_ids.add(route_id)
+        else:
+            self.scope_selected_route_ids.discard(route_id)
+        self._sync_depot_selection_from_routes()
+        self._render_scope_checklist()
+
+    def _render_scope_checklist(self) -> None:
+        for child in self.scope_inner.winfo_children():
+            child.destroy()
+
+        self.scope_depot_vars = {}
+        self.scope_route_vars = {}
 
         for depot in self.scope_depots:
             depot_id = str(depot.get("id") or "").strip()
             if not depot_id:
                 continue
             depot_name = str(depot.get("name") or depot_id)
-            state = self._depot_check_state(depot_id)
             route_ids = self.scope_routes_by_depot.get(depot_id, [])
             selected_count = sum(1 for rid in route_ids if rid in self.scope_selected_route_ids)
-            depot_text = f"{self._checkbox_prefix(state)} {depot_id} | {depot_name} ({selected_count}/{len(route_ids)}路線)"
-            depot_item = self.scope_tree.insert("", tk.END, text=depot_text, open=False)
-            self.scope_tree_depot_item_ids[depot_item] = depot_id
 
-            for route_id in route_ids:
-                route = self.scope_route_by_id.get(route_id) or {}
-                display_name = str(route.get("displayName") or route.get("name") or route_id)
-                route_checked = route_id in self.scope_selected_route_ids
-                route_text = f"{self._checkbox_prefix('checked' if route_checked else 'unchecked')} {route_id} | {display_name}"
-                route_item = self.scope_tree.insert(depot_item, tk.END, text=route_text)
-                self.scope_tree_route_item_ids[route_item] = route_id
+            row = ttk.Frame(self.scope_inner)
+            row.pack(fill=tk.X, pady=1)
+
+            open_var = self.scope_depot_open_vars.get(depot_id)
+            if open_var is None:
+                open_var = tk.BooleanVar(value=False)
+                self.scope_depot_open_vars[depot_id] = open_var
+            ttk.Checkbutton(row, text=("▼" if open_var.get() else "▶"), variable=open_var, command=self._render_scope_checklist, width=2).pack(side=tk.LEFT)
+
+            dep_var = tk.BooleanVar(value=depot_id in self.scope_selected_depot_ids)
+            self.scope_depot_vars[depot_id] = dep_var
+            ttk.Checkbutton(
+                row,
+                text=f"{depot_id} | {depot_name} ({selected_count}/{len(route_ids)}路線)",
+                variable=dep_var,
+                command=lambda d=depot_id: self._on_toggle_depot(d),
+            ).pack(side=tk.LEFT, anchor="w")
+
+            if open_var.get():
+                for route_id in route_ids:
+                    route = self.scope_route_by_id.get(route_id) or {}
+                    display_name = str(route.get("displayName") or route.get("name") or route_id)
+                    route_row = ttk.Frame(self.scope_inner)
+                    route_row.pack(fill=tk.X, padx=16)
+                    route_var = tk.BooleanVar(value=route_id in self.scope_selected_route_ids)
+                    self.scope_route_vars[route_id] = route_var
+                    ttk.Checkbutton(
+                        route_row,
+                        text=f" {route_id} | {display_name}",
+                        variable=route_var,
+                        command=lambda d=depot_id, r=route_id: self._on_toggle_route(d, r),
+                    ).pack(side=tk.LEFT, anchor="w")
 
     def _set_scope_data(
         self,
@@ -834,44 +975,7 @@ class App:
         }
 
         self._sync_depot_selection_from_routes()
-        self._render_scope_tree()
-
-    def on_scope_tree_click(self, event: tk.Event) -> str | None:
-        element = self.scope_tree.identify("element", event.x, event.y)
-        if element and "indicator" in element:
-            return None
-
-        item_id = self.scope_tree.identify_row(event.y)
-        if not item_id:
-            return None
-
-        if item_id in self.scope_tree_depot_item_ids:
-            depot_id = self.scope_tree_depot_item_ids[item_id]
-            route_ids = self.scope_routes_by_depot.get(depot_id, [])
-            currently_checked = self._depot_check_state(depot_id) != "unchecked"
-            if currently_checked:
-                self.scope_selected_depot_ids.discard(depot_id)
-                for rid in route_ids:
-                    self.scope_selected_route_ids.discard(rid)
-            else:
-                self.scope_selected_depot_ids.add(depot_id)
-                for rid in route_ids:
-                    self.scope_selected_route_ids.add(rid)
-            self._sync_depot_selection_from_routes()
-            self._render_scope_tree()
-            return "break"
-
-        if item_id in self.scope_tree_route_item_ids:
-            route_id = self.scope_tree_route_item_ids[item_id]
-            if route_id in self.scope_selected_route_ids:
-                self.scope_selected_route_ids.discard(route_id)
-            else:
-                self.scope_selected_route_ids.add(route_id)
-            self._sync_depot_selection_from_routes()
-            self._render_scope_tree()
-            return "break"
-
-        return None
+        self._render_scope_checklist()
 
     def _selected_depot_ids(self) -> list[str]:
         return sorted(self.scope_selected_depot_ids)
@@ -897,8 +1001,42 @@ class App:
             return None
         return self._parse_float(v)
 
+    @staticmethod
+    def _normalize_powertrain_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        vtype = str(payload.get("type") or "BEV").strip().upper()
+        payload["type"] = vtype
+        if vtype == "BEV":
+            payload["fuelTankL"] = None
+            payload["fuelEfficiencyKmPerL"] = None
+            payload["co2EmissionGPerKm"] = None
+            payload["engineDisplacementL"] = None
+        else:
+            payload["batteryKwh"] = None
+            payload["chargePowerKw"] = None
+            payload["minSoc"] = None
+            payload["maxSoc"] = None
+        return payload
+
+    def _update_vehicle_form_visibility(self, _event=None) -> None:
+        vtype = self.v_type_var.get().strip().upper() or "BEV"
+        if vtype == "BEV":
+            self.vehicle_ev_box.pack(fill=tk.X, pady=(4, 2))
+            self.vehicle_ice_box.pack_forget()
+        else:
+            self.vehicle_ice_box.pack(fill=tk.X, pady=(2, 2))
+            self.vehicle_ev_box.pack_forget()
+
+    def _update_template_form_visibility(self, _event=None) -> None:
+        vtype = self.t_type_var.get().strip().upper() or "BEV"
+        if vtype == "BEV":
+            self.template_ev_box.pack(fill=tk.X, pady=(4, 2))
+            self.template_ice_box.pack_forget()
+        else:
+            self.template_ice_box.pack(fill=tk.X, pady=(2, 2))
+            self.template_ev_box.pack_forget()
+
     def _build_vehicle_payload_from_form(self) -> dict[str, Any]:
-        return {
+        payload = {
             "depotId": self.v_depot_var.get().strip(),
             "type": self.v_type_var.get().strip().upper() or "BEV",
             "modelCode": self.v_model_code_var.get().strip() or None,
@@ -920,9 +1058,10 @@ class App:
             "acquisitionCost": self._parse_float(self.v_acq_cost_var.get(), 0.0),
             "enabled": bool(self.v_enabled_var.get()),
         }
+        return self._normalize_powertrain_payload(payload)
 
     def _build_template_payload_from_form(self) -> dict[str, Any]:
-        return {
+        payload = {
             "name": self.t_name_var.get().strip(),
             "type": self.t_type_var.get().strip().upper() or "BEV",
             "modelCode": self.t_model_code_var.get().strip() or None,
@@ -944,6 +1083,7 @@ class App:
             "acquisitionCost": self._parse_float(self.t_acq_cost_var.get(), 0.0),
             "enabled": bool(self.t_enabled_var.get()),
         }
+        return self._normalize_powertrain_payload(payload)
 
     def _parse_tou_text(self) -> list[dict[str, Any]]:
         text = self.tou_text_var.get().strip()
@@ -1194,14 +1334,22 @@ class App:
                 continue
         return out
 
-    def toggle_advanced(self) -> None:
-        self.advanced_visible = not self.advanced_visible
-        if self.advanced_visible:
-            self.advanced_frame.pack(fill=tk.X, pady=4)
-            self.advanced_btn.configure(text="Hide Advanced Options")
-        else:
-            self.advanced_frame.pack_forget()
-            self.advanced_btn.configure(text="Advanced Options")
+    def _set_day_type_value(self, day_type: str) -> None:
+        value = str(day_type or "WEEKDAY").strip() or "WEEKDAY"
+        options = list(self.day_type_options)
+        if value not in options:
+            options.append(value)
+            self.day_type_combo.configure(values=options)
+        self.day_type_var.set(value)
+
+    def _refresh_depot_dropdowns(self, depots: list[dict[str, Any]]) -> None:
+        depot_ids = [str(d.get("id") or "").strip() for d in depots if str(d.get("id") or "").strip()]
+        self.fleet_depot_combo.configure(values=depot_ids)
+        self.dup_target_depot_combo.configure(values=depot_ids)
+        if depot_ids and self.fleet_depot_var.get().strip() not in depot_ids:
+            self.fleet_depot_var.set(depot_ids[0])
+        if self.dup_target_depot_var.get().strip() not in depot_ids:
+            self.dup_target_depot_var.set("")
 
     def on_connect(self) -> None:
         self.client.set_base_url(self.base_url_var.get().strip())
@@ -1209,15 +1357,34 @@ class App:
         def action() -> dict[str, Any]:
             prefix = self.client.detect_api_prefix()
             context = self.client.get_app_context()
-            return {"prefix": prefix, "context": context}
+            datasets = self.client.get_app_datasets()
+            return {"prefix": prefix, "context": context, "datasets": datasets}
 
         def done(resp: dict[str, Any]) -> None:
             shown = resp.get("prefix") or "(なし)"
             self.log_line(f"接続成功: {self.client.base_url} / API prefix = {shown}")
             self.log_line("App context: " + json.dumps(resp.get("context", {}), ensure_ascii=False))
+            self._apply_dataset_options(resp.get("datasets") or {})
             self.refresh_scenarios()
 
         self.run_bg(action, done)
+
+    def _apply_dataset_options(self, datasets_resp: dict[str, Any]) -> None:
+        items = list(datasets_resp.get("items") or [])
+        dataset_ids = [str(item.get("dataset_id") or item.get("datasetId") or "").strip() for item in items]
+        self.available_dataset_ids = [item for item in dataset_ids if item]
+        default_dataset_id = str(datasets_resp.get("defaultDatasetId") or "").strip()
+        # 既定は東急バス全体データセットを優先する。
+        if "tokyu_full" in self.available_dataset_ids:
+            self.default_dataset_id = "tokyu_full"
+        elif default_dataset_id:
+            self.default_dataset_id = default_dataset_id
+        elif self.available_dataset_ids:
+            self.default_dataset_id = self.available_dataset_ids[0]
+        self.dataset_combo["values"] = self.available_dataset_ids
+        if not self.dataset_id_var.get().strip() or self.dataset_id_var.get().strip() not in self.available_dataset_ids:
+            self.dataset_id_var.set(self.default_dataset_id)
+        self.log_line(f"dataset候補取得: {len(self.available_dataset_ids)} 件 (default={self.default_dataset_id})")
 
     def refresh_scenarios(self) -> None:
         def action() -> dict[str, Any]:
@@ -1428,18 +1595,24 @@ class App:
         self.run_bg(action, done)
 
     def on_scenario_changed(self, _event=None) -> None:
-        if not self._selected_scenario_id():
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
             return
         self.load_quick_setup()
         self.refresh_templates()
         self.refresh_vehicles()
+        self.log_line(f"シナリオ選択完了: {scenario_id}")
+        messagebox.showinfo("シナリオ選択", f"シナリオ選択完了\n{scenario_id}")
 
     def create_scenario(self) -> None:
         name = self.new_name_var.get().strip()
         if not name:
             messagebox.showwarning("入力不足", "シナリオ名を入力してください")
             return
-        dataset_id = self.dataset_id_var.get().strip() or "tokyu_bus_full"
+        dataset_id = self.dataset_id_var.get().strip() or self.default_dataset_id or "tokyu_full"
+        if self.available_dataset_ids and dataset_id not in self.available_dataset_ids:
+            messagebox.showwarning("入力エラー", f"datasetId が無効です: {dataset_id}\n候補: {', '.join(self.available_dataset_ids)}")
+            return
         random_seed = self._parse_int(self.random_seed_var.get(), 42)
 
         def action() -> dict[str, Any]:
@@ -1497,7 +1670,10 @@ class App:
 
         def action() -> dict[str, Any]:
             route_limit = self._parse_int(self.route_limit_var.get(), 600)
-            return self.client.get_quick_setup(scenario_id, route_limit)
+            quick = self.client.get_quick_setup(scenario_id, route_limit)
+            routes = self.client.list_routes(scenario_id)
+            quick["routes"] = list(routes.get("items") or [])
+            return quick
 
         def done(resp: dict[str, Any]) -> None:
             depots = list(resp.get("depots") or [])
@@ -1516,7 +1692,7 @@ class App:
 
             solver = dict(resp.get("solverSettings") or {})
             sim = dict(resp.get("simulationSettings") or {})
-            self.day_type_var.set(str(dispatch_scope.get("dayType") or "WEEKDAY"))
+            self._set_day_type_value(str(dispatch_scope.get("dayType") or "WEEKDAY"))
             self.service_date_var.set(str(sim.get("serviceDate") or ""))
             self.solver_mode_var.set(str(solver.get("solverMode") or "hybrid"))
             self.objective_mode_var.set(str(solver.get("objectiveMode") or "total_cost"))
@@ -1533,9 +1709,8 @@ class App:
             self.co2_price_var.set(str(sim.get("co2PricePerKg") or 1))
             self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
 
-            if depots and not self.fleet_depot_var.get().strip():
-                self.fleet_depot_var.set(str(depots[0].get("id") or ""))
-            self.log_line("Quick Setup を読み込みました")
+            self._refresh_depot_dropdowns(depots)
+            self.log_line(f"Quick Setup を読み込みました (routes={len(routes)}件)")
 
         self.run_bg(action, done)
 
@@ -1635,6 +1810,7 @@ class App:
             self.v_max_soc_var.set("" if v.get("maxSoc") is None else str(v.get("maxSoc")))
             self.v_acq_cost_var.set(str(v.get("acquisitionCost") or 0.0))
             self.v_enabled_var.set(bool(v.get("enabled", True)))
+            self._update_vehicle_form_visibility()
 
         self.run_bg(lambda: self.client.get_vehicle(scenario_id, vehicle_id), done)
 
@@ -1751,6 +1927,367 @@ class App:
             ),
         )
 
+    def _current_depot_choices(self) -> list[str]:
+        from_scope = [str(d.get("id") or "").strip() for d in self.scope_depots if str(d.get("id") or "").strip()]
+        if from_scope:
+            return from_scope
+        from_combo = [str(x).strip() for x in (self.fleet_depot_combo.cget("values") or ()) if str(x).strip()]
+        return from_combo
+
+    def open_vehicle_create_window(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("車両追加")
+        win.geometry("620x700")
+
+        depot_choices = self._current_depot_choices()
+        depot_var = tk.StringVar(value=(self.fleet_depot_var.get().strip() or (depot_choices[0] if depot_choices else "")))
+        qty_var = tk.StringVar(value="1")
+        type_var = tk.StringVar(value="BEV")
+        model_code_var = tk.StringVar(value="")
+        model_name_var = tk.StringVar(value="")
+        cap_var = tk.StringVar(value="0")
+        energy_var = tk.StringVar(value="1.2")
+        acq_var = tk.StringVar(value="0")
+        enabled_var = tk.BooleanVar(value=True)
+        battery_var = tk.StringVar(value="300")
+        charge_var = tk.StringVar(value="90")
+        min_soc_var = tk.StringVar(value="")
+        max_soc_var = tk.StringVar(value="")
+        fuel_tank_var = tk.StringVar(value="")
+        kmpl_var = tk.StringVar(value="")
+        co2_var = tk.StringVar(value="")
+        engine_var = tk.StringVar(value="")
+
+        base = ttk.LabelFrame(win, text="基本情報", padding=8)
+        base.pack(fill=tk.X, padx=10, pady=(10, 6))
+        depot_row = ttk.Frame(base)
+        depot_row.pack(fill=tk.X, pady=2)
+        ttk.Label(depot_row, text="営業所", width=20).pack(side=tk.LEFT)
+        depot_combo = ttk.Combobox(depot_row, textvariable=depot_var, state="readonly", values=depot_choices)
+        depot_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._labeled_entry(base, "追加台数", qty_var)
+        type_row = ttk.Frame(base)
+        type_row.pack(fill=tk.X, pady=2)
+        ttk.Label(type_row, text="車種", width=20).pack(side=tk.LEFT)
+        type_combo = ttk.Combobox(type_row, textvariable=type_var, state="readonly", values=["BEV", "ICE"])
+        type_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._labeled_entry(base, "モデルコード", model_code_var)
+        self._labeled_entry(base, "車両名", model_name_var)
+        self._labeled_entry(base, "定員(人)", cap_var)
+        self._labeled_entry(base, "消費係数", energy_var)
+        self._labeled_entry(base, "導入費(円)", acq_var)
+        ttk.Checkbutton(base, text="有効", variable=enabled_var).pack(anchor="w")
+
+        ev_box = ttk.LabelFrame(win, text="EV専用", padding=8)
+        ev_box.pack(fill=tk.X, padx=10, pady=4)
+        self._labeled_entry(ev_box, "電池容量(kWh)", battery_var)
+        self._labeled_entry(ev_box, "充電出力(kW)", charge_var)
+        self._labeled_entry(ev_box, "最小SOC(0-1)", min_soc_var)
+        self._labeled_entry(ev_box, "最大SOC(0-1)", max_soc_var)
+
+        ice_box = ttk.LabelFrame(win, text="エンジン車専用", padding=8)
+        ice_box.pack(fill=tk.X, padx=10, pady=4)
+        self._labeled_entry(ice_box, "燃料タンク(L)", fuel_tank_var)
+        self._labeled_entry(ice_box, "燃費(km/L)", kmpl_var)
+        self._labeled_entry(ice_box, "CO2排出(g/km)", co2_var)
+        self._labeled_entry(ice_box, "排気量(L)", engine_var)
+
+        def refresh_type(_event=None) -> None:
+            if type_var.get().strip().upper() == "BEV":
+                ev_box.pack(fill=tk.X, padx=10, pady=4)
+                ice_box.pack_forget()
+            else:
+                ice_box.pack(fill=tk.X, padx=10, pady=4)
+                ev_box.pack_forget()
+
+        type_combo.bind("<<ComboboxSelected>>", refresh_type)
+        refresh_type()
+
+        btns = ttk.Frame(win)
+        btns.pack(fill=tk.X, padx=10, pady=10)
+
+        def submit() -> None:
+            depot_id = depot_var.get().strip()
+            if not depot_id:
+                messagebox.showwarning("入力不足", "営業所を選択してください")
+                return
+            qty = max(1, self._parse_int(qty_var.get(), 1))
+            payload = self._normalize_powertrain_payload(
+                {
+                    "depotId": depot_id,
+                    "type": type_var.get().strip().upper() or "BEV",
+                    "modelCode": model_code_var.get().strip() or None,
+                    "modelName": model_name_var.get().strip() or "NewVehicle",
+                    "capacityPassengers": self._parse_int(cap_var.get(), 0),
+                    "batteryKwh": self._parse_optional_float(battery_var.get()),
+                    "fuelTankL": self._parse_optional_float(fuel_tank_var.get()),
+                    "energyConsumption": self._parse_float(energy_var.get(), 0.0),
+                    "fuelEfficiencyKmPerL": self._parse_optional_float(kmpl_var.get()),
+                    "co2EmissionGPerKm": self._parse_optional_float(co2_var.get()),
+                    "engineDisplacementL": self._parse_optional_float(engine_var.get()),
+                    "chargePowerKw": self._parse_optional_float(charge_var.get()),
+                    "minSoc": self._parse_optional_float(min_soc_var.get()),
+                    "maxSoc": self._parse_optional_float(max_soc_var.get()),
+                    "acquisitionCost": self._parse_float(acq_var.get(), 0.0),
+                    "enabled": bool(enabled_var.get()),
+                }
+            )
+
+            def action() -> dict[str, Any]:
+                if qty == 1:
+                    self.client.create_vehicle(scenario_id, payload)
+                    return {"total": 1}
+                batch = dict(payload)
+                batch["quantity"] = qty
+                return self.client.create_vehicle_batch(scenario_id, batch)
+
+            def done(resp: dict[str, Any]) -> None:
+                self.log_line(f"車両を追加: {depot_id} x {resp.get('total') or qty}")
+                self.fleet_depot_var.set(depot_id)
+                self.refresh_vehicles()
+                win.destroy()
+
+            self.run_bg(action, done)
+
+        ttk.Button(btns, text="追加", command=submit).pack(side=tk.RIGHT)
+        ttk.Button(btns, text="キャンセル", command=win.destroy).pack(side=tk.RIGHT, padx=6)
+
+    def open_template_create_window(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("テンプレート追加")
+        win.geometry("620x760")
+
+        depot_choices = self._current_depot_choices()
+        name_var = tk.StringVar(value="")
+        type_var = tk.StringVar(value="BEV")
+        model_code_var = tk.StringVar(value="")
+        model_name_var = tk.StringVar(value="")
+        cap_var = tk.StringVar(value="0")
+        energy_var = tk.StringVar(value="1.2")
+        acq_var = tk.StringVar(value="0")
+        enabled_var = tk.BooleanVar(value=True)
+        battery_var = tk.StringVar(value="300")
+        charge_var = tk.StringVar(value="90")
+        min_soc_var = tk.StringVar(value="")
+        max_soc_var = tk.StringVar(value="")
+        fuel_tank_var = tk.StringVar(value="")
+        kmpl_var = tk.StringVar(value="")
+        co2_var = tk.StringVar(value="")
+        engine_var = tk.StringVar(value="")
+        apply_now_var = tk.BooleanVar(value=False)
+        apply_depot_var = tk.StringVar(value=(self.fleet_depot_var.get().strip() or (depot_choices[0] if depot_choices else "")))
+        apply_qty_var = tk.StringVar(value="1")
+
+        base = ttk.LabelFrame(win, text="テンプレート基本情報", padding=8)
+        base.pack(fill=tk.X, padx=10, pady=(10, 6))
+        self._labeled_entry(base, "名称", name_var)
+        type_row = ttk.Frame(base)
+        type_row.pack(fill=tk.X, pady=2)
+        ttk.Label(type_row, text="車種", width=20).pack(side=tk.LEFT)
+        type_combo = ttk.Combobox(type_row, textvariable=type_var, state="readonly", values=["BEV", "ICE"])
+        type_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._labeled_entry(base, "モデルコード", model_code_var)
+        self._labeled_entry(base, "車両名", model_name_var)
+        self._labeled_entry(base, "定員(人)", cap_var)
+        self._labeled_entry(base, "消費係数", energy_var)
+        self._labeled_entry(base, "導入費(円)", acq_var)
+        ttk.Checkbutton(base, text="有効", variable=enabled_var).pack(anchor="w")
+
+        ev_box = ttk.LabelFrame(win, text="EV専用", padding=8)
+        ev_box.pack(fill=tk.X, padx=10, pady=4)
+        self._labeled_entry(ev_box, "電池容量(kWh)", battery_var)
+        self._labeled_entry(ev_box, "充電出力(kW)", charge_var)
+        self._labeled_entry(ev_box, "最小SOC(0-1)", min_soc_var)
+        self._labeled_entry(ev_box, "最大SOC(0-1)", max_soc_var)
+
+        ice_box = ttk.LabelFrame(win, text="エンジン車専用", padding=8)
+        ice_box.pack(fill=tk.X, padx=10, pady=4)
+        self._labeled_entry(ice_box, "燃料タンク(L)", fuel_tank_var)
+        self._labeled_entry(ice_box, "燃費(km/L)", kmpl_var)
+        self._labeled_entry(ice_box, "CO2排出(g/km)", co2_var)
+        self._labeled_entry(ice_box, "排気量(L)", engine_var)
+
+        apply_box = ttk.LabelFrame(win, text="作成後に営業所へ車両追加（任意）", padding=8)
+        apply_box.pack(fill=tk.X, padx=10, pady=(6, 4))
+        ttk.Checkbutton(apply_box, text="作成直後に追加する", variable=apply_now_var).pack(anchor="w")
+        dep_row = ttk.Frame(apply_box)
+        dep_row.pack(fill=tk.X, pady=2)
+        ttk.Label(dep_row, text="営業所", width=20).pack(side=tk.LEFT)
+        dep_combo = ttk.Combobox(dep_row, textvariable=apply_depot_var, state="readonly", values=depot_choices)
+        dep_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._labeled_entry(apply_box, "追加台数", apply_qty_var)
+
+        def refresh_type(_event=None) -> None:
+            if type_var.get().strip().upper() == "BEV":
+                ev_box.pack(fill=tk.X, padx=10, pady=4)
+                ice_box.pack_forget()
+            else:
+                ice_box.pack(fill=tk.X, padx=10, pady=4)
+                ev_box.pack_forget()
+
+        type_combo.bind("<<ComboboxSelected>>", refresh_type)
+        refresh_type()
+
+        btns = ttk.Frame(win)
+        btns.pack(fill=tk.X, padx=10, pady=10)
+
+        def submit() -> None:
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showwarning("入力不足", "テンプレート名を入力してください")
+                return
+            template_payload = self._normalize_powertrain_payload(
+                {
+                    "name": name,
+                    "type": type_var.get().strip().upper() or "BEV",
+                    "modelCode": model_code_var.get().strip() or None,
+                    "modelName": model_name_var.get().strip() or name,
+                    "capacityPassengers": self._parse_int(cap_var.get(), 0),
+                    "batteryKwh": self._parse_optional_float(battery_var.get()),
+                    "fuelTankL": self._parse_optional_float(fuel_tank_var.get()),
+                    "energyConsumption": self._parse_float(energy_var.get(), 0.0),
+                    "fuelEfficiencyKmPerL": self._parse_optional_float(kmpl_var.get()),
+                    "co2EmissionGPerKm": self._parse_optional_float(co2_var.get()),
+                    "engineDisplacementL": self._parse_optional_float(engine_var.get()),
+                    "chargePowerKw": self._parse_optional_float(charge_var.get()),
+                    "minSoc": self._parse_optional_float(min_soc_var.get()),
+                    "maxSoc": self._parse_optional_float(max_soc_var.get()),
+                    "acquisitionCost": self._parse_float(acq_var.get(), 0.0),
+                    "enabled": bool(enabled_var.get()),
+                }
+            )
+
+            apply_now = bool(apply_now_var.get())
+            apply_depot = apply_depot_var.get().strip()
+            apply_qty = max(1, self._parse_int(apply_qty_var.get(), 1))
+            if apply_now and not apply_depot:
+                messagebox.showwarning("入力不足", "営業所を選択してください")
+                return
+
+            def action() -> dict[str, Any]:
+                created = self.client.create_vehicle_template(scenario_id, template_payload)
+                created_id = str(created.get("id") or created.get("templateId") or "")
+                if apply_now:
+                    vehicle_payload = dict(template_payload)
+                    vehicle_payload.pop("name", None)
+                    vehicle_payload["depotId"] = apply_depot
+                    vehicle_payload["quantity"] = apply_qty
+                    self.client.create_vehicle_batch(scenario_id, vehicle_payload)
+                return {"templateId": created_id, "applied": apply_now, "depotId": apply_depot, "qty": apply_qty}
+
+            def done(resp: dict[str, Any]) -> None:
+                self.log_line(f"テンプレートを作成: {resp.get('templateId') or '(id不明)'}")
+                if resp.get("applied"):
+                    self.log_line(f"テンプレート由来で車両追加: {resp.get('depotId')} x {resp.get('qty')}")
+                    self.fleet_depot_var.set(str(resp.get("depotId") or ""))
+                    self.refresh_vehicles()
+                self.refresh_templates()
+                win.destroy()
+
+            self.run_bg(action, done)
+
+        ttk.Button(btns, text="作成", command=submit).pack(side=tk.RIGHT)
+        ttk.Button(btns, text="キャンセル", command=win.destroy).pack(side=tk.RIGHT, padx=6)
+
+    def open_template_apply_window(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+        if not self.template_rows:
+            messagebox.showwarning("入力不足", "先にテンプレート一覧更新を実行してください")
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("テンプレートから営業所へ車両追加")
+        win.geometry("560x260")
+
+        depot_choices = self._current_depot_choices()
+        template_choices = [f"{str(t.get('id') or '')} | {str(t.get('name') or t.get('modelName') or '')}" for t in self.template_rows]
+        template_var = tk.StringVar(value=(template_choices[0] if template_choices else ""))
+        depot_var = tk.StringVar(value=(self.fleet_depot_var.get().strip() or (depot_choices[0] if depot_choices else "")))
+        qty_var = tk.StringVar(value="1")
+
+        form = ttk.Frame(win, padding=10)
+        form.pack(fill=tk.BOTH, expand=True)
+
+        row1 = ttk.Frame(form)
+        row1.pack(fill=tk.X, pady=3)
+        ttk.Label(row1, text="テンプレート", width=18).pack(side=tk.LEFT)
+        ttk.Combobox(row1, textvariable=template_var, state="readonly", values=template_choices).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row2 = ttk.Frame(form)
+        row2.pack(fill=tk.X, pady=3)
+        ttk.Label(row2, text="営業所", width=18).pack(side=tk.LEFT)
+        ttk.Combobox(row2, textvariable=depot_var, state="readonly", values=depot_choices).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row3 = ttk.Frame(form)
+        row3.pack(fill=tk.X, pady=3)
+        ttk.Label(row3, text="追加台数", width=18).pack(side=tk.LEFT)
+        ttk.Entry(row3, textvariable=qty_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        btns = ttk.Frame(form)
+        btns.pack(fill=tk.X, pady=(10, 0))
+
+        def submit() -> None:
+            template_text = template_var.get().strip()
+            template_id = template_text.split("|", 1)[0].strip()
+            depot_id = depot_var.get().strip()
+            qty = max(1, self._parse_int(qty_var.get(), 1))
+            if not template_id or not depot_id:
+                messagebox.showwarning("入力不足", "テンプレートと営業所を選択してください")
+                return
+            template = next((t for t in self.template_rows if str(t.get("id") or "") == template_id), None)
+            if template is None:
+                messagebox.showwarning("入力不足", "テンプレートが見つかりません。一覧更新してください")
+                return
+
+            payload = self._normalize_powertrain_payload(
+                {
+                    "depotId": depot_id,
+                    "type": str(template.get("type") or "BEV"),
+                    "modelCode": template.get("modelCode"),
+                    "modelName": str(template.get("modelName") or template.get("name") or "TemplateVehicle"),
+                    "capacityPassengers": int(template.get("capacityPassengers") or 0),
+                    "batteryKwh": template.get("batteryKwh"),
+                    "fuelTankL": template.get("fuelTankL"),
+                    "energyConsumption": float(template.get("energyConsumption") or 0.0),
+                    "fuelEfficiencyKmPerL": template.get("fuelEfficiencyKmPerL"),
+                    "co2EmissionGPerKm": template.get("co2EmissionGPerKm"),
+                    "engineDisplacementL": template.get("engineDisplacementL"),
+                    "chargePowerKw": template.get("chargePowerKw"),
+                    "minSoc": template.get("minSoc"),
+                    "maxSoc": template.get("maxSoc"),
+                    "acquisitionCost": float(template.get("acquisitionCost") or 0.0),
+                    "enabled": bool(template.get("enabled", True)),
+                    "quantity": qty,
+                }
+            )
+            payload["quantity"] = qty
+
+            self.run_bg(
+                lambda: self.client.create_vehicle_batch(scenario_id, payload),
+                lambda resp: (
+                    self.log_line(f"テンプレート導入: {template_id} -> {depot_id} x {resp.get('total') or qty}"),
+                    self.fleet_depot_var.set(depot_id),
+                    self.refresh_vehicles(),
+                    win.destroy(),
+                ),
+            )
+
+        ttk.Button(btns, text="追加", command=submit).pack(side=tk.RIGHT)
+        ttk.Button(btns, text="キャンセル", command=win.destroy).pack(side=tk.RIGHT, padx=6)
+
     def refresh_templates(self) -> None:
         scenario_id = self._selected_scenario_id()
         if not scenario_id:
@@ -1808,6 +2345,7 @@ class App:
         self.t_max_soc_var.set("" if row.get("maxSoc") is None else str(row.get("maxSoc")))
         self.t_acq_cost_var.set(str(row.get("acquisitionCost") or 0.0))
         self.t_enabled_var.set(bool(row.get("enabled", True)))
+        self._update_template_form_visibility()
 
     def create_template_from_form(self) -> None:
         scenario_id = self._selected_scenario_id()
@@ -1948,6 +2486,8 @@ class App:
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
+        self.log_line("入力データ作成(Prepare)を開始します")
+        messagebox.showinfo("実行開始", "入力データ作成(Prepare)を開始します")
 
         def done(resp: dict[str, Any]) -> None:
             self.prepared_input_id = str(resp.get("preparedInputId") or "")
@@ -1957,6 +2497,7 @@ class App:
             )
             for warning in resp.get("warnings") or []:
                 self.log_line(f"警告: {warning}")
+            messagebox.showinfo("Prepare完了", f"prepared_input_id: {self.prepared_input_id or '-'}")
 
         self.run_bg(lambda: self.client.prepare_simulation(scenario_id, self._prepare_payload()), done)
 
@@ -1971,9 +2512,14 @@ class App:
         if not scenario_id or not self.prepared_input_id:
             messagebox.showwarning("入力不足", "先に Prepare を実行してください")
             return
+        self.log_line("Prepared実行を開始します")
+        messagebox.showinfo("実行開始", "Prepared実行を開始します")
         self.run_bg(
             lambda: self.client.run_prepared_simulation(scenario_id, self.prepared_input_id),
-            lambda resp: self._set_job_from_resp(resp, "Prepared実行ジョブ開始"),
+            lambda resp: (
+                self._set_job_from_resp(resp, "Prepared実行ジョブ開始"),
+                messagebox.showinfo("Prepared実行", f"ジョブ開始: {self.last_job_id or '-'}"),
+            ),
         )
 
     def run_optimization(self) -> None:
@@ -1981,19 +2527,140 @@ class App:
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
-        depots = self._selected_depot_ids()
-        payload = {
-            "mode": self.solver_mode_var.get().strip(),
-            "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
-            "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
-            "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
-            "service_id": self.day_type_var.get().strip() or None,
-            "depot_id": depots[0] if depots else None,
-        }
-        self.run_bg(
-            lambda: self.client.run_optimization(scenario_id, payload),
-            lambda resp: self._set_job_from_resp(resp, "最適化ジョブ開始"),
-        )
+        self.open_optimization_window()
+
+    def _extract_job_progress_percent(self, job: dict[str, Any]) -> float:
+        raw = job.get("progress")
+        if isinstance(raw, dict):
+            raw = raw.get("percent") or raw.get("progress") or raw.get("value")
+        if raw is None:
+            raw = job.get("progressPercent")
+        if raw is None:
+            return 0.0
+        try:
+            value = float(raw)
+        except Exception:
+            return 0.0
+        if 0.0 <= value <= 1.0:
+            value *= 100.0
+        return max(0.0, min(100.0, value))
+
+    def _optimization_console_log(self, text: str) -> None:
+        if not self.optimization_console:
+            return
+        stamp = datetime.now().strftime("%H:%M:%S")
+        self.optimization_console.insert(tk.END, f"[{stamp}] {text}\n")
+        self.optimization_console.see(tk.END)
+
+    def open_optimization_window(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+
+        if self.optimization_window and self.optimization_window.winfo_exists():
+            self.optimization_window.lift()
+            return
+
+        win = tk.Toplevel(self.root)
+        self.optimization_window = win
+        win.title("最適化実行モニター")
+        win.geometry("900x600")
+
+        top = ttk.Frame(win, padding=10)
+        top.pack(fill=tk.X)
+        ttk.Label(top, text=f"シナリオ: {scenario_id}", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        ttk.Label(top, text="最適化を開始すると進捗とメッセージが下のコンソールに表示されます。", foreground="#444").pack(anchor="w", pady=(2, 6))
+
+        status_row = ttk.Frame(top)
+        status_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(status_row, text="進捗", width=8).pack(side=tk.LEFT)
+        progress = ttk.Progressbar(status_row, mode="determinate", maximum=100, variable=self.optimization_progress_var)
+        progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(status_row, textvariable=self.optimization_status_var, width=18).pack(side=tk.LEFT, padx=(8, 0))
+
+        console_frame = ttk.LabelFrame(win, text="実行ログ (PowerShell風)", padding=8)
+        console_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+        self.optimization_console = ScrolledText(console_frame, height=20, bg="#111", fg="#d8ffd8", insertbackground="#d8ffd8")
+        self.optimization_console.pack(fill=tk.BOTH, expand=True)
+
+        btns = ttk.Frame(win, padding=(10, 0, 10, 10))
+        btns.pack(fill=tk.X)
+
+        def start_optimization() -> None:
+            depots = self._selected_depot_ids()
+            payload = {
+                "mode": self.solver_mode_var.get().strip(),
+                "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
+                "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
+                "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
+                "service_id": self.day_type_var.get().strip() or None,
+                "depot_id": depots[0] if depots else None,
+            }
+            self.optimization_progress_var.set(0.0)
+            self.optimization_status_var.set("送信中")
+            self.optimization_last_message = ""
+            self._optimization_console_log("最適化計算を開始します")
+            self._optimization_console_log("payload=" + json.dumps(payload, ensure_ascii=False))
+            self.log_line("最適化計算を開始します（専用画面）")
+            messagebox.showinfo("最適化実行", "最適化計算を開始します。進捗は専用画面で確認できます。")
+
+            def done(resp: dict[str, Any]) -> None:
+                self._set_job_from_resp(resp, "最適化ジョブ開始")
+                self.optimization_job_id = self.last_job_id
+                self.optimization_status_var.set("実行中")
+                self._optimization_console_log(f"ジョブ開始: {self.optimization_job_id}")
+                self._start_optimization_polling()
+
+            self.run_bg(lambda: self.client.run_optimization(scenario_id, payload), done)
+
+        ttk.Button(btns, text="最適化開始", command=start_optimization).pack(side=tk.RIGHT)
+        ttk.Button(btns, text="閉じる", command=win.destroy).pack(side=tk.RIGHT, padx=6)
+
+        def on_close() -> None:
+            self.optimization_polling = False
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", on_close)
+
+    def _start_optimization_polling(self) -> None:
+        if not self.optimization_job_id:
+            return
+        self.optimization_polling = True
+
+        def tick() -> None:
+            if not self.optimization_polling:
+                return
+            if not self.optimization_window or not self.optimization_window.winfo_exists():
+                self.optimization_polling = False
+                return
+            job_id = self.optimization_job_id
+
+            def done(job: dict[str, Any]) -> None:
+                status = str(job.get("status") or "").lower()
+                progress = self._extract_job_progress_percent(job)
+                message = str(job.get("message") or "")
+                if message and message != self.optimization_last_message:
+                    self.optimization_last_message = message
+                    self._optimization_console_log(message)
+                self.optimization_progress_var.set(progress)
+                shown = status or "running"
+                self.optimization_status_var.set(shown)
+                self.job_var.set(f"job: {job_id} ({shown})")
+                self.log_line(f"最適化監視: status={shown} progress={progress:.1f}%")
+
+                finished = status in {"completed", "failed", "error", "cancelled", "canceled"}
+                if finished:
+                    self.optimization_polling = False
+                    self._optimization_console_log(f"ジョブ終了: status={shown}")
+                    messagebox.showinfo("最適化ジョブ", f"ジョブ終了: {shown}")
+                    return
+                if self.optimization_window and self.optimization_window.winfo_exists():
+                    self.optimization_window.after(2000, tick)
+
+            self.run_bg(lambda: self.client.get_job(job_id), done)
+
+        tick()
 
     def run_simulation_legacy(self) -> None:
         scenario_id = self._selected_scenario_id()
@@ -2044,6 +2711,219 @@ class App:
             }
 
         self.run_bg(action, lambda resp: self.log_line("機能情報: " + json.dumps(resp, ensure_ascii=False)))
+
+    def open_solver_settings_window(self) -> None:
+        win = tk.Toplevel(self.root)
+        win.title("詳細設定 / ソルバー設定")
+        win.geometry("620x520")
+
+        ttk.Label(
+            win,
+            text="旧Advancedメニューとソルバー設定をこの画面に集約しています。",
+            foreground="#444",
+        ).pack(anchor="w", padx=10, pady=(10, 2))
+
+        ttk.Label(win, text="ソルバー種別", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=10, pady=(8, 4))
+        solver_combo = ttk.Combobox(
+            win,
+            state="readonly",
+            textvariable=self.solver_mode_var,
+            values=["mode_milp_only", "mode_alns_only", "hybrid", "ga", "abc"],
+        )
+        solver_combo.pack(fill=tk.X, padx=10)
+
+        body = ttk.Frame(win)
+        body.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        solver_box = ttk.LabelFrame(body, text="ソルバー詳細", padding=8)
+        solver_box.pack(fill=tk.X, pady=(0, 8))
+
+        sim_box = ttk.LabelFrame(body, text="実行時ポリシー (Advanced)", padding=8)
+        sim_box.pack(fill=tk.X)
+
+        row_obj = ttk.Frame(solver_box)
+        row_obj.pack(fill=tk.X, pady=3)
+        ttk.Label(row_obj, text="目的関数モード", width=24).pack(side=tk.LEFT)
+        ttk.Entry(row_obj, textvariable=self.objective_mode_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row_tl = ttk.Frame(solver_box)
+        row_tl.pack(fill=tk.X, pady=3)
+        ttk.Label(row_tl, text="時間上限(秒)", width=24).pack(side=tk.LEFT)
+        ttk.Entry(row_tl, textvariable=self.time_limit_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row_gap = ttk.Frame(solver_box)
+        row_gap.pack(fill=tk.X, pady=3)
+        ttk.Label(row_gap, text="MILPギャップ", width=24).pack(side=tk.LEFT)
+        ttk.Entry(row_gap, textvariable=self.mip_gap_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row_iter = ttk.Frame(solver_box)
+        row_iter.pack(fill=tk.X, pady=3)
+        ttk.Label(row_iter, text="反復回数(ALNS/GA/ABC)", width=24).pack(side=tk.LEFT)
+        ttk.Entry(row_iter, textvariable=self.alns_iter_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row_partial = ttk.Frame(sim_box)
+        row_partial.pack(fill=tk.X, pady=3)
+        ttk.Checkbutton(row_partial, text="未配車許容", variable=self.allow_partial_service_var).pack(side=tk.LEFT)
+
+        row_penalty = ttk.Frame(sim_box)
+        row_penalty.pack(fill=tk.X, pady=3)
+        ttk.Label(row_penalty, text="未配車ペナルティ", width=24).pack(side=tk.LEFT)
+        ttk.Entry(row_penalty, textvariable=self.unserved_penalty_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        info = ttk.Label(body, text="", foreground="#444")
+        info.pack(anchor="w", pady=(8, 0))
+
+        def refresh_visibility(_event=None) -> None:
+            mode = self.solver_mode_var.get().strip().lower()
+            is_milp_like = mode in {"mode_milp_only", "hybrid", "milp"}
+            is_meta_like = mode in {"mode_alns_only", "ga", "abc", "alns"}
+
+            if is_milp_like:
+                row_gap.pack(fill=tk.X, pady=3)
+            else:
+                row_gap.pack_forget()
+
+            if is_meta_like or mode == "hybrid":
+                row_iter.pack(fill=tk.X, pady=3)
+            else:
+                row_iter.pack_forget()
+
+            info.configure(text=f"現在のモード: {self.solver_mode_var.get()} / 表示項目を自動切替")
+
+        solver_combo.bind("<<ComboboxSelected>>", refresh_visibility)
+        refresh_visibility()
+
+        btns = ttk.Frame(win)
+        btns.pack(fill=tk.X, padx=10, pady=(0, 10))
+        ttk.Button(btns, text="閉じる", command=win.destroy).pack(side=tk.RIGHT)
+
+    def open_vehicle_depot_manager(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+
+        win = tk.Toplevel(self.root)
+        self.depot_manager_window = win
+        win.title("営業所別 車両・充電器管理")
+        win.geometry("980x620")
+
+        left = ttk.Frame(win, padding=8)
+        left.pack(side=tk.LEFT, fill=tk.Y)
+        right = ttk.Frame(win, padding=8)
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        ttk.Label(left, text="営業所一覧").pack(anchor="w")
+        depot_list = tk.Listbox(left, width=32, height=28)
+        depot_list.pack(fill=tk.Y, expand=True)
+
+        ops = ttk.Frame(left)
+        ops.pack(fill=tk.X, pady=(6, 0))
+        ttk.Button(ops, text="再読込", command=lambda: self._load_depot_manager_data(depot_list)).pack(side=tk.LEFT)
+        ttk.Button(ops, text="選択営業所を車両タブへ反映", command=lambda: self._apply_selected_depot_to_vehicle_tab(depot_list)).pack(side=tk.LEFT, padx=4)
+
+        charger_box = ttk.LabelFrame(right, text="営業所充電器設定", padding=8)
+        charger_box.pack(fill=tk.X)
+        self.dm_depot_id_var = tk.StringVar(value="")
+        self.dm_depot_name_var = tk.StringVar(value="")
+        self.dm_normal_count_var = tk.StringVar(value="0")
+        self.dm_normal_kw_var = tk.StringVar(value="0")
+        self.dm_fast_count_var = tk.StringVar(value="0")
+        self.dm_fast_kw_var = tk.StringVar(value="0")
+
+        self._labeled_entry(charger_box, "営業所ID", self.dm_depot_id_var, readonly=True)
+        self._labeled_entry(charger_box, "営業所名", self.dm_depot_name_var, readonly=True)
+        self._labeled_entry(charger_box, "普通充電器台数", self.dm_normal_count_var)
+        self._labeled_entry(charger_box, "普通充電器出力(kW)", self.dm_normal_kw_var)
+        self._labeled_entry(charger_box, "急速充電器台数", self.dm_fast_count_var)
+        self._labeled_entry(charger_box, "急速充電器出力(kW)", self.dm_fast_kw_var)
+
+        btn_row = ttk.Frame(charger_box)
+        btn_row.pack(fill=tk.X, pady=4)
+        ttk.Button(btn_row, text="保存", command=self._save_depot_charger_settings).pack(side=tk.LEFT)
+
+        ttk.Label(right, text="車両編集は右ペインの車両管理タブと連動します。", foreground="#444").pack(anchor="w", pady=(8, 0))
+
+        depot_list.bind("<<ListboxSelect>>", lambda _e: self._on_depot_manager_select(depot_list))
+        self._load_depot_manager_data(depot_list)
+
+    def _load_depot_manager_data(self, depot_list: tk.Listbox) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            return
+
+        def action() -> dict[str, Any]:
+            return self.client.list_depots(scenario_id)
+
+        def done(resp: dict[str, Any]) -> None:
+            self.dm_depots = list(resp.get("items") or [])
+            depot_list.delete(0, tk.END)
+            for depot in self.dm_depots:
+                did = str(depot.get("id") or "")
+                name = str(depot.get("name") or did)
+                depot_list.insert(tk.END, f"{did} | {name}")
+            self.log_line(f"営業所一覧取得: {len(self.dm_depots)} 件")
+
+        self.run_bg(action, done)
+
+    def _on_depot_manager_select(self, depot_list: tk.Listbox) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            return
+        sel = depot_list.curselection()
+        if not sel:
+            return
+        idx = int(sel[0])
+        depot = self.dm_depots[idx] if 0 <= idx < len(self.dm_depots) else None
+        if not depot:
+            return
+        depot_id = str(depot.get("id") or "").strip()
+        if not depot_id:
+            return
+
+        def done(detail: dict[str, Any]) -> None:
+            self.dm_depot_id_var.set(str(detail.get("id") or ""))
+            self.dm_depot_name_var.set(str(detail.get("name") or ""))
+            self.dm_normal_count_var.set(str(detail.get("normalChargerCount") or 0))
+            self.dm_normal_kw_var.set(str(detail.get("normalChargerPowerKw") or 0))
+            self.dm_fast_count_var.set(str(detail.get("fastChargerCount") or 0))
+            self.dm_fast_kw_var.set(str(detail.get("fastChargerPowerKw") or 0))
+
+        self.run_bg(lambda: self.client.get_depot(scenario_id, depot_id), done)
+
+    def _save_depot_charger_settings(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        depot_id = self.dm_depot_id_var.get().strip()
+        if not scenario_id or not depot_id:
+            messagebox.showwarning("入力不足", "先に営業所を選択してください")
+            return
+
+        payload = {
+            "normalChargerCount": max(0, self._parse_int(self.dm_normal_count_var.get(), 0)),
+            "normalChargerPowerKw": max(0.0, self._parse_float(self.dm_normal_kw_var.get(), 0.0)),
+            "fastChargerCount": max(0, self._parse_int(self.dm_fast_count_var.get(), 0)),
+            "fastChargerPowerKw": max(0.0, self._parse_float(self.dm_fast_kw_var.get(), 0.0)),
+        }
+
+        self.run_bg(
+            lambda: self.client.update_depot(scenario_id, depot_id, payload),
+            lambda _resp: self.log_line(f"営業所充電器設定を更新: {depot_id}"),
+        )
+
+    def _apply_selected_depot_to_vehicle_tab(self, depot_list: tk.Listbox) -> None:
+        sel = depot_list.curselection()
+        if not sel:
+            return
+        idx = int(sel[0])
+        depot = self.dm_depots[idx] if 0 <= idx < len(self.dm_depots) else None
+        if not depot:
+            return
+        depot_id = str(depot.get("id") or "").strip()
+        if not depot_id:
+            return
+        self.fleet_depot_var.set(depot_id)
+        self.v_depot_var.set(depot_id)
+        self.refresh_vehicles()
 
     def show_simulation_result(self) -> None:
         scenario_id = self._selected_scenario_id()

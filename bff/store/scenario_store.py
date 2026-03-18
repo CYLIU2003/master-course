@@ -296,6 +296,22 @@ def _rename_with_retries(source: Path, target: Path) -> None:
         raise last_error
 
 
+def _sync_tree_non_atomic(source: Path, target: Path) -> None:
+    """Best-effort directory sync used when atomic rename is blocked on Windows.
+
+    This fallback prefers availability over strict atomicity and is used only
+    after rename retries fail with PermissionError.
+    """
+    target.mkdir(parents=True, exist_ok=True)
+    for child in source.iterdir():
+        dst = target / child.name
+        if child.is_dir():
+            shutil.copytree(child, dst, dirs_exist_ok=True)
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(child, dst)
+
+
 def _path(scenario_id: str) -> Path:
     return scenario_meta_store.scenario_path(_STORE_DIR, scenario_id)
 
@@ -1058,13 +1074,33 @@ def _save(doc: Dict[str, Any]) -> None:
             if old_json.exists():
                 _unlink_with_retries(old_json, missing_ok=True)
 
-            if active_dir.exists():
-                _rename_with_retries(active_dir, old_dir)
-            _rename_with_retries(staging_dir, active_dir)
+            try:
+                if active_dir.exists():
+                    _rename_with_retries(active_dir, old_dir)
+                _rename_with_retries(staging_dir, active_dir)
 
-            if active_json.exists():
-                _rename_with_retries(active_json, old_json)
-            _rename_with_retries(staging_json, active_json)
+                if active_json.exists():
+                    _rename_with_retries(active_json, old_json)
+                _rename_with_retries(staging_json, active_json)
+            except OSError as exc:
+                # Windows can keep handles open briefly and reject directory
+                # rename. Fall back to non-atomic sync to avoid save failure.
+                winerror = getattr(exc, "winerror", None)
+                if winerror not in {5, 32} and not isinstance(exc, PermissionError):
+                    raise
+                if active_dir.exists():
+                    _sync_tree_non_atomic(staging_dir, active_dir)
+                    _remove_tree_with_retries(staging_dir, ignore_errors=True)
+                else:
+                    _rename_with_retries(staging_dir, active_dir)
+
+                try:
+                    if active_json.exists():
+                        shutil.copy2(active_json, old_json)
+                except Exception:
+                    pass
+                active_json.write_text(staging_json.read_text(encoding="utf-8"), encoding="utf-8")
+                _unlink_with_retries(staging_json, missing_ok=True)
 
             if old_dir.exists():
                 _remove_tree_with_retries(old_dir, ignore_errors=True)
