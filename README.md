@@ -437,3 +437,37 @@ $$
 以下に、constant 参照元、アプリ構成、パラメータ、制約、実装差分を詳細にまとめた。
 
 - `docs/professor_system_model_guide.md`
+
+## 13. 実測監査（timetable_rows / unserved / departure-arrival一致率）
+
+第三者が追試できるよう、以下の監査スクリプトと成果物を追加しました。
+
+- スクリプト: `scripts/audit_timetable_alignment.py`
+- 提出版レポート: `docs/reproduction/timetable_alignment_audit_20260318.md`
+- 監査成果物（WEEKDAY）: `outputs/audit/bbe1e1bd/timetable_alignment_audit.{json,csv,md}`
+- 監査成果物（SAT比較）: `outputs/audit/bbe1e1bd_sat/timetable_alignment_audit.{json,csv,md}`
+
+### 13.1 監査対象KPI
+
+- `timetable_rows_count`
+- `unserved_trip_count`
+- `departure_arrival_match_rate`
+
+加えて、監査の妥当性確認のために以下を併記します。
+
+- `checked_coverage_rate`（一致率算出に使えた便の割合）
+- `prepared_day_tag`, `result_day_tag`, `day_tag_match`（曜日タグ整合性）
+
+### 13.2 再現コマンド
+
+```powershell
+python scripts/audit_timetable_alignment.py `
+  --scenario-id bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f `
+  --prepared-input-path app/scenarios/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared_inputs/prepared-7822b5b6dd60630d.json `
+  --optimization-result-path outputs/tokyu/2026-03-14/optimization/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/meguro/WEEKDAY/optimization_result.json `
+  --out-dir outputs/audit/bbe1e1bd
+```
+
+`day_tag_match=false` の場合は、prepared input と最適化結果のサービス日種別が異なるため、
+`departure_arrival_match_rate` を品質判定に用いてはいけません。
+

@@ -39,6 +39,33 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-18] Timetable整合監査の自動化（第三者追試向け）
+
+- **背景課題**:
+  - 教員レビュー用に、`timetable_rows` 件数・`unserved_trip_ids` 件数・採用便の departure/arrival 一致率を実測値で提示する必要があった。
+  - 既存のログ確認だけでは、入力ファイルと結果ファイルの突合根拠が散在していた。
+
+- **対応**:
+  - `scripts/audit_timetable_alignment.py` を追加し、prepared input と optimization result を突合する監査を自動化。
+  - JSON/CSV/Markdown の3形式で監査成果物を出力。
+  - 追加指標として `checked_coverage_rate` と `day_tag_match` を導入し、曜日不整合ケースを品質判定から除外可能にした。
+  - 提出用文書 `docs/reproduction/timetable_alignment_audit_20260318.md` を作成。
+
+- **出力先**:
+  - `outputs/audit/bbe1e1bd/timetable_alignment_audit.{json,csv,md}`（WEEKDAY）
+  - `outputs/audit/bbe1e1bd_sat/timetable_alignment_audit.{json,csv,md}`（SAT比較）
+
+- **主結果（WEEKDAY）**:
+  - `timetable_rows_count = 1010`
+  - `unserved_trip_count = 0`
+  - `departure_arrival_match_rate = 100.0%`
+  - `checked_coverage_rate = 100.0%`
+  - `day_tag_match = true`
+
+- **注意（SAT比較）**:
+  - `day_tag_match = false`（prepared=Weekday, result=Saturday）
+  - このため SAT 側の一致率は品質判定に使わず、入力不整合検知の証跡として扱う。
+
 ### [DEV-2026-03-15] Simulation Input Builder 化の第1段（lite bootstrap + depot-scoped 権限 + invalidate 範囲縮小）
 
 - **背景課題**:
