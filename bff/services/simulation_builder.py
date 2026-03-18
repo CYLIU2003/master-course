@@ -189,6 +189,80 @@ def build_builder_chargers(
     return items
 
 
+def _selected_vehicle_inventory(
+    doc: Dict[str, Any],
+    *,
+    selected_depot_ids: list[str],
+    initial_soc: float,
+    soc_min: Optional[float],
+    soc_max: Optional[float],
+) -> list[Dict[str, Any]]:
+    selected = set(selected_depot_ids)
+    vehicles: list[Dict[str, Any]] = []
+    for raw in doc.get("vehicles") or []:
+        vehicle = dict(raw)
+        depot_id = str(vehicle.get("depotId") or "").strip()
+        if depot_id not in selected:
+            continue
+        if vehicle.get("enabled", True) is False:
+            continue
+        if str(vehicle.get("type") or "").upper() == "BEV":
+            vehicle["initialSoc"] = initial_soc
+            if soc_min is not None:
+                vehicle["minSoc"] = soc_min
+            if soc_max is not None:
+                vehicle["maxSoc"] = soc_max
+        vehicles.append(vehicle)
+    return vehicles
+
+
+def _selected_charger_inventory(
+    doc: Dict[str, Any],
+    *,
+    selected_depot_ids: list[str],
+) -> list[Dict[str, Any]]:
+    selected = set(selected_depot_ids)
+    chargers: list[Dict[str, Any]] = []
+    for raw in doc.get("chargers") or []:
+        charger = dict(raw)
+        site_id = str(charger.get("siteId") or charger.get("site_id") or "").strip()
+        if site_id in selected:
+            chargers.append(charger)
+    if chargers:
+        return chargers
+
+    generated: list[Dict[str, Any]] = []
+    for depot in doc.get("depots") or []:
+        depot_id = str(depot.get("id") or depot.get("depotId") or "").strip()
+        if depot_id not in selected:
+            continue
+        normal_count = int(depot.get("normalChargerCount") or 0)
+        normal_power = float(depot.get("normalChargerPowerKw") or 0.0)
+        fast_count = int(depot.get("fastChargerCount") or 0)
+        fast_power = float(depot.get("fastChargerPowerKw") or 0.0)
+        for idx in range(max(normal_count, 0)):
+            generated.append(
+                {
+                    "id": f"depot-normal-{depot_id}-{idx + 1:03d}",
+                    "siteId": depot_id,
+                    "powerKw": normal_power,
+                    "bidirectional": False,
+                    "simultaneous_ports": 1,
+                }
+            )
+        for idx in range(max(fast_count, 0)):
+            generated.append(
+                {
+                    "id": f"depot-fast-{depot_id}-{idx + 1:03d}",
+                    "siteId": depot_id,
+                    "powerKw": fast_power,
+                    "bidirectional": False,
+                    "simultaneous_ports": 1,
+                }
+            )
+    return generated
+
+
 def apply_builder_configuration(
     scenario_id: str,
     body: Any,
@@ -239,20 +313,42 @@ def apply_builder_configuration(
     if not selected_route_ids:
         selected_route_ids = list(candidate_route_ids)
 
-    template_selections = resolve_builder_template_selections(
-        doc, body.simulation_settings
+    settings = body.simulation_settings
+    use_selected_vehicle_inventory = bool(
+        getattr(settings, "use_selected_depot_vehicle_inventory", True)
     )
-    if not template_selections:
-        raise ValueError("No vehicle template is available for builder prepare.")
-    primary_template = dict(template_selections[0]["template"] or {})
-    fleet_counts = {"BEV": 0, "ICE": 0}
-    for selection in template_selections:
-        template_type = str(
-            (selection.get("template") or {}).get("type") or "BEV"
-        ).upper()
-        fleet_counts[template_type] = fleet_counts.get(template_type, 0) + int(
-            selection.get("vehicle_count") or 0
+    use_selected_charger_inventory = bool(
+        getattr(settings, "use_selected_depot_charger_inventory", True)
+    )
+    soc_min = getattr(settings, "soc_min", None)
+    soc_max = getattr(settings, "soc_max", None)
+
+    runtime_vehicles: list[Dict[str, Any]] = []
+    primary_template: Dict[str, Any] = {}
+    template_selections: list[Dict[str, Any]] = []
+    if use_selected_vehicle_inventory:
+        runtime_vehicles = _selected_vehicle_inventory(
+            doc,
+            selected_depot_ids=selected_depot_ids,
+            initial_soc=float(settings.initial_soc),
+            soc_min=soc_min,
+            soc_max=soc_max,
         )
+
+    if not runtime_vehicles:
+        template_selections = resolve_builder_template_selections(doc, settings)
+        if not template_selections:
+            raise ValueError("No vehicle template is available for builder prepare.")
+        primary_template = dict(template_selections[0]["template"] or {})
+        runtime_vehicles = build_builder_fleet_vehicles(
+            primary_depot_id=selected_depot_ids[0],
+            selections=template_selections,
+        )
+
+    fleet_counts = {"BEV": 0, "ICE": 0}
+    for vehicle in runtime_vehicles:
+        template_type = str(vehicle.get("type") or "BEV").upper()
+        fleet_counts[template_type] = fleet_counts.get(template_type, 0) + 1
 
     scenario_meta = store.get_scenario(scenario_id)
     current_overlay = dict(doc.get("scenario_overlay") or {})
@@ -305,12 +401,28 @@ def apply_builder_configuration(
     )
     overlay.fleet.n_bev = int(fleet_counts.get("BEV", 0))
     overlay.fleet.n_ice = int(fleet_counts.get("ICE", 0))
-    overlay.charging_constraints.max_simultaneous_sessions = (
-        body.simulation_settings.charger_count
-    )
-    overlay.charging_constraints.charger_power_limit_kw = (
-        body.simulation_settings.charger_power_kw
-    )
+    runtime_chargers: list[Dict[str, Any]] = []
+    if use_selected_charger_inventory and fleet_counts.get("BEV", 0) > 0:
+        runtime_chargers = _selected_charger_inventory(
+            doc,
+            selected_depot_ids=selected_depot_ids,
+        )
+    if not runtime_chargers:
+        runtime_chargers = build_builder_chargers(
+            primary_depot_id=selected_depot_ids[0],
+            has_bev=fleet_counts.get("BEV", 0) > 0,
+            charger_count=settings.charger_count,
+            charger_power_kw=settings.charger_power_kw,
+        )
+
+    overlay.charging_constraints.max_simultaneous_sessions = len(runtime_chargers)
+    if runtime_chargers:
+        overlay.charging_constraints.charger_power_limit_kw = max(
+            float(item.get("powerKw") or 0.0) for item in runtime_chargers
+        )
+    else:
+        overlay.charging_constraints.charger_power_limit_kw = settings.charger_power_kw
+
     if body.simulation_settings.depot_power_limit_kw is not None:
         overlay.charging_constraints.depot_power_limit_kw = (
             body.simulation_settings.depot_power_limit_kw
@@ -422,6 +534,8 @@ def apply_builder_configuration(
         "service_date": body.service_date or body.simulation_settings.service_date,
         "day_type": selected_day_type,
         "initial_soc": body.simulation_settings.initial_soc,
+        "soc_min": soc_min,
+        "soc_max": soc_max,
         "start_time": body.simulation_settings.start_time,
         "planning_horizon_hours": body.simulation_settings.planning_horizon_hours,
         "time_step_min": 15,
@@ -436,8 +550,10 @@ def apply_builder_configuration(
             }
             for selection in template_selections
         ],
-        "charger_count": body.simulation_settings.charger_count,
-        "charger_power_kw": body.simulation_settings.charger_power_kw,
+        "charger_count": len(runtime_chargers),
+        "charger_power_kw": overlay.charging_constraints.charger_power_limit_kw,
+        "use_selected_depot_vehicle_inventory": use_selected_vehicle_inventory,
+        "use_selected_depot_charger_inventory": use_selected_charger_inventory,
         "solver_mode": body.simulation_settings.solver_mode,
         "objective_mode": overlay.solver_config.objective_mode,
         "allow_partial_service": overlay.solver_config.allow_partial_service,
@@ -450,16 +566,8 @@ def apply_builder_configuration(
         "experiment_method": body.simulation_settings.experiment_method,
         "experiment_notes": body.simulation_settings.experiment_notes,
     }
-    doc["vehicles"] = build_builder_fleet_vehicles(
-        primary_depot_id=primary_depot_id,
-        selections=template_selections,
-    )
-    doc["chargers"] = build_builder_chargers(
-        primary_depot_id=primary_depot_id,
-        has_bev=overlay.fleet.n_bev > 0,
-        charger_count=body.simulation_settings.charger_count,
-        charger_power_kw=body.simulation_settings.charger_power_kw,
-    )
+    doc["vehicles"] = runtime_vehicles
+    doc["chargers"] = runtime_chargers
     if overlay.charging_constraints.depot_power_limit_kw is not None:
         doc["charger_sites"] = [
             {

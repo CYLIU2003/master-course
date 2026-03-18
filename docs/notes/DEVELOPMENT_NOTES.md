@@ -39,6 +39,32 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-18] Prepare時の台数決定を営業所在庫ベースへ変更（Basic Parameters廃止）
+
+- **背景課題**:
+  - Tk の `Basic Parameters` で手入力した車両台数/充電器台数が、営業所に既に設定した実在庫と乖離しやすかった。
+  - SOC関連が `Cost / Tariff` と別枠で分かれており、運用上の入力導線が分散していた。
+
+- **対応**:
+  - `bff/routers/simulation.py` の `PrepareSimulationSettingsBody` に以下を追加:
+    - `soc_min`, `soc_max`
+    - `use_selected_depot_vehicle_inventory`
+    - `use_selected_depot_charger_inventory`
+  - `bff/services/simulation_builder.py` を更新し、Prepare時に
+    - 選択営業所の既存 `vehicles` を優先採用
+    - 選択営業所の既存 `chargers`（無い場合は depot charger 設定から生成）を優先採用
+    - BEVへ `initial_soc` と `soc_min/soc_max` を反映
+    するロジックへ変更。
+  - `tools/scenario_backup_tk.py` を更新し、
+    - `Basic Parameters` セクションを削除
+    - `Cost / Tariff Parameters` 内に `initial_soc`, `soc_min`, `soc_max` を移設
+    - Prepare payload で営業所在庫利用フラグを常時 `true` 送信
+    するよう変更。
+
+- **効果**:
+  - シミュレーション車両台数・充電器台数は「選択営業所に設定済みの実在庫」に自動一致。
+  - 初期SOCとバッファSOC下限/上限を同一UI群で設定でき、運用が単純化。
+
 ### [DEV-2026-03-18] BUILT_DATASET_REQUIRED の復旧導線を catalog-fast 基準へ更新
 
 - **背景課題**:

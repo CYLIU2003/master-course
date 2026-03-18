@@ -101,6 +101,12 @@ python tools/route_variant_labeler_tk.py
 6. 最適化実行
 7. Job completed と Optimization結果を確認
 
+補足（Prepare時の台数決定）:
+
+- `tools/scenario_backup_tk.py` の実行パラメータでは、車両台数/充電器台数の手入力は行いません。
+- Prepare時は「選択した営業所」に登録済みの車両台数・充電器台数をそのまま利用します。
+- SOC設定は `Cost / Tariff Parameters` で `initial_soc`, `soc_min`, `soc_max` を指定します。
+
 ## 6. 削除してはいけないパラメータ
 
 最適化計算に直接関与するため、以下は core で必ず保持します。

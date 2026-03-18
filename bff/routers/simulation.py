@@ -70,10 +70,14 @@ class PrepareSimulationSettingsBody(BaseModel):
     vehicle_template_id: Optional[str] = None
     vehicle_count: int = 10
     initial_soc: float = 0.8
+    soc_min: Optional[float] = None
+    soc_max: Optional[float] = None
     battery_kwh: Optional[float] = None
     fleet_templates: list[PrepareFleetTemplateBody] = Field(default_factory=list)
     charger_count: int = 4
     charger_power_kw: float = 90.0
+    use_selected_depot_vehicle_inventory: bool = True
+    use_selected_depot_charger_inventory: bool = True
     solver_mode: str = "mode_milp_only"
     objective_mode: str = "total_cost"
     allow_partial_service: bool = False

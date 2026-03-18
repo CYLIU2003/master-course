@@ -443,17 +443,10 @@ class App:
         ops = ttk.LabelFrame(parent, text="実行パラメータ / 実行", padding=8)
         ops.pack(fill=tk.BOTH, expand=True)
 
-        sim = ttk.LabelFrame(ops, text="Basic Parameters", padding=6)
-        sim.pack(fill=tk.X, pady=4)
-        self.vehicle_count_var = tk.StringVar(value="10")
-        self.charger_count_var = tk.StringVar(value="4")
         self.initial_soc_var = tk.StringVar(value="0.8")
+        self.soc_min_var = tk.StringVar(value="0.2")
+        self.soc_max_var = tk.StringVar(value="0.9")
         self.charger_power_var = tk.StringVar(value="90")
-
-        self._labeled_entry(sim, "シミュレーション車両台数", self.vehicle_count_var)
-        self._labeled_entry(sim, "充電器台数", self.charger_count_var)
-        self._labeled_entry(sim, "初期SOC", self.initial_soc_var)
-        self._labeled_entry(sim, "充電器出力(kW)", self.charger_power_var)
 
         costs = ttk.LabelFrame(ops, text="Cost / Tariff Parameters", padding=6)
         costs.pack(fill=tk.X, pady=4)
@@ -474,6 +467,10 @@ class App:
         self._labeled_entry(costs, "電気代単価 grid_flat_price_per_kwh", self.grid_flat_price_var)
         self._labeled_entry(costs, "売電単価 grid_sell_price_per_kwh", self.grid_sell_price_var)
         self._labeled_entry(costs, "TOU帯 (例 0-12:15,12-20:40)", self.tou_text_var)
+        self._labeled_entry(costs, "初期SOC initial_soc", self.initial_soc_var)
+        self._labeled_entry(costs, "バッファSOC下限 soc_min", self.soc_min_var)
+        self._labeled_entry(costs, "バッファSOC上限 soc_max", self.soc_max_var)
+        self._labeled_entry(costs, "充電器出力(kW)", self.charger_power_var)
         self._labeled_entry(costs, "需要単価 demand_charge_cost_per_kw", self.demand_charge_var)
         self._labeled_entry(costs, "契約上限 depot_power_limit_kw", self.depot_power_limit_var)
         self._labeled_entry(costs, "契約超過罰金係数(slack_penalty)", self.contract_penalty_coeff_var)
@@ -2468,10 +2465,12 @@ class App:
             "allow_intra_depot_route_swap": self.allow_intra_var.get(),
             "allow_inter_depot_swap": self.allow_inter_var.get(),
             "simulation_settings": {
-                "vehicle_count": self._parse_int(self.vehicle_count_var.get(), 10),
-                "charger_count": self._parse_int(self.charger_count_var.get(), 4),
                 "initial_soc": self._parse_float(self.initial_soc_var.get(), 0.8),
+                "soc_min": self._parse_float(self.soc_min_var.get(), 0.2),
+                "soc_max": self._parse_float(self.soc_max_var.get(), 0.9),
                 "charger_power_kw": self._parse_float(self.charger_power_var.get(), 90.0),
+                "use_selected_depot_vehicle_inventory": True,
+                "use_selected_depot_charger_inventory": True,
                 "solver_mode": self.solver_mode_var.get().strip(),
                 "objective_mode": self.objective_mode_var.get().strip(),
                 "allow_partial_service": self.allow_partial_service_var.get(),
