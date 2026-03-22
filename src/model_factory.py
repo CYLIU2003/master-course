@@ -273,12 +273,6 @@ def build_model_by_mode(
     -------
     (model, vars_dict)
     """
-    try:
-        import gurobipy as gp
-        from gurobipy import GRB
-    except ImportError as e:
-        raise RuntimeError("Gurobi が必要です") from e
-
     flags = get_mode_flags(mode, data, flag_overrides)
 
     model, vars_ = build_milp_model(data, ms, dp, flags)

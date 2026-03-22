@@ -72,6 +72,22 @@ tests/       回帰テスト
   - 既存参照元維持のため、`src/runtime_scope.py` / `bff/store/trip_store.py` / `bff/services/run_preparation.py` 側でも `trip_id` の `__vN` 重複除外が効くことを追加テストで固定した。
   - `src/tokyu_bus_data.py` / `scripts/build_tokyu_bus_data.py` にも同じ `__vN` 除外を追加し、代替 route-scoped データ経路でも重複 trip が混入しないようにした。
 
+### [DEV-2026-03-22] Gurobi import の誤検知を緩和し、Windows 実行時の runtime bootstrap を追加
+
+- **問題**:
+  - `mode_milp_only` 実行時に `solver_result.infeasibility_info = "Gurobi が必要です"` で落ちるケースがあり、`gurobipy` / ライセンス自体は shell から正常でも、BFF 実行時だけ誤って unavailable 扱いになることがあった。
+  - `src/model_factory.py` に solver 構築前の不要な `import gurobipy` があり、ここで失敗すると `src.milp_model.build_milp_model()` 側の retry に到達しなかった。
+
+- **対応**:
+  - `src/model_factory.py` の不要な `import gurobipy` を削除し、Gurobi import は `src.milp_model.build_milp_model()` 側に一本化した。
+  - `src/milp_model.py` に runtime bootstrap を追加し、Windows では `GUROBI_HOME` 候補配下の `bin` を `PATH` / `os.add_dll_directory()` に補完し、`GRB_LICENSE_FILE` も既定候補から自動解決するようにした。
+  - `src/pipeline/solve.py` は solver 例外時に例外クラス名を含めて記録するようにし、将来 `GUROBI_UNAVAILABLE` が出ても原因追跡しやすくした。
+
+- **検証**:
+  - shell から `gurobipy 13.0.1` import と簡易モデル optimize が通ることを確認した。
+  - 弦巻 `WEEKDAY` 実データでも BFF と同じ ProblemData 経路から solver 実行に入り、`GUROBI_UNAVAILABLE` ではなく `TIME_LIMIT` まで進むことを確認した。
+  - `tests/test_model_factory_gurobi_import.py` を追加し、`build_model_by_mode()` が直接 `gurobipy` import に依存しないことを固定した。
+
 ### [DEV-2026-03-22] Quick Setup が全 route を誤表示し、Prepare が `tripCount=0` になりやすい問題を修正
 
 - **問題**:

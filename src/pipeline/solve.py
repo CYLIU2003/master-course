@@ -553,10 +553,11 @@ def solve_problem_data(
     except Exception as exc:
         from src.milp_model import MILPResult
 
-        message = str(exc)
+        message = f"{type(exc).__name__}: {exc}"
+        lower_message = message.lower()
         status = (
             "GUROBI_UNAVAILABLE"
-            if "Gurobi" in message or "gurobipy" in message
+            if "gurobi" in lower_message or "gurobipy" in lower_message
             else "ERROR"
         )
         result = MILPResult(status=status, infeasibility_info=message)

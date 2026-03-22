@@ -21,18 +21,27 @@ try:
     import gurobipy as gp
     from gurobipy import GRB
     _GUROBI_AVAILABLE = True
-except ImportError:
+except (ImportError, Exception):
     _GUROBI_AVAILABLE = False
 
 from .data_loader import load_problem_data
 from .data_schema import ProblemData
-from .milp_model import MILPResult, build_milp_model, extract_result
+from .milp_model import MILPResult, build_milp_model, extract_result, _ensure_gurobi
 from .model_sets import ModelSets, build_model_sets
 from .parameter_builder import DerivedParams, build_derived_params
 
 
 def is_gurobi_available() -> bool:
-    return _GUROBI_AVAILABLE
+    """Check if gurobipy is available, retrying import if it failed at startup."""
+    global _GUROBI_AVAILABLE
+    if _GUROBI_AVAILABLE:
+        return True
+    try:
+        _ensure_gurobi()
+        _GUROBI_AVAILABLE = True
+        return True
+    except Exception:
+        return False
 
 
 def run_milp(
@@ -69,7 +78,7 @@ def run_milp(
     -------
     MILPResult
     """
-    if not _GUROBI_AVAILABLE:
+    if not is_gurobi_available():
         return MILPResult(
             status="GUROBI_UNAVAILABLE",
             infeasibility_info="gurobipy がインストールされていません。",
@@ -111,7 +120,7 @@ def run_milp_from_data(
     -------
     MILPResult
     """
-    if not _GUROBI_AVAILABLE:
+    if not is_gurobi_available():
         return MILPResult(status="GUROBI_UNAVAILABLE")
 
     # --- モデル構築 ---

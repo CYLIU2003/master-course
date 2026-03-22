@@ -14,12 +14,72 @@ import traceback
 import uvicorn
 from pathlib import Path
 
+def _setup_gurobi_paths():
+    """Register Gurobi DLL and gurobipy locations so they are findable in frozen mode.
+
+    In a PyInstaller bundle the normal PATH/site-packages are not guaranteed to
+    be present.  We look for Gurobi in the standard installation locations and
+    make sure the DLL directory is reachable before any import attempt.
+    """
+    import os
+    import sys
+    from pathlib import Path
+
+    # ── 1. DLL directory: add Gurobi bin to PATH and os.add_dll_directory ──
+    gurobi_home = os.environ.get("GUROBI_HOME", "")
+    candidates = []
+    if gurobi_home:
+        candidates.append(Path(gurobi_home) / "bin")
+        candidates.append(Path(gurobi_home) / "lib")
+    # Common default installation paths on Windows
+    for drive in ("C:", "D:"):
+        for d in Path(f"{drive}/").glob("gurobi*/win64/bin"):
+            candidates.append(d)
+    for d in candidates:
+        if d.is_dir():
+            # Add to PATH so LoadLibrary can find gurobi*.dll
+            path_env = os.environ.get("PATH", "")
+            if str(d) not in path_env:
+                os.environ["PATH"] = str(d) + os.pathsep + path_env
+            # Python 3.8+: explicit DLL directory registration
+            try:
+                os.add_dll_directory(str(d))
+            except (AttributeError, OSError):
+                pass
+
+    # ── 2. gurobipy package: make sure the Python files are on sys.path ──
+    # Try system site-packages first (most reliable source of __init__.py etc.)
+    try:
+        import site
+        for sp in site.getsitepackages() if hasattr(site, "getsitepackages") else []:
+            candidate = Path(sp) / "gurobipy"
+            if (candidate / "__init__.py").exists():
+                if sp not in sys.path:
+                    sys.path.insert(0, sp)
+                break
+    except Exception:
+        pass
+
+    # ── 3. bundled gurobipy inside _internal: add DLL dir for .pyd loading ──
+    if getattr(sys, "frozen", False):
+        meipass = Path(getattr(sys, "_MEIPASS", None) or sys.executable).parent
+        bundled_gurobi = meipass / "gurobipy"
+        if bundled_gurobi.is_dir():
+            try:
+                os.add_dll_directory(str(bundled_gurobi))
+            except (AttributeError, OSError):
+                pass
+
+
 def setup_paths():
     """Ensure PyInstaller paths and project root are correctly handled."""
     import sys
     from pathlib import Path
     import os
-    
+
+    # Register Gurobi DLL paths before any gurobipy import attempt
+    _setup_gurobi_paths()
+
     # Check if application is running as a PyInstaller bundle
     if getattr(sys, 'frozen', False):
         # sys._MEIPASS is available for both onefile and onedir builds in newer PyInstaller
@@ -27,18 +87,18 @@ def setup_paths():
             base_dir = Path(sys._MEIPASS)
         else:
             base_dir = Path(sys.executable).parent
-            
+
         if str(base_dir) not in sys.path:
             sys.path.insert(0, str(base_dir))
-            
+
         # Change current working directory to the directory where the executable is located
         exe_dir = Path(sys.executable).parent
         os.chdir(str(exe_dir))
-        
+
         # Set an environment variable so BFF knows we are running in bundled mode
         os.environ["MC_BUNDLED_MODE"] = "1"
         os.environ["MC_MEIPASS"] = str(base_dir)
-        
+
         # Force paths so app_cache.py finds the datasets in the Pyinstaller bundle
         os.environ["BUILT_ROOT"] = str(base_dir / "data" / "built")
         # Ensure outputs go to the real user folder, not inside _internal
@@ -46,7 +106,7 @@ def setup_paths():
         scen_dir = out_dir / "scenarios"
         os.environ["SCENARIO_STORE_PATH"] = str(scen_dir)
         os.environ["MC_OUTPUTS_DIR"] = str(out_dir)
-        
+
         # Create output directories if they don't exist yet
         try:
             scen_dir.mkdir(parents=True, exist_ok=True)
