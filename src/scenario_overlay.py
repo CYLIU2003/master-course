@@ -47,6 +47,7 @@ class CostConfig(BaseModel):
     pv_enabled: bool = False
     pv_scale: float = Field(default=1.0, ge=0.0)
     diesel_price_per_l: float = Field(default=0.0, ge=0.0)
+    ice_co2_kg_per_l: float = Field(default=2.64, ge=0.0)
     grid_co2_kg_per_kwh: float = Field(default=0.0, ge=0.0)
     co2_price_per_kg: float = Field(default=1.0, ge=0.0)
 

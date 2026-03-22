@@ -161,7 +161,9 @@ def _scope_route_child_label(route: dict[str, Any]) -> str:
         or route.get("displayName")
         or route.get("id")
     )
-    return f"{variant_label} | {route_label}"
+    trip_count = int(route.get("tripCount") or 0)
+    trip_suffix = f" [{trip_count}便]" if trip_count > 0 else " [便なし⚠]"
+    return f"{variant_label} | {route_label}{trip_suffix}"
 
 
 def _choose_dataset_options(datasets_resp: dict[str, Any]) -> dict[str, Any]:
@@ -1290,9 +1292,14 @@ class App:
 
             dep_var = tk.BooleanVar(value=depot_id in self.scope_selected_depot_ids)
             self.scope_depot_vars[depot_id] = dep_var
+            linked_count = sum(
+                1 for rid in route_ids
+                if int((self.scope_route_by_id.get(rid) or {}).get("tripCount") or 0) > 0
+            )
+            trip_warn = "" if linked_count == len(route_ids) else f" ⚠{linked_count}件linked"
             ttk.Checkbutton(
                 row,
-                text=f"{depot_id} | {depot_name} ({selected_count}/{len(route_ids)}路線)",
+                text=f"{depot_id} | {depot_name} ({selected_count}/{len(route_ids)}路線{trip_warn})",
                 variable=dep_var,
                 command=lambda d=depot_id: self._on_toggle_depot(d),
             ).pack(side=tk.LEFT, anchor="w")

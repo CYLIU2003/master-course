@@ -309,11 +309,16 @@ def apply_builder_configuration(
         "serviceId": selected_day_type,
     }
     candidate_route_ids = store.route_ids_for_selected_depots(scenario_id, candidate_scope)
+    candidate_route_set = set(candidate_route_ids)
     selected_route_ids = [
         route_id
         for route_id in body.selected_route_ids
-        if str(route_id or "").strip() in set(candidate_route_ids)
+        if str(route_id or "").strip() in candidate_route_set
     ]
+    # フォールバック: 選択ルートがどれも候補に含まれない場合は候補全体を使う
+    if not selected_route_ids and candidate_route_ids:
+        selected_route_ids = list(candidate_route_ids)
+
     dataset_id = str(
         (doc.get("feed_context") or {}).get("datasetId")
         or (doc.get("scenario_overlay") or {}).get("dataset_id")
@@ -330,8 +335,9 @@ def apply_builder_configuration(
             selected_route_ids,
             route_trip_counts,
         )
-    elif not selected_route_ids:
-        selected_route_ids = list(candidate_route_ids)
+    if not selected_route_ids and candidate_route_ids:
+        # trip_counts フィルタ後でも空なら候補全体を fallback (trip_counts が空の場合も含む)
+        selected_route_ids = filter_linked_route_ids(candidate_route_ids, route_trip_counts) or list(candidate_route_ids)
 
     settings = body.simulation_settings
     use_selected_vehicle_inventory = bool(
@@ -464,10 +470,20 @@ def apply_builder_configuration(
     overlay.solver_config.alns_iterations = int(
         body.simulation_settings.alns_iterations or overlay.solver_config.alns_iterations
     )
-    overlay.solver_config.objective_weights = objective_weights_for_mode(
+    base_weights = objective_weights_for_mode(
         objective_mode=overlay.solver_config.objective_mode,
         unserved_penalty=overlay.solver_config.unserved_penalty,
     )
+    # Preserve user-configured weights from the current overlay (e.g. degradation_weight)
+    saved_weights = dict(
+        (current_overlay.get("solver_config") or {}).get("objective_weights") or {}
+    )
+    for key, value in saved_weights.items():
+        try:
+            base_weights[str(key)] = float(value)
+        except (TypeError, ValueError):
+            pass
+    overlay.solver_config.objective_weights = base_weights
     if body.simulation_settings.grid_flat_price_per_kwh is not None:
         overlay.cost_coefficients.grid_flat_price_per_kwh = (
             body.simulation_settings.grid_flat_price_per_kwh
@@ -483,6 +499,10 @@ def apply_builder_configuration(
     if body.simulation_settings.diesel_price_per_l is not None:
         overlay.cost_coefficients.diesel_price_per_l = (
             body.simulation_settings.diesel_price_per_l
+        )
+    if body.simulation_settings.ice_co2_kg_per_l is not None:
+        overlay.cost_coefficients.ice_co2_kg_per_l = (
+            body.simulation_settings.ice_co2_kg_per_l
         )
     if body.simulation_settings.grid_co2_kg_per_kwh is not None:
         overlay.cost_coefficients.grid_co2_kg_per_kwh = (

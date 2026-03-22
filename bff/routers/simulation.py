@@ -103,6 +103,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     grid_sell_price_per_kwh: Optional[float] = None
     demand_charge_cost_per_kw: Optional[float] = None
     diesel_price_per_l: Optional[float] = None
+    ice_co2_kg_per_l: Optional[float] = None
     grid_co2_kg_per_kwh: Optional[float] = None
     co2_price_per_kg: Optional[float] = None
     depot_power_limit_kw: Optional[float] = None

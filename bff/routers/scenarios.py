@@ -828,8 +828,16 @@ def _quick_route_items(
     }
 
     routes = [dict(route) for route in doc.get("routes") or []]
+    # Build effective depot index (covers route_depot_assignments AND route.depotId)
+    route_index = _depot_route_index(doc)
+    # Reverse index: route_id -> effective depot_id
+    effective_depot_by_route: Dict[str, str] = {}
+    for depot_id, rids in route_index.items():
+        for rid in rids:
+            if rid not in effective_depot_by_route:
+                effective_depot_by_route[rid] = depot_id
+
     if selected_depot_set:
-        route_index = _depot_route_index(doc)
         scoped_route_ids = {
             route_id
             for depot_id in selected_depot_set
@@ -843,6 +851,8 @@ def _quick_route_items(
 
     routes.sort(
         key=lambda route: (
+            # Group by effective depot first so routes cluster correctly
+            effective_depot_by_route.get(str(route.get("id") or "").strip(), ""),
             str(
                 route.get("routeFamilyCode")
                 or route.get("routeCode")
@@ -861,6 +871,11 @@ def _quick_route_items(
         if not route_id:
             continue
         trip_count = int(route_trip_counts.get(route_id, _route_trip_count(route)))
+        # Use effective depot (from assignments) if route.depotId is absent
+        effective_depot_id = (
+            effective_depot_by_route.get(route_id)
+            or route.get("depotId")
+        )
         items.append(
             {
                 "id": route_id,
@@ -870,7 +885,7 @@ def _quick_route_items(
                 "routeFamilyCode": route.get("routeFamilyCode"),
                 "routeFamilyLabel": route.get("routeFamilyLabel"),
                 "routeSeriesCode": route.get("routeSeriesCode"),
-                "depotId": route.get("depotId"),
+                "depotId": effective_depot_id,
                 "tripCount": trip_count,
                 "familySortOrder": route.get("familySortOrder"),
                 "routeVariantId": route.get("routeVariantId"),

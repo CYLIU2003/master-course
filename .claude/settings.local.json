@@ -5,7 +5,20 @@
       "Bash(python scripts/extract_meguro_small_case.py --exclude-depot-runs --dry-run)",
       "Bash(python scripts/extract_meguro_small_case.py --exclude-depot-runs)",
       "Bash(python -m pytest tests/ -x -q)",
-      "Bash(python -m py_compile tools/scenario_backup_tk.py)"
+      "Bash(python -m py_compile tools/scenario_backup_tk.py)",
+      "Bash(find c:/master-course -type f -name *scenario*)",
+      "Bash(python -m py_compile bff/routers/scenarios.py)",
+      "Bash(python -m py_compile bff/services/simulation_builder.py)",
+      "Bash(python -c \"import sys,json; [print\\(json.dumps\\(json.loads\\(l\\), ensure_ascii=False, indent=2\\)\\) for l in sys.stdin]\")",
+      "Bash(python -c \"import sys,json; print\\(json.dumps\\(json.load\\(sys.stdin\\), ensure_ascii=False, indent=2\\)\\)\")",
+      "Bash(python -c \"import json; d=json.load\\(open\\(''data/catalog-fast/bundle.json'', encoding=''utf-8''\\)\\); print\\(list\\(d.keys\\(\\)\\)\\)\")",
+      "Bash(grep -n \"route_trip_counts_for_dataset\\\\|tripCount\" bff/services/*.py)",
+      "Bash(grep -rn \"class TripData\\\\|class Trip\\\\|dataclass\" src/*.py)",
+      "Bash(python scripts/rebuild_built_from_normalized.py --dry-run)",
+      "Bash(python scripts/rebuild_built_from_normalized.py)",
+      "Bash(grep -rn \"lru_cache\\\\|cache_clear\\\\|reload_state\" bff/services/*.py bff/routers/*.py)",
+      "Bash(find /c/master-course -name main.py -o -name README.md -o -name .env*)",
+      "Bash(ls -la /c/master-course/*.py)"
     ]
   }
 }
