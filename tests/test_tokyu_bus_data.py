@@ -105,7 +105,7 @@ def test_build_tokyu_bus_data_generates_route_scoped_files_without_duplication(
         {
             "snapshot_id": "snapshot-1",
             "entity_counts": {
-                "trips": 3,
+                "trips": 4,
                 "stop_timetables": 2,
             },
         },
@@ -144,6 +144,22 @@ def test_build_tokyu_bus_data_generates_route_scoped_files_without_duplication(
                 "distance_km": 10.5,
                 "runtime_min": 20,
                 "odpt_timetable_id": "odpt-trip-2",
+            },
+            {
+                "trip_id": "trip-2__v1",
+                "odpt_pattern_id": "pattern-1",
+                "service_id": "sat",
+                "direction": "outbound",
+                "trip_index": 99,
+                "origin_stop_id": "stop-a",
+                "destination_stop_id": "stop-b",
+                "origin_name": "Stop A",
+                "destination_name": "Stop B",
+                "departure_time": "07:10:00",
+                "arrival_time": "07:30:00",
+                "distance_km": 10.5,
+                "runtime_min": 20,
+                "odpt_timetable_id": "odpt-trip-2__v1",
             },
             {
                 "trip_id": "trip-3",
@@ -192,6 +208,22 @@ def test_build_tokyu_bus_data_generates_route_scoped_files_without_duplication(
             },
             {
                 "trip_id": "trip-2",
+                "stop_id": "stop-b",
+                "stop_name": "Stop B",
+                "stop_sequence": 2,
+                "arrival_time": "07:30:00",
+                "departure_time": "07:30:00",
+            },
+            {
+                "trip_id": "trip-2__v1",
+                "stop_id": "stop-a",
+                "stop_name": "Stop A",
+                "stop_sequence": 1,
+                "arrival_time": "07:10:00",
+                "departure_time": "07:10:00",
+            },
+            {
+                "trip_id": "trip-2__v1",
                 "stop_id": "stop-b",
                 "stop_name": "Stop B",
                 "stop_sequence": 2,
@@ -263,6 +295,7 @@ def test_build_tokyu_bus_data_generates_route_scoped_files_without_duplication(
     )
 
     assert result["counts"]["trips"] == 3
+    assert result["counts"]["rawTrips"] == 4
     assert result["counts"]["routesWithTrips"] == 2
     assert len(_read_jsonl(output_root / "route_trips" / "route-1.jsonl")) == 2
     assert len(_read_jsonl(output_root / "route_trips" / "route-2.jsonl")) == 1
@@ -297,7 +330,7 @@ def test_tokyu_bus_data_loader_reads_route_scoped_outputs(tmp_path: Path) -> Non
                     "tripCountsByDayType": {"WEEKDAY": 2, "SAT": 1, "SUN_HOL": 0},
                     "firstDepartureByDayType": {"WEEKDAY": "06:10", "SAT": "07:10"},
                     "lastArrivalByDayType": {"WEEKDAY": "08:30", "SAT": "07:30"},
-                    "sampleTripIds": ["trip-1", "trip-2"],
+                    "sampleTripIds": ["trip-1", "trip-2__v1", "trip-2"],
                     "tripFile": "route_trips/route-1.jsonl",
                     "stopTimeFile": "route_stop_times/route-1.jsonl",
                     "stopTimetableFile": "route_stop_timetables/route-1.jsonl",
@@ -311,6 +344,7 @@ def test_tokyu_bus_data_loader_reads_route_scoped_outputs(tmp_path: Path) -> Non
         root / "route_trips" / "route-1.jsonl",
         [
             {"trip_id": "trip-1", "route_id": "route-1", "service_id": "WEEKDAY", "departure": "06:10"},
+            {"trip_id": "trip-2__v1", "route_id": "route-1", "service_id": "WEEKDAY", "departure": "07:10"},
             {"trip_id": "trip-2", "route_id": "route-1", "service_id": "WEEKDAY", "departure": "08:10"},
             {"trip_id": "trip-3", "route_id": "route-1", "service_id": "SAT", "departure": "07:10"},
         ],
@@ -319,6 +353,7 @@ def test_tokyu_bus_data_loader_reads_route_scoped_outputs(tmp_path: Path) -> Non
         root / "route_stop_times" / "route-1.jsonl",
         [
             {"trip_id": "trip-1", "route_id": "route-1", "service_id": "WEEKDAY", "sequence": 1},
+            {"trip_id": "trip-2__v1", "route_id": "route-1", "service_id": "WEEKDAY", "sequence": 1},
             {"trip_id": "trip-1", "route_id": "route-1", "service_id": "WEEKDAY", "sequence": 2},
         ],
     )

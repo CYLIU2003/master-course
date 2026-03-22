@@ -70,6 +70,7 @@ tests/       回帰テスト
     で `10 passed` を確認。
   - `.gitignore` に `data/catalog-fast/tokyu_bus_data/` を追加し、生成キャッシュが GitHub に同期されないようにした。
   - 既存参照元維持のため、`src/runtime_scope.py` / `bff/store/trip_store.py` / `bff/services/run_preparation.py` 側でも `trip_id` の `__vN` 重複除外が効くことを追加テストで固定した。
+  - `src/tokyu_bus_data.py` / `scripts/build_tokyu_bus_data.py` にも同じ `__vN` 除外を追加し、代替 route-scoped データ経路でも重複 trip が混入しないようにした。
 
 ### [DEV-2026-03-22] Quick Setup が全 route を誤表示し、Prepare が `tripCount=0` になりやすい問題を修正
 

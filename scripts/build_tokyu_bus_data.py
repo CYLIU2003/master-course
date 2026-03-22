@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ TOKYU_BUS_DATA_ROOT = CATALOG_FAST_ROOT / "tokyu_bus_data"
 TOKYUBUS_CANONICAL_ROOT = REPO_ROOT / "data" / "tokyubus" / "canonical"
 TOKYUBUS_RAW_ROOT = REPO_ROOT / "data" / "tokyubus" / "raw"
 BUILT_DIR = REPO_ROOT / "data" / "built" / "tokyu_full"
+_VN_TRIP_RE = re.compile(r"__v\d+$")
 
 
 def _iso_now() -> str:
@@ -117,6 +119,10 @@ def _touch(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_text("", encoding="utf-8")
+
+
+def _is_vn_duplicate_trip_id(value: Any) -> bool:
+    return bool(_VN_TRIP_RE.search(str(value or "").strip()))
 
 
 def _reset_output_root(output_root: Path) -> None:
@@ -317,6 +323,8 @@ def build_tokyu_bus_data(
             origin_stop = stops_by_id.get(origin_stop_id) or {}
             destination_stop = stops_by_id.get(destination_stop_id) or {}
             trip_id = str(row.get("trip_id") or "").strip()
+            if not trip_id or _is_vn_duplicate_trip_id(trip_id):
+                continue
 
             trip_row = {
                 "trip_id": trip_id,
@@ -375,6 +383,8 @@ def build_tokyu_bus_data(
 
         for row in _iter_jsonl(canonical_snapshot_dir / "stop_times.jsonl"):
             trip_id = str(row.get("trip_id") or "").strip()
+            if not trip_id or _is_vn_duplicate_trip_id(trip_id):
+                continue
             trip_meta = trip_route_map.get(trip_id)
             if trip_meta is None:
                 continue

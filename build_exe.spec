@@ -3,11 +3,25 @@
 # PyInstaller spec file for master-course run_app.py
 # Usage: pyinstaller build_exe.spec
 
+import sys
+import os
+from pathlib import Path
+
+# Locate gurobipy package to include all Python source files
+_gurobipy_dir = None
+for _p in sys.path:
+    _candidate = Path(_p) / 'gurobipy'
+    if _candidate.is_dir() and (_candidate / '__init__.py').exists():
+        _gurobipy_dir = str(_candidate)
+        break
+
 a = Analysis(
     ['run_app.py'],
     pathex=[],
     binaries=[],
     datas=[
+        # Include all gurobipy Python source files (PyInstaller misses these)
+        *([(_gurobipy_dir, 'gurobipy')] if _gurobipy_dir else []),
         # Include configuration files
         ('config', 'config'),
         ('constant', 'constant'),
@@ -59,6 +73,18 @@ a = Analysis(
         'starlette.middleware',
         # HTTP client
         'urllib3',
+        # Gurobi optimizer
+        'gurobipy',
+        'gurobipy._core',
+        'gurobipy._model',
+        'gurobipy._helpers',
+        'gurobipy._lowlevel',
+        'gurobipy._batch',
+        'gurobipy._exception',
+        'gurobipy._matrixapi',
+        'gurobipy._util',
+        'gurobipy._attrutil',
+        'gurobipy._modelutil',
         # Scientific stack
         'pandas',
         'pyarrow',

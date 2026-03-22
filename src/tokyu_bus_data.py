@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence
@@ -17,6 +18,7 @@ _REQUIRED_FILES = (
     "routes.jsonl",
 )
 _DEFAULT_DATASET_ID = "tokyu_full"
+_VN_TRIP_RE = re.compile(r"__v\d+$")
 
 
 def _canonical_service_id(value: Any) -> str:
@@ -186,6 +188,10 @@ def _service_filter(service_ids: Iterable[str] | None) -> set[str] | None:
     return normalized or None
 
 
+def _is_vn_duplicate_trip_id(value: Any) -> bool:
+    return bool(_VN_TRIP_RE.search(str(value or "").strip()))
+
+
 def _read_selected_jsonl(
     *,
     dataset_id: str | None,
@@ -208,6 +214,8 @@ def _read_selected_jsonl(
         if not relative_path:
             continue
         for row in _read_jsonl_cached(str(base / relative_path)):
+            if _is_vn_duplicate_trip_id(row.get("trip_id")):
+                continue
             normalized_service_id = _canonical_service_id(row.get("service_id"))
             if selected_services and normalized_service_id not in selected_services:
                 continue
@@ -371,7 +379,7 @@ def build_timetable_summary_for_scope(
         sample_trip_ids = [
             str(value).strip()
             for value in list(entry.get("sampleTripIds") or [])
-            if str(value).strip()
+            if str(value).strip() and not _is_vn_duplicate_trip_id(value)
         ]
         for trip_id in sample_trip_ids:
             if trip_id not in preview_trip_ids and len(preview_trip_ids) < 100:
