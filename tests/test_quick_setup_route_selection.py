@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from unittest import mock
-
 from bff.routers import scenarios
 from bff.routers.scenarios import _quick_route_items, _quick_setup_route_selection_patch
 
@@ -96,7 +94,7 @@ def test_quick_route_items_filter_by_selected_depot_assignment() -> None:
     assert items[0]["selected"] is True
 
 
-def test_build_quick_setup_payload_filters_selected_routes_to_trip_linked_subset() -> None:
+def test_build_quick_setup_payload_preserves_selected_routes_without_link_filtering() -> None:
     doc = {
         "depots": [{"id": "dep1", "name": "Depot 1"}],
         "routes": [
@@ -106,6 +104,7 @@ def test_build_quick_setup_payload_filters_selected_routes_to_trip_linked_subset
                 "routeCode": "黒01",
                 "routeFamilyCode": "黒01",
                 "name": "黒01",
+                "tripCount": 3,
             },
             {
                 "id": "route-b",
@@ -141,15 +140,14 @@ def test_build_quick_setup_payload_filters_selected_routes_to_trip_linked_subset
         "tripSelection": {"includeDeadhead": True},
     }
 
-    with mock.patch.object(scenarios, "route_trip_counts_for_dataset", return_value={"route-a": 3}):
-        payload = scenarios._build_quick_setup_payload(
-            scenario,
-            doc,
-            dispatch_scope,
-            selected_depot_ids=["dep1"],
-            route_limit=20,
-        )
+    payload = scenarios._build_quick_setup_payload(
+        scenario,
+        doc,
+        dispatch_scope,
+        selected_depot_ids=["dep1"],
+        route_limit=20,
+    )
 
-    assert payload["selectedRouteIds"] == ["route-a"]
+    assert payload["selectedRouteIds"] == ["route-a", "route-b"]
     assert [item["id"] for item in payload["routes"]] == ["route-a", "route-b"]
     assert payload["routes"][0]["tripCount"] == 3

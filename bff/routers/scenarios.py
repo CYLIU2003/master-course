@@ -35,10 +35,6 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from bff.services import research_catalog
-from bff.services.route_linking import (
-    filter_linked_route_ids,
-    route_trip_counts_for_dataset,
-)
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
@@ -915,16 +911,11 @@ def _build_quick_setup_payload(
 ) -> Dict[str, Any]:
     route_index = _depot_route_index(doc)
     builder_defaults = _builder_defaults(doc, route_index, dispatch_scope)
-    dataset_id = _scenario_dataset_id(doc) or str(scenario.get("datasetId") or "").strip()
-    route_trip_counts = (
-        route_trip_counts_for_dataset(dataset_id, dispatch_scope.get("serviceId"))
-        if dataset_id
-        else {}
-    )
-    selected_route_ids = filter_linked_route_ids(
-        list(dispatch_scope.get("effectiveRouteIds") or []),
-        route_trip_counts,
-    )
+    selected_route_ids = [
+        str(route_id).strip()
+        for route_id in list(dispatch_scope.get("effectiveRouteIds") or [])
+        if str(route_id).strip()
+    ]
     vehicles = [dict(item) for item in doc.get("vehicles") or []]
     vehicle_count_by_depot: Dict[str, int] = {}
     for vehicle in vehicles:
@@ -969,7 +960,7 @@ def _build_quick_setup_payload(
             doc,
             selected_depot_ids,
             selected_route_ids,
-            route_trip_counts=route_trip_counts,
+            route_trip_counts={},
             route_limit=route_limit,
         ),
         "dispatchScope": {

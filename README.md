@@ -557,9 +557,9 @@ python tools/route_variant_labeler_tk.py
 3. `datasetId` は runtime 実行可能な候補のみが既定表示される。2026-03-21 時点の既定 runtime dataset は `tokyu_full`
 4. `新規作成` 後は必ず `Quick Setup 読込` を押し、営業所・路線の候補を読み直す
 5. 路線一覧は `data/catalog-fast/normalized/routes.jsonl` があれば常にそれを優先して表示する。Quick Setup では現在選択している営業所配下の route だけを `routeFamilyCode` 単位で折りたたみ表示し、系統番号の数字は半角に正規化して表示する
-6. 既定選択は family 表示のままでも、現行 `dayType` で `trips.parquet` に link している route のみを対象にする。展開すると本線・区間便・入出庫便などの raw variant を個別に外せる
+6. Quick Setup は保存済み `dispatch_scope` の route 選択をそのまま表示し、`linked` 件数では絞り込まない。trip / timetable のスコープ確定は `Prepare` 実行時に「現在選択している route のみ」を対象に行う。展開すると本線・区間便・入出庫便などの raw variant を個別に外せる
 7. 保存時は `refine + excludeRouteIds` として保存するため、同じ営業所の系統を基本全部含めつつ、特定 family の入出庫便だけ / 区間便だけ除外する設定を保持できる
-8. 路線は raw route を消さずに保持したまま、`routeFamilyCode` で同一系統として束ねる。Prepare / dispatch / 最適化では `origin_stop_id` / `destination_stop_id` と stop 座標を使い、同一系統内の上り下り・本線・区間便・入出庫便の terminal 間 deadhead を自動補完する
+8. 路線は raw route を消さずに保持したまま、`routeFamilyCode` で同一系統として束ねる。Prepare / dispatch / 最適化では「選択 route のみ」を使って trip / timetable を読み込み、`origin_stop_id` / `destination_stop_id` と stop 座標から同一系統内の上り下り・本線・区間便・入出庫便の terminal 間 deadhead を自動補完する
 9. 既存シナリオを開いた直後に営業所や路線の選択が空なら、stale な保存選択が runtime 補正で外れた可能性があるため選び直す
 10. `Quick Setup 保存` → `入力データ作成 (Prepare)` → `Prepared実行` または `最適化実行` の順で進める
 
@@ -578,7 +578,7 @@ python tools/route_variant_labeler_tk.py
 9. Job completed と Optimization 結果を確認
 
 > **重要：** `保存` の直後に必ず `Prepare` を実行してください。
-> Prepare を飛ばすと、最新の営業所・路線・SOC 設定が最適化入力に反映されません。
+> Prepare を飛ばすと、最新の営業所・路線・SOC 設定が最適化入力に反映されません。trip / timetable の route スコープ確定も Prepare で初めて行います。
 
 > **既存シナリオの補正について：** 旧 `tokyu_dispatch_ready` ベースなど runtime 未整備 dataset のシナリオを開くと、
 > BFF は利用可能な runtime master（現行既定は `tokyu_full`）へ自動補正します。
@@ -658,8 +658,8 @@ python catalog_update_app.py refresh gtfs-pipeline `
 - 新規シナリオ作成時に runtime 未整備 dataset を選んだ場合、bootstrap は実行可能な `tokyu_full` へ自動フォールバックします。
 - 既存シナリオを開いた際も、BFF は stale な route/depot master を runtime 実在データへ補正します。
 - Quick Setup の営業所一覧は dataset 定義の全営業所を表示し、初期選択は runtime で route-backed な営業所だけに絞ります。`routeCount=0` の営業所は現行 runtime で対象路線が未展開です。
-- Quick Setup の路線一覧は catalog-fast 上の全 route inventory を営業所配下で表示し、初期選択は現行 `dayType` で timetable/trip が link している route のみです。`tripCount=0` の route は現行 built/runtime では未リンクです。
-- `Quick Setup 読込` 後に route 選択が 0 件なら、その営業所 / 運行種別では現行 built dataset に link 済み trip がありません。その状態では Prepare は `tripCount=0` になります。
+- Quick Setup の路線一覧は catalog-fast 上の全 route inventory を営業所配下で表示し、初期選択は保存済み `dispatch_scope` をそのまま復元します。Quick Setup では `linked` 件数を表示せず、trip/timetable の確認は Prepare で現在選択した route のみを対象に行います。
+- `Prepare` 後に `tripCount=0` の場合は、現行 built/runtime 上で「選択 route × dayType × service_date」に該当する trip がありません。Quick Setup と日種別を見直してください。
 - 補正後は、以前保存された営業所・路線が現在の runtime に存在しない場合に選択が外れます。`Quick Setup 読込` 後に営業所・路線・車両配置を再確認してください。
 - `Quick Setup 保存` 後は `dispatch_scope` と `scenario_overlay` の両方に選択 route/depot が同期され、Prepare/最適化/Prepared実行は現在の UI 選択を優先します。
 

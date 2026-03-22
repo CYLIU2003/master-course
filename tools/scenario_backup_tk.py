@@ -161,9 +161,7 @@ def _scope_route_child_label(route: dict[str, Any]) -> str:
         or route.get("displayName")
         or route.get("id")
     )
-    trip_count = int(route.get("tripCount") or 0)
-    trip_suffix = f" [{trip_count}便]" if trip_count > 0 else " [便なし⚠]"
-    return f"{variant_label} | {route_label}{trip_suffix}"
+    return f"{variant_label} | {route_label}"
 
 
 def _choose_dataset_options(datasets_resp: dict[str, Any]) -> dict[str, Any]:
@@ -1292,14 +1290,9 @@ class App:
 
             dep_var = tk.BooleanVar(value=depot_id in self.scope_selected_depot_ids)
             self.scope_depot_vars[depot_id] = dep_var
-            linked_count = sum(
-                1 for rid in route_ids
-                if int((self.scope_route_by_id.get(rid) or {}).get("tripCount") or 0) > 0
-            )
-            trip_warn = "" if linked_count == len(route_ids) else f" ⚠{linked_count}件linked"
             ttk.Checkbutton(
                 row,
-                text=f"{depot_id} | {depot_name} ({selected_count}/{len(route_ids)}路線{trip_warn})",
+                text=f"{depot_id} | {depot_name} ({selected_count}/{len(route_ids)}路線)",
                 variable=dep_var,
                 command=lambda d=depot_id: self._on_toggle_depot(d),
             ).pack(side=tk.LEFT, anchor="w")
@@ -2191,18 +2184,14 @@ class App:
                 f"(depots={len(depots)}件/{len(selected_depots)}選択, "
                 f"routes={len(routes)}件/{len(selected_routes)}選択)"
             )
-            linked_route_count = sum(
-                1 for route in routes if int(route.get("tripCount") or 0) > 0
-            )
-            if routes and linked_route_count <= 0:
+            if routes:
                 self.log_line(
-                    "選択中の営業所 / 運行種別では link 済み route がありません。"
-                    "Prepare は tripCount=0 になります。"
+                    "路線の trip/timetable スコープ確定は Prepare 実行時に行います。"
                 )
             if (depots and not selected_depots) or (routes and not selected_routes):
                 self.log_line(
-                    "営業所または路線の選択が空です。stale な保存選択が runtime 補正で外れたか、"
-                    "選択中の営業所 / 運行種別に link 済み route がありません。"
+                    "営業所または路線の選択が空です。stale な保存選択が runtime 補正で外れた可能性があります。"
+                    "Quick Setup で選び直してから Prepare を実行してください。"
                 )
 
         self.run_bg(action, done)
@@ -2996,6 +2985,7 @@ class App:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
         self.log_line("入力データ作成(Prepare)を開始します")
+        self.log_line("Prepare は現在選択している営業所・路線だけを対象に入力データを作成します")
         messagebox.showinfo("実行開始", "入力データ作成(Prepare)を開始します")
 
         def done(resp: dict[str, Any]) -> None:
@@ -3016,9 +3006,9 @@ class App:
             else:
                 route_count = int(resp.get("routeCount") or 0)
                 if route_count <= 0:
-                    reason = "選択営業所 / 運行種別で link 済み route がありません。Quick Setup を確認してください。"
+                    reason = "営業所または路線が未選択です。Quick Setup を確認してください。"
                 else:
-                    reason = "選択 route / day type / timetable linkage を確認してください。"
+                    reason = "選択 route / day type / service_date を確認してください。"
                 messagebox.showwarning(
                     "Prepare未完了",
                     f"tripCount={self.prepared_trip_count} のため実行対象がありません。{reason}",
