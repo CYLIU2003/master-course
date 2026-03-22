@@ -165,6 +165,68 @@ def _scope_route_child_label(route: dict[str, Any]) -> str:
     return f"{variant_label} | {route_label}"
 
 
+def _scope_route_trip_count(route: dict[str, Any], day_type: str | None = None) -> int:
+    counts = route.get("tripCountsByDayType") or {}
+    if isinstance(counts, dict) and day_type:
+        raw = counts.get(str(day_type).strip())
+        try:
+            return int(float(raw))
+        except (TypeError, ValueError):
+            pass
+    for key in ("tripCountSelectedDay", "tripCount"):
+        raw = route.get(key)
+        try:
+            return int(float(raw))
+        except (TypeError, ValueError):
+            continue
+    return 0
+
+
+def _scope_route_total_trip_count(route: dict[str, Any]) -> int:
+    raw_total = route.get("tripCountTotal")
+    try:
+        return int(float(raw_total))
+    except (TypeError, ValueError):
+        pass
+    counts = route.get("tripCountsByDayType") or {}
+    if isinstance(counts, dict) and counts:
+        total = 0
+        for value in counts.values():
+            try:
+                total += int(float(value))
+            except (TypeError, ValueError):
+                continue
+        return total
+    return _scope_route_trip_count(route)
+
+
+def _scope_trip_count_text(
+    route: dict[str, Any],
+    *,
+    day_type: str,
+    day_type_label: str,
+) -> str:
+    selected_trip_count = _scope_route_trip_count(route, day_type)
+    total_trip_count = _scope_route_total_trip_count(route)
+    if total_trip_count > 0 and total_trip_count != selected_trip_count:
+        return f"{day_type_label}{selected_trip_count}便 / 全{total_trip_count}便"
+    return f"{day_type_label}{selected_trip_count}便"
+
+
+def _scope_visible_routes_for_day(
+    routes: list[dict[str, Any]],
+    day_type: str,
+) -> list[dict[str, Any]]:
+    visible: list[dict[str, Any]] = []
+    for route in routes:
+        counts = route.get("tripCountsByDayType") or {}
+        if isinstance(counts, dict) and counts:
+            if _scope_route_trip_count(route, day_type) <= 0:
+                continue
+        visible.append(route)
+    return visible
+
+
 def _choose_dataset_options(datasets_resp: dict[str, Any]) -> dict[str, Any]:
     items = [item for item in list(datasets_resp.get("items") or []) if isinstance(item, dict)]
     all_dataset_ids: list[str] = []
@@ -476,6 +538,7 @@ class App:
         self.template_rows: list[dict[str, Any]] = []
         self.route_label_file_var = tk.StringVar(value="")
         self.scope_depots: list[dict[str, Any]] = []
+        self.scope_all_routes: list[dict[str, Any]] = []
         self.scope_routes: list[dict[str, Any]] = []
         self.scope_routes_by_depot: dict[str, list[str]] = {}
         self.scope_family_keys_by_depot: dict[str, list[str]] = {}
@@ -483,6 +546,8 @@ class App:
         self.scope_family_label_by_key: dict[str, str] = {}
         self.scope_route_by_id: dict[str, dict[str, Any]] = {}
         self.scope_depot_by_id: dict[str, dict[str, Any]] = {}
+        self.scope_day_type_summaries: list[dict[str, Any]] = []
+        self.scope_day_type_label_by_id: dict[str, str] = {}
         self.scope_selected_depot_ids: set[str] = set()
         self.scope_selected_route_ids: set[str] = set()
         self.scope_depot_vars: dict[str, tk.BooleanVar] = {}
@@ -490,6 +555,8 @@ class App:
         self.scope_route_vars: dict[str, tk.BooleanVar] = {}
         self.scope_depot_open_vars: dict[str, tk.BooleanVar] = {}
         self.scope_family_open_vars: dict[str, tk.BooleanVar] = {}
+        self.day_type_summary_tree: ttk.Treeview | None = None
+        self._suspend_day_type_summary_event = False
         self.available_dataset_ids: list[str] = []
         self.day_type_options = ["WEEKDAY", "SAT", "SUN_HOL", "SAT_HOL"]
         self.default_dataset_id: str = "tokyu_full"
@@ -510,6 +577,7 @@ class App:
 
         self._build_ui()
         self._register_prepare_dependency_watchers()
+        self._register_scope_ui_watchers()
 
     def _build_ui(self) -> None:
         # ── レスポンシブウィンドウサイズ ──
@@ -638,6 +706,35 @@ class App:
         self.day_type_combo.pack(side=tk.LEFT)
         ttk.Label(day_row, text="運行日(YYYY-MM-DD)", width=18).pack(side=tk.LEFT, padx=(8, 2))
         ttk.Entry(day_row, textvariable=self.service_date_var, width=12).pack(side=tk.LEFT)
+
+        day_table = ttk.LabelFrame(scope, text="運行種別サマリ", padding=(4, 2))
+        day_table.pack(fill=tk.X, pady=(2, 4))
+        ttk.Label(
+            day_table,
+            text="この表を選ぶと、下の営業所・路線一覧はその運行種別に存在する trip だけへ絞り込みます。",
+            foreground="#444",
+        ).pack(anchor="w")
+        day_tree_wrap = ttk.Frame(day_table)
+        day_tree_wrap.pack(fill=tk.X, pady=(2, 0))
+        self.day_type_summary_tree = ttk.Treeview(
+            day_tree_wrap,
+            columns=("serviceId", "label", "routeCount", "tripCount"),
+            show="headings",
+            height=4,
+        )
+        self.day_type_summary_tree.heading("serviceId", text="service")
+        self.day_type_summary_tree.heading("label", text="種別")
+        self.day_type_summary_tree.heading("routeCount", text="対象系統")
+        self.day_type_summary_tree.heading("tripCount", text="trip数")
+        self.day_type_summary_tree.column("serviceId", width=100, anchor="w")
+        self.day_type_summary_tree.column("label", width=120, anchor="w")
+        self.day_type_summary_tree.column("routeCount", width=90, anchor="e")
+        self.day_type_summary_tree.column("tripCount", width=90, anchor="e")
+        self.day_type_summary_tree.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        day_tree_ysb = ttk.Scrollbar(day_tree_wrap, orient=tk.VERTICAL, command=self.day_type_summary_tree.yview)
+        day_tree_ysb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.day_type_summary_tree.configure(yscrollcommand=day_tree_ysb.set)
+        self.day_type_summary_tree.bind("<<TreeviewSelect>>", self._on_day_type_summary_selected)
 
         # ── 接続フラグ（常時表示・コンパクト 2行）──
         flags_lf = ttk.LabelFrame(scope, text="接続設定", padding=(4, 2))
@@ -1289,6 +1386,8 @@ class App:
         self.scope_depot_vars = {}
         self.scope_family_vars = {}
         self.scope_route_vars = {}
+        day_type = self.day_type_var.get().strip() or "WEEKDAY"
+        day_type_label = self._current_day_type_label()
 
         for depot in self.scope_depots:
             depot_id = str(depot.get("id") or "").strip()
@@ -1297,6 +1396,10 @@ class App:
             depot_name = str(depot.get("name") or depot_id)
             route_ids = self.scope_routes_by_depot.get(depot_id, [])
             selected_count = sum(1 for rid in route_ids if rid in self.scope_selected_route_ids)
+            depot_trip_count = sum(
+                _scope_route_trip_count(self.scope_route_by_id.get(rid) or {}, day_type)
+                for rid in route_ids
+            )
 
             row = ttk.Frame(self.scope_inner)
             row.pack(fill=tk.X, pady=1)
@@ -1311,7 +1414,10 @@ class App:
             self.scope_depot_vars[depot_id] = dep_var
             ttk.Checkbutton(
                 row,
-                text=f"{depot_id} | {depot_name} ({selected_count}/{len(route_ids)}路線)",
+                text=(
+                    f"{depot_id} | {depot_name} "
+                    f"({selected_count}/{len(route_ids)}候補, {day_type_label}{depot_trip_count}便)"
+                ),
                 variable=dep_var,
                 command=lambda d=depot_id: self._on_toggle_depot(d),
             ).pack(side=tk.LEFT, anchor="w")
@@ -1321,6 +1427,10 @@ class App:
                     family_route_ids = self.scope_family_route_ids.get(family_key, [])
                     family_selected_count = sum(
                         1 for rid in family_route_ids if rid in self.scope_selected_route_ids
+                    )
+                    family_trip_count = sum(
+                        _scope_route_trip_count(self.scope_route_by_id.get(rid) or {}, day_type)
+                        for rid in family_route_ids
                     )
                     family_row = ttk.Frame(self.scope_inner)
                     family_row.pack(fill=tk.X, padx=16, pady=1)
@@ -1349,7 +1459,8 @@ class App:
                         family_row,
                         text=(
                             f"{family_label} "
-                            f"({family_selected_count}/{len(family_route_ids)}系統内バリアント)"
+                            f"({family_selected_count}/{len(family_route_ids)}バリアント, "
+                            f"{day_type_label}{family_trip_count}便)"
                         ),
                         variable=family_var,
                         command=lambda d=depot_id, fk=family_key: self._on_toggle_family(d, fk),
@@ -1364,7 +1475,10 @@ class App:
                             self.scope_route_vars[route_id] = route_var
                             ttk.Checkbutton(
                                 route_row,
-                                text=_scope_route_child_label(route),
+                                text=(
+                                    f"{_scope_route_child_label(route)} "
+                                    f"({_scope_trip_count_text(route, day_type=day_type, day_type_label=day_type_label)})"
+                                ),
                                 variable=route_var,
                                 command=lambda d=depot_id, r=route_id: self._on_toggle_route(d, r),
                             ).pack(side=tk.LEFT, anchor="w")
@@ -1380,54 +1494,19 @@ class App:
         selected_routes: set[str],
     ) -> None:
         self.scope_depots = list(depots)
-        self.scope_routes = routes
+        self.scope_all_routes = list(routes)
         self.scope_depot_by_id = {
             str(item.get("id") or "").strip(): item
             for item in self.scope_depots
             if str(item.get("id") or "").strip()
         }
-        self.scope_route_by_id = {
-            str(item.get("id") or "").strip(): item
-            for item in routes
-            if str(item.get("id") or "").strip()
-        }
-        self.scope_routes_by_depot = {}
-        for route in routes:
-            route_id = str(route.get("id") or "").strip()
-            if not route_id:
-                continue
-            depot_id = str(route.get("depotId") or "").strip()
-            if not depot_id or depot_id not in self.scope_depot_by_id:
-                depot_id = "__unassigned__"
-                if depot_id not in self.scope_depot_by_id:
-                    unassigned = {
-                        "id": "__unassigned__",
-                        "name": "未割当営業所",
-                    }
-                    self.scope_depots.append(unassigned)
-                    self.scope_depot_by_id[depot_id] = unassigned
-            self.scope_routes_by_depot.setdefault(depot_id, []).append(route_id)
-
-        for depot in depots:
-            depot_id = str(depot.get("id") or "").strip()
-            if depot_id and depot_id not in self.scope_routes_by_depot:
-                self.scope_routes_by_depot[depot_id] = []
-
-        (
-            self.scope_family_keys_by_depot,
-            self.scope_family_route_ids,
-            self.scope_family_label_by_key,
-        ) = _group_scope_routes_by_family(self.scope_routes)
-
-        self.scope_selected_route_ids = {
-            rid for rid in selected_routes if rid in self.scope_route_by_id
-        }
+        self.scope_selected_route_ids = set(
+            str(rid).strip() for rid in selected_routes if str(rid).strip()
+        )
         self.scope_selected_depot_ids = {
             did for did in selected_depots if did in self.scope_depot_by_id
         }
-
-        self._sync_depot_selection_from_routes()
-        self._render_scope_checklist()
+        self._apply_day_type_scope_filter()
 
     def _selected_depot_ids(self) -> list[str]:
         return sorted(self.scope_selected_depot_ids)
@@ -1791,6 +1870,148 @@ class App:
             return
         self.day_type_options = options
         self.day_type_combo.configure(values=options)
+
+    def _register_scope_ui_watchers(self) -> None:
+        self.day_type_var.trace_add("write", lambda *_args: self._on_day_type_changed())
+
+    def _current_day_type_label(self) -> str:
+        service_id = self.day_type_var.get().strip() or "WEEKDAY"
+        return self.scope_day_type_label_by_id.get(service_id, service_id)
+
+    def _set_day_type_summaries(self, entries: list[dict[str, Any]]) -> None:
+        summaries = [
+            dict(entry)
+            for entry in entries
+            if isinstance(entry, dict) and str(entry.get("serviceId") or "").strip()
+        ]
+        if not summaries:
+            summaries = [
+                {
+                    "serviceId": service_id,
+                    "label": service_id,
+                    "routeCount": 0,
+                    "tripCount": 0,
+                    "selected": service_id == self.day_type_var.get().strip(),
+                }
+                for service_id in self.day_type_options
+                if service_id
+            ]
+        self.scope_day_type_summaries = summaries
+        self.scope_day_type_label_by_id = {
+            str(entry.get("serviceId") or "").strip(): str(entry.get("label") or entry.get("serviceId") or "").strip()
+            for entry in self.scope_day_type_summaries
+            if str(entry.get("serviceId") or "").strip()
+        }
+        self._refresh_day_type_summary_tree()
+
+    def _refresh_day_type_summary_tree(self) -> None:
+        if not self._widget_exists(self.day_type_summary_tree):
+            return
+        current_service_id = self.day_type_var.get().strip() or "WEEKDAY"
+        tree = self.day_type_summary_tree
+        tree.delete(*tree.get_children())
+        for entry in self.scope_day_type_summaries:
+            service_id = str(entry.get("serviceId") or "").strip()
+            if not service_id:
+                continue
+            tree.insert(
+                "",
+                tk.END,
+                iid=service_id,
+                values=(
+                    service_id,
+                    str(entry.get("label") or service_id),
+                    int(entry.get("routeCount") or 0),
+                    int(entry.get("tripCount") or 0),
+                ),
+            )
+        if current_service_id and tree.exists(current_service_id):
+            self._suspend_day_type_summary_event = True
+            try:
+                tree.selection_set(current_service_id)
+                tree.focus(current_service_id)
+            finally:
+                self._suspend_day_type_summary_event = False
+
+    def _on_day_type_summary_selected(self, _event=None) -> None:
+        if self._suspend_day_type_summary_event or not self._widget_exists(self.day_type_summary_tree):
+            return
+        selection = self.day_type_summary_tree.selection()
+        if not selection:
+            return
+        service_id = str(selection[0] or "").strip()
+        if service_id and service_id != self.day_type_var.get().strip():
+            self.day_type_var.set(service_id)
+
+    def _refresh_scope_route_cache(self, routes: list[dict[str, Any]]) -> None:
+        self.scope_routes = list(routes)
+        self.scope_route_by_id = {
+            str(item.get("id") or "").strip(): item
+            for item in self.scope_routes
+            if str(item.get("id") or "").strip()
+        }
+        self.scope_routes_by_depot = {}
+        for route in self.scope_routes:
+            route_id = str(route.get("id") or "").strip()
+            if not route_id:
+                continue
+            depot_id = str(route.get("depotId") or "").strip()
+            if not depot_id or depot_id not in self.scope_depot_by_id:
+                depot_id = "__unassigned__"
+                if depot_id not in self.scope_depot_by_id:
+                    unassigned = {
+                        "id": "__unassigned__",
+                        "name": "未割当営業所",
+                    }
+                    self.scope_depots.append(unassigned)
+                    self.scope_depot_by_id[depot_id] = unassigned
+            self.scope_routes_by_depot.setdefault(depot_id, []).append(route_id)
+
+        for depot in self.scope_depots:
+            depot_id = str(depot.get("id") or "").strip()
+            if depot_id and depot_id not in self.scope_routes_by_depot:
+                self.scope_routes_by_depot[depot_id] = []
+
+        (
+            self.scope_family_keys_by_depot,
+            self.scope_family_route_ids,
+            self.scope_family_label_by_key,
+        ) = _group_scope_routes_by_family(self.scope_routes)
+
+    def _apply_day_type_scope_filter(self) -> None:
+        day_type = self.day_type_var.get().strip() or "WEEKDAY"
+        visible_routes = _scope_visible_routes_for_day(self.scope_all_routes, day_type)
+        self._refresh_scope_route_cache(visible_routes)
+        self.scope_selected_route_ids = {
+            rid for rid in self.scope_selected_route_ids if rid in self.scope_route_by_id
+        }
+        self.scope_selected_depot_ids = {
+            did for did in self.scope_selected_depot_ids if did in self.scope_depot_by_id
+        }
+        self._sync_depot_selection_from_routes()
+        self._render_scope_checklist()
+
+    def _on_day_type_changed(self) -> None:
+        self._refresh_day_type_summary_tree()
+        self._apply_day_type_scope_filter()
+        if self._suspend_prepare_watchers or not self.scope_day_type_summaries:
+            return
+        current_service_id = self.day_type_var.get().strip() or "WEEKDAY"
+        current_day_summary = next(
+            (
+                item
+                for item in self.scope_day_type_summaries
+                if str(item.get("serviceId") or "").strip() == current_service_id
+            ),
+            None,
+        )
+        if current_day_summary is not None:
+            self.log_line(
+                "運行種別を切替: "
+                f"{self._current_day_type_label()} "
+                f"(routes={int(current_day_summary.get('routeCount') or 0)}, "
+                f"trips={int(current_day_summary.get('tripCount') or 0)})"
+            )
 
     def _refresh_depot_dropdowns(self, depots: list[dict[str, Any]]) -> None:
         depot_ids = [str(d.get("id") or "").strip() for d in depots if str(d.get("id") or "").strip()]
@@ -2157,10 +2378,13 @@ class App:
             selected_depots = set(resp.get("selectedDepotIds") or [])
             selected_routes = set(resp.get("selectedRouteIds") or [])
             dispatch_scope = dict(resp.get("dispatchScope") or {})
+            selected_day_type = str(dispatch_scope.get("dayType") or "WEEKDAY")
             self._suspend_prepare_watchers = True
             self._set_day_type_options_from_payload(
                 list(resp.get("availableDayTypes") or [])
             )
+            self._set_day_type_summaries(list(resp.get("dayTypeSummaries") or []))
+            self._set_day_type_value(selected_day_type)
             if str(dispatch_scope.get("routeSelectionMode") or "") == "include":
                 expanded_routes = _expand_selected_routes_to_family_members(routes, selected_routes)
                 if len(expanded_routes) != len(selected_routes):
@@ -2180,7 +2404,6 @@ class App:
 
             solver = dict(resp.get("solverSettings") or {})
             sim = dict(resp.get("simulationSettings") or {})
-            self._set_day_type_value(str(dispatch_scope.get("dayType") or "WEEKDAY"))
             self.service_date_var.set(str(sim.get("serviceDate") or ""))
             self.solver_mode_var.set(str(solver.get("solverMode") or "hybrid"))
             self.objective_mode_var.set(
@@ -2208,9 +2431,24 @@ class App:
                 f"(depots={len(depots)}件/{len(selected_depots)}選択, "
                 f"routes={len(routes)}件/{len(selected_routes)}選択)"
             )
+            current_day_summary = next(
+                (
+                    item
+                    for item in self.scope_day_type_summaries
+                    if str(item.get("serviceId") or "").strip() == selected_day_type
+                ),
+                None,
+            )
+            if current_day_summary is not None:
+                self.log_line(
+                    "運行種別サマリ: "
+                    f"{self._current_day_type_label()} "
+                    f"(routes={int(current_day_summary.get('routeCount') or 0)}, "
+                    f"trips={int(current_day_summary.get('tripCount') or 0)})"
+                )
             if routes:
                 self.log_line(
-                    "路線の trip/timetable スコープ確定は Prepare 実行時に行います。"
+                    "路線一覧は選択中の運行種別に存在する trip だけを表示しています。"
                 )
             if (depots and not selected_depots) or (routes and not selected_routes):
                 self.log_line(

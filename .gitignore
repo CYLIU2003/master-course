@@ -40,6 +40,9 @@ data/tokyubus/canonical/
 data/tokyubus/features/
 GTFS/TokyuBus-GTFS/
 
+# catalog-fast generated route-scoped caches
+data/catalog-fast/tokyu_bus_data/
+
 # OS/editor noise
 .DS_Store
 Thumbs.db

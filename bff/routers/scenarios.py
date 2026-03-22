@@ -637,6 +637,117 @@ def _available_day_types(doc: Dict[str, Any], dispatch_scope: Dict[str, Any]) ->
     return items
 
 
+def _quick_setup_candidate_route_ids(
+    doc: Dict[str, Any],
+    route_index: Dict[str, List[str]],
+    *,
+    selected_depot_ids: List[str],
+) -> List[str]:
+    if selected_depot_ids:
+        route_ids: List[str] = []
+        for depot_id in selected_depot_ids:
+            for route_id in route_index.get(depot_id) or []:
+                normalized = str(route_id).strip()
+                if normalized and normalized not in route_ids:
+                    route_ids.append(normalized)
+        return route_ids
+    return [
+        str(route.get("id") or "").strip()
+        for route in doc.get("routes") or []
+        if str(route.get("id") or "").strip()
+    ]
+
+
+def _route_trip_inventory_for_quick_setup(
+    doc: Dict[str, Any],
+    dispatch_scope: Dict[str, Any],
+    route_index: Dict[str, List[str]],
+    *,
+    selected_depot_ids: List[str],
+) -> Tuple[Dict[str, Dict[str, int]], List[Dict[str, Any]]]:
+    available_day_types = _available_day_types(doc, dispatch_scope)
+    default_day_type_summaries = [
+        {
+            "serviceId": canonical_service_id(item.get("serviceId")),
+            "label": str(item.get("label") or item.get("serviceId") or ""),
+            "routeCount": 0,
+            "tripCount": 0,
+            "selected": bool(item.get("isDefault")),
+        }
+        for item in available_day_types
+    ]
+
+    candidate_route_ids = _quick_setup_candidate_route_ids(
+        doc,
+        route_index,
+        selected_depot_ids=selected_depot_ids,
+    )
+    candidate_route_set = set(candidate_route_ids) if candidate_route_ids else None
+
+    summary: Optional[Dict[str, Any]] = None
+    dataset_id = _scenario_dataset_id(doc)
+    if dataset_id and shard_runtime_ready(dataset_id):
+        summary = build_timetable_summary_for_scope(
+            dataset_id=dataset_id,
+            route_ids=candidate_route_ids,
+            depot_ids=selected_depot_ids or None,
+            service_ids=None,
+        )
+
+    if not summary:
+        return {}, default_day_type_summaries
+
+    route_counts_by_day_type: Dict[str, Dict[str, int]] = {}
+    for raw_service_id, raw_route_counts in (summary.get("routeServiceCounts") or {}).items():
+        service_id = canonical_service_id(raw_service_id)
+        if not isinstance(raw_route_counts, dict):
+            continue
+        for route_id, raw_count in raw_route_counts.items():
+            normalized_route_id = str(route_id or "").strip()
+            if not normalized_route_id:
+                continue
+            try:
+                count = int(raw_count or 0)
+            except (TypeError, ValueError):
+                count = 0
+            if count <= 0:
+                continue
+            bucket = route_counts_by_day_type.setdefault(normalized_route_id, {})
+            bucket[service_id] = bucket.get(service_id, 0) + count
+
+    label_by_service_id = {
+        canonical_service_id(item.get("serviceId")): str(item.get("label") or item.get("serviceId") or "")
+        for item in available_day_types
+    }
+    summary_by_service_id: Dict[str, Dict[str, Any]] = {}
+    for entry in summary.get("byService") or []:
+        service_id = canonical_service_id(entry.get("serviceId"))
+        summary_by_service_id[service_id] = dict(entry)
+    ordered_service_ids: List[str] = []
+    for service_id in label_by_service_id.keys():
+        if service_id not in ordered_service_ids:
+            ordered_service_ids.append(service_id)
+    for service_id in summary_by_service_id.keys():
+        if service_id not in ordered_service_ids:
+            ordered_service_ids.append(service_id)
+
+    selected_service_id = canonical_service_id(dispatch_scope.get("serviceId"))
+    day_type_summaries: List[Dict[str, Any]] = []
+    for service_id in ordered_service_ids:
+        bucket = summary_by_service_id.get(service_id) or {}
+        day_type_summaries.append(
+            {
+                "serviceId": service_id,
+                "label": label_by_service_id.get(service_id) or service_id,
+                "routeCount": int(bucket.get("routeCount") or 0),
+                "tripCount": int(bucket.get("rowCount") or 0),
+                "selected": service_id == selected_service_id,
+            }
+        )
+
+    return route_counts_by_day_type, day_type_summaries
+
+
 def _builder_defaults(
     doc: Dict[str, Any],
     route_index: Dict[str, List[str]],
@@ -824,7 +935,8 @@ def _quick_route_items(
     selected_depot_ids: List[str],
     selected_route_ids: List[str],
     *,
-    route_trip_counts: Dict[str, int],
+    selected_day_type: str,
+    route_trip_counts_by_day_type: Dict[str, Dict[str, int]],
     route_limit: int,
 ) -> List[Dict[str, Any]]:
     selected_depot_set = {
@@ -873,17 +985,29 @@ def _quick_route_items(
     )
 
     items: List[Dict[str, Any]] = []
-    for route in routes[: max(1, route_limit)]:
+    normalized_day_type = canonical_service_id(selected_day_type)
+    filtered_routes: List[Dict[str, Any]] = []
+    for route in routes:
         route_id = str(route.get("id") or "").strip()
         if not route_id:
             continue
-        trip_count = int(route_trip_counts.get(route_id, _route_trip_count(route)))
+        trip_counts_by_day_type = dict(route_trip_counts_by_day_type.get(route_id) or {})
+        trip_count_total = (
+            sum(int(value or 0) for value in trip_counts_by_day_type.values())
+            if trip_counts_by_day_type
+            else _route_trip_count(route)
+        )
+        trip_count_selected_day = int(
+            trip_counts_by_day_type.get(normalized_day_type, trip_count_total if not trip_counts_by_day_type else 0)
+        )
+        if trip_counts_by_day_type and trip_count_selected_day <= 0:
+            continue
         # Use effective depot (from assignments) if route.depotId is absent
         effective_depot_id = (
             effective_depot_by_route.get(route_id)
             or route.get("depotId")
         )
-        items.append(
+        filtered_routes.append(
             {
                 "id": route_id,
                 "displayName": _route_display_name(route),
@@ -893,7 +1017,10 @@ def _quick_route_items(
                 "routeFamilyLabel": route.get("routeFamilyLabel"),
                 "routeSeriesCode": route.get("routeSeriesCode"),
                 "depotId": effective_depot_id,
-                "tripCount": trip_count,
+                "tripCount": trip_count_selected_day,
+                "tripCountSelectedDay": trip_count_selected_day,
+                "tripCountTotal": trip_count_total,
+                "tripCountsByDayType": trip_counts_by_day_type,
                 "familySortOrder": route.get("familySortOrder"),
                 "routeVariantId": route.get("routeVariantId"),
                 "isPrimaryVariant": route.get("isPrimaryVariant"),
@@ -909,7 +1036,7 @@ def _quick_route_items(
                 "selected": route_id in selected_route_set,
             }
         )
-    return items
+    return filtered_routes[: max(1, route_limit)]
 
 
 def _build_quick_setup_payload(
@@ -922,11 +1049,18 @@ def _build_quick_setup_payload(
 ) -> Dict[str, Any]:
     route_index = _depot_route_index(doc)
     builder_defaults = _builder_defaults(doc, route_index, dispatch_scope)
+    selected_day_type = canonical_service_id(dispatch_scope.get("serviceId"))
     selected_route_ids = [
         str(route_id).strip()
         for route_id in list(dispatch_scope.get("effectiveRouteIds") or [])
         if str(route_id).strip()
     ]
+    route_trip_counts_by_day_type, day_type_summaries = _route_trip_inventory_for_quick_setup(
+        doc,
+        dispatch_scope,
+        route_index,
+        selected_depot_ids=selected_depot_ids,
+    )
     vehicles = [dict(item) for item in doc.get("vehicles") or []]
     vehicle_count_by_depot: Dict[str, int] = {}
     for vehicle in vehicles:
@@ -971,11 +1105,12 @@ def _build_quick_setup_payload(
             doc,
             selected_depot_ids,
             selected_route_ids,
-            route_trip_counts={},
+            selected_day_type=selected_day_type,
+            route_trip_counts_by_day_type=route_trip_counts_by_day_type,
             route_limit=route_limit,
         ),
         "dispatchScope": {
-            "dayType": str(dispatch_scope.get("serviceId") or "WEEKDAY"),
+            "dayType": selected_day_type,
             "routeSelectionMode": str(
                 ((dispatch_scope.get("routeSelection") or {}).get("mode") or "include")
             ),
@@ -988,6 +1123,7 @@ def _build_quick_setup_payload(
             ),
         },
         "availableDayTypes": _available_day_types(doc, dispatch_scope),
+        "dayTypeSummaries": day_type_summaries,
         "solverSettings": {
             "solverMode": builder_defaults.get("solverMode") or "mode_milp_only",
             "objectiveMode": normalize_objective_mode(

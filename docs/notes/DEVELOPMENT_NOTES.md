@@ -39,6 +39,37 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-22] Tokyu Bus の route-scoped trip 生成を追加し、21万件 overcount の代替データを分離
+
+- **問題**:
+  - `data/catalog-fast/raw/bus_timetable.json` / `busstop_pole_timetable.json` は ODPT top-level 取得の 1000件打ち切り状態で、`catalog-fast` 正規化データ単体では全量 trip を復元できなかった。
+  - 一方で既存 `data/built/tokyu_full/trips.parquet` は GTFS family 展開起点の重複を含み、`tripCount` 合計が約 210,704 件まで膨らんでいた。
+  - そのまま route 単位選択に使うと、Quick Setup / Prepare / 最適化の対象 trip 数が実運用とかけ離れる。
+
+- **対応**:
+  - `scripts/build_tokyu_bus_data.py` を追加し、`data/tokyubus/canonical/<snapshot>/` の完全 snapshot から `data/catalog-fast/tokyu_bus_data/` を生成できるようにした。
+  - 出力は global JSONL に加えて route-scoped JSONL を持つ:
+    - `route_trips/<route_id>.jsonl`
+    - `route_stop_times/<route_id>.jsonl`
+    - `route_stop_timetables/<route_id>.jsonl`
+  - `route_index.json` / `family_index.json` / `summary.json` も生成し、将来 route 単位ロードへ切り替えやすい補助メタデータを追加した。
+  - 再生成時に route-scoped ディレクトリが追記で二重化しないよう、出力ディレクトリ全体を clean してから rebuild するようにした。
+  - `src/tokyu_bus_data.py` を追加し、`tokyu_bus_data` から route 別 trip / stop_times / stop timetables / day type 集計を読む補助ローダーを実装した。
+  - 既存システムの参照元はこの時点では変更せず、別 agent による `data/catalog-fast` 修正と独立に比較できる状態を維持した。
+
+- **実データ生成結果**:
+  - `python scripts/build_tokyu_bus_data.py`
+    - source snapshot: `data/tokyubus/canonical/20260311T044200Z`
+    - generated counts: `routes=764`, `routesWithTrips=757`, `families=184`, `stops=3084`, `trips=33360`, `stopTimes=583165`
+  - route 側 `tripCount` 合計も `33360` で一致し、route file 数は `764` を確認した。
+  - 今回は既存参照元維持のため `data/built/tokyu_full` は再生成していない。
+
+- **検証**:
+  - `tests/test_tokyu_bus_data.py` を追加し、route-scoped 生成・再実行時の非重複・補助ローダー読込を固定した。
+  - `PYTHONPATH=C:\\master-course pytest tests/test_tokyu_bus_data.py tests/test_runtime_scope_route_mapping.py tests/test_research_dataset_bootstrap_alignment.py -q`
+    で `10 passed` を確認。
+  - `.gitignore` に `data/catalog-fast/tokyu_bus_data/` を追加し、生成キャッシュが GitHub に同期されないようにした。
+
 ### [DEV-2026-03-22] Quick Setup が全 route を誤表示し、Prepare が `tripCount=0` になりやすい問題を修正
 
 - **問題**:

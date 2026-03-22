@@ -372,6 +372,9 @@ def load_scoped_trips(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame:
         )
         return frame.reset_index(drop=True)
     frame = pd.read_parquet(built_dir / "trips.parquet")
+    # Remove __vN duplicate trips created by GTFS reconciliation (one trip mapped to multiple bundle route_ids)
+    if "trip_id" in frame.columns:
+        frame = frame[~frame["trip_id"].str.contains(r"__v\d+$", regex=True, na=False)]
     frame = _filter_by_service(frame, scope)
     return _filter_by_route(
         frame,

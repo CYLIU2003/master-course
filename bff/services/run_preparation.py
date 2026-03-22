@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -368,11 +369,32 @@ def _load_scope_frames(
 
     from src.runtime_scope import load_scoped_timetables, load_scoped_trips
 
-    return (
-        load_scoped_trips(built_dir, scope),
-        load_scoped_timetables(built_dir, scope),
-        "built_parquet",
-    )
+    try:
+        trips_df = load_scoped_trips(built_dir, scope)
+        timetables_df = load_scoped_timetables(built_dir, scope)
+        if not trips_df.empty:
+            return (trips_df, timetables_df, "built_parquet")
+    except Exception as exc:
+        log.warning("Built parquet load failed; falling back to timetable_rows: %s", exc)
+
+    timetable_rows = list(scenario.get("timetable_rows") or [])
+    if timetable_rows:
+        route_id_set = set(scope.route_ids) if scope.route_ids else None
+        service_id_set = set(scope.service_ids) if scope.service_ids else None
+        _vn_pattern = re.compile(r"__v\d+$")
+        scoped_rows = [
+            row for row in timetable_rows
+            if (route_id_set is None or str(row.get("route_id") or "").strip() in route_id_set)
+            and (service_id_set is None or str(row.get("service_id") or "").strip() in service_id_set)
+            and not _vn_pattern.search(str(row.get("trip_id") or ""))
+        ]
+        return (
+            _rows_to_frame(scoped_rows),
+            _rows_to_frame([]),
+            "timetable_rows_fallback",
+        )
+
+    return (_rows_to_frame([]), _rows_to_frame([]), "built_parquet")
 
 
 def _prepared_input_dir(scenarios_dir: Path, scenario_id: str) -> Path:

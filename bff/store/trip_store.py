@@ -279,11 +279,13 @@ def page_timetable_rows(
 ) -> List[Any]:
     if not db_path.exists():
         return []
-    sql = "SELECT payload_json FROM timetable_rows"
+    # Exclude __vN duplicate trips produced by GTFS reconciliation
+    conditions = ["(json_extract(payload_json, '$.trip_id') IS NULL OR json_extract(payload_json, '$.trip_id') NOT GLOB '*__v[0-9]*')"]
     params: list[Any] = []
     if service_id:
-        sql += " WHERE service_id = ?"
+        conditions.append("service_id = ?")
         params.append(service_id)
+    sql = "SELECT payload_json FROM timetable_rows WHERE " + " AND ".join(conditions)
     sql += " ORDER BY row_index ASC"
     if limit is not None:
         sql += " LIMIT ? OFFSET ?"
@@ -300,11 +302,13 @@ def page_timetable_rows(
 def count_timetable_rows(db_path: Path, *, service_id: Optional[str] = None) -> int:
     if not db_path.exists():
         return 0
-    sql = "SELECT COUNT(*) AS n FROM timetable_rows"
+    # Exclude __vN duplicate trips produced by GTFS reconciliation
+    conditions = ["(json_extract(payload_json, '$.trip_id') IS NULL OR json_extract(payload_json, '$.trip_id') NOT GLOB '*__v[0-9]*')"]
     params: list[Any] = []
     if service_id:
-        sql += " WHERE service_id = ?"
+        conditions.append("service_id = ?")
         params.append(service_id)
+    sql = "SELECT COUNT(*) AS n FROM timetable_rows WHERE " + " AND ".join(conditions)
     with closing(_connect(db_path)) as conn:
         _ensure_schema(conn)
         row = conn.execute(sql, params).fetchone()
@@ -320,6 +324,8 @@ def summarize_timetable_routes(db_path: Path) -> List[dict[str, Any]]:
             """
             SELECT route_id, service_id, COUNT(*) AS trip_count
             FROM timetable_rows
+            WHERE (json_extract(payload_json, '$.trip_id') IS NULL
+                   OR json_extract(payload_json, '$.trip_id') NOT GLOB '*__v[0-9]*')
             GROUP BY route_id, service_id
             ORDER BY route_id ASC, service_id ASC
             """
@@ -355,6 +361,8 @@ def summarize_timetable_routes_from_row_artifacts(db_path: Path) -> List[dict[st
                     COUNT(*) AS trip_count
                 FROM row_artifacts
                 WHERE name = 'timetable_rows'
+                  AND (json_extract(payload_json, '$.trip_id') IS NULL
+                       OR json_extract(payload_json, '$.trip_id') NOT GLOB '*__v[0-9]*')
                 GROUP BY route_id, service_id
                 ORDER BY route_id ASC, service_id ASC
                 """
@@ -380,6 +388,9 @@ def summarize_timetable_routes_from_row_artifacts(db_path: Path) -> List[dict[st
         route_id = str((item or {}).get("route_id") or "").strip()
         if not route_id:
             continue
+        trip_id = str((item or {}).get("trip_id") or "")
+        if trip_id and "__v" in trip_id and any(c.isdigit() for c in trip_id.split("__v")[-1][:1]):
+            continue  # Skip __vN GTFS reconciliation duplicates
         service_id = str((item or {}).get("service_id") or "WEEKDAY")
         key = (route_id, service_id)
         grouped[key] = grouped.get(key, 0) + 1
