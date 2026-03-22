@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -355,10 +356,12 @@ def _filter_rows_for_scope(
         for route in _as_list(scenario.get("routes"))
         if route.get("id") is not None
     }
+    _vn_pattern = re.compile(r"__v\d+$")
     timetable_rows = [
         row
         for row in _as_list(scenario.get("timetable_rows"))
         if row.get("service_id", "WEEKDAY") == service_id
+        and not _vn_pattern.search(str(row.get("trip_id") or ""))
     ]
     if effective_route_ids:
         timetable_rows = [

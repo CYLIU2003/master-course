@@ -57,6 +57,7 @@ Each file stores the complete scenario document:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import time
 import uuid
@@ -618,7 +619,20 @@ def _updated_at_from_imports(imports: Dict[str, Any]) -> Optional[str]:
     return max(timestamps)
 
 
+_VN_TRIP_PATTERN = re.compile(r"__v\d+$")
+
+
+def _drop_vn_duplicate_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Remove GTFS-reconciliation duplicate rows whose trip_id ends with __vN."""
+    return [
+        row for row in rows
+        if not _VN_TRIP_PATTERN.search(str(row.get("trip_id") or ""))
+    ]
+
+
 def _build_timetable_summary_artifact(rows: List[Dict[str, Any]], imports: Dict[str, Any]) -> Dict[str, Any]:
+    # Exclude __vN GTFS reconciliation duplicates before counting
+    rows = _drop_vn_duplicate_rows(rows)
     total_distance_km = 0.0
     first_departure: Optional[str] = None
     last_arrival: Optional[str] = None
@@ -959,13 +973,15 @@ def _load(
             continue
         if field == "timetable_rows":
             if trip_store.count_timetable_rows(artifact_db_path) > 0:
+                # page_timetable_rows already excludes __vN GTFS duplicates
                 doc[field] = trip_store.page_timetable_rows(artifact_db_path, offset=0, limit=None)
             elif trip_store.count_rows(artifact_db_path, field) > 0:
-                doc[field] = trip_store.load_rows(artifact_db_path, field)
+                # row_artifacts fallback: filter __vN duplicates manually
+                doc[field] = _drop_vn_duplicate_rows(trip_store.load_rows(artifact_db_path, field))
             elif artifact_path.exists():
-                doc[field] = _load_json_list(artifact_path)
+                doc[field] = _drop_vn_duplicate_rows(_load_json_list(artifact_path))
             elif _legacy_timetable_path(scenario_id).exists():
-                doc[field] = _load_json_list(_legacy_timetable_path(scenario_id))
+                doc[field] = _drop_vn_duplicate_rows(_load_json_list(_legacy_timetable_path(scenario_id)))
             else:
                 doc[field] = _load_split_or_inline(artifact_path, doc.get(field))
             continue
@@ -1933,13 +1949,14 @@ def get_field(scenario_id: str, field: str) -> Any:
 
     if field == "timetable_rows":
         if trip_store.count_timetable_rows(artifact_db_path) > 0:
+            # page_timetable_rows already excludes __vN GTFS duplicates
             return trip_store.page_timetable_rows(artifact_db_path, offset=0, limit=None)
         artifact_path = Path(refs["timetableRows"])
         if artifact_path.exists():
-            return _load_json_list(artifact_path)
+            return _drop_vn_duplicate_rows(_load_json_list(artifact_path))
         legacy = _legacy_timetable_path(scenario_id)
         if legacy.exists():
-            return _load_json_list(legacy)
+            return _drop_vn_duplicate_rows(_load_json_list(legacy))
         return []
 
     if field in _PARQUET_ROW_ARTIFACT_FIELDS:
@@ -1972,9 +1989,16 @@ def count_field_rows(scenario_id: str, field: str) -> int:
     meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
     refs = _refs_for_scenario(scenario_id, meta)
     if field == "timetable_rows":
+        # count_timetable_rows already excludes __vN GTFS duplicates
         db_count = trip_store.count_timetable_rows(_artifact_store_path(refs))
+        # Return here regardless — don't fall through to the unfiltered
+        # _SQLITE_ROW_ARTIFACT_FIELDS path which reads row_artifacts without
+        # filtering __vN duplicates.
         if db_count > 0:
             return db_count
+        # Fallback: count from row_artifacts with __vN filter applied in memory
+        raw_rows = trip_store.load_rows(_artifact_store_path(refs), field)
+        return len(_drop_vn_duplicate_rows(raw_rows))
     if field in _PARQUET_ROW_ARTIFACT_FIELDS:
         parquet_count = trip_store.count_parquet_rows(Path(refs[_ARTIFACT_REF_KEYS[field]]))
         if parquet_count > 0:
@@ -2000,10 +2024,16 @@ def page_field_rows(
         db_path = _artifact_store_path(refs)
         db_count = trip_store.count_timetable_rows(db_path)
         if db_count > 0:
+            # page_timetable_rows already excludes __vN GTFS duplicates
             return [
                 dict(item)
                 for item in trip_store.page_timetable_rows(db_path, offset=offset, limit=limit)
             ]
+        # Fallback: read from row_artifacts with __vN filter
+        raw_rows = _drop_vn_duplicate_rows(trip_store.load_rows(db_path, field))
+        if limit is None:
+            return [dict(item) for item in raw_rows[offset:]]
+        return [dict(item) for item in raw_rows[offset: offset + limit]]
     if field in _PARQUET_ROW_ARTIFACT_FIELDS:
         parquet_path = Path(refs[_ARTIFACT_REF_KEYS[field]])
         parquet_count = trip_store.count_parquet_rows(parquet_path)
@@ -2118,12 +2148,26 @@ def get_field_summary(scenario_id: str, field: str) -> Optional[Dict[str, Any]]:
         return None
     meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
     refs = _refs_for_scenario(scenario_id, meta)
-    summary = trip_store.load_scalar(_artifact_store_path(refs), scalar_name, None)
+    db_path = _artifact_store_path(refs)
+
+    # For timetable_rows: always recompute from the filtered SQLite source.
+    # The cached scalar may have been stored with __vN GTFS duplicates inflating
+    # the count to 210k+.  page_timetable_rows() already excludes those rows.
+    if field == "timetable_rows":
+        if trip_store.count_timetable_rows(db_path) > 0:
+            rows = trip_store.page_timetable_rows(db_path, offset=0, limit=None)
+            imports = _load_shallow(scenario_id).get("timetable_import_meta") or {}
+            return _build_timetable_summary_artifact(rows, imports)
+        # Fallback to JSON-backed rows (e.g. legacy scenarios without SQLite DB)
+        items = _load_shallow(scenario_id).get(field) or []
+        imports = _load_shallow(scenario_id).get("timetable_import_meta") or {}
+        return _build_timetable_summary_artifact(items, imports)
+
+    # For other fields, use the pre-computed scalar when available
+    summary = trip_store.load_scalar(db_path, scalar_name, None)
     if summary is not None:
         return dict(summary)
     items = _load(scenario_id).get(field) or []
-    if field == "timetable_rows":
-        return _build_timetable_summary_artifact(items, _load(scenario_id).get("timetable_import_meta") or {})
     if field == "trips":
         return _build_trips_summary_artifact(items)
     if field == "duties":

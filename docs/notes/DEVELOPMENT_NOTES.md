@@ -69,6 +69,7 @@ tests/       回帰テスト
   - `PYTHONPATH=C:\\master-course pytest tests/test_tokyu_bus_data.py tests/test_runtime_scope_route_mapping.py tests/test_research_dataset_bootstrap_alignment.py -q`
     で `10 passed` を確認。
   - `.gitignore` に `data/catalog-fast/tokyu_bus_data/` を追加し、生成キャッシュが GitHub に同期されないようにした。
+  - 既存参照元維持のため、`src/runtime_scope.py` / `bff/store/trip_store.py` / `bff/services/run_preparation.py` 側でも `trip_id` の `__vN` 重複除外が効くことを追加テストで固定した。
 
 ### [DEV-2026-03-22] Quick Setup が全 route を誤表示し、Prepare が `tripCount=0` になりやすい問題を修正
 

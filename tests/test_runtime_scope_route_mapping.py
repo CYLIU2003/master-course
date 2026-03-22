@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.runtime_scope import _filter_by_route, resolve_scope
+from src.runtime_scope import RuntimeScope, _filter_by_route, load_scoped_timetables, load_scoped_trips, resolve_scope
 
 
 def test_resolve_scope_exposes_route_selectors_from_selected_route_metadata() -> None:
@@ -116,3 +116,40 @@ def test_resolve_scope_prefers_dispatch_scope_over_stale_overlay_ids() -> None:
 
     assert scope.depot_ids == ["runtime-depot"]
     assert scope.route_ids == ["runtime-route"]
+
+
+def test_load_scoped_frames_drop_gtfs_reconciliation_duplicates(tmp_path, monkeypatch) -> None:
+    built_dir = tmp_path / "tokyu_full"
+    built_dir.mkdir(parents=True, exist_ok=True)
+
+    pd.DataFrame(
+        [
+            {"id": "route-a", "routeCode": "黒01", "routeLabel": "黒01", "depotId": "dep1"},
+        ]
+    ).to_parquet(built_dir / "routes.parquet", index=False)
+    pd.DataFrame(
+        [
+            {"trip_id": "trip-1", "route_id": "route-a", "service_id": "WEEKDAY"},
+            {"trip_id": "trip-1__v1", "route_id": "route-a", "service_id": "WEEKDAY"},
+        ]
+    ).to_parquet(built_dir / "trips.parquet", index=False)
+    pd.DataFrame(
+        [
+            {"trip_id": "trip-1", "route_id": "route-a", "service_id": "WEEKDAY", "stop_id": "stop-a"},
+            {"trip_id": "trip-1__v1", "route_id": "route-a", "service_id": "WEEKDAY", "stop_id": "stop-a"},
+        ]
+    ).to_parquet(built_dir / "timetables.parquet", index=False)
+
+    monkeypatch.setattr("src.runtime_scope.shard_runtime_ready", lambda dataset_id: False)
+
+    scope = RuntimeScope(
+        depot_ids=["dep1"],
+        route_ids=["route-a"],
+        service_ids=["WEEKDAY"],
+    )
+
+    trips = load_scoped_trips(built_dir, scope)
+    timetables = load_scoped_timetables(built_dir, scope)
+
+    assert trips["trip_id"].tolist() == ["trip-1"]
+    assert timetables["trip_id"].tolist() == ["trip-1"]

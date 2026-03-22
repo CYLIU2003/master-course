@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from threading import Lock
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
@@ -110,10 +111,15 @@ def _max_hhmm(values: List[str]) -> Optional[str]:
     return max(usable, key=hhmm_to_min)
 
 
+_VN_TRIP_RE = re.compile(r"__v\d+$")
+
+
 def _build_timetable_summary(
     rows: List[Dict[str, Any]],
     imports: Dict[str, Any],
 ) -> Dict[str, Any]:
+    # Exclude __vN GTFS reconciliation duplicates before counting
+    rows = [row for row in rows if not _VN_TRIP_RE.search(str(row.get("trip_id") or ""))]
     by_service: Dict[str, Dict[str, Any]] = {}
     by_route: Dict[str, Dict[str, Any]] = {}
     route_service_counts: Dict[str, Dict[str, int]] = {}

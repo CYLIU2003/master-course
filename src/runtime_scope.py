@@ -270,6 +270,13 @@ def _series_matches_aliases(series: pd.Series, aliases: set[str]) -> pd.Series:
     )
 
 
+def _drop_gtfs_reconciliation_duplicates(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty or "trip_id" not in frame.columns:
+        return frame.reset_index(drop=True)
+    filtered = frame[~frame["trip_id"].astype(str).str.contains(r"__v\d+$", regex=True, na=False)]
+    return filtered.reset_index(drop=True)
+
+
 def _canonical_route_ids_from_lookup(
     routes_df: pd.DataFrame,
     route_selectors: list[str],
@@ -371,10 +378,7 @@ def load_scoped_trips(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame:
             )
         )
         return frame.reset_index(drop=True)
-    frame = pd.read_parquet(built_dir / "trips.parquet")
-    # Remove __vN duplicate trips created by GTFS reconciliation (one trip mapped to multiple bundle route_ids)
-    if "trip_id" in frame.columns:
-        frame = frame[~frame["trip_id"].str.contains(r"__v\d+$", regex=True, na=False)]
+    frame = _drop_gtfs_reconciliation_duplicates(pd.read_parquet(built_dir / "trips.parquet"))
     frame = _filter_by_service(frame, scope)
     return _filter_by_route(
         frame,
@@ -397,7 +401,7 @@ def load_scoped_timetables(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame
             )
         )
         return frame.reset_index(drop=True)
-    frame = pd.read_parquet(built_dir / "timetables.parquet")
+    frame = _drop_gtfs_reconciliation_duplicates(pd.read_parquet(built_dir / "timetables.parquet"))
     frame = _filter_by_service(frame, scope)
     return _filter_by_route(
         frame,
