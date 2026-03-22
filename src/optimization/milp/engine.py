@@ -31,7 +31,7 @@ class MILPOptimizer:
         return OptimizationEngineResult(
             mode=OptimizationMode.MILP,
             solver_status=outcome.solver_status,
-            objective_value=costs["total_cost"],
+            objective_value=costs["objective_value"],
             plan=plan,
             feasible=report.feasible,
             warnings=report.warnings,

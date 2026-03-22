@@ -37,7 +37,11 @@ from bff.routers.graph import (
     _build_trips_payload,
 )
 from bff.services.experiment_reports import log_optimization_experiment
-from bff.services.run_preparation import get_or_build_run_preparation
+from bff.services.run_preparation import (
+    get_or_build_run_preparation,
+    load_prepared_input,
+    materialize_scenario_from_prepared_input,
+)
 from bff.store import job_store, scenario_store as store
 from src.dispatch.models import hhmm_to_min
 from src.optimization import (
@@ -73,6 +77,7 @@ class RunOptimizationBody(BaseModel):
     time_limit_seconds: int = 300
     mip_gap: float = 0.01
     random_seed: int = 42
+    prepared_input_id: Optional[str] = None
     service_id: Optional[str] = None
     depot_id: Optional[str] = None
     rebuild_dispatch: bool = True
@@ -92,6 +97,7 @@ class ReoptimizeBody(BaseModel):
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 300
+    prepared_input_id: Optional[str] = None
     service_id: Optional[str] = None
     depot_id: Optional[str] = None
     actual_soc: Dict[str, float] = {}
@@ -283,6 +289,31 @@ def _git_sha() -> str:
         ).strip()
     except Exception:
         return ""
+
+
+def _prepared_inputs_root() -> Path:
+    return Path(__file__).resolve().parents[2] / "outputs" / "prepared_inputs"
+
+
+def _persist_prepared_scope_artifacts(
+    scenario_id: str,
+    scenario_snapshot: Dict[str, Any],
+) -> None:
+    prepared_trips = list(scenario_snapshot.get("trips") or [])
+    prepared_timetable_rows = list(
+        scenario_snapshot.get("timetable_rows")
+        or prepared_trips
+    )
+    prepared_stops = list(scenario_snapshot.get("stops") or [])
+    prepared_stop_timetables = list(scenario_snapshot.get("stop_timetables") or [])
+    if prepared_trips:
+        store.set_field(scenario_id, "trips", prepared_trips)
+    if prepared_timetable_rows:
+        store.set_field(scenario_id, "timetable_rows", prepared_timetable_rows)
+    if prepared_stops:
+        store.set_field(scenario_id, "stops", prepared_stops)
+    if prepared_stop_timetables:
+        store.set_field(scenario_id, "stop_timetables", prepared_stop_timetables)
 
 
 def _rebuild_dispatch_artifacts(
@@ -484,6 +515,7 @@ def _cost_breakdown(
 def _run_optimization(
     scenario_id: str,
     job_id: str,
+    prepared_input_id: str,
     mode: str,
     time_limit_seconds: int,
     mip_gap: float,
@@ -513,28 +545,33 @@ def _run_optimization(
         if not depot_id:
             raise ValueError("No depot selected. Configure dispatch scope first.")
 
-        if rebuild_dispatch:
-            _rebuild_dispatch_artifacts(scenario_id, service_id, depot_id)
-        elif not (
-            store.get_field(scenario_id, "trips")
-            and store.get_field(scenario_id, "duties")
-        ):
-            _rebuild_dispatch_artifacts(scenario_id, service_id, depot_id)
+        base_scenario = store.get_scenario_document_shallow(scenario_id)
+        prepared_payload = load_prepared_input(
+            scenario_id=scenario_id,
+            prepared_input_id=prepared_input_id,
+            scenarios_dir=_prepared_inputs_root(),
+        )
+        scenario = materialize_scenario_from_prepared_input(
+            base_scenario,
+            prepared_payload,
+        )
 
-        # Use shallow load for base doc (avoids loading graph 100K+ arcs, etc.)
-        # then overlay the specific artifact fields needed for optimization.
-        scenario = store.get_scenario_document_shallow(scenario_id)
-        scenario["trips"] = store.get_field(scenario_id, "trips") or []
+        if rebuild_dispatch:
+            _persist_prepared_scope_artifacts(scenario_id, scenario)
+            _rebuild_dispatch_artifacts(scenario_id, service_id, depot_id)
         scenario["duties"] = store.get_field(scenario_id, "duties") or []
         scenario["blocks"] = store.get_field(scenario_id, "blocks") or []
-        scenario["timetable_rows"] = store.get_field(scenario_id, "timetable_rows") or []
-        # graph summary only (arc count) - full arcs are not needed for optimization
         graph_meta = store.get_field(scenario_id, "graph")
         if isinstance(graph_meta, dict):
             scenario["graph"] = {k: v for k, v in graph_meta.items() if k != "arcs"}
             scenario["graph"]["arcs"] = []
         else:
-            scenario["graph"] = None
+            scenario["graph"] = {
+                "source": "prepared_scope",
+                "total_arcs": 0,
+                "feasible_arcs": 0,
+                "infeasible_arcs": 0,
+            }
         feed_context = _scenario_feed_context(scenario_id)
         job_store.update_job(
             job_id,
@@ -559,21 +596,11 @@ def _run_optimization(
             service_id=service_id,
             mode=solver_mode,
             use_existing_duties=use_existing_duties,
-            analysis_scope=store.get_dispatch_scope(scenario_id),
+            analysis_scope=scenario.get("dispatch_scope") or store.get_dispatch_scope(scenario_id),
         )
         store.set_field(scenario_id, "problemdata_build_audit", build_report.to_dict())
-        canonical_problem = ProblemBuilder().build_from_scenario(
-            scenario,
-            depot_id=depot_id,
-            service_id=service_id,
-            config=OptimizationConfig(
-                mode=_parse_optimization_mode(mode),
-                time_limit_sec=time_limit_seconds,
-                mip_gap=mip_gap,
-                random_seed=random_seed,
-                alns_iterations=alns_iterations,
-            ),
-        )
+        price_slots = list(getattr(data, "electricity_prices", []) or [])
+        pv_slots = list(getattr(data, "pv_profiles", []) or [])
 
         job_store.update_job(
             job_id,
@@ -588,11 +615,11 @@ def _run_optimization(
                 mode=mode,
                 extra={
                     "problem_summary": {
-                        "trips": len(canonical_problem.trips),
-                        "vehicles": len(canonical_problem.vehicles),
-                        "chargers": len(canonical_problem.chargers),
-                        "price_slots": len(canonical_problem.price_slots),
-                        "pv_slots": len(canonical_problem.pv_slots),
+                        "trips": len(getattr(data, "tasks", []) or []),
+                        "vehicles": len(getattr(data, "vehicles", []) or []),
+                        "chargers": len(getattr(data, "chargers", []) or []),
+                        "price_slots": len(price_slots),
+                        "pv_slots": len(pv_slots),
                     }
                 },
             ),
@@ -658,7 +685,7 @@ def _run_optimization(
             "solve_time_seconds": result_payload.get("solve_time_seconds", 0.0),
             "mip_gap": result_payload.get("mip_gap"),
             "cost_breakdown": _cost_breakdown(result_payload, sim_payload),
-            "dispatch_report": store.get_field(scenario_id, "graph") or {},
+            "dispatch_report": scenario.get("graph") or store.get_field(scenario_id, "graph") or {},
             "build_report": build_report.to_dict(),
             "summary": {
                 "vehicle_count_used": sum(
@@ -678,11 +705,11 @@ def _run_optimization(
             },
             "solver_result": result_payload,
             "canonical_problem_summary": {
-                "trip_count": len(canonical_problem.trips),
-                "vehicle_count": len(canonical_problem.vehicles),
-                "charger_count": len(canonical_problem.chargers),
-                "price_slot_count": len(canonical_problem.price_slots),
-                "pv_slot_count": len(canonical_problem.pv_slots),
+                "trip_count": len(getattr(data, "tasks", []) or []),
+                "vehicle_count": len(getattr(data, "vehicles", []) or []),
+                "charger_count": len(getattr(data, "chargers", []) or []),
+                "price_slot_count": len(price_slots),
+                "pv_slot_count": len(pv_slots),
             },
         }
         if sim_payload is not None:
@@ -836,6 +863,7 @@ def _run_reoptimization(
     scenario_id: str,
     job_id: str,
     body_payload: Dict[str, Any],
+    prepared_input_id: str,
     service_id: str,
     depot_id: Optional[str],
 ) -> None:
@@ -845,7 +873,16 @@ def _run_reoptimization(
         if not depot_id:
             raise ValueError("No depot selected. Configure dispatch scope first.")
 
-        scenario = _apply_reoptimization_inputs(store._load(scenario_id), body)
+        base_scenario = store.get_scenario_document_shallow(scenario_id)
+        prepared_payload = load_prepared_input(
+            scenario_id=scenario_id,
+            prepared_input_id=prepared_input_id,
+            scenarios_dir=_prepared_inputs_root(),
+        )
+        scenario = _apply_reoptimization_inputs(
+            materialize_scenario_from_prepared_input(base_scenario, prepared_payload),
+            body,
+        )
         job_store.update_job(
             job_id,
             status="running",
@@ -994,7 +1031,7 @@ def run_optimization(
     prep = get_or_build_run_preparation(
         scenario=scenario,
         built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
-        scenarios_dir=Path(__file__).resolve().parents[2] / "app" / "scenarios",
+        scenarios_dir=_prepared_inputs_root(),
         routes_df=_app_state.get("routes_df"),
     )
     if not prep.is_valid:
@@ -1007,6 +1044,16 @@ def run_optimization(
         )
     _require_nonempty_prepared_scope(prep, action="Optimization preflight")
     request = body or RunOptimizationBody()
+    if request.prepared_input_id and prep.prepared_input_id != request.prepared_input_id:
+        raise HTTPException(
+            status_code=409,
+            detail=make_error(
+                AppErrorCode.SCENARIO_INCOMPLETE,
+                "Prepared input is stale. Run prepare again before starting optimization.",
+                preparedInputId=request.prepared_input_id,
+                currentPreparedInputId=prep.prepared_input_id,
+            ),
+        )
     try:
         scope = _resolve_dispatch_scope(
             scenario_id,
@@ -1031,6 +1078,7 @@ def run_optimization(
             args=(
                 scenario_id,
                 job.job_id,
+                prep.prepared_input_id or "",
                 request.mode,
                 request.time_limit_seconds,
                 request.mip_gap,
@@ -1079,7 +1127,7 @@ def reoptimize(
     prep = get_or_build_run_preparation(
         scenario=scenario,
         built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
-        scenarios_dir=Path(__file__).resolve().parents[2] / "app" / "scenarios",
+        scenarios_dir=_prepared_inputs_root(),
         routes_df=_app_state.get("routes_df"),
     )
     if not prep.is_valid:
@@ -1091,6 +1139,16 @@ def reoptimize(
             ),
         )
     _require_nonempty_prepared_scope(prep, action="Re-optimization preflight")
+    if body.prepared_input_id and prep.prepared_input_id != body.prepared_input_id:
+        raise HTTPException(
+            status_code=409,
+            detail=make_error(
+                AppErrorCode.SCENARIO_INCOMPLETE,
+                "Prepared input is stale. Run prepare again before starting re-optimization.",
+                preparedInputId=body.prepared_input_id,
+                currentPreparedInputId=prep.prepared_input_id,
+            ),
+        )
     scope = _resolve_dispatch_scope(
         scenario_id,
         service_id=body.service_id,
@@ -1116,6 +1174,7 @@ def reoptimize(
                 scenario_id,
                 job.job_id,
                 body.model_dump(),
+                prep.prepared_input_id or "",
                 scope.get("serviceId") or "WEEKDAY",
                 scope.get("depotId"),
             ),

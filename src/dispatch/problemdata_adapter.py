@@ -189,25 +189,26 @@ def build_travel_connections_via_dispatch(
                 continue
 
             can_follow = (from_trip.trip_id, to_trip.trip_id) in feasible_edges
-            if can_follow:
-                from_stop = from_trip.destination_stop_id or from_trip.destination
-                to_stop = to_trip.origin_stop_id or to_trip.origin
-                deadhead_min = context.get_deadhead_min(from_stop, to_stop)
-                deadhead_slots = int(math.ceil(deadhead_min / slot_minutes))
-                deadhead_distance_km = float(
-                    (
-                        deadhead_metrics or {}
-                    ).get((from_stop, to_stop), DeadheadMetric(from_stop, to_stop, deadhead_min)).distance_km
-                )
-            else:
-                deadhead_slots = 0
-                deadhead_distance_km = 0.0
+            if not can_follow:
+                continue
 
+            from_stop = from_trip.destination_stop_id or from_trip.destination
+            to_stop = to_trip.origin_stop_id or to_trip.origin
+            deadhead_min = context.get_deadhead_min(from_stop, to_stop)
+            deadhead_slots = int(math.ceil(deadhead_min / slot_minutes))
+            deadhead_distance_km = float(
+                (
+                    deadhead_metrics or {}
+                ).get((from_stop, to_stop), DeadheadMetric(from_stop, to_stop, deadhead_min)).distance_km
+            )
+
+            # Store only feasible edges. Infeasible pairs are treated as missing
+            # downstream, which avoids O(n^2) connection payloads for large scopes.
             travel_connections.append(
                 TravelConnection(
                     from_task_id=from_trip.trip_id,
                     to_task_id=to_trip.trip_id,
-                    can_follow=can_follow,
+                    can_follow=True,
                     deadhead_time_slot=deadhead_slots,
                     deadhead_distance_km=deadhead_distance_km,
                     deadhead_energy_kwh=0.0,

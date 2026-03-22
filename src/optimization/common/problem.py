@@ -122,6 +122,7 @@ class OptimizationScenario:
     horizon_start: Optional[str] = None
     horizon_end: Optional[str] = None
     timestep_min: int = 30
+    objective_mode: str = "total_cost"
     diesel_price_yen_per_l: float = 0.0
     demand_charge_on_peak_yen_per_kw: float = 0.0
     demand_charge_off_peak_yen_per_kw: float = 0.0
@@ -252,7 +253,12 @@ class SolutionState:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def objective(self) -> float:
-        return float(self.cost_breakdown.get("total_cost", float("inf")))
+        return float(
+            self.cost_breakdown.get(
+                "objective_value",
+                self.cost_breakdown.get("total_cost", float("inf")),
+            )
+        )
 
     def clone(self, **changes: Any) -> "SolutionState":
         return replace(self, **changes)

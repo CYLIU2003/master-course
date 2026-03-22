@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .data_schema import ProblemData
 from .milp_model import MILPResult
 from .model_sets import ModelSets
+from .objective_modes import normalize_objective_mode
 from .parameter_builder import DerivedParams, get_grid_price
 
 _GUROBI_AVAILABLE = False
@@ -69,6 +70,38 @@ class AssignmentSolution:
 
     def get_tasks_for_vehicle(self, vehicle_id: str) -> List[str]:
         return [r for r, v in self.assignment.items() if v == vehicle_id]
+
+
+def _objective_mode(data: ProblemData) -> str:
+    return normalize_objective_mode(getattr(data, "objective_mode", "total_cost"))
+
+
+def _average_grid_co2_factor(
+    ms: ModelSets,
+    dp: DerivedParams,
+) -> float:
+    factors: List[float] = []
+    for site_id in ms.I_CHARGE:
+        factors.extend(
+            float(value)
+            for value in dp.grid_co2_factor.get(site_id, {}).values()
+            if float(value) > 0.0
+        )
+    return (sum(factors) / len(factors)) if factors else 0.0
+
+
+def _assignment_ice_co2_kg(
+    sol: AssignmentSolution,
+    dp: DerivedParams,
+) -> float:
+    total_co2_kg = 0.0
+    for task_id, vehicle_id in sol.assignment.items():
+        veh = dp.vehicle_lut.get(vehicle_id)
+        if veh is None or str(veh.vehicle_type).upper() == "BEV":
+            continue
+        fuel_l = float(dp.task_fuel_ice.get(task_id, 0.0) or 0.0)
+        total_co2_kg += float(getattr(veh, "co2_emission_coeff", 0.0) or 0.0) * fuel_l
+    return total_co2_kg
 
 
 # ---------------------------------------------------------------------------
@@ -296,25 +329,30 @@ def _evaluate_with_gurobi(
 
     # ---------- 目的関数 ----------
     obj = gp.LinExpr()
+    objective_mode = _objective_mode(data)
 
-    # 電力量料金
     for site_id in I_CHARGE:
         for t in T:
-            price = get_grid_price(dp, site_id, t)
-            obj += price * p_grid[site_id, t] * delta_h
+            if objective_mode == "co2":
+                co2_factor = float(dp.grid_co2_factor.get(site_id, {}).get(t, 0.0) or 0.0)
+                obj += co2_factor * p_grid[site_id, t] * delta_h
+            else:
+                price = get_grid_price(dp, site_id, t)
+                obj += price * p_grid[site_id, t] * delta_h
 
-    # 車両使用固定費
-    for k in K_ALL:
-        veh = dp.vehicle_lut[k]
-        tasks_for_k = sol.get_tasks_for_vehicle(k)
-        if tasks_for_k:
-            obj += veh.fixed_use_cost
+    if objective_mode != "co2":
+        # 車両使用固定費
+        for k in K_ALL:
+            veh = dp.vehicle_lut[k]
+            tasks_for_k = sol.get_tasks_for_vehicle(k)
+            if tasks_for_k:
+                obj += veh.fixed_use_cost
 
-    # デマンド料金
-    if data.enable_demand_charge:
-        demand_rate = data.demand_charge_rate_per_kw # P0: demand_rate のハードコード修正
-        for site_id in I_CHARGE:
-            obj += demand_rate * peak[site_id]
+        # デマンド料金
+        if data.enable_demand_charge:
+            demand_rate = data.demand_charge_rate_per_kw
+            for site_id in I_CHARGE:
+                obj += demand_rate * peak[site_id]
 
     model.setObjective(obj, GRB.MINIMIZE)
 
@@ -439,8 +477,12 @@ def _evaluate_with_gurobi(
         return float("inf"), None
 
     # ---------- 結果抽出 ----------
+    objective_value = float(model.ObjVal)
+    if objective_mode == "co2":
+        objective_value += _assignment_ice_co2_kg(sol, dp)
     details: Dict[str, Any] = {
-        "objective": float(model.ObjVal),
+        "objective": objective_value,
+        "objective_mode": objective_mode,
     }
 
     # SOC 系列
@@ -497,12 +539,14 @@ def _evaluate_heuristic(
     ms: ModelSets,
     dp: DerivedParams,
 ) -> Tuple[float, Optional[Dict[str, Any]]]:
-    """ソルバー無し環境用の簡易推定 (SOC シミュレーション + 買電コスト)"""
+    """ソルバー無し環境用の簡易推定."""
     T = ms.T
     K_BEV = ms.K_BEV
     delta_h = data.delta_t_hour
+    objective_mode = _objective_mode(data)
 
     total_cost = 0.0
+    total_grid_kwh = 0.0
     soc_series: Dict[str, List[float]] = {}
 
     for k in K_BEV:
@@ -547,13 +591,21 @@ def _evaluate_heuristic(
     if ms.I_CHARGE and T:
         prices = [get_grid_price(dp, ms.I_CHARGE[0], t) for t in T]
         avg_price = sum(prices) / len(prices) if prices else 25.0
-    total_cost += total_energy * avg_price
+    total_grid_kwh = total_energy
+    total_cost += total_grid_kwh * avg_price
+
+    avg_grid_co2 = _average_grid_co2_factor(ms, dp)
+    total_co2_kg = _assignment_ice_co2_kg(sol, dp) + total_grid_kwh * avg_grid_co2
+    objective_value = total_co2_kg if objective_mode == "co2" else total_cost
 
     details = {
-        "objective": round(total_cost, 2),
+        "objective": round(objective_value, 4),
+        "objective_mode": objective_mode,
+        "total_cost": round(total_cost, 2),
+        "total_co2_kg": round(total_co2_kg, 4),
         "soc_series": soc_series,
     }
-    return total_cost, details
+    return objective_value, details
 
 
 # ---------------------------------------------------------------------------

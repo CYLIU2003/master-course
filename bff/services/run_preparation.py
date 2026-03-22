@@ -15,6 +15,78 @@ from src.value_normalization import normalize_for_python
 log = logging.getLogger("run_prep")
 
 
+def _normalize_solver_mode(mode: Any) -> str:
+    normalized = str(mode or "").strip().lower()
+    alias_map = {
+        "milp": "mode_milp_only",
+        "exact": "mode_milp_only",
+        "alns": "mode_alns_only",
+        "heuristic": "mode_alns_only",
+        "hybrid": "mode_alns_milp",
+        "ga": "mode_ga_only",
+        "abc": "mode_abc_only",
+    }
+    return alias_map.get(normalized, str(mode or "").strip() or "mode_milp_only")
+
+
+def solver_prepare_profile(mode: Any) -> dict[str, Any]:
+    solver_mode_effective = _normalize_solver_mode(mode)
+    if solver_mode_effective == "mode_milp_only":
+        return {
+            "solver_mode_effective": solver_mode_effective,
+            "profile": "milp_exact",
+            "dispatch_rebuild_required": False,
+            "preferred_execution": "optimization",
+            "notes": [
+                "prepared scope is used directly",
+                "MILP exact solve consumes canonical ProblemData",
+            ],
+        }
+    if solver_mode_effective == "mode_alns_only":
+        return {
+            "solver_mode_effective": solver_mode_effective,
+            "profile": "metaheuristic_alns",
+            "dispatch_rebuild_required": False,
+            "preferred_execution": "optimization",
+            "notes": [
+                "prepared scope is used directly",
+                "ALNS consumes canonical ProblemData without dispatch rebuild",
+            ],
+        }
+    if solver_mode_effective == "mode_ga_only":
+        return {
+            "solver_mode_effective": solver_mode_effective,
+            "profile": "metaheuristic_ga",
+            "dispatch_rebuild_required": False,
+            "preferred_execution": "optimization",
+            "notes": [
+                "prepared scope is used directly",
+                "GA mode reuses canonical ProblemData preparation",
+            ],
+        }
+    if solver_mode_effective == "mode_abc_only":
+        return {
+            "solver_mode_effective": solver_mode_effective,
+            "profile": "metaheuristic_abc",
+            "dispatch_rebuild_required": False,
+            "preferred_execution": "optimization",
+            "notes": [
+                "prepared scope is used directly",
+                "ABC mode reuses canonical ProblemData preparation",
+            ],
+        }
+    return {
+        "solver_mode_effective": solver_mode_effective,
+        "profile": "hybrid_seeded",
+        "dispatch_rebuild_required": False,
+        "preferred_execution": "optimization",
+        "notes": [
+            "prepared scope is used directly",
+            "hybrid mode consumes canonical ProblemData with ALNS+MILP pipeline",
+        ],
+    }
+
+
 @dataclass
 class RunPreparation:
     scenario_id: str
@@ -332,6 +404,13 @@ def _build_canonical_input(
     random_seed = _random_seed(scenario)
     vehicles = [dict(item) for item in list(scenario.get("vehicles") or [])]
     chargers = [dict(item) for item in list(scenario.get("chargers") or [])]
+    solver_mode_requested = str(
+        simulation_config.get("solver_mode")
+        or (scenario_overlay.get("solver_config") or {}).get("mode")
+        or "mode_milp_only"
+    ).strip() or "mode_milp_only"
+    solver_mode_effective = _normalize_solver_mode(solver_mode_requested)
+    prepare_profile = solver_prepare_profile(solver_mode_effective)
     depots = _select_items_by_ids(
         [dict(item) for item in list(scenario.get("depots") or [])],
         list(scope.depot_ids),
@@ -376,6 +455,9 @@ def _build_canonical_input(
         "random_seed": random_seed,
         "scenario_hash": scenario_hash,
         "prepared_at": time.time(),
+        "solver_mode_requested": solver_mode_requested,
+        "solver_mode_effective": solver_mode_effective,
+        "prepare_profile": prepare_profile,
         "depot_ids": list(scope.depot_ids),
         "route_ids": list(scope.route_ids),
         "service_ids": list(scope.service_ids),
@@ -417,6 +499,55 @@ def _build_canonical_input(
             "charger_index": charger_index,
         },
     }
+
+
+def materialize_scenario_from_prepared_input(
+    scenario: dict[str, Any],
+    prepared_input: dict[str, Any],
+) -> dict[str, Any]:
+    hydrated = dict(scenario)
+    meta = dict(hydrated.get("meta") or {})
+    meta["selectedDepotIds"] = list(prepared_input.get("depot_ids") or [])
+    meta["selectedRouteIds"] = list(prepared_input.get("route_ids") or [])
+    meta["serviceIds"] = list(prepared_input.get("service_ids") or [])
+    hydrated["meta"] = meta
+
+    for key in ("scenario_overlay", "dispatch_scope", "simulation_config"):
+        value = prepared_input.get(key)
+        if isinstance(value, dict):
+            hydrated[key] = dict(value)
+
+    for key in ("depots", "routes", "vehicles", "chargers", "stops", "trips"):
+        value = prepared_input.get(key)
+        if isinstance(value, list):
+            hydrated[key] = [
+                dict(item)
+                for item in value
+                if isinstance(item, dict)
+            ]
+
+    stop_time_sequences = prepared_input.get("stop_time_sequences")
+    if isinstance(stop_time_sequences, list):
+        hydrated["stop_timetables"] = [
+            dict(item)
+            for item in stop_time_sequences
+            if isinstance(item, dict)
+        ]
+
+    if isinstance(prepared_input.get("trips"), list):
+        # Treat the prepared scoped trips as the canonical timetable rows for
+        # optimization/simulation paths that previously depended on persisted
+        # dispatch artifacts.
+        hydrated["timetable_rows"] = [
+            dict(item)
+            for item in prepared_input.get("trips") or []
+            if isinstance(item, dict)
+        ]
+
+    hydrated["prepared_input_id"] = str(prepared_input.get("prepared_input_id") or "")
+    hydrated["prepared_scope_summary"] = dict(prepared_input.get("scope") or {})
+    hydrated["prepare_profile"] = dict(prepared_input.get("prepare_profile") or {})
+    return hydrated
 
 
 def get_or_build_run_preparation(

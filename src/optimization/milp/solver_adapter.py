@@ -14,6 +14,7 @@ except Exception:  # pragma: no cover
     _GUROBI_AVAILABLE = False
 
 from src.dispatch.models import DutyLeg, VehicleDuty
+from src.objective_modes import normalize_objective_mode
 from src.optimization.milp.model_builder import MILPModelBuilder
 
 from src.optimization.common.problem import (
@@ -326,12 +327,16 @@ class GurobiMILPAdapter:
                     model.addConstr(w_off_var >= p_avg_var[slot_idx])
 
         unserved_penalty_weight = max(problem.objective_weights.unserved, 10000.0)
+        objective_mode = normalize_objective_mode(problem.scenario.objective_mode)
+        energy_weight = max(problem.objective_weights.energy, 0.0)
+        demand_weight = max(problem.objective_weights.demand, 0.0)
+        vehicle_weight = max(problem.objective_weights.vehicle, 0.0)
 
         objective = gp.LinExpr()
         # O2: strict TOU energy purchase cost.
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
         for slot_idx, g in g_var.items():
-            objective += price_by_slot.get(slot_idx, 0.0) * g
+            objective += energy_weight * price_by_slot.get(slot_idx, 0.0) * g
 
         # O1: ICE fuel cost (revenue + deadhead).
         diesel_price = max(problem.scenario.diesel_price_yen_per_l, 0.0)
@@ -345,7 +350,7 @@ class GurobiMILPAdapter:
             fuel_l = max(trip.fuel_l, 0.0)
             if fuel_l <= 0 and vehicle.fuel_consumption_l_per_km:
                 fuel_l = max(trip.distance_km, 0.0) * vehicle.fuel_consumption_l_per_km
-            objective += diesel_price * fuel_l * var
+            objective += energy_weight * diesel_price * fuel_l * var
 
         for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
             vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
@@ -359,18 +364,21 @@ class GurobiMILPAdapter:
                 trip_by_id[to_trip_id].origin,
             )
             deadhead_km = (deadhead_min / 60.0) * 20.0
-            objective += diesel_price * deadhead_km * fuel_rate * var
+            objective += energy_weight * diesel_price * deadhead_km * fuel_rate * var
 
         # O3: demand charge cost.
         if w_on_var is not None and w_off_var is not None:
-            objective += max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on_var
-            objective += max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off_var
+            objective += demand_weight * max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on_var
+            objective += demand_weight * max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off_var
 
         for vehicle in problem.vehicles:
-            objective += vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
+            objective += vehicle_weight * vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
 
-        # CO₂ cost: added to objective when co2_price_per_kg > 0.
+        # CO₂ objective/cost: in CO2 mode, co2_price_per_kg is treated as a
+        # positive scaling factor (defaulted to 1.0 upstream when omitted).
         co2_price = max(problem.scenario.co2_price_per_kg, 0.0)
+        if objective_mode == "co2" and co2_price <= 0.0:
+            co2_price = 1.0
         ice_co2_kg_per_l = max(problem.scenario.ice_co2_kg_per_l, 0.0)
         if co2_price > 0:
             # ICE CO₂ from trip fuel consumption.

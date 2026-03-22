@@ -4,6 +4,10 @@ from typing import Any, Dict, Optional
 
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
+from src.objective_modes import (
+    legacy_objective_weights_for_mode,
+    normalize_objective_mode,
+)
 from src.scenario_overlay import TimeOfUseBand, default_scenario_overlay
 
 
@@ -71,42 +75,10 @@ def objective_weights_for_mode(
     objective_mode: str,
     unserved_penalty: float,
 ) -> Dict[str, float]:
-    normalized = str(objective_mode or "").strip().lower()
-    if normalized == "co2":
-        return {
-            "vehicle_fixed_cost": 0.0,
-            "electricity_cost": 0.0,
-            "demand_charge_cost": 0.0,
-            "fuel_cost": 0.0,
-            "deadhead_cost": 0.0,
-            "battery_degradation_cost": 0.0,
-            "emission_cost": 1.0,
-            "unserved_penalty": float(unserved_penalty),
-            "slack_penalty": 1000000.0,
-        }
-    if normalized in {"balanced", "cost_co2_balanced", "multi_objective"}:
-        return {
-            "vehicle_fixed_cost": 0.0,
-            "electricity_cost": 1.0,
-            "demand_charge_cost": 1.0,
-            "fuel_cost": 1.0,
-            "deadhead_cost": 0.0,
-            "battery_degradation_cost": 0.0,
-            "emission_cost": 1.0,
-            "unserved_penalty": float(unserved_penalty),
-            "slack_penalty": 1000000.0,
-        }
-    return {
-        "vehicle_fixed_cost": 0.0,
-        "electricity_cost": 1.0,
-        "demand_charge_cost": 1.0,
-        "fuel_cost": 1.0,
-        "deadhead_cost": 0.0,
-        "battery_degradation_cost": 0.0,
-        "emission_cost": 0.0,
-        "unserved_penalty": float(unserved_penalty),
-        "slack_penalty": 1000000.0,
-    }
+    return legacy_objective_weights_for_mode(
+        objective_mode=objective_mode,
+        unserved_penalty=unserved_penalty,
+    )
 
 
 def build_builder_vehicles(
@@ -430,7 +402,7 @@ def apply_builder_configuration(
             body.simulation_settings.depot_power_limit_kw
         )
     overlay.solver_config.mode = body.simulation_settings.solver_mode
-    overlay.solver_config.objective_mode = str(  # type: ignore[assignment]
+    overlay.solver_config.objective_mode = normalize_objective_mode(  # type: ignore[assignment]
         body.simulation_settings.objective_mode or "total_cost"
     )
     overlay.solver_config.allow_partial_service = bool(
@@ -446,20 +418,13 @@ def apply_builder_configuration(
     overlay.solver_config.alns_iterations = int(
         body.simulation_settings.alns_iterations or overlay.solver_config.alns_iterations
     )
-    base_weights = objective_weights_for_mode(
+    # Rebuild base weights per mode and preserve only advanced add-ons.
+    saved_weights = dict((current_overlay.get("solver_config") or {}).get("objective_weights") or {})
+    overlay.solver_config.objective_weights = legacy_objective_weights_for_mode(
         objective_mode=overlay.solver_config.objective_mode,
         unserved_penalty=overlay.solver_config.unserved_penalty,
+        explicit_weights=saved_weights,
     )
-    # Preserve user-configured weights from the current overlay (e.g. degradation_weight)
-    saved_weights = dict(
-        (current_overlay.get("solver_config") or {}).get("objective_weights") or {}
-    )
-    for key, value in saved_weights.items():
-        try:
-            base_weights[str(key)] = float(value)
-        except (TypeError, ValueError):
-            pass
-    overlay.solver_config.objective_weights = base_weights
     if body.simulation_settings.grid_flat_price_per_kwh is not None:
         overlay.cost_coefficients.grid_flat_price_per_kwh = (
             body.simulation_settings.grid_flat_price_per_kwh

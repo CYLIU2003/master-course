@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Set, Tuple
 
+from src.objective_modes import objective_value_for_mode
+
 from .problem import AssignmentPlan, CanonicalOptimizationProblem
 
 
@@ -17,7 +19,9 @@ class CostBreakdown:
     degradation_cost: float = 0.0
     deviation_cost: float = 0.0
     co2_cost: float = 0.0
+    total_co2_kg: float = 0.0
     total_cost: float = 0.0
+    objective_value: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
         return {
@@ -30,7 +34,9 @@ class CostBreakdown:
             "degradation_cost": self.degradation_cost,
             "deviation_cost": self.deviation_cost,
             "co2_cost": self.co2_cost,
+            "total_co2_kg": self.total_co2_kg,
             "total_cost": self.total_cost,
+            "objective_value": self.objective_value,
         }
 
 
@@ -119,8 +125,9 @@ class CostEvaluator:
         deviation_count = len(set(plan.served_trip_ids).symmetric_difference(baseline_ids))
         deviation_cost = weights.deviation * deviation_count
 
-        # CO₂ cost: calculate from ICE fuel and grid electricity.
-        co2_cost = self._co2_cost(problem, plan, slot_totals)
+        # CO₂ metrics: calculate from ICE fuel and grid electricity.
+        total_co2_kg = self._total_co2_kg(problem, plan, slot_totals)
+        co2_cost = max(problem.scenario.co2_price_per_kg, 0.0) * total_co2_kg
 
         total_cost = (
             energy_cost
@@ -133,6 +140,15 @@ class CostEvaluator:
             + deviation_cost
             + co2_cost
         )
+        objective_value = objective_value_for_mode(
+            objective_mode=problem.scenario.objective_mode,
+            total_cost=total_cost,
+            total_co2_kg=total_co2_kg,
+            unserved_penalty=unserved_penalty,
+            switch_cost=switch_cost,
+            degradation_cost=degradation_cost,
+            deviation_cost=deviation_cost,
+        )
         return CostBreakdown(
             energy_cost=energy_cost,
             demand_cost=demand_cost,
@@ -143,7 +159,9 @@ class CostEvaluator:
             degradation_cost=degradation_cost,
             deviation_cost=deviation_cost,
             co2_cost=co2_cost,
+            total_co2_kg=total_co2_kg,
             total_cost=total_cost,
+            objective_value=objective_value,
         )
 
     def _trip_fuel_cost(
@@ -311,21 +329,12 @@ class CostEvaluator:
             adjusted_departure += 24 * 60
         return (adjusted_departure - start_min) // timestep_min
 
-    def _co2_cost(
+    def _total_co2_kg(
         self,
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
         slot_totals_kw: Dict[int, float],
     ) -> float:
-        """Return total CO₂ cost [JPY] based on ICE fuel + grid electricity.
-
-        The cost is zero when co2_price_per_kg is zero (default), so this has
-        no effect unless the parameter is explicitly set in the scenario config.
-        """
-        co2_price = max(problem.scenario.co2_price_per_kg, 0.0)
-        if co2_price <= 0:
-            return 0.0
-
         ice_co2_kg_per_l = max(problem.scenario.ice_co2_kg_per_l, 0.0)
         vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
         total_co2_kg = 0.0
@@ -362,4 +371,4 @@ class CostEvaluator:
                 grid_kwh = max(charge_kwh - min(charge_kwh, pv_kwh), 0.0)
                 total_co2_kg += co2_factor * grid_kwh
 
-        return co2_price * total_co2_kg
+        return total_co2_kg

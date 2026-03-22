@@ -22,6 +22,11 @@ from src.route_family_runtime import (
     normalize_variant_type,
 )
 from src.preprocess.tariff_loader import build_electricity_prices_from_tariff, load_tariff_csv
+from src.objective_modes import (
+    canonical_objective_weights_for_mode,
+    effective_co2_price_per_kg,
+    normalize_objective_mode,
+)
 
 from .problem import (
     AssignmentPlan,
@@ -65,6 +70,13 @@ class ProblemBuilder:
         baseline = self._build_baseline_plan_from_scenario(scenario, context)
         charging_cfg = ((scenario.get("scenario_overlay") or {}).get("charging_constraints") or {})
         cost_cfg = ((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {})
+        solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
+        simulation_cfg = scenario.get("simulation_config") or {}
+        objective_mode = normalize_objective_mode(
+            simulation_cfg.get("objective_mode")
+            or solver_cfg.get("objective_mode")
+            or "total_cost"
+        )
         depot_import_limit_kw = self._safe_float(
             charging_cfg.get("depot_power_limit_kw")
             or charging_cfg.get("depotPowerLimitKw")
@@ -73,7 +85,10 @@ class ProblemBuilder:
         )
         demand_charge = float(cost_cfg.get("demand_charge_cost_per_kw") or 0.0)
         diesel_price = float(cost_cfg.get("diesel_price_per_l") or 0.0)
-        co2_price_per_kg = float(cost_cfg.get("co2_price_per_kg") or 0.0)
+        co2_price_per_kg = effective_co2_price_per_kg(
+            objective_mode,
+            cost_cfg.get("co2_price_per_kg"),
+        )
         ice_co2_kg_per_l = float(cost_cfg.get("ice_co2_kg_per_l") or 2.64)
         return self.build_from_dispatch(
             context,
@@ -86,6 +101,7 @@ class ProblemBuilder:
             objective_weights=weights,
             baseline_plan=baseline,
             depot_import_limit_kw=depot_import_limit_kw,
+            objective_mode=objective_mode,
             diesel_price_yen_per_l=diesel_price,
             demand_charge_on_peak_yen_per_kw=demand_charge,
             demand_charge_off_peak_yen_per_kw=demand_charge,
@@ -106,6 +122,7 @@ class ProblemBuilder:
         objective_weights: Optional[OptimizationObjectiveWeights] = None,
         baseline_plan: Optional[AssignmentPlan] = None,
         depot_import_limit_kw: Optional[float] = None,
+        objective_mode: str = "total_cost",
         diesel_price_yen_per_l: float = 0.0,
         demand_charge_on_peak_yen_per_kw: float = 0.0,
         demand_charge_off_peak_yen_per_kw: float = 0.0,
@@ -168,6 +185,7 @@ class ProblemBuilder:
                 horizon_start=self._min_hhmm(context),
                 horizon_end=self._max_hhmm(context),
                 timestep_min=30,
+                objective_mode=normalize_objective_mode(objective_mode),
                 diesel_price_yen_per_l=float(diesel_price_yen_per_l),
                 demand_charge_on_peak_yen_per_kw=float(demand_charge_on_peak_yen_per_kw),
                 demand_charge_off_peak_yen_per_kw=float(demand_charge_off_peak_yen_per_kw),
@@ -745,33 +763,25 @@ class ProblemBuilder:
     ) -> OptimizationObjectiveWeights:
         simulation_config = scenario.get("simulation_config") or {}
         overlay_solver = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
-        objective_weights = (
+        objective_mode = normalize_objective_mode(
+            simulation_config.get("objective_mode")
+            or overlay_solver.get("objective_mode")
+            or "total_cost"
+        )
+        explicit_weights = (
             simulation_config.get("objective_weights")
             or overlay_solver.get("objective_weights")
             or {}
         )
-        objective_mode = str(
-            simulation_config.get("objective_mode")
-            or overlay_solver.get("objective_mode")
-            or "total_cost"
-        ).strip().lower()
-        if not objective_weights:
-            if objective_mode == "co2":
-                objective_weights = {
-                    "electricity_cost": 0.0,
-                    "demand_charge_cost": 0.0,
-                    "vehicle_fixed_cost": 1.0,
-                    "unserved_penalty": float(overlay_solver.get("unserved_penalty") or 10000.0),
-                    "deviation_cost": 0.0,
-                }
-            else:
-                objective_weights = {
-                    "electricity_cost": 1.0,
-                    "demand_charge_cost": 1.0,
-                    "vehicle_fixed_cost": 1.0,
-                    "unserved_penalty": float(overlay_solver.get("unserved_penalty") or 10000.0),
-                    "deviation_cost": 0.0,
-                }
+        objective_weights = canonical_objective_weights_for_mode(
+            objective_mode=objective_mode,
+            unserved_penalty=float(
+                simulation_config.get("unserved_penalty")
+                or overlay_solver.get("unserved_penalty")
+                or 10000.0
+            ),
+            explicit_weights=explicit_weights if isinstance(explicit_weights, dict) else {},
+        )
         return OptimizationObjectiveWeights(
             energy=float(objective_weights.get("electricity_cost", 1.0)),
             demand=float(objective_weights.get("demand_charge_cost", 1.0)),

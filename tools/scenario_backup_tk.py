@@ -23,6 +23,7 @@ from tkinter.scrolledtext import ScrolledText
 from typing import Any
 from urllib import error, parse, request
 
+from src.objective_modes import normalize_objective_mode
 from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
@@ -468,6 +469,8 @@ class App:
         self.prepared_input_id = ""
         self.prepared_ready = False
         self.prepared_trip_count = 0
+        self.prepared_dirty_reason = ""
+        self.prepared_profile_name = ""
         self.last_job_id = ""
         self.vehicle_rows: list[dict[str, Any]] = []
         self.template_rows: list[dict[str, Any]] = []
@@ -500,10 +503,13 @@ class App:
         self.optimization_last_message = ""
         self.wait_until_finish_var = tk.BooleanVar(value=False)
         self.rebuild_dispatch_before_opt_var = tk.BooleanVar(value=False)
+        self.execution_mode_var: tk.StringVar | None = None
+        self._suspend_prepare_watchers = False
         self.compare_scenario_a_var = tk.StringVar(value="")
         self.compare_scenario_b_var = tk.StringVar(value="")
 
         self._build_ui()
+        self._register_prepare_dependency_watchers()
 
     def _build_ui(self) -> None:
         # ── レスポンシブウィンドウサイズ ──
@@ -571,9 +577,9 @@ class App:
         steps = [
             ("①", "シナリオ選択・作成", "#1a5276"),
             ("②", "左パネルで営業所・路線・日付を設定", "#1a5276"),
-            ("③", "中パネルでパラメータ確認 → 「設定保存」", "#1a5276"),
-            ("④", "「Prepare」で入力データ作成", "#117a65"),
-            ("⑤", "「最適化実行」でジョブ開始", "#117a65"),
+            ("③", "Quick Setup 保存 → ② ソルバー設定", "#1a5276"),
+            ("④", "③ Solver対応 Prepare を実行", "#117a65"),
+            ("⑤", "実行種別を選んで ④ 実行", "#117a65"),
             ("⑥", "「Optimization結果」で結果確認", "#6e2f6e"),
         ]
         guide_inner = ttk.Frame(guide)
@@ -686,23 +692,31 @@ class App:
         ops.pack(fill=tk.BOTH, expand=True)
 
         # ── アクションバー（スクロール外・常時表示）──
-        # 推奨フロー: シナリオ保存 → Prepare → 最適化実行
+        # 推奨フロー: シナリオ保存 → ソルバー設定 → Prepare → 実行
         action_bar = ttk.Frame(ops, relief="flat")
         action_bar.pack(fill=tk.X, pady=(0, 6))
 
         ttk.Label(
             action_bar,
-            text="① 保存  →  ② Prepare  →  ③ 最適化実行",
+            text="① 保存  →  ② ソルバー設定  →  ③ Solver対応 Prepare  →  ④ 実行",
             foreground="#1a5276",
             font=("TkDefaultFont", 9, "bold"),
         ).pack(anchor="w", pady=(0, 4))
 
         btn_row = ttk.Frame(action_bar)
         btn_row.pack(fill=tk.X)
-        ttk.Button(btn_row, text="① 入力データ作成 (Prepare)", command=self.prepare).pack(side=tk.LEFT, padx=(0, 4))
-        ttk.Button(btn_row, text="③ 最適化実行", command=self.run_optimization).pack(side=tk.LEFT, padx=4)
-        ttk.Button(btn_row, text="Prepared実行", command=self.run_prepared).pack(side=tk.LEFT, padx=4)
-        ttk.Button(btn_row, text="再最適化", command=self.run_reoptimize).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_row, text="② ソルバー設定", command=self.open_solver_settings_window).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(btn_row, text="③ Solver対応 Prepare", command=self.prepare).pack(side=tk.LEFT, padx=4)
+        self.execution_mode_var = tk.StringVar(value="最適化計算")
+        ttk.Label(btn_row, text="④ 実行種別").pack(side=tk.LEFT, padx=(12, 4))
+        ttk.Combobox(
+            btn_row,
+            state="readonly",
+            textvariable=self.execution_mode_var,
+            values=["最適化計算", "Preparedシミュレーション", "再最適化"],
+            width=20,
+        ).pack(side=tk.LEFT)
+        ttk.Button(btn_row, text="④ 実行", command=self.run_selected_execution).pack(side=tk.LEFT, padx=4)
 
         self.prepared_var = tk.StringVar(value="prepared_input_id: -")
         self.job_var = tk.StringVar(value="job: -")
@@ -710,6 +724,7 @@ class App:
         status_row.pack(fill=tk.X, pady=(4, 0))
         ttk.Label(status_row, textvariable=self.prepared_var, foreground="#555").pack(side=tk.LEFT)
         ttk.Label(status_row, textvariable=self.job_var, foreground="#555").pack(side=tk.LEFT, padx=12)
+        self._update_prepared_status_label()
 
         result_row = ttk.Frame(action_bar)
         result_row.pack(fill=tk.X, pady=(4, 0))
@@ -789,8 +804,8 @@ class App:
 
         settings_box = ttk.LabelFrame(ops, text="ソルバー詳細設定", padding=6)
         settings_box.pack(fill=tk.X, pady=(0, 4))
-        ttk.Label(settings_box, text="MILP時間制限・ALNS反復数などは別画面で設定します。", foreground="#444").pack(anchor="w")
-        ttk.Button(settings_box, text="詳細設定画面を開く", command=self.open_solver_settings_window).pack(anchor="w", pady=(4, 0))
+        ttk.Label(settings_box, text="手順②でソルバー種別・時間上限・反復回数を先に確定してください。", foreground="#444").pack(anchor="w")
+        ttk.Button(settings_box, text="② ソルバー設定を開く", command=self.open_solver_settings_window).pack(anchor="w", pady=(4, 0))
 
         # ── ジョブ監視 ──
         job_row = ttk.Frame(ops)
@@ -1211,6 +1226,7 @@ class App:
         else:
             self.scope_selected_depot_ids.clear()
             self.scope_selected_route_ids.clear()
+        self._mark_prepared_stale("営業所・路線の一括選択を変更")
         self._render_scope_checklist()
 
     def _set_all_depots_open(self, is_open: bool) -> None:
@@ -1232,6 +1248,7 @@ class App:
             for route_id in route_ids:
                 self.scope_selected_route_ids.discard(route_id)
         self._sync_depot_selection_from_routes()
+        self._mark_prepared_stale("営業所選択を変更")
         self._render_scope_checklist()
 
     def _on_toggle_route(self, depot_id: str, route_id: str) -> None:
@@ -1241,6 +1258,7 @@ class App:
         else:
             self.scope_selected_route_ids.discard(route_id)
         self._sync_depot_selection_from_routes()
+        self._mark_prepared_stale("路線選択を変更")
         self._render_scope_checklist()
 
     def _on_toggle_family(self, depot_id: str, family_key: str) -> None:
@@ -1251,6 +1269,7 @@ class App:
             else:
                 self.scope_selected_route_ids.discard(route_id)
         self._sync_depot_selection_from_routes()
+        self._mark_prepared_stale("系統選択を変更")
         self._render_scope_checklist()
 
     def _bind_canvas_mousewheel(self, canvas: tk.Canvas, widget: tk.Widget) -> None:
@@ -2045,6 +2064,7 @@ class App:
         scenario_id = self._selected_scenario_id()
         if not scenario_id:
             return
+        self._clear_prepared_state()
         self.load_quick_setup()
         if self._fleet_window_ready():
             self.refresh_templates()
@@ -2137,6 +2157,7 @@ class App:
             selected_depots = set(resp.get("selectedDepotIds") or [])
             selected_routes = set(resp.get("selectedRouteIds") or [])
             dispatch_scope = dict(resp.get("dispatchScope") or {})
+            self._suspend_prepare_watchers = True
             self._set_day_type_options_from_payload(
                 list(resp.get("availableDayTypes") or [])
             )
@@ -2162,7 +2183,9 @@ class App:
             self._set_day_type_value(str(dispatch_scope.get("dayType") or "WEEKDAY"))
             self.service_date_var.set(str(sim.get("serviceDate") or ""))
             self.solver_mode_var.set(str(solver.get("solverMode") or "hybrid"))
-            self.objective_mode_var.set(str(solver.get("objectiveMode") or "total_cost"))
+            self.objective_mode_var.set(
+                normalize_objective_mode(solver.get("objectiveMode") or "total_cost")
+            )
             self.time_limit_var.set(str(solver.get("timeLimitSeconds") or 300))
             self.mip_gap_var.set(str(solver.get("mipGap") if solver.get("mipGap") is not None else 0.01))
             self.alns_iter_var.set(str(solver.get("alnsIterations") or 500))
@@ -2177,6 +2200,7 @@ class App:
             self.ice_co2_kg_per_l_var.set(str(sim.get("iceCo2KgPerL") or 2.64))
             self.degradation_weight_var.set(str(sim.get("degradationWeight") or 0))
             self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
+            self._suspend_prepare_watchers = False
 
             self._refresh_depot_dropdowns(depots)
             self.log_line(
@@ -2231,7 +2255,10 @@ class App:
         }
         self.run_bg(
             lambda: self.client.put_quick_setup(scenario_id, payload),
-            lambda _resp: self.log_line("Quick Setup を保存しました"),
+            lambda _resp: (
+                self.log_line("Quick Setup を保存しました"),
+                self._mark_prepared_stale("Quick Setup 保存後のため再Prepareが必要です", announce=True),
+            ),
         )
 
     def refresh_vehicles(self) -> None:
@@ -2992,10 +3019,20 @@ class App:
             self.prepared_input_id = str(resp.get("preparedInputId") or "")
             self.prepared_ready = bool(resp.get("ready"))
             self.prepared_trip_count = int(resp.get("tripCount") or 0)
-            self.prepared_var.set(f"prepared_input_id: {self.prepared_input_id or '-'}")
+            prepare_profile = dict(resp.get("prepareProfile") or {})
+            self.prepared_dirty_reason = ""
+            self.prepared_profile_name = str(prepare_profile.get("profile") or "")
+            self._update_prepared_status_label()
             self.log_line(
                 f"Prepare完了: ready={resp.get('ready')} / tripCount={resp.get('tripCount')} / primaryDepot={resp.get('primaryDepotId')}"
             )
+            self.log_line(
+                "Prepare solver profile: "
+                f"requested={resp.get('solverModeRequested')} / "
+                f"effective={resp.get('solverModeEffective')} / "
+                f"profile={prepare_profile.get('profile')}"
+            )
+            self.log_line(f"Prepare objective mode: {resp.get('objectiveMode') or self.objective_mode_var.get().strip()}")
             self.log_line(
                 f"Prepare採用台数: vehicles={resp.get('vehicleCount', '-')} / chargers={resp.get('chargerCount', '-')}"
             )
@@ -3022,38 +3059,260 @@ class App:
         self.manual_job_id_var.set(self.last_job_id)
         self.log_line(f"{label}: {self.last_job_id}")
 
-    def run_prepared(self) -> None:
-        scenario_id = self._selected_scenario_id()
-        if not scenario_id or not self.prepared_input_id:
-            messagebox.showwarning("入力不足", "先に Prepare を実行してください")
-            return
-        if not self.prepared_ready or self.prepared_trip_count <= 0:
-            messagebox.showwarning("Prepare未完了", "tripCount=0 のため Prepared実行できません。選択 route / day type を確認してください。")
-            return
-        self.log_line("Prepared実行を開始します")
-        messagebox.showinfo("実行開始", "Prepared実行を開始します")
-        self.run_bg(
-            lambda: self.client.run_prepared_simulation(scenario_id, self.prepared_input_id),
-            lambda resp: (
-                self._set_job_from_resp(resp, "Prepared実行ジョブ開始"),
-                messagebox.showinfo("Prepared実行", f"ジョブ開始: {self.last_job_id or '-'}"),
-            ),
-        )
-
-    def run_optimization(self) -> None:
+    def _ensure_prepared_before_execution(self, action_label: str) -> str | None:
         scenario_id = self._selected_scenario_id()
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
-            return
+            return None
         if not self.prepared_input_id:
-            self.log_line("推奨: 最適化実行前に『入力データ作成(Prepare)』を実行してください")
-        self.open_optimization_window()
+            messagebox.showwarning("Prepare未実行", "先に Solver対応 Prepare を実行してください")
+            return None
+        if not self.prepared_ready or self.prepared_trip_count <= 0:
+            reason = self.prepared_dirty_reason or "tripCount=0 または stale な prepared_input_id です。"
+            messagebox.showwarning(
+                "Prepare未完了",
+                f"{action_label} の前に Prepare をやり直してください。\n{reason}",
+            )
+            return None
+        return scenario_id
+
+    def _ensure_execution_window(self, title: str) -> None:
+        scenario_id = self._selected_scenario_id() or "-"
+        if self.optimization_window and self.optimization_window.winfo_exists():
+            self.optimization_window.title(title)
+            self.optimization_window.lift()
+            return
+
+        win = tk.Toplevel(self.root)
+        self.optimization_window = win
+        win.title(title)
+        win.geometry("900x600")
+
+        top = ttk.Frame(win, padding=10)
+        top.pack(fill=tk.X)
+        ttk.Label(top, text=f"シナリオ: {scenario_id}", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        ttk.Label(top, text="実行すると進捗とメッセージが下のコンソールに表示されます。", foreground="#444").pack(anchor="w", pady=(2, 6))
+
+        status_row = ttk.Frame(top)
+        status_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(status_row, text="進捗", width=8).pack(side=tk.LEFT)
+        progress = ttk.Progressbar(status_row, mode="determinate", maximum=100, variable=self.optimization_progress_var)
+        progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(status_row, textvariable=self.optimization_status_var, width=18).pack(side=tk.LEFT, padx=(8, 0))
+
+        console_frame = ttk.LabelFrame(win, text="実行ログ (PowerShell風)", padding=8)
+        console_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+        self.optimization_console = ScrolledText(console_frame, height=20, bg="#111", fg="#d8ffd8", insertbackground="#d8ffd8")
+        self.optimization_console.pack(fill=tk.BOTH, expand=True)
+
+        btns = ttk.Frame(win, padding=(10, 0, 10, 10))
+        btns.pack(fill=tk.X)
+        ttk.Button(btns, text="閉じる", command=win.destroy).pack(side=tk.RIGHT, padx=6)
+
+        def on_close() -> None:
+            self.optimization_polling = False
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", on_close)
+
+    def _submit_execution_job(
+        self,
+        *,
+        window_title: str,
+        action_label: str,
+        payload: dict[str, Any] | None,
+        request_action,
+    ) -> None:
+        self._ensure_execution_window(window_title)
+        self.optimization_progress_var.set(0.0)
+        self.optimization_status_var.set("送信中")
+        self.optimization_last_message = ""
+        self._optimization_console_log(f"{action_label}を開始します")
+        if payload is not None:
+            self._optimization_console_log("payload=" + json.dumps(payload, ensure_ascii=False))
+        self.log_line(f"{action_label}を開始します")
+
+        def done(resp: dict[str, Any]) -> None:
+            self._set_job_from_resp(resp, f"{action_label}ジョブ開始")
+            self.optimization_job_id = self.last_job_id
+            self.optimization_status_var.set("実行中")
+            self._optimization_console_log(f"ジョブ開始: {self.optimization_job_id}")
+            self._start_optimization_polling(action_label)
+
+        self.run_bg(request_action, done)
+
+    def run_selected_execution(self) -> None:
+        action_kind = self._execution_mode_kind()
+        if action_kind == "prepared_simulation":
+            scenario_id = self._ensure_prepared_before_execution("Preparedシミュレーション")
+            if not scenario_id:
+                return
+            payload = {
+                "prepared_input_id": self.prepared_input_id,
+                "source": "duties",
+            }
+            self._submit_execution_job(
+                window_title="Preparedシミュレーションモニター",
+                action_label="Preparedシミュレーション",
+                payload=payload,
+                request_action=lambda: self.client.run_prepared_simulation(
+                    scenario_id,
+                    self.prepared_input_id,
+                ),
+            )
+            return
+
+        if action_kind == "reoptimization":
+            scenario_id = self._ensure_prepared_before_execution("再最適化")
+            if not scenario_id:
+                return
+            depots = self._selected_depot_ids()
+            payload = {
+                "mode": self.solver_mode_var.get().strip(),
+                "prepared_input_id": self.prepared_input_id,
+                "current_time": datetime.now().strftime("%H:%M"),
+                "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
+                "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
+                "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
+                "service_id": self.day_type_var.get().strip() or None,
+                "depot_id": depots[0] if depots else None,
+            }
+            self._submit_execution_job(
+                window_title="再最適化モニター",
+                action_label="再最適化",
+                payload=payload,
+                request_action=lambda: self.client.reoptimize(scenario_id, payload),
+            )
+            return
+
+        scenario_id = self._ensure_prepared_before_execution("最適化計算")
+        if not scenario_id:
+            return
+        depots = self._selected_depot_ids()
+        effective_time_limit = self._effective_optimization_time_limit_seconds()
+        payload = {
+            "mode": self.solver_mode_var.get().strip(),
+            "prepared_input_id": self.prepared_input_id,
+            "time_limit_seconds": effective_time_limit,
+            "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
+            "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
+            "service_id": self.day_type_var.get().strip() or None,
+            "depot_id": depots[0] if depots else None,
+            "rebuild_dispatch": bool(self.rebuild_dispatch_before_opt_var.get()),
+        }
+        if payload["mode"] == "mode_milp_only" and self.prepared_trip_count >= 2000:
+            continue_run = messagebox.askyesno(
+                "大規模MILP警告",
+                "現在のスコープは大規模です。\n"
+                f"tripCount={self.prepared_trip_count} / solver=mode_milp_only\n\n"
+                "exact MILP は非常に長くなる可能性があります。\n"
+                "通常は hybrid または mode_alns_only を推奨します。\n"
+                "そのまま実行しますか？",
+            )
+            if not continue_run:
+                self.log_line("大規模MILP警告により実行を中止しました")
+                return
+        if self.wait_until_finish_var.get():
+            self.log_line("終了まで待機モードで実行します")
+        if not self.rebuild_dispatch_before_opt_var.get():
+            self.log_line("軽量化: prepared scope を直接使い、dispatch再構築は省略します")
+        self._submit_execution_job(
+            window_title="最適化実行モニター",
+            action_label="最適化計算",
+            payload=payload,
+            request_action=lambda: self.client.run_optimization(scenario_id, payload),
+        )
+
+    def run_prepared(self) -> None:
+        if self.execution_mode_var is not None:
+            self.execution_mode_var.set("Preparedシミュレーション")
+        self.run_selected_execution()
+
+    def run_optimization(self) -> None:
+        if self.execution_mode_var is not None:
+            self.execution_mode_var.set("最適化計算")
+        self.run_selected_execution()
 
     def _effective_optimization_time_limit_seconds(self) -> int:
         if self.wait_until_finish_var.get():
             # Practically-unbounded wait for large scenarios.
             return 60 * 60 * 24 * 7
         return self._parse_int(self.time_limit_var.get(), 300)
+
+    def _execution_mode_kind(self) -> str:
+        raw = str((self.execution_mode_var.get() if self.execution_mode_var else "") or "").strip()
+        mapping = {
+            "最適化計算": "optimization",
+            "Preparedシミュレーション": "prepared_simulation",
+            "再最適化": "reoptimization",
+        }
+        return mapping.get(raw, "optimization")
+
+    def _update_prepared_status_label(self) -> None:
+        if not hasattr(self, "prepared_var"):
+            return
+        base = self.prepared_input_id or "-"
+        suffix = ""
+        if self.prepared_profile_name:
+            suffix += f" [{self.prepared_profile_name}]"
+        if self.prepared_dirty_reason:
+            suffix += f" [stale: {self.prepared_dirty_reason}]"
+        self.prepared_var.set(f"prepared_input_id: {base}{suffix}")
+
+    def _mark_prepared_stale(self, reason: str, *, clear_id: bool = False, announce: bool = False) -> None:
+        if self._suspend_prepare_watchers:
+            return
+        if clear_id:
+            self.prepared_input_id = ""
+            self.prepared_trip_count = 0
+            self.prepared_profile_name = ""
+        if not self.prepared_input_id and not self.prepared_ready:
+            self.prepared_dirty_reason = ""
+            self._update_prepared_status_label()
+            return
+        self.prepared_ready = False
+        self.prepared_dirty_reason = reason
+        self._update_prepared_status_label()
+        if announce:
+            self.log_line(f"Prepare を再実行してください: {reason}")
+
+    def _clear_prepared_state(self) -> None:
+        self.prepared_input_id = ""
+        self.prepared_ready = False
+        self.prepared_trip_count = 0
+        self.prepared_dirty_reason = ""
+        self.prepared_profile_name = ""
+        self._update_prepared_status_label()
+
+    def _register_prepare_dependency_watchers(self) -> None:
+        watched_pairs = [
+            (self.day_type_var, "運行種別を変更"),
+            (self.service_date_var, "運行日を変更"),
+            (self.include_short_turn_var, "区間便設定を変更"),
+            (self.include_depot_moves_var, "入出庫便設定を変更"),
+            (self.include_deadhead_var, "回送設定を変更"),
+            (self.allow_intra_var, "営業所内トレード設定を変更"),
+            (self.allow_inter_var, "営業所間トレード設定を変更"),
+            (self.solver_mode_var, "ソルバー種別を変更"),
+            (self.objective_mode_var, "目的関数モードを変更"),
+            (self.allow_partial_service_var, "未配車許容設定を変更"),
+            (self.initial_soc_var, "SOC初期値を変更"),
+            (self.soc_min_var, "SOC下限を変更"),
+            (self.soc_max_var, "SOC上限を変更"),
+            (self.charger_power_var, "充電器出力を変更"),
+            (self.unserved_penalty_var, "未配車ペナルティを変更"),
+            (self.grid_flat_price_var, "電気料金を変更"),
+            (self.grid_sell_price_var, "売電単価を変更"),
+            (self.demand_charge_var, "需要料金を変更"),
+            (self.diesel_price_var, "軽油単価を変更"),
+            (self.grid_co2_var, "CO2原単位を変更"),
+            (self.co2_price_var, "CO2単価を変更"),
+            (self.ice_co2_kg_per_l_var, "軽油CO2係数を変更"),
+            (self.degradation_weight_var, "劣化重みを変更"),
+            (self.depot_power_limit_var, "営業所契約電力を変更"),
+        ]
+        for variable, reason in watched_pairs:
+            variable.trace_add("write", lambda *_args, r=reason: self._mark_prepared_stale(r))
 
     def _extract_job_progress_percent(self, job: dict[str, Any]) -> float:
         raw = job.get("progress")
@@ -3078,90 +3337,7 @@ class App:
         self.optimization_console.insert(tk.END, f"[{stamp}] {text}\n")
         self.optimization_console.see(tk.END)
 
-    def open_optimization_window(self) -> None:
-        scenario_id = self._selected_scenario_id()
-        if not scenario_id:
-            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
-            return
-
-        if self.optimization_window and self.optimization_window.winfo_exists():
-            self.optimization_window.lift()
-            return
-
-        win = tk.Toplevel(self.root)
-        self.optimization_window = win
-        win.title("最適化実行モニター")
-        win.geometry("900x600")
-
-        top = ttk.Frame(win, padding=10)
-        top.pack(fill=tk.X)
-        ttk.Label(top, text=f"シナリオ: {scenario_id}", font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        ttk.Label(top, text="最適化を開始すると進捗とメッセージが下のコンソールに表示されます。", foreground="#444").pack(anchor="w", pady=(2, 6))
-
-        status_row = ttk.Frame(top)
-        status_row.pack(fill=tk.X, pady=(0, 4))
-        ttk.Label(status_row, text="進捗", width=8).pack(side=tk.LEFT)
-        progress = ttk.Progressbar(status_row, mode="determinate", maximum=100, variable=self.optimization_progress_var)
-        progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Label(status_row, textvariable=self.optimization_status_var, width=18).pack(side=tk.LEFT, padx=(8, 0))
-
-        console_frame = ttk.LabelFrame(win, text="実行ログ (PowerShell風)", padding=8)
-        console_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
-        self.optimization_console = ScrolledText(console_frame, height=20, bg="#111", fg="#d8ffd8", insertbackground="#d8ffd8")
-        self.optimization_console.pack(fill=tk.BOTH, expand=True)
-
-        btns = ttk.Frame(win, padding=(10, 0, 10, 10))
-        btns.pack(fill=tk.X)
-
-        def start_optimization() -> None:
-            if not self.prepared_ready or self.prepared_trip_count <= 0:
-                messagebox.showwarning(
-                    "Prepare未完了",
-                    "tripCount=0 のため最適化を開始できません。先に Prepare を成功させてください。",
-                )
-                return
-            depots = self._selected_depot_ids()
-            effective_time_limit = self._effective_optimization_time_limit_seconds()
-            payload = {
-                "mode": self.solver_mode_var.get().strip(),
-                "time_limit_seconds": effective_time_limit,
-                "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
-                "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
-                "service_id": self.day_type_var.get().strip() or None,
-                "depot_id": depots[0] if depots else None,
-                "rebuild_dispatch": bool(self.rebuild_dispatch_before_opt_var.get()),
-            }
-            self.optimization_progress_var.set(0.0)
-            self.optimization_status_var.set("送信中")
-            self.optimization_last_message = ""
-            self._optimization_console_log("最適化計算を開始します")
-            if self.wait_until_finish_var.get():
-                self._optimization_console_log("モード: 終了まで待機 (time_limit_seconds=604800)")
-            if not self.rebuild_dispatch_before_opt_var.get():
-                self._optimization_console_log("軽量化: dispatch再構築をスキップして開始")
-            self._optimization_console_log("payload=" + json.dumps(payload, ensure_ascii=False))
-            self.log_line("最適化計算を開始します（専用画面）")
-            messagebox.showinfo("最適化実行", "最適化計算を開始します。進捗は専用画面で確認できます。")
-
-            def done(resp: dict[str, Any]) -> None:
-                self._set_job_from_resp(resp, "最適化ジョブ開始")
-                self.optimization_job_id = self.last_job_id
-                self.optimization_status_var.set("実行中")
-                self._optimization_console_log(f"ジョブ開始: {self.optimization_job_id}")
-                self._start_optimization_polling()
-
-            self.run_bg(lambda: self.client.run_optimization(scenario_id, payload), done)
-
-        ttk.Button(btns, text="最適化開始", command=start_optimization).pack(side=tk.RIGHT)
-        ttk.Button(btns, text="閉じる", command=win.destroy).pack(side=tk.RIGHT, padx=6)
-
-        def on_close() -> None:
-            self.optimization_polling = False
-            win.destroy()
-
-        win.protocol("WM_DELETE_WINDOW", on_close)
-
-    def _start_optimization_polling(self) -> None:
+    def _start_optimization_polling(self, action_label: str) -> None:
         if not self.optimization_job_id:
             return
         self.optimization_polling = True
@@ -3185,13 +3361,27 @@ class App:
                 shown = status or "running"
                 self.optimization_status_var.set(shown)
                 self.job_var.set(f"job: {job_id} ({shown})")
-                self.log_line(f"最適化監視: status={shown} progress={progress:.1f}%")
+                self.log_line(f"実行監視: action={action_label} status={shown} progress={progress:.1f}%")
 
                 finished = status in {"completed", "failed", "error", "cancelled", "canceled"}
                 if finished:
                     self.optimization_polling = False
+                    error_text = str(job.get("error") or "").strip()
+                    if error_text:
+                        first_line = next(
+                            (line.strip() for line in error_text.splitlines() if line.strip()),
+                            error_text,
+                        )
+                        self._optimization_console_log("error=" + first_line)
                     self._optimization_console_log(f"ジョブ終了: status={shown}")
-                    messagebox.showinfo("最適化ジョブ", f"ジョブ終了: {shown}")
+                    if error_text:
+                        first_line = next(
+                            (line.strip() for line in error_text.splitlines() if line.strip()),
+                            error_text,
+                        )
+                        messagebox.showerror("実行ジョブ", f"{action_label} が失敗しました。\n{first_line}")
+                    else:
+                        messagebox.showinfo("実行ジョブ", f"{action_label} が完了しました。\nstatus={shown}")
                     return
                 if self.optimization_window and self.optimization_window.winfo_exists():
                     self.optimization_window.after(2000, tick)
@@ -3217,24 +3407,9 @@ class App:
         )
 
     def run_reoptimize(self) -> None:
-        scenario_id = self._selected_scenario_id()
-        if not scenario_id:
-            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
-            return
-        depots = self._selected_depot_ids()
-        payload = {
-            "mode": self.solver_mode_var.get().strip(),
-            "current_time": datetime.now().strftime("%H:%M"),
-            "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
-            "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
-            "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
-            "service_id": self.day_type_var.get().strip() or None,
-            "depot_id": depots[0] if depots else None,
-        }
-        self.run_bg(
-            lambda: self.client.reoptimize(scenario_id, payload),
-            lambda resp: self._set_job_from_resp(resp, "再最適化ジョブ開始"),
-        )
+        if self.execution_mode_var is not None:
+            self.execution_mode_var.set("再最適化")
+        self.run_selected_execution()
 
     def show_capabilities(self) -> None:
         scenario_id = self._selected_scenario_id()
@@ -3275,7 +3450,7 @@ class App:
         info.pack(fill=tk.X)
         ttk.Label(
             info,
-            text="ヒント: 車両台数・充電出力を設定したら、メイン画面で Prepare → 最適化実行 を行ってください。",
+            text="ヒント: 車両台数・充電出力を設定したら、メイン画面で Solver対応 Prepare → ④ 実行 を行ってください。",
             foreground="#1a5276",
         ).pack(anchor="w")
 
@@ -3362,18 +3537,19 @@ class App:
   - 運行種別（WEEKDAY/SATURDAY/HOLIDAYなど）と運行日を設定
   - 設定が決まったら「Quick Setup 保存」
 
-③ パラメータ設定（中パネル）
+③ ソルバー設定（中パネル）
   - 燃料単価・電気代・SOC上下限などを確認・変更
   - 詳細パラメータ（CO₂・劣化費）は下へスクロール
-  - 「詳細設定画面を開く」でソルバー種別・時間上限を設定
+  - 「② ソルバー設定」を押してソルバー種別・時間上限・反復回数を設定
+  - ソルバー設定を変えたら Prepare は stale になるため、次の手順で再作成します
 
-④ 入力データ作成（Prepare）
-  - 「① 入力データ作成 (Prepare)」をクリック
-  - prepared_input_id が表示されれば完了
+④ Solver対応 Prepare
+  - 「③ Solver対応 Prepare」をクリック
+  - prepared_input_id と solver profile が表示されれば完了
 
-⑤ 最適化実行
-  - 「③ 最適化実行」をクリック
-  - ジョブIDが表示され、進捗がログに流れます
+⑤ 実行
+  - 実行種別で「最適化計算 / Preparedシミュレーション / 再最適化」を選択
+  - 「④ 実行」をクリックするとモニターが開き、ジョブIDと進捗が表示されます
 
 ⑥ 結果確認
   - 「Optimization結果」ボタンで詳細ウィンドウが開きます
@@ -3400,16 +3576,19 @@ class App:
   depot_power_limit_kw     : 営業所の契約上限 [kW]（例: 500）
 
 ■ CO₂・劣化（詳細パラメータ）
-  co2_price_per_kg   : CO₂単価 [円/kg]（0 = CO₂費用無効）
+  co2_price_per_kg   : total_cost モード時の CO₂費単価 [円/kg]
   degradation_weight : 電池劣化コスト重み（0 = 劣化費用無効）
 
 ■ ペナルティ
   unserved_penalty   : 未配車便への罰則（大きいほど欠便を嫌う）
   slack_penalty      : 契約電力超過への罰則
 
-■ ソルバー（詳細設定画面）
+■ ソルバー（手順②）
   ソルバー種別 : mode_milp_only / hybrid / mode_alns_only / ga / abc
-  時間上限(秒) : MILP の最大計算時間（例: 300秒）
+  目的関数      : total_cost（コスト最小） / co2（CO₂排出最小）
+  時間上限(秒) : MILP / hybrid の最大計算時間（例: 300秒）
+  反復回数      : ALNS / GA / ABC の探索反復数
+  注意          : 目的関数やソルバー種別を変えたら手順③の Prepare をやり直す
 """)
 
         make_tab("トラブルシューティング", """\
@@ -3427,9 +3606,10 @@ class App:
 ■ HTTP 500 エラー
   → Prepare が完了していない可能性。Prepare を再実行
   → ログに詳細エラーが出ている場合は内容を確認
+  → 失敗時は実行モニターに error=... が表示されます
 
 ■ ジョブが終わらない
-  → 「詳細設定画面を開く」で時間上限（time_limit_seconds）を短縮
+  → 「② ソルバー設定」で時間上限（time_limit_seconds）を短縮
   → ソルバー種別を mode_alns_only や hybrid に変更
 
 ■ objective_value が None
@@ -3449,7 +3629,7 @@ class App:
 
         ttk.Label(
             win,
-            text="旧Advancedメニューとソルバー設定をこの画面に集約しています。",
+            text="手順②の設定画面です。ここを変更したら手順③の Prepare をやり直してください。",
             foreground="#444",
         ).pack(anchor="w", padx=10, pady=(10, 2))
 
@@ -3474,7 +3654,17 @@ class App:
         row_obj = ttk.Frame(solver_box)
         row_obj.pack(fill=tk.X, pady=3)
         ttk.Label(row_obj, text="目的関数モード", width=24).pack(side=tk.LEFT)
-        ttk.Entry(row_obj, textvariable=self.objective_mode_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Combobox(
+            row_obj,
+            textvariable=self.objective_mode_var,
+            state="readonly",
+            values=["total_cost", "co2"],
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(
+            solver_box,
+            text="total_cost = コスト最小 / co2 = CO2排出最小",
+            foreground="#555",
+        ).pack(anchor="w")
 
         row_tl = ttk.Frame(solver_box)
         row_tl.pack(fill=tk.X, pady=3)

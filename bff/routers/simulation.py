@@ -36,7 +36,12 @@ from bff.routers.graph import (
 )
 from bff.services.experiment_reports import log_simulation_experiment
 from bff.services.simulation_builder import apply_builder_configuration as _apply_builder_configuration
-from bff.services.run_preparation import get_or_build_run_preparation
+from bff.services.run_preparation import (
+    get_or_build_run_preparation,
+    load_prepared_input,
+    materialize_scenario_from_prepared_input,
+    solver_prepare_profile,
+)
 from bff.store import job_store, scenario_store as store
 from src.milp_model import MILPResult
 from src.pipeline.simulate import simulate_problem_data
@@ -377,6 +382,33 @@ def _ensure_dispatch_artifacts(
         )
 
 
+def _sync_prepared_scope_artifacts(
+    scenario_id: str,
+    prepared_scenario: Dict[str, Any],
+) -> None:
+    prepared_trips = list(prepared_scenario.get("trips") or [])
+    prepared_timetable_rows = list(
+        prepared_scenario.get("timetable_rows")
+        or prepared_trips
+    )
+    prepared_stops = list(prepared_scenario.get("stops") or [])
+    prepared_stop_timetables = list(prepared_scenario.get("stop_timetables") or [])
+    if prepared_trips:
+        store.set_field(scenario_id, "trips", prepared_trips)
+    if prepared_timetable_rows:
+        store.set_field(scenario_id, "timetable_rows", prepared_timetable_rows)
+    if prepared_stops:
+        store.set_field(scenario_id, "stops", prepared_stops)
+    if prepared_stop_timetables:
+        store.set_field(scenario_id, "stop_timetables", prepared_stop_timetables)
+    # Prepared scope changed; stale dispatch artifacts must be rebuilt against
+    # the synced prepared trips before a prepared simulation can run.
+    store.set_field(scenario_id, "graph", {})
+    store.set_field(scenario_id, "duties", [])
+    store.set_field(scenario_id, "blocks", [])
+    store.set_field(scenario_id, "dispatch_plan", {})
+
+
 def _result_from_duties(data, duties_raw: list[dict]) -> MILPResult:
     task_lut = {task.task_id: task for task in data.tasks}
     vehicles_by_type: Dict[str, list] = {}
@@ -453,6 +485,7 @@ def _result_from_duties(data, duties_raw: list[dict]) -> MILPResult:
 def _run_simulation(
     scenario_id: str,
     job_id: str,
+    prepared_input_id: str,
     service_id: str,
     depot_id: Optional[str],
     source: str,
@@ -464,8 +497,16 @@ def _run_simulation(
         if not depot_id:
             raise ValueError("No depot selected. Configure dispatch scope first.")
 
+        scenario = materialize_scenario_from_prepared_input(
+            store.get_scenario_document_shallow(scenario_id),
+            load_prepared_input(
+                scenario_id=scenario_id,
+                prepared_input_id=prepared_input_id,
+                scenarios_dir=_prepared_inputs_root(),
+            ),
+        )
+        _sync_prepared_scope_artifacts(scenario_id, scenario)
         _ensure_dispatch_artifacts(scenario_id, service_id, depot_id)
-        scenario = store._load(scenario_id)
         feed_context = _scenario_feed_context(scenario_id)
         output_dir = _scoped_output_dir(
             root="outputs",
@@ -481,7 +522,7 @@ def _run_simulation(
             service_id=service_id,
             mode="mode_milp_only",
             use_existing_duties=True,
-            analysis_scope=store.get_dispatch_scope(scenario_id),
+            analysis_scope=scenario.get("dispatch_scope") or store.get_dispatch_scope(scenario_id),
         )
         store.set_field(scenario_id, "problemdata_build_audit", build_report.to_dict())
 
@@ -688,6 +729,7 @@ def prepare_simulation(
     warnings = list(prep.warnings)
     if not prep.scope_summary.get("primary_depot_id"):
         warnings.append("A primary depot is required before simulation can run.")
+    prepare_profile = solver_prepare_profile(body.simulation_settings.solver_mode)
     vehicle_count = len(scenario_doc.get("vehicles") or [])
     charger_count = len(scenario_doc.get("chargers") or [])
     return {
@@ -703,6 +745,10 @@ def prepare_simulation(
         "primaryDepotId": prep.scope_summary.get("primary_depot_id"),
         "serviceIds": prep.scope_summary.get("service_ids") or [],
         "serviceDate": prep.scope_summary.get("service_date"),
+        "solverModeRequested": body.simulation_settings.solver_mode,
+        "solverModeEffective": prepare_profile.get("solver_mode_effective"),
+        "objectiveMode": body.simulation_settings.objective_mode,
+        "prepareProfile": prepare_profile,
         "warnings": warnings,
         "scopeSummary": prep.scope_summary,
     }
@@ -767,6 +813,7 @@ def run_prepared_simulation(
         args=(
             scenario_id,
             job.job_id,
+            body.prepared_input_id,
             scope.get("serviceId") or service_id,
             scope.get("depotId"),
             body.source,

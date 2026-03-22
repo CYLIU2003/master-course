@@ -38,6 +38,10 @@ from bff.services import research_catalog
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
+from src.objective_modes import (
+    legacy_objective_weights_for_mode,
+    normalize_objective_mode,
+)
 from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
@@ -717,7 +721,11 @@ def _builder_defaults(
             or 90
         ),
         "solverMode": overlay_solver.get("mode") or "mode_milp_only",
-        "objectiveMode": overlay_solver.get("objective_mode") or simulation_config.get("objective_mode") or "total_cost",
+        "objectiveMode": normalize_objective_mode(
+            overlay_solver.get("objective_mode")
+            or simulation_config.get("objective_mode")
+            or "total_cost"
+        ),
         "allowPartialService": bool(
             overlay_solver.get(
                 "allow_partial_service",
@@ -738,7 +746,10 @@ def _builder_defaults(
         "co2PricePerKg": overlay_cost.get("co2_price_per_kg"),
         "iceCo2KgPerL": overlay_cost.get("ice_co2_kg_per_l"),
         "depotPowerLimitKw": overlay_charging.get("depot_power_limit_kw"),
-        "degradationWeight": (overlay_solver.get("objective_weights") or {}).get("degradation"),
+        "degradationWeight": (
+            (overlay_solver.get("objective_weights") or {}).get("degradation")
+            or (overlay_solver.get("objective_weights") or {}).get("battery_degradation_cost")
+        ),
         "touPricing": list(overlay_cost.get("tou_pricing") or []),
         "fleetTemplates": fleet_templates,
         "timeLimitSeconds": int(overlay_solver.get("time_limit_seconds") or 300),
@@ -979,7 +990,9 @@ def _build_quick_setup_payload(
         "availableDayTypes": _available_day_types(doc, dispatch_scope),
         "solverSettings": {
             "solverMode": builder_defaults.get("solverMode") or "mode_milp_only",
-            "objectiveMode": builder_defaults.get("objectiveMode") or "total_cost",
+            "objectiveMode": normalize_objective_mode(
+                builder_defaults.get("objectiveMode") or "total_cost"
+            ),
             "timeLimitSeconds": int(builder_defaults.get("timeLimitSeconds") or 300),
             "mipGap": float(builder_defaults.get("mipGap") or 0.01),
             "alnsIterations": int(builder_defaults.get("alnsIterations") or 500),
@@ -1335,7 +1348,7 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         if body.solverMode is not None:
             solver_config["mode"] = body.solverMode
         if body.objectiveMode is not None:
-            solver_config["objective_mode"] = body.objectiveMode
+            solver_config["objective_mode"] = normalize_objective_mode(body.objectiveMode)
         if body.timeLimitSeconds is not None:
             solver_config["time_limit_seconds"] = int(body.timeLimitSeconds)
         if body.mipGap is not None:
@@ -1346,6 +1359,13 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["allow_partial_service"] = bool(body.allowPartialService)
         if body.unservedPenalty is not None:
             solver_config["unserved_penalty"] = float(body.unservedPenalty)
+        current_objective_mode = normalize_objective_mode(
+            solver_config.get("objective_mode") or "total_cost"
+        )
+        current_unserved_penalty = float(
+            solver_config.get("unserved_penalty") or 10000.0
+        )
+        saved_weights = dict(solver_config.get("objective_weights") or {})
 
         overlay_cost = dict(overlay.get("cost_coefficients") or {})
         if body.gridFlatPricePerKwh is not None:
@@ -1364,9 +1384,13 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             overlay_cost["ice_co2_kg_per_l"] = float(body.iceCo2KgPerL)
 
         if body.degradationWeight is not None:
-            obj_weights = dict(solver_config.get("objective_weights") or {})
-            obj_weights["degradation"] = float(body.degradationWeight)
-            solver_config["objective_weights"] = obj_weights
+            saved_weights["degradation"] = float(body.degradationWeight)
+        if solver_config:
+            solver_config["objective_weights"] = legacy_objective_weights_for_mode(
+                objective_mode=current_objective_mode,
+                unserved_penalty=current_unserved_penalty,
+                explicit_weights=saved_weights,
+            )
 
         overlay_charging = dict(overlay.get("charging_constraints") or {})
         if body.depotPowerLimitKw is not None:
@@ -1387,7 +1411,7 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         if body.serviceDate is not None:
             simulation_config["service_date"] = body.serviceDate
         if body.objectiveMode is not None:
-            simulation_config["objective_mode"] = body.objectiveMode
+            simulation_config["objective_mode"] = normalize_objective_mode(body.objectiveMode)
         if body.timeLimitSeconds is not None:
             simulation_config["time_limit_seconds"] = int(body.timeLimitSeconds)
         if body.mipGap is not None:

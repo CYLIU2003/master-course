@@ -15,6 +15,11 @@ from src.data_schema import (
     Vehicle,
 )
 from src.dispatch.problemdata_adapter import build_travel_connections_via_dispatch
+from src.objective_modes import (
+    effective_co2_price_per_kg,
+    legacy_objective_weights_for_mode,
+    normalize_objective_mode,
+)
 from src.preprocess.trip_converter import (
     build_vehicle_charger_compat,
     build_vehicle_task_compat,
@@ -305,60 +310,25 @@ def _slot_price_from_tou(
 def _objective_weights_from_scenario(scenario: Dict[str, Any]) -> Dict[str, float]:
     simulation_cfg = scenario.get("simulation_config") or {}
     overlay_solver = _scenario_overlay_solver(scenario)
-    objective_mode = str(
+    objective_mode = normalize_objective_mode(
         simulation_cfg.get("objective_mode")
         or overlay_solver.get("objective_mode")
         or "total_cost"
-    ).strip().lower()
+    )
     unserved_penalty = _safe_float(
         simulation_cfg.get("unserved_penalty", overlay_solver.get("unserved_penalty")),
         10000.0,
     )
-    if objective_mode == "co2":
-        weights: Dict[str, float] = {
-            "vehicle_fixed_cost": 1.0,
-            "electricity_cost": 0.0,
-            "demand_charge_cost": 0.0,
-            "fuel_cost": 0.0,
-            "deadhead_cost": 0.0,
-            "battery_degradation_cost": 0.0,
-            "emission_cost": 1.0,
-            "unserved_penalty": unserved_penalty,
-            "slack_penalty": 1000000.0,
-        }
-    elif objective_mode in {"balanced", "cost_co2_balanced", "multi_objective"}:
-        weights = {
-            "vehicle_fixed_cost": 1.0,
-            "electricity_cost": 1.0,
-            "demand_charge_cost": 1.0,
-            "fuel_cost": 1.0,
-            "deadhead_cost": 0.0,
-            "battery_degradation_cost": 0.0,
-            "emission_cost": 1.0,
-            "unserved_penalty": unserved_penalty,
-            "slack_penalty": 1000000.0,
-        }
-    else:
-        weights = {
-            "vehicle_fixed_cost": 1.0,
-            "electricity_cost": 1.0,
-            "demand_charge_cost": 1.0,
-            "fuel_cost": 1.0,
-            "deadhead_cost": 0.0,
-            "battery_degradation_cost": 0.0,
-            "emission_cost": 0.0,
-            "unserved_penalty": unserved_penalty,
-            "slack_penalty": 1000000.0,
-        }
     explicit_weights = (
         simulation_cfg.get("objective_weights")
         or overlay_solver.get("objective_weights")
         or {}
     )
-    if isinstance(explicit_weights, dict):
-        for key, value in explicit_weights.items():
-            weights[str(key)] = _safe_float(value, weights.get(str(key), 0.0))
-    return weights
+    return legacy_objective_weights_for_mode(
+        objective_mode=objective_mode,
+        unserved_penalty=unserved_penalty,
+        explicit_weights=explicit_weights if isinstance(explicit_weights, dict) else {},
+    )
 
 
 def _filter_rows_for_scope(
@@ -1122,7 +1092,15 @@ def build_problem_data_from_scenario(
         cost_cfg.get("demand_charge_cost_per_kw"),
         0.0,
     )
-    co2_price_per_kg = _safe_float(cost_cfg.get("co2_price_per_kg"), 1.0)
+    objective_mode = normalize_objective_mode(
+        simulation_cfg.get("objective_mode")
+        or solver_cfg.get("objective_mode")
+        or "total_cost"
+    )
+    co2_price_per_kg = effective_co2_price_per_kg(
+        objective_mode,
+        cost_cfg.get("co2_price_per_kg"),
+    )
 
     data = ProblemData(
         vehicles=vehicles,
@@ -1137,6 +1115,7 @@ def build_problem_data_from_scenario(
         allow_partial_service=allow_partial_service,
         enable_pv=bool(pv_profiles),
         enable_demand_charge=demand_charge_rate_per_kw > 0.0,
+        objective_mode=objective_mode,
         objective_weights=objective_weights,
         demand_charge_rate_per_kw=demand_charge_rate_per_kw,
         co2_price_per_kg=co2_price_per_kg,

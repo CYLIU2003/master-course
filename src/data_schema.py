@@ -211,6 +211,7 @@ class ProblemData:
     enable_battery_degradation: bool = True
     enable_demand_charge: bool = True
     use_soft_soc_constraint: bool = False
+    objective_mode: str = "total_cost"
 
     # --- 目的関数係数 (§9.2) ---
     objective_weights: Dict[str, float] = field(default_factory=lambda: {

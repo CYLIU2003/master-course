@@ -78,7 +78,8 @@ flowchart LR
 > - **C1 欠便制約**：「全便を必ず割り当てる」は絶対制約ではなく、欠便変数に大きな罰則を課す**罰則付き緩和**として実装しています（通常は欠便が抑止されますが、解なし状態の回避が目的です）。
 > - **C14 充電器制約**：「各充電器にどの車両が接続されているか」を厳密に追うのではなく、全充電器の合計容量（kW）の上限制約として実装しています。
 > - **C20/C21 ピーク判定**：tariff テーブルが設定されている場合はそれを優先しますが、未設定時は時間帯別価格の中央値で on/off を近似的に分類しています。
-> - **CO₂費・劣化費**：目的関数への組み込みは実装済みですが、デフォルト値は 0（無効）です。パラメータ（`co2_price_per_kg`・`degradation` 重み）に正の値を設定することで有効化されます。
+> - **目的関数モード**：`objectiveMode=total_cost` は従来のコスト最小、`objectiveMode=co2` は CO₂排出量最小です。`co2` モードでは `co2_price_per_kg=0` でも排出量そのものを最小化します。
+> - **CO₂費・劣化費**：`total_cost` モードでは、パラメータ（`co2_price_per_kg`・`degradation` 重み）に正の値を設定すると目的関数へ加算されます。
 
 実装本体：[`src/optimization/milp/solver_adapter.py`](src/optimization/milp/solver_adapter.py)
 研究仕様（目標定式化）：[`docs/constant/formulation.md`](docs/constant/formulation.md)
@@ -561,7 +562,7 @@ python tools/route_variant_labeler_tk.py
 7. 保存時は `refine + excludeRouteIds` として保存するため、同じ営業所の系統を基本全部含めつつ、特定 family の入出庫便だけ / 区間便だけ除外する設定を保持できる
 8. 路線は raw route を消さずに保持したまま、`routeFamilyCode` で同一系統として束ねる。Prepare / dispatch / 最適化では「選択 route のみ」を使って trip / timetable を読み込み、`origin_stop_id` / `destination_stop_id` と stop 座標から同一系統内の上り下り・本線・区間便・入出庫便の terminal 間 deadhead を自動補完する
 9. 既存シナリオを開いた直後に営業所や路線の選択が空なら、stale な保存選択が runtime 補正で外れた可能性があるため選び直す
-10. `Quick Setup 保存` → `入力データ作成 (Prepare)` → `Prepared実行` または `最適化実行` の順で進める
+10. `Quick Setup 保存` → `ソルバー設定` → `Solver対応 Prepare` → `実行` の順で進める。`実行` は `最適化計算` / `Preparedシミュレーション` / `再最適化` を切り替える
 
 ---
 
@@ -570,15 +571,16 @@ python tools/route_variant_labeler_tk.py
 1. シナリオ作成
 2. Quick Setup 読込
 3. 営業所と路線を選択
-4. パラメータを設定（費用・ソルバー・SOC 等）
+4. パラメータを設定（費用・SOC 等）
 5. **シナリオ設定を保存（Quick Setup 保存）**
-6. **`入力データ作成 (Prepare)` を実行**（← 必ず保存後に実行）
-7. Prepare ログで `tripCount` と車両台数・充電器台数を確認
-8. 最適化実行
-9. Job completed と Optimization 結果を確認
+6. **ソルバー詳細設定を確定** (`solverMode` / `objectiveMode=total_cost|co2`)
+7. **`Solver対応 Prepare` を実行**（← 保存後・ソルバー設定後に実行）
+8. Prepare ログで `tripCount` / `solver profile` / 車両台数・充電器台数を確認
+9. 実行種別を選んで `④ 実行`
+10. Job completed と Optimization / Simulation 結果を確認
 
-> **重要：** `保存` の直後に必ず `Prepare` を実行してください。
-> Prepare を飛ばすと、最新の営業所・路線・SOC 設定が最適化入力に反映されません。trip / timetable の route スコープ確定も Prepare で初めて行います。
+> **重要：** `保存` や `ソルバー設定` の変更後は必ず `Solver対応 Prepare` を実行してください。
+> Prepare を飛ばすと、最新の営業所・路線・SOC・solver mode / objective mode 設定が最適化入力に反映されません。trip / timetable の route スコープ確定も Prepare で初めて行います。
 
 > **既存シナリオの補正について：** 旧 `tokyu_dispatch_ready` ベースなど runtime 未整備 dataset のシナリオを開くと、
 > BFF は利用可能な runtime master（現行既定は `tokyu_full`）へ自動補正します。
@@ -588,7 +590,7 @@ python tools/route_variant_labeler_tk.py
 > 手入力は不要です。SOC 設定は `Cost / Tariff Parameters` で `initial_soc` / `soc_min` / `soc_max` を指定します。
 
 > **保存先について：** `Quick Setup 保存` では route/depot 選択を `dispatch_scope` と `scenario_overlay` の両方へ同期し、
-> Prepare / Prepared実行 / 最適化実行は `dispatch_scope` の現在選択を優先して使います。
+> `Solver対応 Prepare` は現在の route/depot/solver 設定から solver-specific prepared input を作成します。`④ 実行` はその prepared input を正本として使います。
 
 ---
 
@@ -661,7 +663,9 @@ python catalog_update_app.py refresh gtfs-pipeline `
 - Quick Setup の路線一覧は catalog-fast 上の全 route inventory を営業所配下で表示し、初期選択は保存済み `dispatch_scope` をそのまま復元します。Quick Setup では `linked` 件数を表示せず、trip/timetable の確認は Prepare で現在選択した route のみを対象に行います。
 - `Prepare` 後に `tripCount=0` の場合は、現行 built/runtime 上で「選択 route × dayType × service_date」に該当する trip がありません。Quick Setup と日種別を見直してください。
 - 補正後は、以前保存された営業所・路線が現在の runtime に存在しない場合に選択が外れます。`Quick Setup 読込` 後に営業所・路線・車両配置を再確認してください。
-- `Quick Setup 保存` 後は `dispatch_scope` と `scenario_overlay` の両方に選択 route/depot が同期され、Prepare/最適化/Prepared実行は現在の UI 選択を優先します。
+- `Quick Setup 保存` 後は `dispatch_scope` と `scenario_overlay` の両方に選択 route/depot が同期され、`Solver対応 Prepare` は現在の UI 選択と solver 設定から prepared input を再生成します。
+- `④ 実行` の `最適化計算` / `Preparedシミュレーション` / `再最適化` は、dispatch 再構築が不要な限り prepared input を直接使うため、従来より軽いフローです。
+- 大規模 scope の最適化入力では `TravelConnection` を feasible edge のみ保持する疎形式にしています。全 trip 対の O(n^2) 展開は行いません。
 
 ### 7.4 MILP 変数名の長さエラー
 
@@ -691,6 +695,9 @@ python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.s
 
 **ソルバー設定**
 `solverMode`, `objectiveMode`, `timeLimitSeconds`, `mipGap`, `alnsIterations`, `randomSeed`
+
+`solverMode` を変えた場合は prepared input が stale になるため、必ず `Solver対応 Prepare` をやり直してください。
+`objectiveMode` は現在 `total_cost` と `co2` の 2 種類です。`co2` は `co2_price_per_kg` が 0 でも CO₂排出量最小として解きます。
 
 **スコープ設定**
 `selectedDepotIds`, `selectedRouteIds`, `dayType`, `service_id`, `service_date`,
