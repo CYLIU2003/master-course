@@ -18,7 +18,8 @@
       "Bash(python scripts/rebuild_built_from_normalized.py)",
       "Bash(grep -rn \"lru_cache\\\\|cache_clear\\\\|reload_state\" bff/services/*.py bff/routers/*.py)",
       "Bash(find /c/master-course -name main.py -o -name README.md -o -name .env*)",
-      "Bash(ls -la /c/master-course/*.py)"
+      "Bash(ls -la /c/master-course/*.py)",
+      "Bash(python3 -c \":*)"
     ]
   }
 }
