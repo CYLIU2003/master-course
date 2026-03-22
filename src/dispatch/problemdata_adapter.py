@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass
 
 from src.data_schema import ProblemData, TravelConnection
+from src.route_family_runtime import DeadheadMetric
 
 from .models import DeadheadRule, DispatchContext, Trip, TurnaroundRule, VehicleProfile
 from .pipeline import TimetableDispatchPipeline
@@ -112,6 +113,11 @@ def _build_dispatch_context_from_problem_data(
                 allowed_vehicle_types=_allowed_vehicle_types(
                     task.required_vehicle_type
                 ),
+                origin_stop_id=str(getattr(task, "origin_stop_id", None) or ""),
+                destination_stop_id=str(getattr(task, "destination_stop_id", None) or ""),
+                route_family_code=str(getattr(task, "route_family_code", None) or ""),
+                direction=str(getattr(task, "direction", None) or ""),
+                route_variant_type=str(getattr(task, "route_variant_type", None) or ""),
             )
         )
 
@@ -146,6 +152,7 @@ def build_travel_connections_via_dispatch(
     default_turnaround_min: int = 10,
     turnaround_rules: dict[str, int] | None = None,
     deadhead_rules: dict[tuple[str, str], int] | None = None,
+    deadhead_metrics: dict[tuple[str, str], DeadheadMetric] | None = None,
 ) -> tuple[list[TravelConnection], DispatchTravelBuildReport]:
     """
     Build full TravelConnection matrix from dispatch feasibility graph.
@@ -183,13 +190,18 @@ def build_travel_connections_via_dispatch(
 
             can_follow = (from_trip.trip_id, to_trip.trip_id) in feasible_edges
             if can_follow:
-                deadhead_min = context.get_deadhead_min(
-                    from_trip.destination,
-                    to_trip.origin,
-                )
+                from_stop = from_trip.destination_stop_id or from_trip.destination
+                to_stop = to_trip.origin_stop_id or to_trip.origin
+                deadhead_min = context.get_deadhead_min(from_stop, to_stop)
                 deadhead_slots = int(math.ceil(deadhead_min / slot_minutes))
+                deadhead_distance_km = float(
+                    (
+                        deadhead_metrics or {}
+                    ).get((from_stop, to_stop), DeadheadMetric(from_stop, to_stop, deadhead_min)).distance_km
+                )
             else:
                 deadhead_slots = 0
+                deadhead_distance_km = 0.0
 
             travel_connections.append(
                 TravelConnection(
@@ -197,7 +209,7 @@ def build_travel_connections_via_dispatch(
                     to_task_id=to_trip.trip_id,
                     can_follow=can_follow,
                     deadhead_time_slot=deadhead_slots,
-                    deadhead_distance_km=0.0,
+                    deadhead_distance_km=deadhead_distance_km,
                     deadhead_energy_kwh=0.0,
                 )
             )

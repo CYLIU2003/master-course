@@ -505,6 +505,17 @@ MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同
 
 ## 4. セットアップと実行手順
 
+### 4.0 単一アプリ版からの起動（推奨・環境構築不要）
+TkinterフロントエンドとFastAPIバックエンドは、**1つの実行ファイル（.exe）に統合**されています。
+
+1. **配置先:** dist/MasterCourseApp/MasterCourseApp.exe
+2. **実行:** 上記 .exe をダブルクリックするだけで、裏でFastAPIが立ち上がり、自動でTkinter画面が起動します。
+3. **出力:** 実行結果等は .exe と同じディレクトリ内の outputs/scenarios/ ヘ保存されます。
+
+※ 開発用として .exe を再ビルドしたい場合は、ターミナルで pyinstaller build_exe.spec -y を実行してください。
+
+---
+
 ### 4.1 環境構築
 
 ```powershell
@@ -513,16 +524,16 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 4.2 起動（2ターミナル）
+### 4.2 開発環境からの起動（1ターミナルでOK）
+
+Python環境がある場合は、以下のコマンド1つでバックエンドとフロントエンドの両方が起動します。
 
 ```powershell
-# ターミナル 1: BFF（バックエンド API）
-python -m uvicorn bff.main:app --host 127.0.0.1 --port 8000
-
-# ターミナル 2: Tkinter UI
-.\.venv\Scripts\Activate.ps1
-python tools/scenario_backup_tk.py
+python run_app.py
 ```
+*(内部でFastAPIサーバーをバックグラウンド起動し、自動的にTkinterが立ち上がります。画面を閉じるとバックエンドも自動終了します。)*
+
+---
 
 ### 4.3 Route Variant Labeler（路線タグ付与）
 
@@ -545,8 +556,10 @@ python tools/route_variant_labeler_tk.py
 2. Tk で `接続確認` を実行し、`/api/app/datasets` の候補取得ログを確認する
 3. `datasetId` は runtime 実行可能な候補のみが既定表示される。2026-03-21 時点の既定 runtime dataset は `tokyu_full`
 4. `新規作成` 後は必ず `Quick Setup 読込` を押し、営業所・路線の候補を読み直す
-5. 既存シナリオを開いた直後に営業所や路線の選択が空なら、stale な保存選択が runtime 補正で外れた可能性があるため選び直す
-6. `Quick Setup 保存` → `入力データ作成 (Prepare)` → `Prepared実行` または `最適化実行` の順で進める
+5. 路線一覧は `data/catalog-fast/normalized/routes.jsonl` があれば常にそれを優先して表示する。初期選択は trip-backed route のみなので、一覧件数と初期選択件数は一致しないことがある
+6. 路線は raw route を消さずに保持したまま、`routeFamilyCode` で同一系統として束ねる。Prepare / dispatch / 最適化では `origin_stop_id` / `destination_stop_id` と stop 座標を使い、同一系統内の上り下り・本線・区間便・入出庫便の terminal 間 deadhead を自動補完する
+7. 既存シナリオを開いた直後に営業所や路線の選択が空なら、stale な保存選択が runtime 補正で外れた可能性があるため選び直す
+8. `Quick Setup 保存` → `入力データ作成 (Prepare)` → `Prepared実行` または `最適化実行` の順で進める
 
 ---
 
@@ -639,8 +652,11 @@ python catalog_update_app.py refresh gtfs-pipeline `
 
 - `tokyu_dispatch_ready` は 2026-03-21 時点のこの clone では runtime 用 `trips.parquet` を持たず、実行対象 dataset には使えません。
 - Tk の `datasetId` 候補は `/api/app/datasets` の `runtimeReady=true` を優先表示し、runtime 未整備 dataset は通常候補から外します。
+- 路線一覧は `data/catalog-fast/normalized/routes.jsonl` が存在する場合、それを優先して読み込みます。`routes.parquet` は主に trip/timetable 側の runtime 整合確認に使います。
 - 新規シナリオ作成時に runtime 未整備 dataset を選んだ場合、bootstrap は実行可能な `tokyu_full` へ自動フォールバックします。
 - 既存シナリオを開いた際も、BFF は stale な route/depot master を runtime 実在データへ補正します。
+- Quick Setup の営業所一覧は dataset 定義の全営業所を表示し、初期選択は runtime で route-backed な営業所だけに絞ります。`routeCount=0` の営業所は現行 runtime で対象路線が未展開です。
+- Quick Setup の路線一覧は catalog-fast 上の全 route inventory を表示し、初期選択は timetable/trip が存在する route のみです。`tripCount=0` の route は現行 runtime では未展開です。
 - 補正後は、以前保存された営業所・路線が現在の runtime に存在しない場合に選択が外れます。`Quick Setup 読込` 後に営業所・路線・車両配置を再確認してください。
 - `Quick Setup 保存` 後は `dispatch_scope` と `scenario_overlay` の両方に選択 route/depot が同期され、Prepare/最適化/Prepared実行は現在の UI 選択を優先します。
 
@@ -730,6 +746,11 @@ python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.s
 $$arrival(i) + turnaround(dest_i) + deadhead(dest_i, origin_j) \leq departure(j)$$
 
 実装: `src/dispatch/feasibility.py`、`src/dispatch/graph_builder.py`
+
+補足:
+- 接続判定は stop 名ではなく `origin_stop_id` / `destination_stop_id` を優先して使います。
+- 明示 `deadhead_rules` が無い場合でも、同一 `routeFamilyCode` の terminal stop 座標から回送候補を補完します。
+- これにより、同一系統番号に属する上り下り・本線・区間便・入出庫便を raw trip のまま接続判定できます。
 
 ### 9.4 定数文書トレーサビリティ
 

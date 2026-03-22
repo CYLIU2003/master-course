@@ -39,6 +39,132 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-22] route family を dispatch / Prepare / 最適化の terminal deadhead 補完へ反映
+
+- **問題**:
+  - route family 派生情報は route DTO には載っていたが、実行系では主に表示メタデータ扱いで、
+    上り下り・本線・区間便・入出庫便の接続可否や回送候補生成に十分反映されていなかった。
+  - さらに dispatch の `Trip` は `origin` / `destination` に stop 名を持ち、
+    `deadhead_rules` は `from_stop` / `to_stop` として stop_id を持っていたため、
+    明示 deadhead rule も一致しにくかった。
+
+- **対応**:
+  - `src/route_family_runtime.py` を追加し、
+    detailed variant 正規化（`main_outbound`, `main_inbound`, `depot_out`, `depot_in` など）と
+    same-family terminal stop の座標ベース deadhead 補完を共通化した。
+  - `src/dispatch/models.py`, `src/data_schema.py`
+    - `Trip` / `Task` に `origin_stop_id`, `destination_stop_id` を追加。
+  - `src/dispatch/feasibility.py`
+    - 接続判定は stop 名より stop_id を優先して参照するよう変更。
+  - `bff/routers/graph.py`, `bff/mappers/scenario_to_problemdata.py`,
+    `src/optimization/common/builder.py`
+    - same-family terminal deadhead 補完を dispatch / Prepare / optimization builder 全経路へ適用。
+    - route family / variant 情報を Trip/Task に詳細値のまま保持するよう修正。
+  - `src/dispatch/problemdata_adapter.py`
+    - `TravelConnection.deadhead_distance_km` に推定 deadhead 距離を載せるよう変更。
+  - `bff/routers/master_data.py`, `bff/routers/scenarios.py`, `tools/scenario_backup_tk.py`
+    - variant 正規化の collapse をやめ、manual label / API 応答でも detailed variant を保持するよう修正。
+  - `src/tokyu_shard_loader.py`
+    - dispatch trip rows に `origin_stop_id` / `destination_stop_id` を残すよう修正。
+
+- **検証**:
+  - `tests/test_route_family_deadhead_inference.py` を追加。
+    - detailed variant 正規化
+    - Prepare 経由の same-family terminal deadhead 補完
+    - graph context での stop_id ベース接続
+    を回帰化した。
+  - `python -m pytest tests/test_route_family_deadhead_inference.py tests/test_run_preparation_hash.py tests/test_simulation_executor_mode.py tests/test_runtime_scope_route_mapping.py tests/test_research_dataset_bootstrap_alignment.py tests/test_master_defaults_runtime_repair.py tests/test_scenario_store_dispatch_scope_overlay.py tests/test_scenario_backup_tk_dataset_options.py -q`
+    で `24 passed` を確認。
+
+### [DEV-2026-03-22] `python run_app.py` 起動直後の Tk callback crash 修正
+
+- **問題**:
+  - `tools/scenario_backup_tk.py` は scenario 一覧更新直後に `on_scenario_changed()` を呼んでいたが、
+    車両・テンプレート管理ウィンドウをまだ開いていない状態でも
+    `refresh_vehicles()` / `refresh_templates()` を実行していた。
+  - そのため `fleet_depot_var` / `template_tree` 未生成のままアクセスし、
+    `AttributeError` で Tk callback が繰り返し落ちていた。
+  - さらに background thread の完了通知が root close 後に `root.after()` へ戻ると、
+    `RuntimeError: main thread is not in main loop` が出る経路があった。
+
+- **対応**:
+  - `tools/scenario_backup_tk.py`
+    - fleet/template 関連 widget を `None` 初期化し、
+      `_fleet_window_ready()` / `_vehicle_panel_ready()` / `_template_panel_ready()` を追加。
+    - `on_scenario_changed()` は fleet window が開いている場合だけ
+      `refresh_vehicles()` / `refresh_templates()` を呼ぶよう修正。
+    - `refresh_vehicles()` / `refresh_templates()` の実行前後で
+      widget 生存確認を行い、遅延 callback でも destroyed widget に触れないよう修正。
+    - fleet window close 時に widget 参照をリセットする `WM_DELETE_WINDOW` ハンドラを追加。
+    - プログラム起動直後の自動 scenario 選択では `messagebox.showinfo()` を出さないようにした。
+    - `run_bg()` の UI 戻しを `_queue_on_ui_thread()` 経由に変更し、
+      root close 後の `after()` 失敗を握りつぶすようにした。
+
+- **検証**:
+  - `tests/test_scenario_backup_tk_dataset_options.py` に
+    fleet window 未生成時の `refresh_*()` / `on_scenario_changed()` が no-op で落ちない回帰を追加。
+  - 同テストに `_queue_on_ui_thread()` の closed root / broken after 回帰を追加。
+  - `python run_app.py` 起動時に `fleet_depot_var` / `template_tree` の `AttributeError` が出ないことを確認。
+
+### [DEV-2026-03-22] Quick Setup の路線一覧を catalog-fast 優先へ変更
+
+- **問題**:
+  - `build_dataset_bootstrap("tokyu_full")` は `routes.parquet` と trip-backed route ids を基準に route inventory を作っており、
+    Quick Setup の路線一覧が 21 路線程度に縮んでいた。
+  - 一方で `data/catalog-fast/normalized/routes.jsonl` には 764 route pattern があり、
+    UI ではこの inventory を常時見られる必要があった。
+
+- **対応**:
+  - `src/research_dataset_loader.py`
+    - `data/catalog-fast/normalized/routes.jsonl` を読む `_read_jsonl_rows()` /
+      `_load_catalog_fast_routes()` を追加。
+    - dataset bootstrap の route inventory は catalog-fast normalized routes を優先し、
+      `dispatch_scope.routeSelection.includeRouteIds` / `scenario_overlay.route_ids` は
+      trip-backed subset のみに絞るようにした。
+    - これにより Quick Setup は catalog-fast 全 route を表示しつつ、
+      初期選択は現行 timetable/trip が存在する route に限定される。
+  - `bff/services/master_defaults.py`, `bff/store/scenario_store.py`
+    - 既存 scenario の runtime alignment 判定を拡張し、
+      現在の route/depot master が preload runtime master の proper subset の場合も自動補正するようにした。
+  - `README.md`
+    - 路線一覧は `data/catalog-fast/normalized/routes.jsonl` 優先であること、
+      一覧件数と初期選択件数が一致しない場合があることを追記。
+
+- **検証**:
+  - `build_dataset_bootstrap("tokyu_full")` が `routes > selectedRouteIds` を返すことを確認。
+  - `tests/test_research_dataset_bootstrap_alignment.py` に
+    catalog-fast route inventory 回帰を追加。
+  - `tests/test_scenario_store_dispatch_scope_overlay.py` に
+    runtime master superset 差分で alignment が必要になるケースを追加。
+
+### [DEV-2026-03-22] Quick Setup の営業所一覧が一部しか出ない問題を修正
+
+- **問題**:
+  - `build_dataset_bootstrap("tokyu_full")` が trip-backed route 文脈に合わせて `depots` 自体を削っており、
+    Quick Setup の営業所一覧が `ebara / aobadai / nijigaoka` など一部しか出なくなっていた。
+  - ただし実データの seed 定義では `tokyu_full` は 12 営業所を持っており、
+    UI で営業所管理や選択確認をするには一覧自体は全件見える必要があった。
+
+- **対応**:
+  - `src/research_dataset_loader.py`
+    - bootstrap の `depots` は dataset 定義どおり保持し、
+      route 文脈で絞った depot 集合は `dispatch_scope.depotSelection.depotIds` /
+      `scenario_overlay.depot_ids` の既定選択だけに使うよう修正。
+  - `bff/services/master_defaults.py`
+    - stale scenario 補正時の `valid_depot_ids` を
+      bootstrap の `dispatch_scope.depotSelection.depotIds` 優先に変更し、
+      表示対象 depot は広く保ちつつ、実行不能な旧選択 depot は引き続き自動解除されるようにした。
+  - `README.md`
+    - Quick Setup の営業所一覧は全営業所を表示し、
+      `routeCount=0` の営業所は runtime で route 未展開であることを追記。
+
+- **検証**:
+  - `build_dataset_bootstrap("tokyu_full")` で `depots` が dataset 定義の全営業所を返し、
+    `dispatch_scope.depotSelection.depotIds` はその部分集合になることを確認。
+  - `tests/test_research_dataset_bootstrap_alignment.py` に営業所表示回帰を追加。
+  - `tests/test_master_defaults_runtime_repair.py` に
+    「表示対象 depot は残すが stale selection は解除される」ケースを追加。
+
 ### [DEV-2026-03-21] README 使用方法更新と Tk dataset 候補の runtime-ready 化
 
 - **問題**:

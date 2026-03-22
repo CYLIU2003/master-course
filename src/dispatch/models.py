@@ -34,6 +34,8 @@ class Trip:
     arrival_time: str  # "HH:MM"
     distance_km: float
     allowed_vehicle_types: Tuple[str, ...]  # e.g. ("BEV", "ICE")
+    origin_stop_id: str = ""
+    destination_stop_id: str = ""
     route_family_code: str = ""
     # Optional metadata preserved from timetable_rows for smarter dispatching.
     # direction helps greedy dispatcher prefer the return leg on the same route;

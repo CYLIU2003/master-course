@@ -50,6 +50,12 @@ from src.dispatch.models import (
     DeadheadRule,
     VehicleProfile,
 )
+from src.route_family_runtime import (
+    merge_deadhead_metrics,
+    normalize_direction,
+    normalize_variant_type,
+    route_variant_bucket,
+)
 from src.route_code_utils import extract_route_series_from_candidates
 from src.dispatch.pipeline import TimetableDispatchPipeline
 from src.tokyu_shard_loader import (
@@ -320,31 +326,11 @@ def _normalize_allowed_types(
 
 
 def _normalize_direction(value: Any, default: str = "outbound") -> str:
-    text = str(value or "").strip().lower()
-    if text in {"outbound", "out", "up", "上り", "上り便", "↗"}:
-        return "outbound"
-    if text in {"inbound", "in", "down", "下り", "下り便", "↙"}:
-        return "inbound"
-    if text in {"circular", "loop", "循環", "循環線"}:
-        return "circular"
-    return default
+    return normalize_direction(value, default=default)
 
 
 def _normalize_variant_type(value: Any, *, direction: str = "outbound") -> str:
-    text = str(value or "").strip().lower()
-    if text in {"main", "main_outbound", "main_inbound", "本線"}:
-        return "main"
-    if text in {"short_turn", "区間", "区間便"}:
-        return "short_turn"
-    if text in {"depot", "depot_in", "depot_out", "入出庫", "入出庫便", "入庫", "出庫"}:
-        return "depot"
-    if text in {"branch", "枝線"}:
-        return "branch"
-    if text == "unknown":
-        return "unknown"
-    if direction == "circular":
-        return "main"
-    return "main"
+    return normalize_variant_type(value, direction=direction)
 
 
 def _build_turnaround_rules(
@@ -358,24 +344,6 @@ def _build_turnaround_rules(
         rules[str(stop_id)] = TurnaroundRule(
             stop_id=str(stop_id),
             min_turnaround_min=max(0, int(item.get("min_turnaround_min") or 0)),
-        )
-    return rules
-
-
-def _build_deadhead_rules(
-    scenario_id: str,
-) -> Dict[Tuple[str, str], DeadheadRule]:
-    rules: Dict[Tuple[str, str], DeadheadRule] = {}
-    for item in store.get_deadhead_rules(scenario_id):
-        from_stop = item.get("from_stop")
-        to_stop = item.get("to_stop")
-        if from_stop is None or to_stop is None:
-            continue
-        key = (str(from_stop), str(to_stop))
-        rules[key] = DeadheadRule(
-            from_stop=key[0],
-            to_stop=key[1],
-            travel_time_min=max(0, int(item.get("travel_time_min") or 0)),
         )
     return rules
 
@@ -474,11 +442,12 @@ def _build_dispatch_context(
             or route.get("routeVariantType")
             or "unknown"
         )
-        if not trip_selection.get("includeShortTurn", True) and variant_type == "short_turn":
+        variant_bucket = route_variant_bucket(variant_type)
+        if not trip_selection.get("includeShortTurn", True) and variant_bucket == "short_turn":
             return False
         if (
             not trip_selection.get("includeDepotMoves", True)
-            and variant_type == "depot"
+            and variant_bucket == "depot"
         ):
             return False
         return True
@@ -489,6 +458,20 @@ def _build_dispatch_context(
     raw_trips = [
         trip for trip in raw_trips if _trip_allowed_by_variant(str(trip.get("route_id") or ""))
     ]
+
+    timetable_by_trip_id = {
+        str(row.get("trip_id") or "").strip(): dict(row)
+        for row in timetable_rows
+        if str(row.get("trip_id") or "").strip()
+    }
+    merged_trip_rows: List[Dict[str, Any]] = []
+    for item in raw_trips or timetable_rows:
+        if not isinstance(item, dict):
+            continue
+        trip_id = str(item.get("trip_id") or "").strip()
+        merged = dict(timetable_by_trip_id.get(trip_id) or {})
+        merged.update(item)
+        merged_trip_rows.append(merged)
 
     if not raw_trips and not timetable_rows:
         raise ValueError(
@@ -512,7 +495,7 @@ def _build_dispatch_context(
         # Cache permissions once outside the loop — calling get_vehicle_route_permissions
         # per trip previously triggered a full _load() on every iteration.
         _permissions_cache = store.get_vehicle_route_permissions(scenario_id)
-        for td in raw_trips:
+        for td in (merged_trip_rows or raw_trips):
             route_id = str(td["route_id"])
             route_like = route_lookup.get(route_id) or {}
             route_series_code, _route_series_prefix, _route_series_number, _series_source = extract_route_series_from_candidates(
@@ -568,6 +551,8 @@ def _build_dispatch_context(
                     td.get("allowed_vehicle_types"),
                     route_allowed_types,
                 ),
+                origin_stop_id=str(td.get("origin_stop_id") or ""),
+                destination_stop_id=str(td.get("destination_stop_id") or ""),
                 route_family_code=route_family_code,
                 direction=direction,
                 route_variant_type=variant,
@@ -633,6 +618,8 @@ def _build_dispatch_context(
                         row.get("allowed_vehicle_types"),
                         route_allowed_types,
                     ),
+                    origin_stop_id=str(row.get("origin_stop_id") or ""),
+                    destination_stop_id=str(row.get("destination_stop_id") or ""),
                     route_family_code=route_family_code,
                     direction=direction,
                     route_variant_type=variant,
@@ -641,7 +628,20 @@ def _build_dispatch_context(
 
     # Build turnaround and deadhead rules from scenario.
     turnaround_rules = _build_turnaround_rules(scenario_id)
-    deadhead_rules = _build_deadhead_rules(scenario_id)
+    deadhead_metrics = merge_deadhead_metrics(
+        existing_rules=store.get_deadhead_rules(scenario_id),
+        trip_rows=merged_trip_rows or timetable_rows or raw_trips,
+        routes=list(route_lookup.values()),
+        stops=store.get_field(scenario_id, "stops") or [],
+    )
+    deadhead_rules = {
+        key: DeadheadRule(
+            from_stop=metric.from_stop,
+            to_stop=metric.to_stop,
+            travel_time_min=max(0, int(metric.travel_time_min)),
+        )
+        for key, metric in deadhead_metrics.items()
+    }
 
     # Build vehicle profiles from scenario vehicles
     vehicle_profiles: Dict[str, VehicleProfile] = {}

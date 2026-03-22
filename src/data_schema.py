@@ -79,6 +79,8 @@ class Task:
     route_series_number: Optional[int] = None
     direction: Optional[str] = None
     route_variant_type: Optional[str] = None
+    origin_stop_id: Optional[str] = None
+    destination_stop_id: Optional[str] = None
     service_id: Optional[str] = None
 
 

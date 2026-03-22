@@ -16,6 +16,11 @@ from src.dispatch.models import (
     VehicleProfile,
     hhmm_to_min,
 )
+from src.route_family_runtime import (
+    merge_deadhead_metrics,
+    normalize_direction,
+    normalize_variant_type,
+)
 from src.preprocess.tariff_loader import build_electricity_prices_from_tariff, load_tariff_csv
 
 from .problem import (
@@ -218,6 +223,11 @@ class ProblemBuilder:
             vehicles,
             allowed_route_ids,
         )
+        route_lookup = {
+            str(route.get("id") or route.get("route_id") or ""): dict(route)
+            for route in scenario.get("routes") or []
+            if str(route.get("id") or route.get("route_id") or "")
+        }
         trips: List[Trip] = []
         source_rows = list(scenario.get("timetable_rows") or [])
         if not source_rows:
@@ -229,6 +239,7 @@ class ProblemBuilder:
             route_id = str(row.get("route_id") or "")
             if allowed_route_ids is not None and route_id not in allowed_route_ids:
                 continue
+            route_like = route_lookup.get(route_id) or {}
             explicit_allowed = row.get("allowed_vehicle_types")
             allowed = (
                 tuple(str(item) for item in explicit_allowed)
@@ -247,6 +258,33 @@ class ProblemBuilder:
                     arrival_time=str(row.get("arrival") or "00:00"),
                     distance_km=float(row.get("distance_km") or 0.0),
                     allowed_vehicle_types=allowed,
+                    origin_stop_id=str(row.get("origin_stop_id") or ""),
+                    destination_stop_id=str(row.get("destination_stop_id") or ""),
+                    route_family_code=str(
+                        row.get("routeFamilyCode")
+                        or row.get("route_family_code")
+                        or route_like.get("routeFamilyCode")
+                        or route_id
+                    ),
+                    direction=normalize_direction(
+                        row.get("direction")
+                        or row.get("canonicalDirection")
+                        or route_like.get("canonicalDirection")
+                        or "outbound"
+                    ),
+                    route_variant_type=normalize_variant_type(
+                        row.get("routeVariantType")
+                        or row.get("route_variant_type")
+                        or route_like.get("routeVariantType")
+                        or route_like.get("routeVariantTypeManual")
+                        or "unknown",
+                        direction=normalize_direction(
+                            row.get("direction")
+                            or row.get("canonicalDirection")
+                            or route_like.get("canonicalDirection")
+                            or "outbound"
+                        ),
+                    ),
                 )
             )
 
@@ -258,14 +296,19 @@ class ProblemBuilder:
             for item in scenario.get("turnaround_rules") or []
             if item.get("stop_id") is not None
         }
+        deadhead_metrics = merge_deadhead_metrics(
+            existing_rules=scenario.get("deadhead_rules") or [],
+            trip_rows=source_rows,
+            routes=scenario.get("routes") or [],
+            stops=scenario.get("stops") or [],
+        )
         deadhead_rules = {
-            (str(item.get("from_stop")), str(item.get("to_stop"))): DeadheadRule(
-                from_stop=str(item.get("from_stop")),
-                to_stop=str(item.get("to_stop")),
-                travel_time_min=max(1, int(item.get("travel_time_min") or 1)),
+            key: DeadheadRule(
+                from_stop=metric.from_stop,
+                to_stop=metric.to_stop,
+                travel_time_min=max(1, int(metric.travel_time_min)),
             )
-            for item in scenario.get("deadhead_rules") or []
-            if item.get("from_stop") is not None and item.get("to_stop") is not None
+            for key, metric in deadhead_metrics.items()
         }
 
         service_date = str((scenario.get("meta") or {}).get("updatedAt") or "2026-01-01")[:10]

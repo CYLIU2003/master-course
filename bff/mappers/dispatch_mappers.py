@@ -57,9 +57,12 @@ def trip_to_dict(trip: Trip, direction: str = "outbound") -> Dict[str, Any]:
         "trip_id": trip.trip_id,
         "route_id": trip.route_id,
         "route_family_code": trip.route_family_code,
-        "direction": direction,
+        "direction": trip.direction or direction,
+        "route_variant_type": trip.route_variant_type,
         "origin": trip.origin,
         "destination": trip.destination,
+        "origin_stop_id": trip.origin_stop_id,
+        "destination_stop_id": trip.destination_stop_id,
         "departure": trip.departure_time,
         "arrival": trip.arrival_time,
         "departure_min": trip.departure_min,
@@ -79,10 +82,18 @@ def dict_to_trip(d: Dict[str, Any]) -> Trip:
         arrival_time=d["arrival"],
         distance_km=float(d["distance_km"]),
         allowed_vehicle_types=tuple(d["allowed_vehicle_types"]),
+        origin_stop_id=str(d.get("origin_stop_id") or d.get("originStopId") or ""),
+        destination_stop_id=str(d.get("destination_stop_id") or d.get("destinationStopId") or ""),
         route_family_code=str(
             d.get("route_family_code")
             or d.get("routeFamilyCode")
             or d.get("routeSeriesCode")
+            or ""
+        ),
+        direction=str(d.get("direction") or ""),
+        route_variant_type=str(
+            d.get("route_variant_type")
+            or d.get("routeVariantType")
             or ""
         ),
     )

@@ -45,8 +45,8 @@ class FeasibilityEngine:
             )
 
         # --- 2. Location continuity ---
-        from_stop = trip_i.destination
-        to_stop = trip_j.origin
+        from_stop = trip_i.destination_stop_id or trip_i.destination
+        to_stop = trip_j.origin_stop_id or trip_j.origin
         deadhead_min = context.get_deadhead_min(from_stop, to_stop)
 
         if from_stop != to_stop and deadhead_min == 0:

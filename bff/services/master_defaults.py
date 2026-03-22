@@ -356,10 +356,20 @@ def repair_missing_master_data(
         for item in payload.get("routes") or []
         if str(item.get("id") or "").strip()
     }
+    payload_depot_ids = {
+        str(item.get("id") or item.get("depotId") or "").strip()
+        for item in payload.get("depots") or []
+        if str(item.get("id") or item.get("depotId") or "").strip()
+    }
     current_route_ids = {
         str(item.get("id") or "").strip()
         for item in current_routes
         if str(item.get("id") or "").strip()
+    }
+    current_depot_ids = {
+        str(item.get("id") or item.get("depotId") or "").strip()
+        for item in current_depots
+        if str(item.get("id") or item.get("depotId") or "").strip()
     }
     needs_runtime_refresh = (
         effective_dataset_id != str(target_dataset_id)
@@ -367,6 +377,18 @@ def repair_missing_master_data(
             current_route_ids
             and payload_route_ids
             and not current_route_ids.intersection(payload_route_ids)
+        )
+        or (
+            current_route_ids
+            and payload_route_ids
+            and current_route_ids.issubset(payload_route_ids)
+            and len(current_route_ids) < len(payload_route_ids)
+        )
+        or (
+            current_depot_ids
+            and payload_depot_ids
+            and current_depot_ids.issubset(payload_depot_ids)
+            and len(current_depot_ids) < len(payload_depot_ids)
         )
     )
 
@@ -378,7 +400,17 @@ def repair_missing_master_data(
         )
         fresh_depots = list(bootstrap.get("depots") or [])
         fresh_routes = list(bootstrap.get("routes") or [])
-        valid_depot_ids = [
+        bootstrap_scope_depot_ids = [
+            str(value).strip()
+            for value in list(
+                (
+                    (bootstrap.get("dispatch_scope") or {}).get("depotSelection") or {}
+                ).get("depotIds")
+                or []
+            )
+            if str(value).strip()
+        ]
+        valid_depot_ids = bootstrap_scope_depot_ids or [
             str(item.get("id") or item.get("depotId") or "").strip()
             for item in fresh_depots
             if str(item.get("id") or item.get("depotId") or "").strip()

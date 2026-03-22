@@ -63,7 +63,7 @@ def test_repair_missing_master_data_rebases_stale_runtime_master() -> None:
         "feedContext": {"datasetId": "tokyu_full"},
     }
     bootstrap_payload = {
-        "depots": [{"id": "ebara"}],
+        "depots": [{"id": "ebara"}, {"id": "meguro"}],
         "routes": [{"id": "odpt-route-1", "routeVariantTypeManual": None}],
         "vehicle_templates": [{"id": "tmpl-runtime"}],
         "route_depot_assignments": [{"routeId": "odpt-route-1", "depotId": "ebara"}],
@@ -117,6 +117,7 @@ def test_repair_missing_master_data_rebases_stale_runtime_master() -> None:
     assert changed is True
     assert doc["feed_context"]["datasetId"] == "tokyu_full"
     assert [item["id"] for item in doc["routes"]] == ["odpt-route-1"]
+    assert {item["id"] for item in doc["depots"]} == {"ebara", "meguro"}
     assert doc["dispatch_scope"]["routeSelection"]["includeRouteIds"] == []
     assert doc["dispatch_scope"]["depotSelection"]["depotIds"] == []
     assert doc["scenario_overlay"]["route_ids"] == []

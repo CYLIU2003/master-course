@@ -19,6 +19,13 @@ from src.preprocess.trip_converter import (
     build_vehicle_charger_compat,
     build_vehicle_task_compat,
 )
+from src.route_family_runtime import (
+    DeadheadMetric,
+    merge_deadhead_metrics,
+    normalize_direction,
+    normalize_variant_type,
+    route_variant_bucket,
+)
 from src.schemas.duty_entities import DutyLeg, VehicleDuty
 from src.route_code_utils import extract_route_series_from_candidates
 from src.value_normalization import coerce_list
@@ -75,31 +82,11 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 
 def _normalize_direction(value: Any, default: str = "outbound") -> str:
-    text = str(value or "").strip().lower()
-    if text in {"outbound", "out", "up", "上り", "上り便", "↗"}:
-        return "outbound"
-    if text in {"inbound", "in", "down", "下り", "下り便", "↙"}:
-        return "inbound"
-    if text in {"circular", "loop", "循環", "循環線"}:
-        return "circular"
-    return default
+    return normalize_direction(value, default=default)
 
 
 def _normalize_variant_type(value: Any, *, direction: str = "outbound") -> str:
-    text = str(value or "").strip().lower()
-    if text in {"main", "main_outbound", "main_inbound", "本線"}:
-        return "main"
-    if text in {"short_turn", "区間", "区間便"}:
-        return "short_turn"
-    if text in {"depot", "depot_in", "depot_out", "入出庫", "入出庫便", "入庫", "出庫"}:
-        return "depot"
-    if text in {"branch", "枝線"}:
-        return "branch"
-    if text == "unknown":
-        return "unknown"
-    if direction == "circular":
-        return "main"
-    return "main"
+    return normalize_variant_type(value, direction=direction)
 
 
 def _hhmm_to_idx(time_str: str, start_time: str, delta_t_min: float) -> int:
@@ -235,7 +222,7 @@ def _variant_distance_factor(trip_like: Dict[str, Any], route_like: Dict[str, An
         "depot": 1.15,
         "unknown": 1.1,
     }
-    return float(factors.get(variant, factors["unknown"]))
+    return float(factors.get(route_variant_bucket(variant, direction=direction), factors["unknown"]))
 
 
 def _stop_sequence_from_trip_stop_times(trip_like: Dict[str, Any]) -> List[str]:
@@ -420,11 +407,12 @@ def _filter_rows_for_scope(
                 or route.get("routeVariantType")
                 or "unknown"
             )
-            if not trip_selection.get("includeShortTurn", True) and variant_type == "short_turn":
+            variant_bucket = route_variant_bucket(variant_type)
+            if not trip_selection.get("includeShortTurn", True) and variant_bucket == "short_turn":
                 continue
             if (
                 not trip_selection.get("includeDepotMoves", True)
-                and variant_type == "depot"
+                and variant_bucket == "depot"
             ):
                 continue
             filtered_rows.append(row)
@@ -772,6 +760,8 @@ def _build_tasks(
                 route_family_code=str(trip.get("routeFamilyCode") or "") or None,
                 route_series_prefix=str(trip.get("routeSeriesPrefix") or "") or None,
                 route_series_number=_safe_int(trip.get("routeSeriesNumber"), default=0) or None,
+                origin_stop_id=str(trip.get("origin_stop_id") or "") or None,
+                destination_stop_id=str(trip.get("destination_stop_id") or "") or None,
                 service_id=str(trip.get("service_id") or service_id or "") or None,
             )
         )
@@ -988,18 +978,26 @@ def _build_turnaround_rules(scenario: Dict[str, Any]) -> Dict[str, int]:
     }
 
 
-def _build_deadhead_rules(scenario: Dict[str, Any]) -> Dict[tuple[str, str], int]:
-    rules: Dict[tuple[str, str], int] = {}
-    for item in _as_list(scenario.get("deadhead_rules")):
-        from_stop = item.get("from_stop")
-        to_stop = item.get("to_stop")
-        if from_stop is None or to_stop is None:
-            continue
-        rules[(str(from_stop), str(to_stop))] = max(
-            1,
-            _safe_int(item.get("travel_time_min"), 1),
-        )
-    return rules
+def _build_deadhead_metrics(
+    scenario: Dict[str, Any],
+    trips: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[tuple[str, str], DeadheadMetric]:
+    return merge_deadhead_metrics(
+        existing_rules=_as_list(scenario.get("deadhead_rules")),
+        trip_rows=trips or [],
+        routes=_as_list(scenario.get("routes")),
+        stops=_as_list(scenario.get("stops")),
+    )
+
+
+def _build_deadhead_rules(
+    scenario: Dict[str, Any],
+    trips: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[tuple[str, str], int]:
+    return {
+        key: metric.travel_time_min
+        for key, metric in _build_deadhead_metrics(scenario, trips).items()
+    }
 
 
 def _build_duty_entities(
@@ -1094,6 +1092,10 @@ def build_problem_data_from_scenario(
         delta_t_min,
         service_id=service_id,
     )
+    deadhead_metrics = _build_deadhead_metrics(scenario, trips)
+    deadhead_rules = {
+        key: metric.travel_time_min for key, metric in deadhead_metrics.items()
+    }
     num_periods = max(
         _safe_int(simulation_cfg.get("num_periods"), 0),
         max((task.end_time_idx for task in tasks), default=0) + 2,
@@ -1145,7 +1147,8 @@ def build_problem_data_from_scenario(
         service_date=str(meta.get("updatedAt") or "2026-01-01")[:10],
         default_turnaround_min=default_turnaround_min,
         turnaround_rules=_build_turnaround_rules(scenario),
-        deadhead_rules=_build_deadhead_rules(scenario),
+        deadhead_rules=deadhead_rules,
+        deadhead_metrics=deadhead_metrics,
     )
     data.travel_connections = connections
     data.vehicle_task_compat = build_vehicle_task_compat(vehicles, tasks)

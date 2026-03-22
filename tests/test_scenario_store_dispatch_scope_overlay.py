@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest import mock
+
 from bff.store import scenario_store
 
 
@@ -77,3 +79,20 @@ def test_set_dispatch_scope_syncs_overlay_route_and_depot_ids(monkeypatch) -> No
     assert normalized["effectiveRouteIds"] == ["route-b"]
     assert doc["scenario_overlay"]["depot_ids"] == ["dep-b"]
     assert doc["scenario_overlay"]["route_ids"] == ["route-b"]
+
+
+def test_needs_runtime_master_alignment_when_runtime_has_more_catalog_fast_routes() -> None:
+    doc = {
+        "scenario_overlay": {"dataset_id": "tokyu_full"},
+        "feed_context": {"datasetId": "tokyu_full"},
+        "routes": [{"id": "route-a"}],
+        "depots": [{"id": "dep-a"}],
+    }
+    payload = {
+        "datasetId": "tokyu_full",
+        "routes": [{"id": "route-a"}, {"id": "route-b"}],
+        "depots": [{"id": "dep-a"}, {"id": "dep-b"}],
+    }
+
+    with mock.patch("bff.services.master_defaults.get_preloaded_master_data", return_value=payload):
+        assert scenario_store._needs_runtime_master_alignment(doc) is True

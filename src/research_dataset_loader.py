@@ -32,6 +32,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DATA_ROOT = _REPO_ROOT / "data"
 _SEED_ROOT = _DATA_ROOT / "seed" / DEFAULT_OPERATOR_ID
 _BUILT_ROOT = _DATA_ROOT / "built"
+_CATALOG_FAST_ROOT = _DATA_ROOT / "catalog-fast"
+_CATALOG_FAST_NORMALIZED_ROOT = _CATALOG_FAST_ROOT / "normalized"
 
 _DEPOT_MASTER_CANDIDATES = (
     _REPO_ROOT / "tokyu_bus_depots_master_full.json",
@@ -56,6 +58,21 @@ def _read_json(path: Path) -> Dict[str, Any]:
 def _read_csv_rows(path: Path) -> List[Dict[str, Any]]:
     with path.open("r", encoding="utf-8-sig", newline="") as fh:
         return [dict(row) for row in csv.DictReader(fh)]
+
+
+def _read_jsonl_rows(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    items: List[Dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            text = line.strip()
+            if not text:
+                continue
+            payload = json.loads(text)
+            if isinstance(payload, dict):
+                items.append(dict(payload))
+    return items
 
 
 def _first_existing_path(candidates: Iterable[Path]) -> Path | None:
@@ -155,6 +172,10 @@ def _seed_dataset_path(dataset_id: str) -> Path:
 
 def _built_dataset_dir(dataset_id: str) -> Path:
     return _BUILT_ROOT / dataset_id
+
+
+def _catalog_fast_normalized_path(filename: str) -> Path:
+    return _CATALOG_FAST_NORMALIZED_ROOT / filename
 
 
 def load_seed_version() -> Dict[str, Any]:
@@ -443,6 +464,17 @@ def _filter_built_routes(
             continue
         items.append(route)
     return items
+
+
+def _load_catalog_fast_routes(
+    definition: Dict[str, Any],
+    route_rows: Iterable[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    return _filter_built_routes(
+        definition,
+        _read_jsonl_rows(_catalog_fast_normalized_path("routes.jsonl")),
+        route_rows,
+    )
 
 
 def _filter_rows_by_route_ids(
@@ -776,11 +808,13 @@ def build_dataset_bootstrap(
         depots = list(depots_by_id.values())
     route_rows = load_route_to_depot_rows()
     seed_routes = _seed_route_items(definition, route_rows)
+    catalog_fast_routes = _load_catalog_fast_routes(definition, route_rows)
     shard_ready = bool(status.get("shardReady"))
     shard_manifest = dict(status.get("shardManifest") or {})
     runtime_features: Dict[str, Any] | None = None
     built_routes: List[Dict[str, Any]] = []
     built_stops: List[Dict[str, Any]] = []
+    scope_route_ids: List[str] = []
 
     if status["builtAvailable"]:
         built_dir = _built_dataset_dir(dataset_id)
@@ -801,9 +835,10 @@ def build_dataset_bootstrap(
                     schema_name="stops",
                 )
             ]
+        route_inventory = catalog_fast_routes or built_routes or seed_routes
 
         if shard_ready:
-            routes = built_routes or seed_routes
+            routes = route_inventory
             timetable_rows = []
             trips = []
             stops = built_stops
@@ -811,6 +846,11 @@ def build_dataset_bootstrap(
             calendar_entries = _derive_calendar_entries_from_day_types(
                 shard_manifest.get("available_day_types") or []
             )
+            scope_route_ids = [
+                str(item.get("id") or "").strip()
+                for item in routes
+                if str(item.get("id") or "").strip()
+            ]
             source = "tokyu_shards"
             runtime_features = {
                 "tokyuShards": {
@@ -824,7 +864,11 @@ def build_dataset_bootstrap(
                 }
             }
         else:
-            route_ids = {str(item.get("id") or "") for item in built_routes}
+            route_ids = {
+                str(item.get("id") or "").strip()
+                for item in route_inventory
+                if str(item.get("id") or "").strip()
+            }
             built_timetable_rows = _filter_rows_by_route_ids(
                 [
                     _normalize_timetable_row(item)
@@ -859,25 +903,34 @@ def build_dataset_bootstrap(
                 built_timetable_rows,
                 built_trips,
             )
-            built_routes = _filter_routes_by_route_ids(built_routes, available_route_ids)
-            if built_routes and built_timetable_rows and built_trips:
-                routes = built_routes
+            if route_inventory and built_timetable_rows and built_trips:
+                routes = route_inventory
                 timetable_rows = built_timetable_rows
                 trips = built_trips
                 stops = built_stops
                 stop_timetables = built_stop_timetables
                 calendar_entries = _derive_calendar_entries(timetable_rows)
+                scope_route_ids = [
+                    str(item.get("id") or "").strip()
+                    for item in routes
+                    if str(item.get("id") or "").strip() in available_route_ids
+                ]
                 source = "built_dataset"
             else:
-                routes = seed_routes
+                routes = catalog_fast_routes or seed_routes
                 timetable_rows = []
                 trips = []
                 stops = []
                 stop_timetables = []
                 calendar_entries = _derive_calendar_entries(timetable_rows)
+                scope_route_ids = [
+                    str(item.get("id") or "").strip()
+                    for item in routes
+                    if str(item.get("id") or "").strip()
+                ]
                 source = "seed_only"
     elif shard_ready:
-        routes = seed_routes
+        routes = catalog_fast_routes or seed_routes
         timetable_rows = []
         trips = []
         stops = []
@@ -885,6 +938,11 @@ def build_dataset_bootstrap(
         calendar_entries = _derive_calendar_entries_from_day_types(
             shard_manifest.get("available_day_types") or []
         )
+        scope_route_ids = [
+            str(item.get("id") or "").strip()
+            for item in routes
+            if str(item.get("id") or "").strip()
+        ]
         source = "tokyu_shards"
         runtime_features = {
             "tokyuShards": {
@@ -898,24 +956,37 @@ def build_dataset_bootstrap(
             }
         }
     else:
-        routes = seed_routes
+        routes = catalog_fast_routes or seed_routes
         timetable_rows = []
         trips = []
         stops = []
         stop_timetables = []
         calendar_entries = _derive_calendar_entries(timetable_rows)
+        scope_route_ids = [
+            str(item.get("id") or "").strip()
+            for item in routes
+            if str(item.get("id") or "").strip()
+        ]
         source = "seed_only"
 
     route_assignments = _build_route_assignments(routes, route_rows)
     depot_permissions = _build_depot_permissions(route_assignments)
-    depots = _filter_depots_by_route_context(depots, routes, route_assignments)
+    scope_routes = _filter_routes_by_route_ids(routes, set(scope_route_ids)) if scope_route_ids else list(routes)
+    scope_depots = _filter_depots_by_route_context(depots, scope_routes, [])
+    if not scope_depots and scope_routes:
+        scope_depots = _filter_depots_by_route_context(depots, scope_routes, route_assignments)
+    scope_depot_ids = [
+        str(item.get("id") or item.get("depotId") or "").strip()
+        for item in scope_depots
+        if str(item.get("id") or item.get("depotId") or "").strip()
+    ]
     overlay = default_scenario_overlay(
         scenario_id=scenario_id,
         dataset_id=dataset_id,
         dataset_version=str(status.get("datasetVersion") or _dataset_version_for(dataset_id)),
         random_seed=random_seed,
-        depot_ids=[str(item.get("id") or item.get("depotId")) for item in depots],
-        route_ids=[str(item.get("id") or "") for item in routes if item.get("id")],
+        depot_ids=scope_depot_ids,
+        route_ids=scope_route_ids,
     )
     result = {
         "depots": depots,
@@ -935,7 +1006,7 @@ def build_dataset_bootstrap(
             "datasetVersion": status.get("datasetVersion"),
             "depotSelection": {
                 "mode": "include",
-                "depotIds": overlay.depot_ids,
+                "depotIds": scope_depot_ids,
                 "primaryDepotId": overlay.depot_ids[0] if overlay.depot_ids else None,
             },
             "routeSelection": {

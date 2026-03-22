@@ -87,3 +87,8 @@ outputs/transit_catalog.sqlite
 
 # Scenario solver results (NAS management recommended)
 outputs/scenarios/
+
+build/
+dist/
+*.egg-info/
+*.egg

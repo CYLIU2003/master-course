@@ -38,6 +38,10 @@ from bff.services import research_catalog
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
+from src.route_family_runtime import (
+    normalize_direction,
+    normalize_variant_type,
+)
 from src.tokyu_shard_loader import (
     build_stop_timetable_summary_for_scope,
     build_timetable_summary_for_scope,
@@ -538,27 +542,13 @@ def _route_trip_count(route: Dict[str, Any]) -> int:
 
 
 def _normalize_direction(value: Any, default: str = "outbound") -> str:
-    text = str(value or "").strip().lower()
-    if text in {"outbound", "out", "up", "上り", "上り便", "↗"}:
-        return "outbound"
-    if text in {"inbound", "in", "down", "下り", "下り便", "↙"}:
-        return "inbound"
-    if text in {"circular", "loop", "循環", "循環線"}:
-        return "circular"
-    return default
+    return normalize_direction(value, default=default)
 
 
 def _normalize_variant_type(value: Any) -> str:
-    text = str(value or "").strip().lower()
-    if text in {"main", "main_outbound", "main_inbound", "本線"}:
-        return "main"
-    if text in {"short_turn", "区間", "区間便"}:
-        return "short_turn"
-    if text in {"depot", "depot_in", "depot_out", "入出庫", "入出庫便", "入庫", "出庫"}:
-        return "depot"
-    if text in {"branch", "枝線"}:
-        return "branch"
-    return "unknown"
+    if str(value or "").strip() == "":
+        return "unknown"
+    return normalize_variant_type(value, direction="unknown")
 
 
 def _depot_route_index(doc: Dict[str, Any]) -> Dict[str, List[str]]:

@@ -4,7 +4,8 @@
       "Bash(python -c \":*)",
       "Bash(python scripts/extract_meguro_small_case.py --exclude-depot-runs --dry-run)",
       "Bash(python scripts/extract_meguro_small_case.py --exclude-depot-runs)",
-      "Bash(python -m pytest tests/ -x -q)"
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -m py_compile tools/scenario_backup_tk.py)"
     ]
   }
 }

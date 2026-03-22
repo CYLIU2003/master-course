@@ -69,8 +69,10 @@ from bff.services.service_ids import canonical_service_id
 from bff.store import master_data_store, scenario_meta_store, trip_store
 from src.value_normalization import coerce_list
 
-_STORE_DIR = Path(__file__).parent.parent.parent / "outputs" / "scenarios"
-_APP_CONTEXT_PATH = Path(__file__).parent.parent.parent / "outputs" / "app_context.json"
+import os
+
+_STORE_DIR = Path(os.environ.get("SCENARIO_STORE_PATH", str(Path(__file__).parent.parent.parent / "outputs" / "scenarios")))
+_APP_CONTEXT_PATH = Path(os.environ.get("MC_OUTPUTS_DIR", str(Path(__file__).parent.parent.parent / "outputs"))) / "app_context.json"
 _VALID_OPERATOR_IDS = {"tokyu", "toei"}
 _MASTER_DATA_KEYS = (
     "depots",
@@ -781,7 +783,31 @@ def _needs_runtime_master_alignment(doc: Dict[str, Any]) -> bool:
         for item in payload.get("routes") or []
         if str(item.get("id") or "").strip()
     }
+    runtime_depot_ids = {
+        str(item.get("id") or item.get("depotId") or "").strip()
+        for item in payload.get("depots") or []
+        if str(item.get("id") or item.get("depotId") or "").strip()
+    }
+    current_depot_ids = {
+        str(item.get("id") or item.get("depotId") or "").strip()
+        for item in doc.get("depots") or []
+        if str(item.get("id") or item.get("depotId") or "").strip()
+    }
     if current_route_ids and runtime_route_ids and not current_route_ids.intersection(runtime_route_ids):
+        return True
+    if (
+        current_route_ids
+        and runtime_route_ids
+        and current_route_ids.issubset(runtime_route_ids)
+        and len(current_route_ids) < len(runtime_route_ids)
+    ):
+        return True
+    if (
+        current_depot_ids
+        and runtime_depot_ids
+        and current_depot_ids.issubset(runtime_depot_ids)
+        and len(current_depot_ids) < len(runtime_depot_ids)
+    ):
         return True
     return False
 

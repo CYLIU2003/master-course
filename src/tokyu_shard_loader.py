@@ -381,6 +381,8 @@ def load_dispatch_trip_rows_for_scope(
             "route_id": row["route_id"],
             "origin": row["origin"],
             "destination": row["destination"],
+            "origin_stop_id": row.get("origin_stop_id"),
+            "destination_stop_id": row.get("destination_stop_id"),
             "departure": row["departure"],
             "arrival": row["arrival"],
             "distance_km": row["distance_km"],
