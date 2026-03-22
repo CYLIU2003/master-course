@@ -12,8 +12,9 @@ import subprocess
 import traceback
 import json
 import multiprocessing
+import os
 import threading
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import Executor, Future, ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -41,9 +42,22 @@ from src.milp_model import MILPResult
 from src.pipeline.simulate import simulate_problem_data
 
 router = APIRouter(tags=["simulation"])
-_SIMULATION_EXECUTOR: Optional[ProcessPoolExecutor] = None
+_SIMULATION_EXECUTOR: Optional[Executor] = None
 _SIMULATION_FUTURES: set[Future[Any]] = set()
-_SIMULATION_FUTURE_LOCK = threading.Lock()
+_SIMULATION_FUTURE_LOCK = threading.RLock()
+
+
+def _require_nonempty_prepared_scope(prep, *, action: str) -> None:
+    if int(prep.scope_summary.get("trip_count") or 0) > 0:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail=make_error(
+            AppErrorCode.SCENARIO_INCOMPLETE,
+            f"{action} failed: no trips matched the current depot / route / day-type selection.",
+            scopeSummary=prep.scope_summary,
+        ),
+    )
 
 
 class RunSimulationBody(BaseModel):
@@ -131,26 +145,39 @@ def _simulation_capabilities() -> Dict[str, Any]:
         "job_persistence": dict(job_store.JOB_PERSISTENCE_INFO),
         "primary_inputs": ["scenario", "dispatch_scope", "problem_data"],
         "supported_sources": ["duties", "optimization_result"],
-        "execution_model": "process_pool",
+        "execution_model": f"{_simulation_executor_mode()}_pool",
         "notes": [
             "Simulation runs against scenario-derived ProblemData.",
             "Dispatch artifacts are auto-built when missing.",
             "Results are persisted to the scenario snapshot; job state is not.",
-            "Simulation runs in a dedicated process pool so API polling stays responsive.",
+            "Simulation runs in a dedicated executor so API polling stays responsive.",
         ],
     }
 
 
 _MAX_SIMULATION_WORKERS = max(1, multiprocessing.cpu_count() - 1)
 
-def _get_simulation_executor() -> ProcessPoolExecutor:
+def _simulation_executor_mode() -> str:
+    mode = (os.getenv("BFF_SIM_EXECUTOR") or "").strip().lower()
+    if mode in {"process", "thread"}:
+        return mode
+    # Windows + spawn blocks noticeably during submit; default to thread there.
+    return "thread" if os.name == "nt" else "process"
+
+
+def _get_simulation_executor() -> Executor:
     global _SIMULATION_EXECUTOR
     with _SIMULATION_FUTURE_LOCK:
         if _SIMULATION_EXECUTOR is None:
-            _SIMULATION_EXECUTOR = ProcessPoolExecutor(
-                max_workers=_MAX_SIMULATION_WORKERS,
-                mp_context=multiprocessing.get_context("spawn"),
-            )
+            if _simulation_executor_mode() == "thread":
+                _SIMULATION_EXECUTOR = ThreadPoolExecutor(
+                    max_workers=_MAX_SIMULATION_WORKERS
+                )
+            else:
+                _SIMULATION_EXECUTOR = ProcessPoolExecutor(
+                    max_workers=_MAX_SIMULATION_WORKERS,
+                    mp_context=multiprocessing.get_context("spawn"),
+                )
     return _SIMULATION_EXECUTOR
 
 
@@ -239,6 +266,7 @@ def _not_found(scenario_id: str) -> HTTPException:
 def _require_scenario(scenario_id: str) -> None:
     try:
         store.get_scenario(scenario_id)
+        store.ensure_runtime_master_data(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
@@ -686,7 +714,7 @@ def run_prepared_simulation(
     _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    scenario_doc = store.get_scenario_document(scenario_id)
+    scenario_doc = store.get_scenario_document_shallow(scenario_id)
     prep = get_or_build_run_preparation(
         scenario=scenario_doc,
         built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
@@ -701,6 +729,7 @@ def run_prepared_simulation(
                 f"Run preparation failed: {prep.error}",
             ),
         )
+    _require_nonempty_prepared_scope(prep, action="Prepared simulation")
     if prep.prepared_input_id != body.prepared_input_id:
         raise HTTPException(
             status_code=409,
@@ -772,7 +801,7 @@ def run_simulation(
     _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    scenario = store.get_scenario(scenario_id)
+    scenario = store.get_scenario_document_shallow(scenario_id)
     prep = get_or_build_run_preparation(
         scenario=scenario,
         built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
@@ -787,6 +816,7 @@ def run_simulation(
                 f"Run preparation failed: {prep.error}",
             ),
         )
+    _require_nonempty_prepared_scope(prep, action="Simulation preflight")
     request = body or RunSimulationBody()
     scope = _resolve_dispatch_scope(
         scenario_id,

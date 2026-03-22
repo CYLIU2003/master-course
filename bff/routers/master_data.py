@@ -48,6 +48,7 @@ def _scenario_not_found(scenario_id: str) -> HTTPException:
 def _check_scenario(scenario_id: str) -> None:
     try:
         store.get_scenario(scenario_id)
+        store.ensure_runtime_master_data(scenario_id)
     except KeyError:
         raise _scenario_not_found(scenario_id)
     except RuntimeError as e:

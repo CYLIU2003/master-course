@@ -39,6 +39,116 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-21] README 使用方法更新と Tk dataset 候補の runtime-ready 化
+
+- **問題**:
+  - `README.md` の早見表が下位章の並びと 1 対 1 で対応しておらず、使用方法の参照導線が実装現況とずれていた。
+  - README 内に `Quick Setup 保存 -> scenario_overlay に保存` とある箇所が残っており、
+    実装済みの `dispatch_scope` 同期保存と食い違っていた。
+  - `tools/scenario_backup_tk.py` の dataset 候補は `/api/app/datasets` の全件をそのまま表示しており、
+    runtime 未整備 dataset をユーザーが新規 scenario に選べてしまっていた。
+
+- **対応**:
+  - `README.md`
+    - 早見表を「要約 + 1章〜11章」の各節対応に更新。
+    - `4.4 初回接続時の使い方` を追加し、`接続確認`、dataset 候補、Quick Setup 読込、
+      stale scenario 補正後の選び直し手順を明記。
+    - Quick Setup 保存先を `dispatch_scope / scenario_overlay` の同期保存に修正。
+    - データセット配置の説明を `data/built/{dataset_id}/` 基準へ更新し、
+      既定 runtime dataset が `tokyu_full` であることを追記。
+    - API 導線に `GET /api/app/datasets` と `GET /api/app/data-status` を追加。
+  - `tools/scenario_backup_tk.py`
+    - `/api/app/datasets` の `runtimeReady` / `builtReady` / `shardReady` を見て、
+      runtime 実行可能な dataset を優先表示するよう修正。
+    - runtime-ready dataset が 1 件もない場合だけ全候補へ fallback するようにした。
+    - scenario 作成ログに requested / effective datasetId を表示し、
+      backend の fallback を確認しやすくした。
+    - Quick Setup 読込時に depot/route の総数と選択数をログへ表示するようにした。
+
+- **検証**:
+  - `tests/test_scenario_backup_tk_dataset_options.py` を追加し、
+    `runtimeReady` 優先と全候補 fallback の 2 ケースを確認できるようにした。
+  - README の記述が 2026-03-21 時点の runtime 補正挙動と一致することを目視確認。
+
+### [DEV-2026-03-21] Prepared実行 timeout の原因修正（simulation job submit の自己デッドロック）
+
+- **問題**:
+  - `POST /api/scenarios/{id}/simulation/run` が `job_id` を返す前に長時間停止し、
+    Tk の `Prepared実行` が timeout していた。
+  - `bff/routers/simulation.py` の `_submit_simulation_job()` は
+    `_SIMULATION_FUTURE_LOCK` を保持したまま `_get_simulation_executor()` を呼び、
+    `threading.Lock` の自己再取得でデッドロックしていた。
+  - prepared run 前の再検証が `get_scenario_document()` を読んでいたため、
+    heavy artifact 差分で `prepared_input_id` hash が不安定になりやすく、
+    前段処理も不要に重かった。
+  - `tools/scenario_backup_tk.py` の `/simulation/run` は明示 timeout 未設定で、
+    既定 45 秒待ちに依存していた。
+
+- **対応**:
+  - `bff/routers/simulation.py`
+    - `_SIMULATION_FUTURE_LOCK` を `threading.RLock` へ変更し、job submit の自己デッドロックを解消。
+    - simulation executor に `BFF_SIM_EXECUTOR` を追加し、
+      Windows 既定を `thread` モードへ変更。
+    - `run_prepared_simulation()` / `run_simulation()` の prepared validation を
+      `get_scenario_document_shallow()` 基準へ変更。
+  - `bff/services/simulation_builder.py`
+    - `apply_builder_configuration()` を shallow load 基準に変更し、
+      prepare 時に timetable / graph / result artifact を読まないようにした。
+  - `bff/routers/optimization.py`
+    - `run_optimization()` / `reoptimize()` でも
+      `get_or_build_run_preparation()` 呼び出し前に shallow doc を使うよう統一した。
+  - `bff/services/run_preparation.py`
+    - `prepared_input_id` hash の volatile key に
+      `timetable_rows` / `stop_timetables` / `trips` / `graph` / `blocks` / `duties` /
+      `dispatch_plan` / `simulation_result` / `optimization_result` / `meta` / `stats` / `refs`
+      を追加し、shallow/full load 差分で hash が揺れないようにした。
+  - `tools/scenario_backup_tk.py`
+    - `/simulation/run` の client timeout を `180` 秒へ明示した。
+
+- **検証**:
+  - ローカル実測で `_submit_simulation_job` は `0.001s` で返ることを確認。
+  - `run_prepared_simulation()` は `job_id` を約 `1.5s` で返すことを確認。
+  - `python -m pytest tests/test_run_preparation_hash.py tests/test_simulation_executor_mode.py -q`
+    で `4 passed` を確認。
+
+### [DEV-2026-03-21] 最適化/Prepare の front-run mismatch 修正（stale dataset bootstrap + dispatch_scope 優先）
+
+- **問題**:
+  - `tokyu_dispatch_ready` はこの clone では runtime 用 `trips.parquet` を持たず、scenario bootstrap が seed-only (`44 routes / 0 trips`) になっていた。
+  - その状態で作られた既存 scenario は、フロントで選べる route/depot と runtime 実行時の built dataset (`tokyu_full`) が食い違い、Prepare/最適化が `trip_count=0` になりやすかった。
+  - さらに `src/runtime_scope.py` は `dispatch_scope` より `scenario_overlay.route_ids / depot_ids` を優先していたため、Quick Setup 保存後の route 選択が実行時に無視される条件があった。
+
+- **対応**:
+  - `src/research_dataset_loader.py`
+    - `build_dataset_bootstrap()` を修正し、要求 dataset が runtime 未整備で trip-backed data を返せない場合は、
+      `tokyu_full` へ自動フォールバックするようにした。
+    - `feed_context.requestedDatasetId` / `dataset_status.fallbackDatasetId` を付与し、fallback 発生を追跡可能にした。
+  - `bff/services/master_defaults.py`
+    - preloaded master data の `datasetId` を bootstrap の実効 dataset から返すよう修正。
+    - `repair_missing_master_data()` を拡張し、runtime に存在しない stale route/depot master を
+      実効 dataset の master へリベースしつつ、solver config などの scenario overlay は保持するようにした。
+  - `bff/store/scenario_store.py`
+    - `ensure_runtime_master_data()` を追加し、既存 scenario の stale master を必要時に永続補正できるようにした。
+    - `set_dispatch_scope()` で `scenario_overlay.depot_ids / route_ids` も同期し、
+      実行時 scope と UI 保存状態が乖離しないようにした。
+  - `src/runtime_scope.py`
+    - `resolve_scope()` を修正し、`scenario_overlay` より `dispatch_scope` の選択 route/depot を優先するようにした。
+  - `bff/routers/scenarios.py`, `bff/routers/master_data.py`, `bff/routers/simulation.py`, `bff/routers/optimization.py`
+    - editor bootstrap / quick setup / master-data read / prepare / simulation / optimization の入口で
+      `ensure_runtime_master_data()` を通すようにし、フロントから stale master を見えないようにした。
+
+- **効果**:
+  - 新規 scenario 作成時に runtime 未整備 dataset を選んでも、実行可能な runtime master に揃う。
+  - 既存 stale scenario を開いた際も、フロントが runtime に存在しない route/depot を出さなくなる。
+  - Quick Setup 保存後の route/depot 選択が Prepare / Prepared実行 / 最適化にそのまま反映される。
+
+- **検証**:
+  - `build_dataset_bootstrap("tokyu_dispatch_ready")` が
+    `feed_context.datasetId="tokyu_full"`, `routes=21`, `depots=3`, `trips=1000` を返すことを確認。
+  - `get_preloaded_master_data("tokyu_dispatch_ready")` が `datasetId="tokyu_full"` を返すことを確認。
+  - `python -m pytest tests/test_run_preparation_hash.py tests/test_simulation_executor_mode.py tests/test_runtime_scope_route_mapping.py tests/test_research_dataset_bootstrap_alignment.py tests/test_master_defaults_runtime_repair.py tests/test_scenario_store_dispatch_scope_overlay.py -q`
+    で `12 passed` を確認。
+
 ### [DEV-2026-03-18] Prepare時の台数決定を営業所在庫ベースへ変更（Basic Parameters廃止）
 
 - **背景課題**:

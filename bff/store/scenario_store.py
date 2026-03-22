@@ -760,6 +760,32 @@ def _needs_master_repair(doc: Dict[str, Any]) -> bool:
     )
 
 
+def _needs_runtime_master_alignment(doc: Dict[str, Any]) -> bool:
+    dataset_id = _master_repair_dataset_id(doc)
+    if not dataset_id:
+        return False
+    from bff.services import master_defaults
+
+    payload = master_defaults.get_preloaded_master_data(dataset_id)
+    effective_dataset_id = str(payload.get("datasetId") or "").strip()
+    if effective_dataset_id and effective_dataset_id != dataset_id:
+        return True
+
+    current_route_ids = {
+        str(item.get("id") or "").strip()
+        for item in doc.get("routes") or []
+        if str(item.get("id") or "").strip()
+    }
+    runtime_route_ids = {
+        str(item.get("id") or "").strip()
+        for item in payload.get("routes") or []
+        if str(item.get("id") or "").strip()
+    }
+    if current_route_ids and runtime_route_ids and not current_route_ids.intersection(runtime_route_ids):
+        return True
+    return False
+
+
 # Fields that are heavy and should NOT be loaded for lightweight operations
 # like editor-bootstrap.  These are populated on-demand by specific endpoints.
 _HEAVY_ARTIFACT_FIELDS = frozenset({
@@ -1781,6 +1807,24 @@ def get_scenario_document_shallow(scenario_id: str) -> Dict[str, Any]:
 
 def get_scenario(scenario_id: str) -> Dict[str, Any]:
     return _meta_payload(_load_shallow(scenario_id))
+
+
+def ensure_runtime_master_data(scenario_id: str) -> bool:
+    with _scenario_lock(scenario_id):
+        doc = _load(
+            scenario_id,
+            repair_missing_master=False,
+            skip_graph_arcs=True,
+        )
+        if not (_needs_master_repair(doc) or _needs_runtime_master_alignment(doc)):
+            return False
+        repaired = _repair_missing_master_defaults(doc, touch_updated_at=True)
+        if not repaired:
+            return False
+        _normalize_dispatch_scope(doc)
+        _invalidate_dispatch_artifacts(doc)
+        _save(doc)
+        return True
 
 
 def update_scenario(
@@ -3329,6 +3373,17 @@ def set_dispatch_scope(scenario_id: str, scope: Dict[str, Any]) -> Dict[str, Any
     }
     doc["dispatch_scope"] = next_scope
     normalized = _normalize_dispatch_scope(doc)
+    overlay = doc.get("scenario_overlay")
+    if isinstance(overlay, dict):
+        updated_overlay = dict(overlay)
+        updated_overlay["depot_ids"] = list(
+            (normalized.get("depotSelection") or {}).get("depotIds") or []
+        )
+        updated_overlay["route_ids"] = list(normalized.get("effectiveRouteIds") or [])
+        dataset_version = str(normalized.get("datasetVersion") or "").strip()
+        if dataset_version:
+            updated_overlay["dataset_version"] = dataset_version
+        doc["scenario_overlay"] = updated_overlay
     if normalized != current:
         _invalidate_dispatch_artifacts(doc)
     doc["meta"]["updatedAt"] = _now_iso()

@@ -4,6 +4,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+import unicodedata
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +31,13 @@ def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _normalize_token(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return unicodedata.normalize("NFKC", raw)
+
+
 def _artifact_path(root: Path, artifact_path: str) -> Path:
     path = Path(artifact_path)
     if path.is_absolute():
@@ -39,12 +47,12 @@ def _artifact_path(root: Path, artifact_path: str) -> Path:
 
 def route_code_from_scoped_route_id(route_id: str) -> str:
     parts = str(route_id or "").split(":")
-    return parts[-1] if parts else str(route_id or "")
+    return _normalize_token(parts[-1] if parts else str(route_id or ""))
 
 
 def depot_id_from_scoped_route_id(route_id: str) -> str:
     parts = str(route_id or "").split(":")
-    return parts[-2] if len(parts) >= 3 else ""
+    return _normalize_token(parts[-2] if len(parts) >= 3 else "")
 
 
 def service_id_to_day_type(service_id: str | None) -> str:
@@ -201,16 +209,16 @@ def _route_pairs_for_scope(
     *,
     index_payload: Dict[str, Any],
 ) -> List[Tuple[str, str]]:
-    depots = [str(item) for item in depot_ids or [] if str(item or "").strip()]
+    depots = [_normalize_token(item) for item in depot_ids or [] if str(item or "").strip()]
     route_id_list = [str(item) for item in route_ids or [] if str(item or "").strip()]
 
     route_index = {
-        str(item.get("route_id") or ""): dict(item)
+        _normalize_token(item.get("route_id")): dict(item)
         for item in index_payload.get("routes") or []
         if isinstance(item, dict) and str(item.get("route_id") or "").strip()
     }
     depot_index = {
-        str(item.get("depot_id") or ""): dict(item)
+        _normalize_token(item.get("depot_id")): dict(item)
         for item in index_payload.get("depots") or []
         if isinstance(item, dict) and str(item.get("depot_id") or "").strip()
     }
@@ -224,7 +232,7 @@ def _route_pairs_for_scope(
                 pairs.add((scoped_depot, route_id))
                 continue
             candidate_depots = [
-                str(item)
+                _normalize_token(item)
                 for item in (route_index.get(route_id) or {}).get("depot_ids") or []
                 if str(item or "").strip()
             ]
@@ -235,7 +243,7 @@ def _route_pairs_for_scope(
     elif depots:
         for depot_id in depots:
             for route_id in (depot_index.get(depot_id) or {}).get("route_ids") or []:
-                normalized_route_id = str(route_id or "").strip()
+                normalized_route_id = _normalize_token(route_id)
                 if normalized_route_id:
                     pairs.add((depot_id, normalized_route_id))
     else:
@@ -244,9 +252,9 @@ def _route_pairs_for_scope(
                 continue
             depot_id = str(item.get("depot_id") or "").strip()
             for route_id in item.get("route_ids") or []:
-                normalized_route_id = str(route_id or "").strip()
+                normalized_route_id = _normalize_token(route_id)
                 if depot_id and normalized_route_id:
-                    pairs.add((depot_id, normalized_route_id))
+                    pairs.add((_normalize_token(depot_id), normalized_route_id))
     return sorted(pairs)
 
 

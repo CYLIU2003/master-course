@@ -411,6 +411,15 @@ def _runtime_err_to_http(e: RuntimeError) -> HTTPException:
     raise e
 
 
+def _ensure_runtime_master_data(scenario_id: str) -> None:
+    try:
+        store.ensure_runtime_master_data(scenario_id)
+    except KeyError:
+        raise _not_found(scenario_id)
+    except RuntimeError as e:
+        raise _runtime_err_to_http(e)
+
+
 def _scenario_dataset_id(doc: Dict[str, Any]) -> Optional[str]:
     meta = dict(doc.get("meta") or {})
     overlay = dict(doc.get("scenario_overlay") or {})
@@ -1120,6 +1129,7 @@ def get_scenario(scenario_id: str) -> Dict[str, Any]:
 
 @router.get("/scenarios/{scenario_id}/editor-bootstrap")
 def get_editor_bootstrap(scenario_id: str) -> Dict[str, Any]:
+    _ensure_runtime_master_data(scenario_id)
     try:
         # Use shallow load: skips timetable_rows, trips, graph, duties etc.
         # Only meta + master data (depots, vehicles, routes, …) is loaded.
@@ -1140,6 +1150,7 @@ def get_editor_bootstrap(scenario_id: str) -> Dict[str, Any]:
 
 @router.get("/scenarios/{scenario_id}/editor-bootstrap-lite")
 def get_editor_bootstrap_lite(scenario_id: str) -> Dict[str, Any]:
+    _ensure_runtime_master_data(scenario_id)
     try:
         doc = store.get_scenario_document_shallow(scenario_id)
         scenario = store.get_scenario(scenario_id)
@@ -1162,6 +1173,7 @@ def get_quick_setup(
     depot_ids: Optional[str] = Query(default=None, alias="depotIds"),
     route_limit: int = Query(default=300, ge=50, le=1000, alias="routeLimit"),
 ) -> Dict[str, Any]:
+    _ensure_runtime_master_data(scenario_id)
     try:
         doc = store.get_scenario_document_shallow(scenario_id)
         scenario = store.get_scenario(scenario_id)
@@ -1196,6 +1208,7 @@ def get_quick_setup(
 
 @router.put("/scenarios/{scenario_id}/quick-setup")
 def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str, Any]:
+    _ensure_runtime_master_data(scenario_id)
     try:
         current_scope = store.get_dispatch_scope(scenario_id)
     except KeyError:
@@ -1459,6 +1472,7 @@ def delete_scenario(scenario_id: str) -> Response:
 
 @router.post("/scenarios/{scenario_id}/activate")
 def activate_scenario(scenario_id: str) -> Dict[str, Any]:
+    _ensure_runtime_master_data(scenario_id)
     try:
         scenario = _ensure_scenario_bootstrap_persisted(scenario_id)
     except KeyError:

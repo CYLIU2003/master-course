@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+import unicodedata
 
 import pandas as pd
 
@@ -19,6 +20,7 @@ class RuntimeScope:
     route_ids: list[str]
     service_ids: list[str]
     service_date: str | None = None
+    route_selectors: list[str] = field(default_factory=list)
 
     @property
     def service_types(self) -> list[str]:
@@ -58,6 +60,53 @@ def _normalize_service_id(value: Any) -> str:
     }:
         return "SUN_HOL"
     return upper or "WEEKDAY"
+
+
+def _normalize_text(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return unicodedata.normalize("NFKC", raw)
+
+
+def _text_aliases(value: Any) -> set[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return set()
+    tail = raw.split(":")[-1].strip()
+    aliases = {
+        raw,
+        tail,
+        _normalize_text(raw),
+        _normalize_text(tail),
+    }
+    return {item for item in aliases if item}
+
+
+def _dedupe_texts(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        raw = str(value or "").strip()
+        if not raw:
+            continue
+        key = _normalize_text(raw)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(raw)
+    return ordered
+
+
+def _route_label_head(value: Any) -> str:
+    normalized = _normalize_text(value)
+    if not normalized:
+        return ""
+    for token in ("(", "（"):
+        idx = normalized.find(token)
+        if idx >= 0:
+            normalized = normalized[:idx]
+    return normalized.strip()
 
 
 def _service_aliases(values: list[str]) -> set[str]:
@@ -104,21 +153,71 @@ def _resolve_service_ids(scenario_like: dict) -> list[str]:
     return selected or ["WEEKDAY"]
 
 
+def _resolve_route_selectors(scenario_like: dict, route_ids: list[str]) -> list[str]:
+    selectors = list(route_ids)
+    if not route_ids:
+        return selectors
+    selected_aliases: set[str] = set()
+    for route_id in route_ids:
+        selected_aliases.update(_text_aliases(route_id))
+    for route in list(scenario_like.get("routes") or []):
+        if not isinstance(route, dict):
+            continue
+        route_values = [
+            str(route.get(key) or "").strip()
+            for key in (
+                "id",
+                "routeCode",
+                "routeLabel",
+                "name",
+                "routeFamilyCode",
+                "routeFamilyLabel",
+            )
+            if str(route.get(key) or "").strip()
+        ]
+        if not route_values:
+            continue
+        route_aliases: set[str] = set()
+        for value in route_values:
+            route_aliases.update(_text_aliases(value))
+        if not route_aliases & selected_aliases:
+            continue
+        selectors.extend(route_values)
+        for key in ("routeLabel", "name", "routeFamilyLabel"):
+            head = _route_label_head(route.get(key))
+            if head:
+                selectors.append(head)
+    return _dedupe_texts(selectors)
+
+
 def resolve_scope(scenario_overlay: dict, routes_df: pd.DataFrame) -> RuntimeScope:
     overlay = _overlay_like(scenario_overlay)
     dispatch_scope = _dispatch_scope_like(scenario_overlay)
-    depot_ids = list(overlay.get("depot_ids") or [])
-    route_ids = list(overlay.get("route_ids") or [])
+    depot_selection = dispatch_scope.get("depotSelection") or {}
+    route_selection = dispatch_scope.get("routeSelection") or {}
+    depot_ids = [
+        str(value)
+        for value in list(depot_selection.get("depotIds") or [])
+        if str(value or "").strip()
+    ]
+    primary = dispatch_scope.get("depotId") or depot_selection.get("primaryDepotId")
+    if primary and str(primary) not in depot_ids:
+        depot_ids.insert(0, str(primary))
     if not depot_ids:
-        depot_selection = dispatch_scope.get("depotSelection") or {}
-        depot_ids = [str(value) for value in list(depot_selection.get("depotIds") or []) if str(value or "").strip()]
-        primary = dispatch_scope.get("depotId") or depot_selection.get("primaryDepotId")
-        if primary and str(primary) not in depot_ids:
-            depot_ids.insert(0, str(primary))
+        depot_ids = list(overlay.get("depot_ids") or [])
+
+    route_ids = [
+        str(value)
+        for value in list(route_selection.get("includeRouteIds") or [])
+        if str(value or "").strip()
+    ]
+    route_ids = route_ids or [
+        str(value)
+        for value in list(dispatch_scope.get("effectiveRouteIds") or [])
+        if str(value or "").strip()
+    ]
     if not route_ids:
-        route_selection = dispatch_scope.get("routeSelection") or {}
-        route_ids = [str(value) for value in list(route_selection.get("includeRouteIds") or []) if str(value or "").strip()]
-        route_ids = route_ids or [str(value) for value in list(dispatch_scope.get("effectiveRouteIds") or []) if str(value or "").strip()]
+        route_ids = list(overlay.get("route_ids") or [])
     if not route_ids and depot_ids and not routes_df.empty:
         depot_column = "depot_id" if "depot_id" in routes_df.columns else "depotId"
         route_column = "route_code" if "route_code" in routes_df.columns else "routeCode"
@@ -136,6 +235,7 @@ def resolve_scope(scenario_overlay: dict, routes_df: pd.DataFrame) -> RuntimeSco
             )
         ).strip()
         or None,
+        route_selectors=_resolve_route_selectors(scenario_overlay, route_ids),
     )
 
 
@@ -153,26 +253,110 @@ def _filter_by_service(frame: pd.DataFrame, scope: RuntimeScope) -> pd.DataFrame
 def _route_aliases(route_ids: list[str]) -> set[str]:
     aliases: set[str] = set()
     for value in route_ids:
-        raw = str(value or "").strip()
-        if not raw:
-            continue
-        aliases.add(raw)
-        aliases.add(raw.split(":")[-1])
+        aliases.update(_text_aliases(value))
     return aliases
 
 
-def _filter_by_route(frame: pd.DataFrame, route_ids: list[str]) -> pd.DataFrame:
-    if frame.empty or not route_ids:
+def _series_matches_aliases(series: pd.Series, aliases: set[str]) -> pd.Series:
+    text = series.fillna("").astype(str).str.strip()
+    tail = text.where(~text.str.contains(":"), text.str.split(":").str[-1].fillna(""))
+    normalized = text.map(_normalize_text)
+    tail_normalized = tail.map(_normalize_text)
+    return (
+        text.isin(aliases)
+        | tail.isin(aliases)
+        | normalized.isin(aliases)
+        | tail_normalized.isin(aliases)
+    )
+
+
+def _canonical_route_ids_from_lookup(
+    routes_df: pd.DataFrame,
+    route_selectors: list[str],
+    depot_ids: list[str],
+) -> set[str]:
+    if routes_df.empty:
+        return set()
+    id_column = "id" if "id" in routes_df.columns else "route_id" if "route_id" in routes_df.columns else "routeId" if "routeId" in routes_df.columns else None
+    if not id_column:
+        return set()
+    selector_aliases = _route_aliases(route_selectors)
+    if selector_aliases:
+        route_mask = pd.Series(False, index=routes_df.index)
+        for column in (
+            "id",
+            "route_id",
+            "routeId",
+            "routeCode",
+            "route_code",
+            "routeLabel",
+            "route_label",
+            "name",
+            "routeFamilyCode",
+            "route_family_code",
+            "routeFamilyLabel",
+            "route_family_label",
+        ):
+            if column in routes_df.columns:
+                route_mask = route_mask | _series_matches_aliases(routes_df[column], selector_aliases)
+        if bool(route_mask.any()):
+            return {
+                str(value).strip()
+                for value in routes_df.loc[route_mask, id_column].tolist()
+                if str(value).strip()
+            }
+    depot_aliases = _route_aliases(depot_ids)
+    if depot_aliases:
+        depot_mask = pd.Series(False, index=routes_df.index)
+        for column in ("depotId", "depot_id"):
+            if column in routes_df.columns:
+                depot_mask = depot_mask | _series_matches_aliases(routes_df[column], depot_aliases)
+        if bool(depot_mask.any()):
+            return {
+                str(value).strip()
+                for value in routes_df.loc[depot_mask, id_column].tolist()
+                if str(value).strip()
+            }
+    return set()
+
+
+def _filter_by_route(
+    frame: pd.DataFrame,
+    route_ids: list[str],
+    *,
+    route_selectors: list[str] | None = None,
+    routes_df: pd.DataFrame | None = None,
+    depot_ids: list[str] | None = None,
+) -> pd.DataFrame:
+    if frame.empty:
         return frame.reset_index(drop=True)
-    aliases = _route_aliases(route_ids)
+    selectors = list(route_selectors or route_ids or [])
+    depots = list(depot_ids or [])
+    if not selectors and not depots:
+        return frame.reset_index(drop=True)
+    canonical_route_ids = _canonical_route_ids_from_lookup(
+        routes_df if isinstance(routes_df, pd.DataFrame) else pd.DataFrame(),
+        selectors,
+        depots,
+    )
+    if canonical_route_ids:
+        aliases = _route_aliases(list(canonical_route_ids))
+        for column in ("route_id", "routeId", "id"):
+            if column in frame.columns:
+                return frame[_series_matches_aliases(frame[column], aliases)].reset_index(drop=True)
+    aliases = _route_aliases(selectors)
     for column in ("route_code", "routeCode", "route_id", "routeId"):
         if column not in frame.columns:
             continue
-        series = frame[column].astype(str).str.strip()
-        expanded = series.where(~series.str.contains(":"), series.str.split(":").str[-1])
-        mask = series.isin(aliases) | expanded.isin(aliases)
-        return frame[mask].reset_index(drop=True)
+        return frame[_series_matches_aliases(frame[column], aliases)].reset_index(drop=True)
     return frame.reset_index(drop=True)
+
+
+def _load_routes_lookup(built_dir: Path) -> pd.DataFrame:
+    routes_path = built_dir / "routes.parquet"
+    if not routes_path.exists():
+        return pd.DataFrame()
+    return pd.read_parquet(routes_path)
 
 
 def load_scoped_trips(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame:
@@ -189,7 +373,13 @@ def load_scoped_trips(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame:
         return frame.reset_index(drop=True)
     frame = pd.read_parquet(built_dir / "trips.parquet")
     frame = _filter_by_service(frame, scope)
-    return _filter_by_route(frame, scope.route_ids)
+    return _filter_by_route(
+        frame,
+        scope.route_ids,
+        route_selectors=scope.route_selectors,
+        routes_df=_load_routes_lookup(built_dir),
+        depot_ids=scope.depot_ids,
+    )
 
 
 def load_scoped_timetables(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame:
@@ -206,4 +396,10 @@ def load_scoped_timetables(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame
         return frame.reset_index(drop=True)
     frame = pd.read_parquet(built_dir / "timetables.parquet")
     frame = _filter_by_service(frame, scope)
-    return _filter_by_route(frame, scope.route_ids)
+    return _filter_by_route(
+        frame,
+        scope.route_ids,
+        route_selectors=scope.route_selectors,
+        routes_df=_load_routes_lookup(built_dir),
+        depot_ids=scope.depot_ids,
+    )

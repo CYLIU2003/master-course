@@ -23,6 +23,56 @@ from typing import Any
 from urllib import error, parse, request
 
 
+def _dataset_item_id(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    return str(item.get("dataset_id") or item.get("datasetId") or "").strip()
+
+
+def _dataset_runtime_ready(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    return bool(
+        item.get("runtimeReady")
+        or item.get("runtime_ready")
+        or item.get("builtReady")
+        or item.get("built_ready")
+        or item.get("shardReady")
+        or item.get("shard_ready")
+    )
+
+
+def _choose_dataset_options(datasets_resp: dict[str, Any]) -> dict[str, Any]:
+    items = [item for item in list(datasets_resp.get("items") or []) if isinstance(item, dict)]
+    all_dataset_ids: list[str] = []
+    runtime_ready_ids: list[str] = []
+    hidden_ids: list[str] = []
+    for item in items:
+        dataset_id = _dataset_item_id(item)
+        if not dataset_id:
+            continue
+        all_dataset_ids.append(dataset_id)
+        if _dataset_runtime_ready(item):
+            runtime_ready_ids.append(dataset_id)
+        else:
+            hidden_ids.append(dataset_id)
+
+    use_runtime_ready_only = bool(runtime_ready_ids)
+    visible_ids = runtime_ready_ids if use_runtime_ready_only else all_dataset_ids
+    default_dataset_id = str(datasets_resp.get("defaultDatasetId") or "").strip()
+    if "tokyu_full" in visible_ids:
+        default_dataset_id = "tokyu_full"
+    elif default_dataset_id not in visible_ids:
+        default_dataset_id = visible_ids[0] if visible_ids else "tokyu_full"
+
+    return {
+        "visibleIds": visible_ids,
+        "hiddenIds": hidden_ids if use_runtime_ready_only else [],
+        "defaultDatasetId": default_dataset_id,
+        "usedRuntimeReadyOnly": use_runtime_ready_only,
+    }
+
+
 class BFFClient:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
@@ -253,6 +303,7 @@ class BFFClient:
             "POST",
             f"/scenarios/{scenario_id}/simulation/run",
             {"prepared_input_id": prepared_input_id, "source": source},
+            timeout_seconds=180.0,
         )
 
     def run_optimization(self, scenario_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -286,6 +337,8 @@ class App:
         self.client = BFFClient("http://127.0.0.1:8000")
         self.scenarios: list[dict[str, Any]] = []
         self.prepared_input_id = ""
+        self.prepared_ready = False
+        self.prepared_trip_count = 0
         self.last_job_id = ""
         self.vehicle_rows: list[dict[str, Any]] = []
         self.template_rows: list[dict[str, Any]] = []
@@ -1387,20 +1440,17 @@ class App:
         self.run_bg(action, done)
 
     def _apply_dataset_options(self, datasets_resp: dict[str, Any]) -> None:
-        items = list(datasets_resp.get("items") or [])
-        dataset_ids = [str(item.get("dataset_id") or item.get("datasetId") or "").strip() for item in items]
-        self.available_dataset_ids = [item for item in dataset_ids if item]
-        default_dataset_id = str(datasets_resp.get("defaultDatasetId") or "").strip()
-        # 既定は東急バス全体データセットを優先する。
-        if "tokyu_full" in self.available_dataset_ids:
-            self.default_dataset_id = "tokyu_full"
-        elif default_dataset_id:
-            self.default_dataset_id = default_dataset_id
-        elif self.available_dataset_ids:
-            self.default_dataset_id = self.available_dataset_ids[0]
+        selected = _choose_dataset_options(datasets_resp)
+        self.available_dataset_ids = list(selected.get("visibleIds") or [])
+        self.default_dataset_id = str(selected.get("defaultDatasetId") or "tokyu_full").strip() or "tokyu_full"
         self.dataset_combo["values"] = self.available_dataset_ids
         if not self.dataset_id_var.get().strip() or self.dataset_id_var.get().strip() not in self.available_dataset_ids:
             self.dataset_id_var.set(self.default_dataset_id)
+        hidden_ids = [str(item).strip() for item in (selected.get("hiddenIds") or []) if str(item).strip()]
+        if hidden_ids:
+            self.log_line("runtime 未整備 dataset を候補から除外: " + ", ".join(hidden_ids))
+        elif datasets_resp.get("items") and not selected.get("usedRuntimeReadyOnly"):
+            self.log_line("runtimeReady dataset が見つからないため全 dataset 候補を表示します")
         self.log_line(f"dataset候補取得: {len(self.available_dataset_ids)} 件 (default={self.default_dataset_id})")
 
     def refresh_scenarios(self) -> None:
@@ -1650,8 +1700,18 @@ class App:
         def action() -> dict[str, Any]:
             return self.client.create_scenario(name, "backup console", dataset_id, random_seed)
 
-        def done(_resp: dict[str, Any]) -> None:
-            self.log_line(f"シナリオ作成: {name}")
+        def done(resp: dict[str, Any]) -> None:
+            scenario_id = str(resp.get("id") or "").strip()
+            effective_dataset_id = str(resp.get("datasetId") or "").strip()
+            if effective_dataset_id and effective_dataset_id != dataset_id:
+                self.log_line(
+                    f"シナリオ作成: {name} [{scenario_id}] "
+                    f"(requested={dataset_id}, effective={effective_dataset_id})"
+                )
+            elif effective_dataset_id:
+                self.log_line(f"シナリオ作成: {name} [{scenario_id}] (dataset={effective_dataset_id})")
+            else:
+                self.log_line(f"シナリオ作成: {name} [{scenario_id}]")
             self.refresh_scenarios()
 
         self.run_bg(action, done)
@@ -1744,7 +1804,15 @@ class App:
             self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
 
             self._refresh_depot_dropdowns(depots)
-            self.log_line(f"Quick Setup を読み込みました (routes={len(routes)}件)")
+            self.log_line(
+                "Quick Setup を読み込みました "
+                f"(depots={len(depots)}件/{len(selected_depots)}選択, "
+                f"routes={len(routes)}件/{len(selected_routes)}選択)"
+            )
+            if (depots and not selected_depots) or (routes and not selected_routes):
+                self.log_line(
+                    "営業所または路線の選択が空です。stale な保存選択が runtime 補正で外れた場合は選び直してください"
+                )
 
         self.run_bg(action, done)
 
@@ -2533,6 +2601,8 @@ class App:
 
         def done(resp: dict[str, Any]) -> None:
             self.prepared_input_id = str(resp.get("preparedInputId") or "")
+            self.prepared_ready = bool(resp.get("ready"))
+            self.prepared_trip_count = int(resp.get("tripCount") or 0)
             self.prepared_var.set(f"prepared_input_id: {self.prepared_input_id or '-'}")
             self.log_line(
                 f"Prepare完了: ready={resp.get('ready')} / tripCount={resp.get('tripCount')} / primaryDepot={resp.get('primaryDepotId')}"
@@ -2542,7 +2612,13 @@ class App:
             )
             for warning in resp.get("warnings") or []:
                 self.log_line(f"警告: {warning}")
-            messagebox.showinfo("Prepare完了", f"prepared_input_id: {self.prepared_input_id or '-'}")
+            if self.prepared_ready:
+                messagebox.showinfo("Prepare完了", f"prepared_input_id: {self.prepared_input_id or '-'}")
+            else:
+                messagebox.showwarning(
+                    "Prepare未完了",
+                    f"tripCount={self.prepared_trip_count} のため実行対象がありません。選択 route / day type を確認してください。",
+                )
 
         self.run_bg(lambda: self.client.prepare_simulation(scenario_id, self._prepare_payload()), done)
 
@@ -2556,6 +2632,9 @@ class App:
         scenario_id = self._selected_scenario_id()
         if not scenario_id or not self.prepared_input_id:
             messagebox.showwarning("入力不足", "先に Prepare を実行してください")
+            return
+        if not self.prepared_ready or self.prepared_trip_count <= 0:
+            messagebox.showwarning("Prepare未完了", "tripCount=0 のため Prepared実行できません。選択 route / day type を確認してください。")
             return
         self.log_line("Prepared実行を開始します")
         messagebox.showinfo("実行開始", "Prepared実行を開始します")
@@ -2641,6 +2720,12 @@ class App:
         btns.pack(fill=tk.X)
 
         def start_optimization() -> None:
+            if not self.prepared_ready or self.prepared_trip_count <= 0:
+                messagebox.showwarning(
+                    "Prepare未完了",
+                    "tripCount=0 のため最適化を開始できません。先に Prepare を成功させてください。",
+                )
+                return
             depots = self._selected_depot_ids()
             effective_time_limit = self._effective_optimization_time_limit_seconds()
             payload = {

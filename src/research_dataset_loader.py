@@ -452,6 +452,53 @@ def _filter_rows_by_route_ids(
     return [row for row in rows if str(row.get("route_id") or "") in route_ids]
 
 
+def _available_route_ids_from_rows(*row_groups: Iterable[Dict[str, Any]]) -> set[str]:
+    route_ids: set[str] = set()
+    for rows in row_groups:
+        for row in rows:
+            route_id = str(row.get("route_id") or row.get("routeId") or "").strip()
+            if route_id:
+                route_ids.add(route_id)
+    return route_ids
+
+
+def _filter_routes_by_route_ids(
+    routes: Iterable[Dict[str, Any]],
+    route_ids: set[str],
+) -> List[Dict[str, Any]]:
+    if not route_ids:
+        return []
+    return [
+        dict(route)
+        for route in routes
+        if str((route or {}).get("id") or "").strip() in route_ids
+    ]
+
+
+def _filter_depots_by_route_context(
+    depots: Iterable[Dict[str, Any]],
+    routes: Iterable[Dict[str, Any]],
+    assignments: Iterable[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    referenced_depot_ids = {
+        str((route or {}).get("depotId") or "").strip()
+        for route in routes
+        if str((route or {}).get("depotId") or "").strip()
+    }
+    referenced_depot_ids.update(
+        str((assignment or {}).get("depotId") or "").strip()
+        for assignment in assignments
+        if str((assignment or {}).get("depotId") or "").strip()
+    )
+    if not referenced_depot_ids:
+        return [dict(item) for item in depots]
+    return [
+        dict(item)
+        for item in depots
+        if str((item or {}).get("id") or (item or {}).get("depotId") or "").strip() in referenced_depot_ids
+    ]
+
+
 def _build_route_assignments(
     routes: Iterable[Dict[str, Any]],
     route_rows: Iterable[Dict[str, Any]],
@@ -808,6 +855,11 @@ def build_dataset_bootstrap(
                         schema_name="stop_timetables",
                     )
                 ]
+            available_route_ids = _available_route_ids_from_rows(
+                built_timetable_rows,
+                built_trips,
+            )
+            built_routes = _filter_routes_by_route_ids(built_routes, available_route_ids)
             if built_routes and built_timetable_rows and built_trips:
                 routes = built_routes
                 timetable_rows = built_timetable_rows
@@ -856,6 +908,7 @@ def build_dataset_bootstrap(
 
     route_assignments = _build_route_assignments(routes, route_rows)
     depot_permissions = _build_depot_permissions(route_assignments)
+    depots = _filter_depots_by_route_context(depots, routes, route_assignments)
     overlay = default_scenario_overlay(
         scenario_id=scenario_id,
         dataset_id=dataset_id,
@@ -912,6 +965,25 @@ def build_dataset_bootstrap(
         "scenario_overlay": overlay.model_dump(),
         "dataset_status": status,
     }
+    if (
+        dataset_id != DEFAULT_DATASET_ID
+        and not list(result.get("trips") or [])
+    ):
+        fallback = build_dataset_bootstrap(
+            DEFAULT_DATASET_ID,
+            scenario_id=scenario_id,
+            random_seed=random_seed,
+        )
+        if list(fallback.get("trips") or []):
+            fallback_feed_context = dict(fallback.get("feed_context") or {})
+            fallback_feed_context["requestedDatasetId"] = dataset_id
+            fallback["feed_context"] = fallback_feed_context
+
+            fallback_status = dict(fallback.get("dataset_status") or {})
+            fallback_status["requestedDatasetId"] = dataset_id
+            fallback_status["fallbackDatasetId"] = DEFAULT_DATASET_ID
+            fallback["dataset_status"] = fallback_status
+            return normalize_for_python(fallback)
     # Parquet/Arrow 由来の numpy 型を Python ネイティブ型に一括変換して返す。
     # BFF 層で個別ガードを入れているが、ここで一括処理するのが canonical パス。
     return normalize_for_python(result)

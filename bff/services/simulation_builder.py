@@ -267,7 +267,7 @@ def apply_builder_configuration(
     scenario_id: str,
     body: Any,
 ) -> Dict[str, Any]:
-    doc = store.get_scenario_document(scenario_id, repair_missing_master=False)
+    doc = store.get_scenario_document_shallow(scenario_id)
     valid_depot_ids = {
         str(item.get("id") or item.get("depotId") or "").strip()
         for item in doc.get("depots") or []

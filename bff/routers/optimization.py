@@ -55,6 +55,19 @@ _OPTIMIZATION_FUTURE: Optional[Future[Any]] = None
 _OPTIMIZATION_FUTURE_LOCK = threading.RLock()
 
 
+def _require_nonempty_prepared_scope(prep, *, action: str) -> None:
+    if int(prep.scope_summary.get("trip_count") or 0) > 0:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail=make_error(
+            AppErrorCode.SCENARIO_INCOMPLETE,
+            f"{action} failed: no trips matched the current depot / route / day-type selection.",
+            scopeSummary=prep.scope_summary,
+        ),
+    )
+
+
 class RunOptimizationBody(BaseModel):
     mode: str = "mode_milp_only"
     time_limit_seconds: int = 300
@@ -226,6 +239,7 @@ def _not_found(scenario_id: str) -> HTTPException:
 def _require_scenario(scenario_id: str) -> None:
     try:
         store.get_scenario(scenario_id)
+        store.ensure_runtime_master_data(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
@@ -976,7 +990,7 @@ def run_optimization(
 ) -> Dict[str, Any]:
     print(f"DEBUG: run_optimization called for {scenario_id}", flush=True)
     _require_scenario(scenario_id)
-    scenario = store.get_scenario(scenario_id)
+    scenario = store.get_scenario_document_shallow(scenario_id)
     prep = get_or_build_run_preparation(
         scenario=scenario,
         built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
@@ -991,6 +1005,7 @@ def run_optimization(
                 f"Run preparation failed: {prep.error}",
             ),
         )
+    _require_nonempty_prepared_scope(prep, action="Optimization preflight")
     request = body or RunOptimizationBody()
     try:
         scope = _resolve_dispatch_scope(
@@ -1060,7 +1075,7 @@ def reoptimize(
     _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
-    scenario = store.get_scenario(scenario_id)
+    scenario = store.get_scenario_document_shallow(scenario_id)
     prep = get_or_build_run_preparation(
         scenario=scenario,
         built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
@@ -1075,6 +1090,7 @@ def reoptimize(
                 f"Run preparation failed: {prep.error}",
             ),
         )
+    _require_nonempty_prepared_scope(prep, action="Re-optimization preflight")
     scope = _resolve_dispatch_scope(
         scenario_id,
         service_id=body.service_id,
