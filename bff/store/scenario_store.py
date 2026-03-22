@@ -1501,16 +1501,13 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
         for route_id, assignment in assignment_map.items():
             if str(assignment.get("depotId")) in selected_depots and route_id not in candidate_route_ids:
                 candidate_route_ids.append(route_id)
-        for item in doc.get("depot_route_permissions") or []:
-            route_id = item.get("routeId")
-            depot_id = item.get("depotId")
-            if route_id is None or depot_id is None:
-                continue
-            route_id = str(route_id)
+        for route in doc.get("routes") or []:
+            route_id = str(route.get("id") or "").strip()
+            depot_id = str(route.get("depotId") or "").strip()
             if (
-                route_id in route_ids
-                and str(depot_id) in selected_depots
-                and bool(item.get("allowed")) is True
+                route_id
+                and depot_id in selected_depots
+                and route_id in route_ids
                 and route_id not in candidate_route_ids
             ):
                 candidate_route_ids.append(route_id)
@@ -1518,7 +1515,7 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
         candidate_route_ids = sorted(route_ids)
 
     if route_mode == "all":
-        effective_route_ids = [route_id for route_id in sorted(route_ids) if route_id not in exclude_route_ids]
+        effective_route_ids = [route_id for route_id in candidate_route_ids if route_id not in exclude_route_ids]
     elif route_mode == "include":
         effective_route_ids = [route_id for route_id in include_route_ids if route_id not in exclude_route_ids]
     elif route_mode == "exclude":

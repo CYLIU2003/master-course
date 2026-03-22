@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from bff.services.service_ids import canonical_service_id
+from bff.services.route_linking import (
+    filter_linked_route_ids,
+    route_trip_counts_for_dataset,
+)
 from bff.store import scenario_store as store
 from src.scenario_overlay import TimeOfUseBand, default_scenario_overlay
 
@@ -310,7 +314,23 @@ def apply_builder_configuration(
         for route_id in body.selected_route_ids
         if str(route_id or "").strip() in set(candidate_route_ids)
     ]
-    if not selected_route_ids:
+    dataset_id = str(
+        (doc.get("feed_context") or {}).get("datasetId")
+        or (doc.get("scenario_overlay") or {}).get("dataset_id")
+        or (doc.get("scenario_overlay") or {}).get("datasetId")
+        or ""
+    ).strip()
+    route_trip_counts = (
+        route_trip_counts_for_dataset(dataset_id, selected_day_type)
+        if dataset_id
+        else {}
+    )
+    if route_trip_counts:
+        selected_route_ids = filter_linked_route_ids(
+            selected_route_ids,
+            route_trip_counts,
+        )
+    elif not selected_route_ids:
         selected_route_ids = list(candidate_route_ids)
 
     settings = body.simulation_settings

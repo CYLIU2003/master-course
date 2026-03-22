@@ -39,6 +39,41 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-22] Quick Setup が全 route を誤表示し、Prepare が `tripCount=0` になりやすい問題を修正
+
+- **問題**:
+  - `tools/scenario_backup_tk.py` の `load_quick_setup()` が `GET /quick-setup` で返した depot-scoped route 一覧を捨てて、
+    `GET /routes` の全件一覧で上書きしていた。
+  - `bff/store/scenario_store.py` の `candidateRouteIds` が full-matrix `depot_route_permissions` を使っており、
+    営業所選択後でも全 route が候補に残りやすかった。
+  - その結果、UI では選べるが `trips.parquet` と link していない route を既定選択しやすく、
+    Prepare が `tripCount=0` になっていた。
+
+- **対応**:
+  - `tools/scenario_backup_tk.py`
+    - Quick Setup 読込時に `/quick-setup` の route payload をそのまま使うよう修正し、
+      global route 一覧で上書きしないようにした。
+    - backend から返る `availableDayTypes` で day type 候補を同期し、
+      link 済み route が 0 件のときはログで明示するようにした。
+    - Prepare 未完了メッセージも `route / day type / timetable linkage` を確認する文面へ更新した。
+  - `bff/store/scenario_store.py`
+    - `candidateRouteIds` / `effectiveRouteIds` は selected depot 配下の route を基準に計算するよう修正し、
+      full-matrix permission で候補を拡張しないようにした。
+  - `bff/routers/scenarios.py`, `bff/services/simulation_builder.py`, `bff/services/route_linking.py`
+    - `trips.parquet` の route link 数を読み、Quick Setup の `tripCount` と既定選択を trip-linked subset に揃えた。
+    - builder 側も未リンク route を自動採用しないようにし、false positive な route 選択を避けるようにした。
+
+- **検証**:
+  - `tests/test_quick_setup_route_selection.py`
+    - selected depot assignment で route list が絞られる回帰
+    - Quick Setup payload が trip-linked route だけを既定選択する回帰
+    を追加。
+  - `tests/test_scenario_store_dispatch_scope_overlay.py`
+    - full-matrix permission が candidate route を全件化しない回帰
+    を追加。
+  - `python -m pytest tests/test_run_preparation_hash.py tests/test_simulation_executor_mode.py tests/test_runtime_scope_route_mapping.py tests/test_research_dataset_bootstrap_alignment.py tests/test_master_defaults_runtime_repair.py tests/test_scenario_store_dispatch_scope_overlay.py tests/test_quick_setup_route_selection.py tests/test_scenario_backup_tk_dataset_options.py -q`
+    で `28 passed` を確認。
+
 ### [DEV-2026-03-22] Quick Setup の路線選択を系統単位 UI に変更し、variant 個別除外を保持
 
 - **問題**:

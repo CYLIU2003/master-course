@@ -35,6 +35,10 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from bff.services import research_catalog
+from bff.services.route_linking import (
+    filter_linked_route_ids,
+    route_trip_counts_for_dataset,
+)
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
@@ -813,6 +817,7 @@ def _quick_route_items(
     selected_depot_ids: List[str],
     selected_route_ids: List[str],
     *,
+    route_trip_counts: Dict[str, int],
     route_limit: int,
 ) -> List[Dict[str, Any]]:
     selected_depot_set = {
@@ -824,10 +829,16 @@ def _quick_route_items(
 
     routes = [dict(route) for route in doc.get("routes") or []]
     if selected_depot_set:
+        route_index = _depot_route_index(doc)
+        scoped_route_ids = {
+            route_id
+            for depot_id in selected_depot_set
+            for route_id in (route_index.get(depot_id) or [])
+        }
         routes = [
             route
             for route in routes
-            if str(route.get("depotId") or "").strip() in selected_depot_set
+            if str(route.get("id") or "").strip() in scoped_route_ids
         ]
 
     routes.sort(
@@ -849,7 +860,7 @@ def _quick_route_items(
         route_id = str(route.get("id") or "").strip()
         if not route_id:
             continue
-        trip_count = _route_trip_count(route)
+        trip_count = int(route_trip_counts.get(route_id, _route_trip_count(route)))
         items.append(
             {
                 "id": route_id,
@@ -889,7 +900,16 @@ def _build_quick_setup_payload(
 ) -> Dict[str, Any]:
     route_index = _depot_route_index(doc)
     builder_defaults = _builder_defaults(doc, route_index, dispatch_scope)
-    selected_route_ids = list(dispatch_scope.get("effectiveRouteIds") or [])
+    dataset_id = _scenario_dataset_id(doc) or str(scenario.get("datasetId") or "").strip()
+    route_trip_counts = (
+        route_trip_counts_for_dataset(dataset_id, dispatch_scope.get("serviceId"))
+        if dataset_id
+        else {}
+    )
+    selected_route_ids = filter_linked_route_ids(
+        list(dispatch_scope.get("effectiveRouteIds") or []),
+        route_trip_counts,
+    )
     vehicles = [dict(item) for item in doc.get("vehicles") or []]
     vehicle_count_by_depot: Dict[str, int] = {}
     for vehicle in vehicles:
@@ -934,6 +954,7 @@ def _build_quick_setup_payload(
             doc,
             selected_depot_ids,
             selected_route_ids,
+            route_trip_counts=route_trip_counts,
             route_limit=route_limit,
         ),
         "dispatchScope": {
@@ -949,6 +970,7 @@ def _build_quick_setup_payload(
                 dispatch_scope.get("allowInterDepotSwap", False)
             ),
         },
+        "availableDayTypes": _available_day_types(doc, dispatch_scope),
         "solverSettings": {
             "solverMode": builder_defaults.get("solverMode") or "mode_milp_only",
             "objectiveMode": builder_defaults.get("objectiveMode") or "total_cost",

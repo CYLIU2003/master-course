@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from bff.routers.scenarios import _quick_setup_route_selection_patch
+from unittest import mock
+
+from bff.routers import scenarios
+from bff.routers.scenarios import _quick_route_items, _quick_setup_route_selection_patch
 
 
 def test_quick_setup_route_selection_turns_unchecked_routes_into_excludes() -> None:
@@ -55,3 +58,98 @@ def test_quick_setup_route_selection_keeps_routes_outside_selected_depot_as_incl
 
     assert route_selection["includeRouteIds"] == ["route-c"]
     assert route_selection["excludeRouteIds"] == ["route-b"]
+
+
+def test_quick_route_items_filter_by_selected_depot_assignment() -> None:
+    doc = {
+        "routes": [
+            {
+                "id": "route-a",
+                "depotId": "",
+                "routeCode": "黒01",
+                "routeFamilyCode": "黒01",
+                "name": "黒01 系統",
+            },
+            {
+                "id": "route-b",
+                "depotId": "dep2",
+                "routeCode": "黒02",
+                "routeFamilyCode": "黒02",
+                "name": "黒02 系統",
+            },
+        ],
+        "route_depot_assignments": [
+            {"routeId": "route-a", "depotId": "dep1"},
+            {"routeId": "route-b", "depotId": "dep2"},
+        ],
+    }
+
+    items = _quick_route_items(
+        doc,
+        selected_depot_ids=["dep1"],
+        selected_route_ids=["route-a"],
+        route_trip_counts={},
+        route_limit=20,
+    )
+
+    assert [item["id"] for item in items] == ["route-a"]
+    assert items[0]["selected"] is True
+
+
+def test_build_quick_setup_payload_filters_selected_routes_to_trip_linked_subset() -> None:
+    doc = {
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [
+            {
+                "id": "route-a",
+                "depotId": "dep1",
+                "routeCode": "黒01",
+                "routeFamilyCode": "黒01",
+                "name": "黒01",
+            },
+            {
+                "id": "route-b",
+                "depotId": "dep1",
+                "routeCode": "黒02",
+                "routeFamilyCode": "黒02",
+                "name": "黒02",
+            },
+        ],
+        "route_depot_assignments": [],
+        "vehicles": [],
+        "chargers": [],
+        "vehicle_templates": [],
+        "scenario_overlay": {},
+        "simulation_config": {},
+    }
+    scenario = {
+        "id": "scenario-1",
+        "name": "Scenario 1",
+        "operatorId": "tokyu",
+        "datasetVersion": "v1",
+        "datasetId": "tokyu_full",
+        "status": "draft",
+        "feedContext": {},
+        "stats": {},
+    }
+    dispatch_scope = {
+        "serviceId": "WEEKDAY",
+        "effectiveRouteIds": ["route-a", "route-b"],
+        "depotSelection": {"depotIds": ["dep1"], "primaryDepotId": "dep1"},
+        "routeSelection": {"mode": "refine", "includeRouteIds": [], "excludeRouteIds": []},
+        "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+        "tripSelection": {"includeDeadhead": True},
+    }
+
+    with mock.patch.object(scenarios, "route_trip_counts_for_dataset", return_value={"route-a": 3}):
+        payload = scenarios._build_quick_setup_payload(
+            scenario,
+            doc,
+            dispatch_scope,
+            selected_depot_ids=["dep1"],
+            route_limit=20,
+        )
+
+    assert payload["selectedRouteIds"] == ["route-a"]
+    assert [item["id"] for item in payload["routes"]] == ["route-a", "route-b"]
+    assert payload["routes"][0]["tripCount"] == 3

@@ -488,7 +488,7 @@ class App:
         self.scope_depot_open_vars: dict[str, tk.BooleanVar] = {}
         self.scope_family_open_vars: dict[str, tk.BooleanVar] = {}
         self.available_dataset_ids: list[str] = []
-        self.day_type_options = ["WEEKDAY", "SATURDAY", "SUNDAY", "HOLIDAY", "SUN_HOL"]
+        self.day_type_options = ["WEEKDAY", "SAT", "SUN_HOL", "SAT_HOL"]
         self.default_dataset_id: str = "tokyu_full"
         self.depot_manager_window: tk.Toplevel | None = None
         self.optimization_window: tk.Toplevel | None = None
@@ -1758,8 +1758,20 @@ class App:
         options = list(self.day_type_options)
         if value not in options:
             options.append(value)
+            self.day_type_options = options
             self.day_type_combo.configure(values=options)
         self.day_type_var.set(value)
+
+    def _set_day_type_options_from_payload(self, entries: list[dict[str, Any]]) -> None:
+        options: list[str] = []
+        for entry in entries:
+            service_id = str(entry.get("serviceId") or "").strip()
+            if service_id and service_id not in options:
+                options.append(service_id)
+        if not options:
+            return
+        self.day_type_options = options
+        self.day_type_combo.configure(values=options)
 
     def _refresh_depot_dropdowns(self, depots: list[dict[str, Any]]) -> None:
         depot_ids = [str(d.get("id") or "").strip() for d in depots if str(d.get("id") or "").strip()]
@@ -2117,10 +2129,7 @@ class App:
 
         def action() -> dict[str, Any]:
             route_limit = self._parse_int(self.route_limit_var.get(), 600)
-            quick = self.client.get_quick_setup(scenario_id, route_limit)
-            routes = self.client.list_routes(scenario_id)
-            quick["routes"] = list(routes.get("items") or [])
-            return quick
+            return self.client.get_quick_setup(scenario_id, route_limit)
 
         def done(resp: dict[str, Any]) -> None:
             depots = list(resp.get("depots") or [])
@@ -2128,6 +2137,9 @@ class App:
             selected_depots = set(resp.get("selectedDepotIds") or [])
             selected_routes = set(resp.get("selectedRouteIds") or [])
             dispatch_scope = dict(resp.get("dispatchScope") or {})
+            self._set_day_type_options_from_payload(
+                list(resp.get("availableDayTypes") or [])
+            )
             if str(dispatch_scope.get("routeSelectionMode") or "") == "include":
                 expanded_routes = _expand_selected_routes_to_family_members(routes, selected_routes)
                 if len(expanded_routes) != len(selected_routes):
@@ -2172,9 +2184,18 @@ class App:
                 f"(depots={len(depots)}件/{len(selected_depots)}選択, "
                 f"routes={len(routes)}件/{len(selected_routes)}選択)"
             )
+            linked_route_count = sum(
+                1 for route in routes if int(route.get("tripCount") or 0) > 0
+            )
+            if routes and linked_route_count <= 0:
+                self.log_line(
+                    "選択中の営業所 / 運行種別では link 済み route がありません。"
+                    "Prepare は tripCount=0 になります。"
+                )
             if (depots and not selected_depots) or (routes and not selected_routes):
                 self.log_line(
-                    "営業所または路線の選択が空です。stale な保存選択が runtime 補正で外れた場合は選び直してください"
+                    "営業所または路線の選択が空です。stale な保存選択が runtime 補正で外れたか、"
+                    "選択中の営業所 / 運行種別に link 済み route がありません。"
                 )
 
         self.run_bg(action, done)
@@ -2986,9 +3007,14 @@ class App:
             if self.prepared_ready:
                 messagebox.showinfo("Prepare完了", f"prepared_input_id: {self.prepared_input_id or '-'}")
             else:
+                route_count = int(resp.get("routeCount") or 0)
+                if route_count <= 0:
+                    reason = "選択営業所 / 運行種別で link 済み route がありません。Quick Setup を確認してください。"
+                else:
+                    reason = "選択 route / day type / timetable linkage を確認してください。"
                 messagebox.showwarning(
                     "Prepare未完了",
-                    f"tripCount={self.prepared_trip_count} のため実行対象がありません。選択 route / day type を確認してください。",
+                    f"tripCount={self.prepared_trip_count} のため実行対象がありません。{reason}",
                 )
 
         self.run_bg(lambda: self.client.prepare_simulation(scenario_id, self._prepare_payload()), done)

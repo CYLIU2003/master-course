@@ -96,3 +96,48 @@ def test_needs_runtime_master_alignment_when_runtime_has_more_catalog_fast_route
 
     with mock.patch("bff.services.master_defaults.get_preloaded_master_data", return_value=payload):
         assert scenario_store._needs_runtime_master_alignment(doc) is True
+
+
+def test_normalize_dispatch_scope_candidate_routes_ignore_full_matrix_permissions() -> None:
+    doc = {
+        "meta": {"operatorId": "tokyu"},
+        "depots": [{"id": "dep-a"}, {"id": "dep-b"}],
+        "routes": [
+            {"id": "route-a", "depotId": "dep-a", "routeFamilyCode": "黒01"},
+            {"id": "route-b", "depotId": "dep-b", "routeFamilyCode": "黒02"},
+        ],
+        "route_depot_assignments": [],
+        "depot_route_permissions": [
+            {"depotId": "dep-a", "routeId": "route-a", "allowed": True},
+            {"depotId": "dep-a", "routeId": "route-b", "allowed": True},
+            {"depotId": "dep-b", "routeId": "route-a", "allowed": True},
+            {"depotId": "dep-b", "routeId": "route-b", "allowed": True},
+        ],
+        "calendar": [{"service_id": "WEEKDAY"}],
+        "dispatch_scope": {
+            "operatorId": "tokyu",
+            "depotSelection": {
+                "mode": "include",
+                "depotIds": ["dep-a"],
+                "primaryDepotId": "dep-a",
+            },
+            "routeSelection": {
+                "mode": "all",
+                "includeRouteIds": [],
+                "excludeRouteIds": [],
+            },
+            "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+            "tripSelection": {
+                "includeShortTurn": True,
+                "includeDepotMoves": True,
+                "includeDeadhead": True,
+            },
+            "serviceId": "WEEKDAY",
+            "depotId": "dep-a",
+        },
+    }
+
+    normalized = scenario_store._normalize_dispatch_scope(doc)
+
+    assert normalized["candidateRouteIds"] == ["route-a"]
+    assert normalized["effectiveRouteIds"] == ["route-a"]
