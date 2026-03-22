@@ -1,4 +1,9 @@
-from tools.scenario_backup_tk import App, _choose_dataset_options
+from tools.scenario_backup_tk import (
+    App,
+    _choose_dataset_options,
+    _expand_selected_routes_to_family_members,
+    _group_scope_routes_by_family,
+)
 
 
 def test_choose_dataset_options_prefers_runtime_ready_candidates() -> None:
@@ -93,3 +98,29 @@ def test_queue_on_ui_thread_swallows_after_runtime_error() -> None:
     app.root = BrokenRoot()
 
     assert App._queue_on_ui_thread(app, lambda: None) is False
+
+
+def test_expand_selected_routes_to_family_members_uses_half_width_family_code() -> None:
+    routes = [
+        {"id": "route-a", "depotId": "dep1", "routeFamilyCode": "黒０１"},
+        {"id": "route-b", "depotId": "dep1", "routeFamilyCode": "黒01"},
+        {"id": "route-c", "depotId": "dep2", "routeFamilyCode": "黒01"},
+    ]
+
+    expanded = _expand_selected_routes_to_family_members(routes, {"route-a"})
+
+    assert expanded == {"route-a", "route-b"}
+
+
+def test_group_scope_routes_by_family_groups_routes_under_family_per_depot() -> None:
+    routes = [
+        {"id": "route-b", "depotId": "dep1", "routeFamilyCode": "黒01", "familySortOrder": 20},
+        {"id": "route-a", "depotId": "dep1", "routeFamilyCode": "黒０１", "familySortOrder": 10},
+        {"id": "route-c", "depotId": "dep1", "routeFamilyCode": "東98", "familySortOrder": 10},
+    ]
+
+    family_keys_by_depot, family_route_ids, family_labels = _group_scope_routes_by_family(routes)
+
+    assert family_keys_by_depot["dep1"] == ["dep1::東98", "dep1::黒01"]
+    assert family_route_ids["dep1::黒01"] == ["route-a", "route-b"]
+    assert family_labels["dep1::黒01"] == "黒01"

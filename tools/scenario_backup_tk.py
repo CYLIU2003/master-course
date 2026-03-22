@@ -16,6 +16,7 @@ import csv
 import json
 import threading
 import tkinter as tk
+import unicodedata
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
@@ -45,6 +46,122 @@ def _dataset_runtime_ready(item: Any) -> bool:
         or item.get("shardReady")
         or item.get("shard_ready")
     )
+
+
+def _normalize_scope_text(value: Any) -> str:
+    return unicodedata.normalize("NFKC", str(value or "").strip())
+
+
+def _scope_depot_id(route: dict[str, Any]) -> str:
+    depot_id = _normalize_scope_text(route.get("depotId"))
+    return depot_id or "__unassigned__"
+
+
+def _scope_route_family_code(route: dict[str, Any]) -> str:
+    return (
+        _normalize_scope_text(route.get("routeFamilyCode"))
+        or _normalize_scope_text(route.get("routeSeriesCode"))
+        or _normalize_scope_text(route.get("routeCode"))
+        or _normalize_scope_text(route.get("id"))
+        or "UNCLASSIFIED"
+    )
+
+
+def _scope_family_key(depot_id: str, family_code: str) -> str:
+    return f"{depot_id}::{family_code}"
+
+
+def _scope_route_sort_key(route: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        _scope_depot_id(route),
+        _scope_route_family_code(route),
+        int(route.get("familySortOrder") or 999),
+        _normalize_scope_text(route.get("routeLabel") or route.get("name") or ""),
+        _normalize_scope_text(route.get("id")),
+    )
+
+
+def _group_scope_routes_by_family(
+    routes: list[dict[str, Any]],
+) -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, str]]:
+    family_keys_by_depot: dict[str, list[str]] = {}
+    family_route_ids: dict[str, list[str]] = {}
+    family_labels: dict[str, str] = {}
+
+    for route in sorted(routes, key=_scope_route_sort_key):
+        route_id = _normalize_scope_text(route.get("id"))
+        if not route_id:
+            continue
+        depot_id = _scope_depot_id(route)
+        family_code = _scope_route_family_code(route)
+        family_key = _scope_family_key(depot_id, family_code)
+        if family_key not in family_route_ids:
+            family_route_ids[family_key] = []
+            family_labels[family_key] = family_code
+            family_keys_by_depot.setdefault(depot_id, []).append(family_key)
+        family_route_ids[family_key].append(route_id)
+
+    return family_keys_by_depot, family_route_ids, family_labels
+
+
+def _expand_selected_routes_to_family_members(
+    routes: list[dict[str, Any]],
+    selected_route_ids: set[str],
+) -> set[str]:
+    selected_pairs: set[tuple[str, str]] = set()
+    for route in routes:
+        route_id = _normalize_scope_text(route.get("id"))
+        if route_id and route_id in selected_route_ids:
+            selected_pairs.add((_scope_depot_id(route), _scope_route_family_code(route)))
+    if not selected_pairs:
+        return set(selected_route_ids)
+
+    expanded = set(selected_route_ids)
+    for route in routes:
+        route_id = _normalize_scope_text(route.get("id"))
+        if not route_id:
+            continue
+        pair = (_scope_depot_id(route), _scope_route_family_code(route))
+        if pair in selected_pairs:
+            expanded.add(route_id)
+    return expanded
+
+
+def _scope_variant_display_name(route: dict[str, Any]) -> str:
+    raw_variant = str(route.get("routeVariantType") or "").strip()
+    variant = (
+        normalize_variant_type(raw_variant, direction="unknown")
+        if raw_variant
+        else "unknown"
+    )
+    direction = normalize_direction(route.get("canonicalDirection"), default="unknown")
+    labels = {
+        "main_outbound": "本線 上り",
+        "main_inbound": "本線 下り",
+        "main": "本線",
+        "short_turn": "区間便",
+        "branch": "枝線",
+        "depot_out": "出庫便",
+        "depot_in": "入庫便",
+        "depot": "入出庫便",
+        "unknown": "未分類",
+    }
+    base = labels.get(variant, "未分類")
+    if variant in {"short_turn", "branch"} and direction in {"outbound", "inbound"}:
+        dir_label = "上り" if direction == "outbound" else "下り"
+        return f"{base} {dir_label}"
+    return base
+
+
+def _scope_route_child_label(route: dict[str, Any]) -> str:
+    variant_label = _scope_variant_display_name(route)
+    route_label = _normalize_scope_text(
+        route.get("routeLabel")
+        or route.get("name")
+        or route.get("displayName")
+        or route.get("id")
+    )
+    return f"{variant_label} | {route_label}"
 
 
 def _choose_dataset_options(datasets_resp: dict[str, Any]) -> dict[str, Any]:
@@ -358,13 +475,18 @@ class App:
         self.scope_depots: list[dict[str, Any]] = []
         self.scope_routes: list[dict[str, Any]] = []
         self.scope_routes_by_depot: dict[str, list[str]] = {}
+        self.scope_family_keys_by_depot: dict[str, list[str]] = {}
+        self.scope_family_route_ids: dict[str, list[str]] = {}
+        self.scope_family_label_by_key: dict[str, str] = {}
         self.scope_route_by_id: dict[str, dict[str, Any]] = {}
         self.scope_depot_by_id: dict[str, dict[str, Any]] = {}
         self.scope_selected_depot_ids: set[str] = set()
         self.scope_selected_route_ids: set[str] = set()
         self.scope_depot_vars: dict[str, tk.BooleanVar] = {}
+        self.scope_family_vars: dict[str, tk.BooleanVar] = {}
         self.scope_route_vars: dict[str, tk.BooleanVar] = {}
         self.scope_depot_open_vars: dict[str, tk.BooleanVar] = {}
+        self.scope_family_open_vars: dict[str, tk.BooleanVar] = {}
         self.available_dataset_ids: list[str] = []
         self.day_type_options = ["WEEKDAY", "SATURDAY", "SUNDAY", "HOLIDAY", "SUN_HOL"]
         self.default_dataset_id: str = "tokyu_full"
@@ -1121,6 +1243,16 @@ class App:
         self._sync_depot_selection_from_routes()
         self._render_scope_checklist()
 
+    def _on_toggle_family(self, depot_id: str, family_key: str) -> None:
+        checked = bool((self.scope_family_vars.get(family_key) or tk.BooleanVar(value=False)).get())
+        for route_id in self.scope_family_route_ids.get(family_key, []):
+            if checked:
+                self.scope_selected_route_ids.add(route_id)
+            else:
+                self.scope_selected_route_ids.discard(route_id)
+        self._sync_depot_selection_from_routes()
+        self._render_scope_checklist()
+
     def _bind_canvas_mousewheel(self, canvas: tk.Canvas, widget: tk.Widget) -> None:
         """Recursively bind MouseWheel on widget tree to scroll the given canvas."""
         widget.bind("<MouseWheel>", lambda e: canvas.yview_scroll(-1 * (e.delta // 120), "units"))
@@ -1136,6 +1268,7 @@ class App:
             child.destroy()
 
         self.scope_depot_vars = {}
+        self.scope_family_vars = {}
         self.scope_route_vars = {}
 
         for depot in self.scope_depots:
@@ -1165,19 +1298,57 @@ class App:
             ).pack(side=tk.LEFT, anchor="w")
 
             if open_var.get():
-                for route_id in route_ids:
-                    route = self.scope_route_by_id.get(route_id) or {}
-                    display_name = str(route.get("displayName") or route.get("name") or route_id)
-                    route_row = ttk.Frame(self.scope_inner)
-                    route_row.pack(fill=tk.X, padx=16)
-                    route_var = tk.BooleanVar(value=route_id in self.scope_selected_route_ids)
-                    self.scope_route_vars[route_id] = route_var
+                for family_key in self.scope_family_keys_by_depot.get(depot_id, []):
+                    family_route_ids = self.scope_family_route_ids.get(family_key, [])
+                    family_selected_count = sum(
+                        1 for rid in family_route_ids if rid in self.scope_selected_route_ids
+                    )
+                    family_row = ttk.Frame(self.scope_inner)
+                    family_row.pack(fill=tk.X, padx=16, pady=1)
+
+                    family_open_var = self.scope_family_open_vars.get(family_key)
+                    if family_open_var is None:
+                        family_open_var = tk.BooleanVar(value=False)
+                        self.scope_family_open_vars[family_key] = family_open_var
                     ttk.Checkbutton(
-                        route_row,
-                        text=f" {route_id} | {display_name}",
-                        variable=route_var,
-                        command=lambda d=depot_id, r=route_id: self._on_toggle_route(d, r),
+                        family_row,
+                        text=("▼" if family_open_var.get() else "▶"),
+                        variable=family_open_var,
+                        command=self._render_scope_checklist,
+                        width=2,
+                    ).pack(side=tk.LEFT)
+
+                    family_var = tk.BooleanVar(
+                        value=(
+                            family_selected_count == len(family_route_ids)
+                            and family_selected_count > 0
+                        )
+                    )
+                    self.scope_family_vars[family_key] = family_var
+                    family_label = self.scope_family_label_by_key.get(family_key, family_key)
+                    ttk.Checkbutton(
+                        family_row,
+                        text=(
+                            f"{family_label} "
+                            f"({family_selected_count}/{len(family_route_ids)}系統内バリアント)"
+                        ),
+                        variable=family_var,
+                        command=lambda d=depot_id, fk=family_key: self._on_toggle_family(d, fk),
                     ).pack(side=tk.LEFT, anchor="w")
+
+                    if family_open_var.get():
+                        for route_id in family_route_ids:
+                            route = self.scope_route_by_id.get(route_id) or {}
+                            route_row = ttk.Frame(self.scope_inner)
+                            route_row.pack(fill=tk.X, padx=34)
+                            route_var = tk.BooleanVar(value=route_id in self.scope_selected_route_ids)
+                            self.scope_route_vars[route_id] = route_var
+                            ttk.Checkbutton(
+                                route_row,
+                                text=_scope_route_child_label(route),
+                                variable=route_var,
+                                command=lambda d=depot_id, r=route_id: self._on_toggle_route(d, r),
+                            ).pack(side=tk.LEFT, anchor="w")
 
         # 動的生成した子ウィジェット全てにマウスホイールを伝播させる
         self._bind_scope_mousewheel(self.scope_inner)
@@ -1222,6 +1393,12 @@ class App:
             depot_id = str(depot.get("id") or "").strip()
             if depot_id and depot_id not in self.scope_routes_by_depot:
                 self.scope_routes_by_depot[depot_id] = []
+
+        (
+            self.scope_family_keys_by_depot,
+            self.scope_family_route_ids,
+            self.scope_family_label_by_key,
+        ) = _group_scope_routes_by_family(self.scope_routes)
 
         self.scope_selected_route_ids = {
             rid for rid in selected_routes if rid in self.scope_route_by_id
@@ -1950,9 +2127,17 @@ class App:
             routes = list(resp.get("routes") or [])
             selected_depots = set(resp.get("selectedDepotIds") or [])
             selected_routes = set(resp.get("selectedRouteIds") or [])
+            dispatch_scope = dict(resp.get("dispatchScope") or {})
+            if str(dispatch_scope.get("routeSelectionMode") or "") == "include":
+                expanded_routes = _expand_selected_routes_to_family_members(routes, selected_routes)
+                if len(expanded_routes) != len(selected_routes):
+                    self.log_line(
+                        "系統単位の初期選択へ展開: "
+                        f"{len(selected_routes)} -> {len(expanded_routes)} routes"
+                    )
+                selected_routes = expanded_routes
             self._set_scope_data(depots, routes, selected_depots, selected_routes)
 
-            dispatch_scope = dict(resp.get("dispatchScope") or {})
             trip = dict(dispatch_scope.get("tripSelection") or {})
             self.include_short_turn_var.set(bool(trip.get("includeShortTurn", True)))
             self.include_depot_moves_var.set(bool(trip.get("includeDepotMoves", True)))

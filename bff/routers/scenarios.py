@@ -773,6 +773,41 @@ def _builder_defaults(
     }
 
 
+def _quick_setup_route_selection_patch(
+    doc: Dict[str, Any],
+    current_scope: Dict[str, Any],
+    *,
+    selected_depot_ids: List[str],
+    selected_route_ids: List[str],
+) -> Dict[str, Any]:
+    route_selection = {
+        **dict(current_scope.get("routeSelection") or {}),
+        "mode": "refine",
+        "includeRouteFamilyCodes": [],
+        "excludeRouteFamilyCodes": [],
+    }
+    route_index = _depot_route_index(doc)
+    candidate_route_ids: List[str] = []
+    for depot_id in selected_depot_ids:
+        for route_id in route_index.get(depot_id) or []:
+            if route_id not in candidate_route_ids:
+                candidate_route_ids.append(route_id)
+
+    selected_route_set = set(selected_route_ids)
+    candidate_route_set = set(candidate_route_ids)
+    route_selection["includeRouteIds"] = [
+        route_id
+        for route_id in selected_route_ids
+        if route_id not in candidate_route_set
+    ]
+    route_selection["excludeRouteIds"] = [
+        route_id
+        for route_id in candidate_route_ids
+        if route_id not in selected_route_set
+    ]
+    return route_selection
+
+
 def _quick_route_items(
     doc: Dict[str, Any],
     selected_depot_ids: List[str],
@@ -822,9 +857,13 @@ def _quick_route_items(
                 "routeCode": route.get("routeCode"),
                 "routeLabel": route.get("routeLabel"),
                 "routeFamilyCode": route.get("routeFamilyCode"),
+                "routeFamilyLabel": route.get("routeFamilyLabel"),
                 "routeSeriesCode": route.get("routeSeriesCode"),
                 "depotId": route.get("depotId"),
                 "tripCount": trip_count,
+                "familySortOrder": route.get("familySortOrder"),
+                "routeVariantId": route.get("routeVariantId"),
+                "isPrimaryVariant": route.get("isPrimaryVariant"),
                 "routeVariantType": _normalize_variant_type(
                     route.get("routeVariantTypeManual")
                     or route.get("routeVariantType")
@@ -899,6 +938,9 @@ def _build_quick_setup_payload(
         ),
         "dispatchScope": {
             "dayType": str(dispatch_scope.get("serviceId") or "WEEKDAY"),
+            "routeSelectionMode": str(
+                ((dispatch_scope.get("routeSelection") or {}).get("mode") or "include")
+            ),
             "tripSelection": dict(dispatch_scope.get("tripSelection") or {}),
             "allowIntraDepotRouteSwap": bool(
                 dispatch_scope.get("allowIntraDepotRouteSwap", False)
@@ -1201,6 +1243,7 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
     _ensure_runtime_master_data(scenario_id)
     try:
         current_scope = store.get_dispatch_scope(scenario_id)
+        doc = store.get_scenario_document_shallow(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
@@ -1223,12 +1266,12 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             "depotIds": selected_depot_ids,
             "primaryDepotId": selected_depot_ids[0] if selected_depot_ids else None,
         },
-        "routeSelection": {
-            **dict(current_scope.get("routeSelection") or {}),
-            "mode": "refine",
-            "includeRouteIds": selected_route_ids,
-            "excludeRouteIds": [],
-        },
+        "routeSelection": _quick_setup_route_selection_patch(
+            doc,
+            current_scope,
+            selected_depot_ids=selected_depot_ids,
+            selected_route_ids=selected_route_ids,
+        ),
     }
     if selected_depot_ids:
         patch["depotId"] = selected_depot_ids[0]

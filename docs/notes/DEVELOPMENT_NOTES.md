@@ -39,6 +39,39 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-22] Quick Setup の路線選択を系統単位 UI に変更し、variant 個別除外を保持
+
+- **問題**:
+  - `tools/scenario_backup_tk.py` の Quick Setup 路線一覧は営業所配下に raw route をフラット表示しており、
+    同じ系統番号でも本線・区間便・入出庫便の関係が見えにくかった。
+  - family 単位でまとめて見たい一方、将来的には特定シナリオで「入出庫便だけ外す」「区間便だけ外す」を保存したかった。
+  - `PUT /quick-setup` は `selectedRouteIds` をそのまま `includeRouteIds` へ入れていたため、
+    `refine` モードでは営業所配下の route が再び全部有効になりやすく、
+    個別 route の除外が保持されにくかった。
+
+- **対応**:
+  - `tools/scenario_backup_tk.py`
+    - 営業所配下の route を `routeFamilyCode` 単位で折りたたみ表示する family grouping を追加。
+    - family header は NFKC 正規化で系統番号の数字を半角表示。
+    - family header のチェックで系統内 variant を一括選択/解除、展開後は raw variant を個別選択/解除できるようにした。
+    - `include` モードで読み込んだ初期選択は、同一 family の route をまとめて既定選択へ展開するようにした。
+  - `bff/routers/scenarios.py`
+    - Quick Setup payload の `dispatchScope` に `routeSelectionMode` を追加。
+    - `update_quick_setup()` は `selectedRouteIds` を `refine + excludeRouteIds` へ変換する helper を使うよう変更し、
+      営業所の既定 family 全選択を維持しながら、個別 variant の除外を保存できるようにした。
+
+- **検証**:
+  - `tests/test_scenario_backup_tk_dataset_options.py`
+    - half-width family code 展開
+    - family grouping
+    を追加。
+  - `tests/test_quick_setup_route_selection.py`
+    - unchecked route が `excludeRouteIds` に落ちる回帰
+    - selected depot 外の route が `includeRouteIds` として保持される回帰
+    を追加。
+  - `python -m pytest tests/test_route_family_deadhead_inference.py tests/test_quick_setup_route_selection.py tests/test_run_preparation_hash.py tests/test_simulation_executor_mode.py tests/test_runtime_scope_route_mapping.py tests/test_research_dataset_bootstrap_alignment.py tests/test_master_defaults_runtime_repair.py tests/test_scenario_store_dispatch_scope_overlay.py tests/test_scenario_backup_tk_dataset_options.py -q`
+    で `28 passed` を確認。
+
 ### [DEV-2026-03-22] route family を dispatch / Prepare / 最適化の terminal deadhead 補完へ反映
 
 - **問題**:

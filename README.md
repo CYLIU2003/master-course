@@ -556,10 +556,12 @@ python tools/route_variant_labeler_tk.py
 2. Tk で `接続確認` を実行し、`/api/app/datasets` の候補取得ログを確認する
 3. `datasetId` は runtime 実行可能な候補のみが既定表示される。2026-03-21 時点の既定 runtime dataset は `tokyu_full`
 4. `新規作成` 後は必ず `Quick Setup 読込` を押し、営業所・路線の候補を読み直す
-5. 路線一覧は `data/catalog-fast/normalized/routes.jsonl` があれば常にそれを優先して表示する。初期選択は trip-backed route のみなので、一覧件数と初期選択件数は一致しないことがある
-6. 路線は raw route を消さずに保持したまま、`routeFamilyCode` で同一系統として束ねる。Prepare / dispatch / 最適化では `origin_stop_id` / `destination_stop_id` と stop 座標を使い、同一系統内の上り下り・本線・区間便・入出庫便の terminal 間 deadhead を自動補完する
-7. 既存シナリオを開いた直後に営業所や路線の選択が空なら、stale な保存選択が runtime 補正で外れた可能性があるため選び直す
-8. `Quick Setup 保存` → `入力データ作成 (Prepare)` → `Prepared実行` または `最適化実行` の順で進める
+5. 路線一覧は `data/catalog-fast/normalized/routes.jsonl` があれば常にそれを優先して表示する。Quick Setup では営業所配下を `routeFamilyCode` 単位で折りたたみ表示し、系統番号の数字は半角に正規化して表示する
+6. 新規シナリオや `include` ベースの初期状態では、同一系統に属する variant を family 単位でまとめて既定選択する。展開すると本線・区間便・入出庫便などの raw variant を個別に外せる
+7. 保存時は `refine + excludeRouteIds` として保存するため、同じ営業所の系統を基本全部含めつつ、特定 family の入出庫便だけ / 区間便だけ除外する設定を保持できる
+8. 路線は raw route を消さずに保持したまま、`routeFamilyCode` で同一系統として束ねる。Prepare / dispatch / 最適化では `origin_stop_id` / `destination_stop_id` と stop 座標を使い、同一系統内の上り下り・本線・区間便・入出庫便の terminal 間 deadhead を自動補完する
+9. 既存シナリオを開いた直後に営業所や路線の選択が空なら、stale な保存選択が runtime 補正で外れた可能性があるため選び直す
+10. `Quick Setup 保存` → `入力データ作成 (Prepare)` → `Prepared実行` または `最適化実行` の順で進める
 
 ---
 
