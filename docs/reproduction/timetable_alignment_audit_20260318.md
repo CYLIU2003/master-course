@@ -11,7 +11,7 @@
 ## 2. 監査対象データ
 
 - Scenario ID: `bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f`
-- Prepared Input: `app/scenarios/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared_inputs/prepared-7822b5b6dd60630d.json`
+- Prepared Input: `outputs/prepared_inputs/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared-7822b5b6dd60630d.json`
 - Optimization Result (WEEKDAY): `outputs/tokyu/2026-03-14/optimization/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/meguro/WEEKDAY/optimization_result.json`
 - Optimization Result (SAT, 比較用): `outputs/tokyu/2026-03-14/optimization/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/meguro/SAT/optimization_result.json`
 
@@ -66,7 +66,7 @@ $$
 ```powershell
 python scripts/audit_timetable_alignment.py `
   --scenario-id bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f `
-  --prepared-input-path app/scenarios/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared_inputs/prepared-7822b5b6dd60630d.json `
+  --prepared-input-path outputs/prepared_inputs/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared-7822b5b6dd60630d.json `
   --optimization-result-path outputs/tokyu/2026-03-14/optimization/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/meguro/WEEKDAY/optimization_result.json `
   --out-dir outputs/audit/bbe1e1bd
 ```
@@ -76,7 +76,7 @@ python scripts/audit_timetable_alignment.py `
 ```powershell
 python scripts/audit_timetable_alignment.py `
   --scenario-id bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f `
-  --prepared-input-path app/scenarios/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared_inputs/prepared-7822b5b6dd60630d.json `
+  --prepared-input-path outputs/prepared_inputs/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared-7822b5b6dd60630d.json `
   --optimization-result-path outputs/tokyu/2026-03-14/optimization/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/meguro/SAT/optimization_result.json `
   --out-dir outputs/audit/bbe1e1bd_sat
 ```

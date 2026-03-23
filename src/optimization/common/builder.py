@@ -77,6 +77,34 @@ class ProblemBuilder:
             or solver_cfg.get("objective_mode")
             or "total_cost"
         )
+        fixed_route_band_mode = bool(
+            simulation_cfg.get(
+                "fixed_route_band_mode",
+                solver_cfg.get("fixed_route_band_mode", False),
+            )
+        )
+        max_start_fragments_per_vehicle = int(
+            simulation_cfg.get(
+                "max_start_fragments_per_vehicle",
+                solver_cfg.get("max_start_fragments_per_vehicle", 1),
+            )
+            or 1
+        )
+        max_end_fragments_per_vehicle = int(
+            simulation_cfg.get(
+                "max_end_fragments_per_vehicle",
+                solver_cfg.get("max_end_fragments_per_vehicle", 1),
+            )
+            or 1
+        )
+        initial_soc_percent = self._safe_float(
+            simulation_cfg.get("initial_soc_percent")
+            or charging_cfg.get("initial_soc_percent")
+        )
+        final_soc_floor_percent = self._safe_float(
+            simulation_cfg.get("final_soc_floor_percent")
+            or charging_cfg.get("final_soc_floor_percent")
+        )
         depot_import_limit_kw = self._safe_float(
             charging_cfg.get("depot_power_limit_kw")
             or charging_cfg.get("depotPowerLimitKw")
@@ -107,6 +135,11 @@ class ProblemBuilder:
             demand_charge_off_peak_yen_per_kw=demand_charge,
             co2_price_per_kg=co2_price_per_kg,
             ice_co2_kg_per_l=ice_co2_kg_per_l,
+            fixed_route_band_mode=fixed_route_band_mode,
+            max_start_fragments_per_vehicle=max(1, max_start_fragments_per_vehicle),
+            max_end_fragments_per_vehicle=max(1, max_end_fragments_per_vehicle),
+            initial_soc_percent=initial_soc_percent,
+            final_soc_floor_percent=final_soc_floor_percent,
         )
 
     def build_from_dispatch(
@@ -128,25 +161,47 @@ class ProblemBuilder:
         demand_charge_off_peak_yen_per_kw: float = 0.0,
         co2_price_per_kg: float = 0.0,
         ice_co2_kg_per_l: float = 2.64,
+        fixed_route_band_mode: bool = False,
+        max_start_fragments_per_vehicle: int = 1,
+        max_end_fragments_per_vehicle: int = 1,
+        initial_soc_percent: Optional[float] = None,
+        final_soc_floor_percent: Optional[float] = None,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
-        trip_nodes = tuple(
-            ProblemTrip(
-                trip_id=trip.trip_id,
-                route_id=trip.route_id,
-                origin=trip.origin,
-                destination=trip.destination,
-                departure_min=trip.departure_min,
-                arrival_min=trip.arrival_min,
-                distance_km=trip.distance_km,
-                allowed_vehicle_types=trip.allowed_vehicle_types,
-                energy_kwh=self._estimate_trip_energy(trip.distance_km, context),
-                fuel_l=self._estimate_trip_fuel(trip.distance_km, context),
-                service_id=context.service_date,
+        bev_reference_capacity_kwh = self._reference_bev_capacity_kwh(context)
+        final_soc_floor_ratio = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
+        trip_nodes_list: List[ProblemTrip] = []
+        for trip in context.trips:
+            energy_kwh = self._estimate_trip_energy(trip.distance_km, context)
+            has_electric_vehicle = any(
+                str(vt).upper() in {"BEV", "PHEV", "FCEV"}
+                for vt in trip.allowed_vehicle_types
             )
-            for trip in context.trips
-        )
+            required_soc_departure_percent = None
+            if has_electric_vehicle:
+                required_soc_departure_percent = self._derive_required_soc_departure_percent(
+                    trip_energy_kwh=energy_kwh,
+                    bev_capacity_kwh=bev_reference_capacity_kwh,
+                    final_soc_floor_ratio=final_soc_floor_ratio,
+                )
+            trip_nodes_list.append(
+                ProblemTrip(
+                    trip_id=trip.trip_id,
+                    route_id=trip.route_id,
+                    origin=trip.origin,
+                    destination=trip.destination,
+                    departure_min=trip.departure_min,
+                    arrival_min=trip.arrival_min,
+                    distance_km=trip.distance_km,
+                    allowed_vehicle_types=trip.allowed_vehicle_types,
+                    energy_kwh=energy_kwh,
+                    fuel_l=self._estimate_trip_fuel(trip.distance_km, context),
+                    service_id=context.service_date,
+                    required_soc_departure_percent=required_soc_departure_percent,
+                )
+            )
+        trip_nodes = tuple(trip_nodes_list)
         route_nodes = self._build_routes(trip_nodes)
         vehicle_types = self._build_vehicle_types(context.vehicle_profiles)
         vehicles = tuple(
@@ -211,6 +266,11 @@ class ProblemBuilder:
                 "route_count": len(route_nodes),
                 "charger_count": len(chargers),
                 "baseline_plan_source": (baseline.metadata or {}).get("source", "dispatch_greedy_baseline"),
+                "fixed_route_band_mode": bool(fixed_route_band_mode),
+                "max_start_fragments_per_vehicle": int(max(1, max_start_fragments_per_vehicle)),
+                "max_end_fragments_per_vehicle": int(max(1, max_end_fragments_per_vehicle)),
+                "initial_soc_percent": initial_soc_percent,
+                "final_soc_floor_percent": final_soc_floor_percent,
             },
         )
 
@@ -541,6 +601,43 @@ class ProblemBuilder:
             return 0.0
         return distance_km * min(fuel_rates)
 
+    def _reference_bev_capacity_kwh(self, context: DispatchContext) -> Optional[float]:
+        bev_candidates = [
+            profile.battery_capacity_kwh
+            for profile in context.vehicle_profiles.values()
+            if str(profile.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}
+            and profile.battery_capacity_kwh is not None
+            and profile.battery_capacity_kwh > 0
+        ]
+        if not bev_candidates:
+            return None
+        return float(max(bev_candidates))
+
+    def _normalize_percent_like_to_ratio(self, value: Any) -> Optional[float]:
+        parsed = self._safe_float(value)
+        if parsed is None:
+            return None
+        if parsed < 0.0:
+            return None
+        if parsed > 1.0:
+            parsed = parsed / 100.0
+        return min(parsed, 1.0)
+
+    def _derive_required_soc_departure_percent(
+        self,
+        *,
+        trip_energy_kwh: float,
+        bev_capacity_kwh: Optional[float],
+        final_soc_floor_ratio: Optional[float],
+    ) -> Optional[float]:
+        cap = float(bev_capacity_kwh or 0.0)
+        if cap <= 0.0:
+            return None
+        floor_ratio = max(0.0, float(final_soc_floor_ratio or 0.0))
+        trip_ratio = max(0.0, float(trip_energy_kwh or 0.0)) / cap
+        required_ratio = min(1.0, floor_ratio + trip_ratio)
+        return required_ratio * 100.0
+
     def _build_chargers_from_scenario(
         self,
         scenario: Dict[str, Any],
@@ -790,6 +887,7 @@ class ProblemBuilder:
             deviation=float(objective_weights.get("deviation_cost", 0.0)),
             switch=float(objective_weights.get("switch_cost", 0.0)),
             degradation=float(objective_weights.get("degradation", 0.0)),
+            utilization=float(objective_weights.get("utilization", 0.0)),
         )
 
     def _safe_float(self, value: Any) -> Optional[float]:

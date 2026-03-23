@@ -8,6 +8,7 @@
     "solver_mode": { "type": "string" },
     "solver_status": { "type": "string" },
     "objective_value": { "type": "number" },
+    "objective_mode": { "type": "string" },
     "feasible": { "type": "boolean" },
     "served_trip_ids": {
       "type": "array",
@@ -27,6 +28,81 @@
     "cost_breakdown": {
       "type": "object",
       "additionalProperties": { "type": "number" }
+    },
+    "objective_components_raw": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "objective_components_weighted": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "objective_weights": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "pv_summary": {
+      "type": "object",
+      "properties": {
+        "pv_generated_kwh": { "type": "number" },
+        "pv_used_direct_kwh": { "type": "number" },
+        "pv_curtailed_kwh": { "type": "number" },
+        "grid_import_kwh": { "type": "number" },
+        "peak_grid_kw": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "utilization_summary": {
+      "type": "object",
+      "properties": {
+        "fleet_size": { "type": "integer" },
+        "used_vehicle_count": { "type": "integer" },
+        "utilization_ratio": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "vehicle_diagram": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vehicle_id": { "type": "string" },
+          "legs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": { "type": "string" },
+                "start_min": { "type": "integer" },
+                "end_min": { "type": "integer" },
+                "origin": { "type": ["string", "null"] },
+                "destination": { "type": ["string", "null"] },
+                "trip_id": { "type": ["string", "null"] }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "soc_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vehicle_id": { "type": "string" },
+          "time_min": { "type": "integer" },
+          "soc_percent": { "type": "number" },
+          "event_type": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "termination_reason": { "type": ["string", "null"] },
+    "effective_limits": {
+      "type": "object",
+      "additionalProperties": true
     },
     "operator_stats": {
       "type": "object",

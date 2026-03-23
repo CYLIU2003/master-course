@@ -41,7 +41,9 @@
         "overnight_window_start": { "type": ["string", "null"] },
         "overnight_window_end": { "type": ["string", "null"] },
         "depot_power_limit_kw": { "type": ["number", "null"], "minimum": 0 },
-        "charger_power_limit_kw": { "type": ["number", "null"], "minimum": 0 }
+        "charger_power_limit_kw": { "type": ["number", "null"], "minimum": 0 },
+        "initial_soc_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "final_soc_floor_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 }
       },
       "additionalProperties": false
     },
@@ -57,9 +59,22 @@
         "demand_charge_cost_per_kw": { "type": "number", "minimum": 0 },
         "pv_enabled": { "type": "boolean" },
         "pv_scale": { "type": "number", "minimum": 0 },
+        "pv_profile_id": { "type": ["string", "null"] },
+        "pv_resolution_minutes": { "type": "integer", "minimum": 1 },
+        "weather_mode": {
+          "type": ["string", "null"],
+          "enum": ["sunny", "cloudy", "rainy", null]
+        },
+        "weather_factor_scalar": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "weather_factor_hourly": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
         "diesel_price_per_l": { "type": "number", "minimum": 0 },
         "grid_co2_kg_per_kwh": { "type": "number", "minimum": 0 },
-        "co2_price_per_kg": { "type": "number", "minimum": 0 }
+        "co2_price_per_kg": { "type": "number", "minimum": 0 },
+        "co2_price_source": { "type": ["string", "null"] },
+        "co2_reference_date": { "type": ["string", "null"] }
       },
       "additionalProperties": false
     },
@@ -68,17 +83,29 @@
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["milp", "alns", "hybrid", "mode_milp_only", "mode_alns_only", "mode_alns_milp"]
+          "enum": ["milp", "alns", "hybrid", "ga", "abc", "mode_milp_only", "mode_alns_only", "mode_alns_milp"]
         },
         "time_limit_seconds": { "type": "integer", "minimum": 1 },
         "mip_gap": { "type": "number", "minimum": 0 },
         "alns_iterations": { "type": "integer", "minimum": 1 },
         "objective_mode": {
           "type": "string",
-          "enum": ["total_cost", "co2"]
+          "enum": ["total_cost", "co2", "balanced", "utilization"]
         },
         "allow_partial_service": { "type": "boolean" },
         "unserved_penalty": { "type": "number", "minimum": 0 },
+        "objective_preset": {
+          "type": ["string", "null"],
+          "enum": ["cost", "co2", "balanced", "utilization", null]
+        },
+        "fixed_route_band_mode": { "type": "boolean" },
+        "max_start_fragments_per_vehicle": { "type": "integer", "minimum": 1 },
+        "max_end_fragments_per_vehicle": { "type": "integer", "minimum": 1 },
+        "output_vehicle_diagram": { "type": "boolean" },
+        "termination_policy": {
+          "type": "string",
+          "enum": ["time_limit_or_gap"]
+        },
         "objective_weights": {
           "type": "object",
           "additionalProperties": { "type": "number" }

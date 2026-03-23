@@ -40,6 +40,22 @@ class MILPOptimizer:
             solver_metadata={
                 "backend": outcome.used_backend,
                 "supports_exact_milp": outcome.supports_exact_milp,
+                "objective_mode": problem.scenario.objective_mode,
+                "objective_weights": {
+                    "electricity_cost": float(problem.objective_weights.energy),
+                    "demand_charge_cost": float(problem.objective_weights.demand),
+                    "vehicle_fixed_cost": float(problem.objective_weights.vehicle),
+                    "unserved_penalty": float(problem.objective_weights.unserved),
+                    "switch_cost": float(problem.objective_weights.switch),
+                    "deviation_cost": float(problem.objective_weights.deviation),
+                    "degradation": float(problem.objective_weights.degradation),
+                    "utilization": float(problem.objective_weights.utilization),
+                },
+                "termination_reason": self._termination_reason(outcome.solver_status),
+                "effective_limits": {
+                    "time_limit_sec": int(config.time_limit_sec),
+                    "mip_gap": float(config.mip_gap),
+                },
                 "model_stats": {
                     "variables": model.variable_counts,
                     "constraints": model.constraint_counts,
@@ -57,3 +73,15 @@ class MILPOptimizer:
                 ),
             },
         )
+
+    def _termination_reason(self, solver_status: str) -> str:
+        status = str(solver_status or "").strip().lower()
+        if status == "optimal":
+            return "optimal"
+        if status == "time_limit":
+            return "time_limit"
+        if status in {"infeasible", "inf_or_unbd", "unbounded"}:
+            return "infeasible_or_unbounded"
+        if status == "suboptimal":
+            return "stopped_with_feasible"
+        return "unknown"

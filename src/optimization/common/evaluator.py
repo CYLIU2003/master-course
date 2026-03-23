@@ -20,6 +20,12 @@ class CostBreakdown:
     deviation_cost: float = 0.0
     co2_cost: float = 0.0
     total_co2_kg: float = 0.0
+    utilization_score: float = 0.0
+    pv_generated_kwh: float = 0.0
+    pv_used_direct_kwh: float = 0.0
+    pv_curtailed_kwh: float = 0.0
+    grid_import_kwh: float = 0.0
+    peak_grid_kw: float = 0.0
     total_cost: float = 0.0
     objective_value: float = 0.0
 
@@ -35,6 +41,12 @@ class CostBreakdown:
             "deviation_cost": self.deviation_cost,
             "co2_cost": self.co2_cost,
             "total_co2_kg": self.total_co2_kg,
+            "utilization_score": self.utilization_score,
+            "pv_generated_kwh": self.pv_generated_kwh,
+            "pv_used_direct_kwh": self.pv_used_direct_kwh,
+            "pv_curtailed_kwh": self.pv_curtailed_kwh,
+            "grid_import_kwh": self.grid_import_kwh,
+            "peak_grid_kw": self.peak_grid_kw,
             "total_cost": self.total_cost,
             "objective_value": self.objective_value,
         }
@@ -97,6 +109,11 @@ class CostEvaluator:
         operating_slot_totals = self._operating_electric_energy_kwh_by_slot(problem, plan)
         energy_cost += self._operating_electric_energy_cost(problem, operating_slot_totals)
         demand_cost = self._operating_demand_charge_cost(problem, operating_slot_totals)
+        pv_generated_kwh, pv_used_direct_kwh, grid_import_kwh, peak_grid_kw = self._pv_grid_summary(
+            problem,
+            operating_slot_totals,
+        )
+        pv_curtailed_kwh = max(pv_generated_kwh - pv_used_direct_kwh, 0.0)
 
         baseline_map = self._trip_vehicle_type_map(problem.baseline_plan) if problem.baseline_plan else {}
         current_map = self._trip_vehicle_type_map(plan)
@@ -128,6 +145,21 @@ class CostEvaluator:
         total_co2_kg = self._total_co2_kg(problem, plan, operating_slot_totals)
         co2_cost = max(problem.scenario.co2_price_per_kg, 0.0) * total_co2_kg
 
+        total_vehicle_count = max(len(problem.vehicles), 1)
+        used_vehicle_count = sum(1 for duty in plan.duties if duty.legs)
+        utilization_score = float(used_vehicle_count) / float(total_vehicle_count)
+
+        objective_weights = {
+            "electricity_cost": float(weights.energy),
+            "demand_charge_cost": float(weights.demand),
+            "vehicle_fixed_cost": float(weights.vehicle),
+            "unserved_penalty": float(weights.unserved),
+            "switch_cost": float(weights.switch),
+            "degradation": float(weights.degradation),
+            "deviation_cost": float(weights.deviation),
+            "utilization": float(weights.utilization),
+        }
+
         total_cost = (
             energy_cost
             + demand_cost
@@ -147,6 +179,8 @@ class CostEvaluator:
             switch_cost=switch_cost,
             degradation_cost=degradation_cost,
             deviation_cost=deviation_cost,
+            utilization_score=utilization_score,
+            objective_weights=objective_weights,
         )
         return CostBreakdown(
             energy_cost=energy_cost,
@@ -159,9 +193,43 @@ class CostEvaluator:
             deviation_cost=deviation_cost,
             co2_cost=co2_cost,
             total_co2_kg=total_co2_kg,
+            utilization_score=utilization_score,
+            pv_generated_kwh=pv_generated_kwh,
+            pv_used_direct_kwh=pv_used_direct_kwh,
+            pv_curtailed_kwh=pv_curtailed_kwh,
+            grid_import_kwh=grid_import_kwh,
+            peak_grid_kw=peak_grid_kw,
             total_cost=total_cost,
             objective_value=objective_value,
         )
+
+    def _pv_grid_summary(
+        self,
+        problem: CanonicalOptimizationProblem,
+        slot_totals_kwh: Dict[int, float],
+    ) -> Tuple[float, float, float, float]:
+        if not problem.price_slots:
+            return 0.0, 0.0, 0.0, 0.0
+        timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
+        pv_by_slot_kwh = {
+            slot.slot_index: max(float(slot.pv_available_kw or 0.0), 0.0) * timestep_h
+            for slot in problem.pv_slots
+        }
+        pv_generated_kwh = 0.0
+        pv_used_direct_kwh = 0.0
+        grid_import_kwh = 0.0
+        peak_grid_kw = 0.0
+        for slot in problem.price_slots:
+            slot_idx = slot.slot_index
+            load_kwh = max(float(slot_totals_kwh.get(slot_idx, 0.0) or 0.0), 0.0)
+            pv_kwh = max(float(pv_by_slot_kwh.get(slot_idx, 0.0) or 0.0), 0.0)
+            used_pv_kwh = min(load_kwh, pv_kwh)
+            import_kwh = max(load_kwh - used_pv_kwh, 0.0)
+            pv_generated_kwh += pv_kwh
+            pv_used_direct_kwh += used_pv_kwh
+            grid_import_kwh += import_kwh
+            peak_grid_kw = max(peak_grid_kw, import_kwh / timestep_h)
+        return pv_generated_kwh, pv_used_direct_kwh, grid_import_kwh, peak_grid_kw
 
     def _trip_fuel_cost(
         self,

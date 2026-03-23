@@ -50,6 +50,11 @@ class GAOptimizer:
                 **dict(result.solver_metadata),
                 "metaheuristic": "ga",
                 "delegate": "alns_kernel",
+                "effective_limits": {
+                    "time_limit_sec": int(ga_config.time_limit_sec),
+                    "alns_iterations": int(ga_config.alns_iterations),
+                    "no_improvement_limit": int(ga_config.no_improvement_limit),
+                },
             },
             operator_stats=result.operator_stats,
             incumbent_history=result.incumbent_history,

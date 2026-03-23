@@ -238,6 +238,20 @@
             "string",
             "null"
           ]
+        },
+        "required_soc_departure_percent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "diagram_label": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

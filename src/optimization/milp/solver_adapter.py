@@ -136,6 +136,15 @@ class GurobiMILPAdapter:
             if (vehicle_id, to_trip_id) in y:
                 model.addConstr(var <= y[(vehicle_id, to_trip_id)])
 
+        max_start_fragments_per_vehicle = self._safe_positive_int(
+            problem.metadata.get("max_start_fragments_per_vehicle"),
+            default=1,
+        )
+        max_end_fragments_per_vehicle = self._safe_positive_int(
+            problem.metadata.get("max_end_fragments_per_vehicle"),
+            default=1,
+        )
+
         # Arc-flow constraints: one predecessor/successor with explicit start/end indicators.
         for vehicle in problem.vehicles:
             vehicle_terms_start: List[Any] = []
@@ -150,8 +159,39 @@ class GurobiMILPAdapter:
                 model.addConstr(outgoing + end_arc[key] == y[key])
                 vehicle_terms_start.append(start_arc[key])
                 vehicle_terms_end.append(end_arc[key])
-            model.addConstr(gp.quicksum(vehicle_terms_start) <= 1)
-            model.addConstr(gp.quicksum(vehicle_terms_end) <= 1)
+            model.addConstr(gp.quicksum(vehicle_terms_start) <= max_start_fragments_per_vehicle)
+            model.addConstr(gp.quicksum(vehicle_terms_end) <= max_end_fragments_per_vehicle)
+
+        # Fixed route-band mode: one vehicle can serve at most one route family (fallback: route_id).
+        fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
+        if fixed_route_band_mode:
+            route_band_by_trip_id = {
+                trip.trip_id: self._route_band_key(dispatch_trip_by_id.get(trip.trip_id), trip.route_id)
+                for trip in problem.trips
+            }
+            route_bands = sorted({band for band in route_band_by_trip_id.values() if band})
+            route_band_use: Dict[Tuple[str, str], Any] = {
+                (vehicle.vehicle_id, band): model.addVar(vtype=GRB.BINARY)
+                for vehicle in problem.vehicles
+                for band in route_bands
+            }
+            for (vehicle_id, trip_id), var in y.items():
+                band = route_band_by_trip_id.get(trip_id)
+                if not band:
+                    continue
+                band_var = route_band_use.get((vehicle_id, band))
+                if band_var is not None:
+                    model.addConstr(var <= band_var)
+            for vehicle in problem.vehicles:
+                vehicle_band_vars = [
+                    route_band_use[(vehicle.vehicle_id, band)]
+                    for band in route_bands
+                    if (vehicle.vehicle_id, band) in route_band_use
+                ]
+                if vehicle_band_vars:
+                    model.addConstr(gp.quicksum(vehicle_band_vars) <= 1)
+                    for band_var in vehicle_band_vars:
+                        model.addConstr(band_var <= used_vehicle[vehicle.vehicle_id])
 
         # C5: Explicit time-overlap prohibition.
         # For each vehicle k and each overlapping trip pair (i, j) add y[k,i] + y[k,j] <= 1.
@@ -230,6 +270,8 @@ class GurobiMILPAdapter:
         w_off_var = None
 
         if bev_ids and slot_indices:
+            initial_soc_ratio_override = self._percent_to_ratio(problem.metadata.get("initial_soc_percent"))
+            final_soc_floor_ratio_override = self._percent_to_ratio(problem.metadata.get("final_soc_floor_percent"))
             for vehicle in problem.vehicles:
                 if vehicle.vehicle_id not in bev_ids:
                     continue
@@ -251,20 +293,45 @@ class GurobiMILPAdapter:
                     d_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=discharge_max_kw, vtype=GRB.CONTINUOUS)
                     s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=soc_min, ub=cap, vtype=GRB.CONTINUOUS)
 
-                initial_soc = vehicle.initial_soc
-                if initial_soc is None:
-                    initial_kwh = 0.8 * cap
-                elif initial_soc <= 1.0:
-                    initial_kwh = initial_soc * cap
+                if initial_soc_ratio_override is not None:
+                    initial_kwh = initial_soc_ratio_override * cap
                 else:
-                    initial_kwh = initial_soc
+                    initial_soc = vehicle.initial_soc
+                    if initial_soc is None:
+                        initial_kwh = 0.8 * cap
+                    elif initial_soc <= 1.0:
+                        initial_kwh = initial_soc * cap
+                    else:
+                        initial_kwh = initial_soc
                 initial_kwh = min(max(initial_kwh, soc_min), cap)
                 first_slot = slot_indices[0]
                 model.addConstr(s_var[(vehicle.vehicle_id, first_slot)] == initial_kwh)
 
                 # C11: terminal SOC lower bound for used vehicles.
                 last_slot = slot_indices[-1]
-                model.addConstr(s_var[(vehicle.vehicle_id, last_slot)] >= soc_min * used_vehicle[vehicle.vehicle_id])
+                final_soc_floor_kwh = soc_min
+                if final_soc_floor_ratio_override is not None:
+                    final_soc_floor_kwh = max(final_soc_floor_kwh, final_soc_floor_ratio_override * cap)
+                model.addConstr(
+                    s_var[(vehicle.vehicle_id, last_slot)]
+                    >= final_soc_floor_kwh * used_vehicle[vehicle.vehicle_id]
+                )
+
+                # C10 (departure readiness): each assigned BEV trip must start with sufficient SOC.
+                for trip in problem.trips:
+                    key = (vehicle.vehicle_id, trip.trip_id)
+                    if key not in y:
+                        continue
+                    required_ratio = self._percent_to_ratio(trip.required_soc_departure_percent)
+                    if required_ratio is None or required_ratio <= 0.0:
+                        continue
+                    depart_slot_idx = self._slot_index(problem, trip.departure_min)
+                    if (vehicle.vehicle_id, depart_slot_idx) not in s_var:
+                        continue
+                    model.addConstr(
+                        s_var[(vehicle.vehicle_id, depart_slot_idx)]
+                        >= (required_ratio * cap) * y[key]
+                    )
 
                 for pos in range(len(slot_indices) - 1):
                     slot_idx = slot_indices[pos]
@@ -705,4 +772,30 @@ class GurobiMILPAdapter:
         if arr_b <= dep_b:
             arr_b += 24 * 60
         return dep_a < arr_b and dep_b < arr_a
+
+    def _safe_positive_int(self, value: Any, *, default: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed >= 1 else default
+
+    def _route_band_key(self, dispatch_trip: Any, fallback_route_id: str) -> str:
+        family_code = str(getattr(dispatch_trip, "route_family_code", "") or "").strip()
+        if family_code:
+            return family_code
+        return str(fallback_route_id or "").strip()
+
+    def _percent_to_ratio(self, value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if parsed < 0.0:
+            return None
+        if parsed > 1.0:
+            parsed = parsed / 100.0
+        return min(parsed, 1.0)
 

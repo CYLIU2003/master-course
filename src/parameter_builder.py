@@ -9,12 +9,16 @@ parameter_builder.py — 派生パラメータ生成
 """
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from .data_schema import ProblemData
 from .model_sets import ModelSets
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -104,11 +108,26 @@ def build_derived_params(data: ProblemData, ms: ModelSets) -> DerivedParams:
     dp.BIG_M_SOC    = data.BIG_M_SOC
 
     # --- タスク基本情報 ---
+    bev_energy_rate_kwh_per_km = _estimate_bev_energy_rate_kwh_per_km(data)
+    bev_energy_fallback_count = 0
     for t in data.tasks:
+        energy_required_kwh_bev = float(t.energy_required_kwh_bev or 0.0)
+        if energy_required_kwh_bev <= 0.0 and float(t.distance_km or 0.0) > 0.0:
+            energy_required_kwh_bev = float(t.distance_km) * bev_energy_rate_kwh_per_km
+            # Keep canonical Task data in sync so downstream legacy paths stay consistent.
+            t.energy_required_kwh_bev = energy_required_kwh_bev
+            bev_energy_fallback_count += 1
         dp.task_duration_slot[t.task_id] = t.end_time_idx - t.start_time_idx
-        dp.task_energy_bev[t.task_id]    = t.energy_required_kwh_bev
+        dp.task_energy_bev[t.task_id]    = energy_required_kwh_bev
         dp.task_fuel_ice[t.task_id]      = t.fuel_required_liter_ice
         dp.task_distance_km[t.task_id]   = t.distance_km
+
+    if bev_energy_fallback_count > 0:
+        logger.warning(
+            "Backfilled BEV energy for %d task(s) using %.3f kWh/km because input energy_required_kwh_bev was missing/zero.",
+            bev_energy_fallback_count,
+            bev_energy_rate_kwh_per_km,
+        )
 
     # --- §10.5 時刻別タスク状態 ---
     T = data.num_periods
@@ -116,7 +135,8 @@ def build_derived_params(data: ProblemData, ms: ModelSets) -> DerivedParams:
         active = [0] * T
         energy = [0.0] * T
         span = t.end_time_idx - t.start_time_idx + 1
-        per_slot = t.energy_required_kwh_bev / span if span > 0 else 0.0
+        task_energy_kwh = float(dp.task_energy_bev.get(t.task_id, t.energy_required_kwh_bev) or 0.0)
+        per_slot = task_energy_kwh / span if span > 0 else 0.0
         for ti in range(T):
             if t.start_time_idx <= ti <= t.end_time_idx:
                 active[ti] = 1
@@ -177,6 +197,18 @@ def _default_can_follow(data: ProblemData, dp: DerivedParams) -> None:
             dp.deadhead_time_slot[t1.task_id][t2.task_id] = dh_slot if can else 0
             dp.deadhead_energy_kwh[t1.task_id][t2.task_id] = 0.0 if same_loc else 5.0
             dp.deadhead_distance_km[t1.task_id][t2.task_id] = 0.0 if same_loc else 15.0
+
+
+def _estimate_bev_energy_rate_kwh_per_km(data: ProblemData, default: float = 1.2) -> float:
+    ratios: List[float] = []
+    for task in data.tasks:
+        distance_km = float(task.distance_km or 0.0)
+        energy_kwh = float(task.energy_required_kwh_bev or 0.0)
+        if distance_km > 0.0 and energy_kwh > 0.0:
+            ratios.append(energy_kwh / distance_km)
+    if ratios:
+        return float(sum(ratios) / len(ratios))
+    return float(default)
 
 
 def get_grid_price(dp: DerivedParams, site_id: str, t_idx: int,

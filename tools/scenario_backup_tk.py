@@ -744,6 +744,7 @@ class App:
         self.include_deadhead_var = tk.BooleanVar(value=True)
         self.allow_intra_var = tk.BooleanVar(value=False)
         self.allow_inter_var = tk.BooleanVar(value=False)
+        self.fixed_route_band_mode_var = tk.BooleanVar(value=False)
         frow1 = ttk.Frame(flags_lf)
         frow1.pack(fill=tk.X)
         ttk.Checkbutton(frow1, text="区間便", variable=self.include_short_turn_var).pack(side=tk.LEFT)
@@ -753,6 +754,7 @@ class App:
         frow2.pack(fill=tk.X)
         ttk.Checkbutton(frow2, text="営業所内路線間トレード許可", variable=self.allow_intra_var).pack(side=tk.LEFT)
         ttk.Checkbutton(frow2, text="営業所間トレード許可", variable=self.allow_inter_var).pack(side=tk.LEFT, padx=8)
+        ttk.Checkbutton(frow2, text="固定路線バンド", variable=self.fixed_route_band_mode_var).pack(side=tk.LEFT, padx=8)
 
         # ── 営業所・路線チェックリスト（スクロール・残りスペースを全て使用）──
         scope_hdr = ttk.Frame(scope)
@@ -881,14 +883,36 @@ class App:
         self.contract_penalty_coeff_var = tk.StringVar(value="1000000")
         self.unserved_penalty_var = tk.StringVar(value="10000")
         self.objective_weights_json_var = tk.StringVar(value="")
+        self.objective_preset_var = tk.StringVar(value="cost")
+        self.max_start_fragments_var = tk.StringVar(value="100")
+        self.max_end_fragments_var = tk.StringVar(value="100")
+        self.initial_soc_percent_var = tk.StringVar(value="0.8")
+        self.final_soc_floor_percent_var = tk.StringVar(value="0.2")
+        self.pv_profile_id_var = tk.StringVar(value="")
+        self.weather_mode_var = tk.StringVar(value="sunny")
+        self.weather_factor_scalar_var = tk.StringVar(value="1.0")
+        self.co2_price_source_var = tk.StringVar(value="manual")
+        self.co2_reference_date_var = tk.StringVar(value="")
+        self.enable_vehicle_diagram_output_var = tk.BooleanVar(value=False)
         self._labeled_entry(advanced, "売電単価 grid_sell_price_per_kwh", self.grid_sell_price_var)
         self._labeled_entry(advanced, "未配車罰金 unserved_penalty", self.unserved_penalty_var)
         self._labeled_entry(advanced, "契約超過罰金係数(slack_penalty)", self.contract_penalty_coeff_var)
         self._labeled_entry(advanced, "CO2原単位 grid_co2_kg_per_kwh", self.grid_co2_var)
         self._labeled_entry(advanced, "CO2単価 co2_price_per_kg (0=無効)", self.co2_price_var)
+        self._labeled_entry(advanced, "CO2価格ソース co2_price_source", self.co2_price_source_var)
+        self._labeled_entry(advanced, "CO2参照日 co2_reference_date", self.co2_reference_date_var)
         self._labeled_entry(advanced, "軽油CO2係数 ice_co2_kg_per_l", self.ice_co2_kg_per_l_var)
         self._labeled_entry(advanced, "劣化重み degradation_weight (0=無効)", self.degradation_weight_var)
+        self._labeled_entry(advanced, "目的プリセット objective_preset", self.objective_preset_var)
+        self._labeled_entry(advanced, "開始断片上限 max_start_fragments", self.max_start_fragments_var)
+        self._labeled_entry(advanced, "終了断片上限 max_end_fragments", self.max_end_fragments_var)
+        self._labeled_entry(advanced, "初期SOC比 initial_soc_percent", self.initial_soc_percent_var)
+        self._labeled_entry(advanced, "終了SOC床 final_soc_floor_percent", self.final_soc_floor_percent_var)
+        self._labeled_entry(advanced, "PVプロファイルID pv_profile_id", self.pv_profile_id_var)
+        self._labeled_entry(advanced, "天気モード weather_mode", self.weather_mode_var)
+        self._labeled_entry(advanced, "天気係数 weather_factor_scalar", self.weather_factor_scalar_var)
         self._labeled_entry(advanced, "拡張係数 objective_weights(JSON)", self.objective_weights_json_var)
+        ttk.Checkbutton(advanced, text="車両ダイヤグラム出力", variable=self.enable_vehicle_diagram_output_var).pack(anchor="w", pady=(2, 0))
         self._labeled_entry(advanced, "車両導入費(編集は車両/テンプレ画面)", tk.StringVar(value="個別設定"), readonly=True)
 
         # ── ソルバー詳細設定 ──
@@ -2401,6 +2425,7 @@ class App:
             self.include_deadhead_var.set(bool(trip.get("includeDeadhead", True)))
             self.allow_intra_var.set(bool(dispatch_scope.get("allowIntraDepotRouteSwap", False)))
             self.allow_inter_var.set(bool(dispatch_scope.get("allowInterDepotSwap", False)))
+            self.fixed_route_band_mode_var.set(bool(dispatch_scope.get("fixedRouteBandMode", False)))
 
             solver = dict(resp.get("solverSettings") or {})
             sim = dict(resp.get("simulationSettings") or {})
@@ -2412,6 +2437,10 @@ class App:
             self.time_limit_var.set(str(solver.get("timeLimitSeconds") or 300))
             self.mip_gap_var.set(str(solver.get("mipGap") if solver.get("mipGap") is not None else 0.01))
             self.alns_iter_var.set(str(solver.get("alnsIterations") or 500))
+            self.objective_preset_var.set(str(solver.get("objectivePreset") or sim.get("objectivePreset") or "cost"))
+            self.max_start_fragments_var.set(str(solver.get("maxStartFragmentsPerVehicle") or 100))
+            self.max_end_fragments_var.set(str(solver.get("maxEndFragmentsPerVehicle") or 100))
+            self.enable_vehicle_diagram_output_var.set(bool(solver.get("enableVehicleDiagramOutput", False)))
             self.allow_partial_service_var.set(bool(sim.get("allowPartialService", False)))
             self.unserved_penalty_var.set(str(sim.get("unservedPenalty") or 10000))
             self.grid_flat_price_var.set(str(sim.get("gridFlatPricePerKwh") or 30))
@@ -2420,9 +2449,16 @@ class App:
             self.diesel_price_var.set(str(sim.get("dieselPricePerL") or 145))
             self.grid_co2_var.set(str(sim.get("gridCo2KgPerKwh") or 0))
             self.co2_price_var.set(str(sim.get("co2PricePerKg") or 0))
+            self.co2_price_source_var.set(str(sim.get("co2PriceSource") or "manual"))
+            self.co2_reference_date_var.set(str(sim.get("co2ReferenceDate") or ""))
             self.ice_co2_kg_per_l_var.set(str(sim.get("iceCo2KgPerL") or 2.64))
             self.degradation_weight_var.set(str(sim.get("degradationWeight") or 0))
             self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
+            self.initial_soc_percent_var.set(str(sim.get("initialSocPercent") or 0.8))
+            self.final_soc_floor_percent_var.set(str(sim.get("finalSocFloorPercent") or 0.2))
+            self.pv_profile_id_var.set(str(sim.get("pvProfileId") or ""))
+            self.weather_mode_var.set(str(sim.get("weatherMode") or "sunny"))
+            self.weather_factor_scalar_var.set(str(sim.get("weatherFactorScalar") or 1.0))
             self._suspend_prepare_watchers = False
 
             self._refresh_depot_dropdowns(depots)
@@ -2474,11 +2510,16 @@ class App:
             "includeDeadhead": self.include_deadhead_var.get(),
             "allowIntraDepotRouteSwap": self.allow_intra_var.get(),
             "allowInterDepotSwap": self.allow_inter_var.get(),
+            "fixedRouteBandMode": self.fixed_route_band_mode_var.get(),
             "solverMode": self.solver_mode_var.get().strip(),
             "objectiveMode": self.objective_mode_var.get().strip(),
+            "objectivePreset": self.objective_preset_var.get().strip() or "cost",
             "timeLimitSeconds": self._parse_int(self.time_limit_var.get(), 300),
             "mipGap": self._parse_float(self.mip_gap_var.get(), 0.01),
             "alnsIterations": self._parse_int(self.alns_iter_var.get(), 500),
+            "maxStartFragmentsPerVehicle": self._parse_int(self.max_start_fragments_var.get(), 100),
+            "maxEndFragmentsPerVehicle": self._parse_int(self.max_end_fragments_var.get(), 100),
+            "enableVehicleDiagramOutput": self.enable_vehicle_diagram_output_var.get(),
             "allowPartialService": self.allow_partial_service_var.get(),
             "unservedPenalty": self._parse_float(self.unserved_penalty_var.get(), 10000.0),
             "gridFlatPricePerKwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
@@ -2487,9 +2528,16 @@ class App:
             "dieselPricePerL": self._parse_float(self.diesel_price_var.get(), 145.0),
             "gridCo2KgPerKwh": self._parse_float(self.grid_co2_var.get(), 0.0),
             "co2PricePerKg": self._parse_float(self.co2_price_var.get(), 0.0),
+            "co2PriceSource": self.co2_price_source_var.get().strip() or "manual",
+            "co2ReferenceDate": self.co2_reference_date_var.get().strip() or None,
             "iceCo2KgPerL": self._parse_float(self.ice_co2_kg_per_l_var.get(), 2.64),
             "depotPowerLimitKw": self._parse_float(self.depot_power_limit_var.get(), 500.0),
             "degradationWeight": self._parse_float(self.degradation_weight_var.get(), 0.0),
+            "initialSocPercent": self._parse_float(self.initial_soc_percent_var.get(), 0.8),
+            "finalSocFloorPercent": self._parse_float(self.final_soc_floor_percent_var.get(), 0.2),
+            "pvProfileId": self.pv_profile_id_var.get().strip() or None,
+            "weatherMode": self.weather_mode_var.get().strip() or "sunny",
+            "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
         }
         self.run_bg(
             lambda: self.client.put_quick_setup(scenario_id, payload),
@@ -3531,8 +3579,10 @@ class App:
             (self.include_deadhead_var, "回送設定を変更"),
             (self.allow_intra_var, "営業所内トレード設定を変更"),
             (self.allow_inter_var, "営業所間トレード設定を変更"),
+            (self.fixed_route_band_mode_var, "固定路線バンド設定を変更"),
             (self.solver_mode_var, "ソルバー種別を変更"),
             (self.objective_mode_var, "目的関数モードを変更"),
+            (self.objective_preset_var, "目的プリセットを変更"),
             (self.allow_partial_service_var, "未配車許容設定を変更"),
             (self.initial_soc_var, "SOC初期値を変更"),
             (self.soc_min_var, "SOC下限を変更"),
@@ -3548,6 +3598,16 @@ class App:
             (self.ice_co2_kg_per_l_var, "軽油CO2係数を変更"),
             (self.degradation_weight_var, "劣化重みを変更"),
             (self.depot_power_limit_var, "営業所契約電力を変更"),
+            (self.max_start_fragments_var, "開始断片上限を変更"),
+            (self.max_end_fragments_var, "終了断片上限を変更"),
+            (self.initial_soc_percent_var, "初期SOC比を変更"),
+            (self.final_soc_floor_percent_var, "終了SOC床を変更"),
+            (self.pv_profile_id_var, "PVプロファイルを変更"),
+            (self.weather_mode_var, "天気モードを変更"),
+            (self.weather_factor_scalar_var, "天気係数を変更"),
+            (self.co2_price_source_var, "CO2価格ソースを変更"),
+            (self.co2_reference_date_var, "CO2参照日を変更"),
+            (self.enable_vehicle_diagram_output_var, "ダイヤグラム出力設定を変更"),
         ]
         for variable, reason in watched_pairs:
             variable.trace_add("write", lambda *_args, r=reason: self._mark_prepared_stale(r))

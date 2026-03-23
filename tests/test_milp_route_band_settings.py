@@ -1,0 +1,104 @@
+from src.dispatch.models import DispatchContext, Trip, VehicleProfile
+from src.optimization.common.builder import ProblemBuilder
+from src.optimization.milp.solver_adapter import GurobiMILPAdapter
+
+
+def _minimal_dispatch_context() -> DispatchContext:
+    return DispatchContext(
+        service_date="2026-03-23",
+        trips=[
+            Trip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_time="08:00",
+                arrival_time="08:30",
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                route_family_code="FAM01",
+            )
+        ],
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={
+            "BEV": VehicleProfile(
+                vehicle_type="BEV",
+                battery_capacity_kwh=300.0,
+                energy_consumption_kwh_per_km=1.2,
+            )
+        },
+    )
+
+
+def test_builder_metadata_includes_fragment_and_band_settings() -> None:
+    context = _minimal_dispatch_context()
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="s1",
+        vehicle_counts={"BEV": 1},
+        fixed_route_band_mode=True,
+        max_start_fragments_per_vehicle=3,
+        max_end_fragments_per_vehicle=4,
+        initial_soc_percent=80.0,
+        final_soc_floor_percent=20.0,
+    )
+
+    assert problem.metadata.get("fixed_route_band_mode") is True
+    assert problem.metadata.get("max_start_fragments_per_vehicle") == 3
+    assert problem.metadata.get("max_end_fragments_per_vehicle") == 4
+    assert problem.metadata.get("initial_soc_percent") == 80.0
+    assert problem.metadata.get("final_soc_floor_percent") == 20.0
+    assert abs((problem.trips[0].required_soc_departure_percent or 0.0) - 24.0) < 1.0e-9
+
+
+def test_solver_adapter_route_band_key_prefers_family_code() -> None:
+    context = _minimal_dispatch_context()
+    trip = context.trips[0]
+    adapter = GurobiMILPAdapter()
+
+    assert adapter._route_band_key(trip, "fallback_route") == "FAM01"
+    trip_without_family = Trip(
+        trip_id=trip.trip_id,
+        route_id=trip.route_id,
+        origin=trip.origin,
+        destination=trip.destination,
+        departure_time=trip.departure_time,
+        arrival_time=trip.arrival_time,
+        distance_km=trip.distance_km,
+        allowed_vehicle_types=trip.allowed_vehicle_types,
+        route_family_code="",
+    )
+    assert adapter._route_band_key(trip_without_family, "fallback_route") == "fallback_route"
+
+
+def test_solver_adapter_safe_positive_int_uses_default_for_invalid_values() -> None:
+    adapter = GurobiMILPAdapter()
+
+    assert adapter._safe_positive_int(5, default=1) == 5
+    assert adapter._safe_positive_int(0, default=1) == 1
+    assert adapter._safe_positive_int(None, default=2) == 2
+    assert adapter._safe_positive_int("x", default=3) == 3
+
+
+def test_solver_adapter_percent_to_ratio_supports_percent_and_ratio() -> None:
+    adapter = GurobiMILPAdapter()
+
+    assert adapter._percent_to_ratio(80.0) == 0.8
+    assert adapter._percent_to_ratio(0.25) == 0.25
+    assert adapter._percent_to_ratio(120.0) == 1.0
+    assert adapter._percent_to_ratio(-1) is None
+
+
+def test_builder_percent_normalization_and_required_soc_derivation() -> None:
+    builder = ProblemBuilder()
+    assert builder._normalize_percent_like_to_ratio(80.0) == 0.8
+    assert builder._normalize_percent_like_to_ratio(0.25) == 0.25
+    assert builder._normalize_percent_like_to_ratio(None) is None
+
+    required = builder._derive_required_soc_departure_percent(
+        trip_energy_kwh=18.0,
+        bev_capacity_kwh=300.0,
+        final_soc_floor_ratio=0.2,
+    )
+    assert required == 26.0

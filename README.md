@@ -51,6 +51,15 @@ flowchart LR
 > - 実装済み/未実装は 3章で明示し、断定表現を避けています。
 > - 実行前に 4章・5章、問題発生時は 7章、検証時は 10章を参照してください。
 
+### 更新メモ（2026-03-23）
+
+- `objectiveMode` の定義を `total_cost/co2/balanced/utilization` で統一しました（helper/overlay/schemaを整合）。
+- `fixed_route_band_mode` を MILP 制約に反映し、1車両が複数 route family（未設定時は route_id）をまたがない運用を選択可能にしました。
+- C3 の開始/終了断片上限を固定値ではなく `max_start_fragments_per_vehicle` / `max_end_fragments_per_vehicle` で制御するようにしました。
+- `required_soc_departure_percent` を trip レベルで導出し、MILP で出発時SOC下限制約として適用しました（0-1/0-100入力を正規化）。
+- 最適化結果シリアライズに `objective_components_raw` / `objective_components_weighted` / `objective_weights` / `pv_summary` / `utilization_summary` / `termination_reason` / `effective_limits` を追加しました。
+- `energy_required_kwh_bev` が欠損/0 のタスクは、走行距離 `distance_km` と推定係数（既知タスク平均、未取得時は 1.2 kWh/km）で補完し、EV 電力量料金が「走行ベース」で必ず計上されるようにしました。
+
 ## このシステムが何をしているか（先生向け要約）
 
 本システムの現行 core は、東急バス 1 日分の運行計画について以下の **3 つを同時に決める** 混合整数線形計画（MILP）です。
@@ -78,7 +87,7 @@ flowchart LR
 > - **C1 欠便制約**：「全便を必ず割り当てる」は絶対制約ではなく、欠便変数に大きな罰則を課す**罰則付き緩和**として実装しています（通常は欠便が抑止されますが、解なし状態の回避が目的です）。
 > - **C14 充電器制約**：「各充電器にどの車両が接続されているか」を厳密に追うのではなく、全充電器の合計容量（kW）の上限制約として実装しています。
 > - **C20/C21 ピーク判定**：tariff テーブルが設定されている場合はそれを優先しますが、未設定時は時間帯別価格の中央値で on/off を近似的に分類しています。
-> - **目的関数モード**：`objectiveMode=total_cost` は従来のコスト最小、`objectiveMode=co2` は CO₂排出量最小です。`co2` モードでは `co2_price_per_kg=0` でも排出量そのものを最小化します。
+> - **目的関数モード**：`objectiveMode=total_cost` は従来のコスト最小、`objectiveMode=co2` は CO₂排出量最小、`objectiveMode=balanced` はコストと排出の加重和、`objectiveMode=utilization` は運行達成を維持しつつ車両稼働の効率化を重視します。`co2` モードでは `co2_price_per_kg=0` でも排出量そのものを最小化します。
 > - **CO₂費・劣化費**：`total_cost` モードでは、パラメータ（`co2_price_per_kg`・`degradation` 重み）に正の値を設定すると目的関数へ加算されます。
 
 実装本体：[`src/optimization/milp/solver_adapter.py`](src/optimization/milp/solver_adapter.py)
@@ -625,6 +634,29 @@ python tools/multi_run_visualizer_tk.py
 
 ---
 
+### 4.7 固定フォーマット Graph Exports（Phase 1 必須）
+
+`export_all` 実行時に、論文・再分析向けの構造化データを自動生成します。
+
+出力先：
+1. run ごと: `.../run_YYYYMMDD_HHMM/graph_exports/`
+2. scenario 集約: `outputs/scenarios/{scenario_id}/graph_exports/`
+
+生成ファイル（Phase 1 必須）：
+- `manifest.json`
+- `vehicle_timeline.csv`
+- `soc_events.csv`
+- `depot_power_timeseries_5min.csv`
+- `trip_assignment.csv`
+- `cost_breakdown.json`
+- `kpi_summary.json`
+
+補足：
+- タイムゾーンは `Asia/Tokyo`、時刻は ISO 8601 形式です。
+- まず構造化データを安定出力し、描画は Tk アプリ / Notebook / フロントで再利用する方針です。
+
+---
+
 ## 5. 東急全体最適化の推奨フロー
 
 1. シナリオ作成
@@ -725,6 +757,9 @@ python catalog_update_app.py refresh gtfs-pipeline `
 - 補正後は、以前保存された営業所・路線が現在の runtime に存在しない場合に選択が外れます。`Quick Setup 読込` 後に営業所・路線・車両配置を再確認してください。
 - `Quick Setup 保存` 後は `dispatch_scope` と `scenario_overlay` の両方に選択 route/depot が同期され、`Solver対応 Prepare` は現在の UI 選択と solver 設定から prepared input を再生成します。
 - `④ 実行` の `最適化計算` / `Preparedシミュレーション` / `再最適化` は、dispatch 再構築が不要な限り prepared input を直接使うため、従来より軽いフローです。
+- Tk の既定値どおり `最適化計算 + dispatch再構築OFF` で実行しても、BFF は prepared scope の `timetable_rows` / `trips` / `stops` を scenario artifact へ同期し、`optimization_result.prepared_input_id` と `optimization_audit.prepared_input_id` に実行入力を保存します。
+- 逆に `rebuild_dispatch=false` の run では duty 再生成は意図的に行わないため、`optimization_result` が有効でも `dutyCount=0` のままになることがあります。dispatch duty 自体が必要な確認では `dispatch再構築ON` で実行してください。
+- `timetable_rows` / `stop_timetables` を更新した場合、BFF は stale な `trips` / `graph` / `duties` / `dispatch_plan` / `simulation_result` / `optimization_result` を破棄して scenario を `draft` へ戻します。timetable-first の前提を壊さないための仕様です。
 - 大規模 scope の最適化入力では `TravelConnection` を feasible edge のみ保持する疎形式にしています。全 trip 対の O(n^2) 展開は行いません。
 
 ### 7.4 MILP 変数名の長さエラー
@@ -757,7 +792,7 @@ python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.s
 `solverMode`, `objectiveMode`, `timeLimitSeconds`, `mipGap`, `alnsIterations`, `randomSeed`
 
 `solverMode` を変えた場合は prepared input が stale になるため、必ず `Solver対応 Prepare` をやり直してください。
-`objectiveMode` は現在 `total_cost` と `co2` の 2 種類です。`co2` は `co2_price_per_kg` が 0 でも CO₂排出量最小として解きます。
+`objectiveMode` は現在 `total_cost` / `co2` / `balanced` / `utilization` の 4 種類です。`co2` は `co2_price_per_kg` が 0 でも CO₂排出量最小として解きます。
 
 **スコープ設定**
 `selectedDepotIds`, `selectedRouteIds`, `dayType`, `service_id`, `service_date`,
@@ -871,7 +906,7 @@ $$arrival(i) + turnaround(dest_i) + deadhead(dest_i, origin_j) \leq departure(j)
 ```powershell
 python scripts/audit_timetable_alignment.py `
   --scenario-id bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f `
-  --prepared-input-path app/scenarios/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared_inputs/prepared-7822b5b6dd60630d.json `
+  --prepared-input-path outputs/prepared_inputs/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared-7822b5b6dd60630d.json `
   --optimization-result-path outputs/tokyu/2026-03-14/optimization/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/meguro/WEEKDAY/optimization_result.json `
   --out-dir outputs/audit/bbe1e1bd
 ```

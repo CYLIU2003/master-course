@@ -298,6 +298,8 @@ def _prepared_inputs_root() -> Path:
 def _persist_prepared_scope_artifacts(
     scenario_id: str,
     scenario_snapshot: Dict[str, Any],
+    *,
+    clear_stale_dispatch: bool = False,
 ) -> None:
     prepared_trips = list(scenario_snapshot.get("trips") or [])
     prepared_timetable_rows = list(
@@ -314,6 +316,11 @@ def _persist_prepared_scope_artifacts(
         store.set_field(scenario_id, "stops", prepared_stops)
     if prepared_stop_timetables:
         store.set_field(scenario_id, "stop_timetables", prepared_stop_timetables)
+    if clear_stale_dispatch:
+        store.set_field(scenario_id, "graph", {})
+        store.set_field(scenario_id, "blocks", [])
+        store.set_field(scenario_id, "duties", [])
+        store.set_field(scenario_id, "dispatch_plan", {})
 
 
 def _rebuild_dispatch_artifacts(
@@ -556,8 +563,12 @@ def _run_optimization(
             prepared_payload,
         )
 
+        _persist_prepared_scope_artifacts(
+            scenario_id,
+            scenario,
+            clear_stale_dispatch=not rebuild_dispatch and not use_existing_duties,
+        )
         if rebuild_dispatch:
-            _persist_prepared_scope_artifacts(scenario_id, scenario)
             _rebuild_dispatch_artifacts(scenario_id, service_id, depot_id)
         scenario["duties"] = store.get_field(scenario_id, "duties") or []
         scenario["blocks"] = store.get_field(scenario_id, "blocks") or []
@@ -677,6 +688,8 @@ def _run_optimization(
             "scenario_id": scenario_id,
             "feed_context": feed_context,
             "scope": {"serviceId": service_id, "depotId": depot_id},
+            "prepared_input_id": prepared_input_id,
+            "prepared_scope_summary": dict(scenario.get("prepared_scope_summary") or {}),
             "solver_status": result_payload["status"],
             "mode": mode,
             "solver_mode": solver_mode,
@@ -720,6 +733,8 @@ def _run_optimization(
             "feed_context": feed_context,
             "depot_id": depot_id,
             "service_id": service_id,
+            "prepared_input_id": prepared_input_id,
+            "prepared_scope_summary": dict(scenario.get("prepared_scope_summary") or {}),
             "case_type": scenario.get("experiment_case_type"),
             "input_counts": {
                 "vehicles": build_report.vehicle_count,

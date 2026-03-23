@@ -406,6 +406,18 @@ class UpdateQuickSetupBody(BaseModel):
     iceCo2KgPerL: Optional[float] = None
     depotPowerLimitKw: Optional[float] = None
     degradationWeight: Optional[float] = None
+    fixedRouteBandMode: Optional[bool] = None
+    maxStartFragmentsPerVehicle: Optional[int] = None
+    maxEndFragmentsPerVehicle: Optional[int] = None
+    initialSocPercent: Optional[float] = None
+    finalSocFloorPercent: Optional[float] = None
+    objectivePreset: Optional[str] = None
+    pvProfileId: Optional[str] = None
+    weatherMode: Optional[str] = None
+    weatherFactorScalar: Optional[float] = None
+    co2PriceSource: Optional[str] = None
+    co2ReferenceDate: Optional[str] = None
+    enableVehicleDiagramOutput: Optional[bool] = None
 
 
 class TimetableRowBody(BaseModel):
@@ -873,6 +885,36 @@ def _builder_defaults(
             or simulation_config.get("objective_mode")
             or "total_cost"
         ),
+        "objectivePreset": str(
+            simulation_config.get("objective_preset")
+            or overlay_solver.get("objective_preset")
+            or "cost"
+        ),
+        "fixedRouteBandMode": bool(
+            simulation_config.get("fixed_route_band_mode", overlay_solver.get("fixed_route_band_mode", False))
+        ),
+        "maxStartFragmentsPerVehicle": int(
+            simulation_config.get("max_start_fragments_per_vehicle")
+            or overlay_solver.get("max_start_fragments_per_vehicle")
+            or 100
+        ),
+        "maxEndFragmentsPerVehicle": int(
+            simulation_config.get("max_end_fragments_per_vehicle")
+            or overlay_solver.get("max_end_fragments_per_vehicle")
+            or 100
+        ),
+        "enableVehicleDiagramOutput": bool(
+            simulation_config.get(
+                "enable_vehicle_diagram_output",
+                simulation_config.get(
+                    "output_vehicle_diagram",
+                    overlay_solver.get(
+                        "enable_vehicle_diagram_output",
+                        overlay_solver.get("output_vehicle_diagram", False),
+                    ),
+                ),
+            )
+        ),
         "allowPartialService": bool(
             overlay_solver.get(
                 "allow_partial_service",
@@ -891,8 +933,15 @@ def _builder_defaults(
         "dieselPricePerL": overlay_cost.get("diesel_price_per_l"),
         "gridCo2KgPerKwh": overlay_cost.get("grid_co2_kg_per_kwh"),
         "co2PricePerKg": overlay_cost.get("co2_price_per_kg"),
+        "co2PriceSource": simulation_config.get("co2_price_source") or "manual",
+        "co2ReferenceDate": simulation_config.get("co2_reference_date"),
         "iceCo2KgPerL": overlay_cost.get("ice_co2_kg_per_l"),
         "depotPowerLimitKw": overlay_charging.get("depot_power_limit_kw"),
+        "initialSocPercent": simulation_config.get("initial_soc_percent"),
+        "finalSocFloorPercent": simulation_config.get("final_soc_floor_percent"),
+        "pvProfileId": simulation_config.get("pv_profile_id"),
+        "weatherMode": simulation_config.get("weather_mode") or "sunny",
+        "weatherFactorScalar": simulation_config.get("weather_factor_scalar"),
         "degradationWeight": (
             (overlay_solver.get("objective_weights") or {}).get("degradation")
             or (overlay_solver.get("objective_weights") or {}).get("battery_degradation_cost")
@@ -1157,6 +1206,9 @@ def _build_quick_setup_payload(
             "allowInterDepotSwap": bool(
                 dispatch_scope.get("allowInterDepotSwap", False)
             ),
+            "fixedRouteBandMode": bool(
+                dispatch_scope.get("fixedRouteBandMode", False)
+            ),
         },
         "availableDayTypes": _available_day_types(doc, dispatch_scope),
         "dayTypeSummaries": day_type_summaries,
@@ -1165,9 +1217,20 @@ def _build_quick_setup_payload(
             "objectiveMode": normalize_objective_mode(
                 builder_defaults.get("objectiveMode") or "total_cost"
             ),
+            "objectivePreset": builder_defaults.get("objectivePreset") or "cost",
             "timeLimitSeconds": int(builder_defaults.get("timeLimitSeconds") or 300),
             "mipGap": float(builder_defaults.get("mipGap") or 0.01),
             "alnsIterations": int(builder_defaults.get("alnsIterations") or 500),
+            "fixedRouteBandMode": bool(builder_defaults.get("fixedRouteBandMode", False)),
+            "maxStartFragmentsPerVehicle": int(
+                builder_defaults.get("maxStartFragmentsPerVehicle") or 100
+            ),
+            "maxEndFragmentsPerVehicle": int(
+                builder_defaults.get("maxEndFragmentsPerVehicle") or 100
+            ),
+            "enableVehicleDiagramOutput": bool(
+                builder_defaults.get("enableVehicleDiagramOutput", False)
+            ),
         },
         "simulationSettings": {
             "serviceDate": builder_defaults.get("serviceDate"),
@@ -1182,8 +1245,15 @@ def _build_quick_setup_payload(
             "dieselPricePerL": builder_defaults.get("dieselPricePerL"),
             "gridCo2KgPerKwh": builder_defaults.get("gridCo2KgPerKwh"),
             "co2PricePerKg": builder_defaults.get("co2PricePerKg"),
+            "co2PriceSource": builder_defaults.get("co2PriceSource"),
+            "co2ReferenceDate": builder_defaults.get("co2ReferenceDate"),
             "iceCo2KgPerL": builder_defaults.get("iceCo2KgPerL"),
             "depotPowerLimitKw": builder_defaults.get("depotPowerLimitKw"),
+            "initialSocPercent": builder_defaults.get("initialSocPercent"),
+            "finalSocFloorPercent": builder_defaults.get("finalSocFloorPercent"),
+            "pvProfileId": builder_defaults.get("pvProfileId"),
+            "weatherMode": builder_defaults.get("weatherMode") or "sunny",
+            "weatherFactorScalar": builder_defaults.get("weatherFactorScalar"),
             "degradationWeight": builder_defaults.get("degradationWeight"),
             "allowPartialService": bool(builder_defaults.get("allowPartialService", False)),
             "unservedPenalty": float(builder_defaults.get("unservedPenalty") or 10000.0),
@@ -1511,6 +1581,8 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         patch["allowIntraDepotRouteSwap"] = bool(body.allowIntraDepotRouteSwap)
     if body.allowInterDepotSwap is not None:
         patch["allowInterDepotSwap"] = bool(body.allowInterDepotSwap)
+    if body.fixedRouteBandMode is not None:
+        patch["fixedRouteBandMode"] = bool(body.fixedRouteBandMode)
 
     try:
         normalized_scope = store.set_dispatch_scope(scenario_id, patch)
@@ -1531,6 +1603,14 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["allow_partial_service"] = bool(body.allowPartialService)
         if body.unservedPenalty is not None:
             solver_config["unserved_penalty"] = float(body.unservedPenalty)
+        if body.fixedRouteBandMode is not None:
+            solver_config["fixed_route_band_mode"] = bool(body.fixedRouteBandMode)
+        if body.maxStartFragmentsPerVehicle is not None:
+            solver_config["max_start_fragments_per_vehicle"] = int(body.maxStartFragmentsPerVehicle)
+        if body.maxEndFragmentsPerVehicle is not None:
+            solver_config["max_end_fragments_per_vehicle"] = int(body.maxEndFragmentsPerVehicle)
+        if body.objectivePreset is not None:
+            solver_config["objective_preset"] = str(body.objectivePreset)
         current_objective_mode = normalize_objective_mode(
             solver_config.get("objective_mode") or "total_cost"
         )
@@ -1594,6 +1674,36 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["allow_partial_service"] = bool(body.allowPartialService)
         if body.unservedPenalty is not None:
             simulation_config["unserved_penalty"] = float(body.unservedPenalty)
+        if body.fixedRouteBandMode is not None:
+            simulation_config["fixed_route_band_mode"] = bool(body.fixedRouteBandMode)
+        if body.maxStartFragmentsPerVehicle is not None:
+            simulation_config["max_start_fragments_per_vehicle"] = int(body.maxStartFragmentsPerVehicle)
+        if body.maxEndFragmentsPerVehicle is not None:
+            simulation_config["max_end_fragments_per_vehicle"] = int(body.maxEndFragmentsPerVehicle)
+        if body.initialSocPercent is not None:
+            simulation_config["initial_soc_percent"] = float(body.initialSocPercent)
+        if body.finalSocFloorPercent is not None:
+            simulation_config["final_soc_floor_percent"] = float(body.finalSocFloorPercent)
+        if body.objectivePreset is not None:
+            simulation_config["objective_preset"] = str(body.objectivePreset)
+        if body.pvProfileId is not None:
+            simulation_config["pv_profile_id"] = str(body.pvProfileId)
+        if body.weatherMode is not None:
+            simulation_config["weather_mode"] = str(body.weatherMode)
+        if body.weatherFactorScalar is not None:
+            simulation_config["weather_factor_scalar"] = float(body.weatherFactorScalar)
+        if body.co2PriceSource is not None:
+            simulation_config["co2_price_source"] = str(body.co2PriceSource)
+        if body.co2ReferenceDate is not None:
+            simulation_config["co2_reference_date"] = str(body.co2ReferenceDate)
+        if body.enableVehicleDiagramOutput is not None:
+            enabled_diagram_output = bool(body.enableVehicleDiagramOutput)
+            simulation_config["enable_vehicle_diagram_output"] = enabled_diagram_output
+            simulation_config["output_vehicle_diagram"] = enabled_diagram_output
+            solver_config["enable_vehicle_diagram_output"] = enabled_diagram_output
+            solver_config["output_vehicle_diagram"] = enabled_diagram_output
+            overlay["solver_config"] = solver_config
+            store.set_scenario_overlay(scenario_id, overlay)
         if simulation_config:
             store.set_field(scenario_id, "simulation_config", simulation_config)
 

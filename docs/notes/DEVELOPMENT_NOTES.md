@@ -1971,3 +1971,18 @@ master-course/
   - 確認:
     - `python -m pytest tests -q` → `53 passed`
     - synthetic smoke: `energy_cost=300.0`, `demand_charge=1000.0`, `grid_kwh=20.0`, `peak_kw=10.0`
+
+- 2026-03-23 (Prepared-scope optimization と scenario artifact の整合を修正)
+  - 問題は Tk/BFF の既定フローで `rebuild_dispatch=false` のまま最適化を完了すると、`optimization_result` だけは更新される一方で scenario 側の `trips` / `timetable_rows` / `stats` が古いまま残り、フロント・BFF・最適化監査で見える件数が食い違うことだった。
+  - さらに `scenario_store.set_field(..., invalidate_dispatch=True)` の direct row-artifact 更新経路は `timetable_rows` / `stop_timetables` 更新時に stale な `trips` / `duties` / `optimization_result` を落としておらず、timetable-first なのに古い dispatch/optimization が残り得た。
+  - `bff/routers/optimization.py` では prepared input 直実行でも `trips` / `timetable_rows` / `stops` / `stop_timetables` を scenario artifact へ同期するようにし、dispatch 再構築を省く run では stale `graph` / `blocks` / `duties` / `dispatch_plan` を明示クリアするよう修正した。
+  - 同時に `optimization_result` と `optimization_audit` に `prepared_input_id` / `prepared_scope_summary` を保存し、どの prepared scope で solve したかを追跡できるようにした。
+  - `bff/store/scenario_store.py` では direct row-artifact 更新後も meta を更新し、`invalidate_dispatch=True` 時は scenario status を `draft` に戻し、`tripCount` / `dutyCount` を 0 リセットしたうえで stale dispatch/optimization artifact を削除するよう修正した。
+  - ドキュメントも現行保存先 `outputs/prepared_inputs/<scenario_id>/<prepared_input_id>.json` に合わせて README / run prep contract / reproduction note を更新した。
+  - 回帰テスト:
+    - `tests/test_prepared_scope_execution.py`
+    - `tests/test_scenario_store_dispatch_scope_overlay.py`
+  - 確認:
+    - `python -m pytest tests/test_prepared_scope_execution.py tests/test_scenario_store_dispatch_scope_overlay.py` → pass
+    - `python -m pytest tests` → `62 passed`
+    - scenario `2b0a60cf-61ad-4094-807c-f766641984c6` を `tsurumaki` / `WEEKDAY` / `mode_milp_only` / `rebuild_dispatch=false` で再実行し、`prepared_input_id=prepared-e0fb1e07bb3635d8`, `trip_count_served=702`, `tripCount=702`, `timetableRowCount=702`, `solver_status=OPTIMAL` を確認

@@ -188,6 +188,25 @@ class ALNSOptimizer:
                 "best_destroy_operator": max(selector.weights, key=selector.weights.get),
                 "accepted_neighborhoods": accepted_count,
                 "rejected_neighborhoods": rejected_count,
+                "objective_mode": problem.scenario.objective_mode,
+                "objective_weights": {
+                    "electricity_cost": float(problem.objective_weights.energy),
+                    "demand_charge_cost": float(problem.objective_weights.demand),
+                    "vehicle_fixed_cost": float(problem.objective_weights.vehicle),
+                    "unserved_penalty": float(problem.objective_weights.unserved),
+                    "switch_cost": float(problem.objective_weights.switch),
+                    "deviation_cost": float(problem.objective_weights.deviation),
+                    "degradation": float(problem.objective_weights.degradation),
+                    "utilization": float(problem.objective_weights.utilization),
+                },
+                "termination_reason": (
+                    "iteration_limit" if iteration >= int(config.alns_iterations) else "time_limit_or_early_stop"
+                ),
+                "effective_limits": {
+                    "time_limit_sec": int(config.time_limit_sec),
+                    "alns_iterations": int(config.alns_iterations),
+                    "no_improvement_limit": int(config.no_improvement_limit),
+                },
             },
             operator_stats=operator_stats,
             incumbent_history=tuple(incumbent_history),

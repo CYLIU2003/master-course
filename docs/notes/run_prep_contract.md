@@ -17,11 +17,11 @@
 ## Cache behavior
 
 - cache hit: return existing `RunPreparation` without rebuilding scoped inputs
-- cache miss: resolve runtime scope, load scoped Parquet rows, write `solver_input.json`, cache result
+- cache miss: resolve runtime scope, load scoped Parquet rows, write the prepared input JSON artifact, cache result
 - invalid cached entry: rebuild and replace cache entry
 
-## solver_input artifact
+## prepared_input artifact
 
-- path: `app/scenarios/<scenario_id>/solver_input.json`
+- path: `outputs/prepared_inputs/<scenario_id>/<prepared_input_id>.json`
 - written during run preparation before simulation/optimization job submission
 - includes scenario id, dataset version, scenario hash, scoped depot ids, scoped route ids, random seed, and row counts

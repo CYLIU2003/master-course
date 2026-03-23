@@ -15,8 +15,9 @@ from __future__ import annotations
 import csv
 import json
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional
 
 from .data_schema import ProblemData
@@ -83,12 +84,596 @@ def export_all(
     export_vehicle_timelines(run_dir, data, ms, dp, milp_result)
     export_objective_breakdown(run_dir, milp_result, sim_result)
     export_simulation_conditions(run_dir, data, dp)
+    export_graph_exports_phase1(run_dir, data, ms, dp, milp_result, sim_result, run_label)
     try:
         export_excel(data, ms, dp, milp_result, sim_result, run_dir, run_label)
     except ImportError:
         pass  # openpyxl 未インストール時はスキップ
 
     return run_dir
+
+
+def export_graph_exports_phase1(
+    run_dir: Path,
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp: MILPResult,
+    sim: SimulationResult,
+    run_label: Optional[str] = None,
+) -> None:
+    """
+    Graph export specification Phase 1.
+
+    Required outputs:
+    - manifest.json
+    - vehicle_timeline.csv
+    - soc_events.csv
+    - depot_power_timeseries_5min.csv
+    - trip_assignment.csv
+    - cost_breakdown.json
+    - kpi_summary.json
+    """
+    scenario_id = _extract_scenario_id(run_dir, run_label)
+    base_date = _extract_base_date(run_dir)
+    graph_dir = run_dir / "graph_exports"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+
+    vehicle_timeline_rows = _build_vehicle_timeline_rows(data, ms, dp, milp, scenario_id, base_date)
+    soc_event_rows = _build_soc_event_rows(data, ms, dp, milp, scenario_id, base_date)
+    depot_power_rows = _build_depot_power_rows_5min(data, ms, dp, milp, scenario_id, base_date)
+    trip_assignment_rows = _build_trip_assignment_rows(data, dp, milp, scenario_id, base_date)
+    cost_breakdown = _build_cost_breakdown_json(data, sim, scenario_id)
+    kpi_summary = _build_kpi_summary_json(data, ms, dp, milp, sim, scenario_id)
+
+    _write_csv(graph_dir / "vehicle_timeline.csv", vehicle_timeline_rows)
+    _write_csv(graph_dir / "soc_events.csv", soc_event_rows)
+    _write_csv(graph_dir / "depot_power_timeseries_5min.csv", depot_power_rows)
+    _write_csv(graph_dir / "trip_assignment.csv", trip_assignment_rows)
+    with open(graph_dir / "cost_breakdown.json", "w", encoding="utf-8") as f:
+        json.dump(cost_breakdown, f, ensure_ascii=False, indent=2)
+    with open(graph_dir / "kpi_summary.json", "w", encoding="utf-8") as f:
+        json.dump(kpi_summary, f, ensure_ascii=False, indent=2)
+
+    files = [
+        "vehicle_timeline.csv",
+        "soc_events.csv",
+        "depot_power_timeseries_5min.csv",
+        "trip_assignment.csv",
+        "cost_breakdown.json",
+        "kpi_summary.json",
+    ]
+    manifest = {
+        "schema_version": "1.0.0",
+        "scenario_id": scenario_id,
+        "generated_at": _tokyo_now().isoformat(),
+        "time_resolution_minutes": 5,
+        "timezone": "Asia/Tokyo",
+        "has_pv": bool(data.enable_pv),
+        "has_optimization_result": True,
+        "has_dispatch_result": True,
+        "has_simulation_result": True,
+        "files": files,
+    }
+    with open(graph_dir / "manifest.json", "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    scenario_graph_dir = _scenario_graph_export_dir(run_dir, scenario_id)
+    scenario_graph_dir.mkdir(parents=True, exist_ok=True)
+    _write_csv(scenario_graph_dir / "vehicle_timeline.csv", vehicle_timeline_rows)
+    _write_csv(scenario_graph_dir / "soc_events.csv", soc_event_rows)
+    _write_csv(scenario_graph_dir / "depot_power_timeseries_5min.csv", depot_power_rows)
+    _write_csv(scenario_graph_dir / "trip_assignment.csv", trip_assignment_rows)
+    with open(scenario_graph_dir / "cost_breakdown.json", "w", encoding="utf-8") as f:
+        json.dump(cost_breakdown, f, ensure_ascii=False, indent=2)
+    with open(scenario_graph_dir / "kpi_summary.json", "w", encoding="utf-8") as f:
+        json.dump(kpi_summary, f, ensure_ascii=False, indent=2)
+    with open(scenario_graph_dir / "manifest.json", "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+
+def _tokyo_now() -> datetime:
+    return datetime.now(timezone(timedelta(hours=9)))
+
+
+def _extract_scenario_id(run_dir: Path, run_label: Optional[str]) -> str:
+    parts = [part for part in run_dir.parts if part]
+    lowered = [part.lower() for part in parts]
+    if "optimization" in lowered:
+        idx = lowered.index("optimization")
+        if idx + 1 < len(parts):
+            value = str(parts[idx + 1]).strip()
+            if value:
+                return value
+    if run_label and str(run_label).strip():
+        return str(run_label).strip()
+    return "unknown_scenario"
+
+
+def _extract_base_date(run_dir: Path) -> date:
+    date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    for part in run_dir.parts:
+        text = str(part).strip()
+        if date_pattern.match(text):
+            try:
+                return date.fromisoformat(text)
+            except ValueError:
+                continue
+    return _tokyo_now().date()
+
+
+def _slot_to_iso(base_date: date, slot_idx: int, delta_t_min: float) -> str:
+    tz = timezone(timedelta(hours=9))
+    dt0 = datetime.combine(base_date, time(0, 0), tz)
+    dt = dt0 + timedelta(minutes=float(slot_idx) * float(delta_t_min))
+    return dt.isoformat()
+
+
+def _state_from_event_type(event_type: str) -> str:
+    value = str(event_type or "").strip().lower()
+    if value == "service":
+        return "service"
+    if value == "deadhead":
+        return "deadhead"
+    if value in {"charging", "charge"}:
+        return "charge"
+    return "idle"
+
+
+def _scenario_graph_export_dir(run_dir: Path, scenario_id: str) -> Path:
+    current = run_dir
+    while True:
+        if current.name.lower() == "outputs":
+            return current / "scenarios" / scenario_id / "graph_exports"
+        if current.parent == current:
+            break
+        current = current.parent
+    return Path("outputs") / "scenarios" / scenario_id / "graph_exports"
+
+
+def _build_vehicle_timeline_rows(
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp: MILPResult,
+    scenario_id: str,
+    base_date: date,
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+
+    for vehicle_id in ms.K_ALL:
+        vehicle = dp.vehicle_lut.get(vehicle_id)
+        depot_id = str(getattr(vehicle, "home_depot", "") or "")
+        assigned = sorted(
+            milp.assignment.get(vehicle_id, []),
+            key=lambda task_id: dp.task_lut.get(task_id).start_time_idx if dp.task_lut.get(task_id) else 0,
+        )
+        previous_task_id: Optional[str] = None
+
+        for task_id in assigned:
+            task = dp.task_lut.get(task_id)
+            if task is None:
+                continue
+
+            if previous_task_id is not None:
+                deadhead_slots = int(dp.deadhead_time_slot.get(previous_task_id, {}).get(task_id, 0) or 0)
+                if deadhead_slots > 0:
+                    dh_start_idx = max(int(task.start_time_idx) - deadhead_slots, 0)
+                    dh_end_idx = int(task.start_time_idx)
+                    dh_start = _slot_to_iso(base_date, dh_start_idx, data.delta_t_min)
+                    dh_end = _slot_to_iso(base_date, dh_end_idx, data.delta_t_min)
+                    rows.append(
+                        {
+                            "scenario_id": scenario_id,
+                            "depot_id": depot_id,
+                            "vehicle_id": vehicle_id,
+                            "band_id": "",
+                            "start_time": dh_start,
+                            "end_time": dh_end,
+                            "state": "deadhead",
+                            "route_id": "",
+                            "trip_id": "",
+                            "from_location_id": str(getattr(dp.task_lut.get(previous_task_id), "destination", "") or ""),
+                            "to_location_id": str(task.origin or ""),
+                            "from_location_type": "terminal",
+                            "to_location_type": "terminal",
+                            "direction": "",
+                            "route_variant_type": "",
+                            "energy_delta_kwh": "",
+                            "distance_km": float(dp.deadhead_distance_km.get(previous_task_id, {}).get(task_id, 0.0) or 0.0),
+                            "duration_min": max((dh_end_idx - dh_start_idx) * float(data.delta_t_min), 0.0),
+                            "is_deadhead": True,
+                            "is_charge": False,
+                            "is_service": False,
+                            "is_idle": False,
+                            "is_depot_move": False,
+                            "is_short_turn": False,
+                            "charger_id": "",
+                            "charge_power_kw": "",
+                        }
+                    )
+
+            start_idx = int(task.start_time_idx)
+            end_idx = int(task.end_time_idx)
+            start_time = _slot_to_iso(base_date, start_idx, data.delta_t_min)
+            end_time = _slot_to_iso(base_date, end_idx, data.delta_t_min)
+            variant = str(task.route_variant_type or "unknown")
+            is_short_turn = variant == "short_turn"
+            is_depot_move = variant in {"depot_move", "depot_in", "depot_out"}
+            energy_delta = -float(task.energy_required_kwh_bev or 0.0)
+
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "depot_id": depot_id,
+                    "vehicle_id": vehicle_id,
+                    "band_id": "",
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "state": "service",
+                    "route_id": str(task.route_id or ""),
+                    "trip_id": str(task.task_id),
+                    "from_location_id": str(task.origin or ""),
+                    "to_location_id": str(task.destination or ""),
+                    "from_location_type": "terminal",
+                    "to_location_type": "terminal",
+                    "direction": _normalize_direction(task.direction),
+                    "route_variant_type": variant,
+                    "energy_delta_kwh": energy_delta,
+                    "distance_km": float(task.distance_km or 0.0),
+                    "duration_min": max((end_idx - start_idx) * float(data.delta_t_min), 0.0),
+                    "is_deadhead": False,
+                    "is_charge": False,
+                    "is_service": True,
+                    "is_idle": False,
+                    "is_depot_move": is_depot_move,
+                    "is_short_turn": is_short_turn,
+                    "charger_id": "",
+                    "charge_power_kw": "",
+                }
+            )
+            previous_task_id = task_id
+
+        charge_by_slot: Dict[int, float] = defaultdict(float)
+        charge_by_slot_charger: Dict[int, str] = {}
+        for charger_id, power_series in milp.charge_power_kw.get(vehicle_id, {}).items():
+            for idx, raw in enumerate(power_series):
+                kw = float(raw or 0.0)
+                if kw <= 0.0:
+                    continue
+                charge_by_slot[idx] += kw
+                if idx not in charge_by_slot_charger:
+                    charge_by_slot_charger[idx] = charger_id
+
+        if charge_by_slot:
+            active_slots = sorted(charge_by_slot.keys())
+            seg_start = active_slots[0]
+            seg_values: List[float] = [charge_by_slot[seg_start]]
+            seg_charger = charge_by_slot_charger.get(seg_start, "")
+
+            def _append_charge_segment(start_slot: int, end_slot_exclusive: int, values: List[float], charger: str) -> None:
+                if end_slot_exclusive <= start_slot:
+                    return
+                start_time = _slot_to_iso(base_date, start_slot, data.delta_t_min)
+                end_time = _slot_to_iso(base_date, end_slot_exclusive, data.delta_t_min)
+                avg_power = sum(values) / len(values) if values else 0.0
+                duration_min = (end_slot_exclusive - start_slot) * float(data.delta_t_min)
+                rows.append(
+                    {
+                        "scenario_id": scenario_id,
+                        "depot_id": depot_id,
+                        "vehicle_id": vehicle_id,
+                        "band_id": "",
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "state": "charge",
+                        "route_id": "",
+                        "trip_id": "",
+                        "from_location_id": depot_id,
+                        "to_location_id": depot_id,
+                        "from_location_type": "charger",
+                        "to_location_type": "charger",
+                        "direction": "",
+                        "route_variant_type": "",
+                        "energy_delta_kwh": avg_power * (duration_min / 60.0),
+                        "distance_km": 0.0,
+                        "duration_min": duration_min,
+                        "is_deadhead": False,
+                        "is_charge": True,
+                        "is_service": False,
+                        "is_idle": False,
+                        "is_depot_move": False,
+                        "is_short_turn": False,
+                        "charger_id": charger,
+                        "charge_power_kw": avg_power,
+                    }
+                )
+
+            previous_slot = seg_start
+            for slot in active_slots[1:]:
+                if slot == previous_slot + 1:
+                    seg_values.append(charge_by_slot[slot])
+                    previous_slot = slot
+                    continue
+                _append_charge_segment(seg_start, previous_slot + 1, seg_values, seg_charger)
+                seg_start = slot
+                previous_slot = slot
+                seg_values = [charge_by_slot[slot]]
+                seg_charger = charge_by_slot_charger.get(slot, "")
+            _append_charge_segment(seg_start, previous_slot + 1, seg_values, seg_charger)
+
+    rows.sort(key=lambda row: (str(row.get("vehicle_id", "")), str(row.get("start_time", "")), str(row.get("state", ""))))
+    return rows
+
+
+def _build_soc_event_rows(
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp: MILPResult,
+    scenario_id: str,
+    base_date: date,
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for vehicle_id in ms.K_BEV:
+        series = list(milp.soc_series.get(vehicle_id, []))
+        if len(series) < 2:
+            continue
+        vehicle = dp.vehicle_lut.get(vehicle_id)
+        battery_kwh = float(getattr(vehicle, "battery_capacity", 0.0) or 0.0)
+        min_soc = float(getattr(vehicle, "soc_min", 0.0) or 0.0)
+        max_soc = float(getattr(vehicle, "soc_max", battery_kwh) or battery_kwh)
+        location_id = str(getattr(vehicle, "home_depot", "") or "")
+        for t_idx in range(1, len(series)):
+            soc_before = float(series[t_idx - 1] or 0.0)
+            soc_after = float(series[t_idx] or 0.0)
+            delta = soc_after - soc_before
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "vehicle_id": vehicle_id,
+                    "event_time": _slot_to_iso(base_date, t_idx, data.delta_t_min),
+                    "event_type": "simulation_tick",
+                    "trip_id": "",
+                    "route_id": "",
+                    "location_id": location_id,
+                    "soc_kwh_before": soc_before,
+                    "soc_kwh_after": soc_after,
+                    "soc_pct_before": (soc_before / battery_kwh * 100.0) if battery_kwh > 0 else 0.0,
+                    "soc_pct_after": (soc_after / battery_kwh * 100.0) if battery_kwh > 0 else 0.0,
+                    "delta_kwh": delta,
+                    "battery_capacity_kwh": battery_kwh,
+                    "energy_consumed_kwh": max(-delta, 0.0),
+                    "energy_charged_kwh": max(delta, 0.0),
+                    "reserve_margin_kwh": soc_after - min_soc,
+                    "min_soc_constraint_kwh": min_soc,
+                    "max_soc_constraint_kwh": max_soc,
+                }
+            )
+    rows.sort(key=lambda row: (str(row.get("vehicle_id", "")), str(row.get("event_time", ""))))
+    return rows
+
+
+def _build_depot_power_rows_5min(
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp: MILPResult,
+    scenario_id: str,
+    base_date: date,
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    if data.num_periods <= 0:
+        return rows
+
+    horizon_min = int(round(float(data.num_periods) * float(data.delta_t_min)))
+    five_min_points = list(range(0, max(horizon_min, 1), 5))
+
+    charge_kw_by_site_slot: Dict[str, Dict[int, float]] = defaultdict(lambda: defaultdict(float))
+    for vehicle_id, by_charger in milp.charge_power_kw.items():
+        for charger_id, pwr_series in by_charger.items():
+            charger = dp.charger_lut.get(charger_id)
+            site_id = str(getattr(charger, "site_id", "") or "")
+            if not site_id:
+                continue
+            for slot_idx, raw_kw in enumerate(pwr_series):
+                charge_kw_by_site_slot[site_id][slot_idx] += float(raw_kw or 0.0)
+
+    site_ids = sorted(set(ms.I_CHARGE) | set(dp.site_lut.keys()) | set(charge_kw_by_site_slot.keys()))
+    for site_id in site_ids:
+        grid_series = list(milp.grid_import_kw.get(site_id, []))
+        pv_used_series = list(milp.pv_used_kw.get(site_id, []))
+        charge_slot_map = charge_kw_by_site_slot.get(site_id, {})
+
+        def _slot_value(series: List[float], slot_idx: int) -> float:
+            if slot_idx < 0:
+                return 0.0
+            if slot_idx < len(series):
+                return float(series[slot_idx] or 0.0)
+            return 0.0
+
+        peak_grid = 0.0
+        for slot_idx in range(data.num_periods):
+            peak_grid = max(peak_grid, _slot_value(grid_series, slot_idx))
+
+        for minute in five_min_points:
+            slot_idx = min(int(minute // max(float(data.delta_t_min), 1.0)), max(data.num_periods - 1, 0))
+            grid_import_kw = _slot_value(grid_series, slot_idx)
+            pv_used_kw = _slot_value(pv_used_series, slot_idx)
+            pv_generation_kw = float(dp.pv_gen_kw.get(site_id, {}).get(slot_idx, 0.0) or 0.0)
+            total_charge_kw = float(charge_slot_map.get(slot_idx, 0.0) or 0.0)
+            building_load_kw = float(dp.base_load_kw.get(site_id, {}).get(slot_idx, 0.0) or 0.0)
+            pv_curtailed_kw = max(pv_generation_kw - pv_used_kw, 0.0)
+            net_load_kw = max(grid_import_kw + pv_used_kw, 0.0)
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "timestamp": _slot_to_iso(base_date, int(minute / max(float(data.delta_t_min), 1e-6)), data.delta_t_min)
+                    if float(data.delta_t_min) == 5.0
+                    else (
+                        datetime.combine(base_date, time(0, 0), timezone(timedelta(hours=9))) + timedelta(minutes=minute)
+                    ).isoformat(),
+                    "depot_id": site_id,
+                    "total_charge_kw": total_charge_kw,
+                    "grid_import_kw": grid_import_kw,
+                    "pv_generation_kw": pv_generation_kw,
+                    "pv_used_for_charging_kw": pv_used_kw,
+                    "pv_used_for_building_kw": 0.0,
+                    "pv_curtailed_kw": pv_curtailed_kw,
+                    "building_load_kw": building_load_kw,
+                    "battery_storage_charge_kw": 0.0,
+                    "battery_storage_discharge_kw": 0.0,
+                    "net_load_kw": net_load_kw,
+                    "demand_peak_candidate": abs(grid_import_kw - peak_grid) <= 1e-9,
+                    "energy_price_yen_per_kwh": float(get_grid_price(dp, site_id, slot_idx, default=0.0) or 0.0),
+                    "demand_charge_window_flag": bool(data.enable_demand_charge),
+                }
+            )
+    rows.sort(key=lambda row: (str(row.get("depot_id", "")), str(row.get("timestamp", ""))))
+    return rows
+
+
+def _build_trip_assignment_rows(
+    data: ProblemData,
+    dp: DerivedParams,
+    milp: MILPResult,
+    scenario_id: str,
+    base_date: date,
+) -> List[Dict[str, Any]]:
+    assigned_vehicle_by_task: Dict[str, str] = {}
+    for vehicle_id, tasks in milp.assignment.items():
+        for task_id in tasks:
+            assigned_vehicle_by_task[str(task_id)] = str(vehicle_id)
+
+    rows: List[Dict[str, Any]] = []
+    for task in data.tasks:
+        trip_id = str(task.task_id)
+        vehicle_id = assigned_vehicle_by_task.get(trip_id, "")
+        served = bool(vehicle_id)
+        vehicle = dp.vehicle_lut.get(vehicle_id) if vehicle_id else None
+        start_iso = _slot_to_iso(base_date, int(task.start_time_idx), data.delta_t_min)
+        end_iso = _slot_to_iso(base_date, int(task.end_time_idx), data.delta_t_min)
+        rows.append(
+            {
+                "scenario_id": scenario_id,
+                "trip_id": trip_id,
+                "route_id": str(task.route_id or ""),
+                "direction": _normalize_direction(task.direction),
+                "route_variant_type": str(task.route_variant_type or "unknown"),
+                "scheduled_departure": start_iso,
+                "scheduled_arrival": end_iso,
+                "actual_departure": start_iso,
+                "actual_arrival": end_iso,
+                "assigned_vehicle_id": vehicle_id,
+                "assigned_depot_id": str(getattr(vehicle, "home_depot", "") or "") if vehicle else "",
+                "served_flag": served,
+                "unserved_reason": "" if served else "unassigned",
+                "energy_used_kwh": float(task.energy_required_kwh_bev or 0.0),
+                "distance_km": float(task.distance_km or 0.0),
+                "delay_departure_min": 0.0,
+                "delay_arrival_min": 0.0,
+                "deadhead_before_km": 0.0,
+                "deadhead_after_km": 0.0,
+                "swap_type": "none",
+            }
+        )
+    rows.sort(key=lambda row: str(row.get("trip_id", "")))
+    return rows
+
+
+def _build_cost_breakdown_json(data: ProblemData, sim: SimulationResult, scenario_id: str) -> Dict[str, Any]:
+    components = {
+        "electricity_energy_cost": float(sim.total_energy_cost or 0.0),
+        "demand_charge_cost": float(sim.total_demand_charge or 0.0),
+        "diesel_cost": float(sim.total_fuel_cost or 0.0),
+        "co2_cost": float(data.co2_price_per_kg or 0.0) * float(sim.total_co2_kg or 0.0),
+        "battery_degradation_cost": float(sim.total_degradation_cost or 0.0),
+        "charger_operation_cost": 0.0,
+        "pv_capex_daily_equivalent": 0.0,
+        "ess_cost": 0.0,
+        "unserved_trip_penalty": float(len(sim.unserved_tasks or [])) * float(data.objective_weights.get("unserved_penalty", 0.0) or 0.0),
+    }
+    total_cost = float(sim.total_operating_cost or 0.0)
+    return {
+        "scenario_id": scenario_id,
+        "currency": "JPY",
+        "total_cost": total_cost,
+        "components": components,
+        "meta": {
+            "objective_mode": str(getattr(data, "objective_mode", "total_cost") or "total_cost"),
+            "solver_mode": "unknown",
+            "includes_pv": bool(data.enable_pv),
+        },
+    }
+
+
+def _build_kpi_summary_json(
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp: MILPResult,
+    sim: SimulationResult,
+    scenario_id: str,
+) -> Dict[str, Any]:
+    served_count = max(len(data.tasks) - len(sim.unserved_tasks or []), 0)
+    total_distance = sum(float(task.distance_km or 0.0) for task in data.tasks)
+    deadhead_distance = 0.0
+    for vehicle_id, tasks in milp.assignment.items():
+        sorted_tasks = sorted(tasks, key=lambda task_id: dp.task_lut.get(task_id).start_time_idx if dp.task_lut.get(task_id) else 0)
+        for i in range(len(sorted_tasks) - 1):
+            deadhead_distance += float(dp.deadhead_distance_km.get(sorted_tasks[i], {}).get(sorted_tasks[i + 1], 0.0) or 0.0)
+
+    total_energy = sum(float(task.energy_required_kwh_bev or 0.0) for task in data.tasks)
+    total_charge_energy = 0.0
+    for vehicle_id, by_charger in milp.charge_power_kw.items():
+        for charger_id, series in by_charger.items():
+            for kw in series:
+                total_charge_energy += float(kw or 0.0) * float(data.delta_t_hour)
+
+    charger_values = [float(v) for v in (sim.charger_utilization or {}).values()]
+    min_soc_pct = 0.0
+    if ms.K_BEV:
+        pct_values: List[float] = []
+        for vehicle_id in ms.K_BEV:
+            vehicle = dp.vehicle_lut.get(vehicle_id)
+            capacity = float(getattr(vehicle, "battery_capacity", 0.0) or 0.0)
+            series = list(milp.soc_series.get(vehicle_id, []))
+            if capacity <= 0 or not series:
+                continue
+            pct_values.extend([(float(v) / capacity) * 100.0 for v in series])
+        if pct_values:
+            min_soc_pct = min(pct_values)
+            avg_soc_pct = sum(pct_values) / len(pct_values)
+        else:
+            avg_soc_pct = 0.0
+    else:
+        avg_soc_pct = 0.0
+
+    return {
+        "scenario_id": scenario_id,
+        "fleet_size": len(ms.K_ALL),
+        "served_trip_count": served_count,
+        "unserved_trip_count": len(sim.unserved_tasks or []),
+        "served_trip_rate": float(sim.served_task_ratio or 0.0),
+        "total_distance_km": float(total_distance),
+        "total_deadhead_km": float(deadhead_distance),
+        "deadhead_ratio": float(deadhead_distance / total_distance) if total_distance > 0 else 0.0,
+        "total_energy_consumption_kwh": float(total_energy),
+        "total_charging_energy_kwh": float(total_charge_energy),
+        "peak_grid_import_kw": float(sim.peak_demand_kw or 0.0),
+        "peak_charge_kw": float(max((max(series) if series else 0.0) for by_charger in milp.charge_power_kw.values() for series in by_charger.values()) if milp.charge_power_kw else 0.0),
+        "pv_generation_total_kwh": float(sim.total_pv_kwh or 0.0),
+        "pv_self_consumption_kwh": float(sim.total_pv_kwh or 0.0),
+        "pv_utilization_ratio": float(sim.pv_self_consumption_ratio or 0.0),
+        "min_soc_pct": float(min_soc_pct),
+        "average_soc_pct": float(avg_soc_pct),
+        "charger_utilization_avg": (sum(charger_values) / len(charger_values)) if charger_values else 0.0,
+        "charger_utilization_max": max(charger_values) if charger_values else 0.0,
+        "total_cost_jpy": float(sim.total_operating_cost or 0.0),
+        "co2_kg": float(sim.total_co2_kg or 0.0),
+        "solver_runtime_sec": float(milp.solve_time_sec or 0.0),
+        "solution_status": str(milp.status or "UNKNOWN").lower(),
+    }
 
 
 # ---------------------------------------------------------------------------

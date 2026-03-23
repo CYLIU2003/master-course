@@ -53,6 +53,8 @@ class HybridOptimizer:
             solver_metadata={
                 "milp_seed_status": milp_result.solver_status,
                 "partial_milp_calls": 1,
+                "termination_reason": dict(alns_result.solver_metadata).get("termination_reason", "time_limit_or_gap"),
+                "effective_limits": dict(alns_result.solver_metadata).get("effective_limits", {}),
                 **dict(alns_result.solver_metadata),
             },
             operator_stats=alns_result.operator_stats,

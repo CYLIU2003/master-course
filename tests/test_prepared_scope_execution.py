@@ -105,6 +105,10 @@ def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback(
         price_slots=[],
         pv_slots=[],
     )
+    stored_fields: dict[str, object] = {}
+
+    def _record_set_field(_scenario_id: str, field: str, value, **_kwargs) -> None:
+        stored_fields[field] = value
 
     with (
         mock.patch.object(optimization, "load_prepared_input", return_value=prepared_input),
@@ -130,7 +134,7 @@ def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback(
         mock.patch.object(optimization, "_persist_json_outputs"),
         mock.patch.object(optimization, "_cost_breakdown", return_value={}),
         mock.patch.object(optimization, "log_optimization_experiment", return_value={"experiment_id": "exp-1"}),
-        mock.patch.object(optimization.store, "set_field"),
+        mock.patch.object(optimization.store, "set_field", side_effect=_record_set_field),
         mock.patch.object(optimization.store, "update_scenario"),
         mock.patch.object(optimization.store, "get_field", return_value=None),
         mock.patch.object(optimization.job_store, "update_job"),
@@ -156,3 +160,7 @@ def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback(
     built_scenario = build_problem_data.call_args.args[0]
     assert built_scenario["trips"][0]["trip_id"] == "trip-1"
     assert built_scenario["dispatch_scope"]["effectiveRouteIds"] == ["route-a"]
+    assert stored_fields["trips"][0]["trip_id"] == "trip-1"
+    assert stored_fields["timetable_rows"][0]["trip_id"] == "trip-1"
+    assert stored_fields["optimization_result"]["prepared_input_id"] == "prepared-1"
+    assert stored_fields["optimization_audit"]["prepared_input_id"] == "prepared-1"

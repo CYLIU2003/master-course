@@ -169,6 +169,7 @@ def _default_dispatch_scope() -> Dict[str, Any]:
         # routes (intra-depot) or across depots (inter-depot).
         "allowIntraDepotRouteSwap": False,
         "allowInterDepotSwap": False,
+        "fixedRouteBandMode": False,
         "depotId": None,
         "serviceId": "WEEKDAY",
     }
@@ -1573,6 +1574,7 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
         "tripSelection": normalized_trip_selection,
         "allowIntraDepotRouteSwap": bool(scope.get("allowIntraDepotRouteSwap", False)),
         "allowInterDepotSwap": bool(scope.get("allowInterDepotSwap", False)),
+        "fixedRouteBandMode": bool(scope.get("fixedRouteBandMode", False)),
         "depotId": primary_depot_id,
         "serviceId": selected_service_ids[0],
         "candidateRouteIds": candidate_route_ids,
@@ -2237,6 +2239,28 @@ def page_graph_arcs(
 def set_field(
     scenario_id: str, field: str, value: Any, *, invalidate_dispatch: bool = False
 ) -> None:
+    def _refresh_meta_for_direct_artifact_update(
+        *,
+        reset_dispatch_state: bool,
+    ) -> None:
+        refreshed_meta = dict(meta)
+        refreshed_meta_payload = dict(refreshed_meta.get("meta") or {})
+        refreshed_meta_payload["updatedAt"] = _now_iso()
+        if reset_dispatch_state:
+            refreshed_meta_payload["status"] = "draft"
+        refreshed_meta["meta"] = refreshed_meta_payload
+
+        refreshed_stats = dict(refreshed_meta.get("stats") or {})
+        if field == "timetable_rows":
+            refreshed_stats["timetableRowCount"] = len(
+                _drop_vn_duplicate_rows(list(value or []))
+            )
+        if reset_dispatch_state:
+            refreshed_stats["tripCount"] = 0
+            refreshed_stats["dutyCount"] = 0
+        refreshed_meta["stats"] = refreshed_stats
+        scenario_meta_store.save_meta(_STORE_DIR, scenario_id, refreshed_meta)
+
     meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
     refs = _refs_for_scenario(scenario_id, meta)
     db_path = _artifact_store_path(refs)
@@ -2263,6 +2287,11 @@ def set_field(
                 summary = None
             if summary:
                 trip_store.save_scalar(db_path, _SUMMARY_SCALAR_NAMES[field], summary)
+        if invalidate_dispatch:
+            _clear_dispatch_artifacts(refs)
+        _refresh_meta_for_direct_artifact_update(
+            reset_dispatch_state=invalidate_dispatch,
+        )
         return
         
     if field == "graph":
@@ -3432,6 +3461,10 @@ def set_dispatch_scope(scenario_id: str, scope: Dict[str, Any]) -> Dict[str, Any
         "allowInterDepotSwap": scope.get(
             "allowInterDepotSwap",
             current.get("allowInterDepotSwap", False),
+        ),
+        "fixedRouteBandMode": scope.get(
+            "fixedRouteBandMode",
+            current.get("fixedRouteBandMode", False),
         ),
         "depotId": depot_selection.get("primaryDepotId"),
         "serviceId": (

@@ -28,6 +28,7 @@ class ProblemTrip:
     energy_kwh: float = 0.0
     fuel_l: float = 0.0
     service_id: Optional[str] = None
+    required_soc_departure_percent: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,7 @@ class OptimizationObjectiveWeights:
     switch: float = 0.0
     degradation: float = 0.0
     deviation: float = 0.0
+    utilization: float = 0.0
 
 
 @dataclass(frozen=True)

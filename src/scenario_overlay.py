@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 _DEFAULT_INPUT_TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "constant" / "input_template.json"
@@ -35,6 +35,8 @@ class ChargingConfig(BaseModel):
     overnight_window_end: Optional[str] = None
     depot_power_limit_kw: Optional[float] = Field(default=None, ge=0.0)
     charger_power_limit_kw: Optional[float] = Field(default=None, ge=0.0)
+    initial_soc_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    final_soc_floor_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
 
 
 class CostConfig(BaseModel):
@@ -50,6 +52,13 @@ class CostConfig(BaseModel):
     ice_co2_kg_per_l: float = Field(default=2.64, ge=0.0)
     grid_co2_kg_per_kwh: float = Field(default=0.0, ge=0.0)
     co2_price_per_kg: float = Field(default=1.0, ge=0.0)
+    co2_price_source: Optional[str] = None
+    co2_reference_date: Optional[str] = None
+    pv_profile_id: Optional[str] = None
+    pv_resolution_minutes: int = Field(default=60, ge=1)
+    weather_mode: Optional[str] = None
+    weather_factor_scalar: Optional[float] = Field(default=None, ge=0.0)
+    weather_factor_hourly: list[float] = Field(default_factory=list)
 
 
 class SolverConfig(BaseModel):
@@ -68,10 +77,24 @@ class SolverConfig(BaseModel):
     time_limit_seconds: int = Field(default=300, ge=1)
     mip_gap: float = Field(default=0.01, ge=0.0)
     alns_iterations: int = Field(default=500, ge=1)
-    objective_mode: Literal["total_cost", "co2", "balanced"] = "total_cost"
+    objective_mode: Literal["total_cost", "co2", "balanced", "utilization"] = "total_cost"
     allow_partial_service: bool = False
     unserved_penalty: float = Field(default=10000.0, ge=0.0)
     objective_weights: dict[str, float] = Field(default_factory=dict)
+    objective_preset: Optional[str] = None
+    fixed_route_band_mode: bool = False
+    max_start_fragments_per_vehicle: int = Field(default=100, ge=1)
+    max_end_fragments_per_vehicle: int = Field(default=100, ge=1)
+    enable_vehicle_diagram_output: bool = False
+    output_vehicle_diagram: bool = False
+    termination_policy: Literal["time_limit_or_gap"] = "time_limit_or_gap"
+
+    @model_validator(mode="after")
+    def _normalize_vehicle_diagram_flags(self) -> "SolverConfig":
+        enabled = bool(self.enable_vehicle_diagram_output or self.output_vehicle_diagram)
+        self.enable_vehicle_diagram_output = enabled
+        self.output_vehicle_diagram = enabled
+        return self
 
 
 class ScenarioOverlay(BaseModel):

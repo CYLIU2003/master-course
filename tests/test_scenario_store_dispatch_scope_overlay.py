@@ -141,3 +141,71 @@ def test_normalize_dispatch_scope_candidate_routes_ignore_full_matrix_permission
 
     assert normalized["candidateRouteIds"] == ["route-a"]
     assert normalized["effectiveRouteIds"] == ["route-a"]
+
+
+def test_set_field_timetable_rows_updates_stats_and_invalidates_dispatch(tmp_path, monkeypatch) -> None:
+    scenario_id = "scenario-1"
+    store_dir = tmp_path / "scenarios"
+    refs = scenario_store.scenario_meta_store.default_refs(store_dir, scenario_id)
+    scenario_store.scenario_meta_store.save_meta(
+        store_dir,
+        scenario_id,
+        {
+            "scenarioId": scenario_id,
+            "name": "Scenario 1",
+            "meta": {
+                "id": scenario_id,
+                "name": "Scenario 1",
+                "status": "optimized",
+                "updatedAt": "2026-03-23T00:00:00Z",
+                "operatorId": "tokyu",
+            },
+            "refs": refs,
+            "stats": {
+                "routeCount": 0,
+                "stopCount": 0,
+                "timetableRowCount": 0,
+                "tripCount": 1,
+                "dutyCount": 1,
+            },
+        },
+    )
+    monkeypatch.setattr(scenario_store, "_STORE_DIR", store_dir)
+
+    scenario_store.set_field(scenario_id, "trips", [{"trip_id": "old-trip"}])
+    scenario_store.set_field(
+        scenario_id,
+        "optimization_result",
+        {"solver_status": "OPTIMAL"},
+    )
+
+    scenario_store.set_field(
+        scenario_id,
+        "timetable_rows",
+        [
+            {
+                "trip_id": "trip-1",
+                "route_id": "route-a",
+                "service_id": "WEEKDAY",
+                "departure": "08:00",
+                "arrival": "08:30",
+            },
+            {
+                "trip_id": "trip-1__v1",
+                "route_id": "route-a",
+                "service_id": "WEEKDAY",
+                "departure": "08:00",
+                "arrival": "08:30",
+            },
+        ],
+        invalidate_dispatch=True,
+    )
+
+    updated_meta = scenario_store.scenario_meta_store.load_meta(store_dir, scenario_id)
+
+    assert updated_meta["meta"]["status"] == "draft"
+    assert updated_meta["stats"]["timetableRowCount"] == 1
+    assert updated_meta["stats"]["tripCount"] == 0
+    assert updated_meta["stats"]["dutyCount"] == 0
+    assert scenario_store.get_field(scenario_id, "optimization_result") is None
+    assert scenario_store.get_field(scenario_id, "trips") is None

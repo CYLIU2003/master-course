@@ -48,6 +48,11 @@ class ABCOptimizer:
                 **dict(result.solver_metadata),
                 "metaheuristic": "abc",
                 "delegate": "alns_kernel",
+                "effective_limits": {
+                    "time_limit_sec": int(abc_config.time_limit_sec),
+                    "alns_iterations": int(abc_config.alns_iterations),
+                    "no_improvement_limit": int(abc_config.no_improvement_limit),
+                },
             },
             operator_stats=result.operator_stats,
             incumbent_history=result.incumbent_history,
