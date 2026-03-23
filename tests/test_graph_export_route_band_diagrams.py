@@ -1,8 +1,10 @@
 import json
 import re
+from datetime import date
 
 from src.result_exporter import (
     _build_route_band_diagram_assets,
+    _slot_to_iso,
     _write_route_band_diagram_assets,
 )
 
@@ -59,7 +61,10 @@ def _timeline_row(
 
 
 def _svg_axis_labels(svg: str) -> list[str]:
-    return re.findall(r'text-anchor="end"[^>]*>([^<]+)</text>', svg)
+    return re.findall(
+        r'text-anchor="end" font-size="13"[^>]*>([^<]+)</text>',
+        svg,
+    )
 
 
 def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
@@ -119,6 +124,9 @@ def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
             "route/22": "Route 22",
             "route/99": "Route 99",
         },
+        "depot_labels_by_id": {
+            "dep-1": "Depot 22",
+        },
         "band_stop_sequences": {
             "route/22": [
                 ["Depot 22", "Stop A", "Stop B", "Stop C"],
@@ -160,8 +168,11 @@ def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
 
     svg = assets["svg_payloads"]["route_22.svg"]
     assert "Route Band Diagram: Route 22" in svg
-    assert "grouped by actual route band / route-only stop axis" in svg
+    assert "route-only stop axis / full-day 00:00-23:59 / depot stay inferred" in svg
+    assert ">00:00<" in svg
+    assert ">23:59<" in svg
     assert "Vehicle Types" in svg
+    assert "Line Styles" in svg
     assert "veh-ev [BEV]" in svg
     assert "veh-ice [ICE]" in svg
     assert "Depot 22" in svg
@@ -187,3 +198,58 @@ def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
     manifest_entry = next(item for item in manifest["entries"] if item["band_id"] == "route/22")
     assert manifest_entry["diagram_file"] == "route_22.svg"
     assert (out_dir / "route_band_diagrams" / "route_22.svg").exists()
+
+
+def test_route_band_diagram_infers_depot_stay_rows() -> None:
+    rows = [
+        _timeline_row(
+            vehicle_id="veh-1",
+            vehicle_type="ICE",
+            state="service",
+            start_time="2026-03-23T08:00:00+09:00",
+            end_time="2026-03-23T08:30:00+09:00",
+            from_location_id="Stop A",
+            to_location_id="Stop C",
+            trip_id="t-1",
+        ),
+        _timeline_row(
+            vehicle_id="veh-1",
+            vehicle_type="ICE",
+            state="service",
+            start_time="2026-03-23T12:00:00+09:00",
+            end_time="2026-03-23T12:30:00+09:00",
+            from_location_id="Stop C",
+            to_location_id="Stop A",
+            trip_id="t-2",
+        ),
+    ]
+    graph_context = {
+        "band_labels_by_band_id": {"route/22": "Route 22"},
+        "band_stop_sequences": {"route/22": [["Stop A", "Stop B", "Stop C"]]},
+        "task_stop_sequences": {
+            "t-1": [
+                {"stop_label": "Stop A", "departure_time": "08:00:00"},
+                {"stop_label": "Stop B", "departure_time": "08:15:00"},
+                {"stop_label": "Stop C", "departure_time": "08:30:00"},
+            ],
+            "t-2": [
+                {"stop_label": "Stop C", "departure_time": "12:00:00"},
+                {"stop_label": "Stop B", "departure_time": "12:15:00"},
+                {"stop_label": "Stop A", "departure_time": "12:30:00"},
+            ],
+        },
+        "depot_labels_by_id": {"dep-1": "Depot 22"},
+    }
+
+    assets = _build_route_band_diagram_assets(rows, "scenario-1", graph_context=graph_context)
+
+    svg = assets["svg_payloads"]["route_22.svg"]
+    axis_labels = _svg_axis_labels(svg)
+    assert axis_labels == ["Depot 22", "Stop A", "Stop B", "Stop C"]
+    assert 'stroke-dasharray="2 6"' in svg
+    assert 'stroke-dasharray="8 5"' in svg
+
+
+def test_slot_to_iso_uses_planning_start_time() -> None:
+    assert _slot_to_iso(date(2026, 3, 23), 0, 15, planning_start_time="05:00") == "2026-03-23T05:00:00+09:00"
+    assert _slot_to_iso(date(2026, 3, 23), 70, 15, planning_start_time="05:00") == "2026-03-23T22:30:00+09:00"

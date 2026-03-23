@@ -77,6 +77,15 @@ def test_graph_export_context_loads_catalog_fast_stop_times(tmp_path, monkeypatc
     )
 
     scenario = {
+        "depots": [
+            {
+                "id": "dep-1",
+                "name": "Depot 1",
+            }
+        ],
+        "simulation_config": {
+            "start_time": "05:00",
+        },
         "routes": [
             {
                 "id": "route-a",
@@ -119,6 +128,8 @@ def test_graph_export_context_loads_catalog_fast_stop_times(tmp_path, monkeypatc
     context = scenario_to_problemdata._build_graph_export_context(scenario, trips, tasks)
 
     assert context["band_stop_sequences"]["渋22"][0] == ["Stop A", "Stop B", "Stop C"]
+    assert context["depot_labels_by_id"] == {"dep-1": "Depot 1"}
+    assert context["planning_start_time"] == "05:00"
     assert context["task_stop_sequences"]["trip-1"] == [
         {
             "stop_id": "stop-a",

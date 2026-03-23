@@ -264,15 +264,21 @@ class GurobiMILPAdapter:
         d_var: Dict[Tuple[str, int], Any] = {}
         charge_on_var: Dict[Tuple[str, int], Any] = {}
         s_var: Dict[Tuple[str, int], Any] = {}
+        fuel_l_var: Dict[Tuple[str, int], Any] = {}
         g_var: Dict[int, Any] = {}
         pv_ch_var: Dict[int, Any] = {}
         p_avg_var: Dict[int, Any] = {}
+        end_soc_excess_dev_var: Dict[str, Any] = {}
         w_on_var = None
         w_off_var = None
 
         if bev_ids and slot_indices:
             initial_soc_ratio_override = self._percent_to_ratio(problem.metadata.get("initial_soc_percent"))
             final_soc_floor_ratio_override = self._percent_to_ratio(problem.metadata.get("final_soc_floor_percent"))
+            final_soc_target_ratio_override = self._percent_to_ratio(problem.metadata.get("final_soc_target_percent"))
+            final_soc_target_tolerance_ratio_override = self._percent_to_ratio(
+                problem.metadata.get("final_soc_target_tolerance_percent")
+            )
             for vehicle in problem.vehicles:
                 if vehicle.vehicle_id not in bev_ids:
                     continue
@@ -317,6 +323,28 @@ class GurobiMILPAdapter:
                     s_var[(vehicle.vehicle_id, last_slot)]
                     >= final_soc_floor_kwh * used_vehicle[vehicle.vehicle_id]
                 )
+
+                # End-of-day SOC target: soft objective to approach configured target by horizon end.
+                if final_soc_target_ratio_override is not None:
+                    target_kwh = min(max(final_soc_target_ratio_override * cap, soc_min), cap)
+                    tolerance_ratio = 0.0
+                    if final_soc_target_tolerance_ratio_override is not None:
+                        tolerance_ratio = min(max(final_soc_target_tolerance_ratio_override, 0.0), 1.0)
+                    tolerance_kwh = tolerance_ratio * cap
+                    excess_dev = model.addVar(lb=0.0, ub=cap, vtype=GRB.CONTINUOUS)
+                    end_soc_excess_dev_var[vehicle.vehicle_id] = excess_dev
+                    model.addConstr(
+                        excess_dev
+                        >= s_var[(vehicle.vehicle_id, last_slot)]
+                        - (target_kwh + tolerance_kwh)
+                        - cap * (1 - used_vehicle[vehicle.vehicle_id])
+                    )
+                    model.addConstr(
+                        excess_dev
+                        >= (target_kwh - tolerance_kwh)
+                        - s_var[(vehicle.vehicle_id, last_slot)]
+                        - cap * (1 - used_vehicle[vehicle.vehicle_id])
+                    )
 
                 # C10 (departure readiness): each assigned BEV trip must start with sufficient SOC.
                 for trip in problem.trips:
@@ -390,6 +418,95 @@ class GurobiMILPAdapter:
                     model.addConstr(
                         gp.quicksum(c_var[(vehicle_id, slot_idx)] for vehicle_id in bev_ids)
                         <= total_kw
+                    )
+
+        # ICE finite-fuel constraints: check before departure and update after operation.
+        if slot_indices:
+            initial_ice_fuel_ratio_override = self._percent_to_ratio(
+                problem.metadata.get("initial_ice_fuel_percent")
+            )
+            min_ice_fuel_ratio_override = self._percent_to_ratio(
+                problem.metadata.get("min_ice_fuel_percent")
+            )
+            default_ice_tank_capacity_l = self._safe_nonnegative_float(
+                problem.metadata.get("default_ice_tank_capacity_l"),
+                default=300.0,
+            )
+            for vehicle in problem.vehicles:
+                if vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
+                    continue
+                fuel_rate = max(float(vehicle.fuel_consumption_l_per_km or 0.0), 0.0)
+                if fuel_rate <= 0.0:
+                    continue
+
+                tank_cap_l = float(vehicle.fuel_tank_capacity_l or 0.0)
+                if tank_cap_l <= 0.0:
+                    tank_cap_l = default_ice_tank_capacity_l
+                if tank_cap_l <= 0.0:
+                    continue
+
+                reserve_l = max(float(vehicle.fuel_reserve_l or 0.0), 0.0)
+                if min_ice_fuel_ratio_override is not None:
+                    reserve_l = max(reserve_l, min_ice_fuel_ratio_override * tank_cap_l)
+                reserve_l = min(reserve_l, tank_cap_l)
+
+                for slot_idx in slot_indices:
+                    fuel_l_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(
+                        lb=reserve_l,
+                        ub=tank_cap_l,
+                        vtype=GRB.CONTINUOUS,
+                    )
+
+                if initial_ice_fuel_ratio_override is not None:
+                    initial_l = initial_ice_fuel_ratio_override * tank_cap_l
+                else:
+                    initial_l = float(vehicle.initial_fuel_l or tank_cap_l)
+                initial_l = min(max(initial_l, reserve_l), tank_cap_l)
+
+                first_slot = slot_indices[0]
+                model.addConstr(fuel_l_var[(vehicle.vehicle_id, first_slot)] == initial_l)
+
+                for trip in problem.trips:
+                    key = (vehicle.vehicle_id, trip.trip_id)
+                    if key not in y:
+                        continue
+                    depart_slot_idx = self._slot_index(problem, trip.departure_min)
+                    fuel_required_l = self._trip_fuel_l(problem, vehicle, trip.trip_id)
+                    if fuel_required_l <= 0.0:
+                        continue
+                    if (vehicle.vehicle_id, depart_slot_idx) not in fuel_l_var:
+                        continue
+                    model.addConstr(
+                        fuel_l_var[(vehicle.vehicle_id, depart_slot_idx)]
+                        >= fuel_required_l * y[key]
+                    )
+
+                vehicle_arcs = [
+                    (f_trip, t_trip)
+                    for v_id, f_trip, t_trip in arc_pairs
+                    if v_id == vehicle.vehicle_id
+                ]
+                for pos in range(len(slot_indices) - 1):
+                    slot_idx = slot_indices[pos]
+                    next_slot_idx = slot_indices[pos + 1]
+                    trip_fuel_expr = gp.quicksum(
+                        self._trip_fuel_l(problem, vehicle, trip.trip_id)
+                        * y[(vehicle.vehicle_id, trip.trip_id)]
+                        for trip in problem.trips
+                        if (vehicle.vehicle_id, trip.trip_id) in y
+                        and self._slot_index(problem, trip.departure_min) == slot_idx
+                    )
+                    deadhead_fuel_expr = gp.quicksum(
+                        self._deadhead_fuel_l(problem, vehicle, from_trip_id, to_trip_id)
+                        * x[(vehicle.vehicle_id, from_trip_id, to_trip_id)]
+                        for from_trip_id, to_trip_id in vehicle_arcs
+                        if self._slot_index(problem, trip_by_id[to_trip_id].departure_min) == slot_idx
+                    )
+                    model.addConstr(
+                        fuel_l_var[(vehicle.vehicle_id, next_slot_idx)]
+                        == fuel_l_var[(vehicle.vehicle_id, slot_idx)]
+                        - trip_fuel_expr
+                        - deadhead_fuel_expr
                     )
 
         # C15-C21: grid/PV balance, non-backflow, contract limit and demand charges.
@@ -548,6 +665,15 @@ class GurobiMILPAdapter:
                     # charged_kwh = c_var * timestep_h; cycles = charged_kwh / cap
                     coeff = degradation_weight * unit_cost_per_cycle * timestep_h / cap
                     objective += coeff * c_var[(vehicle.vehicle_id, slot_idx)]
+
+        # End-of-day SOC target deviation penalty (soft).
+        if end_soc_excess_dev_var:
+            target_penalty_per_kwh = self._safe_nonnegative_float(
+                problem.metadata.get("final_soc_target_penalty_per_kwh"),
+                default=50.0,
+            )
+            for dev in end_soc_excess_dev_var.values():
+                objective += target_penalty_per_kwh * dev
 
         for trip in problem.trips:
             objective += unserved_penalty_weight * unserved[trip.trip_id]
@@ -737,6 +863,42 @@ class GurobiMILPAdapter:
             return deadhead_km * drive_rate
         return 0.0
 
+    def _trip_fuel_l(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        trip_id: str,
+    ) -> float:
+        trip = problem.trip_by_id().get(trip_id)
+        if trip is None:
+            return 0.0
+        fuel_l = max(float(trip.fuel_l or 0.0), 0.0)
+        if fuel_l > 0.0:
+            return fuel_l
+        fuel_rate = max(float(vehicle.fuel_consumption_l_per_km or 0.0), 0.0)
+        return max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
+
+    def _deadhead_fuel_l(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        from_trip_id: str,
+        to_trip_id: str,
+    ) -> float:
+        fuel_rate = max(float(vehicle.fuel_consumption_l_per_km or 0.0), 0.0)
+        if fuel_rate <= 0.0:
+            return 0.0
+        from_trip = problem.trip_by_id().get(from_trip_id)
+        to_trip = problem.trip_by_id().get(to_trip_id)
+        if from_trip is None or to_trip is None:
+            return 0.0
+        deadhead_min = problem.dispatch_context.get_deadhead_min(
+            from_trip.destination,
+            to_trip.origin,
+        )
+        deadhead_km = (deadhead_min / 60.0) * 20.0
+        return max(deadhead_km, 0.0) * fuel_rate
+
     def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
         return classify_peak_slots(problem.price_slots)
 
@@ -757,6 +919,13 @@ class GurobiMILPAdapter:
         except (TypeError, ValueError):
             return default
         return parsed if parsed >= 1 else default
+
+    def _safe_nonnegative_float(self, value: Any, *, default: float) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed >= 0.0 else default
 
     def _route_band_key(self, dispatch_trip: Any, fallback_route_id: str) -> str:
         family_code = str(getattr(dispatch_trip, "route_family_code", "") or "").strip()

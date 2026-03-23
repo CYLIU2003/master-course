@@ -37,6 +37,8 @@ class ChargingConfig(BaseModel):
     charger_power_limit_kw: Optional[float] = Field(default=None, ge=0.0)
     initial_soc_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     final_soc_floor_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    final_soc_target_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    final_soc_target_tolerance_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
 
 
 class CostConfig(BaseModel):

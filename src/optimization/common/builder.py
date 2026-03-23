@@ -105,6 +105,23 @@ class ProblemBuilder:
             simulation_cfg.get("final_soc_floor_percent")
             or charging_cfg.get("final_soc_floor_percent")
         )
+        final_soc_target_percent = self._safe_float(
+            simulation_cfg.get("final_soc_target_percent")
+            or charging_cfg.get("final_soc_target_percent")
+        )
+        final_soc_target_tolerance_percent = self._safe_float(
+            simulation_cfg.get("final_soc_target_tolerance_percent")
+            or charging_cfg.get("final_soc_target_tolerance_percent")
+        )
+        initial_ice_fuel_percent = self._safe_float(
+            simulation_cfg.get("initial_ice_fuel_percent")
+        )
+        min_ice_fuel_percent = self._safe_float(
+            simulation_cfg.get("min_ice_fuel_percent")
+        )
+        default_ice_tank_capacity_l = self._safe_float(
+            simulation_cfg.get("default_ice_tank_capacity_l")
+        )
         depot_import_limit_kw = self._safe_float(
             charging_cfg.get("depot_power_limit_kw")
             or charging_cfg.get("depotPowerLimitKw")
@@ -140,6 +157,11 @@ class ProblemBuilder:
             max_end_fragments_per_vehicle=max(1, max_end_fragments_per_vehicle),
             initial_soc_percent=initial_soc_percent,
             final_soc_floor_percent=final_soc_floor_percent,
+            final_soc_target_percent=final_soc_target_percent,
+            final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+            initial_ice_fuel_percent=initial_ice_fuel_percent,
+            min_ice_fuel_percent=min_ice_fuel_percent,
+            default_ice_tank_capacity_l=default_ice_tank_capacity_l,
         )
 
     def build_from_dispatch(
@@ -166,6 +188,11 @@ class ProblemBuilder:
         max_end_fragments_per_vehicle: int = 1,
         initial_soc_percent: Optional[float] = None,
         final_soc_floor_percent: Optional[float] = None,
+        final_soc_target_percent: Optional[float] = None,
+        final_soc_target_tolerance_percent: Optional[float] = None,
+        initial_ice_fuel_percent: Optional[float] = None,
+        min_ice_fuel_percent: Optional[float] = None,
+        default_ice_tank_capacity_l: Optional[float] = None,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -271,6 +298,11 @@ class ProblemBuilder:
                 "max_end_fragments_per_vehicle": int(max(1, max_end_fragments_per_vehicle)),
                 "initial_soc_percent": initial_soc_percent,
                 "final_soc_floor_percent": final_soc_floor_percent,
+                "final_soc_target_percent": final_soc_target_percent,
+                "final_soc_target_tolerance_percent": final_soc_target_tolerance_percent,
+                "initial_ice_fuel_percent": initial_ice_fuel_percent,
+                "min_ice_fuel_percent": min_ice_fuel_percent,
+                "default_ice_tank_capacity_l": default_ice_tank_capacity_l,
             },
         )
 
@@ -294,7 +326,18 @@ class ProblemBuilder:
             if depot_id is None or vehicle.get("depotId") == depot_id
         ]
         allowed_route_ids = self._allowed_route_ids_for_depot(scenario, depot_id)
-        vehicle_profiles = self._build_vehicle_profiles(vehicles)
+        simulation_cfg = scenario.get("simulation_config") or {}
+        disable_acquisition_cost = bool(
+            simulation_cfg.get("disable_vehicle_acquisition_cost", False)
+        )
+        default_ice_tank_capacity_l = self._safe_float(
+            simulation_cfg.get("default_ice_tank_capacity_l")
+        )
+        vehicle_profiles = self._build_vehicle_profiles(
+            vehicles,
+            disable_acquisition_cost=disable_acquisition_cost,
+            default_ice_tank_capacity_l=default_ice_tank_capacity_l,
+        )
 
         route_allowed_vehicle_types = self._allowed_vehicle_types_for_routes(
             scenario,
@@ -390,9 +433,7 @@ class ProblemBuilder:
         }
 
         service_date = str((scenario.get("meta") or {}).get("updatedAt") or "2026-01-01")[:10]
-        default_turnaround_min = int(
-            ((scenario.get("simulation_config") or {}).get("default_turnaround_min")) or 10
-        )
+        default_turnaround_min = int((simulation_cfg.get("default_turnaround_min")) or 10)
         return DispatchContext(
             service_date=service_date,
             trips=trips,
@@ -419,6 +460,11 @@ class ProblemBuilder:
                     reserve_soc=profile.battery_capacity_kwh * 0.1
                     if profile.battery_capacity_kwh
                     else None,
+                    initial_fuel_l=profile.fuel_tank_capacity_l,
+                    fuel_tank_capacity_l=profile.fuel_tank_capacity_l,
+                    fuel_reserve_l=profile.fuel_tank_capacity_l * 0.1
+                    if profile.fuel_tank_capacity_l
+                    else None,
                     fuel_consumption_l_per_km=profile.fuel_consumption_l_per_km,
                     fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )
@@ -426,6 +472,9 @@ class ProblemBuilder:
     def _build_vehicle_profiles(
         self,
         vehicles: Sequence[Dict[str, Any]],
+        *,
+        disable_acquisition_cost: bool = False,
+        default_ice_tank_capacity_l: Optional[float] = None,
     ) -> Dict[str, VehicleProfile]:
         profiles: Dict[str, VehicleProfile] = {}
         for vehicle in vehicles:
@@ -444,6 +493,15 @@ class ProblemBuilder:
             lifetime_year = max(self._safe_float(vehicle.get("lifetimeYear") or vehicle.get("lifetime_year")) or 12.0, 1.0)
             operation_days = max(self._safe_float(vehicle.get("operationDaysPerYear") or vehicle.get("operation_days_per_year")) or 365.0, 1.0)
             fixed_use_cost_jpy = (purchase_cost - residual_value) / (lifetime_year * operation_days)
+            if disable_acquisition_cost:
+                fixed_use_cost_jpy = 0.0
+            fuel_tank_capacity_l = self._safe_float(vehicle.get("fuelTankL"))
+            if (
+                (fuel_tank_capacity_l is None or fuel_tank_capacity_l <= 0.0)
+                and vehicle_type not in {"BEV", "PHEV", "FCEV"}
+            ):
+                fallback = self._safe_float(default_ice_tank_capacity_l)
+                fuel_tank_capacity_l = fallback if fallback is not None and fallback > 0.0 else 300.0
 
             profiles.setdefault(
                 vehicle_type,
@@ -451,7 +509,7 @@ class ProblemBuilder:
                     vehicle_type=vehicle_type,
                     battery_capacity_kwh=self._safe_float(vehicle.get("batteryKwh")),
                     energy_consumption_kwh_per_km=self._safe_float(vehicle.get("energyConsumption")),
-                    fuel_tank_capacity_l=self._safe_float(vehicle.get("fuelTankL")),
+                    fuel_tank_capacity_l=fuel_tank_capacity_l,
                     fuel_consumption_l_per_km=fuel_l_per_km,
                     fixed_use_cost_jpy=fixed_use_cost_jpy,
                 ),
@@ -482,6 +540,7 @@ class ProblemBuilder:
                     reserve_soc=profile.battery_capacity_kwh * 0.1
                     if profile.battery_capacity_kwh
                     else None,
+                    fuel_tank_capacity_l=profile.fuel_tank_capacity_l,
                     fuel_consumption_l_per_km=profile.fuel_consumption_l_per_km,
                     fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )

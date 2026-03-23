@@ -5,7 +5,7 @@ import logging
 import math
 from pathlib import Path
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace as dc_replace
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from src.data_schema import (
@@ -794,7 +794,40 @@ def _graph_export_stop_name_index(scenario: Dict[str, Any]) -> Dict[str, str]:
         if not stop_id:
             continue
         stop_names[stop_id] = str(stop.get("name") or stop.get("stopName") or stop_id).strip() or stop_id
+    for depot in _as_list(scenario.get("depots")):
+        if not isinstance(depot, dict):
+            continue
+        depot_id = str(depot.get("id") or depot.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        stop_names.setdefault(
+            depot_id,
+            str(
+                depot.get("name")
+                or depot.get("depotName")
+                or depot.get("label")
+                or depot_id
+            ).strip()
+            or depot_id,
+        )
     return stop_names
+
+
+def _graph_export_depot_name_index(scenario: Dict[str, Any]) -> Dict[str, str]:
+    depot_names: Dict[str, str] = {}
+    for depot in _as_list(scenario.get("depots")):
+        if not isinstance(depot, dict):
+            continue
+        depot_id = str(depot.get("id") or depot.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        depot_names[depot_id] = str(
+            depot.get("name")
+            or depot.get("depotName")
+            or depot.get("label")
+            or depot_id
+        ).strip() or depot_id
+    return depot_names
 
 
 def _load_catalog_fast_stop_names(stop_ids: Iterable[str]) -> Dict[str, str]:
@@ -1007,6 +1040,7 @@ def _build_graph_export_context(
     tasks: List[Task],
 ) -> Dict[str, Any]:
     stop_name_by_id = _graph_export_stop_name_index(scenario)
+    depot_name_by_id = _graph_export_depot_name_index(scenario)
     route_lookup = {
         str(route.get("id") or ""): dict(route)
         for route in _as_list(scenario.get("routes"))
@@ -1169,6 +1203,7 @@ def _build_graph_export_context(
         "band_stop_sequences": band_stop_sequences,
         "task_stop_sequences": task_stop_sequences,
         "band_labels_by_band_id": band_labels_by_band_id,
+        "depot_labels_by_id": depot_name_by_id,
         "planning_start_time": str(
             ((scenario.get("simulation_config") or {}).get("start_time")) or "05:00"
         ).strip()
@@ -1483,11 +1518,15 @@ def build_problem_data_from_scenario(
         for item in _vehicles_for_scope(scenario, depot_id)
     ]
     diesel_price_per_l = _safe_float(cost_cfg.get("diesel_price_per_l"), 145.0)
+    disable_acquisition_cost = bool(simulation_cfg.get("disable_vehicle_acquisition_cost", False))
     vehicles = []
     for item in scope_vehicles_raw:
         vehicle_like = dict(item)
         vehicle_like.setdefault("fuelCostPerL", diesel_price_per_l)
-        vehicles.append(_build_vehicle(vehicle_like))
+        v = _build_vehicle(vehicle_like)
+        if disable_acquisition_cost:
+            v = dc_replace(v, fixed_use_cost=0.0)
+        vehicles.append(v)
     tasks = _build_tasks(
         trips,
         scope_vehicles_raw,

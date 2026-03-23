@@ -42,6 +42,11 @@ def test_builder_metadata_includes_fragment_and_band_settings() -> None:
         max_end_fragments_per_vehicle=4,
         initial_soc_percent=80.0,
         final_soc_floor_percent=20.0,
+        final_soc_target_percent=70.0,
+        final_soc_target_tolerance_percent=5.0,
+        initial_ice_fuel_percent=85.0,
+        min_ice_fuel_percent=15.0,
+        default_ice_tank_capacity_l=320.0,
     )
 
     assert problem.metadata.get("fixed_route_band_mode") is True
@@ -49,6 +54,11 @@ def test_builder_metadata_includes_fragment_and_band_settings() -> None:
     assert problem.metadata.get("max_end_fragments_per_vehicle") == 4
     assert problem.metadata.get("initial_soc_percent") == 80.0
     assert problem.metadata.get("final_soc_floor_percent") == 20.0
+    assert problem.metadata.get("final_soc_target_percent") == 70.0
+    assert problem.metadata.get("final_soc_target_tolerance_percent") == 5.0
+    assert problem.metadata.get("initial_ice_fuel_percent") == 85.0
+    assert problem.metadata.get("min_ice_fuel_percent") == 15.0
+    assert problem.metadata.get("default_ice_tank_capacity_l") == 320.0
     assert abs((problem.trips[0].required_soc_departure_percent or 0.0) - 24.0) < 1.0e-9
 
 
@@ -87,7 +97,16 @@ def test_solver_adapter_percent_to_ratio_supports_percent_and_ratio() -> None:
     assert adapter._percent_to_ratio(80.0) == 0.8
     assert adapter._percent_to_ratio(0.25) == 0.25
     assert adapter._percent_to_ratio(120.0) == 1.0
+    assert adapter._percent_to_ratio(5.0) == 0.05
     assert adapter._percent_to_ratio(-1) is None
+
+
+def test_solver_adapter_safe_nonnegative_float_uses_default_for_invalid_values() -> None:
+    adapter = GurobiMILPAdapter()
+
+    assert adapter._safe_nonnegative_float(12.5, default=1.0) == 12.5
+    assert adapter._safe_nonnegative_float(-1.0, default=2.0) == 2.0
+    assert adapter._safe_nonnegative_float(None, default=3.0) == 3.0
 
 
 def test_builder_percent_normalization_and_required_soc_derivation() -> None:
@@ -102,3 +121,26 @@ def test_builder_percent_normalization_and_required_soc_derivation() -> None:
         final_soc_floor_ratio=0.2,
     )
     assert required == 26.0
+
+
+def test_solver_adapter_trip_and_deadhead_fuel_helpers() -> None:
+    context = _minimal_dispatch_context()
+    context.vehicle_profiles["ICE"] = VehicleProfile(
+        vehicle_type="ICE",
+        fuel_tank_capacity_l=300.0,
+        fuel_consumption_l_per_km=0.4,
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="s2",
+        vehicle_counts={"ICE": 1},
+    )
+    adapter = GurobiMILPAdapter()
+    vehicle = problem.vehicles[0]
+    trip = problem.trips[0]
+
+    trip_fuel = adapter._trip_fuel_l(problem, vehicle, trip.trip_id)
+    assert trip_fuel >= 0.0
+
+    deadhead_fuel = adapter._deadhead_fuel_l(problem, vehicle, trip.trip_id, trip.trip_id)
+    assert deadhead_fuel >= 0.0

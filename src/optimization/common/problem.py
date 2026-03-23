@@ -55,6 +55,7 @@ class ProblemVehicleType:
     charge_power_max_kw: Optional[float] = None
     discharge_power_max_kw: Optional[float] = None
     reserve_soc: Optional[float] = None
+    fuel_tank_capacity_l: Optional[float] = None
     fuel_consumption_l_per_km: Optional[float] = None
     fixed_use_cost_jpy: float = 0.0
 
@@ -68,6 +69,9 @@ class ProblemVehicle:
     battery_capacity_kwh: Optional[float] = None
     reserve_soc: Optional[float] = None
     available: bool = True
+    initial_fuel_l: Optional[float] = None
+    fuel_tank_capacity_l: Optional[float] = None
+    fuel_reserve_l: Optional[float] = None
     fuel_consumption_l_per_km: Optional[float] = None
     fixed_use_cost_jpy: float = 0.0
 

@@ -97,6 +97,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     charger_power_kw: float = 90.0
     use_selected_depot_vehicle_inventory: bool = True
     use_selected_depot_charger_inventory: bool = True
+    disable_vehicle_acquisition_cost: bool = False
     solver_mode: str = "mode_milp_only"
     objective_mode: str = "total_cost"
     allow_partial_service: bool = False

@@ -535,6 +535,7 @@ def apply_builder_configuration(
         "charger_power_kw": overlay.charging_constraints.charger_power_limit_kw,
         "use_selected_depot_vehicle_inventory": use_selected_vehicle_inventory,
         "use_selected_depot_charger_inventory": use_selected_charger_inventory,
+        "disable_vehicle_acquisition_cost": body.simulation_settings.disable_vehicle_acquisition_cost,
         "solver_mode": body.simulation_settings.solver_mode,
         "objective_mode": overlay.solver_config.objective_mode,
         "allow_partial_service": overlay.solver_config.allow_partial_service,

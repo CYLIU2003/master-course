@@ -38,6 +38,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
         simulation_settings=PrepareSimulationSettingsBody(
             use_selected_depot_vehicle_inventory=True,
             use_selected_depot_charger_inventory=True,
+            disable_vehicle_acquisition_cost=True,
         ),
     )
 
@@ -70,3 +71,4 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["dispatch_scope"]["routeSelection"]["includeRouteIds"] == ["route-a"]
     assert updated["dispatch_scope"]["effectiveRouteIds"] == ["route-a"]
     assert updated["scenario_overlay"]["route_ids"] == ["route-a"]
+    assert updated["simulation_config"]["disable_vehicle_acquisition_cost"] is True

@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .data_schema import ProblemData
 from .milp_model import MILPResult
@@ -986,6 +986,7 @@ def _diagram_location_labels(
     bottom_labels: List[str] = []
     top_seen: set[str] = set()
     bottom_seen: set[str] = set()
+    assigned_seen: set[str] = set()
     main_axis_set = set(ordered_main_axis)
     origin_counts: Dict[str, int] = defaultdict(int)
     destination_counts: Dict[str, int] = defaultdict(int)
@@ -1003,7 +1004,7 @@ def _diagram_location_labels(
             (str(row.get("from_location_id") or "").strip(), True),
             (str(row.get("to_location_id") or "").strip(), False),
         ):
-            if not label or label in main_axis_set:
+            if not label or label in main_axis_set or label in assigned_seen:
                 continue
             prefer_top = origin_counts.get(label, 0) >= destination_counts.get(label, 0)
             if not _is_side_location_label(label):
@@ -1012,10 +1013,12 @@ def _diagram_location_labels(
                 if label not in top_seen:
                     top_labels.append(label)
                     top_seen.add(label)
+                    assigned_seen.add(label)
                 continue
             if label not in bottom_seen:
                 bottom_labels.append(label)
                 bottom_seen.add(label)
+                assigned_seen.add(label)
 
     return [*top_labels, *ordered_main_axis, *bottom_labels]
 
@@ -1148,6 +1151,501 @@ def _graph_context_task_stop_points(
     return [dict(item) for item in raw_points if isinstance(item, dict)]
 
 
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _graph_context_depot_label(
+    graph_context: Optional[Dict[str, Any]],
+    depot_id: str,
+) -> str:
+    normalized_depot_id = str(depot_id or "").strip()
+    if not normalized_depot_id:
+        return ""
+    if isinstance(graph_context, dict):
+        labels = graph_context.get("depot_labels_by_id") or {}
+        if isinstance(labels, dict):
+            label = str(labels.get(normalized_depot_id) or "").strip()
+            if label:
+                return label
+    return normalized_depot_id
+
+
+def _band_row_key(row: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        str(row.get("vehicle_id") or ""),
+        str(row.get("band_id") or ""),
+        str(row.get("state") or ""),
+        str(row.get("start_time") or ""),
+        str(row.get("end_time") or ""),
+        str(row.get("from_location_id") or ""),
+        str(row.get("to_location_id") or ""),
+        str(row.get("trip_id") or ""),
+        str(row.get("charger_id") or ""),
+    )
+
+
+def _normalized_band_row(
+    row: Dict[str, Any],
+    *,
+    band_id: str,
+    band_label: str,
+    graph_context: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    normalized = dict(row)
+    depot_id = str(normalized.get("depot_id") or "").strip()
+    depot_label = _graph_context_depot_label(graph_context, depot_id)
+    if depot_id and depot_label:
+        for key in ("from_location_id", "to_location_id"):
+            value = str(normalized.get(key) or "").strip()
+            if value == depot_id:
+                normalized[key] = depot_label
+    state = str(normalized.get("state") or "").strip()
+    if state in {"charge", "idle"} and depot_label:
+        normalized["from_location_id"] = depot_label
+        normalized["to_location_id"] = depot_label
+    if not str(normalized.get("band_id") or "").strip():
+        normalized["band_id"] = band_id
+    if not str(normalized.get("band_label") or "").strip():
+        normalized["band_label"] = band_label or band_id
+    if not str(normalized.get("route_series_code") or "").strip():
+        normalized["route_series_code"] = band_id
+    if not str(normalized.get("event_route_band_id") or "").strip() and state in {
+        "deadhead",
+        "charge",
+        "idle",
+    }:
+        normalized["event_route_band_id"] = band_id
+    if state == "charge":
+        normalized["is_deadhead"] = False
+        normalized["is_charge"] = True
+        normalized["is_service"] = False
+        normalized["is_idle"] = False
+        normalized["is_depot_move"] = True
+    elif state == "idle":
+        normalized["is_deadhead"] = False
+        normalized["is_charge"] = False
+        normalized["is_service"] = False
+        normalized["is_idle"] = True
+        normalized["is_depot_move"] = True
+    return normalized
+
+
+def _inferred_depot_move_minutes(total_gap_min: float) -> int:
+    gap = max(int(round(float(total_gap_min))), 0)
+    if gap <= 0:
+        return 0
+    return max(10, min(25, max(gap // 4, 10)))
+
+
+def _make_inferred_band_row(
+    *,
+    template_row: Dict[str, Any],
+    band_id: str,
+    band_label: str,
+    state: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    from_label: str,
+    to_label: str,
+    route_variant_type: str = "",
+    charge_power_kw: Any = "",
+) -> Optional[Dict[str, Any]]:
+    if end_dt <= start_dt:
+        return None
+    duration_min = max((end_dt - start_dt).total_seconds() / 60.0, 0.0)
+    depot_label = str(template_row.get("depot_label") or "").strip()
+    from_type = "depot" if from_label == depot_label and depot_label else "terminal"
+    to_type = "depot" if to_label == depot_label and depot_label else "terminal"
+    row = dict(template_row)
+    row.update(
+        {
+            "band_id": band_id,
+            "band_label": band_label or band_id,
+            "start_time": start_dt.isoformat(),
+            "end_time": end_dt.isoformat(),
+            "state": state,
+            "route_id": "",
+            "route_series_code": band_id,
+            "event_route_band_id": band_id,
+            "trip_id": "",
+            "from_location_id": from_label,
+            "to_location_id": to_label,
+            "from_location_type": from_type,
+            "to_location_type": to_type,
+            "direction": "",
+            "route_variant_type": route_variant_type,
+            "energy_delta_kwh": 0.0,
+            "distance_km": 0.0,
+            "duration_min": duration_min,
+            "is_deadhead": state == "deadhead",
+            "is_charge": state == "charge",
+            "is_service": False,
+            "is_idle": state == "idle",
+            "is_depot_move": True,
+            "is_short_turn": False,
+            "charger_id": row.get("charger_id") if state == "charge" else "",
+            "charge_power_kw": charge_power_kw if state == "charge" else "",
+        }
+    )
+    return row
+
+
+def _append_gap_as_depot_presence(
+    *,
+    append_row: Callable[[Dict[str, Any]], None],
+    template_row: Dict[str, Any],
+    band_id: str,
+    band_label: str,
+    start_dt: Optional[datetime],
+    end_dt: Optional[datetime],
+    origin_label: str,
+    destination_label: str,
+    depot_label: str,
+) -> None:
+    if start_dt is None or end_dt is None or end_dt <= start_dt:
+        return
+    total_gap_min = max((end_dt - start_dt).total_seconds() / 60.0, 0.0)
+    if total_gap_min <= 0.0:
+        return
+    move_min = min(
+        _inferred_depot_move_minutes(total_gap_min),
+        max(int(total_gap_min // 2), 0),
+    )
+    arrival_end = start_dt
+    departure_start = end_dt
+    if origin_label != depot_label:
+        arrival_end = min(end_dt, start_dt + timedelta(minutes=move_min))
+        inferred = _make_inferred_band_row(
+            template_row=template_row,
+            band_id=band_id,
+            band_label=band_label,
+            state="deadhead",
+            start_dt=start_dt,
+            end_dt=arrival_end,
+            from_label=origin_label,
+            to_label=depot_label,
+            route_variant_type="depot_in",
+        )
+        if inferred:
+            append_row(inferred)
+    if destination_label != depot_label:
+        departure_start = max(start_dt, end_dt - timedelta(minutes=move_min))
+    idle_start = arrival_end if origin_label != depot_label else start_dt
+    idle_end = departure_start if destination_label != depot_label else end_dt
+    inferred_idle = _make_inferred_band_row(
+        template_row=template_row,
+        band_id=band_id,
+        band_label=band_label,
+        state="idle",
+        start_dt=idle_start,
+        end_dt=idle_end,
+        from_label=depot_label,
+        to_label=depot_label,
+        route_variant_type="depot_stay",
+    )
+    if inferred_idle:
+        append_row(inferred_idle)
+    if destination_label != depot_label:
+        inferred = _make_inferred_band_row(
+            template_row=template_row,
+            band_id=band_id,
+            band_label=band_label,
+            state="deadhead",
+            start_dt=departure_start,
+            end_dt=end_dt,
+            from_label=depot_label,
+            to_label=destination_label,
+            route_variant_type="depot_out",
+        )
+        if inferred:
+            append_row(inferred)
+
+
+def _row_is_charge(row: Dict[str, Any]) -> bool:
+    return str(row.get("state") or "").strip() == "charge"
+
+
+def _row_is_explicit_band_deadhead(row: Dict[str, Any], band_id: str) -> bool:
+    return (
+        str(row.get("state") or "").strip() == "deadhead"
+        and str(row.get("band_id") or "").strip() == band_id
+    )
+
+
+def _vehicle_band_rows(
+    *,
+    vehicle_rows: List[Dict[str, Any]],
+    band_id: str,
+    band_label: str,
+    graph_context: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    normalized_full_rows = [
+        _normalized_band_row(
+            row,
+            band_id=band_id,
+            band_label=band_label,
+            graph_context=graph_context,
+        )
+        for row in vehicle_rows
+    ]
+    normalized_full_rows.sort(
+        key=lambda row: (str(row.get("start_time") or ""), str(row.get("state") or ""))
+    )
+    relevant_indices = [
+        idx
+        for idx, row in enumerate(normalized_full_rows)
+        if str(row.get("state") or "").strip() == "service"
+        and str(row.get("band_id") or "").strip() == band_id
+    ]
+    if not relevant_indices:
+        return []
+
+    sample_row = dict(normalized_full_rows[relevant_indices[0]])
+    depot_label = _graph_context_depot_label(
+        graph_context,
+        str(sample_row.get("depot_id") or ""),
+    )
+    sample_row["depot_label"] = depot_label
+
+    band_rows: List[Dict[str, Any]] = []
+    seen_keys: set[tuple[Any, ...]] = set()
+
+    def _append(row: Dict[str, Any]) -> None:
+        normalized = _normalized_band_row(
+            row,
+            band_id=band_id,
+            band_label=band_label,
+            graph_context=graph_context,
+        )
+        key = _band_row_key(normalized)
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        band_rows.append(normalized)
+
+    for row in normalized_full_rows:
+        if (
+            str(row.get("band_id") or "").strip() == band_id
+            and str(row.get("state") or "").strip() in {"service", "deadhead"}
+        ):
+            _append(row)
+
+    day_datetimes = [
+        dt
+        for row in normalized_full_rows
+        for dt in (
+            _parse_iso_datetime(row.get("start_time")),
+            _parse_iso_datetime(row.get("end_time")),
+        )
+        if dt is not None
+    ]
+    if not day_datetimes:
+        return sorted(
+            band_rows,
+            key=lambda row: (str(row.get("vehicle_id") or ""), str(row.get("start_time") or "")),
+        )
+    first_dt = min(day_datetimes)
+    day_start = datetime.combine(first_dt.date(), time(0, 0), first_dt.tzinfo)
+    day_end = datetime.combine(first_dt.date(), time(23, 59), first_dt.tzinfo)
+
+    first_relevant_idx = relevant_indices[0]
+    first_relevant_row = normalized_full_rows[first_relevant_idx]
+    first_relevant_start = _parse_iso_datetime(first_relevant_row.get("start_time"))
+    first_relevant_origin = str(first_relevant_row.get("from_location_id") or depot_label).strip() or depot_label
+    earlier_rows = normalized_full_rows[:first_relevant_idx]
+    earlier_non_charge_rows = [row for row in earlier_rows if not _row_is_charge(row)]
+    if not earlier_non_charge_rows:
+        earlier_charge_rows = [row for row in earlier_rows if _row_is_charge(row)]
+        previous_charge_end = day_start
+        if earlier_charge_rows:
+            first_charge_start = _parse_iso_datetime(earlier_charge_rows[0].get("start_time"))
+            if first_charge_start is not None and first_charge_start > day_start:
+                _append_gap_as_depot_presence(
+                    append_row=_append,
+                    template_row=sample_row,
+                    band_id=band_id,
+                    band_label=band_label,
+                    start_dt=day_start,
+                    end_dt=first_charge_start,
+                    origin_label=depot_label,
+                    destination_label=depot_label,
+                    depot_label=depot_label,
+                )
+            for charge_row in earlier_charge_rows:
+                _append(charge_row)
+            previous_charge_end = _parse_iso_datetime(earlier_charge_rows[-1].get("end_time")) or day_start
+        _append_gap_as_depot_presence(
+            append_row=_append,
+            template_row=sample_row,
+            band_id=band_id,
+            band_label=band_label,
+            start_dt=previous_charge_end,
+            end_dt=first_relevant_start,
+            origin_label=depot_label,
+            destination_label=first_relevant_origin,
+            depot_label=depot_label,
+        )
+
+    for left_idx, right_idx in zip(relevant_indices, relevant_indices[1:]):
+        left_row = normalized_full_rows[left_idx]
+        right_row = normalized_full_rows[right_idx]
+        between_rows = normalized_full_rows[left_idx + 1 : right_idx]
+        blocking_rows = [
+            row
+            for row in between_rows
+            if not _row_is_charge(row) and not _row_is_explicit_band_deadhead(row, band_id)
+        ]
+        if blocking_rows:
+            continue
+
+        charge_rows = [row for row in between_rows if _row_is_charge(row)]
+        left_end = _parse_iso_datetime(left_row.get("end_time"))
+        right_start = _parse_iso_datetime(right_row.get("start_time"))
+        left_destination = str(left_row.get("to_location_id") or depot_label).strip() or depot_label
+        right_origin = str(right_row.get("from_location_id") or depot_label).strip() or depot_label
+
+        if charge_rows:
+            first_charge_start = _parse_iso_datetime(charge_rows[0].get("start_time"))
+            if first_charge_start is not None:
+                _append_gap_as_depot_presence(
+                    append_row=_append,
+                    template_row=sample_row,
+                    band_id=band_id,
+                    band_label=band_label,
+                    start_dt=left_end,
+                    end_dt=first_charge_start,
+                    origin_label=left_destination,
+                    destination_label=depot_label,
+                    depot_label=depot_label,
+                )
+            previous_charge_end: Optional[datetime] = None
+            for charge_row in charge_rows:
+                charge_start = _parse_iso_datetime(charge_row.get("start_time"))
+                if previous_charge_end is not None and charge_start is not None:
+                    _append_gap_as_depot_presence(
+                        append_row=_append,
+                        template_row=sample_row,
+                        band_id=band_id,
+                        band_label=band_label,
+                        start_dt=previous_charge_end,
+                        end_dt=charge_start,
+                        origin_label=depot_label,
+                        destination_label=depot_label,
+                        depot_label=depot_label,
+                    )
+                _append(charge_row)
+                previous_charge_end = _parse_iso_datetime(charge_row.get("end_time")) or previous_charge_end
+            _append_gap_as_depot_presence(
+                append_row=_append,
+                template_row=sample_row,
+                band_id=band_id,
+                band_label=band_label,
+                start_dt=previous_charge_end,
+                end_dt=right_start,
+                origin_label=depot_label,
+                destination_label=right_origin,
+                depot_label=depot_label,
+            )
+            continue
+
+        gap_min = (
+            (right_start - left_end).total_seconds() / 60.0
+            if left_end is not None and right_start is not None
+            else 0.0
+        )
+        if gap_min >= 60.0:
+            _append_gap_as_depot_presence(
+                append_row=_append,
+                template_row=sample_row,
+                band_id=band_id,
+                band_label=band_label,
+                start_dt=left_end,
+                end_dt=right_start,
+                origin_label=left_destination,
+                destination_label=right_origin,
+                depot_label=depot_label,
+            )
+
+    last_relevant_idx = relevant_indices[-1]
+    last_relevant_row = normalized_full_rows[last_relevant_idx]
+    last_relevant_end = _parse_iso_datetime(last_relevant_row.get("end_time"))
+    last_relevant_destination = str(last_relevant_row.get("to_location_id") or depot_label).strip() or depot_label
+    later_rows = normalized_full_rows[last_relevant_idx + 1 :]
+    later_non_charge_rows = [row for row in later_rows if not _row_is_charge(row)]
+    if not later_non_charge_rows:
+        later_charge_rows = [row for row in later_rows if _row_is_charge(row)]
+        if later_charge_rows:
+            first_charge_start = _parse_iso_datetime(later_charge_rows[0].get("start_time"))
+            _append_gap_as_depot_presence(
+                append_row=_append,
+                template_row=sample_row,
+                band_id=band_id,
+                band_label=band_label,
+                start_dt=last_relevant_end,
+                end_dt=first_charge_start,
+                origin_label=last_relevant_destination,
+                destination_label=depot_label,
+                depot_label=depot_label,
+            )
+            previous_charge_end: Optional[datetime] = None
+            for charge_row in later_charge_rows:
+                charge_start = _parse_iso_datetime(charge_row.get("start_time"))
+                if previous_charge_end is not None and charge_start is not None:
+                    _append_gap_as_depot_presence(
+                        append_row=_append,
+                        template_row=sample_row,
+                        band_id=band_id,
+                        band_label=band_label,
+                        start_dt=previous_charge_end,
+                        end_dt=charge_start,
+                        origin_label=depot_label,
+                        destination_label=depot_label,
+                        depot_label=depot_label,
+                    )
+                _append(charge_row)
+                previous_charge_end = _parse_iso_datetime(charge_row.get("end_time")) or previous_charge_end
+            _append_gap_as_depot_presence(
+                append_row=_append,
+                template_row=sample_row,
+                band_id=band_id,
+                band_label=band_label,
+                start_dt=previous_charge_end,
+                end_dt=day_end,
+                origin_label=depot_label,
+                destination_label=depot_label,
+                depot_label=depot_label,
+            )
+        else:
+            _append_gap_as_depot_presence(
+                append_row=_append,
+                template_row=sample_row,
+                band_id=band_id,
+                band_label=band_label,
+                start_dt=last_relevant_end,
+                end_dt=day_end,
+                origin_label=last_relevant_destination,
+                destination_label=depot_label,
+                depot_label=depot_label,
+            )
+
+    return sorted(
+        band_rows,
+        key=lambda row: (
+            str(row.get("vehicle_id") or ""),
+            str(row.get("start_time") or ""),
+            str(row.get("state") or ""),
+            str(row.get("from_location_id") or ""),
+        ),
+    )
+
+
 def _interpolated_band_path_pairs(
     *,
     graph_context: Optional[Dict[str, Any]],
@@ -1217,23 +1715,8 @@ def _route_band_diagram_svg(
     if not rows:
         return ""
 
-    time_points = [
-        minute
-        for minute in (
-            _parse_iso_minute(row.get("start_time")) for row in rows
-        )
-        if minute is not None
-    ] + [
-        minute
-        for minute in (
-            _parse_iso_minute(row.get("end_time")) for row in rows
-        )
-        if minute is not None
-    ]
-    min_minute = min(time_points) if time_points else 0
-    max_minute = max(time_points) if time_points else min_minute + 60
-    min_minute = (min_minute // 60) * 60
-    max_minute = ((max(max_minute, min_minute + 60) + 59) // 60) * 60
+    min_minute = 0
+    max_minute = 24 * 60 - 1
 
     location_labels = list(
         location_labels
@@ -1253,8 +1736,8 @@ def _route_band_diagram_svg(
     left_margin = max(220, min(480, 48 + max_stop_label_len * 14))
     right_margin = 420
     bottom_margin = 70
-    hour_span = max(1.0, float(max_minute - min_minute) / 60.0)
-    plot_width = max(1400, int(hour_span * 140.0))
+    hour_span = 24.0
+    plot_width = max(2400, int(hour_span * 120.0))
     width = left_margin + plot_width + right_margin
     lane_height = 92 if len(location_labels) <= 18 else 84
     plot_height = max(260, (len(location_labels) - 1) * lane_height + 40)
@@ -1285,10 +1768,10 @@ def _route_band_diagram_svg(
     right_margin = max(340, min(760, 120 + max_vehicle_label_len * 8))
     width = left_margin + plot_width + right_margin
 
-    hour_marks = list(range(min_minute, max_minute + 1, 60))
+    hour_marks = list(range(0, 24 * 60, 60))
     display_label = str(band_label or band_id or "").strip() or band_id
     legend_y = top_margin + 18
-    legend_height = 58 + len(vehicle_ids) * 18 + 36
+    legend_height = 58 + 90 + len(vehicle_ids) * 18 + 36
     height = max(top_margin + plot_height + bottom_margin, int(legend_y + legend_height + 20))
     clip_id = f"clip-{_safe_export_name(f'{scenario_id}-{band_id}', fallback='band')}"
     svg_parts: List[str] = [
@@ -1298,7 +1781,7 @@ def _route_band_diagram_svg(
         "</defs>",
         '<rect width="100%" height="100%" fill="#fffdf8"/>',
         f'<text x="{left_margin}" y="34" font-size="24" font-family="Segoe UI, Meiryo, sans-serif" fill="#14213d">Route Band Diagram: {html.escape(display_label)}</text>',
-        f'<text x="{left_margin}" y="60" font-size="13" font-family="Segoe UI, Meiryo, sans-serif" fill="#5c677d">scenario={html.escape(scenario_id)} / vehicles={len(vehicle_ids)} / grouped by actual route band / route-only stop axis</text>',
+        f'<text x="{left_margin}" y="60" font-size="13" font-family="Segoe UI, Meiryo, sans-serif" fill="#5c677d">scenario={html.escape(scenario_id)} / vehicles={len(vehicle_ids)} / route-only stop axis / full-day 00:00-23:59 / depot stay inferred</text>',
     ]
 
     for label in location_labels:
@@ -1318,6 +1801,9 @@ def _route_band_diagram_svg(
         svg_parts.append(
             f'<text x="{x:.1f}" y="{top_margin + plot_height + 26}" text-anchor="middle" font-size="12" font-family="Segoe UI, Meiryo, sans-serif" fill="#394867">{minute // 60:02d}:{minute % 60:02d}</text>'
         )
+    svg_parts.append(
+        f'<text x="{left_margin + plot_width:.1f}" y="{top_margin + plot_height + 26}" text-anchor="end" font-size="12" font-family="Segoe UI, Meiryo, sans-serif" fill="#394867">23:59</text>'
+    )
 
     svg_parts.append(
         f'<rect x="{left_margin}" y="{top_margin}" width="{plot_width}" height="{plot_height}" fill="none" stroke="#98a2b3" stroke-width="1.2"/>'
@@ -1336,6 +1822,24 @@ def _route_band_diagram_svg(
             f'<text x="{legend_x + 24}" y="{type_y + 4:.1f}" font-size="11" font-family="Consolas, Meiryo, monospace" fill="#22304a">{html.escape(vehicle_type)}</text>'
         )
     legend_y += 58
+    svg_parts.append(
+        f'<text x="{legend_x}" y="{legend_y - 10}" font-size="14" font-family="Segoe UI, Meiryo, sans-serif" fill="#14213d">Line Styles</text>'
+    )
+    style_specs = [
+        ("service", "", 3.6, "#22304a"),
+        ("depot deadhead", ' stroke-dasharray="8 5"', 2.4, "#22304a"),
+        ("depot stay", ' stroke-dasharray="2 6"', 2.2, "#22304a"),
+        ("charge at depot", ' stroke-dasharray="4 4"', 3.0, "#22304a"),
+    ]
+    for style_idx, (style_label, dash, stroke_width, style_color) in enumerate(style_specs):
+        style_y = legend_y + style_idx * 18
+        svg_parts.append(
+            f'<line x1="{legend_x}" y1="{style_y:.1f}" x2="{legend_x + 18}" y2="{style_y:.1f}" stroke="{style_color}" stroke-width="{stroke_width:.1f}"{dash}/>'
+        )
+        svg_parts.append(
+            f'<text x="{legend_x + 24}" y="{style_y + 4:.1f}" font-size="11" font-family="Consolas, Meiryo, monospace" fill="#22304a">{html.escape(style_label)}</text>'
+        )
+    legend_y += 90
     svg_parts.append(
         f'<text x="{legend_x}" y="{legend_y - 10}" font-size="14" font-family="Segoe UI, Meiryo, sans-serif" fill="#14213d">Vehicles</text>'
     )
@@ -1399,6 +1903,14 @@ def _route_band_diagram_svg(
                 dash = ' stroke-dasharray="8 5"'
                 stroke_width = 2.4
                 opacity = 0.86
+            elif state == "idle":
+                dash = ' stroke-dasharray="2 6"'
+                stroke_width = 2.2
+                opacity = 0.60
+            elif state == "charge":
+                dash = ' stroke-dasharray="4 4"'
+                stroke_width = 3.0
+                opacity = 0.76
             else:
                 dash = ' stroke-dasharray="3 4"'
                 stroke_width = 2.2
@@ -1488,8 +2000,15 @@ def _build_route_band_diagram_assets(
         if vehicle_id and band_id:
             service_bands_by_vehicle[vehicle_id].add(band_id)
 
-    rows_by_band: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    full_rows_by_vehicle: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for row in vehicle_timeline_rows:
+        vehicle_id = str(row.get("vehicle_id") or "").strip()
+        if not vehicle_id:
+            continue
+        full_rows_by_vehicle[vehicle_id].append(dict(row))
+
+    rows_by_band: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for row in service_rows_all:
         band_id = str(row.get("band_id") or "").strip()
         if not band_id:
             continue
@@ -1502,30 +2021,29 @@ def _build_route_band_diagram_assets(
         service_rows = [row for row in grouped_rows if str(row.get("state") or "") == "service"]
         if not service_rows:
             continue
+        band_label = str(
+            ((graph_context or {}).get("band_labels_by_band_id") or {}).get(band_id)
+            or service_rows[0].get("band_label")
+            or band_id
+        )
+        band_vehicle_ids = sorted(
+            {
+                str(row.get("vehicle_id") or "").strip()
+                for row in service_rows
+                if str(row.get("vehicle_id") or "").strip()
+            }
+        )
+        band_rows: List[Dict[str, Any]] = []
+        for vehicle_id in band_vehicle_ids:
+            vehicle_band_rows = _vehicle_band_rows(
+                vehicle_rows=full_rows_by_vehicle.get(vehicle_id, []),
+                band_id=band_id,
+                band_label=band_label,
+                graph_context=graph_context,
+            )
+            band_rows.extend(vehicle_band_rows)
         band_sequences = _graph_context_band_sequences(graph_context, band_id)
         main_location_labels = _ordered_location_labels(service_rows, sequences=band_sequences)
-        route_location_set = set(main_location_labels)
-        band_rows = [
-            row
-            for row in grouped_rows
-            if (
-                str(row.get("state") or "") == "service"
-                or (
-                    str(row.get("from_location_id") or "").strip() in route_location_set
-                    and str(row.get("to_location_id") or "").strip() in route_location_set
-                )
-                or (
-                    (
-                        str(row.get("from_location_id") or "").strip() in route_location_set
-                        and _is_side_location_label(str(row.get("to_location_id") or "").strip())
-                    )
-                    or (
-                        str(row.get("to_location_id") or "").strip() in route_location_set
-                        and _is_side_location_label(str(row.get("from_location_id") or "").strip())
-                    )
-                )
-            )
-        ]
         route_location_labels = _diagram_location_labels(band_rows, main_location_labels)
         vehicle_ids = sorted(
             {
@@ -1560,11 +2078,7 @@ def _build_route_band_diagram_assets(
             scenario_id=scenario_id,
             band_id=band_id,
             rows=band_rows,
-            band_label=str(
-                ((graph_context or {}).get("band_labels_by_band_id") or {}).get(band_id)
-                or band_rows[0].get("band_label")
-                or band_id
-            ),
+            band_label=band_label,
             location_labels=route_location_labels,
             graph_context=graph_context,
         )
@@ -1572,11 +2086,7 @@ def _build_route_band_diagram_assets(
             {
                 "scenario_id": scenario_id,
                 "band_id": band_id,
-                "band_label": str(
-                    ((graph_context or {}).get("band_labels_by_band_id") or {}).get(band_id)
-                    or band_rows[0].get("band_label")
-                    or band_id
-                ),
+                "band_label": band_label,
                 "vehicle_count": len(vehicle_ids),
                 "vehicle_ids": vehicle_ids,
                 "vehicle_type_counts": vehicle_type_counts,

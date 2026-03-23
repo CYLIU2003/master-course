@@ -52,6 +52,13 @@ flowchart LR
 - `required_soc_departure_percent` を trip レベルで導出し MILP の出発時 SOC 下限制約として適用（0-1/0-100 正規化）
 - 最適化結果シリアライズに `objective_components_raw` / `_weighted` / `pv_summary` / `utilization_summary` / `termination_reason` / `effective_limits` を追加
 - `energy_required_kwh_bev` が欠損/0 のタスクは走行距離と推定係数（既知タスク平均、未取得時は 1.2 kWh/km）で補完
+- Quick Setup に `finalSocTargetPercent`（その日の最終SOC目標）を追加し、フロント入力→BFF保存→最適化設定参照を接続（`finalSocFloorPercent` と後方互換で同期）
+- `finalSocTargetPercent` は「終端SOC下限」ではなく、終端時点SOCを目標値へ近づけるソフト制約（偏差ペナルティ）として MILP 目的に反映
+- Quick Setup に `finalSocTargetTolerancePercent`（終端SOC目標の許容±%）を追加し、許容帯を超えた偏差分のみを MILP 目的でペナルティ化
+- 「固定路線バンド（路線間車両トレード禁止）」チェックは `fixedRouteBandMode` として dispatch scope に保存され、MILP の route-family 制約に連動
+- ICE 車両にも燃料残量の状態遷移を追加し、便出発前の必要燃料チェックと走行後の残量更新（trip + deadhead 消費）を MILP 制約で扱うよう拡張
+- `disable_vehicle_acquisition_cost` は simulation 設定から共通最適化（`src/optimization/common`）経路にも反映され、ON 時は車両固定費（日割り導入費）を 0 として評価
+- Quick Setup に `initialIceFuelPercent` / `minIceFuelPercent` / `defaultIceTankCapacityL` を追加し、ICE の初期燃料・最低バッファ・既定タンク容量をフロント入力から最適化へ反映
 - `tools/bus_operation_visualizer_tk.py` / `tools/multi_run_visualizer_tk.py` の UI 表示を日本語化し、主要数値パラメータに単位（`[台]` `[秒]` `[円]` `[kg-CO2]`）を明記
 
 </details>
@@ -584,8 +591,10 @@ route-band 可視化の仕様：
 - `trip_assignment.csv` には `assigned_vehicle_type`, `assigned_vehicle_band_id`, `band_id` を含めます。
 - SVG は actual service の `band_id` ごとに 1 band 1 ファイルで出力し、route `stopSequence` の順番を stop 軸の正本として使います。stop 名は `data/catalog-fast/normalized/stops.jsonl` と `data/catalog-fast/tokyu_bus_data/route_stop_times/*.jsonl` から補完し、対象 band の route 以外の stop は本線軸に出しません。
 - 本線は最長の営業系統を基準に構成し、区間便はその stop 軸の途中に差し込みます。入出庫など本線外の terminal は main axis に混ぜず、図の上側または下側の side lane に分けて飛び線で表します。
-- 上り/下り、区間便、入出庫便は同じ band の図へ統合し、service は stop-time polyline、same-band deadhead は破線で重ねます。ICE/BEV は色系統を分け、凡例に `vehicle_id [ICE/BEV]` と type legend を表示します。
+- 上り/下り、区間便、入出庫便は同じ band の図へ統合し、service は stop-time polyline、same-band / depot deadhead は破線、depot stay は点線で重ねます。ICE/BEV は色系統を分け、凡例に `vehicle_id [ICE/BEV]` と type legend を表示します。
 - catalog-fast に該当 trip の stop-time が無い場合だけ、route `stopSequence` 上を線形補間して「その時刻におおよそどこにいるか」を見られるようにします。
+- 時間軸は常に `00:00` から `23:59` の 1 日固定です。`simulation_config.start_time` 起点の slot index を実時刻へ補正してから `vehicle_timeline.csv` / `trip_assignment.csv` / SVG に反映するため、夕方以降の便が軸外へ飛ぶことはありません。
+- SVG では vehicle ごとの日内最初の便に対する `depot_out`、最後の便の後の `depot_in`、および同一 band 内の長い空き時間や charge row を挟む区間の temporary depot stay を推定描画します。depot が当該路線の stopSequence に含まれない場合は side lane にのみ出します。
 - `fixed_route_band_mode=true` の run では、そのまま路線専属ダイヤ図として使えます。通常 run でも出力しますが、`route_band_diagrams/manifest.json` の `mixed_event_route_band_detected=true` は「その route graph に出てくる車両が同日に他 band の trip も担当した」ことを意味します。
 
 補足：

@@ -73,10 +73,12 @@ def test_set_dispatch_scope_syncs_overlay_route_and_depot_ids(monkeypatch) -> No
                 "includeRouteIds": ["route-b"],
                 "excludeRouteIds": [],
             },
+            "fixedRouteBandMode": True,
         },
     )
 
     assert normalized["effectiveRouteIds"] == ["route-b"]
+    assert normalized["fixedRouteBandMode"] is True
     assert doc["scenario_overlay"]["depot_ids"] == ["dep-b"]
     assert doc["scenario_overlay"]["route_ids"] == ["route-b"]
 

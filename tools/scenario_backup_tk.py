@@ -852,6 +852,7 @@ class App:
         self.initial_soc_var = tk.StringVar(value="0.8")
         self.soc_min_var = tk.StringVar(value="0.2")
         self.soc_max_var = tk.StringVar(value="0.9")
+        self.disable_vehicle_acquisition_cost_var = tk.BooleanVar(value=False)
         # ── よく使うパラメータ（最上部）──
         basic = ttk.LabelFrame(ops, text="基本パラメータ", padding=6)
         basic.pack(fill=tk.X, pady=(0, 4))
@@ -868,6 +869,11 @@ class App:
         self._labeled_entry(basic, "バッファSOC上限 soc_max", self.soc_max_var)
         self._labeled_entry(basic, "需要単価 demand_charge_cost_per_kw", self.demand_charge_var)
         self._labeled_entry(basic, "契約上限 depot_power_limit_kw", self.depot_power_limit_var)
+        ttk.Checkbutton(
+            basic,
+            text="バス導入費の日割り計算を無効化 (disable_vehicle_acquisition_cost)",
+            variable=self.disable_vehicle_acquisition_cost_var,
+        ).pack(anchor="w", pady=(2, 0))
 
         # ── 詳細・ペナルティ・CO₂パラメータ（スクロール下部）──
         advanced = ttk.LabelFrame(ops, text="詳細パラメータ / CO₂・劣化費", padding=6)
@@ -885,6 +891,11 @@ class App:
         self.max_end_fragments_var = tk.StringVar(value="100")
         self.initial_soc_percent_var = tk.StringVar(value="0.8")
         self.final_soc_floor_percent_var = tk.StringVar(value="0.2")
+        self.final_soc_target_percent_var = tk.StringVar(value="0.8")
+        self.final_soc_target_tolerance_percent_var = tk.StringVar(value="0.0")
+        self.initial_ice_fuel_percent_var = tk.StringVar(value="100.0")
+        self.min_ice_fuel_percent_var = tk.StringVar(value="10.0")
+        self.default_ice_tank_capacity_l_var = tk.StringVar(value="300.0")
         self.pv_profile_id_var = tk.StringVar(value="")
         self.weather_mode_var = tk.StringVar(value="sunny")
         self.weather_factor_scalar_var = tk.StringVar(value="1.0")
@@ -905,6 +916,11 @@ class App:
         self._labeled_entry(advanced, "終了断片上限 max_end_fragments", self.max_end_fragments_var)
         self._labeled_entry(advanced, "初期SOC比 initial_soc_percent", self.initial_soc_percent_var)
         self._labeled_entry(advanced, "終了SOC床 final_soc_floor_percent", self.final_soc_floor_percent_var)
+        self._labeled_entry(advanced, "終了SOC目標 final_soc_target_percent", self.final_soc_target_percent_var)
+        self._labeled_entry(advanced, "終了SOC目標許容± final_soc_target_tolerance_percent", self.final_soc_target_tolerance_percent_var)
+        self._labeled_entry(advanced, "ICE初期燃料比 initial_ice_fuel_percent", self.initial_ice_fuel_percent_var)
+        self._labeled_entry(advanced, "ICE最低燃料バッファ min_ice_fuel_percent", self.min_ice_fuel_percent_var)
+        self._labeled_entry(advanced, "ICE既定タンク容量[L] default_ice_tank_capacity_l", self.default_ice_tank_capacity_l_var)
         self._labeled_entry(advanced, "PVプロファイルID pv_profile_id", self.pv_profile_id_var)
         self._labeled_entry(advanced, "天気モード weather_mode", self.weather_mode_var)
         self._labeled_entry(advanced, "天気係数 weather_factor_scalar", self.weather_factor_scalar_var)
@@ -2453,6 +2469,15 @@ class App:
             self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
             self.initial_soc_percent_var.set(str(sim.get("initialSocPercent") or 0.8))
             self.final_soc_floor_percent_var.set(str(sim.get("finalSocFloorPercent") or 0.2))
+            self.final_soc_target_percent_var.set(
+                str(sim.get("finalSocTargetPercent") or sim.get("finalSocFloorPercent") or 0.8)
+            )
+            self.final_soc_target_tolerance_percent_var.set(
+                str(sim.get("finalSocTargetTolerancePercent") or 0.0)
+            )
+            self.initial_ice_fuel_percent_var.set(str(sim.get("initialIceFuelPercent") or 100.0))
+            self.min_ice_fuel_percent_var.set(str(sim.get("minIceFuelPercent") or 10.0))
+            self.default_ice_tank_capacity_l_var.set(str(sim.get("defaultIceTankCapacityL") or 300.0))
             self.pv_profile_id_var.set(str(sim.get("pvProfileId") or ""))
             self.weather_mode_var.set(str(sim.get("weatherMode") or "sunny"))
             self.weather_factor_scalar_var.set(str(sim.get("weatherFactorScalar") or 1.0))
@@ -2532,6 +2557,17 @@ class App:
             "degradationWeight": self._parse_float(self.degradation_weight_var.get(), 0.0),
             "initialSocPercent": self._parse_float(self.initial_soc_percent_var.get(), 0.8),
             "finalSocFloorPercent": self._parse_float(self.final_soc_floor_percent_var.get(), 0.2),
+            "finalSocTargetPercent": self._parse_float(self.final_soc_target_percent_var.get(), 0.8),
+            "finalSocTargetTolerancePercent": self._parse_float(
+                self.final_soc_target_tolerance_percent_var.get(),
+                0.0,
+            ),
+            "initialIceFuelPercent": self._parse_float(self.initial_ice_fuel_percent_var.get(), 100.0),
+            "minIceFuelPercent": self._parse_float(self.min_ice_fuel_percent_var.get(), 10.0),
+            "defaultIceTankCapacityL": self._parse_float(
+                self.default_ice_tank_capacity_l_var.get(),
+                300.0,
+            ),
             "pvProfileId": self.pv_profile_id_var.get().strip() or None,
             "weatherMode": self.weather_mode_var.get().strip() or "sunny",
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
@@ -3267,6 +3303,7 @@ class App:
                 "soc_max": self._parse_float(self.soc_max_var.get(), 0.9),
                 "use_selected_depot_vehicle_inventory": True,
                 "use_selected_depot_charger_inventory": True,
+                "disable_vehicle_acquisition_cost": self.disable_vehicle_acquisition_cost_var.get(),
                 "solver_mode": self.solver_mode_var.get().strip(),
                 "objective_mode": self.objective_mode_var.get().strip(),
                 "allow_partial_service": self.allow_partial_service_var.get(),
@@ -3597,6 +3634,11 @@ class App:
             (self.max_end_fragments_var, "終了断片上限を変更"),
             (self.initial_soc_percent_var, "初期SOC比を変更"),
             (self.final_soc_floor_percent_var, "終了SOC床を変更"),
+            (self.final_soc_target_percent_var, "終了SOC目標を変更"),
+            (self.final_soc_target_tolerance_percent_var, "終了SOC目標許容幅を変更"),
+            (self.initial_ice_fuel_percent_var, "ICE初期燃料比を変更"),
+            (self.min_ice_fuel_percent_var, "ICE最低燃料バッファを変更"),
+            (self.default_ice_tank_capacity_l_var, "ICE既定タンク容量を変更"),
             (self.pv_profile_id_var, "PVプロファイルを変更"),
             (self.weather_mode_var, "天気モードを変更"),
             (self.weather_factor_scalar_var, "天気係数を変更"),

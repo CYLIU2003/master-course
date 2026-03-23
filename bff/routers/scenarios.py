@@ -411,6 +411,11 @@ class UpdateQuickSetupBody(BaseModel):
     maxEndFragmentsPerVehicle: Optional[int] = None
     initialSocPercent: Optional[float] = None
     finalSocFloorPercent: Optional[float] = None
+    finalSocTargetPercent: Optional[float] = None
+    finalSocTargetTolerancePercent: Optional[float] = None
+    initialIceFuelPercent: Optional[float] = None
+    minIceFuelPercent: Optional[float] = None
+    defaultIceTankCapacityL: Optional[float] = None
     objectivePreset: Optional[str] = None
     pvProfileId: Optional[str] = None
     weatherMode: Optional[str] = None
@@ -939,6 +944,17 @@ def _builder_defaults(
         "depotPowerLimitKw": overlay_charging.get("depot_power_limit_kw"),
         "initialSocPercent": simulation_config.get("initial_soc_percent"),
         "finalSocFloorPercent": simulation_config.get("final_soc_floor_percent"),
+        "finalSocTargetPercent": simulation_config.get(
+            "final_soc_target_percent",
+            simulation_config.get("final_soc_floor_percent"),
+        ),
+        "finalSocTargetTolerancePercent": simulation_config.get(
+            "final_soc_target_tolerance_percent",
+            0.0,
+        ),
+        "initialIceFuelPercent": simulation_config.get("initial_ice_fuel_percent", 100.0),
+        "minIceFuelPercent": simulation_config.get("min_ice_fuel_percent", 10.0),
+        "defaultIceTankCapacityL": simulation_config.get("default_ice_tank_capacity_l", 300.0),
         "pvProfileId": simulation_config.get("pv_profile_id"),
         "weatherMode": simulation_config.get("weather_mode") or "sunny",
         "weatherFactorScalar": simulation_config.get("weather_factor_scalar"),
@@ -1251,6 +1267,11 @@ def _build_quick_setup_payload(
             "depotPowerLimitKw": builder_defaults.get("depotPowerLimitKw"),
             "initialSocPercent": builder_defaults.get("initialSocPercent"),
             "finalSocFloorPercent": builder_defaults.get("finalSocFloorPercent"),
+            "finalSocTargetPercent": builder_defaults.get("finalSocTargetPercent"),
+            "finalSocTargetTolerancePercent": builder_defaults.get("finalSocTargetTolerancePercent"),
+            "initialIceFuelPercent": builder_defaults.get("initialIceFuelPercent"),
+            "minIceFuelPercent": builder_defaults.get("minIceFuelPercent"),
+            "defaultIceTankCapacityL": builder_defaults.get("defaultIceTankCapacityL"),
             "pvProfileId": builder_defaults.get("pvProfileId"),
             "weatherMode": builder_defaults.get("weatherMode") or "sunny",
             "weatherFactorScalar": builder_defaults.get("weatherFactorScalar"),
@@ -1684,6 +1705,18 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["initial_soc_percent"] = float(body.initialSocPercent)
         if body.finalSocFloorPercent is not None:
             simulation_config["final_soc_floor_percent"] = float(body.finalSocFloorPercent)
+        if body.finalSocTargetPercent is not None:
+            simulation_config["final_soc_target_percent"] = float(body.finalSocTargetPercent)
+        if body.finalSocTargetTolerancePercent is not None:
+            simulation_config["final_soc_target_tolerance_percent"] = float(
+                body.finalSocTargetTolerancePercent
+            )
+        if body.initialIceFuelPercent is not None:
+            simulation_config["initial_ice_fuel_percent"] = float(body.initialIceFuelPercent)
+        if body.minIceFuelPercent is not None:
+            simulation_config["min_ice_fuel_percent"] = float(body.minIceFuelPercent)
+        if body.defaultIceTankCapacityL is not None:
+            simulation_config["default_ice_tank_capacity_l"] = float(body.defaultIceTankCapacityL)
         if body.objectivePreset is not None:
             simulation_config["objective_preset"] = str(body.objectivePreset)
         if body.pvProfileId is not None:

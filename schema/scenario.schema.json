@@ -43,7 +43,9 @@
         "depot_power_limit_kw": { "type": ["number", "null"], "minimum": 0 },
         "charger_power_limit_kw": { "type": ["number", "null"], "minimum": 0 },
         "initial_soc_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
-        "final_soc_floor_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 }
+        "final_soc_floor_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "final_soc_target_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "final_soc_target_tolerance_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 }
       },
       "additionalProperties": false
     },

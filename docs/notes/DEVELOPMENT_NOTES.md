@@ -1995,8 +1995,14 @@ master-course/
   - 2026-03-23 夜に `bff/mappers/scenario_to_problemdata.py` から route `stopSequence` を graph export context として渡し、SVG 側は actual `band_id` 単位で再 grouping するよう修正した。これで route 軸は当該路線の stop だけになり、上り/下り/区間便/入出庫便は同一路線グラフへ統合、ICE/BEV は色系統と type legend で識別できる。
   - その後、prepared payload 内の `stop_time_sequences` が stop-level ではなく trip-level 行だったため、中間 stop 時刻が取れていない問題を追加で確認した。`data/catalog-fast/tokyu_bus_data/route_stop_times/{route_id}.jsonl` から selected trip の stop-time を補完するよう変更し、catalog-fast に無い trip だけ route `stopSequence` 上の線形補間へフォールバックするようにした。
   - さらに、stop 軸の順番を adjacency 推定で並べ替えていたため、variant stop が末尾へ落ちる問題を追加で確認した。route `stopSequence` を本線基準でマージする方式へ変更し、区間便は本線の間へ差し込み、本線外 terminal は top/bottom side lane として分離した。
+  - 2026-03-23 18:30 頃、Graph SVG だけ夕方便が欠けて見える問題を追加で確認した。原因は slot index を `00:00` 起点として ISO 化していたことで、実際には `simulation_config.start_time=05:00` 起点の `vehicle_timeline.csv` / `trip_assignment.csv` が stop-time polyline と 5 時間ずれていた点だった。`src/result_exporter.py` で planning start を graph export builder に通し、slot->時刻変換を補正した。
+  - 同時に、route-band SVG の時間軸を常に `00:00-23:59` の full-day 固定へ変更し、plot width を拡大、clip-path を導入して path がフレーム外へ飛んでも表示破綻しないようにした。
+  - さらに、営業所入出庫の条件緩和が図に出ていなかったため、band 図の row 生成を `vehicle_timeline.csv` 全体から vehicle ごとに再構成する方式へ変更した。これにより、その日最初の便の前の `depot_out`、最後の便の後の `depot_in`、同一 band 内の長い空き時間や charge row を挟む temporary depot stay を `弦巻営業所` などの depot side lane として推定描画できるようにした。
+  - side lane label を top/bottom に二重登録して同じ depot 名が軸に 2 回出る不具合も追加で確認し、`_diagram_location_labels()` で重複抑止を入れた。
   - `mixed_event_route_band_detected=true` は「その route graph に出てくる車両が同日に他 band も担当した」ことを示す警告値へ意味を変更した。
-  - 回帰テスト `tests/test_graph_export_route_band_diagrams.py` を追加し、SVG の生成、ICE/BEV 凡例、deadhead/charge 線種、manifest 出力を固定した。
+  - 回帰テスト `tests/test_graph_export_route_band_diagrams.py` を拡張し、SVG の生成、ICE/BEV 凡例、full-day 軸、slot 時刻補正、depot stay 推定、manifest 出力を固定した。
   - 実データ確認:
-    - scenario `2b0a60cf-61ad-4094-807c-f766641984c6` を再実行し、`outputs/tokyu/2026-03-22/optimization/2b0a60cf-61ad-4094-807c-f766641984c6/tsurumaki/WEEKDAY/run_20260323_1800/graph/route_band_diagrams/` に `黒06.svg`, `黒07.svg`, `渋21.svg`, `渋22.svg`, `渋23.svg`, `渋24.svg` が生成されることを確認
-    - `python -m pytest tests` → `64 passed`
+    - scenario `2b0a60cf-61ad-4094-807c-f766641984c6` を `prepared_input_id=prepared-23163ca5b3496ca1`, `tsurumaki`, `WEEKDAY`, `mode_milp_only`, `rebuild_dispatch=false` で再実行し、`outputs/tokyu/2026-03-22/optimization/2b0a60cf-61ad-4094-807c-f766641984c6/tsurumaki/WEEKDAY/run_20260323_1833/graph/route_band_diagrams/` に `黒06.svg`, `黒07.svg`, `渋21.svg`, `渋22.svg`, `渋23.svg`, `渋24.svg` が生成されることを確認
+    - `run_20260323_1833/graph/vehicle_timeline.csv` は `min_start=2026-03-22T05:30:00+09:00`, `max_end=2026-03-22T23:15:00+09:00` で、夕方便が CSV / SVG ともに落ちていないことを確認
+    - `渋22.svg` は `viewBox width=3556`, `plot width=2880`, 軸 `00:00-23:59`, stop 軸末尾 `弦巻営業所`, `stroke-dasharray="8 5"` の depot deadhead と `stroke-dasharray="2 6"` の depot stay を含むことを確認
+    - `python -m pytest tests` → `66 passed`
