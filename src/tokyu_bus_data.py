@@ -92,6 +92,16 @@ def load_summary(dataset_id: str | None = None, *, root: Path | None = None) -> 
     return dict(payload) if isinstance(payload, dict) else {}
 
 
+def load_network_scale_summary(
+    dataset_id: str | None = None,
+    *,
+    root: Path | None = None,
+) -> Dict[str, Any]:
+    summary = load_summary(dataset_id, root=root)
+    payload = summary.get("networkScale")
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
 def load_route_index(dataset_id: str | None = None, *, root: Path | None = None) -> List[Dict[str, Any]]:
     base = _resolve_root(dataset_id, root=root)
     payload = _read_json_cached(str(base / "route_index.json"))

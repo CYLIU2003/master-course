@@ -20,13 +20,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-except ImportError:
-    pass
-
 from ..data_schema import ProblemData
+from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams
 
@@ -50,6 +45,7 @@ def add_soc_threshold_charging_constraints(
     resume_ratio : float
         SOC がこの比率以上に回復するまで充電推奨 (ソフト制約)
     """
+    gp, GRB = ensure_gurobi()
     soc = vars.get("soc")
     z = vars.get("z_charge")
     x = vars.get("x_assign")

@@ -12,6 +12,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from src.tokyu_bus_data import (
     build_timetable_summary_for_scope,
+    load_network_scale_summary,
     load_stop_time_rows_for_scope,
     load_stop_timetable_rows_for_scope,
     load_trip_rows_for_scope,
@@ -297,6 +298,15 @@ def test_build_tokyu_bus_data_generates_route_scoped_files_without_duplication(
     assert result["counts"]["trips"] == 3
     assert result["counts"]["rawTrips"] == 4
     assert result["counts"]["routesWithTrips"] == 2
+    assert result["networkScale"]["tripCountsByDayType"] == {"WEEKDAY": 1, "SAT": 1, "SUN_HOL": 1}
+    assert result["counts"]["trips"] == sum(result["networkScale"]["tripCountsByDayType"].values())
+    assert result["networkScale"]["routesWithTripsByDayType"] == {
+        "WEEKDAY": 1,
+        "SAT": 1,
+        "SUN_HOL": 1,
+    }
+    assert result["networkScale"]["routeVariantStatsByDayType"]["WEEKDAY"]["meanTripsAcrossAllEntities"] == 0.5
+    assert (output_root / "network_summary.json").exists()
     assert len(_read_jsonl(output_root / "route_trips" / "route-1.jsonl")) == 2
     assert len(_read_jsonl(output_root / "route_trips" / "route-2.jsonl")) == 1
 
@@ -318,6 +328,10 @@ def test_tokyu_bus_data_loader_reads_route_scoped_outputs(tmp_path: Path) -> Non
         {
             "generatedAt": "2026-03-22T00:00:00+00:00",
             "counts": {"stops": 2},
+            "networkScale": {
+                "tripCountsByDayType": {"WEEKDAY": 2, "SAT": 1, "SUN_HOL": 0},
+                "routesWithTripsByDayType": {"WEEKDAY": 1, "SAT": 1, "SUN_HOL": 0},
+            },
         },
     )
     _write_json(
@@ -365,6 +379,10 @@ def test_tokyu_bus_data_loader_reads_route_scoped_outputs(tmp_path: Path) -> Non
     )
 
     assert tokyu_bus_data_ready(root=root)
+    assert load_network_scale_summary(dataset_id="tokyu_full", root=root) == {
+        "tripCountsByDayType": {"WEEKDAY": 2, "SAT": 1, "SUN_HOL": 0},
+        "routesWithTripsByDayType": {"WEEKDAY": 1, "SAT": 1, "SUN_HOL": 0},
+    }
     assert route_trip_counts_by_day_type(dataset_id="tokyu_full", route_ids=["route-1"], depot_ids=None, root=root) == {
         "route-1": {"WEEKDAY": 2, "SAT": 1, "SUN_HOL": 0}
     }

@@ -3,17 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Protocol, Set, Tuple
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-
-    _GUROBI_AVAILABLE = True
-except Exception:  # pragma: no cover
-    gp = None
-    GRB = None
-    _GUROBI_AVAILABLE = False
-
 from src.dispatch.models import DutyLeg, VehicleDuty
+from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.milp.model_builder import MILPModelBuilder
 
@@ -70,7 +61,7 @@ class GurobiMILPAdapter:
         problem: CanonicalOptimizationProblem,
         config: OptimizationConfig,
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
-        if not _GUROBI_AVAILABLE:
+        if not is_gurobi_available():
             baseline = problem.baseline_plan or AssignmentPlan()
             return (
                 MILPSolverOutcome(
@@ -81,6 +72,7 @@ class GurobiMILPAdapter:
                 baseline,
             )
 
+        gp, GRB = ensure_gurobi()
         model = gp.Model("optimization_milp_adapter")
         model.Params.OutputFlag = 0
         model.Params.TimeLimit = max(1, int(config.time_limit_sec))
@@ -183,8 +175,49 @@ class GurobiMILPAdapter:
             for vehicle in problem.vehicles
             if vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}
         ]
+        electric_vehicle_ids = set(bev_ids)
         slot_indices = sorted({slot.slot_index for slot in problem.price_slots})
         timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
+        electric_trip_kwh_by_slot: Dict[int, List[Tuple[float, Tuple[str, str]]]] = {
+            slot_idx: [] for slot_idx in slot_indices
+        }
+        electric_deadhead_kwh_by_slot: Dict[int, List[Tuple[float, Tuple[str, str, str]]]] = {
+            slot_idx: [] for slot_idx in slot_indices
+        }
+        for vehicle in problem.vehicles:
+            if vehicle.vehicle_id not in electric_vehicle_ids:
+                continue
+            for trip in problem.trips:
+                key = (vehicle.vehicle_id, trip.trip_id)
+                if key not in y:
+                    continue
+                trip_slot_indices = self._slot_indices_for_interval(
+                    problem,
+                    trip.departure_min,
+                    trip.arrival_min,
+                )
+                if not trip_slot_indices:
+                    continue
+                energy_per_slot = max(trip.energy_kwh, 0.0) / len(trip_slot_indices)
+                if energy_per_slot <= 0.0:
+                    continue
+                for slot_idx in trip_slot_indices:
+                    electric_trip_kwh_by_slot.setdefault(slot_idx, []).append((energy_per_slot, key))
+            for vehicle_id, from_trip_id, to_trip_id in arc_pairs:
+                if vehicle_id != vehicle.vehicle_id:
+                    continue
+                deadhead_kwh = self._deadhead_energy_kwh(
+                    problem,
+                    vehicle.vehicle_type,
+                    from_trip_id,
+                    to_trip_id,
+                )
+                if deadhead_kwh <= 0.0:
+                    continue
+                slot_idx = self._slot_index(problem, trip_by_id[to_trip_id].departure_min)
+                electric_deadhead_kwh_by_slot.setdefault(slot_idx, []).append(
+                    (deadhead_kwh, (vehicle_id, from_trip_id, to_trip_id))
+                )
 
         c_var: Dict[Tuple[str, int], Any] = {}
         d_var: Dict[Tuple[str, int], Any] = {}
@@ -320,11 +353,20 @@ class GurobiMILPAdapter:
                 # C19: period average demand (one slot period).
                 model.addConstr(p_avg_var[slot_idx] == g_var[slot_idx] / timestep_h)
 
-                # C20/C21: on/off peak maximum demand.
+                operating_kwh_expr = gp.quicksum(
+                    coeff * y[key]
+                    for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, [])
+                ) + gp.quicksum(
+                    coeff * x[key]
+                    for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, [])
+                )
+                operating_kw_expr = operating_kwh_expr / timestep_h
+
+                # C20/C21: on/off peak maximum demand tracked on BEV operating demand.
                 if slot_idx in on_peak_slots:
-                    model.addConstr(w_on_var >= p_avg_var[slot_idx])
+                    model.addConstr(w_on_var >= operating_kw_expr)
                 if slot_idx in off_peak_slots:
-                    model.addConstr(w_off_var >= p_avg_var[slot_idx])
+                    model.addConstr(w_off_var >= operating_kw_expr)
 
         unserved_penalty_weight = max(problem.objective_weights.unserved, 10000.0)
         objective_mode = normalize_objective_mode(problem.scenario.objective_mode)
@@ -333,10 +375,16 @@ class GurobiMILPAdapter:
         vehicle_weight = max(problem.objective_weights.vehicle, 0.0)
 
         objective = gp.LinExpr()
-        # O2: strict TOU energy purchase cost.
+        # O2: BEV traction energy cost (charging itself is not monetized).
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
-        for slot_idx, g in g_var.items():
-            objective += energy_weight * price_by_slot.get(slot_idx, 0.0) * g
+        for slot_idx in slot_indices:
+            price = price_by_slot.get(slot_idx, 0.0)
+            if price <= 0.0:
+                continue
+            for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, []):
+                objective += energy_weight * price * coeff * y[key]
+            for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
+                objective += energy_weight * price * coeff * x[key]
 
         # O1: ICE fuel cost (revenue + deadhead).
         diesel_price = max(problem.scenario.diesel_price_yen_per_l, 0.0)
@@ -407,12 +455,15 @@ class GurobiMILPAdapter:
                 )
                 dh_km = (dh_min / 60.0) * 20.0
                 objective += co2_price * ice_co2_kg_per_l * dh_km * fuel_rate * var
-            # Grid CO₂ from electricity purchase (co2_factor is kg/kWh; g_var is kWh).
+            # BEV traction CO₂ (co2_factor is kg/kWh; slot totals are kWh).
             co2_by_slot = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
-            for slot_idx, g in g_var.items():
+            for slot_idx in slot_indices:
                 co2_factor = co2_by_slot.get(slot_idx, 0.0)
                 if co2_factor > 0:
-                    objective += co2_price * co2_factor * g
+                    for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, []):
+                        objective += co2_price * co2_factor * coeff * y[key]
+                    for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
+                        objective += co2_price * co2_factor * coeff * x[key]
 
         # Battery degradation cost: added when weights.degradation > 0.
         # degradation_cost ≈ (charged_kwh / capacity_kwh) * unit_cost_per_cycle
@@ -538,6 +589,19 @@ class GurobiMILPAdapter:
         if adjusted < start_min:
             adjusted += 24 * 60
         return (adjusted - start_min) // timestep_min
+
+    def _slot_indices_for_interval(
+        self,
+        problem: CanonicalOptimizationProblem,
+        departure_min: int,
+        arrival_min: int,
+    ) -> Tuple[int, ...]:
+        start_idx = self._slot_index(problem, departure_min)
+        adjusted_arrival = max(arrival_min - 1, departure_min)
+        end_idx = self._slot_index(problem, adjusted_arrival)
+        if end_idx < start_idx:
+            end_idx = start_idx
+        return tuple(range(start_idx, end_idx + 1))
 
     def _charge_power_max_kw(self, problem: CanonicalOptimizationProblem, vehicle_type: str) -> float:
         vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type), None)

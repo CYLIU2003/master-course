@@ -17,31 +17,17 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-    _GUROBI_AVAILABLE = True
-except (ImportError, Exception):
-    _GUROBI_AVAILABLE = False
-
 from .data_loader import load_problem_data
 from .data_schema import ProblemData
-from .milp_model import MILPResult, build_milp_model, extract_result, _ensure_gurobi
+from .gurobi_runtime import ensure_gurobi, is_gurobi_available as runtime_is_gurobi_available
+from .milp_model import MILPResult, build_milp_model, extract_result
 from .model_sets import ModelSets, build_model_sets
 from .parameter_builder import DerivedParams, build_derived_params
 
 
 def is_gurobi_available() -> bool:
     """Check if gurobipy is available, retrying import if it failed at startup."""
-    global _GUROBI_AVAILABLE
-    if _GUROBI_AVAILABLE:
-        return True
-    try:
-        _ensure_gurobi()
-        _GUROBI_AVAILABLE = True
-        return True
-    except Exception:
-        return False
+    return runtime_is_gurobi_available()
 
 
 def run_milp(
@@ -122,6 +108,8 @@ def run_milp_from_data(
     """
     if not is_gurobi_available():
         return MILPResult(status="GUROBI_UNAVAILABLE")
+
+    gp, _ = ensure_gurobi()
 
     # --- モデル構築 ---
     try:

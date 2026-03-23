@@ -19,18 +19,11 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .data_schema import ProblemData
+from .gurobi_runtime import ensure_gurobi, is_gurobi_available
 from .milp_model import MILPResult
 from .model_sets import ModelSets
 from .objective_modes import normalize_objective_mode
-from .parameter_builder import DerivedParams, get_grid_price
-
-_GUROBI_AVAILABLE = False
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-    _GUROBI_AVAILABLE = True
-except ImportError:
-    pass
+from .parameter_builder import DerivedParams, get_grid_price, resolve_vehicle_energy_site_id
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +81,33 @@ def _average_grid_co2_factor(
             if float(value) > 0.0
         )
     return (sum(factors) / len(factors)) if factors else 0.0
+
+
+def _bev_operating_energy_kwh_by_site(
+    sol: AssignmentSolution,
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+) -> Dict[str, List[float]]:
+    profile: Dict[str, List[float]] = {}
+    for vehicle_id in ms.K_BEV:
+        assigned_tasks = sol.get_tasks_for_vehicle(vehicle_id)
+        if not assigned_tasks:
+            continue
+        site_id = resolve_vehicle_energy_site_id(ms, dp, vehicle_id)
+        if not site_id:
+            continue
+        series = profile.setdefault(site_id, [0.0] * data.num_periods)
+        for task_id in assigned_tasks:
+            energy_per_slot = dp.task_energy_per_slot.get(task_id, [])
+            for t_idx in ms.T:
+                if t_idx >= len(energy_per_slot):
+                    continue
+                energy_kwh = float(energy_per_slot[t_idx] or 0.0)
+                if energy_kwh <= 0.0:
+                    continue
+                series[t_idx] += energy_kwh
+    return profile
 
 
 def _assignment_ice_co2_kg(
@@ -285,7 +305,7 @@ def evaluate_assignment(
 
     実行不能は (inf, None)。
     """
-    if _GUROBI_AVAILABLE:
+    if is_gurobi_available():
         return _evaluate_with_gurobi(sol, data, ms, dp)
     else:
         return _evaluate_heuristic(sol, data, ms, dp)
@@ -298,6 +318,7 @@ def _evaluate_with_gurobi(
     dp: DerivedParams,
 ) -> Tuple[float, Optional[Dict[str, Any]]]:
     """Gurobi で内側 LP を解く"""
+    gp, GRB = ensure_gurobi()
     T = ms.T
     K_BEV = ms.K_BEV
     K_ALL = ms.K_ALL
@@ -330,15 +351,19 @@ def _evaluate_with_gurobi(
     # ---------- 目的関数 ----------
     obj = gp.LinExpr()
     objective_mode = _objective_mode(data)
+    operating_energy_kwh_by_site = _bev_operating_energy_kwh_by_site(sol, data, ms, dp)
 
-    for site_id in I_CHARGE:
+    for site_id, energy_series in operating_energy_kwh_by_site.items():
         for t in T:
+            energy_kwh = energy_series[t] if t < len(energy_series) else 0.0
+            if energy_kwh <= 0.0:
+                continue
             if objective_mode == "co2":
                 co2_factor = float(dp.grid_co2_factor.get(site_id, {}).get(t, 0.0) or 0.0)
-                obj += co2_factor * p_grid[site_id, t] * delta_h
+                obj += co2_factor * energy_kwh
             else:
                 price = get_grid_price(dp, site_id, t)
-                obj += price * p_grid[site_id, t] * delta_h
+                obj += price * energy_kwh
 
     if objective_mode != "co2":
         # 車両使用固定費
@@ -455,11 +480,10 @@ def _evaluate_with_gurobi(
                     name=f"power_bal_{site_id}_{t}",
                 )
 
-            # ピーク需要
-            model.addConstr(
-                peak[site_id] >= p_grid[site_id, t],
-                name=f"peak_{site_id}_{t}",
-            )
+            operating_kw = 0.0
+            if site_id in operating_energy_kwh_by_site and t < len(operating_energy_kwh_by_site[site_id]):
+                operating_kw = operating_energy_kwh_by_site[site_id][t] / delta_h
+            model.addConstr(peak[site_id] >= operating_kw, name=f"peak_{site_id}_{t}")
 
     # 系統受電上限
     for site_id in I_CHARGE:
@@ -548,6 +572,7 @@ def _evaluate_heuristic(
     total_cost = 0.0
     total_grid_kwh = 0.0
     soc_series: Dict[str, List[float]] = {}
+    operating_energy_kwh_by_site = _bev_operating_energy_kwh_by_site(sol, data, ms, dp)
 
     for k in K_BEV:
         veh = dp.vehicle_lut[k]
@@ -579,23 +604,23 @@ def _evaluate_heuristic(
         if sol.get_tasks_for_vehicle(k):
             total_cost += veh.fixed_use_cost
 
-    # 簡易電力コスト
-    for site_id in ms.I_CHARGE:
+    peak_kw = 0.0
+    total_co2_kg = _assignment_ice_co2_kg(sol, dp)
+    for site_id, energy_series in operating_energy_kwh_by_site.items():
         for t in T:
-            price = get_grid_price(dp, site_id, t)
-            # 全充電必要量を均等分配 (概算)
+            energy_kwh = energy_series[t] if t < len(energy_series) else 0.0
+            if energy_kwh <= 0.0:
+                continue
+            total_grid_kwh += energy_kwh
+            kw = energy_kwh / delta_h if delta_h > 0 else 0.0
+            if kw > peak_kw:
+                peak_kw = kw
+            total_co2_kg += float(dp.grid_co2_factor.get(site_id, {}).get(t, 0.0) or 0.0) * energy_kwh
+            if objective_mode != "co2":
+                total_cost += get_grid_price(dp, site_id, t) * energy_kwh
 
-    # 概算: 全タスクの消費量 × 平均料金
-    total_energy = sum(dp.task_energy_bev.get(r, 0.0) for r in list(sol.assignment.keys()))
-    avg_price = 25.0
-    if ms.I_CHARGE and T:
-        prices = [get_grid_price(dp, ms.I_CHARGE[0], t) for t in T]
-        avg_price = sum(prices) / len(prices) if prices else 25.0
-    total_grid_kwh = total_energy
-    total_cost += total_grid_kwh * avg_price
-
-    avg_grid_co2 = _average_grid_co2_factor(ms, dp)
-    total_co2_kg = _assignment_ice_co2_kg(sol, dp) + total_grid_kwh * avg_grid_co2
+    if objective_mode != "co2" and data.enable_demand_charge:
+        total_cost += float(data.demand_charge_rate_per_kw or 0.0) * peak_kw
     objective_value = total_co2_kg if objective_mode == "co2" else total_cost
 
     details = {

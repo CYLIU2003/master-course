@@ -195,6 +195,23 @@ def get_base_load(dp: DerivedParams, site_id: str, t_idx: int) -> float:
     return dp.base_load_kw.get(site_id, {}).get(t_idx, 0.0)
 
 
+def resolve_vehicle_energy_site_id(
+    ms: ModelSets,
+    dp: DerivedParams,
+    vehicle_id: str,
+) -> str:
+    """Return the site whose tariff should be used for a vehicle's traction energy."""
+    vehicle = dp.vehicle_lut.get(vehicle_id)
+    home_depot = str(getattr(vehicle, "home_depot", "") or "").strip()
+    if home_depot and (home_depot in dp.grid_price or home_depot in dp.site_lut or home_depot in ms.I_CHARGE):
+        return home_depot
+    for site_id in ms.I_CHARGE:
+        normalized = str(site_id or "").strip()
+        if normalized:
+            return normalized
+    return home_depot
+
+
 def compute_safe_big_m(data: ProblemData) -> float:
     """
     Big-M の安全上界を計算する。

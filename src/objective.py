@@ -23,15 +23,10 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-except ImportError:
-    pass
-
 from .data_schema import ProblemData
+from .gurobi_runtime import ensure_gurobi
 from .model_sets import ModelSets
-from .parameter_builder import DerivedParams, get_grid_price
+from .parameter_builder import DerivedParams, get_grid_price, resolve_vehicle_energy_site_id
 
 
 def build_objective(
@@ -55,6 +50,7 @@ def build_objective(
     dp    : DerivedParams
     vars  : 変数辞書
     """
+    gp, GRB = ensure_gurobi()
     w = data.objective_weights
     K_ALL = ms.K_ALL
     K_BEV = ms.K_BEV
@@ -65,14 +61,11 @@ def build_objective(
 
     x     = vars["x_assign"]
     u     = vars.get("u_vehicle")
-    p     = vars.get("p_charge")
     p_grid = vars.get("p_grid_import")
     peak  = vars.get("peak_demand")
     deg   = vars.get("deg")
     slack_cover = vars.get("slack_cover")
     slack_soc   = vars.get("slack_soc")
-
-    delta_h = data.delta_t_hour
 
     obj_expr = gp.LinExpr()
     obj_terms: Dict[str, Any] = {}
@@ -93,27 +86,23 @@ def build_objective(
         _append_term("vehicle_fixed_cost", term)
 
     # ===== w2: 電力量料金 =====
-    if w.get("electricity_cost", 0.0) > 0 and p_grid is not None:
-        # depot サイトの電力料金を集計
+    if w.get("electricity_cost", 0.0) > 0:
+        # BEV は「充電量」ではなく「走行で消費した電力量」で課金する。
+        # 充電は SOC feasibility のためだけに残し、追加コストは課さない。
         term = gp.LinExpr()
-        for site_id in ms.I_CHARGE:
-            for t in T:
-                price = get_grid_price(dp, site_id, t)
-                # p_grid は kW 単位。エネルギー = p_grid * delta_h [kWh]
-                term += w["electricity_cost"] * price * p_grid[site_id, t] * delta_h
-        _append_term("electricity_cost", term)
-
-    # p_grid がない場合の代替: p_charge から直接集計
-    if w.get("electricity_cost", 0.0) > 0 and p_grid is None and p is not None:
-        term = gp.LinExpr()
-        for site_id in ms.I_CHARGE:
-            for t in T:
-                price = get_grid_price(dp, site_id, t)
-                site_chargers = ms.C_at_site.get(site_id, [])
-                for k in K_BEV:
-                    for c in site_chargers:
-                        if c in ms.vehicle_charger_feasible.get(k, set()):
-                            term += w["electricity_cost"] * price * p[k, c, t] * delta_h
+        for k in K_BEV:
+            site_id = resolve_vehicle_energy_site_id(ms, dp, k)
+            feasible_tasks = ms.vehicle_task_feasible.get(k, set())
+            for r in feasible_tasks:
+                energy_per_slot = dp.task_energy_per_slot.get(r, [])
+                for t in T:
+                    if t >= len(energy_per_slot):
+                        continue
+                    energy_kwh = float(energy_per_slot[t] or 0.0)
+                    if energy_kwh <= 0.0:
+                        continue
+                    price = get_grid_price(dp, site_id, t)
+                    term += w["electricity_cost"] * price * energy_kwh * x[k, r]
         _append_term("electricity_cost", term)
 
     # ===== w3: デマンド料金 =====
@@ -173,36 +162,27 @@ def build_objective(
                     fuel_l = dp.task_fuel_ice.get(r, 0.0)
                     co2_kg = co2_coeff * fuel_l
                     term += w["emission_cost"] * co2_price_per_kg * co2_kg * x[k, r]
-        if p_grid is not None:
-            for site_id in ms.I_CHARGE:
+        for k in K_BEV:
+            site_id = resolve_vehicle_energy_site_id(ms, dp, k)
+            feasible_tasks = ms.vehicle_task_feasible.get(k, set())
+            for r in feasible_tasks:
+                energy_per_slot = dp.task_energy_per_slot.get(r, [])
                 for t in T:
+                    if t >= len(energy_per_slot):
+                        continue
                     co2_factor = dp.grid_co2_factor.get(site_id, {}).get(t, 0.0)
                     if co2_factor <= 0:
+                        continue
+                    energy_kwh = float(energy_per_slot[t] or 0.0)
+                    if energy_kwh <= 0.0:
                         continue
                     term += (
                         w["emission_cost"]
                         * co2_price_per_kg
                         * co2_factor
-                        * p_grid[site_id, t]
-                        * delta_h
+                        * energy_kwh
+                        * x[k, r]
                     )
-        elif p is not None:
-            for site_id in ms.I_CHARGE:
-                site_chargers = ms.C_at_site.get(site_id, [])
-                for t in T:
-                    co2_factor = dp.grid_co2_factor.get(site_id, {}).get(t, 0.0)
-                    if co2_factor <= 0:
-                        continue
-                    for k in K_BEV:
-                        for c in site_chargers:
-                            if c in ms.vehicle_charger_feasible.get(k, set()):
-                                term += (
-                                    w["emission_cost"]
-                                    * co2_price_per_kg
-                                    * co2_factor
-                                    * p[k, c, t]
-                                    * delta_h
-                                )
         _append_term("emission_cost", term)
 
     # ===== w8: 未割当ペナルティ =====

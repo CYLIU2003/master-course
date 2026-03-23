@@ -249,6 +249,7 @@ def test_build_quick_setup_payload_falls_back_to_route_trip_count_when_shards_un
 
     # Shards NOT available
     monkeypatch.setattr(scenarios, "shard_runtime_ready", lambda dataset_id: False)
+    monkeypatch.setattr(scenarios, "tokyu_bus_data_ready", lambda dataset_id: False)
 
     payload = scenarios._build_quick_setup_payload(
         scenario,
@@ -273,6 +274,106 @@ def test_build_quick_setup_payload_falls_back_to_route_trip_count_when_shards_un
     assert route_b["tripCount"] == 3
     assert route_b["tripCountTotal"] == 3
     assert route_b["tripCountsByDayType"] == {}
+
+
+def test_build_quick_setup_payload_uses_tokyu_bus_data_when_shards_unavailable(
+    monkeypatch,
+) -> None:
+    doc = {
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [
+            {
+                "id": "route-a",
+                "depotId": "dep1",
+                "routeCode": "黒01",
+                "routeFamilyCode": "黒01",
+                "name": "黒01",
+                "tripCount": 999,
+            },
+            {
+                "id": "route-b",
+                "depotId": "dep1",
+                "routeCode": "黒02",
+                "routeFamilyCode": "黒02",
+                "name": "黒02",
+                "tripCount": 999,
+            },
+        ],
+        "route_depot_assignments": [],
+        "vehicles": [],
+        "chargers": [],
+        "vehicle_templates": [],
+        "scenario_overlay": {"dataset_id": "tokyu_full"},
+        "simulation_config": {},
+        "calendar": [
+            {"service_id": "WEEKDAY", "name": "平日"},
+            {"service_id": "SAT", "name": "土曜"},
+        ],
+    }
+    scenario = {
+        "id": "scenario-bus-data",
+        "name": "Scenario Bus Data",
+        "operatorId": "tokyu",
+        "datasetVersion": "v1",
+        "datasetId": "tokyu_full",
+        "status": "draft",
+        "feedContext": {},
+        "stats": {},
+    }
+    dispatch_scope = {
+        "serviceId": "SAT",
+        "effectiveRouteIds": ["route-a", "route-b"],
+        "depotSelection": {"depotIds": ["dep1"], "primaryDepotId": "dep1"},
+        "routeSelection": {"mode": "refine", "includeRouteIds": [], "excludeRouteIds": []},
+        "serviceSelection": {"serviceIds": ["SAT"]},
+        "tripSelection": {"includeDeadhead": True},
+    }
+
+    monkeypatch.setattr(scenarios, "shard_runtime_ready", lambda dataset_id: False)
+    monkeypatch.setattr(scenarios, "tokyu_bus_data_ready", lambda dataset_id: dataset_id == "tokyu_full")
+    monkeypatch.setattr(
+        scenarios,
+        "_build_timetable_summary_for_scope_from_tokyu_bus_data",
+        lambda **_kwargs: {
+            "routeServiceCounts": {
+                "WEEKDAY": {"route-a": 5, "route-b": 1},
+                "SAT": {"route-b": 2},
+            },
+            "byService": [
+                {"serviceId": "WEEKDAY", "rowCount": 6, "routeCount": 2},
+                {"serviceId": "SAT", "rowCount": 2, "routeCount": 1},
+            ],
+        },
+    )
+
+    payload = scenarios._build_quick_setup_payload(
+        scenario,
+        doc,
+        dispatch_scope,
+        selected_depot_ids=["dep1"],
+        route_limit=20,
+    )
+
+    assert [item["id"] for item in payload["routes"]] == ["route-b"]
+    assert payload["routes"][0]["tripCount"] == 2
+    assert payload["routes"][0]["tripCountSelectedDay"] == 2
+    assert payload["routes"][0]["tripCountTotal"] == 3
+    assert payload["dayTypeSummaries"] == [
+        {
+            "serviceId": "WEEKDAY",
+            "label": "平日",
+            "routeCount": 2,
+            "tripCount": 6,
+            "selected": False,
+        },
+        {
+            "serviceId": "SAT",
+            "label": "土曜",
+            "routeCount": 1,
+            "tripCount": 2,
+            "selected": True,
+        },
+    ]
 
 
 def test_build_quick_setup_payload_filters_routes_by_selected_day_type_and_exposes_summaries(

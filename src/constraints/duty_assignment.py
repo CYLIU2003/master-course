@@ -15,13 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-except ImportError:
-    pass
-
 from ..data_schema import ProblemData
+from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams
 from ..schemas.duty_entities import VehicleDuty, DutyAssignmentConfig
@@ -52,6 +47,7 @@ def add_duty_assignment_constraints(
     -------
     Dict[str, Any] : 追加変数辞書 {y_duty_assign, ...}
     """
+    gp, GRB = ensure_gurobi()
     if config is None:
         config = DutyAssignmentConfig(enabled=True)
 

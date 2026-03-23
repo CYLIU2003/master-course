@@ -8,13 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-except ImportError:
-    pass
-
 from ..data_schema import ProblemData
+from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams
 
@@ -33,6 +28,7 @@ def add_battery_degradation_constraints(
       p_charge : p_charge[k, c, t]  [kW]
       deg      : deg[k, t]          [円/slot]  (劣化コスト)
     """
+    gp, _ = ensure_gurobi()
     if not data.enable_battery_degradation:
         return
 

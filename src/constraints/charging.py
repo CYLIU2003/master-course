@@ -11,13 +11,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-except ImportError:
-    pass
-
 from ..data_schema import ProblemData
+from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams
 
@@ -37,6 +32,7 @@ def add_charging_constraints(
       z_charge  : z[k, c, t]
       p_charge  : p_charge[k, c, t]
     """
+    gp, _ = ensure_gurobi()
     x = vars["x_assign"]
     z = vars["z_charge"]          # z[k, c, t]
     p = vars["p_charge"]          # p[k, c, t]  [kW]
@@ -118,6 +114,7 @@ def add_soc_constraints(
       soc       : soc[k, t]          [kWh]
       slack_soc : slack_soc[k, t]    (任意)
     """
+    gp, _ = ensure_gurobi()
     x      = vars["x_assign"]
     p      = vars["p_charge"]
     soc    = vars["soc"]

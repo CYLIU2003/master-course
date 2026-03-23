@@ -12,13 +12,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-except ImportError:
-    pass
-
 from ..data_schema import ProblemData
+from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams
 
@@ -40,6 +35,7 @@ def add_v2g_constraints(
       p_discharge  : p_discharge[k, c, t] [kW]
       soc          : soc[k, t]
     """
+    gp, _ = ensure_gurobi()
     if not data.enable_v2g:
         return
 

@@ -81,12 +81,13 @@ tests/       回帰テスト
 - **対応**:
   - `src/model_factory.py` の不要な `import gurobipy` を削除し、Gurobi import は `src.milp_model.build_milp_model()` 側に一本化した。
   - `src/milp_model.py` に runtime bootstrap を追加し、Windows では `GUROBI_HOME` 候補配下の `bin` を `PATH` / `os.add_dll_directory()` に補完し、`GRB_LICENSE_FILE` も既定候補から自動解決するようにした。
+  - さらに `site.getsitepackages()` / `getusersitepackages()` / `sys.prefix` 由来の `site-packages` を solve 時に再探索して `sys.path` へ補完し、`run_app.py` 経由で `No module named 'gurobipy'` になるケースも潰した。
   - `src/pipeline/solve.py` は solver 例外時に例外クラス名を含めて記録するようにし、将来 `GUROBI_UNAVAILABLE` が出ても原因追跡しやすくした。
 
 - **検証**:
   - shell から `gurobipy 13.0.1` import と簡易モデル optimize が通ることを確認した。
   - 弦巻 `WEEKDAY` 実データでも BFF と同じ ProblemData 経路から solver 実行に入り、`GUROBI_UNAVAILABLE` ではなく `TIME_LIMIT` まで進むことを確認した。
-  - `tests/test_model_factory_gurobi_import.py` を追加し、`build_model_by_mode()` が直接 `gurobipy` import に依存しないことを固定した。
+  - `tests/test_model_factory_gurobi_import.py` を追加し、`build_model_by_mode()` が直接 `gurobipy` import に依存しないこと、および solve 時の `site-packages` 補完が効くことを固定した。
 
 ### [DEV-2026-03-22] Quick Setup が全 route を誤表示し、Prepare が `tripCount=0` になりやすい問題を修正
 
@@ -1921,3 +1922,52 @@ master-course/
   - `mode_milp_only` 実行時の `solver_result.infeasibility_info = "Name too long (maximum name length is 255 characters)"` を確認。
   - 原因は `src/optimization/milp/solver_adapter.py` の Gurobi 変数名に `vehicle_id/trip_id` を長文字列で埋め込んでいたこと。
   - 対策として MILP変数生成時の `name=...` 指定を除去し、自動命名へ変更して名称長制限を回避した。
+
+- 2026-03-22 (Gurobi late-import stabilization across MILP/ALNS/constraints)
+  - `run_app.py` 再起動後の `mode_milp_only` で `solver_result.infeasibility_info = "NameError: name 'gp' is not defined"` を確認。
+  - 原因は `src/constraints/*` と `src/objective.py` がモジュール読込時の `try: import gurobipy as gp` に失敗したまま `gp` 未定義で残り、`src/milp_model.py` 側だけ solve 時に import 復旧しても stale import が解消されなかったこと。
+  - `src/gurobi_runtime.py` を追加し、Gurobi site-packages / DLL path / license 補完と `ensure_gurobi()` を共通化した。
+  - `src/milp_model.py`, `src/objective.py`, `src/solver_runner.py`, `src/solver_alns.py`, `src/optimization/milp/solver_adapter.py`, `src/constraints/assignment.py`, `src/constraints/battery_degradation.py`, `src/constraints/charger_capacity.py`, `src/constraints/charging.py`, `src/constraints/duty_assignment.py`, `src/constraints/energy_balance.py`, `src/constraints/optional_v2g.py`, `src/constraints/pv_grid.py`, `src/constraints/soc_threshold_charging.py` を修正し、Gurobi 参照をすべて呼び出し時の `ensure_gurobi()` 経由へ統一した。
+  - `tests/test_model_factory_gurobi_import.py` に constraints / objective の late-binding 回帰テストを追加した。
+  - 確認:
+    - `python -m pytest tests -q` → `50 passed`
+    - scenario `2b0a60cf-61ad-4094-807c-f766641984c6` を同じ `tsurumaki` / `WEEKDAY` / `mode_milp_only` で direct smoke 実行 → Gurobi ライセンス読込成功、`status='OPTIMAL'`, `infeasibility_info=''`
+
+- 2026-03-23 (Quick Setup trip counts now use `tokyu_bus_data` when shard runtime is unavailable)
+  - Quick Setup の運行種別サマリーと営業所路線選択で `routes=0 / trips=0` になる原因は、`bff/routers/scenarios.py` が `shard_runtime_ready(dataset_id)` を満たさないと day-type summary を一切作らず、route list 側だけ `route.tripCount` 総数にフォールバックしていたこと。
+  - `bff/routers/scenarios.py` に `build_timetable_summary_for_scope()` ラッパーを追加し、`data/catalog-fast/tokyu_bus_data` を優先、次に legacy shard runtime を使う順へ変更した。
+  - `_route_trip_inventory_for_quick_setup()` は shard readiness に依存せず dataset summary を引くよう修正し、`_shard_scope_params()` も dataset が分かれば summary endpoint から `tokyu_bus_data` に到達できるようにした。
+  - これにより Quick Setup の `dayTypeSummaries` と route list の `tripCount/tripCountSelectedDay/tripCountTotal` が同じ day-type 別集計を使うようになった。
+  - 実データ確認: scenario `2b0a60cf-61ad-4094-807c-f766641984c6` / depot `tsurumaki` で `dayTypeSummaries = SAT 714 / SUN_HOL 754 / WEEKDAY 974`、route list 先頭も `tripCountSelectedDay` が非 0 で返ることを確認。
+  - 追加テスト: `tests/test_quick_setup_route_selection.py` に `tokyu_bus_data` fallback ケースを追加。
+  - 確認:
+    - `python -m pytest tests -q` → `51 passed`
+
+- 2026-03-23 (Tokyu 全体便数の presentation 向け network scale を `tokyu_bus_data` に追加)
+  - 問題は `data/catalog-fast/tokyu_bus_data/summary.json` の `counts.trips=33360` が「平日便数」に見えやすいことだった。実際にはこれは `WEEKDAY/SAT/SUN_HOL` を全部足した総 trip 数で、weekday-only の値ではない。
+  - `scripts/build_tokyu_bus_data.py` を修正し、summary に `countSemantics` と `networkScale` を追加した。`networkScale` には day-type 別総便数、day-type 別 active route 数、weekday 比率、route-variant / route-family の分布統計、day-type 別の上位 route variants を持たせた。
+  - `data/catalog-fast/tokyu_bus_data/network_summary.json` も追加生成するようにし、presentation 用の規模感だけを summary 本体から独立して読みやすくした。
+  - `src/tokyu_bus_data.py` に `load_network_scale_summary()` を追加し、将来 UI/API 側が `summary.json` のネスト構造に直接依存しなくてよいようにした。
+  - 実データ再集計結果:
+    - route variants: `764`
+    - families: `184`
+    - weekday trips: `14,437`
+    - saturday trips: `8,477` (`58.72%` of weekday)
+    - sunday/holiday trips: `10,446` (`72.36%` of weekday)
+    - weekday active route variants: `698`
+    - weekday average trips per route variant: `18.90` across all 764 variants / `20.68` across active weekday variants
+  - これで `33360` は「全 day-type 合計」、発表で使う weekday 規模感は `14437` と明示的に区別できるようになった。
+
+- 2026-03-23 (BEV の電気コスト集計を charging-centric から operating-centric へ修正)
+  - 問題は BEV の `energy_cost` / `demand_charge` が「充電したときだけ」発生する設計になっていたことだった。初期 SOC だけで走り切れる解では、BEV が多数運行していても `energy_cost=0`, `demand_charge=0` になり、ICE の fuel cost と対称でなかった。
+  - `src/objective.py` を修正し、legacy MILP の電力量料金と電力由来 CO2 を `p_grid_import` / `p_charge` ではなく `x_assign * task_energy_per_slot` ベースで計上するよう変更した。充電は SOC feasibility のためだけに残し、追加コストは課さない。
+  - `src/constraints/energy_balance.py` の peak tracking も `p_grid_import` ではなく BEV の走行電力需要ベースへ変更し、`demand_charge_cost` が operating demand を見るようにした。
+  - `src/simulator.py` は simulation summary の `total_energy_cost`, `total_demand_charge`, `total_grid_kwh`, `peak_demand_kw` を BEV の走行消費プロファイルから再計算するように変更した。これで solver 後の可視化でも `充電しなかったので電気代 0` にならない。
+  - canonical path とのズレも防ぐため、`src/optimization/common/evaluator.py`, `src/optimization/milp/solver_adapter.py`, `src/solver_alns.py` も同じ operating-centric 基準へ揃えた。ALNS heuristic 側には「全 assigned task を BEV energy に混ぜる」退行もあり、あわせて修正した。
+  - 回帰テスト `tests/test_bev_energy_accounting.py` を追加し、
+    - BEV が charge import に依存せず走行消費分だけ電気代・デマンド料金を持つこと
+    - canonical `CostEvaluator` でも charging slot 無しで BEV energy cost が立つこと
+    を固定した。
+  - 確認:
+    - `python -m pytest tests -q` → `53 passed`
+    - synthetic smoke: `energy_cost=300.0`, `demand_charge=1000.0`, `grid_kwh=20.0`, `peak_kw=10.0`

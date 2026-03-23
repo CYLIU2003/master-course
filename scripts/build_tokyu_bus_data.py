@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import shutil
+import statistics as st
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -22,6 +23,7 @@ TOKYUBUS_CANONICAL_ROOT = REPO_ROOT / "data" / "tokyubus" / "canonical"
 TOKYUBUS_RAW_ROOT = REPO_ROOT / "data" / "tokyubus" / "raw"
 BUILT_DIR = REPO_ROOT / "data" / "built" / "tokyu_full"
 _VN_TRIP_RE = re.compile(r"__v\d+$")
+_SERVICE_IDS = ("WEEKDAY", "SAT", "SUN_HOL")
 
 
 def _iso_now() -> str:
@@ -125,6 +127,67 @@ def _is_vn_duplicate_trip_id(value: Any) -> bool:
     return bool(_VN_TRIP_RE.search(str(value or "").strip()))
 
 
+def _service_trip_counts() -> Dict[str, int]:
+    return {service_id: 0 for service_id in _SERVICE_IDS}
+
+
+def _percentile(sorted_values: list[int], ratio: float) -> int | None:
+    if not sorted_values:
+        return None
+    index = max(0, min(len(sorted_values) - 1, int(len(sorted_values) * ratio) - 1))
+    return sorted_values[index]
+
+
+def _distribution_stats(counts: Iterable[int], *, entity_count: int) -> Dict[str, Any]:
+    normalized = [int(value or 0) for value in counts]
+    active = sorted(value for value in normalized if value > 0)
+    total = sum(normalized)
+    stats: Dict[str, Any] = {
+        "entityCount": entity_count,
+        "activeEntityCount": len(active),
+        "totalTrips": total,
+        "meanTripsAcrossAllEntities": round(total / entity_count, 2) if entity_count > 0 else 0.0,
+        "meanTripsAcrossActiveEntities": round(st.mean(active), 2) if active else 0.0,
+        "medianTripsAcrossActiveEntities": st.median(active) if active else None,
+        "p10TripsAcrossActiveEntities": _percentile(active, 0.10),
+        "p90TripsAcrossActiveEntities": _percentile(active, 0.90),
+        "minTripsAcrossActiveEntities": min(active) if active else None,
+        "maxTripsAcrossActiveEntities": max(active) if active else None,
+    }
+    return stats
+
+
+def _top_route_variants_by_day_type(
+    route_index_items: list[Dict[str, Any]],
+    *,
+    service_id: str,
+    limit: int = 10,
+) -> list[Dict[str, Any]]:
+    ranked: list[Dict[str, Any]] = []
+    for item in route_index_items:
+        trip_count = int((item.get("tripCountsByDayType") or {}).get(service_id) or 0)
+        if trip_count <= 0:
+            continue
+        ranked.append(
+            {
+                "routeId": str(item.get("routeId") or ""),
+                "routeCode": str(item.get("routeCode") or ""),
+                "routeLabel": str(item.get("routeLabel") or ""),
+                "routeFamilyCode": str(item.get("routeFamilyCode") or ""),
+                "depotId": str(item.get("depotId") or ""),
+                "tripCount": trip_count,
+            }
+        )
+    ranked.sort(
+        key=lambda item: (
+            -int(item.get("tripCount") or 0),
+            str(item.get("routeCode") or ""),
+            str(item.get("routeId") or ""),
+        )
+    )
+    return ranked[:limit]
+
+
 def _reset_output_root(output_root: Path) -> None:
     output_root.mkdir(parents=True, exist_ok=True)
     for rel in (
@@ -136,6 +199,7 @@ def _reset_output_root(output_root: Path) -> None:
         "route_index.json",
         "family_index.json",
         "summary.json",
+        "network_summary.json",
     ):
         path = output_root / rel
         if path.exists():
@@ -256,7 +320,7 @@ def build_tokyu_bus_data(
             "routeFamilyCode": route_family_code,
             "routeFamilyLabel": route_family_label,
             "depotId": str(route.get("depotId") or "").strip(),
-            "tripCountsByDayType": {"WEEKDAY": 0, "SAT": 0, "SUN_HOL": 0},
+            "tripCountsByDayType": _service_trip_counts(),
             "firstDepartureByDayType": {},
             "lastArrivalByDayType": {},
             "sampleTripIds": [],
@@ -275,7 +339,7 @@ def build_tokyu_bus_data(
                 "routeIds": [],
                 "routeCodes": [],
                 "depotIds": [],
-                "tripCountsByDayType": {"WEEKDAY": 0, "SAT": 0, "SUN_HOL": 0},
+                "tripCountsByDayType": _service_trip_counts(),
                 "tripFiles": [],
                 "stopTimeFiles": [],
                 "stopTimetableFiles": [],
@@ -541,6 +605,64 @@ def build_tokyu_bus_data(
             }
         )
 
+    trip_counts_by_day_type = _service_trip_counts()
+    routes_with_trips_by_day_type = _service_trip_counts()
+    for item in route_index_items:
+        counts = dict(item.get("tripCountsByDayType") or {})
+        for service_id in _SERVICE_IDS:
+            service_trip_count = int(counts.get(service_id) or 0)
+            trip_counts_by_day_type[service_id] += service_trip_count
+            if service_trip_count > 0:
+                routes_with_trips_by_day_type[service_id] += 1
+
+    families_with_trips_by_day_type = _service_trip_counts()
+    for item in family_index_items:
+        counts = dict(item.get("tripCountsByDayType") or {})
+        for service_id in _SERVICE_IDS:
+            if int(counts.get(service_id) or 0) > 0:
+                families_with_trips_by_day_type[service_id] += 1
+
+    route_variant_stats_by_day_type = {
+        service_id: _distribution_stats(
+            [int((item.get("tripCountsByDayType") or {}).get(service_id) or 0) for item in route_index_items],
+            entity_count=len(route_index_items),
+        )
+        for service_id in _SERVICE_IDS
+    }
+    route_family_stats_by_day_type = {
+        service_id: _distribution_stats(
+            [int((item.get("tripCountsByDayType") or {}).get(service_id) or 0) for item in family_index_items],
+            entity_count=len(family_index_items),
+        )
+        for service_id in _SERVICE_IDS
+    }
+    ratios_vs_weekday = {
+        service_id: round(
+            trip_counts_by_day_type[service_id] / trip_counts_by_day_type["WEEKDAY"],
+            4,
+        )
+        if service_id != "WEEKDAY" and trip_counts_by_day_type["WEEKDAY"] > 0
+        else 1.0
+        if service_id == "WEEKDAY"
+        else None
+        for service_id in _SERVICE_IDS
+    }
+    top_route_variants_by_day_type = {
+        service_id: _top_route_variants_by_day_type(route_index_items, service_id=service_id)
+        for service_id in _SERVICE_IDS
+    }
+    network_scale_summary = {
+        "routeVariantCount": len(route_index_items),
+        "routeFamilyCount": len(family_index_items),
+        "tripCountsByDayType": trip_counts_by_day_type,
+        "routesWithTripsByDayType": routes_with_trips_by_day_type,
+        "familiesWithTripsByDayType": families_with_trips_by_day_type,
+        "ratiosVsWeekday": ratios_vs_weekday,
+        "routeVariantStatsByDayType": route_variant_stats_by_day_type,
+        "routeFamilyStatsByDayType": route_family_stats_by_day_type,
+        "topRouteVariantsByDayType": top_route_variants_by_day_type,
+    }
+
     _write_jsonl_rows(output_root / "routes.jsonl", corrected_routes)
     _write_jsonl_rows(output_root / "stops.jsonl", catalog_stops)
     _json_dump(
@@ -578,8 +700,25 @@ def build_tokyu_bus_data(
             "rawTrips": _int_or_zero((summary.get("entity_counts") or {}).get("trips")),
             "rawStopTimetables": _int_or_zero((summary.get("entity_counts") or {}).get("stop_timetables")),
         },
+        "countSemantics": {
+            "counts.routes": "Route-variant count from data/catalog-fast/normalized/routes.jsonl.",
+            "counts.routesWithTrips": "Route variants with at least one trip across WEEKDAY, SAT, or SUN_HOL.",
+            "counts.trips": "Total trips across all day types combined; not weekday-only.",
+            "networkScale.tripCountsByDayType": "Presentation-safe trip totals per day type at the route-variant layer.",
+            "networkScale.routeVariantStatsByDayType": "Outbound/inbound, short-turn, and depot in/out variants remain separate.",
+        },
+        "networkScale": network_scale_summary,
     }
     _json_dump(generation_summary, output_root / "summary.json")
+    _json_dump(
+        {
+            "generatedAt": generation_summary["generatedAt"],
+            "sourceSnapshotId": snapshot_id,
+            "countSemantics": generation_summary["countSemantics"],
+            "networkScale": network_scale_summary,
+        },
+        output_root / "network_summary.json",
+    )
 
     built_summary: Dict[str, Any] | None = None
     if rebuild_built:

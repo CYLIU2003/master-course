@@ -47,9 +47,13 @@ from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
 )
+from src.tokyu_bus_data import (
+    build_timetable_summary_for_scope as _build_timetable_summary_for_scope_from_tokyu_bus_data,
+    tokyu_bus_data_ready,
+)
 from src.tokyu_shard_loader import (
     build_stop_timetable_summary_for_scope,
-    build_timetable_summary_for_scope,
+    build_timetable_summary_for_scope as _build_timetable_summary_for_scope_from_shard,
     load_trip_rows_for_scope,
     shard_runtime_ready,
 )
@@ -73,6 +77,32 @@ _CSV_COLUMNS = [
 ]
 
 _MAX_PAGE_LIMIT = 500
+
+
+def build_timetable_summary_for_scope(
+    *,
+    dataset_id: str | None,
+    route_ids: List[str] | None,
+    depot_ids: List[str] | None,
+    service_ids: List[str] | None = None,
+) -> Optional[Dict[str, Any]]:
+    if dataset_id and tokyu_bus_data_ready(dataset_id):
+        summary = _build_timetable_summary_for_scope_from_tokyu_bus_data(
+            dataset_id=dataset_id,
+            route_ids=route_ids,
+            depot_ids=depot_ids,
+            service_ids=service_ids,
+        )
+        if summary is not None:
+            return summary
+    if dataset_id and shard_runtime_ready(dataset_id):
+        return _build_timetable_summary_for_scope_from_shard(
+            dataset_id=dataset_id,
+            route_ids=route_ids,
+            depot_ids=depot_ids,
+            service_ids=service_ids,
+        )
+    return None
 
 
 def _paginate_items(
@@ -458,7 +488,7 @@ def _shard_scope_params(
     depot_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     dataset_id = _scenario_dataset_id(doc)
-    if not dataset_id or not shard_runtime_ready(dataset_id):
+    if not dataset_id:
         return None
     dispatch_scope = store._normalize_dispatch_scope(doc)
     depot_ids = [str(item) for item in (dispatch_scope.get("depotSelection") or {}).get("depotIds") or [] if str(item or "").strip()]
@@ -692,7 +722,7 @@ def _route_trip_inventory_for_quick_setup(
 
     summary: Optional[Dict[str, Any]] = None
     dataset_id = _scenario_dataset_id(doc)
-    if dataset_id and shard_runtime_ready(dataset_id):
+    if dataset_id:
         summary = build_timetable_summary_for_scope(
             dataset_id=dataset_id,
             route_ids=candidate_route_ids,

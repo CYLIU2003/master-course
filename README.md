@@ -566,6 +566,65 @@ python tools/route_variant_labeler_tk.py
 
 ---
 
+### 4.5 論文用バス運行状態可視化（EV/エンジン識別対応）
+
+最適化 run フォルダから、論文掲載向けの運行状態図を生成する専用アプリです。
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python tools/bus_operation_visualizer_tk.py
+```
+
+操作手順：
+1. `Browse` で run フォルダ（例: `outputs/tokyu/.../run_YYYYMMDD_HHMM`）を選択
+2. `Load` を押してデータを読込
+3. `Only assigned buses` / `Max buses` を調整
+4. `Summary` タブで `status/objective/solve_time_seconds/total_cost/total_co2_kg` を確認
+5. `Details` タブで詳細 key-value を確認、`Raw JSON` タブで元JSONを確認
+6. `Render` で2種類の図を生成
+7. `Save PNG` / `Save SVG` / `Save PDF` で高解像度保存
+
+特長：
+- 英語フォントは Times New Roman、日本語フォントはメイリオを使用
+- EV とエンジンバスを別ラベル（`EV-xx` / `ENG-xx`）で表示
+- ガント図では EV/エンジンでハッチ方向を変えて識別
+- 充電図では緑の濃淡で充電出力比を表示
+- アプリ内の文字ベース表示（Summary/Details/Raw JSON）で総コスト・総CO2を即時確認可能
+
+---
+
+### 4.6 複数 run 比較可視化（multi-run）
+
+`outputs/tokyu` 配下の複数日・複数シナリオ・複数 run を横断して、比較表と比較図を生成するアプリです。
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python tools/multi_run_visualizer_tk.py
+```
+
+操作手順：
+1. `Base folder` に `outputs/tokyu`（またはその下位）を指定
+2. `Scan` で `run_*` フォルダを収集
+3. `Date / Scenario / Depot / Service` フィルタを設定して `Apply Filter`
+4. 比較対象 run を複数選択
+5. `Preview Text Summary` で `status / total_cost / total_co2_kg / objective / solve_time_sec` を確認
+6. `Preview Comparison Charts` で `Total Cost` と `Total CO2` の棒グラフを確認
+7. 必要に応じて `Only assigned` / `Max buses` / `Export SVG` を調整
+8. `Export Selected` で比較表と図を一括出力
+
+出力内容（`<base>/analysis_export/<timestamp>/`）：
+- `summary_table.csv`（比較テーブル）
+- `summary_report.md`（比較レポート）
+- `total_cost_comparison.png` / `total_co2_comparison.png`
+- `Export SVG` 有効時: 比較図の `.svg`
+- 各 run サブフォルダに `bus_operation_figure_a/b`（PNG、必要に応じてSVG）
+
+使い分け：
+- 単一 run を詳細に確認する場合: `tools/bus_operation_visualizer_tk.py`
+- 複数 run の総コスト・総CO2を比較する場合: `tools/multi_run_visualizer_tk.py`
+
+---
+
 ## 5. 東急全体最適化の推奨フロー
 
 1. シナリオ作成
@@ -600,7 +659,7 @@ python tools/route_variant_labeler_tk.py
 
 | カテゴリ | パス |
 |---------|------|
-| Tkinter UI | `tools/scenario_backup_tk.py`, `tools/route_variant_labeler_tk.py` |
+| Tkinter UI | `tools/scenario_backup_tk.py`, `tools/route_variant_labeler_tk.py`, `tools/bus_operation_visualizer_tk.py`, `tools/multi_run_visualizer_tk.py` |
 | FastAPI BFF | `bff/` |
 | Dispatch（運行可行性） | `src/dispatch/` |
 | 最適化ソルバー | `src/optimization/` |

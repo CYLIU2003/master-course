@@ -9,13 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-except ImportError:
-    pass
-
 from ..data_schema import ProblemData
+from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams
 
@@ -33,6 +28,7 @@ def add_charger_capacity_constraints(
     vars に必要なキー:
       z_charge : z[k, c, t]
     """
+    gp, _ = ensure_gurobi()
     z = vars["z_charge"]
     K_BEV = ms.K_BEV
     C     = ms.C

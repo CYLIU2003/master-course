@@ -12,13 +12,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-except ImportError:
-    pass
-
 from ..data_schema import ProblemData
+from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams
 
@@ -41,6 +36,7 @@ def add_assignment_constraints(
     dp     : DerivedParams
     vars   : 変数辞書 {x_assign, u_vehicle, slack_cover, ...}
     """
+    gp, _ = ensure_gurobi()
     x = vars["x_assign"]          # x[k, r]
     u = vars.get("u_vehicle")     # u[k]  (存在しない場合は None)
     slack = vars.get("slack_cover")  # slack[r]

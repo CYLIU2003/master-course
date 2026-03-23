@@ -9,13 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-try:
-    import gurobipy as gp
-    from gurobipy import GRB
-except ImportError:
-    pass
-
 from ..data_schema import ProblemData
+from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams, get_pv_gen
 
@@ -35,6 +30,7 @@ def add_pv_grid_constraints(
       p_pv_curtail : p_pv_curtail[i, t]  [kW]
       p_grid_export: p_grid_export[i, t] [kW] (売電あり時)
     """
+    ensure_gurobi()
     if not data.enable_pv:
         return
 

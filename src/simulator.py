@@ -17,7 +17,12 @@ from typing import Any, Dict, List, Optional
 from .data_schema import ProblemData
 from .milp_model import MILPResult
 from .model_sets import ModelSets
-from .parameter_builder import DerivedParams, get_grid_price, get_pv_gen, get_base_load
+from .parameter_builder import (
+    DerivedParams,
+    get_grid_price,
+    get_pv_gen,
+    resolve_vehicle_energy_site_id,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +252,34 @@ class SimulationResult:
     feasibility_report: Optional[FeasibilityReport] = None
 
 
+def _bev_operating_energy_kwh_by_site(
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp_result: MILPResult,
+) -> Dict[str, List[float]]:
+    profile: Dict[str, List[float]] = {}
+    horizon = len(ms.T)
+    for vehicle_id in ms.K_BEV:
+        assigned_tasks = milp_result.assignment.get(vehicle_id) or []
+        if not assigned_tasks:
+            continue
+        site_id = resolve_vehicle_energy_site_id(ms, dp, vehicle_id)
+        if not site_id:
+            continue
+        series = profile.setdefault(site_id, [0.0] * horizon)
+        for task_id in assigned_tasks:
+            energy_per_slot = dp.task_energy_per_slot.get(task_id, [])
+            for t_idx in ms.T:
+                if t_idx >= len(energy_per_slot):
+                    continue
+                energy_kwh = float(energy_per_slot[t_idx] or 0.0)
+                if energy_kwh <= 0.0:
+                    continue
+                series[t_idx] += energy_kwh
+    return profile
+
+
 def simulate(
     data: ProblemData,
     ms: ModelSets,
@@ -289,18 +322,20 @@ def simulate(
                 sim.soc_violations.append(f"{k}@t={t_idx}")
     sim.soc_min_kwh = round(min_soc, 4) if min_soc < float("inf") else 0.0
 
-    # ===== 系統受電・電力料金 =====
+    # ===== BEV 走行消費・電力料金 =====
     total_grid = 0.0
     total_cost = 0.0
     total_grid_co2 = 0.0
     peak_kw = 0.0
-    for site_id, series in milp_result.grid_import_kw.items():
-        sim.grid_import_kw_series[site_id] = series
-        for t_idx, kw in enumerate(series):
-            kwh = kw * delta_h
+    operating_energy_kwh_by_site = _bev_operating_energy_kwh_by_site(data, ms, dp, milp_result)
+    for site_id, energy_kwh_series in operating_energy_kwh_by_site.items():
+        kw_series = [round((kwh / delta_h) if delta_h > 0 else 0.0, 4) for kwh in energy_kwh_series]
+        sim.grid_import_kw_series[site_id] = kw_series
+        for t_idx, kwh in enumerate(energy_kwh_series):
             total_grid += kwh
             total_cost += get_grid_price(dp, site_id, t_idx) * kwh
             total_grid_co2 += dp.grid_co2_factor.get(site_id, {}).get(t_idx, 0.0) * kwh
+            kw = kw_series[t_idx] if t_idx < len(kw_series) else 0.0
             if kw > peak_kw:
                 peak_kw = kw
 
