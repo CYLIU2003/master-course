@@ -1,5 +1,10 @@
 from src.dispatch.models import DutyLeg, Trip, VehicleDuty
-from src.optimization.common.problem import AssignmentPlan, OptimizationEngineResult, OptimizationMode
+from src.optimization.common.problem import (
+    AssignmentPlan,
+    OptimizationEngineResult,
+    OptimizationMode,
+    RefuelSlot,
+)
 from src.optimization.common.result import ResultSerializer
 
 
@@ -27,8 +32,18 @@ def test_result_serializer_includes_objective_components_and_limits() -> None:
     )
     plan = AssignmentPlan(
         duties=(duty,),
+        refuel_slots=(
+            # 08:00 start + 2*30min = 09:00
+            RefuelSlot(
+                vehicle_id="veh-ice-1",
+                slot_index=2,
+                refuel_liters=12.5,
+                location_id="dep-1",
+            ),
+        ),
         served_trip_ids=("t1", "t2"),
         unserved_trip_ids=(),
+        metadata={"horizon_start": "08:00", "timestep_min": 30},
     )
     result = OptimizationEngineResult(
         mode=OptimizationMode.MILP,
@@ -75,3 +90,6 @@ def test_result_serializer_includes_objective_components_and_limits() -> None:
     assert "grid_import_kwh" in payload["pv_summary"]
     assert payload["utilization_summary"]["fleet_size"] == 1
     assert payload["utilization_summary"]["used_vehicle_count"] == 1
+    assert payload["refueling_schedule"][0]["vehicle_id"] == "veh-ice-1"
+    assert payload["refueling_schedule"][0]["time_hhmm"] == "09:00"
+    assert payload["refueling_schedule"][0]["refuel_liters"] == 12.5

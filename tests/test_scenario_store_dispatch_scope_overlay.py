@@ -211,3 +211,173 @@ def test_set_field_timetable_rows_updates_stats_and_invalidates_dispatch(tmp_pat
     assert updated_meta["stats"]["dutyCount"] == 0
     assert scenario_store.get_field(scenario_id, "optimization_result") is None
     assert scenario_store.get_field(scenario_id, "trips") is None
+
+
+def test_set_public_data_state_preserves_existing_timetable_rows(tmp_path, monkeypatch) -> None:
+    store_dir = tmp_path / "scenarios"
+    monkeypatch.setattr(scenario_store, "_STORE_DIR", store_dir)
+
+    scenario = scenario_store.create_scenario(
+        name="Scenario 1",
+        description="preserve artifacts",
+        mode="thesis_mode",
+    )
+    scenario_id = str(scenario["id"])
+
+    scenario_store.set_field(
+        scenario_id,
+        "timetable_rows",
+        [
+            {
+                "trip_id": "trip-1",
+                "route_id": "route-a",
+                "service_id": "WEEKDAY",
+                "departure": "08:00",
+                "arrival": "08:30",
+            }
+        ],
+    )
+
+    assert scenario_store.count_timetable_rows(scenario_id) == 1
+
+    scenario_store.set_public_data_state(
+        scenario_id,
+        {"warnings": ["noop master-only update"]},
+    )
+
+    assert scenario_store.count_timetable_rows(scenario_id) == 1
+    assert scenario_store.page_timetable_rows(scenario_id)[0]["trip_id"] == "trip-1"
+
+
+def test_load_shallow_repairs_route_trip_counts_from_preload(tmp_path, monkeypatch) -> None:
+    store_dir = tmp_path / "scenarios"
+    monkeypatch.setattr(scenario_store, "_STORE_DIR", store_dir)
+
+    scenario = scenario_store.create_scenario(
+        name="Scenario 1",
+        description="route metadata repair",
+        mode="thesis_mode",
+    )
+    scenario_id = str(scenario["id"])
+
+    scenario_store._save_master_subset(
+        scenario_id,
+        updates={
+            "depots": [{"id": "dep-a", "name": "Depot A"}],
+            "routes": [
+                {
+                    "id": "route-a",
+                    "name": "黒０１",
+                    "routeCode": "黒０１",
+                    "tripCount": 587,
+                }
+            ],
+            "vehicle_templates": [{"id": "tmpl-1"}],
+            "route_depot_assignments": [{"routeId": "route-a", "depotId": "dep-a"}],
+            "feed_context": {"datasetId": "tokyu_full"},
+            "scenario_overlay": {"dataset_id": "tokyu_full"},
+        },
+        invalidate_dispatch=False,
+    )
+
+    monkeypatch.setattr(
+        "bff.services.master_defaults.get_preloaded_master_data",
+        lambda dataset_id: {
+            "datasetId": dataset_id,
+            "routes": [
+                {
+                    "id": "route-a",
+                    "name": "黒０１",
+                    "routeCode": "黒０１",
+                    "tripCount": 495,
+                    "tripCountTotal": 495,
+                    "tripCountsByDayType": {
+                        "WEEKDAY": 191,
+                        "SAT": 152,
+                        "SUN_HOL": 152,
+                    },
+                }
+            ],
+        },
+    )
+
+    route = scenario_store._load_shallow(scenario_id)["routes"][0]
+
+    assert route["tripCount"] == 495
+    assert route["tripCountTotal"] == 495
+    assert route["tripCountsByDayType"] == {
+        "WEEKDAY": 191,
+        "SAT": 152,
+        "SUN_HOL": 152,
+    }
+
+
+def test_timetable_rows_fall_back_to_tokyu_bus_data_when_artifacts_missing(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store_dir = tmp_path / "scenarios"
+    monkeypatch.setattr(scenario_store, "_STORE_DIR", store_dir)
+
+    scenario = scenario_store.create_scenario(
+        name="Scenario 1",
+        description="tokyu bus fallback",
+        mode="thesis_mode",
+    )
+    scenario_id = str(scenario["id"])
+
+    scenario_store._save_master_subset(
+        scenario_id,
+        updates={
+            "depots": [{"id": "dep-a", "name": "Depot A"}],
+            "routes": [{"id": "route-a", "name": "Route A", "routeCode": "A01"}],
+            "vehicle_templates": [{"id": "tmpl-1"}],
+            "route_depot_assignments": [{"routeId": "route-a", "depotId": "dep-a"}],
+            "feed_context": {"datasetId": "tokyu_full"},
+            "scenario_overlay": {"dataset_id": "tokyu_full"},
+        },
+        invalidate_dispatch=False,
+    )
+
+    monkeypatch.setattr(
+        scenario_store,
+        "_tokyu_bus_timetable_summary_for_doc",
+        lambda doc, service_ids=None: {
+            "totalRows": 5 if not service_ids else 3,
+            "routeCount": 1,
+            "byService": [{"serviceId": "WEEKDAY", "rowCount": 3, "routeCount": 1}],
+            "imports": {},
+        },
+    )
+    monkeypatch.setattr(
+        scenario_store,
+        "_tokyu_bus_timetable_rows_for_doc",
+        lambda doc, service_ids=None: [
+            {
+                "trip_id": f"trip-{idx}",
+                "route_id": "route-a",
+                "service_id": "WEEKDAY",
+                "departure": f"08:0{idx}",
+                "arrival": f"08:3{idx}",
+            }
+            for idx in range(3)
+        ],
+    )
+    monkeypatch.setattr(
+        scenario_store,
+        "_tokyu_bus_route_service_count_rows_for_doc",
+        lambda doc: [
+            {"route_id": "route-a", "service_id": "WEEKDAY", "trip_count": 3},
+            {"route_id": "route-a", "service_id": "SAT", "trip_count": 2},
+        ],
+    )
+
+    assert scenario_store.count_timetable_rows(scenario_id) == 5
+    assert scenario_store.count_field_rows(scenario_id, "timetable_rows") == 5
+    assert len(scenario_store.page_timetable_rows(scenario_id, limit=2)) == 2
+    assert len(scenario_store.page_field_rows(scenario_id, "timetable_rows", limit=1)) == 1
+    assert scenario_store.get_field_summary(scenario_id, "timetable_rows")["totalRows"] == 5
+    assert scenario_store.summarize_route_service_trip_counts(scenario_id) == [
+        {"route_id": "route-a", "service_id": "WEEKDAY", "trip_count": 3},
+        {"route_id": "route-a", "service_id": "SAT", "trip_count": 2},
+    ]

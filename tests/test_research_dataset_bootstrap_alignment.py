@@ -81,6 +81,23 @@ def test_build_dataset_bootstrap_uses_catalog_fast_route_inventory() -> None:
     assert any(route_id not in set(selected_route_ids) for route_id in route_ids)
 
 
+def test_build_dataset_bootstrap_routes_include_day_type_trip_counts() -> None:
+    payload = build_dataset_bootstrap(
+        master_defaults.DEFAULT_DATASET_ID,
+        scenario_id="test-route-day-type-counts",
+        random_seed=42,
+    )
+
+    route = next(
+        item
+        for item in payload.get("routes") or []
+        if str(item.get("id") or "").strip() == "odpt-route-524c00d5ceff"
+    )
+
+    assert route["tripCountsByDayType"] == {"WEEKDAY": 191, "SAT": 152, "SUN_HOL": 152}
+    assert int(route["tripCountTotal"]) == 495
+
+
 def test_master_defaults_falls_back_to_runtime_default_when_preload_has_no_trips() -> None:
     preload_payload = {
         "depots": [{"id": "meguro"}],

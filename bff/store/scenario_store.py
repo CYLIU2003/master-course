@@ -127,6 +127,7 @@ _SUMMARY_SCALAR_NAMES = {
     "duties": "duties_summary",
 }
 _PARQUET_ROW_ARTIFACT_FIELDS = {"trips", "blocks", "duties"}
+_UNLOADED_ARTIFACT_FIELDS_KEY = "__unloaded_artifact_fields__"
 _SCENARIO_LOCKS: dict[str, RLock] = {}
 _SCENARIO_LOCKS_GUARD = Lock()
 
@@ -405,6 +406,24 @@ def _artifact_default(key: str) -> Any:
     return [] if key in {"timetable_rows", "stop_timetables"} else None
 
 
+def _artifact_fields_unloaded(doc: Dict[str, Any]) -> set[str]:
+    return {
+        str(field).strip()
+        for field in list(doc.get(_UNLOADED_ARTIFACT_FIELDS_KEY) or [])
+        if str(field).strip() in _ARTIFACT_REF_KEYS
+    }
+
+
+def _mark_artifact_fields_unloaded(
+    doc: Dict[str, Any],
+    fields: set[str],
+) -> None:
+    if fields:
+        doc[_UNLOADED_ARTIFACT_FIELDS_KEY] = sorted(fields)
+        return
+    doc.pop(_UNLOADED_ARTIFACT_FIELDS_KEY, None)
+
+
 def _graph_meta_name() -> str:
     return "graph_meta"
 
@@ -439,6 +458,30 @@ def _scenario_stats(doc: Dict[str, Any]) -> Dict[str, Any]:
         "tripCount": len(list(doc.get("trips") or [])) if doc.get("trips") is not None else 0,
         "dutyCount": len(list(doc.get("duties") or [])) if doc.get("duties") is not None else 0,
     }
+
+
+def _scenario_stats_for_save(
+    doc: Dict[str, Any],
+    *,
+    fallback: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    unloaded_fields = _artifact_fields_unloaded(doc)
+    stats = dict(fallback or {})
+    stats["routeCount"] = len(list(doc.get("routes") or []))
+    stats["stopCount"] = len(list(doc.get("stops") or []))
+    if "timetable_rows" not in unloaded_fields:
+        stats["timetableRowCount"] = len(_drop_vn_duplicate_rows(list(doc.get("timetable_rows") or [])))
+    else:
+        stats.setdefault("timetableRowCount", 0)
+    if "trips" not in unloaded_fields:
+        stats["tripCount"] = len(list(doc.get("trips") or [])) if doc.get("trips") is not None else 0
+    else:
+        stats.setdefault("tripCount", 0)
+    if "duties" not in unloaded_fields:
+        stats["dutyCount"] = len(list(doc.get("duties") or [])) if doc.get("duties") is not None else 0
+    else:
+        stats.setdefault("dutyCount", 0)
+    return stats
 
 
 def _normalize_stats_payload(
@@ -748,6 +791,137 @@ def _master_repair_dataset_id(doc: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _scenario_route_ids(doc: Dict[str, Any]) -> List[str]:
+    return [
+        str(route.get("id") or "").strip()
+        for route in doc.get("routes") or []
+        if str(route.get("id") or "").strip()
+    ]
+
+
+def _tokyu_bus_timetable_summary_for_doc(
+    doc: Dict[str, Any],
+    *,
+    service_ids: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    dataset_id = _master_repair_dataset_id(doc)
+    route_ids = _scenario_route_ids(doc)
+    if not dataset_id or not route_ids:
+        return None
+    from src.tokyu_bus_data import build_timetable_summary_for_scope, tokyu_bus_data_ready
+
+    if not tokyu_bus_data_ready(dataset_id):
+        return None
+    summary = build_timetable_summary_for_scope(
+        dataset_id=dataset_id,
+        route_ids=route_ids,
+        depot_ids=None,
+        service_ids=service_ids,
+    )
+    return dict(summary) if isinstance(summary, dict) else None
+
+
+def _tokyu_bus_timetable_rows_for_doc(
+    doc: Dict[str, Any],
+    *,
+    service_ids: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    dataset_id = _master_repair_dataset_id(doc)
+    route_ids = _scenario_route_ids(doc)
+    if not dataset_id or not route_ids:
+        return []
+    from src.tokyu_bus_data import load_trip_rows_for_scope, tokyu_bus_data_ready
+
+    if not tokyu_bus_data_ready(dataset_id):
+        return []
+    return [
+        dict(item)
+        for item in load_trip_rows_for_scope(
+            dataset_id=dataset_id,
+            route_ids=route_ids,
+            depot_ids=None,
+            service_ids=service_ids,
+        )
+    ]
+
+
+def _tokyu_bus_route_service_count_rows_for_doc(
+    doc: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    dataset_id = _master_repair_dataset_id(doc)
+    route_ids = _scenario_route_ids(doc)
+    if not dataset_id or not route_ids:
+        return []
+    from src.tokyu_bus_data import route_trip_counts_by_day_type, tokyu_bus_data_ready
+
+    if not tokyu_bus_data_ready(dataset_id):
+        return []
+    counts_by_route = route_trip_counts_by_day_type(
+        dataset_id=dataset_id,
+        route_ids=route_ids,
+        depot_ids=None,
+    )
+    rows: List[Dict[str, Any]] = []
+    for route_id, counts in sorted(counts_by_route.items()):
+        for service_id, trip_count in sorted(dict(counts or {}).items()):
+            normalized_trip_count = int(trip_count or 0)
+            if normalized_trip_count <= 0:
+                continue
+            rows.append(
+                {
+                    "route_id": str(route_id or "").strip(),
+                    "service_id": str(service_id or "WEEKDAY"),
+                    "trip_count": normalized_trip_count,
+                }
+            )
+    return rows
+
+
+def _repair_route_metadata_from_preload(doc: Dict[str, Any]) -> bool:
+    dataset_id = _master_repair_dataset_id(doc)
+    current_routes = [dict(route) for route in doc.get("routes") or [] if isinstance(route, dict)]
+    if not dataset_id or not current_routes:
+        return False
+
+    from bff.services import master_defaults
+
+    payload = master_defaults.get_preloaded_master_data(dataset_id)
+    fresh_routes = [dict(route) for route in payload.get("routes") or [] if isinstance(route, dict)]
+    fresh_by_id = {
+        str(route.get("id") or "").strip(): route
+        for route in fresh_routes
+        if str(route.get("id") or "").strip()
+    }
+    if not fresh_by_id:
+        return False
+
+    preserve_keys = {
+        "enabled",
+        "color",
+        "routeVariantTypeManual",
+        "canonicalDirectionManual",
+    }
+    changed = False
+    repaired_routes: List[Dict[str, Any]] = []
+    for current_route in current_routes:
+        route_id = str(current_route.get("id") or "").strip()
+        fresh_route = fresh_by_id.get(route_id)
+        if not route_id or fresh_route is None:
+            repaired_routes.append(dict(current_route))
+            continue
+        merged_route = {**dict(current_route), **dict(fresh_route)}
+        for key in preserve_keys:
+            if key in current_route and current_route.get(key) is not None:
+                merged_route[key] = current_route.get(key)
+        if merged_route != current_route:
+            changed = True
+        repaired_routes.append(merged_route)
+
+    if changed:
+        doc["routes"] = repaired_routes
+    return changed
+
+
 def _repair_missing_master_defaults(
     doc: Dict[str, Any],
     *,
@@ -892,6 +1066,7 @@ def _load_shallow(
     # Heavy artifacts are left empty — callers must use get_field() to load them.
     for field in _HEAVY_ARTIFACT_FIELDS:
         doc.setdefault(field, _artifact_default(field))
+    _mark_artifact_fields_unloaded(doc, set(_HEAVY_ARTIFACT_FIELDS))
 
     doc.setdefault("calendar", _default_calendar())
     doc.setdefault("calendar_dates", [])
@@ -901,6 +1076,7 @@ def _load_shallow(
     doc.setdefault("public_data", _default_public_data_state())
     if _needs_master_repair(doc):
         _repair_missing_master_defaults(doc)
+    _repair_route_metadata_from_preload(doc)
     doc.setdefault("stats", _scenario_stats(doc))
     for key, value in _default_v1_2_fields().items():
         doc.setdefault(key, value)
@@ -1013,6 +1189,7 @@ def _load(
         else:
             doc.setdefault(field, _artifact_default(field))
 
+    _mark_artifact_fields_unloaded(doc, set())
     doc.setdefault("calendar", _default_calendar())
     doc.setdefault("calendar_dates", [])
     doc.setdefault("simulation_config", None)
@@ -1021,6 +1198,7 @@ def _load(
     doc.setdefault("public_data", _default_public_data_state())
     if repair_missing_master and _needs_master_repair(doc):
         _repair_missing_master_defaults(doc)
+    _repair_route_metadata_from_preload(doc)
     doc.setdefault("stats", _scenario_stats(doc))
     for key, value in _default_v1_2_fields().items():
         doc.setdefault(key, value)
@@ -1032,6 +1210,12 @@ def _save(doc: Dict[str, Any]) -> None:
     scenario_id = doc["meta"]["id"]
     with _scenario_lock(scenario_id):
         refs = _refs_for_scenario(scenario_id, doc)
+        try:
+            existing_meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+        except KeyError:
+            existing_meta = {}
+        existing_refs = _refs_for_scenario(scenario_id, existing_meta)
+        unloaded_fields = _artifact_fields_unloaded(doc)
 
         staging_dir = _STORE_DIR / f"{scenario_id}.staging"
         if staging_dir.exists():
@@ -1058,6 +1242,15 @@ def _save(doc: Dict[str, Any]) -> None:
             for field, ref_key in _ARTIFACT_REF_KEYS.items():
                 preserved_artifacts[field] = doc.get(field)
                 target_path = Path(staging_refs[ref_key])
+                existing_target_path = Path(existing_refs[ref_key])
+                if field in unloaded_fields:
+                    if field == "graph" or field in _SQLITE_ROW_ARTIFACT_FIELDS or field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
+                        if Path(existing_refs["artifactStore"]).exists() and not artifact_db_path.exists():
+                            shutil.copy2(existing_refs["artifactStore"], artifact_db_path)
+                        continue
+                    if existing_target_path.exists():
+                        shutil.copy2(existing_target_path, target_path)
+                    continue
                 if field == "graph":
                     _save_graph_artifact(artifact_db_path, doc.get(field))
                 elif field == "timetable_rows":
@@ -1118,7 +1311,10 @@ def _save(doc: Dict[str, Any]) -> None:
                 },
                 "feed_context": doc.get("feed_context"),
                 "refs": refs,
-                "stats": _scenario_stats(doc),
+                "stats": _scenario_stats_for_save(
+                    doc,
+                    fallback=existing_meta.get("stats") if isinstance(existing_meta, dict) else None,
+                ),
             }
 
             staging_json.write_text(
@@ -1363,6 +1559,7 @@ def _new_id() -> str:
 
 
 def _invalidate_dispatch_artifacts(doc: Dict[str, Any]) -> None:
+    unloaded_fields = _artifact_fields_unloaded(doc)
     doc["trips"] = None
     doc["graph"] = None
     doc["blocks"] = None
@@ -1374,6 +1571,20 @@ def _invalidate_dispatch_artifacts(doc: Dict[str, Any]) -> None:
     doc["optimization_audit"] = None
     doc["simulation_audit"] = None
     doc["meta"]["status"] = "draft"
+    _mark_artifact_fields_unloaded(
+        doc,
+        unloaded_fields.difference(
+            {
+                "trips",
+                "graph",
+                "blocks",
+                "duties",
+                "dispatch_plan",
+                "simulation_result",
+                "optimization_result",
+            }
+        ),
+    )
 
 
 def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -1857,14 +2068,23 @@ def ensure_runtime_master_data(scenario_id: str) -> bool:
             repair_missing_master=False,
             skip_graph_arcs=True,
         )
-        if not (_needs_master_repair(doc) or _needs_runtime_master_alignment(doc)):
+        needs_master_refresh = _needs_master_repair(doc) or _needs_runtime_master_alignment(doc)
+        route_metadata_repaired = _repair_route_metadata_from_preload(doc)
+        if not needs_master_refresh and not route_metadata_repaired:
             return False
-        repaired = _repair_missing_master_defaults(doc, touch_updated_at=True)
-        if not repaired:
-            return False
+        repaired = False
+        if needs_master_refresh:
+            repaired = _repair_missing_master_defaults(doc, touch_updated_at=True)
+            route_metadata_repaired = _repair_route_metadata_from_preload(doc) or route_metadata_repaired
+            if not repaired and not route_metadata_repaired:
+                return False
         _normalize_dispatch_scope(doc)
-        _invalidate_dispatch_artifacts(doc)
-        _save(doc)
+        doc["meta"]["updatedAt"] = _now_iso()
+        if repaired:
+            _invalidate_dispatch_artifacts(doc)
+            _save(doc)
+        else:
+            _save_master_only(doc, invalidate_dispatch=False)
         return True
 
 
@@ -1959,6 +2179,9 @@ def get_field(scenario_id: str, field: str) -> Any:
         legacy = _legacy_timetable_path(scenario_id)
         if legacy.exists():
             return _drop_vn_duplicate_rows(_load_json_list(legacy))
+        fallback_rows = _tokyu_bus_timetable_rows_for_doc(_load_shallow(scenario_id))
+        if fallback_rows:
+            return fallback_rows
         return []
 
     if field in _PARQUET_ROW_ARTIFACT_FIELDS:
@@ -2000,7 +2223,13 @@ def count_field_rows(scenario_id: str, field: str) -> int:
             return db_count
         # Fallback: count from row_artifacts with __vN filter applied in memory
         raw_rows = trip_store.load_rows(_artifact_store_path(refs), field)
-        return len(_drop_vn_duplicate_rows(raw_rows))
+        filtered_rows = _drop_vn_duplicate_rows(raw_rows)
+        if filtered_rows:
+            return len(filtered_rows)
+        summary = _tokyu_bus_timetable_summary_for_doc(_load_shallow(scenario_id))
+        if summary:
+            return int(summary.get("totalRows") or 0)
+        return 0
     if field in _PARQUET_ROW_ARTIFACT_FIELDS:
         parquet_count = trip_store.count_parquet_rows(Path(refs[_ARTIFACT_REF_KEYS[field]]))
         if parquet_count > 0:
@@ -2033,6 +2262,8 @@ def page_field_rows(
             ]
         # Fallback: read from row_artifacts with __vN filter
         raw_rows = _drop_vn_duplicate_rows(trip_store.load_rows(db_path, field))
+        if not raw_rows:
+            raw_rows = _tokyu_bus_timetable_rows_for_doc(_load_shallow(scenario_id))
         if limit is None:
             return [dict(item) for item in raw_rows[offset:]]
         return [dict(item) for item in raw_rows[offset: offset + limit]]
@@ -2078,6 +2309,11 @@ def page_timetable_rows(
             )
         ]
     rows = _load(scenario_id).get("timetable_rows") or []
+    if not rows:
+        rows = _tokyu_bus_timetable_rows_for_doc(
+            _load_shallow(scenario_id),
+            service_ids=[service_id] if service_id else None,
+        )
     if service_id:
         rows = [row for row in rows if str(row.get("service_id") or "WEEKDAY") == service_id]
     if limit is None:
@@ -2093,6 +2329,13 @@ def count_timetable_rows(scenario_id: str, *, service_id: Optional[str] = None) 
     if total_db_rows > 0:
         return trip_store.count_timetable_rows(db_path, service_id=service_id)
     rows = _load(scenario_id).get("timetable_rows") or []
+    if not rows:
+        summary = _tokyu_bus_timetable_summary_for_doc(
+            _load_shallow(scenario_id),
+            service_ids=[service_id] if service_id else None,
+        )
+        if summary:
+            return int(summary.get("totalRows") or 0)
     if service_id:
         rows = [row for row in rows if str(row.get("service_id") or "WEEKDAY") == service_id]
     return len(rows)
@@ -2122,9 +2365,16 @@ def summarize_route_service_trip_counts(
         timetable_path = Path(refs["timetableRows"])
         legacy_timetable_path = _legacy_timetable_path(scenario_id)
         if not timetable_path.exists() and not legacy_timetable_path.exists():
+            fallback_rows = _tokyu_bus_route_service_count_rows_for_doc(_load_shallow(scenario_id))
+            if fallback_rows:
+                return fallback_rows
             return []
 
     rows = _load(scenario_id).get("timetable_rows") or []
+    if not rows:
+        fallback_rows = _tokyu_bus_route_service_count_rows_for_doc(_load_shallow(scenario_id))
+        if fallback_rows:
+            return fallback_rows
     grouped: Dict[tuple[str, str], int] = {}
     for row in rows:
         route_id = str((row or {}).get("route_id") or "").strip()
@@ -2161,8 +2411,13 @@ def get_field_summary(scenario_id: str, field: str) -> Optional[Dict[str, Any]]:
             imports = _load_shallow(scenario_id).get("timetable_import_meta") or {}
             return _build_timetable_summary_artifact(rows, imports)
         # Fallback to JSON-backed rows (e.g. legacy scenarios without SQLite DB)
-        items = _load_shallow(scenario_id).get(field) or []
-        imports = _load_shallow(scenario_id).get("timetable_import_meta") or {}
+        shallow_doc = _load_shallow(scenario_id)
+        items = shallow_doc.get(field) or []
+        imports = shallow_doc.get("timetable_import_meta") or {}
+        if not items:
+            summary = _tokyu_bus_timetable_summary_for_doc(shallow_doc)
+            if summary:
+                return summary
         return _build_timetable_summary_artifact(items, imports)
 
     # For other fields, use the pre-computed scalar when available

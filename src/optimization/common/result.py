@@ -8,6 +8,21 @@ from .problem import AssignmentPlan, OptimizationEngineResult
 class ResultSerializer:
     @staticmethod
     def serialize_plan(plan: AssignmentPlan) -> Dict[str, Any]:
+        metadata = dict(plan.metadata)
+
+        def _slot_to_hhmm(slot_index: int) -> str:
+            timestep_min = int(metadata.get("timestep_min") or 0)
+            if timestep_min <= 0:
+                return ""
+            base_text = str(metadata.get("horizon_start") or "00:00")
+            try:
+                hh_text, mm_text = base_text.split(":", 1)
+                base_min = int(hh_text) * 60 + int(mm_text)
+            except ValueError:
+                base_min = 0
+            minute = (base_min + int(slot_index) * timestep_min) % (24 * 60)
+            return f"{minute // 60:02d}:{minute % 60:02d}"
+
         duties: List[Dict[str, Any]] = []
         for duty in plan.duties:
             duties.append(
@@ -38,9 +53,19 @@ class ResultSerializer:
                 }
                 for slot in plan.charging_slots
             ],
+            "refueling_schedule": [
+                {
+                    "vehicle_id": slot.vehicle_id,
+                    "slot_index": slot.slot_index,
+                    "time_hhmm": _slot_to_hhmm(slot.slot_index),
+                    "refuel_liters": slot.refuel_liters,
+                    "location_id": slot.location_id,
+                }
+                for slot in plan.refuel_slots
+            ],
             "served_trip_ids": list(plan.served_trip_ids),
             "unserved_trip_ids": list(plan.unserved_trip_ids),
-            "metadata": dict(plan.metadata),
+            "metadata": metadata,
         }
 
     @classmethod

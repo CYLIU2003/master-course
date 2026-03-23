@@ -52,6 +52,7 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
     return AssignmentPlan(
         duties=tuple(existing),
         charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=served,
         unserved_trip_ids=tuple(unserved),
         metadata={**dict(plan.metadata), "repair_operator": "greedy_trip_insertion"},
@@ -98,6 +99,7 @@ def baseline_dispatch_repair(
         repaired = AssignmentPlan(
             duties=tuple(existing),
             charging_slots=plan.charging_slots,
+            refuel_slots=plan.refuel_slots,
             served_trip_ids=tuple(sorted(served)),
             unserved_trip_ids=tuple(sorted(missing)),
             metadata={**dict(plan.metadata), "repair_operator": "baseline_dispatch_repair"},
@@ -107,6 +109,7 @@ def baseline_dispatch_repair(
     return AssignmentPlan(
         duties=tuple(existing),
         charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=tuple(sorted(served)),
         unserved_trip_ids=tuple(),
         metadata={**dict(plan.metadata), "repair_operator": "baseline_dispatch_repair"},
@@ -182,6 +185,7 @@ def partial_milp_repair(problem: CanonicalOptimizationProblem, plan: AssignmentP
     return AssignmentPlan(
         duties=tuple(existing_duties),
         charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=tuple(sorted(existing_served)),
         unserved_trip_ids=unserved,
         metadata={**dict(plan.metadata), "repair_operator": "partial_milp_repair"},
@@ -259,6 +263,7 @@ def regret_k_insertion(problem: CanonicalOptimizationProblem, plan: AssignmentPl
         fallback_plan = AssignmentPlan(
             duties=tuple(duties),
             charging_slots=plan.charging_slots,
+            refuel_slots=plan.refuel_slots,
             served_trip_ids=tuple(sorted({trip_id for duty in duties for trip_id in duty.trip_ids})),
             unserved_trip_ids=tuple(unserved),
             metadata=plan.metadata,
@@ -269,6 +274,7 @@ def regret_k_insertion(problem: CanonicalOptimizationProblem, plan: AssignmentPl
     return AssignmentPlan(
         duties=tuple(duties),
         charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=served,
         unserved_trip_ids=tuple(),
         metadata={**dict(plan.metadata), "repair_operator": "regret_k_insertion"},
@@ -291,6 +297,7 @@ def energy_aware_insertion(problem: CanonicalOptimizationProblem, plan: Assignme
         AssignmentPlan(
             duties=plan.duties,
             charging_slots=plan.charging_slots,
+            refuel_slots=plan.refuel_slots,
             served_trip_ids=plan.served_trip_ids,
             unserved_trip_ids=ordered_unserved,
             metadata={**dict(plan.metadata), "repair_operator": "energy_aware_insertion"},
@@ -315,6 +322,7 @@ def charger_reassignment_repair(problem: CanonicalOptimizationProblem, plan: Ass
     return AssignmentPlan(
         duties=plan.duties,
         charging_slots=reassigned,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=plan.served_trip_ids,
         unserved_trip_ids=plan.unserved_trip_ids,
         metadata={**dict(plan.metadata), "repair_operator": "charger_reassignment_repair"},
@@ -373,6 +381,7 @@ def soc_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> A
     return AssignmentPlan(
         duties=plan.duties,
         charging_slots=tuple(repaired_slots),
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=plan.served_trip_ids,
         unserved_trip_ids=plan.unserved_trip_ids,
         metadata={**dict(plan.metadata), "repair_operator": "soc_repair"},

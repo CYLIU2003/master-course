@@ -119,8 +119,14 @@ class ProblemBuilder:
         min_ice_fuel_percent = self._safe_float(
             simulation_cfg.get("min_ice_fuel_percent")
         )
+        max_ice_fuel_percent = self._safe_float(
+            simulation_cfg.get("max_ice_fuel_percent")
+        )
         default_ice_tank_capacity_l = self._safe_float(
             simulation_cfg.get("default_ice_tank_capacity_l")
+        )
+        deadhead_speed_kmh = self._safe_float(
+            simulation_cfg.get("deadhead_speed_kmh")
         )
         depot_import_limit_kw = self._safe_float(
             charging_cfg.get("depot_power_limit_kw")
@@ -161,7 +167,9 @@ class ProblemBuilder:
             final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
             initial_ice_fuel_percent=initial_ice_fuel_percent,
             min_ice_fuel_percent=min_ice_fuel_percent,
+            max_ice_fuel_percent=max_ice_fuel_percent,
             default_ice_tank_capacity_l=default_ice_tank_capacity_l,
+            deadhead_speed_kmh=deadhead_speed_kmh,
         )
 
     def build_from_dispatch(
@@ -192,7 +200,9 @@ class ProblemBuilder:
         final_soc_target_tolerance_percent: Optional[float] = None,
         initial_ice_fuel_percent: Optional[float] = None,
         min_ice_fuel_percent: Optional[float] = None,
+        max_ice_fuel_percent: Optional[float] = None,
         default_ice_tank_capacity_l: Optional[float] = None,
+        deadhead_speed_kmh: Optional[float] = None,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -302,7 +312,9 @@ class ProblemBuilder:
                 "final_soc_target_tolerance_percent": final_soc_target_tolerance_percent,
                 "initial_ice_fuel_percent": initial_ice_fuel_percent,
                 "min_ice_fuel_percent": min_ice_fuel_percent,
+                "max_ice_fuel_percent": max_ice_fuel_percent,
                 "default_ice_tank_capacity_l": default_ice_tank_capacity_l,
+                "deadhead_speed_kmh": deadhead_speed_kmh,
             },
         )
 

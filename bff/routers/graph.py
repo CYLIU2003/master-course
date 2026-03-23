@@ -58,9 +58,13 @@ from src.route_family_runtime import (
 )
 from src.route_code_utils import extract_route_series_from_candidates
 from src.dispatch.pipeline import TimetableDispatchPipeline
+from src.tokyu_bus_data import (
+    load_trip_rows_for_scope as load_tokyu_bus_trip_rows_for_scope,
+    tokyu_bus_data_ready,
+)
 from src.tokyu_shard_loader import (
     load_dispatch_trip_rows_for_scope,
-    load_trip_rows_for_scope,
+    load_trip_rows_for_scope as load_trip_rows_for_scope_from_shard,
     shard_runtime_ready,
 )
 
@@ -406,26 +410,59 @@ def _build_dispatch_context(
             or overlay.get("datasetId")
             or ""
         ).strip()
-        if dataset_id and shard_runtime_ready(dataset_id):
+        if dataset_id and (tokyu_bus_data_ready(dataset_id) or shard_runtime_ready(dataset_id)):
             # Use all_depot_ids for inter-depot swap; single depot_id otherwise
             scoped_depot_ids = list(all_depot_ids)
             scoped_service_ids = list((scope.get("serviceSelection") or {}).get("serviceIds") or [])
             if service_id and service_id not in scoped_service_ids:
                 scoped_service_ids.insert(0, service_id)
             scoped_route_ids = list(effective_route_ids)
-            if not raw_trips:
-                raw_trips = load_dispatch_trip_rows_for_scope(
+            runtime_trip_rows = (
+                load_tokyu_bus_trip_rows_for_scope(
                     dataset_id=dataset_id,
                     route_ids=scoped_route_ids,
                     depot_ids=scoped_depot_ids,
                     service_ids=scoped_service_ids,
                 )
+                if tokyu_bus_data_ready(dataset_id)
+                else None
+            )
+            if not raw_trips:
+                if runtime_trip_rows is not None:
+                    raw_trips = [
+                        {
+                            "trip_id": row["trip_id"],
+                            "route_id": row["route_id"],
+                            "origin": row["origin"],
+                            "destination": row["destination"],
+                            "origin_stop_id": row.get("origin_stop_id"),
+                            "destination_stop_id": row.get("destination_stop_id"),
+                            "departure": row["departure"],
+                            "arrival": row["arrival"],
+                            "distance_km": row["distance_km"],
+                            "allowed_vehicle_types": list(row.get("allowed_vehicle_types") or ["BEV", "ICE"]),
+                            "direction": row["direction"],
+                            "source": "tokyu_bus_data",
+                        }
+                        for row in runtime_trip_rows
+                    ]
+                else:
+                    raw_trips = load_dispatch_trip_rows_for_scope(
+                        dataset_id=dataset_id,
+                        route_ids=scoped_route_ids,
+                        depot_ids=scoped_depot_ids,
+                        service_ids=scoped_service_ids,
+                    )
             if not timetable_rows:
-                timetable_rows = load_trip_rows_for_scope(
-                    dataset_id=dataset_id,
-                    route_ids=scoped_route_ids,
-                    depot_ids=scoped_depot_ids,
-                    service_ids=scoped_service_ids,
+                timetable_rows = (
+                    runtime_trip_rows
+                    if runtime_trip_rows is not None
+                    else load_trip_rows_for_scope_from_shard(
+                        dataset_id=dataset_id,
+                        route_ids=scoped_route_ids,
+                        depot_ids=scoped_depot_ids,
+                        service_ids=scoped_service_ids,
+                    )
                 )
 
     if service_id:

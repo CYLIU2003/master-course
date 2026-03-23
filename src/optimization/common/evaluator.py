@@ -130,7 +130,6 @@ class CostEvaluator:
             vehicle = vehicle_by_id.get(slot.vehicle_id)
             if vehicle is None:
                 continue
-            capacity_kwh = max(vehicle.battery_capacity_kwh or 300.0, 1.0)
             charged_kwh = max(slot.charge_kw, 0.0) * slot_hours
             degradation_cycles += charged_kwh / capacity_kwh
         degradation_cost = weights.degradation * degradation_cycles * 50.0
@@ -260,10 +259,27 @@ class CostEvaluator:
         if fuel_rate <= 0.0:
             return 0.0
 
-        avg_speed_kmph = 20.0
-        distance_km = (deadhead_from_prev_min / 60.0) * avg_speed_kmph
+        distance_km = self._deadhead_distance_km(problem, deadhead_from_prev_min)
         fuel_l = distance_km * fuel_rate
         return max(problem.scenario.diesel_price_yen_per_l, 0.0) * fuel_l
+
+    def _deadhead_distance_km(
+        self,
+        problem: CanonicalOptimizationProblem,
+        deadhead_min: int,
+    ) -> float:
+        speed_kmh = self._safe_nonnegative_float(
+            (problem.metadata or {}).get("deadhead_speed_kmh"),
+            default=18.0,
+        )
+        return max(float(deadhead_min or 0), 0.0) * speed_kmh / 60.0
+
+    def _safe_nonnegative_float(self, value: object, *, default: float) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed >= 0.0 else default
 
     def _operating_electric_energy_kwh_by_slot(
         self,
@@ -291,7 +307,7 @@ class CostEvaluator:
                     self._distribute_energy_to_single_slot(
                         problem,
                         leg.trip.departure_min,
-                        self._estimated_deadhead_energy_kwh(leg, trip_info),
+                        self._estimated_deadhead_energy_kwh(problem, leg, trip_info),
                         slot_totals_kwh,
                     )
         return slot_totals_kwh
@@ -413,10 +429,15 @@ class CostEvaluator:
             end_idx = start_idx
         return tuple(range(start_idx, end_idx + 1))
 
-    def _estimated_deadhead_energy_kwh(self, leg: DutyLeg, trip_info: object | None) -> float:
+    def _estimated_deadhead_energy_kwh(
+        self,
+        problem: CanonicalOptimizationProblem,
+        leg: DutyLeg,
+        trip_info: object | None,
+    ) -> float:
         if leg.deadhead_from_prev_min <= 0:
             return 0.0
-        distance_km = (leg.deadhead_from_prev_min / 60.0) * 20.0
+        distance_km = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min)
         trip_distance = max(float(getattr(trip_info, "distance_km", 0.0) or 0.0), 1.0e-6)
         energy_per_km = max(float(getattr(trip_info, "energy_kwh", 0.0) or 0.0), 0.0) / trip_distance
         return distance_km * energy_per_km
@@ -476,7 +497,7 @@ class CostEvaluator:
                     total_co2_kg += ice_co2_kg_per_l * fuel_l
                 # Deadhead fuel CO₂.
                 if leg.deadhead_from_prev_min > 0 and fuel_rate > 0:
-                    dh_km = (leg.deadhead_from_prev_min / 60.0) * 20.0
+                    dh_km = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min)
                     total_co2_kg += ice_co2_kg_per_l * dh_km * fuel_rate
 
         # BEV traction electricity CO₂.

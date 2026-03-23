@@ -59,6 +59,12 @@ flowchart LR
 - ICE 車両にも燃料残量の状態遷移を追加し、便出発前の必要燃料チェックと走行後の残量更新（trip + deadhead 消費）を MILP 制約で扱うよう拡張
 - `disable_vehicle_acquisition_cost` は simulation 設定から共通最適化（`src/optimization/common`）経路にも反映され、ON 時は車両固定費（日割り導入費）を 0 として評価
 - Quick Setup に `initialIceFuelPercent` / `minIceFuelPercent` / `defaultIceTankCapacityL` を追加し、ICE の初期燃料・最低バッファ・既定タンク容量をフロント入力から最適化へ反映
+- デフォルト車両テンプレートを 6 車種（BYD K8 2.0 / ブルーリボン Z EV / エルガ EV / ブルーリボン 2KG-KV290N4 6AT / エルガ 2KG-LV290N4 6AT / エアロスター 2KG-MP38FK 6AT）へ更新し、ICE は `energyConsumption` を L/km（燃費逆数）で統一、タンク容量は標準 160L を採用
+- ICE 燃料モデルを拡張し、燃料残量が下限バッファに近づいた場合は refuel 変数で補充できるようにした（補充速度は「5分で下限→上限バッファ到達」想定）。`maxIceFuelPercent` を上限バッファとして追加
+- 回送速度を `deadhead_speed_kmh`（既定 18 km/h）でパラメータ化し、Tk 基本パラメータ・Quick Setup・Prepare・最適化計算（燃費/CO2/電費の deadhead 換算）へ反映
+- 補給イベントを出力可視化へ追加し、`vehicle_timelines.json/csv`・`graph/vehicle_timeline.csv`・`optimization_result.refueling_schedule` で「いつ・何L補充したか」を確認可能にした。`route_band_diagrams/*.svg` には ICE 補給マーカー（緑の印）を表示
+- 補給イベント専用CSV `refuel_events.csv`（run直下と `graph/` 配下）を追加し、時刻順に「車両・デポ・補充L」を単独確認できるようにした
+- `refuel_events.csv` に可視化補助列として `vehicle_type` / `route_band_id` / `route_band_label` / `route_family_code` を追加し、可視化ツールから車種・路線帯別に扱えるようにした
 - `tools/bus_operation_visualizer_tk.py` / `tools/multi_run_visualizer_tk.py` の UI 表示を日本語化し、主要数値パラメータに単位（`[台]` `[秒]` `[円]` `[kg-CO2]`）を明記
 
 </details>

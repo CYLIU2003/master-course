@@ -2006,3 +2006,51 @@ master-course/
     - `run_20260323_1833/graph/vehicle_timeline.csv` は `min_start=2026-03-22T05:30:00+09:00`, `max_end=2026-03-22T23:15:00+09:00` で、夕方便が CSV / SVG ともに落ちていないことを確認
     - `渋22.svg` は `viewBox width=3556`, `plot width=2880`, 軸 `00:00-23:59`, stop 軸末尾 `弦巻営業所`, `stroke-dasharray="8 5"` の depot deadhead と `stroke-dasharray="2 6"` の depot stay を含むことを確認
     - `python -m pytest tests` → `66 passed`
+
+- 2026-03-23 (UI: 営業所別充電器管理・充電器出力グローバルパラメータ廃止・バス導入費無効化チェックボックス追加)
+  - **変更内容**:
+    - `tools/scenario_backup_tk.py` の基本パラメータ欄から「充電器出力(kW)」グローバル入力を削除。充電器出力は `営業所充電器設定`（`normalChargerPowerKw` / `fastChargerPowerKw`）から参照するように統一。`use_selected_depot_charger_inventory=True` は既に有効だったため、mapper 側の動作変更はなし。
+    - `simulation_settings` dict から `charger_power_kw` 送信も廃止（`PrepareSimulationSettingsBody.charger_power_kw` フィールドは残存、デフォルト 90 kW）。
+    - トップバーのボタン名「営業所別車両管理」→「**営業所別充電器管理**」に変更。ウィンドウタイトルも同様に更新。車両管理は「車両・テンプレート管理」ボタンに集約。
+    - 「営業所別充電器管理」画面の「選択営業所を車両タブへ反映」ボタンを削除し、「保存」ボタンのみ残した。
+    - 基本パラメータ欄に **「バス導入費の日割り計算を無効化 (disable_vehicle_acquisition_cost)」チェックボックス**を追加（デフォルト OFF）。
+  - **バックエンド対応**:
+    - `bff/routers/simulation.py` の `PrepareSimulationSettingsBody` に `disable_vehicle_acquisition_cost: bool = False` を追加。
+    - `bff/services/simulation_builder.py` の `simulation_config` dict に `disable_vehicle_acquisition_cost` を追加で渡すよう変更。
+    - `bff/mappers/scenario_to_problemdata.py` の `build_problem_data_from_scenario` で `simulation_cfg.get("disable_vehicle_acquisition_cost", False)` を読み、`True` のとき全車両の `fixed_use_cost` を `dataclasses.replace` で 0.0 に上書きするよう変更。
+  - **ドキュメント反映**: `docs/constant/formulation.md` O4 節・`docs/constant/implementation_status.md` O4 行を更新。
+  - **既存テスト**: `tests/test_problem_builder_disable_acquisition_cost.py` が既に存在し pass 確認済み。
+
+- 2026-03-23 (Tokyu route-family trip replication を全系統で除去し、front/back/最適化の入力 source を統一)
+  - 問題は `data/built/tokyu_full/trips.parquet` / `timetables.parquet` の再生成ロジックが、GTFS trip を `routeFamilyCode + depotId` に一致する全 route variant へ複製していたことだった。代表例の `meguro / 黒01` では 587 便が family 内 9 route に複写され、`__vN` 除外後も base trip 群が先頭 route に偏って残るため、営業所路線選択・backend summary・最適化入力が route variant と一致しなかった。
+  - `scripts/rebuild_built_from_normalized.py` を修正し、trip-to-route mapping を family-based replication から `trip_id` に埋め込まれた `odptPatternId` の exact match へ変更した。fallback は `(routeFamilyCode, depotId, first_stop_id, last_stop_id)` の単一候補だけに限定し、1 便を複数 route に複写しないようにした。
+  - これにより `data/built/tokyu_full` を上書き再生成し、`trips.parquet=33354`, `timetables.parquet=33354`, `__vN=0` になった。`黒01` は `31 / 22 / 28 / 10 / 495 / 1` の route-variant 別 count に戻り、`587 x 9` の増殖は解消した。
+  - ただし built GTFS export と `data/catalog-fast/tokyu_bus_data` の間に route-level で 4 件だけ残差（`あ28`, `空港` 2 variant, `自02`）があり得るため、現在系では `src/runtime_scope.py`, `src/research_dataset_loader.py`, `bff/services/run_preparation.py`, `bff/routers/graph.py`, `bff/routers/scenarios.py` を修正し、Tokyu 系 timetable/trip scope load は `tokyu_shards` の次に `data/catalog-fast/tokyu_bus_data` を優先するよう揃えた。これで front/back/最適化計算は built の stale/misaligned route trip count に依存しない。
+  - 追加で、day-type 分離が route list 表示で落ちないよう `src/research_dataset_loader.py` の bootstrap route metadata に `tripCountsByDayType` / `tripCountTotal` を埋め込み、`bff/routers/master_data.py` の `/scenarios/{id}/routes` は `serviceId` 指定時、または scenario の現在 `dispatch_scope.serviceId` を既定 selected day として `tripCountSelectedDay` を返すよう修正した。これで route list API も total count ではなく selected day count を既定表示できる。
+  - 監査として `data/catalog-fast/tokyu_bus_data` の全 764 route variant を再走査し、同一 service 内で `origin + destination + departure + arrival` が重複する route は `0`、別 route 間で exact stop-time sequence まで一致する duplicate も `0` を確認した。terminal/time だけ同じ cross-route signature は 8 件あったが、すべて stop sequence が異なる別系統だった。
+  - 回帰テスト:
+    - `tests/test_rebuild_built_from_normalized.py`
+    - `tests/test_runtime_scope_route_mapping.py`
+    - `tests/test_master_data_route_counts.py`
+    - `tests/test_research_dataset_bootstrap_alignment.py`
+  - 確認:
+    - `python -m pytest tests -q` → `78 passed`
+    - `python scripts/rebuild_built_from_normalized.py` 実行済み
+    - `src.runtime_scope.load_scoped_trips()` で `odpt-route-9e1a26bc3c19` は `WEEKDAY=11`、residual mismatch route `odpt-route-ff937d39d487` も runtime では `WEEKDAY=7, SUN_HOL=7` を返し、`tokyu_bus_data` 側 count と一致することを確認
+
+- 2026-03-23 (再起動・再読込後に route trip count が壊れる問題を修正し、Tokyu route/day-type count を scenario reload でも維持)
+  - 実シナリオ `2b0a60cf-61ad-4094-807c-f766641984c6` を確認すると、`outputs/scenarios/.../master_data.sqlite` の `routes` に古い `tripCount=587` が残ったまま、`artifacts.sqlite` の `timetable_rows` / `trips` が 0 件へ上書きされるケースがあった。これにより、アプリ再起動後は route list / Quick Setup が stale route metadata へフォールバックし、`黒01` をはじめ高本数系統が「平日・土曜・休日で分別されず 587 が何個もある」表示になっていた。
+  - 根本原因は `bff/store/scenario_store.py` の `_load_shallow()` が heavy artifact を空既定値で埋めた doc を返し、その doc を `_save()` する経路が row/parquet artifact を丸ごと空で再保存していたことだった。`set_public_data_state()` など master-only 更新でも dispatch artifact を消し得る状態だった。
+  - 対策として `scenario_store._save()` に unloaded artifact 保護を追加し、`_load_shallow()` 由来の未ロード artifact は既存 `artifacts.sqlite` / parquet / json を staging へコピーして保持するよう修正した。逆に `_invalidate_dispatch_artifacts()` で明示的に無効化した `trips` / `graph` / `duties` / result artifact は unloaded マーカーから外し、意図した invalidation はそのまま効くようにした。
+  - 同時に `scenario_store._load_shallow()` / `_load()` で Tokyu の route metadata を preload master から自動補修するようにし、既存 scenario の `routes.tripCount`, `tripCountTotal`, `tripCountsByDayType` が stale でも request ごとに現行 `tokyu_bus_data` ベースの値へ戻るようにした。
+  - `get_field()`, `count_field_rows()`, `page_field_rows()`, `page_timetable_rows()`, `count_timetable_rows()`, `get_field_summary()`, `summarize_route_service_trip_counts()` も、scenario artifact が空のときは `data/catalog-fast/tokyu_bus_data` へフォールバックして件数・行・route/service summary を返すよう修正した。これで stale / missing artifact があっても front/back の count 表示は current Tokyu dataset に揃う。
+  - Quick Setup には追加の穴があり、summary 側が `0 便 route` を返さないため、`黒01` の 0 便 variant が `tripCountsByDayType={}` 扱いで route list に残っていた。`bff/routers/scenarios.py` で route metadata の `tripCountsByDayType` を事前 seed し、summary count は上書きマージに変更したことで、0 便 variant は非表示、正の count variant だけが selected day 別本数で残るようにした。
+  - 実データ確認:
+    - `bff.routers.master_data.list_routes('2b0a60cf-61ad-4094-807c-f766641984c6', service_id='WEEKDAY')` で `黒01` は `11 / 8 / 12 / 2 / 191 / 1`、`tripCountTotal` は `31 / 22 / 28 / 10 / 495 / 1` を返すことを確認
+    - 同じ scenario を `meguro + WEEKDAY` 相当に正規化した Quick Setup payload では、`黒01` の 0 便 variant 3 件が消え、残る 6 variant が source 通りの day-type count を返すことを確認
+  - 回帰テスト:
+    - `tests/test_scenario_store_dispatch_scope_overlay.py`
+    - `tests/test_quick_setup_route_selection.py`
+    - `tests/test_master_data_route_counts.py`
+  - 確認:
+    - `python -m pytest tests -q` → `82 passed`

@@ -141,6 +141,7 @@ def test_load_scoped_frames_drop_gtfs_reconciliation_duplicates(tmp_path, monkey
     ).to_parquet(built_dir / "timetables.parquet", index=False)
 
     monkeypatch.setattr("src.runtime_scope.shard_runtime_ready", lambda dataset_id: False)
+    monkeypatch.setattr("src.runtime_scope.tokyu_bus_data_ready", lambda dataset_id: False)
 
     scope = RuntimeScope(
         depot_ids=["dep1"],
@@ -153,3 +154,51 @@ def test_load_scoped_frames_drop_gtfs_reconciliation_duplicates(tmp_path, monkey
 
     assert trips["trip_id"].tolist() == ["trip-1"]
     assert timetables["trip_id"].tolist() == ["trip-1"]
+
+
+def test_load_scoped_frames_prefer_tokyu_bus_data_over_built_parquet(tmp_path, monkeypatch) -> None:
+    built_dir = tmp_path / "tokyu_full"
+    built_dir.mkdir(parents=True, exist_ok=True)
+
+    pd.DataFrame(
+        [
+            {"id": "route-a", "routeCode": "黒01", "routeLabel": "黒01", "depotId": "meguro"},
+        ]
+    ).to_parquet(built_dir / "routes.parquet", index=False)
+    pd.DataFrame(
+        [
+            {"trip_id": "stale-trip", "route_id": "route-a", "service_id": "WEEKDAY"},
+        ]
+    ).to_parquet(built_dir / "trips.parquet", index=False)
+    pd.DataFrame(
+        [
+            {"trip_id": "stale-trip", "route_id": "route-a", "service_id": "WEEKDAY", "stop_id": "stop-a"},
+        ]
+    ).to_parquet(built_dir / "timetables.parquet", index=False)
+
+    monkeypatch.setattr("src.runtime_scope.shard_runtime_ready", lambda dataset_id: False)
+    monkeypatch.setattr("src.runtime_scope.tokyu_bus_data_ready", lambda dataset_id: True)
+    monkeypatch.setattr(
+        "src.runtime_scope.load_tokyu_bus_trip_rows_for_scope",
+        lambda **kwargs: [
+            {"trip_id": "bus-data-trip", "route_id": "route-a", "service_id": "WEEKDAY"}
+        ],
+    )
+    monkeypatch.setattr(
+        "src.runtime_scope.load_tokyu_bus_stop_time_rows_for_scope",
+        lambda **kwargs: [
+            {"trip_id": "bus-data-trip", "route_id": "route-a", "service_id": "WEEKDAY", "stop_id": "stop-a"}
+        ],
+    )
+
+    scope = RuntimeScope(
+        depot_ids=["meguro"],
+        route_ids=["route-a"],
+        service_ids=["WEEKDAY"],
+    )
+
+    trips = load_scoped_trips(built_dir, scope)
+    timetables = load_scoped_timetables(built_dir, scope)
+
+    assert trips["trip_id"].tolist() == ["bus-data-trip"]
+    assert timetables["trip_id"].tolist() == ["bus-data-trip"]

@@ -46,6 +46,7 @@ from .constraints.battery_degradation import add_battery_degradation_constraints
 from .constraints.optional_v2g import add_v2g_constraints
 from .constraints.duty_assignment import add_duty_assignment_constraints
 from .objective import build_objective
+from .refuel_schedule import compute_refuel_schedule_l
 
 
 @dataclass
@@ -68,6 +69,9 @@ class MILPResult:
 
     # § 7.3.2 充電電力: vehicle_id -> charger_id -> [kW, ...]
     charge_power_kw: Dict[str, Dict[str, List[float]]] = field(default_factory=dict)
+
+    # ICE 補給量: vehicle_id -> [L per slot]
+    refuel_schedule_l: Dict[str, List[float]] = field(default_factory=dict)
 
     # § 7.5 系統受電: site_id -> [kW, ...]
     grid_import_kw: Dict[str, List[float]] = field(default_factory=dict)
@@ -318,6 +322,9 @@ def extract_result(
             total = sum(x[k, r_id].X for k in K_ALL)
             if total < 0.5:
                 result.unserved_tasks.append(r_id)
+
+    # --- ICE 補給スケジュール (全モード共通推定) ---
+    result.refuel_schedule_l = compute_refuel_schedule_l(data, ms, dp, result.assignment)
 
     # --- SOC ---
     if soc is not None:

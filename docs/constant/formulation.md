@@ -518,7 +518,7 @@ $$
 | ICE 燃料費 | $C_{fuel}$ | **常に有効** | ICE 車両が 0 台なら自動的に 0 |
 | 電気代（TOU） | $C_{elec}$ | **常に有効** | 系統買電量が 0 なら自動的に 0 |
 | デマンド料金 | $C_{dem}$ | **常に有効** | 単価を 0 に設定すれば実質無効化可 |
-| 車両固定費 | $C_{veh}$ | **常に有効** | `fixed_use_cost_jpy = 0` で実質無効化可 |
+| 車両固定費 | $C_{veh}$ | **常に有効** | `fixed_use_cost_jpy = 0` で個別無効化可。UI チェックボックス `disable_vehicle_acquisition_cost` で全車両一括無効化も可 |
 | 欠便ペナルティ | $\pi \cdot u_j$ | **常に有効・無条件** | 他のすべての項の後に無条件で加算。最低 10,000 円/便 |
 | CO₂ 費用 | $C_{CO_2}^{*}$ | `co2_price_per_kg > 0` のときのみ | デフォルトは 0（無効） |
 | 電池劣化費 | $C_{degr}^{*}$ | `degradation_weight > 0` のときのみ | デフォルトは 0（無効） |
@@ -592,6 +592,7 @@ $$
 | $c_k^{veh}$ | 車両 $k$ の日割り固定費（円/日） | パラメータ（vehicle.fixed_use_cost_jpy） |
 
 **意味：** 使用台数に比例する固定費（日割り減価償却費等）。$c_k^{veh} = 0$ に設定すれば実質無効化できる。1 台の BEV で複数便を連続担当すると $z_k$ の合計が減り O4 が下がる。
+UI の基本パラメータ欄にある **「バス導入費の日割り計算を無効化」チェックボックス**（`disable_vehicle_acquisition_cost`）をオンにすると、シナリオビルド時に全車両の $c_k^{veh}$ を 0 に強制上書きする（`bff/mappers/scenario_to_problemdata.py` の `build_problem_data_from_scenario` 内で `simulation_config.disable_vehicle_acquisition_cost` を読んで適用）。
 
 #### 欠便ペナルティ（常に有効）
 

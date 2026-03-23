@@ -860,6 +860,7 @@ class App:
         self.diesel_price_var = tk.StringVar(value="145")
         self.demand_charge_var = tk.StringVar(value="1500")
         self.depot_power_limit_var = tk.StringVar(value="500")
+        self.deadhead_speed_kmh_var = tk.StringVar(value="18")
         self.tou_text_var = tk.StringVar(value="0-12:15,12-20:40,20-48:20")
         self._labeled_entry(basic, "燃料単価 diesel_price_per_l", self.diesel_price_var)
         self._labeled_entry(basic, "電気代単価 grid_flat_price_per_kwh", self.grid_flat_price_var)
@@ -869,6 +870,7 @@ class App:
         self._labeled_entry(basic, "バッファSOC上限 soc_max", self.soc_max_var)
         self._labeled_entry(basic, "需要単価 demand_charge_cost_per_kw", self.demand_charge_var)
         self._labeled_entry(basic, "契約上限 depot_power_limit_kw", self.depot_power_limit_var)
+        self._labeled_entry(basic, "回送速度 deadhead_speed_kmh", self.deadhead_speed_kmh_var)
         ttk.Checkbutton(
             basic,
             text="バス導入費の日割り計算を無効化 (disable_vehicle_acquisition_cost)",
@@ -895,6 +897,7 @@ class App:
         self.final_soc_target_tolerance_percent_var = tk.StringVar(value="0.0")
         self.initial_ice_fuel_percent_var = tk.StringVar(value="100.0")
         self.min_ice_fuel_percent_var = tk.StringVar(value="10.0")
+        self.max_ice_fuel_percent_var = tk.StringVar(value="90.0")
         self.default_ice_tank_capacity_l_var = tk.StringVar(value="300.0")
         self.pv_profile_id_var = tk.StringVar(value="")
         self.weather_mode_var = tk.StringVar(value="sunny")
@@ -920,6 +923,7 @@ class App:
         self._labeled_entry(advanced, "終了SOC目標許容± final_soc_target_tolerance_percent", self.final_soc_target_tolerance_percent_var)
         self._labeled_entry(advanced, "ICE初期燃料比 initial_ice_fuel_percent", self.initial_ice_fuel_percent_var)
         self._labeled_entry(advanced, "ICE最低燃料バッファ min_ice_fuel_percent", self.min_ice_fuel_percent_var)
+        self._labeled_entry(advanced, "ICE燃料バッファ上限 max_ice_fuel_percent", self.max_ice_fuel_percent_var)
         self._labeled_entry(advanced, "ICE既定タンク容量[L] default_ice_tank_capacity_l", self.default_ice_tank_capacity_l_var)
         self._labeled_entry(advanced, "PVプロファイルID pv_profile_id", self.pv_profile_id_var)
         self._labeled_entry(advanced, "天気モード weather_mode", self.weather_mode_var)
@@ -2478,6 +2482,8 @@ class App:
             self.initial_ice_fuel_percent_var.set(str(sim.get("initialIceFuelPercent") or 100.0))
             self.min_ice_fuel_percent_var.set(str(sim.get("minIceFuelPercent") or 10.0))
             self.default_ice_tank_capacity_l_var.set(str(sim.get("defaultIceTankCapacityL") or 300.0))
+            self.max_ice_fuel_percent_var.set(str(sim.get("maxIceFuelPercent") or 90.0))
+            self.deadhead_speed_kmh_var.set(str(sim.get("deadheadSpeedKmh") or 18.0))
             self.pv_profile_id_var.set(str(sim.get("pvProfileId") or ""))
             self.weather_mode_var.set(str(sim.get("weatherMode") or "sunny"))
             self.weather_factor_scalar_var.set(str(sim.get("weatherFactorScalar") or 1.0))
@@ -2564,10 +2570,12 @@ class App:
             ),
             "initialIceFuelPercent": self._parse_float(self.initial_ice_fuel_percent_var.get(), 100.0),
             "minIceFuelPercent": self._parse_float(self.min_ice_fuel_percent_var.get(), 10.0),
+            "maxIceFuelPercent": self._parse_float(self.max_ice_fuel_percent_var.get(), 90.0),
             "defaultIceTankCapacityL": self._parse_float(
                 self.default_ice_tank_capacity_l_var.get(),
                 300.0,
             ),
+            "deadheadSpeedKmh": self._parse_float(self.deadhead_speed_kmh_var.get(), 18.0),
             "pvProfileId": self.pv_profile_id_var.get().strip() or None,
             "weatherMode": self.weather_mode_var.get().strip() or "sunny",
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
@@ -3304,6 +3312,7 @@ class App:
                 "use_selected_depot_vehicle_inventory": True,
                 "use_selected_depot_charger_inventory": True,
                 "disable_vehicle_acquisition_cost": self.disable_vehicle_acquisition_cost_var.get(),
+                "deadhead_speed_kmh": self._parse_float(self.deadhead_speed_kmh_var.get(), 18.0),
                 "solver_mode": self.solver_mode_var.get().strip(),
                 "objective_mode": self.objective_mode_var.get().strip(),
                 "allow_partial_service": self.allow_partial_service_var.get(),
@@ -3625,6 +3634,7 @@ class App:
             (self.grid_sell_price_var, "売電単価を変更"),
             (self.demand_charge_var, "需要料金を変更"),
             (self.diesel_price_var, "軽油単価を変更"),
+            (self.deadhead_speed_kmh_var, "回送速度を変更"),
             (self.grid_co2_var, "CO2原単位を変更"),
             (self.co2_price_var, "CO2単価を変更"),
             (self.ice_co2_kg_per_l_var, "軽油CO2係数を変更"),
@@ -3638,6 +3648,7 @@ class App:
             (self.final_soc_target_tolerance_percent_var, "終了SOC目標許容幅を変更"),
             (self.initial_ice_fuel_percent_var, "ICE初期燃料比を変更"),
             (self.min_ice_fuel_percent_var, "ICE最低燃料バッファを変更"),
+            (self.max_ice_fuel_percent_var, "ICE燃料バッファ上限を変更"),
             (self.default_ice_tank_capacity_l_var, "ICE既定タンク容量を変更"),
             (self.pv_profile_id_var, "PVプロファイルを変更"),
             (self.weather_mode_var, "天気モードを変更"),

@@ -39,6 +39,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             use_selected_depot_vehicle_inventory=True,
             use_selected_depot_charger_inventory=True,
             disable_vehicle_acquisition_cost=True,
+            deadhead_speed_kmh=18.0,
         ),
     )
 
@@ -72,3 +73,4 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["dispatch_scope"]["effectiveRouteIds"] == ["route-a"]
     assert updated["scenario_overlay"]["route_ids"] == ["route-a"]
     assert updated["simulation_config"]["disable_vehicle_acquisition_cost"] is True
+    assert updated["simulation_config"]["deadhead_speed_kmh"] == 18.0

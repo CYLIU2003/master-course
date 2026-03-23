@@ -7,6 +7,11 @@ import unicodedata
 
 import pandas as pd
 
+from src.tokyu_bus_data import (
+    load_stop_time_rows_for_scope as load_tokyu_bus_stop_time_rows_for_scope,
+    load_trip_rows_for_scope as load_tokyu_bus_trip_rows_for_scope,
+    tokyu_bus_data_ready,
+)
 from src.tokyu_shard_loader import (
     load_stop_time_rows_for_scope,
     load_trip_rows_for_scope,
@@ -378,6 +383,16 @@ def load_scoped_trips(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame:
             )
         )
         return frame.reset_index(drop=True)
+    if tokyu_bus_data_ready(dataset_id):
+        frame = pd.DataFrame(
+            load_tokyu_bus_trip_rows_for_scope(
+                dataset_id=dataset_id,
+                route_ids=scope.route_ids,
+                depot_ids=scope.depot_ids,
+                service_ids=scope.service_ids,
+            )
+        )
+        return frame.reset_index(drop=True)
     frame = _drop_gtfs_reconciliation_duplicates(pd.read_parquet(built_dir / "trips.parquet"))
     frame = _filter_by_service(frame, scope)
     return _filter_by_route(
@@ -394,6 +409,16 @@ def load_scoped_timetables(built_dir: Path, scope: RuntimeScope) -> pd.DataFrame
     if shard_runtime_ready(dataset_id):
         frame = pd.DataFrame(
             load_stop_time_rows_for_scope(
+                dataset_id=dataset_id,
+                route_ids=scope.route_ids,
+                depot_ids=scope.depot_ids,
+                service_ids=scope.service_ids,
+            )
+        )
+        return frame.reset_index(drop=True)
+    if tokyu_bus_data_ready(dataset_id):
+        frame = pd.DataFrame(
+            load_tokyu_bus_stop_time_rows_for_scope(
                 dataset_id=dataset_id,
                 route_ids=scope.route_ids,
                 depot_ids=scope.depot_ids,

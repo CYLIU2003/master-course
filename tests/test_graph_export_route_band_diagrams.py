@@ -24,6 +24,7 @@ def _timeline_row(
     route_series_code: str = "route/22",
     event_route_band_id: str = "route/22",
     trip_id: str = "",
+    refuel_liters: float = 0.0,
 ):
     return {
         "scenario_id": "scenario-1",
@@ -57,6 +58,7 @@ def _timeline_row(
         "is_short_turn": False,
         "charger_id": "chg-1" if state == "charge" else "",
         "charge_power_kw": 60.0 if state == "charge" else "",
+        "refuel_liters": refuel_liters if state == "refuel" else "",
     }
 
 
@@ -91,6 +93,19 @@ def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
             route_id="",
             trip_id="",
             event_route_band_id="",
+        ),
+        _timeline_row(
+            vehicle_id="veh-ice",
+            vehicle_type="ICE",
+            state="refuel",
+            start_time="2026-03-23T08:48:00+09:00",
+            end_time="2026-03-23T09:00:00+09:00",
+            from_location_id="dep-1",
+            to_location_id="dep-1",
+            route_id="",
+            trip_id="",
+            event_route_band_id="",
+            refuel_liters=18.0,
         ),
         _timeline_row(
             vehicle_id="veh-ice",
@@ -183,6 +198,8 @@ def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
     assert "Other 1" not in svg
     assert "Other 2" not in svg
     assert 'stroke-dasharray="8 5"' in svg
+    assert "ICE refuel mark" in svg
+    assert "#6cab2f" in svg
     axis_labels = _svg_axis_labels(svg)
     assert axis_labels in (
         ["Depot 22", "Stop A", "Stop B", "Stop Bx", "Stop C"],

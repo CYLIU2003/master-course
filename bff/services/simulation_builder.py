@@ -168,8 +168,10 @@ def _selected_vehicle_inventory(
     initial_soc: float,
     soc_min: Optional[float],
     soc_max: Optional[float],
+    restrict_vehicle_types: Optional[list[str]] = None,
 ) -> list[Dict[str, Any]]:
     selected = set(selected_depot_ids)
+    type_filter = {t.upper() for t in restrict_vehicle_types} if restrict_vehicle_types else None
     vehicles: list[Dict[str, Any]] = []
     for raw in doc.get("vehicles") or []:
         vehicle = dict(raw)
@@ -178,7 +180,10 @@ def _selected_vehicle_inventory(
             continue
         if vehicle.get("enabled", True) is False:
             continue
-        if str(vehicle.get("type") or "").upper() == "BEV":
+        vehicle_type = str(vehicle.get("type") or "").upper()
+        if type_filter is not None and vehicle_type not in type_filter:
+            continue
+        if vehicle_type == "BEV":
             vehicle["initialSoc"] = initial_soc
             if soc_min is not None:
                 vehicle["minSoc"] = soc_min
@@ -194,15 +199,10 @@ def _selected_charger_inventory(
     selected_depot_ids: list[str],
 ) -> list[Dict[str, Any]]:
     selected = set(selected_depot_ids)
-    chargers: list[Dict[str, Any]] = []
-    for raw in doc.get("chargers") or []:
-        charger = dict(raw)
-        site_id = str(charger.get("siteId") or charger.get("site_id") or "").strip()
-        if site_id in selected:
-            chargers.append(charger)
-    if chargers:
-        return chargers
 
+    # デポ充電器設定（normalChargerCount/fastChargerCount）が存在する場合は
+    # そちらを優先して使う。保存済みの charger オブジェクトは設定済みデポが
+    # ない場合のフォールバックとする。
     generated: list[Dict[str, Any]] = []
     for depot in doc.get("depots") or []:
         depot_id = str(depot.get("id") or depot.get("depotId") or "").strip()
@@ -232,7 +232,17 @@ def _selected_charger_inventory(
                     "simultaneous_ports": 1,
                 }
             )
-    return generated
+    if generated:
+        return generated
+
+    # デポ設定がない場合は保存済みの charger オブジェクトを使う
+    chargers: list[Dict[str, Any]] = []
+    for raw in doc.get("chargers") or []:
+        charger = dict(raw)
+        site_id = str(charger.get("siteId") or charger.get("site_id") or "").strip()
+        if site_id in selected:
+            chargers.append(charger)
+    return chargers
 
 
 def apply_builder_configuration(
@@ -300,6 +310,7 @@ def apply_builder_configuration(
     runtime_vehicles: list[Dict[str, Any]] = []
     primary_template: Dict[str, Any] = {}
     template_selections: list[Dict[str, Any]] = []
+    restrict_vehicle_types = list(getattr(settings, "restrict_vehicle_types", None) or [])
     if use_selected_vehicle_inventory:
         runtime_vehicles = _selected_vehicle_inventory(
             doc,
@@ -307,6 +318,7 @@ def apply_builder_configuration(
             initial_soc=float(settings.initial_soc),
             soc_min=soc_min,
             soc_max=soc_max,
+            restrict_vehicle_types=restrict_vehicle_types or None,
         )
 
     if not runtime_vehicles:
@@ -544,6 +556,7 @@ def apply_builder_configuration(
         "time_limit_seconds": body.simulation_settings.time_limit_seconds,
         "mip_gap": body.simulation_settings.mip_gap,
         "alns_iterations": overlay.solver_config.alns_iterations,
+        "deadhead_speed_kmh": body.simulation_settings.deadhead_speed_kmh,
         "random_seed": overlay.random_seed,
         "experiment_method": body.simulation_settings.experiment_method,
         "experiment_notes": body.simulation_settings.experiment_notes,

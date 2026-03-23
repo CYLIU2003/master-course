@@ -9,6 +9,12 @@ import pandas as pd
 
 from src.dataset_integrity import evaluate_dataset_integrity, validate_rows_against_schema
 from src.scenario_overlay import default_scenario_overlay
+from src.tokyu_bus_data import (
+    load_stop_timetable_rows_for_scope as load_tokyu_bus_stop_timetable_rows_for_scope,
+    load_trip_rows_for_scope as load_tokyu_bus_trip_rows_for_scope,
+    route_trip_counts_by_day_type as load_tokyu_bus_route_trip_counts_by_day_type,
+    tokyu_bus_data_ready,
+)
 from src.tokyu_shard_loader import (
     TOKYU_SHARD_ROOT,
     day_type_to_service_id,
@@ -322,11 +328,56 @@ def _normalize_route_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "routeVariantType": row.get("routeVariantType") or row.get("route_variant_type"),
         "canonicalDirection": row.get("canonicalDirection") or row.get("canonical_direction"),
         "tripCount": _safe_int(row.get("tripCount", row.get("trip_count")), 0),
+        "tripCountTotal": _safe_int(
+            row.get("tripCountTotal", row.get("trip_count_total", row.get("tripCount", row.get("trip_count")))),
+            0,
+        ),
+        "tripCountsByDayType": {
+            str(key): _safe_int(value, 0)
+            for key, value in dict(row.get("tripCountsByDayType") or row.get("trip_counts_by_day_type") or {}).items()
+        },
         "stopSequence": coerce_str_list(
             first_non_empty_list(row.get("stopSequence"), row.get("stop_sequence"))
         ),
     }
     return normalized
+
+
+def _apply_route_day_type_counts(
+    routes: List[Dict[str, Any]],
+    *,
+    dataset_id: str,
+    depot_ids: List[str] | None = None,
+) -> List[Dict[str, Any]]:
+    route_ids = [
+        str(route.get("id") or "").strip()
+        for route in routes
+        if str(route.get("id") or "").strip()
+    ]
+    if not route_ids or not tokyu_bus_data_ready(dataset_id):
+        return routes
+    counts_by_route = load_tokyu_bus_route_trip_counts_by_day_type(
+        dataset_id=dataset_id,
+        route_ids=route_ids,
+        depot_ids=depot_ids,
+    )
+    enriched: List[Dict[str, Any]] = []
+    for route in routes:
+        route_id = str(route.get("id") or "").strip()
+        counts = {
+            str(key): _safe_int(value, 0)
+            for key, value in dict(counts_by_route.get(route_id) or {}).items()
+        }
+        total = sum(counts.values()) if counts else _safe_int(route.get("tripCount"), 0)
+        enriched.append(
+            {
+                **route,
+                "tripCountsByDayType": counts,
+                "tripCountTotal": total,
+                "tripCount": total,
+            }
+        )
+    return enriched
 
 
 def _normalize_timetable_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -863,6 +914,35 @@ def build_dataset_bootstrap(
                     "availableRoutes": list(shard_manifest.get("available_routes") or []),
                 }
             }
+        elif tokyu_bus_data_ready(dataset_id):
+            route_ids = [
+                str(item.get("id") or "").strip()
+                for item in route_inventory
+                if str(item.get("id") or "").strip()
+            ]
+            timetable_rows = load_tokyu_bus_trip_rows_for_scope(
+                dataset_id=dataset_id,
+                route_ids=route_ids or None,
+                depot_ids=requested_depot_ids or None,
+                service_ids=None,
+            )
+            trips = list(timetable_rows)
+            stops = built_stops
+            stop_timetables = load_tokyu_bus_stop_timetable_rows_for_scope(
+                dataset_id=dataset_id,
+                route_ids=route_ids or None,
+                depot_ids=requested_depot_ids or None,
+                service_ids=None,
+            )
+            routes = route_inventory
+            calendar_entries = _derive_calendar_entries(timetable_rows)
+            available_route_ids = _available_route_ids_from_rows(timetable_rows, trips)
+            scope_route_ids = [
+                route_id
+                for route_id in route_ids
+                if route_id in available_route_ids
+            ]
+            source = "tokyu_bus_data"
         else:
             route_ids = {
                 str(item.get("id") or "").strip()
@@ -972,6 +1052,17 @@ def build_dataset_bootstrap(
     route_assignments = _build_route_assignments(routes, route_rows)
     depot_permissions = _build_depot_permissions(route_assignments)
     scope_routes = _filter_routes_by_route_ids(routes, set(scope_route_ids)) if scope_route_ids else list(routes)
+    if tokyu_bus_data_ready(dataset_id):
+        routes = _apply_route_day_type_counts(
+            list(routes),
+            dataset_id=dataset_id,
+            depot_ids=requested_depot_ids or None,
+        )
+        scope_routes = _apply_route_day_type_counts(
+            list(scope_routes),
+            dataset_id=dataset_id,
+            depot_ids=requested_depot_ids or None,
+        )
     scope_depots = _filter_depots_by_route_context(depots, scope_routes, [])
     if not scope_depots and scope_routes:
         scope_depots = _filter_depots_by_route_context(depots, scope_routes, route_assignments)

@@ -39,6 +39,7 @@ class TimelineBundle:
     events: pd.DataFrame
     vehicle_types: Dict[str, str]
     charging: pd.DataFrame
+    refuel_events: pd.DataFrame
     delta_t_min: int
     horizon_minute: int
     horizon_max_minute: int
@@ -79,12 +80,19 @@ def _build_summary_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
         unmet_trips = len(unmet)
     else:
         unmet_trips = 0
+    refuel_count = 0
+    refuel_total_l = 0.0
+    if not bundle.refuel_events.empty:
+        refuel_count = len(bundle.refuel_events)
+        refuel_total_l = float(pd.to_numeric(bundle.refuel_events["refuel_liters"], errors="coerce").fillna(0.0).sum())
 
     rows = [
         ("ステータス", status),
         ("目的関数値 [モデル単位]", f"{objective:.6f}"),
         ("求解時間 [秒]", f"{solve_time_sec:.6f}"),
         ("未割当便数 [便]", str(unmet_trips)),
+        ("補給イベント数 [件]", str(refuel_count)),
+        ("補給総量 [L]", f"{refuel_total_l:.6f}"),
         ("電力コスト [円]", f"{_safe_float(cost_breakdown.get('electricity_cost'), 0.0):.6f}"),
         ("燃料コスト [円]", f"{_safe_float(cost_breakdown.get('fuel_cost'), 0.0):.6f}"),
         ("デマンド料金 [円]", f"{_safe_float(cost_breakdown.get('demand_charge'), 0.0):.6f}"),
@@ -113,6 +121,31 @@ def _build_details_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
     _flatten_dict_for_details("サマリー", bundle.summary_json or {}, rows)
     _flatten_dict_for_details("コスト内訳詳細", bundle.cost_detail_json or {}, rows)
     _flatten_dict_for_details("CO2内訳", bundle.co2_detail_json or {}, rows)
+    if not bundle.refuel_events.empty:
+        route_band_counts = (
+            bundle.refuel_events.get("route_band_id", pd.Series(dtype=str))
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+        route_band_counts = route_band_counts[route_band_counts != ""]
+        if not route_band_counts.empty:
+            for band_id, count in route_band_counts.value_counts().items():
+                rows.append((f"補給イベント.route_band.{band_id}", str(int(count))))
+        top_rows = bundle.refuel_events.head(10)
+        for idx, r in top_rows.iterrows():
+            rows.append(
+                (
+                    f"補給イベント.sample[{int(idx)}]",
+                    (
+                        f"vehicle={r.get('vehicle_id', '')}, "
+                        f"type={r.get('vehicle_type', '')}, "
+                        f"band={r.get('route_band_id', '')}, "
+                        f"liters={_safe_float(r.get('refuel_liters', 0.0), 0.0):.3f}, "
+                        f"time={r.get('time_hhmm', '')}"
+                    ),
+                )
+            )
     return rows
 
 
@@ -214,6 +247,54 @@ def _load_bundle(run_dir: Path) -> TimelineBundle:
 
     delta_t_min = _detect_delta_t_min(run_dir, gantt)
 
+    refuel_events = _read_csv_or_empty(
+        run_dir / "refuel_events.csv",
+        [
+            "vehicle_id",
+            "vehicle_type",
+            "depot_id",
+            "route_band_id",
+            "route_band_label",
+            "slot_index",
+            "event_time",
+            "time_hhmm",
+            "refuel_liters",
+        ],
+    )
+    if not refuel_events.empty:
+        refuel_events["slot_index"] = pd.to_numeric(refuel_events["slot_index"], errors="coerce").fillna(0).astype(int)
+        refuel_events["refuel_liters"] = pd.to_numeric(refuel_events["refuel_liters"], errors="coerce").fillna(0.0)
+        # Backward-compatible minute reconstruction when event_time is missing.
+        if "event_time" not in refuel_events.columns or refuel_events["event_time"].isna().all():
+            refuel_events["event_time"] = pd.NA
+        refuel_events["event_minute"] = refuel_events["slot_index"] * delta_t_min
+        if "vehicle_type" in refuel_events.columns:
+            fallback_types = (
+                refuel_events[["vehicle_id", "vehicle_type"]]
+                .dropna()
+                .assign(vehicle_id=lambda d: d["vehicle_id"].astype(str), vehicle_type=lambda d: d["vehicle_type"].astype(str).str.upper().str.strip())
+            )
+            for _, row in fallback_types.iterrows():
+                vid = str(row["vehicle_id"])
+                vtype = str(row["vehicle_type"])
+                if vid and vtype and vid not in vehicle_types:
+                    vehicle_types[vid] = vtype
+    else:
+        refuel_events = pd.DataFrame(
+            columns=[
+                "vehicle_id",
+                "vehicle_type",
+                "depot_id",
+                "route_band_id",
+                "route_band_label",
+                "slot_index",
+                "event_time",
+                "time_hhmm",
+                "refuel_liters",
+                "event_minute",
+            ]
+        )
+
     min_from_events = _safe_int(pd.to_numeric(gantt["start_minute"], errors="coerce").min(), 0)
     max_from_events = _safe_int(pd.to_numeric(gantt["end_minute"], errors="coerce").max(), 24 * 60)
 
@@ -235,6 +316,7 @@ def _load_bundle(run_dir: Path) -> TimelineBundle:
         events=gantt,
         vehicle_types=vehicle_types,
         charging=charging,
+        refuel_events=refuel_events,
         delta_t_min=delta_t_min,
         horizon_minute=horizon_min,
         horizon_max_minute=horizon_max,
@@ -283,6 +365,8 @@ def _build_vehicle_order(bundle: TimelineBundle, only_assigned: bool) -> List[st
         all_ids = set(bundle.events["vehicle_id"].astype(str).unique().tolist())
         all_ids.update(bundle.vehicle_types.keys())
         all_ids.update(bundle.charging["vehicle_id"].astype(str).unique().tolist())
+        if not bundle.refuel_events.empty:
+            all_ids.update(bundle.refuel_events["vehicle_id"].astype(str).unique().tolist())
         ids = sorted(all_ids)
 
     ids.sort(key=lambda vid: (_type_key(bundle.vehicle_types.get(vid, "UNKNOWN")), vid))
@@ -412,6 +496,17 @@ def _plot_style_2(bundle: TimelineBundle, vehicle_ids: List[str], only_assigned:
         for _, r in agg.iterrows():
             charging_map[(str(r["vehicle_id_norm"]), int(r["time_idx"]))] = float(r["p_charge_kw"])
 
+    refuel_map: Dict[str, List[Tuple[float, float]]] = {}
+    if not bundle.refuel_events.empty:
+        refuel_work = bundle.refuel_events.copy()
+        refuel_work["vehicle_id_norm"] = refuel_work["vehicle_id"].astype(str)
+        refuel_work["event_minute"] = pd.to_numeric(refuel_work.get("event_minute"), errors="coerce")
+        refuel_work["refuel_liters"] = pd.to_numeric(refuel_work.get("refuel_liters"), errors="coerce").fillna(0.0)
+        for _, r in refuel_work.iterrows():
+            minute = float(r["event_minute"]) if pd.notna(r["event_minute"]) else float(r.get("slot_index", 0)) * float(bundle.delta_t_min)
+            liters = float(r["refuel_liters"])
+            refuel_map.setdefault(str(r["vehicle_id_norm"]), []).append((minute, liters))
+
     for i, vid in enumerate(vehicle_ids):
         vtype = bundle.vehicle_types.get(vid, "UNKNOWN").upper()
 
@@ -455,6 +550,22 @@ def _plot_style_2(bundle: TimelineBundle, vehicle_ids: List[str], only_assigned:
                 )
             )
 
+        # ICE refuel markers (diamond), scaled by liters.
+        for minute, liters in refuel_map.get(vid, []):
+            if minute < bundle.horizon_minute or minute > bundle.horizon_max_minute:
+                continue
+            size = 28.0 + min(max(liters, 0.0), 80.0) * 1.6
+            ax.scatter(
+                [minute],
+                [i],
+                marker="D",
+                s=size,
+                c="#6cab2f",
+                edgecolors="#3f7d1b",
+                linewidths=0.8,
+                zorder=3,
+            )
+
         ytick_pos.append(i)
         ytick_labels.append(_vehicle_label(vid, vtype, i + 1))
 
@@ -474,6 +585,7 @@ def _plot_style_2(bundle: TimelineBundle, vehicle_ids: List[str], only_assigned:
     legend_items = [
         Patch(facecolor="#d7d7d7", edgecolor="none", label="走行中"),
         Patch(facecolor=cmap(0.85), edgecolor="none", label="充電中（出力比が高いほど濃色）"),
+        Patch(facecolor="#6cab2f", edgecolor="#3f7d1b", label="補給イベント（菱形マーカー）"),
     ]
     ax.legend(handles=legend_items, loc="upper right", frameon=True, fontsize=10)
 

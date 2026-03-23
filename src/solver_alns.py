@@ -24,6 +24,7 @@ from .milp_model import MILPResult
 from .model_sets import ModelSets
 from .objective_modes import normalize_objective_mode
 from .parameter_builder import DerivedParams, get_grid_price, resolve_vehicle_energy_site_id
+from .refuel_schedule import compute_refuel_schedule_l
 
 
 # ---------------------------------------------------------------------------
@@ -719,9 +720,13 @@ def _to_milp_result(
         result.soc_series = details.get("soc_series", {})
         result.charge_schedule = details.get("charge_schedule", {})
         result.charge_power_kw = details.get("charge_power_kw", {})
+        result.refuel_schedule_l = details.get("refuel_schedule_l", {})
         result.grid_import_kw = details.get("grid_import_kw", {})
         result.pv_used_kw = details.get("pv_used_kw", {})
         result.peak_demand_kw = details.get("peak_demand_kw", {})
+
+    if not result.refuel_schedule_l:
+        result.refuel_schedule_l = compute_refuel_schedule_l(data, ms, dp, result.assignment)
 
     return result
 

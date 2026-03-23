@@ -95,14 +95,18 @@ def _route_summaries_from_timetable(
         bucket = by_route.setdefault(
             route_id,
             {
-                "tripCount": 0,
+                "tripCountTotal": 0,
+                "tripCountsByDayType": {},
                 "serviceTypes": set(),
             },
         )
-        bucket["tripCount"] += int(row.get("trip_count") or 0)
-        bucket["serviceTypes"].add(
-            canonical_service_id(row.get("service_id") or "WEEKDAY")
+        service_id = canonical_service_id(row.get("service_id") or "WEEKDAY")
+        trip_count = int(row.get("trip_count") or 0)
+        bucket["tripCountTotal"] += trip_count
+        bucket["tripCountsByDayType"][service_id] = (
+            int(bucket["tripCountsByDayType"].get(service_id) or 0) + trip_count
         )
+        bucket["serviceTypes"].add(service_id)
 
     for bucket in by_route.values():
         bucket["serviceTypes"] = sorted(bucket["serviceTypes"])
@@ -814,9 +818,13 @@ def list_routes(
     depot_id: Optional[str] = Query(None, alias="depotId"),
     operator: Optional[str] = Query(None),
     group_by_family: bool = Query(False, alias="groupByFamily"),
+    service_id: Optional[str] = Query(None, alias="serviceId"),
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    items = store.list_routes(scenario_id, depot_id=depot_id, operator=operator)
+    requested_depot_id = depot_id if isinstance(depot_id, str) else None
+    requested_operator = operator if isinstance(operator, str) else None
+    requested_group_by_family = group_by_family if isinstance(group_by_family, bool) else False
+    items = store.list_routes(scenario_id, depot_id=requested_depot_id, operator=requested_operator)
     items = enrich_routes_with_family([dict(route) for route in items])
 
     route_ids = {
@@ -825,8 +833,14 @@ def list_routes(
         if route.get("id") is not None
     }
     route_summaries = _route_summaries_from_timetable(scenario_id, route_ids)
+    requested_service_id = service_id if isinstance(service_id, str) else None
+    selected_service_id = canonical_service_id(
+        requested_service_id
+        or (store.get_dispatch_scope(scenario_id) or {}).get("serviceId")
+        or ""
+    ) or None
 
-    if group_by_family:
+    if requested_group_by_family:
         items = sorted(
             items,
             key=lambda route: (
@@ -846,8 +860,28 @@ def list_routes(
     for route in items:
         route_id = str(route.get("id") or "").strip()
         summary = route_summaries.get(route_id)
-        service_types = list(summary.get("serviceTypes") or []) if summary else []
-        trip_count = int(summary.get("tripCount") or 0) if summary else 0
+        trip_counts_by_day_type = {
+            canonical_service_id(key): _safe_int(value)
+            for key, value in dict(
+                (summary or {}).get("tripCountsByDayType")
+                or route.get("tripCountsByDayType")
+                or {}
+            ).items()
+        }
+        service_types = list(summary.get("serviceTypes") or []) if summary else [
+            key for key, value in sorted(trip_counts_by_day_type.items()) if int(value or 0) > 0
+        ]
+        trip_count_total = (
+            _safe_int((summary or {}).get("tripCountTotal"))
+            or _safe_int(route.get("tripCountTotal"))
+            or (sum(trip_counts_by_day_type.values()) if trip_counts_by_day_type else 0)
+            or _safe_int(route.get("tripCount"))
+        )
+        trip_count_selected_day = (
+            _safe_int(trip_counts_by_day_type.get(selected_service_id))
+            if selected_service_id
+            else trip_count_total
+        )
         route_item = {
             "id": route.get("id"),
             "name": route.get("name"),
@@ -864,7 +898,11 @@ def list_routes(
             "assignmentType": route.get("assignmentType"),
             "assignmentConfidence": route.get("assignmentConfidence"),
             "assignmentReason": route.get("assignmentReason"),
-            "tripCount": _safe_int(route.get("tripCount")) or trip_count,
+            "tripCount": trip_count_selected_day,
+            "tripCountSelectedDay": trip_count_selected_day,
+            "tripCountTotal": trip_count_total,
+            "tripCountsByDayType": trip_counts_by_day_type,
+            "selectedServiceId": selected_service_id,
             "serviceTypes": service_types,
             "routeFamilyId": route.get("routeFamilyId"),
             "routeFamilyCode": route.get("routeFamilyCode"),
@@ -887,7 +925,7 @@ def list_routes(
         "total": len(summarized_items),
         "meta": {
             "imports": store.get_route_import_meta(scenario_id),
-            "groupedByFamily": group_by_family,
+            "groupedByFamily": requested_group_by_family,
         },
     }
 

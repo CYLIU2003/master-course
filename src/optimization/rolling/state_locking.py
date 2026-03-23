@@ -31,6 +31,7 @@ def lock_started_trips(plan: AssignmentPlan, current_min: int) -> AssignmentPlan
     return AssignmentPlan(
         duties=tuple(duties),
         charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=served,
         unserved_trip_ids=tuple(sorted(set(plan.unserved_trip_ids))),
         metadata={**dict(plan.metadata), "locked_trip_ids": tuple(locked)},

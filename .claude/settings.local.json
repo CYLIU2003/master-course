@@ -20,7 +20,20 @@
       "Bash(find /c/master-course -name main.py -o -name README.md -o -name .env*)",
       "Bash(ls -la /c/master-course/*.py)",
       "Bash(python3 -c \":*)",
-      "Bash(python -m pytest -x -q)"
+      "Bash(python -m pytest -x -q)",
+      "Bash(curl -s http://127.0.0.1:8000/health)",
+      "Bash(python -m pytest tests/test_problem_builder_disable_acquisition_cost.py -v)",
+      "Bash(python -c \"from src.optimization.common.evaluator import CostEvaluator; print\\(''OK''\\)\")",
+      "Bash(curl -s \"http://127.0.0.1:8000/api/scenarios/2b0a60cf-61ad-4094-807c-f766641984c6\")",
+      "Bash(curl -s http://127.0.0.1:8000/openapi.json)",
+      "Bash(SCENARIO=\"2b0a60cf-61ad-4094-807c-f766641984c6\" curl -s \"http://127.0.0.1:8000/api/scenarios/$SCENARIO\")",
+      "Bash(JOB=\"f67a09ff-6551-458e-9f45-90777c80ec87\" curl -s \"http://127.0.0.1:8000/api/jobs/$JOB\")",
+      "Bash(curl -s \"http://127.0.0.1:8000/api/scenarios/2b0a60cf-61ad-4094-807c-f766641984c6/depots\")",
+      "Bash(curl -s \"http://127.0.0.1:8000/api/scenarios/2b0a60cf-61ad-4094-807c-f766641984c6/depots/tsurumaki\")",
+      "Bash(netstat -ano)",
+      "Bash(cmd.exe /c \"taskkill /PID 134460 /F\")",
+      "Bash(cmd.exe /c \"taskkill /PID 134460 /F 2>&1\")",
+      "Bash(cmd //c \"taskkill /PID 134460 /F\")"
     ]
   }
 }

@@ -164,6 +164,15 @@ def export_graph_exports_phase1(
     )
     cost_breakdown = _build_cost_breakdown_json(data, sim, scenario_id)
     kpi_summary = _build_kpi_summary_json(data, ms, dp, milp, sim, scenario_id)
+    refuel_event_rows = _build_refuel_event_rows(
+        data,
+        ms,
+        dp,
+        milp,
+        scenario_id,
+        base_date,
+        planning_start_time=planning_start_time,
+    )
     route_band_diagrams = _build_route_band_diagram_assets(
         vehicle_timeline_rows,
         scenario_id,
@@ -174,6 +183,7 @@ def export_graph_exports_phase1(
     _write_csv(graph_dir / "soc_events.csv", soc_event_rows)
     _write_csv(graph_dir / "depot_power_timeseries_5min.csv", depot_power_rows)
     _write_csv(graph_dir / "trip_assignment.csv", trip_assignment_rows)
+    _write_csv(graph_dir / "refuel_events.csv", refuel_event_rows)
     with open(graph_dir / "cost_breakdown.json", "w", encoding="utf-8") as f:
         json.dump(cost_breakdown, f, ensure_ascii=False, indent=2)
     with open(graph_dir / "kpi_summary.json", "w", encoding="utf-8") as f:
@@ -185,6 +195,7 @@ def export_graph_exports_phase1(
         "soc_events.csv",
         "depot_power_timeseries_5min.csv",
         "trip_assignment.csv",
+        "refuel_events.csv",
         "cost_breakdown.json",
         "kpi_summary.json",
     ]
@@ -279,6 +290,71 @@ def _slot_to_iso(
     return dt.isoformat()
 
 
+def _slot_to_hhmm(
+    slot_idx: int,
+    delta_t_min: float,
+    *,
+    planning_start_time: str = "00:00",
+) -> str:
+    start_hour, start_minute = _planning_start_components(planning_start_time)
+    total = int(round(start_hour * 60 + start_minute + float(slot_idx) * float(delta_t_min)))
+    total %= 24 * 60
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def _build_refuel_event_rows(
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp: MILPResult,
+    scenario_id: str,
+    base_date: date,
+    *,
+    planning_start_time: str = "00:00",
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    vehicle_band_lookup = _vehicle_primary_route_band_lookup(ms, dp, milp)
+    for vehicle_id in ms.K_ALL:
+        vehicle = dp.vehicle_lut.get(vehicle_id)
+        depot_id = str(getattr(vehicle, "home_depot", "") or "")
+        vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "")
+        primary_band = vehicle_band_lookup.get(vehicle_id, {})
+        route_band_id = str(primary_band.get("band_id") or "")
+        route_band_label = str(primary_band.get("band_label") or route_band_id)
+        route_family_code = str(primary_band.get("route_family_code") or "")
+        series = list(milp.refuel_schedule_l.get(vehicle_id, []))
+        for slot_idx, liters in enumerate(series):
+            refuel_liters = float(liters or 0.0)
+            if refuel_liters <= 1.0e-9:
+                continue
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "vehicle_id": vehicle_id,
+                    "vehicle_type": vehicle_type,
+                    "depot_id": depot_id,
+                    "route_band_id": route_band_id,
+                    "route_band_label": route_band_label,
+                    "route_family_code": route_family_code,
+                    "slot_index": int(slot_idx),
+                    "event_time": _slot_to_iso(
+                        base_date,
+                        int(slot_idx),
+                        data.delta_t_min,
+                        planning_start_time=planning_start_time,
+                    ),
+                    "time_hhmm": _slot_to_hhmm(
+                        int(slot_idx),
+                        data.delta_t_min,
+                        planning_start_time=planning_start_time,
+                    ),
+                    "refuel_liters": round(refuel_liters, 4),
+                }
+            )
+    rows.sort(key=lambda row: (str(row.get("event_time") or ""), str(row.get("vehicle_id") or "")))
+    return rows
+
+
 def _state_from_event_type(event_type: str) -> str:
     value = str(event_type or "").strip().lower()
     if value == "service":
@@ -287,6 +363,8 @@ def _state_from_event_type(event_type: str) -> str:
         return "deadhead"
     if value in {"charging", "charge"}:
         return "charge"
+    if value == "refuel":
+        return "refuel"
     return "idle"
 
 
@@ -426,6 +504,7 @@ def _build_vehicle_timeline_rows(
                             "is_short_turn": False,
                             "charger_id": "",
                             "charge_power_kw": "",
+                            "refuel_liters": "",
                         }
                     )
 
@@ -485,6 +564,7 @@ def _build_vehicle_timeline_rows(
                     "is_short_turn": is_short_turn,
                     "charger_id": "",
                     "charge_power_kw": "",
+                    "refuel_liters": "",
                 }
             )
             previous_task_id = task_id
@@ -558,6 +638,7 @@ def _build_vehicle_timeline_rows(
                         "is_short_turn": False,
                         "charger_id": charger,
                         "charge_power_kw": avg_power,
+                        "refuel_liters": "",
                     }
                 )
 
@@ -573,6 +654,62 @@ def _build_vehicle_timeline_rows(
                 seg_values = [charge_by_slot[slot]]
                 seg_charger = charge_by_slot_charger.get(slot, "")
             _append_charge_segment(seg_start, previous_slot + 1, seg_values, seg_charger)
+
+        refuel_series = list(milp.refuel_schedule_l.get(vehicle_id, []))
+        for slot_idx, liters in enumerate(refuel_series):
+            refuel_liters = float(liters or 0.0)
+            if refuel_liters <= 1.0e-9:
+                continue
+            start_time = _slot_to_iso(
+                base_date,
+                slot_idx,
+                data.delta_t_min,
+                planning_start_time=planning_start_time,
+            )
+            end_time = _slot_to_iso(
+                base_date,
+                slot_idx + 1,
+                data.delta_t_min,
+                planning_start_time=planning_start_time,
+            )
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "depot_id": depot_id,
+                    "vehicle_id": vehicle_id,
+                    "vehicle_type": vehicle_type,
+                    "band_id": "",
+                    "band_label": "",
+                    "vehicle_primary_band_id": primary_band_id,
+                    "vehicle_primary_band_label": primary_band_label,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "state": "refuel",
+                    "route_id": "",
+                    "route_family_code": primary_route_family_code,
+                    "route_series_code": "",
+                    "event_route_band_id": "",
+                    "trip_id": "",
+                    "from_location_id": depot_id,
+                    "to_location_id": depot_id,
+                    "from_location_type": "depot",
+                    "to_location_type": "depot",
+                    "direction": "",
+                    "route_variant_type": "depot_refuel",
+                    "energy_delta_kwh": "",
+                    "distance_km": 0.0,
+                    "duration_min": float(data.delta_t_min),
+                    "is_deadhead": False,
+                    "is_charge": False,
+                    "is_service": False,
+                    "is_idle": False,
+                    "is_depot_move": True,
+                    "is_short_turn": False,
+                    "charger_id": "",
+                    "charge_power_kw": "",
+                    "refuel_liters": round(refuel_liters, 4),
+                }
+            )
 
     rows.sort(key=lambda row: (str(row.get("vehicle_id", "")), str(row.get("start_time", "")), str(row.get("state", ""))))
     return rows
@@ -1207,7 +1344,7 @@ def _normalized_band_row(
             if value == depot_id:
                 normalized[key] = depot_label
     state = str(normalized.get("state") or "").strip()
-    if state in {"charge", "idle"} and depot_label:
+    if state in {"charge", "idle", "refuel"} and depot_label:
         normalized["from_location_id"] = depot_label
         normalized["to_location_id"] = depot_label
     if not str(normalized.get("band_id") or "").strip():
@@ -1219,6 +1356,7 @@ def _normalized_band_row(
     if not str(normalized.get("event_route_band_id") or "").strip() and state in {
         "deadhead",
         "charge",
+        "refuel",
         "idle",
     }:
         normalized["event_route_band_id"] = band_id
@@ -1233,6 +1371,12 @@ def _normalized_band_row(
         normalized["is_charge"] = False
         normalized["is_service"] = False
         normalized["is_idle"] = True
+        normalized["is_depot_move"] = True
+    elif state == "refuel":
+        normalized["is_deadhead"] = False
+        normalized["is_charge"] = False
+        normalized["is_service"] = False
+        normalized["is_idle"] = False
         normalized["is_depot_move"] = True
     return normalized
 
@@ -1369,7 +1513,7 @@ def _append_gap_as_depot_presence(
 
 
 def _row_is_charge(row: Dict[str, Any]) -> bool:
-    return str(row.get("state") or "").strip() == "charge"
+    return str(row.get("state") or "").strip() in {"charge", "refuel"}
 
 
 def _row_is_explicit_band_deadhead(row: Dict[str, Any], band_id: str) -> bool:
@@ -1830,12 +1974,21 @@ def _route_band_diagram_svg(
         ("depot deadhead", ' stroke-dasharray="8 5"', 2.4, "#22304a"),
         ("depot stay", ' stroke-dasharray="2 6"', 2.2, "#22304a"),
         ("charge at depot", ' stroke-dasharray="4 4"', 3.0, "#22304a"),
+        ("ICE refuel mark", "", 0.0, "#6cab2f"),
     ]
     for style_idx, (style_label, dash, stroke_width, style_color) in enumerate(style_specs):
         style_y = legend_y + style_idx * 18
-        svg_parts.append(
-            f'<line x1="{legend_x}" y1="{style_y:.1f}" x2="{legend_x + 18}" y2="{style_y:.1f}" stroke="{style_color}" stroke-width="{stroke_width:.1f}"{dash}/>'
-        )
+        if style_label == "ICE refuel mark":
+            cx = legend_x + 9
+            cy = style_y
+            points = f"{cx:.1f},{cy - 4.0:.1f} {cx + 4.0:.1f},{cy:.1f} {cx:.1f},{cy + 4.0:.1f} {cx - 4.0:.1f},{cy:.1f}"
+            svg_parts.append(
+                f'<polygon points="{points}" fill="{style_color}" opacity="0.95"/>'
+            )
+        else:
+            svg_parts.append(
+                f'<line x1="{legend_x}" y1="{style_y:.1f}" x2="{legend_x + 18}" y2="{style_y:.1f}" stroke="{style_color}" stroke-width="{stroke_width:.1f}"{dash}/>'
+            )
         svg_parts.append(
             f'<text x="{legend_x + 24}" y="{style_y + 4:.1f}" font-size="11" font-family="Consolas, Meiryo, monospace" fill="#22304a">{html.escape(style_label)}</text>'
         )
@@ -1911,6 +2064,10 @@ def _route_band_diagram_svg(
                 dash = ' stroke-dasharray="4 4"'
                 stroke_width = 3.0
                 opacity = 0.76
+            elif state == "refuel":
+                dash = ' stroke-dasharray="1 4"'
+                stroke_width = 2.0
+                opacity = 0.78
             else:
                 dash = ' stroke-dasharray="3 4"'
                 stroke_width = 2.2
@@ -1966,6 +2123,18 @@ def _route_band_diagram_svg(
             for point_x, point_y in point_pairs:
                 plot_elements.append(
                     f'<circle cx="{point_x:.1f}" cy="{point_y:.1f}" r="2.4" fill="{color}" opacity="0.95"/>'
+                )
+            if state == "refuel":
+                marker_x = point_pairs[-1][0]
+                marker_y = point_pairs[-1][1]
+                marker_points = (
+                    f"{marker_x:.1f},{marker_y - 4.8:.1f} "
+                    f"{marker_x + 4.8:.1f},{marker_y:.1f} "
+                    f"{marker_x:.1f},{marker_y + 4.8:.1f} "
+                    f"{marker_x - 4.8:.1f},{marker_y:.1f}"
+                )
+                plot_elements.append(
+                    f'<polygon points="{marker_points}" fill="#6cab2f" stroke="#3f7d1b" stroke-width="0.8" opacity="0.98"/>'
                 )
             if vehicle_id not in first_label_done:
                 first_label_done.add(vehicle_id)
@@ -2431,6 +2600,8 @@ def export_vehicle_timelines(
     dp: DerivedParams,
     milp: MILPResult,
 ) -> None:
+    base_date = _tokyo_now().date()
+
     def _slot_to_minute(slot_idx: int) -> int:
         return int(round(float(slot_idx) * float(data.delta_t_min)))
 
@@ -2467,6 +2638,8 @@ def export_vehicle_timelines(
             activity_group = "deadhead"
         elif event_type == "charging":
             activity_group = "charging"
+        elif event_type == "refuel":
+            activity_group = "refuel"
         else:
             activity_group = "other"
 
@@ -2502,6 +2675,7 @@ def export_vehicle_timelines(
             "deadhead_distance_km": event.get("deadhead_distance_km") or 0.0,
             "charger_id": event.get("charger_id") or "",
             "avg_power_kw": event.get("avg_power_kw") or 0.0,
+            "refuel_liters": event.get("refuel_liters") or 0.0,
             "distance_km": event.get("distance_km") or 0.0,
             "timeline_note": event.get("timeline_note") or "",
         }
@@ -2599,6 +2773,22 @@ def export_vehicle_timelines(
                     }
                 )
 
+        for slot_idx, liters in enumerate(list(milp.refuel_schedule_l.get(vehicle_id, []))):
+            refuel_liters = float(liters or 0.0)
+            if refuel_liters <= 1.0e-9:
+                continue
+            events.append(
+                {
+                    "event_type": "refuel",
+                    "start_time_idx": slot_idx,
+                    "end_time_idx": slot_idx + 1,
+                    "refuel_liters": round(refuel_liters, 4),
+                    "origin": getattr(dp.vehicle_lut.get(vehicle_id), "home_depot", "") or "",
+                    "destination": getattr(dp.vehicle_lut.get(vehicle_id), "home_depot", "") or "",
+                    "timeline_note": "depot refuel",
+                }
+            )
+
         events.sort(key=lambda event: (event.get("start_time_idx", 0), event.get("event_type", "")))
         enriched_events: List[Dict[str, Any]] = []
         for seq, event in enumerate(events, start=1):
@@ -2620,8 +2810,18 @@ def export_vehicle_timelines(
             ensure_ascii=False,
             indent=2,
         )
+    refuel_event_rows = _build_refuel_event_rows(
+        data,
+        ms,
+        dp,
+        milp,
+        scenario_id="",
+        base_date=base_date,
+        planning_start_time="00:00",
+    )
     _write_csv(run_dir / "vehicle_timelines.csv", csv_rows)
     _write_csv(run_dir / "vehicle_timeline_gantt.csv", csv_rows)
+    _write_csv(run_dir / "refuel_events.csv", refuel_event_rows)
 
 
 def export_objective_breakdown(run_dir: Path, milp: MILPResult, sim: SimulationResult) -> None:

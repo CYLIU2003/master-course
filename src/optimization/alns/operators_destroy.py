@@ -41,6 +41,7 @@ def random_trip_removal(plan: AssignmentPlan, rng: random.Random, fraction: floa
     return AssignmentPlan(
         duties=tuple(duties),
         charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=served,
         unserved_trip_ids=tuple(sorted(unserved)),
         metadata={**dict(plan.metadata), "destroy_operator": "random_trip_removal"},
@@ -69,6 +70,7 @@ def peak_hour_removal(plan: AssignmentPlan, rng: random.Random, fraction: float)
     return AssignmentPlan(
         duties=tuple(duties),
         charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=served,
         unserved_trip_ids=tuple(sorted(set(plan.unserved_trip_ids).union(removed))),
         metadata={**dict(plan.metadata), "destroy_operator": "peak_hour_removal"},
@@ -90,6 +92,7 @@ def worst_trip_removal(plan: AssignmentPlan, rng: random.Random, fraction: float
         AssignmentPlan(
             duties=plan.duties,
             charging_slots=plan.charging_slots,
+            refuel_slots=plan.refuel_slots,
             served_trip_ids=plan.served_trip_ids,
             unserved_trip_ids=tuple(sorted(set(plan.unserved_trip_ids).union(removed))),
             metadata=plan.metadata,
@@ -109,6 +112,7 @@ def vehicle_path_removal(plan: AssignmentPlan, rng: random.Random, fraction: flo
     return AssignmentPlan(
         duties=remaining,
         charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=served,
         unserved_trip_ids=tuple(sorted(unserved)),
         metadata={**dict(plan.metadata), "destroy_operator": "vehicle_path_removal"},
@@ -144,6 +148,7 @@ def unlocked_future_only_removal(
     return AssignmentPlan(
         duties=tuple(duties),
         charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
         served_trip_ids=served,
         unserved_trip_ids=tuple(sorted(set(plan.unserved_trip_ids).union(removed))),
         metadata={**dict(plan.metadata), "destroy_operator": "unlocked_future_only_removal"},

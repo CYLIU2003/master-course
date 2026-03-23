@@ -1592,6 +1592,15 @@ def build_problem_data_from_scenario(
         demand_charge_rate_per_kw=demand_charge_rate_per_kw,
         co2_price_per_kg=co2_price_per_kg,
     )
+    setattr(data, "initial_ice_fuel_percent", _safe_float(simulation_cfg.get("initial_ice_fuel_percent"), 100.0))
+    setattr(data, "min_ice_fuel_percent", _safe_float(simulation_cfg.get("min_ice_fuel_percent"), 10.0))
+    setattr(data, "max_ice_fuel_percent", _safe_float(simulation_cfg.get("max_ice_fuel_percent"), 90.0))
+    setattr(
+        data,
+        "default_ice_tank_capacity_l",
+        _safe_float(simulation_cfg.get("default_ice_tank_capacity_l"), 300.0),
+    )
+    setattr(data, "deadhead_speed_kmh", _safe_float(simulation_cfg.get("deadhead_speed_kmh"), 18.0))
     data.graph_export_context = _build_graph_export_context(scenario, trips, tasks)
 
     connections, dispatch_report = build_travel_connections_via_dispatch(

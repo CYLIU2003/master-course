@@ -98,6 +98,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     use_selected_depot_vehicle_inventory: bool = True
     use_selected_depot_charger_inventory: bool = True
     disable_vehicle_acquisition_cost: bool = False
+    restrict_vehicle_types: list[str] = Field(default_factory=list)
     solver_mode: str = "mode_milp_only"
     objective_mode: str = "total_cost"
     allow_partial_service: bool = False
@@ -105,6 +106,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     time_limit_seconds: int = 300
     mip_gap: float = 0.01
     include_deadhead: bool = True
+    deadhead_speed_kmh: float = 18.0
     grid_flat_price_per_kwh: Optional[float] = None
     grid_sell_price_per_kwh: Optional[float] = None
     demand_charge_cost_per_kw: Optional[float] = None

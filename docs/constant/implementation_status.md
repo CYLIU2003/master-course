@@ -68,7 +68,7 @@
 | O1 | ICE 燃料費（便 + deadhead） | ✅ 実装済み | `diesel_price * fuel_k(j) * y_j^k`（便）+ `diesel_price * fuel_k^{dh}(i,j) * x_{ij}^k`（回送） |
 | O2 | TOU 電力料金（系統買電費） | ✅ 実装済み | `sum_t price_t * g_t`（スロット別単価 × 買電量） |
 | O3 | デマンド料金（最大需要電力） | ✅ 実装済み | `demand_on * W^on + demand_off * W^off` |
-| O4 | 車両固定費 | ✅ 実装済み | `fixed_use_cost_k * z_k`（`fixed_use_cost_jpy` 設定がある場合のみ有効） |
+| O4 | 車両固定費 | ✅ 実装済み | `fixed_use_cost_k * z_k`。個別無効化: 車両の `acquisitionCost=0`。一括無効化: UI チェックボックス `disable_vehicle_acquisition_cost=true`（simulation_config 経由でマッパーが全車両の fixed_use_cost を 0 上書き） |
 | —   | 欠便ペナルティ | ✅ 実装済み | `unserved_penalty * sum_j u_j`（大きな重みで欠便を強く抑制） |
 | —   | CO₂ 費用 | ✅ 実装済み | `co2_price_per_kg > 0` のとき MILP 目的関数・evaluator.py 両方に加算。ICE 燃料由来 + 系統電力由来を個別計算 |
 | —   | 電池劣化費 | ✅ 実装済み | `weights.degradation > 0` のとき MILP・evaluator.py 両方で目的関数に加算。充電 kWh / 容量 × 単価/cycle × 重み |

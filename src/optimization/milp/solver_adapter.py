@@ -13,6 +13,7 @@ from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
     OptimizationConfig,
     ProblemTrip,
+    RefuelSlot,
     classify_peak_slots,
 )
 
@@ -265,6 +266,7 @@ class GurobiMILPAdapter:
         charge_on_var: Dict[Tuple[str, int], Any] = {}
         s_var: Dict[Tuple[str, int], Any] = {}
         fuel_l_var: Dict[Tuple[str, int], Any] = {}
+        refuel_l_var: Dict[Tuple[str, int], Any] = {}
         g_var: Dict[int, Any] = {}
         pv_ch_var: Dict[int, Any] = {}
         p_avg_var: Dict[int, Any] = {}
@@ -428,10 +430,14 @@ class GurobiMILPAdapter:
             min_ice_fuel_ratio_override = self._percent_to_ratio(
                 problem.metadata.get("min_ice_fuel_percent")
             )
+            max_ice_fuel_ratio_override = self._percent_to_ratio(
+                problem.metadata.get("max_ice_fuel_percent")
+            )
             default_ice_tank_capacity_l = self._safe_nonnegative_float(
                 problem.metadata.get("default_ice_tank_capacity_l"),
                 default=300.0,
             )
+            refuel_duration_h = 5.0 / 60.0
             for vehicle in problem.vehicles:
                 if vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
                     continue
@@ -450,10 +456,24 @@ class GurobiMILPAdapter:
                     reserve_l = max(reserve_l, min_ice_fuel_ratio_override * tank_cap_l)
                 reserve_l = min(reserve_l, tank_cap_l)
 
+                upper_buffer_l = tank_cap_l
+                if max_ice_fuel_ratio_override is not None:
+                    upper_buffer_l = min(tank_cap_l, max_ice_fuel_ratio_override * tank_cap_l)
+                upper_buffer_l = max(upper_buffer_l, reserve_l)
+                refuel_rate_l_per_h = 0.0
+                if upper_buffer_l > reserve_l:
+                    refuel_rate_l_per_h = (upper_buffer_l - reserve_l) / refuel_duration_h
+                refuel_per_slot_l = refuel_rate_l_per_h * timestep_h
+
                 for slot_idx in slot_indices:
                     fuel_l_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(
                         lb=reserve_l,
                         ub=tank_cap_l,
+                        vtype=GRB.CONTINUOUS,
+                    )
+                    refuel_l_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(
+                        lb=0.0,
+                        ub=max(refuel_per_slot_l, 0.0),
                         vtype=GRB.CONTINUOUS,
                     )
 
@@ -479,6 +499,23 @@ class GurobiMILPAdapter:
                     model.addConstr(
                         fuel_l_var[(vehicle.vehicle_id, depart_slot_idx)]
                         >= fuel_required_l * y[key]
+                    )
+
+                for slot_idx in slot_indices:
+                    running_expr = gp.quicksum(
+                        y[(vehicle.vehicle_id, trip.trip_id)]
+                        for trip in problem.trips
+                        if (vehicle.vehicle_id, trip.trip_id) in y
+                        and self._trip_active_in_slot(
+                            problem,
+                            trip.departure_min,
+                            trip.arrival_min,
+                            slot_idx,
+                        )
+                    )
+                    model.addConstr(
+                        refuel_l_var[(vehicle.vehicle_id, slot_idx)]
+                        <= max(refuel_per_slot_l, 0.0) * (1 - running_expr)
                     )
 
                 vehicle_arcs = [
@@ -507,6 +544,7 @@ class GurobiMILPAdapter:
                         == fuel_l_var[(vehicle.vehicle_id, slot_idx)]
                         - trip_fuel_expr
                         - deadhead_fuel_expr
+                        + refuel_l_var[(vehicle.vehicle_id, slot_idx)]
                     )
 
         # C15-C21: grid/PV balance, non-backflow, contract limit and demand charges.
@@ -596,7 +634,7 @@ class GurobiMILPAdapter:
                 trip_by_id[from_trip_id].destination,
                 trip_by_id[to_trip_id].origin,
             )
-            deadhead_km = (deadhead_min / 60.0) * 20.0
+            deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
             objective += energy_weight * diesel_price * deadhead_km * fuel_rate * var
 
         # O3: demand charge cost.
@@ -638,7 +676,7 @@ class GurobiMILPAdapter:
                     trip_by_id[from_trip_id].destination,
                     trip_by_id[to_trip_id].origin,
                 )
-                dh_km = (dh_min / 60.0) * 20.0
+                dh_km = self._deadhead_distance_km(problem, dh_min)
                 objective += co2_price * ice_co2_kg_per_l * dh_km * fuel_rate * var
             # BEV traction CO₂ (co2_factor is kg/kWh; slot totals are kWh).
             co2_by_slot = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
@@ -710,6 +748,7 @@ class GurobiMILPAdapter:
 
         duties: List[VehicleDuty] = []
         served_trip_ids: List[str] = []
+        refuel_slots: List[RefuelSlot] = []
 
         for vehicle in problem.vehicles:
             assigned_trip_ids = [
@@ -750,15 +789,41 @@ class GurobiMILPAdapter:
         served_set = set(served_trip_ids)
         unserved_trip_ids = sorted(trip.trip_id for trip in problem.trips if trip.trip_id not in served_set)
 
+        for vehicle in problem.vehicles:
+            if vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
+                continue
+            for slot_idx in slot_indices:
+                key = (vehicle.vehicle_id, slot_idx)
+                refuel_var = refuel_l_var.get(key)
+                if refuel_var is None:
+                    continue
+                try:
+                    refuel_l = float(refuel_var.X)
+                except Exception:
+                    continue
+                if refuel_l <= 1.0e-6:
+                    continue
+                refuel_slots.append(
+                    RefuelSlot(
+                        vehicle_id=vehicle.vehicle_id,
+                        slot_index=slot_idx,
+                        refuel_liters=round(refuel_l, 4),
+                        location_id=str(vehicle.home_depot_id or ""),
+                    )
+                )
+
         plan = AssignmentPlan(
             duties=tuple(duties),
             charging_slots=(),
+            refuel_slots=tuple(sorted(refuel_slots, key=lambda item: (item.vehicle_id, item.slot_index))),
             served_trip_ids=tuple(sorted(served_set)),
             unserved_trip_ids=tuple(unserved_trip_ids),
             metadata={
                 "source": "milp_gurobi",
                 "status": solver_status,
                 "objective_value": float(model.ObjVal),
+                "horizon_start": str(problem.scenario.horizon_start or "00:00"),
+                "timestep_min": int(problem.scenario.timestep_min),
             },
         )
         return (
@@ -856,7 +921,7 @@ class GurobiMILPAdapter:
             from_trip.destination,
             to_trip.origin,
         )
-        deadhead_km = (deadhead_min / 60.0) * 20.0
+        deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
         vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type), None)
         if vt and vt.powertrain_type.upper() in {"BEV", "PHEV", "FCEV"}:
             drive_rate = max((from_trip.energy_kwh / max(from_trip.distance_km, 1e-6)), 0.0)
@@ -896,8 +961,15 @@ class GurobiMILPAdapter:
             from_trip.destination,
             to_trip.origin,
         )
-        deadhead_km = (deadhead_min / 60.0) * 20.0
+        deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
         return max(deadhead_km, 0.0) * fuel_rate
+
+    def _deadhead_distance_km(self, problem: CanonicalOptimizationProblem, deadhead_min: int) -> float:
+        speed_kmh = self._safe_nonnegative_float(
+            problem.metadata.get("deadhead_speed_kmh"),
+            default=18.0,
+        )
+        return max(float(deadhead_min or 0), 0.0) * speed_kmh / 60.0
 
     def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
         return classify_peak_slots(problem.price_slots)

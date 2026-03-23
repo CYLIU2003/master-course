@@ -343,7 +343,7 @@ def _load_scope_frames(
     scope,
 ) -> tuple[pd.DataFrame, pd.DataFrame, str]:
     try:
-        from src import tokyu_shard_loader
+        from src import tokyu_bus_data, tokyu_shard_loader
 
         dataset_id = _dataset_id(scenario)
         if tokyu_shard_loader.shard_runtime_ready(dataset_id):
@@ -363,6 +363,24 @@ def _load_scope_frames(
                 _rows_to_frame(trip_rows),
                 _rows_to_frame(stop_time_rows),
                 "tokyu_shard",
+            )
+        if tokyu_bus_data.tokyu_bus_data_ready(dataset_id):
+            trip_rows = tokyu_bus_data.load_trip_rows_for_scope(
+                dataset_id=dataset_id,
+                route_ids=scope.route_ids,
+                depot_ids=scope.depot_ids,
+                service_ids=scope.service_ids,
+            )
+            stop_time_rows = tokyu_bus_data.load_stop_time_rows_for_scope(
+                dataset_id=dataset_id,
+                route_ids=scope.route_ids,
+                depot_ids=scope.depot_ids,
+                service_ids=scope.service_ids,
+            )
+            return (
+                _rows_to_frame(trip_rows),
+                _rows_to_frame(stop_time_rows),
+                "tokyu_bus_data",
             )
     except Exception as exc:
         log.warning("Shard runtime load failed; falling back to built parquet: %s", exc)

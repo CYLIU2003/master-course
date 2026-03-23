@@ -49,12 +49,13 @@ from src.route_family_runtime import (
 )
 from src.tokyu_bus_data import (
     build_timetable_summary_for_scope as _build_timetable_summary_for_scope_from_tokyu_bus_data,
+    load_trip_rows_for_scope as _load_trip_rows_for_scope_from_tokyu_bus_data,
     tokyu_bus_data_ready,
 )
 from src.tokyu_shard_loader import (
     build_stop_timetable_summary_for_scope,
     build_timetable_summary_for_scope as _build_timetable_summary_for_scope_from_shard,
-    load_trip_rows_for_scope,
+    load_trip_rows_for_scope as _load_trip_rows_for_scope_from_shard,
     shard_runtime_ready,
 )
 
@@ -415,7 +416,9 @@ class UpdateQuickSetupBody(BaseModel):
     finalSocTargetTolerancePercent: Optional[float] = None
     initialIceFuelPercent: Optional[float] = None
     minIceFuelPercent: Optional[float] = None
+    maxIceFuelPercent: Optional[float] = None
     defaultIceTankCapacityL: Optional[float] = None
+    deadheadSpeedKmh: Optional[float] = None
     objectivePreset: Optional[str] = None
     pvProfileId: Optional[str] = None
     weatherMode: Optional[str] = None
@@ -539,12 +542,22 @@ def _load_shard_timetable_rows(
     )
     if scope_params is None:
         return None
-    return load_trip_rows_for_scope(
-        dataset_id=scope_params["dataset_id"],
-        route_ids=scope_params["route_ids"],
-        depot_ids=scope_params["depot_ids"],
-        service_ids=scope_params["service_ids"],
-    )
+    dataset_id = scope_params["dataset_id"]
+    if tokyu_bus_data_ready(dataset_id):
+        return _load_trip_rows_for_scope_from_tokyu_bus_data(
+            dataset_id=dataset_id,
+            route_ids=scope_params["route_ids"],
+            depot_ids=scope_params["depot_ids"],
+            service_ids=scope_params["service_ids"],
+        )
+    if shard_runtime_ready(dataset_id):
+        return _load_trip_rows_for_scope_from_shard(
+            dataset_id=dataset_id,
+            route_ids=scope_params["route_ids"],
+            depot_ids=scope_params["depot_ids"],
+            service_ids=scope_params["service_ids"],
+        )
+    return None
 
 
 def _pick_latest_scenario(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -751,6 +764,18 @@ def _route_trip_inventory_for_quick_setup(
         return {}, default_day_type_summaries
 
     route_counts_by_day_type: Dict[str, Dict[str, int]] = {}
+    for route in doc.get("routes") or []:
+        route_id = str(route.get("id") or "").strip()
+        if not route_id:
+            continue
+        if candidate_route_set is not None and route_id not in candidate_route_set:
+            continue
+        counts = {
+            canonical_service_id(service_id): int(value or 0)
+            for service_id, value in dict(route.get("tripCountsByDayType") or {}).items()
+        }
+        if counts:
+            route_counts_by_day_type[route_id] = counts
     for raw_service_id, raw_route_counts in (summary.get("routeServiceCounts") or {}).items():
         service_id = canonical_service_id(raw_service_id)
         if not isinstance(raw_route_counts, dict):
@@ -766,7 +791,7 @@ def _route_trip_inventory_for_quick_setup(
             if count <= 0:
                 continue
             bucket = route_counts_by_day_type.setdefault(normalized_route_id, {})
-            bucket[service_id] = bucket.get(service_id, 0) + count
+            bucket[service_id] = count
 
     label_by_service_id = {
         canonical_service_id(item.get("serviceId")): str(item.get("label") or item.get("serviceId") or "")
@@ -954,7 +979,9 @@ def _builder_defaults(
         ),
         "initialIceFuelPercent": simulation_config.get("initial_ice_fuel_percent", 100.0),
         "minIceFuelPercent": simulation_config.get("min_ice_fuel_percent", 10.0),
+        "maxIceFuelPercent": simulation_config.get("max_ice_fuel_percent", 90.0),
         "defaultIceTankCapacityL": simulation_config.get("default_ice_tank_capacity_l", 300.0),
+        "deadheadSpeedKmh": simulation_config.get("deadhead_speed_kmh", 18.0),
         "pvProfileId": simulation_config.get("pv_profile_id"),
         "weatherMode": simulation_config.get("weather_mode") or "sunny",
         "weatherFactorScalar": simulation_config.get("weather_factor_scalar"),
@@ -1271,7 +1298,9 @@ def _build_quick_setup_payload(
             "finalSocTargetTolerancePercent": builder_defaults.get("finalSocTargetTolerancePercent"),
             "initialIceFuelPercent": builder_defaults.get("initialIceFuelPercent"),
             "minIceFuelPercent": builder_defaults.get("minIceFuelPercent"),
+            "maxIceFuelPercent": builder_defaults.get("maxIceFuelPercent"),
             "defaultIceTankCapacityL": builder_defaults.get("defaultIceTankCapacityL"),
+            "deadheadSpeedKmh": builder_defaults.get("deadheadSpeedKmh"),
             "pvProfileId": builder_defaults.get("pvProfileId"),
             "weatherMode": builder_defaults.get("weatherMode") or "sunny",
             "weatherFactorScalar": builder_defaults.get("weatherFactorScalar"),
@@ -1715,8 +1744,12 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["initial_ice_fuel_percent"] = float(body.initialIceFuelPercent)
         if body.minIceFuelPercent is not None:
             simulation_config["min_ice_fuel_percent"] = float(body.minIceFuelPercent)
+        if body.maxIceFuelPercent is not None:
+            simulation_config["max_ice_fuel_percent"] = float(body.maxIceFuelPercent)
         if body.defaultIceTankCapacityL is not None:
             simulation_config["default_ice_tank_capacity_l"] = float(body.defaultIceTankCapacityL)
+        if body.deadheadSpeedKmh is not None:
+            simulation_config["deadhead_speed_kmh"] = float(body.deadheadSpeedKmh)
         if body.objectivePreset is not None:
             simulation_config["objective_preset"] = str(body.objectivePreset)
         if body.pvProfileId is not None:

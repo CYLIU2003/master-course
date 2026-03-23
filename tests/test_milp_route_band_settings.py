@@ -46,7 +46,9 @@ def test_builder_metadata_includes_fragment_and_band_settings() -> None:
         final_soc_target_tolerance_percent=5.0,
         initial_ice_fuel_percent=85.0,
         min_ice_fuel_percent=15.0,
+        max_ice_fuel_percent=90.0,
         default_ice_tank_capacity_l=320.0,
+        deadhead_speed_kmh=18.0,
     )
 
     assert problem.metadata.get("fixed_route_band_mode") is True
@@ -58,7 +60,9 @@ def test_builder_metadata_includes_fragment_and_band_settings() -> None:
     assert problem.metadata.get("final_soc_target_tolerance_percent") == 5.0
     assert problem.metadata.get("initial_ice_fuel_percent") == 85.0
     assert problem.metadata.get("min_ice_fuel_percent") == 15.0
+    assert problem.metadata.get("max_ice_fuel_percent") == 90.0
     assert problem.metadata.get("default_ice_tank_capacity_l") == 320.0
+    assert problem.metadata.get("deadhead_speed_kmh") == 18.0
     assert abs((problem.trips[0].required_soc_departure_percent or 0.0) - 24.0) < 1.0e-9
 
 
@@ -144,3 +148,15 @@ def test_solver_adapter_trip_and_deadhead_fuel_helpers() -> None:
 
     deadhead_fuel = adapter._deadhead_fuel_l(problem, vehicle, trip.trip_id, trip.trip_id)
     assert deadhead_fuel >= 0.0
+
+
+def test_solver_adapter_deadhead_distance_uses_metadata_speed() -> None:
+    context = _minimal_dispatch_context()
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="s3",
+        vehicle_counts={"BEV": 1},
+        deadhead_speed_kmh=18.0,
+    )
+    adapter = GurobiMILPAdapter()
+    assert abs(adapter._deadhead_distance_km(problem, 60) - 18.0) < 1.0e-9

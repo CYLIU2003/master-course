@@ -13,14 +13,15 @@ Why:
 
 Strategy:
   - routes.parquet  → rebuilt from routes.jsonl (all 41 fields preserved)
-  - trips.parquet   → rebuilt by joining GTFS trips to ODPT route IDs
+  - trips.parquet   → rebuilt by joining GTFS trips to ODPT route variants
   - timetables.parquet → subset of trips.parquet columns
 
 Trip-to-Route mapping:
-  GTFS: (route_family=routeCode, depot_id=tokyu:depot:X) → short depot=X
-  ODPT: (routeFamilyCode, depotId=X)
-  → All ODPT routes sharing the same (routeFamilyCode, depotId) get ALL trips for that family.
-  → Routes with no depotId are assigned trips from any matching routeFamily depot.
+  - Primary key: parse `odptPatternId` from the preserved ODPT-style `trip_id`
+    and map it to normalized `routes.jsonl.odptPatternId`.
+  - Fallback: `(routeFamilyCode, depotId, first_stop_id, last_stop_id)` when
+    the trip ID does not carry an ODPT pattern.
+  - Never replicate one physical trip to every route in the same family.
 
 Usage:
     python scripts/rebuild_built_from_normalized.py
@@ -93,17 +94,33 @@ def load_normalized_routes(path: Path) -> list[dict]:
     return routes
 
 
-def build_odpt_route_lookup(routes: list[dict]) -> dict[tuple, list[str]]:
-    """Build mapping: (routeFamilyCode, depotId_short) → [odpt-route-id, ...]"""
+def build_odpt_route_lookup(routes: list[dict]) -> dict[tuple[str, str, str, str], list[str]]:
+    """Build mapping: (routeFamilyCode, depotId_short, first_stop_id, last_stop_id) → [route_id]."""
     lookup: dict[tuple, list[str]] = {}
     for r in routes:
         fam = str(r.get("routeFamilyCode") or r.get("routeCode") or "").strip()
         depot = str(r.get("depotId") or r.get("depot_id") or "").strip()
         rid = str(r.get("id") or "").strip()
-        if not fam or not rid:
+        stop_sequence = [
+            str(item).strip()
+            for item in list(r.get("stopSequence") or [])
+            if str(item).strip()
+        ]
+        if not fam or not rid or not stop_sequence:
             continue
-        key = (fam, depot)
+        key = (fam, depot, stop_sequence[0], stop_sequence[-1])
         lookup.setdefault(key, []).append(rid)
+    return lookup
+
+
+def build_pattern_lookup(routes: list[dict]) -> dict[str, str]:
+    """Build mapping: odptPatternId → route_id."""
+    lookup: dict[str, str] = {}
+    for route in routes:
+        pattern_id = str(route.get("odptPatternId") or "").strip()
+        route_id = str(route.get("id") or "").strip()
+        if pattern_id and route_id and pattern_id not in lookup:
+            lookup[pattern_id] = route_id
     return lookup
 
 
@@ -155,34 +172,70 @@ def load_gtfs_trips(db_path: Path) -> pd.DataFrame:
     return df
 
 
+def _extract_odpt_pattern_id_from_trip_id(trip_id: Any) -> str | None:
+    text = str(trip_id or "").strip()
+    parts = text.split(".")
+    if len(parts) < 4:
+        return None
+    if parts[0] != "odpt" or parts[1] != "BusTimetable:TokyuBus":
+        return None
+    return f"odpt.BusroutePattern:TokyuBus.{parts[2]}.{parts[3]}"
+
+
 def build_trips_parquet(
     gtfs_trips: pd.DataFrame,
+    pattern_lookup: dict[str, str],
     odpt_lookup: dict[tuple, list[str]],
     no_depot_lookup: dict[str, list[str]],
 ) -> pd.DataFrame:
     """
     Map GTFS trips to ODPT route IDs and produce trips DataFrame.
-    Each GTFS trip is replicated once per matching ODPT route.
+    Each GTFS trip must resolve to exactly one route variant.
     """
     records = []
     skipped = 0
+    matched_by_pattern = 0
+    matched_by_signature = 0
+    matched_by_family = 0
+    ambiguous_fallback = 0
 
     for _, row in gtfs_trips.iterrows():
         route_family = str(row["route_family"] or "").strip()
         depot_id_full = str(row["depot_id"] or "").strip()
         depot_id_short = _short_depot_id(depot_id_full)
+        base_trip_id = str(row["trip_id"] or "").strip()
 
-        # Find matching ODPT route IDs
         matched_route_ids: list[str] = []
+        odpt_pattern_id = _extract_odpt_pattern_id_from_trip_id(base_trip_id)
+        if odpt_pattern_id:
+            matched_route_id = pattern_lookup.get(odpt_pattern_id)
+            if matched_route_id:
+                matched_route_ids = [matched_route_id]
+                matched_by_pattern += 1
 
-        if depot_id_short:
-            matched_route_ids = odpt_lookup.get((route_family, depot_id_short), [])
+        if not matched_route_ids and depot_id_short:
+            signature_ids = odpt_lookup.get(
+                (
+                    route_family,
+                    depot_id_short,
+                    str(row["origin_id"] or "").strip(),
+                    str(row["dest_id"] or "").strip(),
+                ),
+                [],
+            )
+            if len(signature_ids) == 1:
+                matched_route_ids = list(signature_ids)
+                matched_by_signature += 1
+            elif len(signature_ids) > 1:
+                ambiguous_fallback += 1
 
-        # Fallback: routes without depotId that match routeFamilyCode
-        no_depot_ids = no_depot_lookup.get(route_family, [])
-        for rid in no_depot_ids:
-            if rid not in matched_route_ids:
-                matched_route_ids.append(rid)
+        if not matched_route_ids:
+            no_depot_ids = no_depot_lookup.get(route_family, [])
+            if len(no_depot_ids) == 1:
+                matched_route_ids = list(no_depot_ids)
+                matched_by_family += 1
+            elif len(no_depot_ids) > 1:
+                ambiguous_fallback += 1
 
         if not matched_route_ids:
             skipped += 1
@@ -214,30 +267,35 @@ def build_trips_parquet(
         dest_lat = float(row["dest_lat"]) if row["dest_lat"] is not None and not pd.isna(row["dest_lat"]) else None
         dest_lon = float(row["dest_lon"]) if row["dest_lon"] is not None and not pd.isna(row["dest_lon"]) else None
 
-        base_trip_id = str(row["trip_id"] or "").strip()
+        records.append({
+            "trip_id": base_trip_id,
+            "route_id": matched_route_ids[0],
+            "service_id": service_id,
+            "departure": departure,
+            "arrival": arrival,
+            "origin": origin_name,
+            "destination": dest_name,
+            "origin_lat": origin_lat,
+            "origin_lon": origin_lon,
+            "destination_lat": dest_lat,
+            "destination_lon": dest_lon,
+            "distance_km": distance_km,
+            "direction": direction,
+            "allowed_vehicle_types": ["BEV", "ICE"],
+            "source": "gtfs",
+        })
 
-        for idx, route_id in enumerate(matched_route_ids):
-            # Suffix to make trip_id unique when replicated
-            trip_id = base_trip_id if idx == 0 else f"{base_trip_id}__v{idx}"
-            records.append({
-                "trip_id": trip_id,
-                "route_id": route_id,
-                "service_id": service_id,
-                "departure": departure,
-                "arrival": arrival,
-                "origin": origin_name,
-                "destination": dest_name,
-                "origin_lat": origin_lat,
-                "origin_lon": origin_lon,
-                "destination_lat": dest_lat,
-                "destination_lon": dest_lon,
-                "distance_km": distance_km,
-                "direction": direction,
-                "allowed_vehicle_types": ["BEV", "ICE"],
-                "source": "gtfs",
-            })
-
-    log(f"Built {len(records)} trip records ({skipped} GTFS trips had no matching ODPT route)")
+    log(
+        "Built %s trip records (%s skipped, pattern=%s, signature=%s, family=%s, ambiguous=%s)"
+        % (
+            len(records),
+            skipped,
+            matched_by_pattern,
+            matched_by_signature,
+            matched_by_family,
+            ambiguous_fallback,
+        )
+    )
     if not records:
         raise RuntimeError("No trips could be mapped to ODPT routes — check route family name matching")
     return pd.DataFrame(records)
@@ -359,16 +417,18 @@ def main() -> None:
     routes = load_normalized_routes(routes_path)
 
     # Step 2: Build lookup tables
+    pattern_lookup = build_pattern_lookup(routes)
     odpt_lookup = build_odpt_route_lookup(routes)
     no_depot_lookup = build_route_family_lookup_no_depot(routes)
-    log(f"  (family,depot) pairs with routes: {len(odpt_lookup)}")
+    log(f"  odptPatternId routes: {len(pattern_lookup)}")
+    log(f"  (family,depot,terminals) pairs with routes: {len(odpt_lookup)}")
     log(f"  Route families with no-depot routes: {len(no_depot_lookup)}")
 
     # Step 3: Load GTFS trips
     gtfs_trips = load_gtfs_trips(db_path)
 
     # Step 4: Map GTFS trips → ODPT route IDs
-    trips_df = build_trips_parquet(gtfs_trips, odpt_lookup, no_depot_lookup)
+    trips_df = build_trips_parquet(gtfs_trips, pattern_lookup, odpt_lookup, no_depot_lookup)
 
     # Step 5: Compute trip counts per route_id
     trip_counts: dict[str, int] = (

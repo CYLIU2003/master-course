@@ -165,9 +165,18 @@ class ChargingSlot:
 
 
 @dataclass(frozen=True)
+class RefuelSlot:
+    vehicle_id: str
+    slot_index: int
+    refuel_liters: float
+    location_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class AssignmentPlan:
     duties: Tuple[VehicleDuty, ...] = ()
     charging_slots: Tuple[ChargingSlot, ...] = ()
+    refuel_slots: Tuple[RefuelSlot, ...] = ()
     served_trip_ids: Tuple[str, ...] = ()
     unserved_trip_ids: Tuple[str, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
