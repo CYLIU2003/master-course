@@ -1986,3 +1986,17 @@ master-course/
     - `python -m pytest tests/test_prepared_scope_execution.py tests/test_scenario_store_dispatch_scope_overlay.py` → pass
     - `python -m pytest tests` → `62 passed`
     - scenario `2b0a60cf-61ad-4094-807c-f766641984c6` を `tsurumaki` / `WEEKDAY` / `mode_milp_only` / `rebuild_dispatch=false` で再実行し、`prepared_input_id=prepared-e0fb1e07bb3635d8`, `trip_count_served=702`, `tripCount=702`, `timetableRowCount=702`, `solver_status=OPTIMAL` を確認
+
+- 2026-03-23 (Graph Exports に route-band 別の車両ダイヤ SVG を追加)
+  - 要件は「固定路線バンドで路線間車両トレードを許可しない run では、鉄道ダイヤグラム風に route ごとの車両位置推移を見たい」というものだった。
+  - `src/result_exporter.py` を拡張し、optimization run 配下の `graph/vehicle_timeline.csv` に `vehicle_type` / `band_id` / `route_family_code` / `route_series_code` / `event_route_band_id` を追加した。
+  - 同じ情報から `graph/route_band_diagrams/manifest.json` と `graph/route_band_diagrams/*.svg` を生成するようにし、1 band 1 図で `vehicle_id [ICE/BEV]` 凡例付きの time-space diagram を出せるようにした。
+  - 初版は「車両の主担当 band」で grouping していたため、同じ車両が他路線を担当した stop が route graph に混入する欠陥があった。
+  - 2026-03-23 夜に `bff/mappers/scenario_to_problemdata.py` から route `stopSequence` を graph export context として渡し、SVG 側は actual `band_id` 単位で再 grouping するよう修正した。これで route 軸は当該路線の stop だけになり、上り/下り/区間便/入出庫便は同一路線グラフへ統合、ICE/BEV は色系統と type legend で識別できる。
+  - その後、prepared payload 内の `stop_time_sequences` が stop-level ではなく trip-level 行だったため、中間 stop 時刻が取れていない問題を追加で確認した。`data/catalog-fast/tokyu_bus_data/route_stop_times/{route_id}.jsonl` から selected trip の stop-time を補完するよう変更し、catalog-fast に無い trip だけ route `stopSequence` 上の線形補間へフォールバックするようにした。
+  - さらに、stop 軸の順番を adjacency 推定で並べ替えていたため、variant stop が末尾へ落ちる問題を追加で確認した。route `stopSequence` を本線基準でマージする方式へ変更し、区間便は本線の間へ差し込み、本線外 terminal は top/bottom side lane として分離した。
+  - `mixed_event_route_band_detected=true` は「その route graph に出てくる車両が同日に他 band も担当した」ことを示す警告値へ意味を変更した。
+  - 回帰テスト `tests/test_graph_export_route_band_diagrams.py` を追加し、SVG の生成、ICE/BEV 凡例、deadhead/charge 線種、manifest 出力を固定した。
+  - 実データ確認:
+    - scenario `2b0a60cf-61ad-4094-807c-f766641984c6` を再実行し、`outputs/tokyu/2026-03-22/optimization/2b0a60cf-61ad-4094-807c-f766641984c6/tsurumaki/WEEKDAY/run_20260323_1800/graph/route_band_diagrams/` に `黒06.svg`, `黒07.svg`, `渋21.svg`, `渋22.svg`, `渋23.svg`, `渋24.svg` が生成されることを確認
+    - `python -m pytest tests` → `64 passed`

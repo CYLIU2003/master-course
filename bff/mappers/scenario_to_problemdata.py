@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 import math
+from pathlib import Path
 import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -45,6 +47,20 @@ logger = logging.getLogger(__name__)
 _DEFAULT_LIFETIME_YEAR = 12.0
 _DEFAULT_OPERATION_DAYS_PER_YEAR = 300.0
 _DEFAULT_RESIDUAL_VALUE_YEN = 0.0
+_CATALOG_FAST_ROUTE_STOP_TIMES_DIR = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "catalog-fast"
+    / "tokyu_bus_data"
+    / "route_stop_times"
+)
+_CATALOG_FAST_NORMALIZED_STOPS_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "catalog-fast"
+    / "normalized"
+    / "stops.jsonl"
+)
 
 
 @dataclass
@@ -746,6 +762,420 @@ def _build_tasks(
     return tasks
 
 
+def _graph_export_band_id(
+    route_id: str,
+    trip_like: Dict[str, Any],
+    route_like: Dict[str, Any],
+) -> str:
+    route_series_code, _route_series_prefix, _route_series_number, _series_source = (
+        extract_route_series_from_candidates(
+            str(trip_like.get("routeSeriesCode") or trip_like.get("route_series_code") or ""),
+            str(trip_like.get("routeFamilyCode") or trip_like.get("route_family_code") or ""),
+            str(route_like.get("routeCode") or route_like.get("route_code") or ""),
+            str(route_like.get("routeFamilyCode") or route_like.get("route_family_code") or ""),
+            str(
+                route_like.get("routeLabel")
+                or route_like.get("route_label")
+                or route_like.get("name")
+                or route_id
+                or ""
+            ),
+        )
+    )
+    return str(route_series_code or route_id or "").strip()
+
+
+def _graph_export_stop_name_index(scenario: Dict[str, Any]) -> Dict[str, str]:
+    stop_names: Dict[str, str] = {}
+    for stop in _as_list(scenario.get("stops")):
+        if not isinstance(stop, dict):
+            continue
+        stop_id = str(stop.get("id") or stop.get("stop_id") or stop.get("stopId") or "").strip()
+        if not stop_id:
+            continue
+        stop_names[stop_id] = str(stop.get("name") or stop.get("stopName") or stop_id).strip() or stop_id
+    return stop_names
+
+
+def _load_catalog_fast_stop_names(stop_ids: Iterable[str]) -> Dict[str, str]:
+    requested_ids = {
+        str(stop_id or "").strip()
+        for stop_id in stop_ids
+        if str(stop_id or "").strip()
+    }
+    if not requested_ids or not _CATALOG_FAST_NORMALIZED_STOPS_PATH.exists():
+        return {}
+
+    resolved: Dict[str, str] = {}
+    with _CATALOG_FAST_NORMALIZED_STOPS_PATH.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            stop_id = str(row.get("id") or row.get("stop_id") or row.get("stopId") or "").strip()
+            if not stop_id or stop_id not in requested_ids:
+                continue
+            stop_name = str(
+                row.get("name")
+                or row.get("stopName")
+                or row.get("title")
+                or stop_id
+            ).strip() or stop_id
+            resolved[stop_id] = stop_name
+            if len(resolved) >= len(requested_ids):
+                break
+    return resolved
+
+
+def _iter_graph_stop_time_rows(stop_timetables: List[Dict[str, Any]]) -> Iterable[Dict[str, Any]]:
+    for raw_row in stop_timetables:
+        if not isinstance(raw_row, dict):
+            continue
+        if isinstance(raw_row.get("items"), list):
+            parent_stop_id = str(raw_row.get("stop_id") or raw_row.get("stopId") or "").strip()
+            parent_stop_name = str(raw_row.get("stop_name") or raw_row.get("stopName") or parent_stop_id).strip()
+            for entry in raw_row.get("items") or []:
+                if not isinstance(entry, dict):
+                    continue
+                stop_id = str(entry.get("stop_id") or entry.get("stopId") or parent_stop_id).strip()
+                trip_id = str(
+                    entry.get("trip_id")
+                    or entry.get("tripId")
+                    or entry.get("busTimetable")
+                    or ""
+                ).strip()
+                if not trip_id or not stop_id:
+                    continue
+                yield {
+                    "trip_id": trip_id,
+                    "stop_id": stop_id,
+                    "stop_name": str(
+                        entry.get("stop_name")
+                        or entry.get("stopName")
+                        or parent_stop_name
+                        or stop_id
+                    ).strip()
+                    or stop_id,
+                    "stop_sequence": _safe_int(
+                        entry.get("stop_sequence")
+                        or entry.get("sequence")
+                        or entry.get("seq"),
+                        0,
+                    ),
+                    "arrival_time": str(
+                        entry.get("arrival_time")
+                        or entry.get("arrivalTime")
+                        or entry.get("arrival")
+                        or ""
+                    ).strip(),
+                    "departure_time": str(
+                        entry.get("departure_time")
+                        or entry.get("departureTime")
+                        or entry.get("departure")
+                        or ""
+                    ).strip(),
+                }
+            continue
+
+        stop_id = str(raw_row.get("stop_id") or raw_row.get("stopId") or "").strip()
+        trip_id = str(raw_row.get("trip_id") or raw_row.get("tripId") or "").strip()
+        if not trip_id or not stop_id:
+            continue
+        yield {
+            "trip_id": trip_id,
+            "stop_id": stop_id,
+            "stop_name": str(
+                raw_row.get("stop_name")
+                or raw_row.get("stopName")
+                or stop_id
+            ).strip()
+            or stop_id,
+            "stop_sequence": _safe_int(
+                raw_row.get("stop_sequence")
+                or raw_row.get("sequence")
+                or raw_row.get("seq"),
+                0,
+            ),
+            "arrival_time": str(
+                raw_row.get("arrival_time")
+                or raw_row.get("arrivalTime")
+                or raw_row.get("arrival")
+                or ""
+            ).strip(),
+            "departure_time": str(
+                raw_row.get("departure_time")
+                or raw_row.get("departureTime")
+                or raw_row.get("departure")
+                or ""
+            ).strip(),
+        }
+
+
+def _dedupe_consecutive_labels(labels: Iterable[str]) -> List[str]:
+    cleaned: List[str] = []
+    for label in labels:
+        normalized = str(label or "").strip()
+        if not normalized:
+            continue
+        if cleaned and cleaned[-1] == normalized:
+            continue
+        cleaned.append(normalized)
+    return cleaned
+
+
+def _load_catalog_fast_stop_rows_by_trip_id(
+    *,
+    route_ids: set[str],
+    trip_ids: set[str],
+    service_ids: set[str],
+) -> Dict[str, List[Dict[str, Any]]]:
+    rows_by_trip_id: Dict[str, List[Dict[str, Any]]] = {}
+    if not route_ids or not trip_ids:
+        return rows_by_trip_id
+
+    for route_id in sorted(route_ids):
+        path = _CATALOG_FAST_ROUTE_STOP_TIMES_DIR / f"{route_id}.jsonl"
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                trip_id = str(row.get("trip_id") or "").strip()
+                if not trip_id or trip_id not in trip_ids:
+                    continue
+                service_id = str(row.get("service_id") or "").strip()
+                if service_ids and service_id and service_id not in service_ids:
+                    continue
+                stop_id = str(row.get("stop_id") or row.get("stopId") or "").strip()
+                if not stop_id:
+                    continue
+                rows_by_trip_id.setdefault(trip_id, []).append(
+                    {
+                        "stop_id": stop_id,
+                        "stop_name": str(
+                            row.get("stop_name")
+                            or row.get("stopName")
+                            or stop_id
+                        ).strip()
+                        or stop_id,
+                        "stop_sequence": _safe_int(
+                            row.get("stop_sequence")
+                            or row.get("sequence")
+                            or row.get("seq"),
+                            0,
+                        ),
+                        "arrival_time": str(
+                            row.get("arrival_time")
+                            or row.get("arrivalTime")
+                            or row.get("arrival")
+                            or ""
+                        ).strip(),
+                        "departure_time": str(
+                            row.get("departure_time")
+                            or row.get("departureTime")
+                            or row.get("departure")
+                            or ""
+                        ).strip(),
+                    }
+                )
+    for trip_id in list(rows_by_trip_id.keys()):
+        rows_by_trip_id[trip_id].sort(
+            key=lambda row: (
+                _safe_int(row.get("stop_sequence"), 0),
+                str(row.get("arrival_time") or row.get("departure_time") or ""),
+                str(row.get("stop_name") or ""),
+            )
+        )
+    return rows_by_trip_id
+
+
+def _build_graph_export_context(
+    scenario: Dict[str, Any],
+    trips: List[Dict[str, Any]],
+    tasks: List[Task],
+) -> Dict[str, Any]:
+    stop_name_by_id = _graph_export_stop_name_index(scenario)
+    route_lookup = {
+        str(route.get("id") or ""): dict(route)
+        for route in _as_list(scenario.get("routes"))
+        if isinstance(route, dict) and str(route.get("id") or "").strip()
+    }
+    route_stop_ids = {
+        stop_id
+        for route_like in route_lookup.values()
+        for stop_id in _route_stop_sequence(route_like)
+        if stop_id
+    }
+    missing_route_stop_ids = [
+        stop_id
+        for stop_id in route_stop_ids
+        if stop_id not in stop_name_by_id
+    ]
+    if missing_route_stop_ids:
+        stop_name_by_id.update(_load_catalog_fast_stop_names(missing_route_stop_ids))
+
+    stop_rows_by_trip_id: Dict[str, List[Dict[str, Any]]] = {}
+    for row in _iter_graph_stop_time_rows(_as_list(scenario.get("stop_timetables"))):
+        trip_id = str(row.get("trip_id") or "").strip()
+        if not trip_id:
+            continue
+        stop_id = str(row.get("stop_id") or "").strip()
+        stop_name = str(row.get("stop_name") or stop_name_by_id.get(stop_id) or stop_id).strip() or stop_id
+        if stop_id and stop_name and stop_id not in stop_name_by_id:
+            stop_name_by_id[stop_id] = stop_name
+        stop_rows_by_trip_id.setdefault(trip_id, []).append(
+            {
+                "stop_id": stop_id,
+                "stop_name": stop_name,
+                "stop_sequence": _safe_int(row.get("stop_sequence"), 0),
+                "arrival_time": str(row.get("arrival_time") or "").strip(),
+                "departure_time": str(row.get("departure_time") or "").strip(),
+            }
+        )
+
+    for trip_id in list(stop_rows_by_trip_id.keys()):
+        stop_rows_by_trip_id[trip_id].sort(
+            key=lambda row: (
+                _safe_int(row.get("stop_sequence"), 0),
+                str(row.get("arrival_time") or row.get("departure_time") or ""),
+                str(row.get("stop_name") or ""),
+            )
+        )
+
+    requested_trip_ids = {
+        str(trip.get("trip_id") or "").strip()
+        for trip in trips
+        if str(trip.get("trip_id") or "").strip()
+    }
+    missing_trip_ids = {
+        trip_id
+        for trip_id in requested_trip_ids
+        if trip_id not in stop_rows_by_trip_id
+    }
+    if missing_trip_ids:
+        catalog_rows_by_trip_id = _load_catalog_fast_stop_rows_by_trip_id(
+            route_ids={
+                str(trip.get("route_id") or "").strip()
+                for trip in trips
+                if str(trip.get("route_id") or "").strip()
+            },
+            trip_ids=missing_trip_ids,
+            service_ids={
+                str(trip.get("service_id") or "").strip()
+                for trip in trips
+                if str(trip.get("service_id") or "").strip()
+            },
+        )
+        for trip_id, rows in catalog_rows_by_trip_id.items():
+            if trip_id in stop_rows_by_trip_id or not rows:
+                continue
+            stop_rows_by_trip_id[trip_id] = rows
+            for row in rows:
+                stop_id = str(row.get("stop_id") or "").strip()
+                stop_name = str(row.get("stop_name") or stop_id).strip() or stop_id
+                if stop_id and stop_name and stop_id not in stop_name_by_id:
+                    stop_name_by_id[stop_id] = stop_name
+
+    band_stop_sequences: Dict[str, List[List[str]]] = {}
+    band_labels_by_band_id: Dict[str, str] = {}
+    for route_id, route_like in route_lookup.items():
+        band_id = _graph_export_band_id(route_id, route_like, route_like)
+        if not band_id:
+            continue
+        band_labels_by_band_id.setdefault(
+            band_id,
+            str(
+                route_like.get("routeFamilyLabel")
+                or route_like.get("routeLabel")
+                or route_like.get("routeFamilyCode")
+                or route_like.get("name")
+                or band_id
+            ).strip()
+            or band_id,
+        )
+        sequence_labels = _dedupe_consecutive_labels(
+            stop_name_by_id.get(stop_id, stop_id)
+            for stop_id in _route_stop_sequence(route_like)
+        )
+        if len(sequence_labels) >= 2:
+            band_stop_sequences.setdefault(band_id, []).append(sequence_labels)
+
+    task_stop_sequences: Dict[str, List[Dict[str, Any]]] = {}
+    for trip, task in zip(trips, tasks):
+        task_id = str(task.task_id or "").strip()
+        base_trip_id = str(trip.get("trip_id") or "").strip()
+        route_id = str(trip.get("route_id") or "").strip()
+        route_like = route_lookup.get(route_id) or {}
+        band_id = _graph_export_band_id(route_id, trip, route_like)
+        if band_id:
+            band_labels_by_band_id.setdefault(
+                band_id,
+                str(
+                    route_like.get("routeFamilyLabel")
+                    or route_like.get("routeLabel")
+                    or route_like.get("routeFamilyCode")
+                    or trip.get("routeFamilyCode")
+                    or band_id
+                ).strip()
+                or band_id,
+            )
+        stop_rows = list(stop_rows_by_trip_id.get(base_trip_id) or [])
+        if not stop_rows or not task_id:
+            continue
+        normalized_points = [
+            {
+                "stop_id": str(row.get("stop_id") or "").strip(),
+                "stop_label": str(
+                    row.get("stop_name")
+                    or stop_name_by_id.get(str(row.get("stop_id") or "").strip())
+                    or row.get("stop_id")
+                    or ""
+                ).strip(),
+                "stop_sequence": _safe_int(row.get("stop_sequence"), 0),
+                "arrival_time": str(row.get("arrival_time") or "").strip(),
+                "departure_time": str(row.get("departure_time") or "").strip(),
+            }
+            for row in stop_rows
+        ]
+        normalized_points = [
+            row
+            for row in normalized_points
+            if str(row.get("stop_label") or "").strip()
+        ]
+        if not normalized_points:
+            continue
+        task_stop_sequences[task_id] = normalized_points
+        if band_id:
+            band_sequence = _dedupe_consecutive_labels(
+                row.get("stop_label") or ""
+                for row in normalized_points
+            )
+            if len(band_sequence) >= 2:
+                band_stop_sequences.setdefault(band_id, []).append(band_sequence)
+
+    return {
+        "band_stop_sequences": band_stop_sequences,
+        "task_stop_sequences": task_stop_sequences,
+        "band_labels_by_band_id": band_labels_by_band_id,
+        "planning_start_time": str(
+            ((scenario.get("simulation_config") or {}).get("start_time")) or "05:00"
+        ).strip()
+        or "05:00",
+    }
+
+
 def _build_sites(scenario: Dict[str, Any], depot_id: str) -> List[Site]:
     sites: Dict[str, Site] = {}
     charging_cfg = ((scenario.get("scenario_overlay") or {}).get("charging_constraints") or {})
@@ -1123,6 +1553,7 @@ def build_problem_data_from_scenario(
         demand_charge_rate_per_kw=demand_charge_rate_per_kw,
         co2_price_per_kg=co2_price_per_kg,
     )
+    data.graph_export_context = _build_graph_export_context(scenario, trips, tasks)
 
     connections, dispatch_report = build_travel_connections_via_dispatch(
         data=data,

@@ -563,8 +563,7 @@ python tools/multi_run_visualizer_tk.py
 `export_all` 実行時に、論文・再分析向けの構造化データを自動生成します。
 
 出力先：
-1. run ごと: `.../run_YYYYMMDD_HHMM/graph_exports/`
-2. scenario 集約: `outputs/scenarios/{scenario_id}/graph_exports/`
+1. run ごと: `.../run_YYYYMMDD_HHMM/graph/`
 
 生成ファイル（Phase 1 必須）：
 - `manifest.json`
@@ -575,9 +574,40 @@ python tools/multi_run_visualizer_tk.py
 - `cost_breakdown.json`
 - `kpi_summary.json`
 
+追加出力（route-band 可視化）：
+- `route_band_diagrams/manifest.json`
+- `route_band_diagrams/*.svg`
+
+route-band 可視化の仕様：
+- 出力先は各 optimization run 配下の `graph/` です。例: `outputs/tokyu/2026-03-22/optimization/<scenario_id>/<depot>/<service>/run_YYYYMMDD_HHMM/graph/`
+- `vehicle_timeline.csv` には `vehicle_type`, `band_id`, `band_label`, `route_family_code`, `route_series_code`, `event_route_band_id` を含めます。
+- `trip_assignment.csv` には `assigned_vehicle_type`, `assigned_vehicle_band_id`, `band_id` を含めます。
+- SVG は actual service の `band_id` ごとに 1 band 1 ファイルで出力し、route `stopSequence` の順番を stop 軸の正本として使います。stop 名は `data/catalog-fast/normalized/stops.jsonl` と `data/catalog-fast/tokyu_bus_data/route_stop_times/*.jsonl` から補完し、対象 band の route 以外の stop は本線軸に出しません。
+- 本線は最長の営業系統を基準に構成し、区間便はその stop 軸の途中に差し込みます。入出庫など本線外の terminal は main axis に混ぜず、図の上側または下側の side lane に分けて飛び線で表します。
+- 上り/下り、区間便、入出庫便は同じ band の図へ統合し、service は stop-time polyline、same-band deadhead は破線で重ねます。ICE/BEV は色系統を分け、凡例に `vehicle_id [ICE/BEV]` と type legend を表示します。
+- catalog-fast に該当 trip の stop-time が無い場合だけ、route `stopSequence` 上を線形補間して「その時刻におおよそどこにいるか」を見られるようにします。
+- `fixed_route_band_mode=true` の run では、そのまま路線専属ダイヤ図として使えます。通常 run でも出力しますが、`route_band_diagrams/manifest.json` の `mixed_event_route_band_detected=true` は「その route graph に出てくる車両が同日に他 band の trip も担当した」ことを意味します。
+
 補足：
 - タイムゾーンは `Asia/Tokyo`、時刻は ISO 8601 形式です。
 - まず構造化データを安定出力し、描画は Tk アプリ / Notebook / フロントで再利用する方針です。
+
+### 4.8 readme_save（保存先・出力先一覧）
+
+この節は、README に散らばりやすい保存先と出力先をひとまとめにした参照用メモです。
+
+| 種別 | 保存先 / 出力先 | 補足 |
+|---|---|---|
+| シナリオ保存 | `outputs/scenarios/{scenario_id}/` | シナリオ本体、Quick Setup、派生成果物の集約先 |
+| 実行 run 出力 | `outputs/tokyu/.../run_YYYYMMDD_HHMM/` | 最適化・simulation の run 単位出力 |
+| Graph Exports | `.../run_YYYYMMDD_HHMM/graph/` | `manifest.json`、`vehicle_timeline.csv`、`soc_events.csv` など |
+| route-band 図 | `.../run_YYYYMMDD_HHMM/graph/route_band_diagrams/` | `manifest.json` と `*.svg` |
+| Prepare 入力 | `outputs/prepared_inputs/{scenario_id}/` | `Solver対応 Prepare` の生成物 |
+| 監査出力 | `outputs/audit/{scenario_id}/` | `*.json` / `*.csv` / `*.md` |
+| 複数 run 比較 | `outputs/tokyu/.../analysis_export/{timestamp}/` | 比較テーブル・比較レポート・比較図 |
+| Built dataset | `data/built/{dataset_id}/` | runtime 実行可能な dataset の保存先 |
+| Catalog 正規化データ | `data/catalog-fast/normalized/` | 路線一覧や Quick Setup で優先参照 |
+| GTFS 出力 | `GTFS/TokyuBus-GTFS/` | 標準 GTFS feed と sidecar |
 
 ---
 

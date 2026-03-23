@@ -598,7 +598,7 @@ class App:
         ttk.Entry(top, textvariable=self.base_url_var, width=36).pack(side=tk.LEFT, padx=6)
         ttk.Button(top, text="接続確認", command=self.on_connect).pack(side=tk.LEFT, padx=4)
         ttk.Button(top, text="車両・テンプレート管理", command=self.open_fleet_window).pack(side=tk.LEFT, padx=(20, 2))
-        ttk.Button(top, text="営業所別車両管理", command=self.open_vehicle_depot_manager).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top, text="営業所別充電器管理", command=self.open_vehicle_depot_manager).pack(side=tk.LEFT, padx=2)
         ttk.Button(top, text="使い方ヘルプ", command=self.open_help_window).pack(side=tk.LEFT, padx=(12, 2))
         ttk.Button(top, text="App Context", command=self.show_app_context).pack(side=tk.LEFT, padx=2)
 
@@ -852,8 +852,6 @@ class App:
         self.initial_soc_var = tk.StringVar(value="0.8")
         self.soc_min_var = tk.StringVar(value="0.2")
         self.soc_max_var = tk.StringVar(value="0.9")
-        self.charger_power_var = tk.StringVar(value="90")
-
         # ── よく使うパラメータ（最上部）──
         basic = ttk.LabelFrame(ops, text="基本パラメータ", padding=6)
         basic.pack(fill=tk.X, pady=(0, 4))
@@ -868,7 +866,6 @@ class App:
         self._labeled_entry(basic, "初期SOC initial_soc", self.initial_soc_var)
         self._labeled_entry(basic, "バッファSOC下限 soc_min", self.soc_min_var)
         self._labeled_entry(basic, "バッファSOC上限 soc_max", self.soc_max_var)
-        self._labeled_entry(basic, "充電器出力(kW)", self.charger_power_var)
         self._labeled_entry(basic, "需要単価 demand_charge_cost_per_kw", self.demand_charge_var)
         self._labeled_entry(basic, "契約上限 depot_power_limit_kw", self.depot_power_limit_var)
 
@@ -3268,7 +3265,6 @@ class App:
                 "initial_soc": self._parse_float(self.initial_soc_var.get(), 0.8),
                 "soc_min": self._parse_float(self.soc_min_var.get(), 0.2),
                 "soc_max": self._parse_float(self.soc_max_var.get(), 0.9),
-                "charger_power_kw": self._parse_float(self.charger_power_var.get(), 90.0),
                 "use_selected_depot_vehicle_inventory": True,
                 "use_selected_depot_charger_inventory": True,
                 "solver_mode": self.solver_mode_var.get().strip(),
@@ -3587,7 +3583,6 @@ class App:
             (self.initial_soc_var, "SOC初期値を変更"),
             (self.soc_min_var, "SOC下限を変更"),
             (self.soc_max_var, "SOC上限を変更"),
-            (self.charger_power_var, "充電器出力を変更"),
             (self.unserved_penalty_var, "未配車ペナルティを変更"),
             (self.grid_flat_price_var, "電気料金を変更"),
             (self.grid_sell_price_var, "売電単価を変更"),
@@ -4039,7 +4034,7 @@ class App:
 
         win = tk.Toplevel(self.root)
         self.depot_manager_window = win
-        win.title("営業所別 車両・充電器管理")
+        win.title("営業所別充電器管理")
         win.geometry("980x620")
 
         left = ttk.Frame(win, padding=8)
@@ -4054,7 +4049,6 @@ class App:
         ops = ttk.Frame(left)
         ops.pack(fill=tk.X, pady=(6, 0))
         ttk.Button(ops, text="再読込", command=lambda: self._load_depot_manager_data(depot_list)).pack(side=tk.LEFT)
-        ttk.Button(ops, text="選択営業所を車両タブへ反映", command=lambda: self._apply_selected_depot_to_vehicle_tab(depot_list)).pack(side=tk.LEFT, padx=4)
 
         charger_box = ttk.LabelFrame(right, text="営業所充電器設定", padding=8)
         charger_box.pack(fill=tk.X)
