@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from src.dispatch.models import VehicleDuty
 
@@ -228,6 +228,41 @@ class CanonicalOptimizationProblem:
             for trip in self.trips
             if vehicle_type in trip.allowed_vehicle_types
         ]
+
+
+def classify_peak_slots(
+    price_slots: Tuple[EnergyPriceSlot, ...],
+) -> Tuple[Set[int], Set[int]]:
+    """Partition price slot indices into (on_peak, off_peak) sets.
+
+    If any slot carries an explicit demand_charge_weight, that field drives the
+    classification.  Otherwise the median grid-buy price is used as a threshold.
+    Returns a pair (on_peak_indices, off_peak_indices).
+    """
+    if not price_slots:
+        return set(), set()
+
+    explicit_slots = [
+        slot for slot in price_slots if abs(float(slot.demand_charge_weight or 0.0)) > 1.0e-9
+    ]
+    if explicit_slots:
+        on_peak = {
+            slot.slot_index
+            for slot in price_slots
+            if float(slot.demand_charge_weight or 0.0) > 0.0
+        }
+        off_peak = {slot.slot_index for slot in price_slots if slot.slot_index not in on_peak}
+        return on_peak, off_peak
+
+    sorted_prices = sorted(float(slot.grid_buy_yen_per_kwh or 0.0) for slot in price_slots)
+    threshold = sorted_prices[len(sorted_prices) // 2] if sorted_prices else 0.0
+    on_peak = {
+        slot.slot_index
+        for slot in price_slots
+        if float(slot.grid_buy_yen_per_kwh or 0.0) >= threshold
+    }
+    off_peak = {slot.slot_index for slot in price_slots if slot.slot_index not in on_peak}
+    return on_peak, off_peak
 
 
 @dataclass(frozen=True)

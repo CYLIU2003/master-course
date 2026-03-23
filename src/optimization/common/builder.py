@@ -589,7 +589,7 @@ class ProblemBuilder:
         bev = context.vehicle_profiles.get("BEV")
         if not bev or bev.energy_consumption_kwh_per_km is None:
             return 0.0
-        return distance_km * bev.energy_consumption_kwh_per_km
+        return max(distance_km, 0.0) * bev.energy_consumption_kwh_per_km
 
     def _estimate_trip_fuel(self, distance_km: float, context: DispatchContext) -> float:
         fuel_rates = [
@@ -599,7 +599,7 @@ class ProblemBuilder:
         ]
         if not fuel_rates:
             return 0.0
-        return distance_km * min(fuel_rates)
+        return max(distance_km, 0.0) * min(fuel_rates)
 
     def _reference_bev_capacity_kwh(self, context: DispatchContext) -> Optional[float]:
         bev_candidates = [

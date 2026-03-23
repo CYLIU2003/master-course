@@ -167,10 +167,12 @@
           "minimum": 0
         },
         "distance_km": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0
         },
         "energy_kwh": {
           "type": "number",
+          "minimum": 0,
           "default": 0
         },
         "allowed_vehicle_types": {

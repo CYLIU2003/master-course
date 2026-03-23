@@ -1,24 +1,9 @@
 """
-Bus Operation Visualizer (Tkinter)
+バス運行可視化ツール（Tkinter）
 
-Purpose
--------
-Create publication-ready bus operation figures from optimization output folder,
-including clear EV vs engine bus distinction.
+最適化結果フォルダから、EV/エンジン区別付きの運行可視化図を生成する。
 
-Input folder example
---------------------
-outputs/tokyu/YYYY-MM-DD/optimization/<scenario_id>/<depot>/<service>/run_xxxxx
-
-Required files in run folder
-----------------------------
-- vehicle_timeline_gantt.csv
-- vehicle_schedule.csv
-- charging_schedule.csv (optional but recommended)
-- vehicle_timelines.json (optional; used for delta_t_min)
-
-Usage
------
+実行:
 python tools/bus_operation_visualizer_tk.py
 """
 
@@ -43,7 +28,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.patches import Patch, Rectangle
 
 
-# English text -> Times New Roman, Japanese fallback -> Meiryo
+# 英語は Times New Roman、日本語は Meiryo を優先
 matplotlib.rcParams["font.family"] = ["Times New Roman", "Meiryo"]
 matplotlib.rcParams["axes.unicode_minus"] = False
 
@@ -96,17 +81,17 @@ def _build_summary_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
         unmet_trips = 0
 
     rows = [
-        ("status", status),
-        ("objective", f"{objective:.6f}"),
-        ("solve_time_seconds", f"{solve_time_sec:.6f}"),
-        ("unmet_trips", str(unmet_trips)),
-        ("energy_cost", f"{_safe_float(cost_breakdown.get('electricity_cost'), 0.0):.6f}"),
-        ("fuel_cost", f"{_safe_float(cost_breakdown.get('fuel_cost'), 0.0):.6f}"),
-        ("demand_charge", f"{_safe_float(cost_breakdown.get('demand_charge'), 0.0):.6f}"),
-        ("battery_degradation_cost", f"{_safe_float(cost_breakdown.get('degradation_cost'), 0.0):.6f}"),
-        ("total_cost", f"{_safe_float(cost_breakdown.get('total_operating_cost'), 0.0):.6f}"),
-        ("total_co2_kg", f"{_safe_float(kpi.get('total_co2_kg'), 0.0):.6f}"),
-        ("co2_cost", "NA"),
+        ("ステータス", status),
+        ("目的関数値 [モデル単位]", f"{objective:.6f}"),
+        ("求解時間 [秒]", f"{solve_time_sec:.6f}"),
+        ("未割当便数 [便]", str(unmet_trips)),
+        ("電力コスト [円]", f"{_safe_float(cost_breakdown.get('electricity_cost'), 0.0):.6f}"),
+        ("燃料コスト [円]", f"{_safe_float(cost_breakdown.get('fuel_cost'), 0.0):.6f}"),
+        ("デマンド料金 [円]", f"{_safe_float(cost_breakdown.get('demand_charge'), 0.0):.6f}"),
+        ("電池劣化コスト [円]", f"{_safe_float(cost_breakdown.get('degradation_cost'), 0.0):.6f}"),
+        ("総コスト [円]", f"{_safe_float(cost_breakdown.get('total_operating_cost'), 0.0):.6f}"),
+        ("総CO2排出量 [kg-CO2]", f"{_safe_float(kpi.get('total_co2_kg'), 0.0):.6f}"),
+        ("CO2コスト [円]", "NA"),
     ]
     return rows
 
@@ -125,9 +110,9 @@ def _flatten_dict_for_details(prefix: str, value, out: List[Tuple[str, str]]) ->
 
 def _build_details_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
     rows: List[Tuple[str, str]] = []
-    _flatten_dict_for_details("summary", bundle.summary_json or {}, rows)
-    _flatten_dict_for_details("cost_breakdown_detail", bundle.cost_detail_json or {}, rows)
-    _flatten_dict_for_details("co2_breakdown", bundle.co2_detail_json or {}, rows)
+    _flatten_dict_for_details("サマリー", bundle.summary_json or {}, rows)
+    _flatten_dict_for_details("コスト内訳詳細", bundle.cost_detail_json or {}, rows)
+    _flatten_dict_for_details("CO2内訳", bundle.co2_detail_json or {}, rows)
     return rows
 
 
@@ -389,16 +374,16 @@ def _plot_style_1(bundle: TimelineBundle, vehicle_ids: List[str], only_assigned:
     ax.set_yticks(ytick_pos)
     ax.set_yticklabels(ytick_labels, fontsize=10)
     ax.invert_yaxis()
-    ax.set_xlabel("Time", fontsize=12)
-    ax.set_ylabel("Bus number", fontsize=12)
+    ax.set_xlabel("時刻 [時:分]", fontsize=12)
+    ax.set_ylabel("車両番号 [台]", fontsize=12)
     ax.grid(axis="x", color="#d0d0d0", linewidth=0.5)
-    title_suffix = "(Assigned Vehicles)" if only_assigned else "(All Vehicles)"
-    ax.set_title(f"Bus Operation Timeline {title_suffix}", fontsize=13)
+    title_suffix = "（割当車両のみ）" if only_assigned else "（全車両）"
+    ax.set_title(f"バス運行タイムライン {title_suffix}", fontsize=13)
 
     legend_items = [
-        Patch(facecolor="#e9e9e9", edgecolor=type_palette["BEV"], hatch="////", label="On Trip (EV)"),
-        Patch(facecolor="#e9e9e9", edgecolor=type_palette["ICE"], hatch="\\\\", label="On Trip (Engine)"),
-        Patch(facecolor="#ffffff", edgecolor="#3b3b3b", label="On Station"),
+        Patch(facecolor="#e9e9e9", edgecolor=type_palette["BEV"], hatch="////", label="運行中（EV）"),
+        Patch(facecolor="#e9e9e9", edgecolor=type_palette["ICE"], hatch="\\\\", label="運行中（エンジン）"),
+        Patch(facecolor="#ffffff", edgecolor="#3b3b3b", label="待機・停車"),
     ]
     ax.legend(handles=legend_items, loc="upper right", frameon=True, fontsize=10)
 
@@ -480,15 +465,15 @@ def _plot_style_2(bundle: TimelineBundle, vehicle_ids: List[str], only_assigned:
     ax.set_yticks(ytick_pos)
     ax.set_yticklabels(ytick_labels, fontsize=9)
     ax.invert_yaxis()
-    ax.set_xlabel("Time (h)", fontsize=12)
-    ax.set_ylabel("Bus number", fontsize=12)
+    ax.set_xlabel("時刻 [時:分]", fontsize=12)
+    ax.set_ylabel("車両番号 [台]", fontsize=12)
     ax.grid(axis="x", color="#d0d0d0", linewidth=0.5)
-    title_suffix = "(Assigned Vehicles)" if only_assigned else "(All Vehicles)"
-    ax.set_title(f"Scheduling and Charging Plan {title_suffix}", fontsize=13)
+    title_suffix = "（割当車両のみ）" if only_assigned else "（全車両）"
+    ax.set_title(f"運行・充電計画 {title_suffix}", fontsize=13)
 
     legend_items = [
-        Patch(facecolor="#d7d7d7", edgecolor="none", label="On the Road"),
-        Patch(facecolor=cmap(0.85), edgecolor="none", label="Charging (higher ratio = darker)"),
+        Patch(facecolor="#d7d7d7", edgecolor="none", label="走行中"),
+        Patch(facecolor=cmap(0.85), edgecolor="none", label="充電中（出力比が高いほど濃色）"),
     ]
     ax.legend(handles=legend_items, loc="upper right", frameon=True, fontsize=10)
 
@@ -499,7 +484,7 @@ def _plot_style_2(bundle: TimelineBundle, vehicle_ids: List[str], only_assigned:
 class BusOperationVisualizerApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Bus Operation Visualizer")
+        self.root.title("バス運行可視化ツール")
         self.root.geometry("1420x920")
 
         self.bundle: TimelineBundle | None = None
@@ -518,26 +503,26 @@ class BusOperationVisualizerApp:
         top.pack(fill="x")
 
         self.run_dir_var = tk.StringVar(value="")
-        ttk.Label(top, text="Run folder:").pack(side="left", padx=(0, 6))
+        ttk.Label(top, text="実行結果フォルダ:").pack(side="left", padx=(0, 6))
         ttk.Entry(top, textvariable=self.run_dir_var, width=95).pack(side="left", padx=(0, 6), fill="x", expand=True)
-        ttk.Button(top, text="Browse", command=self._on_browse).pack(side="left", padx=4)
-        ttk.Button(top, text="Load", command=self._on_load).pack(side="left", padx=4)
+        ttk.Button(top, text="参照", command=self._on_browse).pack(side="left", padx=4)
+        ttk.Button(top, text="読込", command=self._on_load).pack(side="left", padx=4)
 
         self.only_assigned_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(top, text="Only assigned buses", variable=self.only_assigned_var).pack(side="left", padx=(12, 4))
+        ttk.Checkbutton(top, text="割当車両のみ表示", variable=self.only_assigned_var).pack(side="left", padx=(12, 4))
 
         self.max_buses_var = tk.IntVar(value=45)
-        ttk.Label(top, text="Max buses:").pack(side="left", padx=(12, 4))
+        ttk.Label(top, text="最大表示車両数 [台]:").pack(side="left", padx=(12, 4))
         ttk.Spinbox(top, from_=5, to=300, width=6, textvariable=self.max_buses_var).pack(side="left", padx=2)
 
-        ttk.Button(top, text="Render", command=self._on_render).pack(side="left", padx=(12, 4))
-        ttk.Button(top, text="Save PNG", command=lambda: self._on_save("png")).pack(side="left", padx=4)
-        ttk.Button(top, text="Save SVG", command=lambda: self._on_save("svg")).pack(side="left", padx=4)
-        ttk.Button(top, text="Save PDF", command=lambda: self._on_save("pdf")).pack(side="left", padx=4)
+        ttk.Button(top, text="描画", command=self._on_render).pack(side="left", padx=(12, 4))
+        ttk.Button(top, text="PNG保存", command=lambda: self._on_save("png")).pack(side="left", padx=4)
+        ttk.Button(top, text="SVG保存", command=lambda: self._on_save("svg")).pack(side="left", padx=4)
+        ttk.Button(top, text="PDF保存", command=lambda: self._on_save("pdf")).pack(side="left", padx=4)
 
         info = (
-            "Font policy: English=Times New Roman, Japanese=Meiryo | "
-            "EV and Engine buses are differentiated by labels and hatch styles."
+            "フォント方針: 英語=Times New Roman / 日本語=Meiryo | "
+            "EVとエンジン車はラベルとハッチで識別"
         )
         ttk.Label(self.root, text=info).pack(fill="x", padx=10)
 
@@ -549,25 +534,25 @@ class BusOperationVisualizerApp:
         self.tab_raw = ttk.Frame(self.nb)
         self.tab1 = ttk.Frame(self.nb)
         self.tab2 = ttk.Frame(self.nb)
-        self.nb.add(self.tab_summary, text="Summary")
-        self.nb.add(self.tab_details, text="Details")
-        self.nb.add(self.tab_raw, text="Raw JSON")
-        self.nb.add(self.tab1, text="Figure A: Gantt style")
-        self.nb.add(self.tab2, text="Figure B: Charging intensity")
+        self.nb.add(self.tab_summary, text="サマリー")
+        self.nb.add(self.tab_details, text="詳細")
+        self.nb.add(self.tab_raw, text="生JSON")
+        self.nb.add(self.tab1, text="図A: ガント表示")
+        self.nb.add(self.tab2, text="図B: 充電強度")
 
         self._build_info_tabs()
 
     def _build_info_tabs(self) -> None:
         self.summary_tree = ttk.Treeview(self.tab_summary, columns=("key", "value"), show="headings")
-        self.summary_tree.heading("key", text="key")
-        self.summary_tree.heading("value", text="value")
+        self.summary_tree.heading("key", text="項目")
+        self.summary_tree.heading("value", text="値")
         self.summary_tree.column("key", width=280, anchor="w")
         self.summary_tree.column("value", width=760, anchor="w")
         self.summary_tree.pack(fill="both", expand=True)
 
         self.detail_tree = ttk.Treeview(self.tab_details, columns=("key", "value"), show="headings")
-        self.detail_tree.heading("key", text="key")
-        self.detail_tree.heading("value", text="value")
+        self.detail_tree.heading("key", text="項目")
+        self.detail_tree.heading("value", text="値")
         self.detail_tree.column("key", width=420, anchor="w")
         self.detail_tree.column("value", width=620, anchor="w")
         self.detail_tree.pack(fill="both", expand=True)
@@ -596,32 +581,32 @@ class BusOperationVisualizerApp:
             self.raw_text.insert("1.0", _build_raw_json_text(self.bundle))
 
     def _on_browse(self) -> None:
-        selected = filedialog.askdirectory(title="Select optimization run folder")
+        selected = filedialog.askdirectory(title="最適化 run フォルダを選択")
         if selected:
             self.run_dir_var.set(selected)
 
     def _on_load(self) -> None:
         path_text = self.run_dir_var.get().strip()
         if not path_text:
-            messagebox.showwarning("Input required", "Run folder を指定してください。")
+            messagebox.showwarning("入力不足", "実行結果フォルダを指定してください。")
             return
         run_dir = Path(path_text)
         if not run_dir.exists() or not run_dir.is_dir():
-            messagebox.showerror("Invalid folder", "指定フォルダが存在しません。")
+            messagebox.showerror("不正なフォルダ", "指定フォルダが存在しません。")
             return
 
         try:
             self.bundle = _load_bundle(run_dir)
         except Exception as exc:
-            messagebox.showerror("Load failed", str(exc))
+            messagebox.showerror("読込失敗", str(exc))
             return
 
         messagebox.showinfo(
-            "Loaded",
-            f"Loaded run folder:\n{run_dir}\n\n"
-            f"Events: {len(self.bundle.events):,}\n"
-            f"Vehicles with type info: {len(self.bundle.vehicle_types):,}\n"
-            f"Charging rows: {len(self.bundle.charging):,}",
+            "読込完了",
+            f"読込フォルダ:\n{run_dir}\n\n"
+            f"イベント数 [件]: {len(self.bundle.events):,}\n"
+            f"車種情報付き車両数 [台]: {len(self.bundle.vehicle_types):,}\n"
+            f"充電レコード数 [行]: {len(self.bundle.charging):,}",
         )
         self._populate_info_tabs()
 
@@ -646,12 +631,12 @@ class BusOperationVisualizerApp:
 
     def _on_render(self) -> None:
         if self.bundle is None:
-            messagebox.showwarning("No data", "先に Load を実行してください。")
+            messagebox.showwarning("データなし", "先に読込を実行してください。")
             return
 
         vehicle_ids = self._current_vehicle_ids()
         if not vehicle_ids:
-            messagebox.showwarning("No vehicles", "描画対象の車両がありません。")
+            messagebox.showwarning("車両なし", "描画対象の車両がありません。")
             return
 
         if self.fig1 is not None:
@@ -670,7 +655,7 @@ class BusOperationVisualizerApp:
 
     def _on_save(self, ext: str) -> None:
         if self.bundle is None or self.fig1 is None or self.fig2 is None:
-            messagebox.showwarning("No figure", "先に Load と Render を実行してください。")
+            messagebox.showwarning("図が未作成", "先に読込と描画を実行してください。")
             return
 
         output_dir = self.bundle.run_dir / "figures"
@@ -682,7 +667,7 @@ class BusOperationVisualizerApp:
         self.fig1.savefig(p1, dpi=300, bbox_inches="tight")
         self.fig2.savefig(p2, dpi=300, bbox_inches="tight")
 
-        messagebox.showinfo("Saved", f"Saved files:\n{p1}\n{p2}")
+        messagebox.showinfo("保存完了", f"保存先:\n{p1}\n{p2}")
 
 
 def main() -> None:

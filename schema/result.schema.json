@@ -44,22 +44,22 @@
     "pv_summary": {
       "type": "object",
       "properties": {
-        "pv_generated_kwh": { "type": "number" },
-        "pv_used_direct_kwh": { "type": "number" },
-        "pv_curtailed_kwh": { "type": "number" },
-        "grid_import_kwh": { "type": "number" },
-        "peak_grid_kw": { "type": "number" }
+        "pv_generated_kwh": { "type": "number", "minimum": 0 },
+        "pv_used_direct_kwh": { "type": "number", "minimum": 0 },
+        "pv_curtailed_kwh": { "type": "number", "minimum": 0 },
+        "grid_import_kwh": { "type": "number", "minimum": 0 },
+        "peak_grid_kw": { "type": "number", "minimum": 0 }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "utilization_summary": {
       "type": "object",
       "properties": {
-        "fleet_size": { "type": "integer" },
-        "used_vehicle_count": { "type": "integer" },
-        "utilization_ratio": { "type": "number" }
+        "fleet_size": { "type": "integer", "minimum": 0 },
+        "used_vehicle_count": { "type": "integer", "minimum": 0 },
+        "utilization_ratio": { "type": "number", "minimum": 0, "maximum": 1 }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "vehicle_diagram": {
       "type": "array",
@@ -131,5 +131,5 @@
       }
     }
   },
-  "additionalProperties": true
+  "additionalProperties": false
 }

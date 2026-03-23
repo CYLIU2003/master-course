@@ -13,6 +13,7 @@ from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
     OptimizationConfig,
     ProblemTrip,
+    classify_peak_slots,
 )
 
 
@@ -737,30 +738,7 @@ class GurobiMILPAdapter:
         return 0.0
 
     def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
-        if not problem.price_slots:
-            return set(), set()
-
-        explicit_slots = [
-            slot for slot in problem.price_slots if abs(float(slot.demand_charge_weight or 0.0)) > 1.0e-9
-        ]
-        if explicit_slots:
-            on_peak = {
-                slot.slot_index
-                for slot in problem.price_slots
-                if float(slot.demand_charge_weight or 0.0) > 0.0
-            }
-            off_peak = {slot.slot_index for slot in problem.price_slots if slot.slot_index not in on_peak}
-            return on_peak, off_peak
-
-        price_values = [slot.grid_buy_yen_per_kwh for slot in problem.price_slots]
-        median_price = sorted(price_values)[len(price_values) // 2] if price_values else 0.0
-        on_peak = {
-            slot.slot_index
-            for slot in problem.price_slots
-            if float(slot.grid_buy_yen_per_kwh or 0.0) >= median_price
-        }
-        off_peak = {slot.slot_index for slot in problem.price_slots if slot.slot_index not in on_peak}
-        return on_peak, off_peak
+        return classify_peak_slots(problem.price_slots)
 
     def _trips_overlap(self, t_a: ProblemTrip, t_b: ProblemTrip) -> bool:
         """Return True if trips t_a and t_b have overlapping operating time intervals."""

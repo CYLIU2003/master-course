@@ -5,7 +5,7 @@ from typing import Dict, Set, Tuple
 
 from src.objective_modes import objective_value_for_mode
 
-from .problem import AssignmentPlan, CanonicalOptimizationProblem
+from .problem import AssignmentPlan, CanonicalOptimizationProblem, classify_peak_slots
 
 
 @dataclass(frozen=True)
@@ -334,30 +334,7 @@ class CostEvaluator:
         )
 
     def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
-        if not problem.price_slots:
-            return set(), set()
-
-        explicit_slots = [
-            slot for slot in problem.price_slots if abs(float(slot.demand_charge_weight or 0.0)) > 1.0e-9
-        ]
-        if explicit_slots:
-            on_peak = {
-                slot.slot_index
-                for slot in problem.price_slots
-                if float(slot.demand_charge_weight or 0.0) > 0.0
-            }
-            off_peak = {slot.slot_index for slot in problem.price_slots if slot.slot_index not in on_peak}
-            return on_peak, off_peak
-
-        sorted_prices = sorted(float(slot.grid_buy_yen_per_kwh or 0.0) for slot in problem.price_slots)
-        threshold = sorted_prices[len(sorted_prices) // 2] if sorted_prices else 0.0
-        on_peak = {
-            slot.slot_index
-            for slot in problem.price_slots
-            if float(slot.grid_buy_yen_per_kwh or 0.0) >= threshold
-        }
-        off_peak = {slot.slot_index for slot in problem.price_slots if slot.slot_index not in on_peak}
-        return on_peak, off_peak
+        return classify_peak_slots(problem.price_slots)
 
     def _is_non_electric_powertrain(
         self,

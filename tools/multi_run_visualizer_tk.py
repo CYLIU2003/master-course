@@ -1,15 +1,9 @@
 """
-Multi-Run Bus Operation Visualizer (Tkinter)
+複数 run 比較可視化ツール（Tkinter）
 
-Purpose
--------
-Scan outputs/tokyu directory tree, select multiple run folders, and generate:
-- Text-based summary (total cost / total CO2 / status / objective / solve time)
-- Comparison charts across runs
-- Per-run bus operation figures (Gantt + charging intensity)
+outputs/tokyu 配下の複数 run を収集し、比較表と比較図を生成する。
 
-Usage
------
+実行:
 python tools/multi_run_visualizer_tk.py
 """
 
@@ -41,6 +35,8 @@ from tools.bus_operation_visualizer_tk import (
 
 matplotlib.rcParams["font.family"] = ["Times New Roman", "Meiryo"]
 matplotlib.rcParams["axes.unicode_minus"] = False
+
+ALL_FILTER = "すべて"
 
 
 @dataclass
@@ -218,7 +214,7 @@ def _fmt_num(value: Optional[float], nd: int = 2) -> str:
 
 
 def _build_markdown_report(df: pd.DataFrame, title: str) -> str:
-    lines = [f"# {title}", "", "| Run | Status | Total Cost [JPY] | Total CO2 [kg] | Objective | Solve Time [s] |", "|---|---:|---:|---:|---:|---:|"]
+    lines = [f"# {title}", "", "| Run | ステータス | 総コスト [円] | 総CO2 [kg-CO2] | 目的関数値 [モデル単位] | 求解時間 [秒] |", "|---|---:|---:|---:|---:|---:|"]
     for _, r in df.iterrows():
         lines.append(
             "| "
@@ -234,7 +230,7 @@ def _plot_metric_bar(df: pd.DataFrame, metric: str, y_label: str, title: str):
     work = df.copy()
     work = work.dropna(subset=[metric])
     if work.empty:
-        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+        ax.text(0.5, 0.5, "データなし", ha="center", va="center", transform=ax.transAxes)
         ax.set_title(title)
         fig.tight_layout()
         return fig
@@ -247,7 +243,7 @@ def _plot_metric_bar(df: pd.DataFrame, metric: str, y_label: str, title: str):
         ax.text(b.get_x() + b.get_width() / 2, b.get_height(), _fmt_num(float(val), 2), ha="center", va="bottom", fontsize=8)
 
     ax.set_title(title)
-    ax.set_xlabel("Run")
+    ax.set_xlabel("Run ID")
     ax.set_ylabel(y_label)
     ax.tick_params(axis="x", labelrotation=35)
     ax.grid(axis="y", color="#d0d0d0", linewidth=0.5)
@@ -259,7 +255,7 @@ def _plot_metric_bar(df: pd.DataFrame, metric: str, y_label: str, title: str):
 class MultiRunVisualizerApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Multi-Run Bus Operation Visualizer")
+        self.root.title("複数 run 比較可視化ツール")
         self.root.geometry("1560x960")
 
         self.all_metas: List[RunMeta] = []
@@ -278,27 +274,27 @@ class MultiRunVisualizerApp:
         top.pack(fill="x")
 
         self.base_dir_var = tk.StringVar(value="outputs/tokyu")
-        ttk.Label(top, text="Base folder:").pack(side="left", padx=(0, 6))
+        ttk.Label(top, text="基準フォルダ:").pack(side="left", padx=(0, 6))
         ttk.Entry(top, textvariable=self.base_dir_var, width=90).pack(side="left", fill="x", expand=True, padx=(0, 6))
-        ttk.Button(top, text="Browse", command=self._on_browse).pack(side="left", padx=4)
-        ttk.Button(top, text="Scan", command=self._on_scan).pack(side="left", padx=4)
+        ttk.Button(top, text="参照", command=self._on_browse).pack(side="left", padx=4)
+        ttk.Button(top, text="走査", command=self._on_scan).pack(side="left", padx=4)
 
         filters = ttk.Frame(self.root, padding=(8, 0, 8, 8))
         filters.pack(fill="x")
 
-        self.date_var = tk.StringVar(value="ALL")
-        self.scenario_var = tk.StringVar(value="ALL")
-        self.depot_var = tk.StringVar(value="ALL")
-        self.service_var = tk.StringVar(value="ALL")
+        self.date_var = tk.StringVar(value=ALL_FILTER)
+        self.scenario_var = tk.StringVar(value=ALL_FILTER)
+        self.depot_var = tk.StringVar(value=ALL_FILTER)
+        self.service_var = tk.StringVar(value=ALL_FILTER)
 
-        self.date_combo = self._add_filter_combo(filters, "Date", self.date_var)
-        self.scenario_combo = self._add_filter_combo(filters, "Scenario", self.scenario_var)
-        self.depot_combo = self._add_filter_combo(filters, "Depot", self.depot_var)
-        self.service_combo = self._add_filter_combo(filters, "Service", self.service_var)
+        self.date_combo = self._add_filter_combo(filters, "日付", self.date_var)
+        self.scenario_combo = self._add_filter_combo(filters, "シナリオ", self.scenario_var)
+        self.depot_combo = self._add_filter_combo(filters, "営業所", self.depot_var)
+        self.service_combo = self._add_filter_combo(filters, "運行種別", self.service_var)
 
-        ttk.Button(filters, text="Apply Filter", command=self._apply_filter).pack(side="left", padx=8)
-        ttk.Button(filters, text="Select All", command=self._select_all_runs).pack(side="left", padx=4)
-        ttk.Button(filters, text="Clear Selection", command=self._clear_runs).pack(side="left", padx=4)
+        ttk.Button(filters, text="フィルタ適用", command=self._apply_filter).pack(side="left", padx=8)
+        ttk.Button(filters, text="全選択", command=self._select_all_runs).pack(side="left", padx=4)
+        ttk.Button(filters, text="選択解除", command=self._clear_runs).pack(side="left", padx=4)
 
         middle = ttk.Panedwindow(self.root, orient="horizontal")
         middle.pack(fill="both", expand=True, padx=8, pady=8)
@@ -308,26 +304,26 @@ class MultiRunVisualizerApp:
         middle.add(left, weight=1)
         middle.add(right, weight=3)
 
-        ttk.Label(left, text="Run list").pack(anchor="w")
+        ttk.Label(left, text="Run一覧").pack(anchor="w")
         self.run_listbox = tk.Listbox(left, selectmode=tk.EXTENDED, width=56, exportselection=False)
         self.run_listbox.pack(fill="both", expand=True)
 
         right_top = ttk.Frame(right)
         right_top.pack(fill="x")
 
-        ttk.Button(right_top, text="Preview Text Summary", command=self._preview_text_summary).pack(side="left", padx=4)
-        ttk.Button(right_top, text="Preview Comparison Charts", command=self._preview_charts).pack(side="left", padx=4)
+        ttk.Button(right_top, text="比較表プレビュー", command=self._preview_text_summary).pack(side="left", padx=4)
+        ttk.Button(right_top, text="比較図プレビュー", command=self._preview_charts).pack(side="left", padx=4)
 
         self.max_buses_var = tk.IntVar(value=45)
         self.only_assigned_var = tk.BooleanVar(value=True)
-        ttk.Label(right_top, text="Max buses").pack(side="left", padx=(16, 4))
+        ttk.Label(right_top, text="最大表示車両数 [台]").pack(side="left", padx=(16, 4))
         ttk.Spinbox(right_top, from_=5, to=300, width=6, textvariable=self.max_buses_var).pack(side="left")
-        ttk.Checkbutton(right_top, text="Only assigned", variable=self.only_assigned_var).pack(side="left", padx=8)
+        ttk.Checkbutton(right_top, text="割当車両のみ", variable=self.only_assigned_var).pack(side="left", padx=8)
 
         self.export_svg_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(right_top, text="Export SVG", variable=self.export_svg_var).pack(side="left", padx=8)
+        ttk.Checkbutton(right_top, text="SVG出力", variable=self.export_svg_var).pack(side="left", padx=8)
 
-        ttk.Button(right_top, text="Export Selected", command=self._export_selected).pack(side="right", padx=4)
+        ttk.Button(right_top, text="選択runを出力", command=self._export_selected).pack(side="right", padx=4)
 
         self.nb = ttk.Notebook(right)
         self.nb.pack(fill="both", expand=True, pady=(8, 0))
@@ -335,21 +331,21 @@ class MultiRunVisualizerApp:
         self.tab_text = ttk.Frame(self.nb)
         self.tab_cost = ttk.Frame(self.nb)
         self.tab_co2 = ttk.Frame(self.nb)
-        self.nb.add(self.tab_text, text="Text Summary")
-        self.nb.add(self.tab_cost, text="Total Cost")
-        self.nb.add(self.tab_co2, text="Total CO2")
+        self.nb.add(self.tab_text, text="比較表")
+        self.nb.add(self.tab_cost, text="総コスト")
+        self.nb.add(self.tab_co2, text="総CO2")
 
         self.summary_tree = ttk.Treeview(
             self.tab_text,
             columns=("run_id", "status", "total_cost", "total_co2", "objective", "solve_time"),
             show="headings",
         )
-        self.summary_tree.heading("run_id", text="Run")
-        self.summary_tree.heading("status", text="Status")
-        self.summary_tree.heading("total_cost", text="Total Cost [JPY]")
-        self.summary_tree.heading("total_co2", text="Total CO2 [kg]")
-        self.summary_tree.heading("objective", text="Objective")
-        self.summary_tree.heading("solve_time", text="Solve Time [s]")
+        self.summary_tree.heading("run_id", text="Run ID")
+        self.summary_tree.heading("status", text="ステータス")
+        self.summary_tree.heading("total_cost", text="総コスト [円]")
+        self.summary_tree.heading("total_co2", text="総CO2 [kg-CO2]")
+        self.summary_tree.heading("objective", text="目的関数値 [モデル単位]")
+        self.summary_tree.heading("solve_time", text="求解時間 [秒]")
         self.summary_tree.column("run_id", width=180, anchor="w")
         self.summary_tree.column("status", width=110, anchor="center")
         self.summary_tree.column("total_cost", width=180, anchor="e")
@@ -358,50 +354,50 @@ class MultiRunVisualizerApp:
         self.summary_tree.column("solve_time", width=130, anchor="e")
         self.summary_tree.pack(fill="both", expand=True)
 
-        self.status_var = tk.StringVar(value="Ready")
+        self.status_var = tk.StringVar(value="準備完了")
         ttk.Label(self.root, textvariable=self.status_var).pack(fill="x", padx=10, pady=(0, 6))
 
     def _add_filter_combo(self, parent, label: str, var: tk.StringVar):
         ttk.Label(parent, text=label).pack(side="left", padx=(0, 4))
-        combo = ttk.Combobox(parent, textvariable=var, values=["ALL"], state="readonly", width=22)
+        combo = ttk.Combobox(parent, textvariable=var, values=[ALL_FILTER], state="readonly", width=22)
         combo.pack(side="left", padx=(0, 10))
         return combo
 
     def _on_browse(self) -> None:
-        selected = filedialog.askdirectory(title="Select outputs/tokyu or optimization directory")
+        selected = filedialog.askdirectory(title="outputs/tokyu または optimization 配下を選択")
         if selected:
             self.base_dir_var.set(selected)
 
     def _on_scan(self) -> None:
         base = Path(self.base_dir_var.get().strip())
         if not base.exists():
-            messagebox.showerror("Invalid folder", "指定フォルダが存在しません。")
+            messagebox.showerror("不正なフォルダ", "指定フォルダが存在しません。")
             return
 
         run_dirs = _discover_run_dirs(base)
         if not run_dirs:
-            messagebox.showwarning("No runs", "run_* フォルダが見つかりませんでした。")
+            messagebox.showwarning("runなし", "run_* フォルダが見つかりませんでした。")
             return
 
         self.all_metas = [_collect_run_meta(p) for p in run_dirs]
         self._refresh_filter_options()
         self._apply_filter()
-        self.status_var.set(f"Scanned {len(self.all_metas):,} runs from {base}")
+        self.status_var.set(f"走査完了: {len(self.all_metas):,} run / {base}")
 
     def _refresh_filter_options(self) -> None:
         def values(attr: str) -> List[str]:
             vals = sorted({getattr(m, attr) for m in self.all_metas})
-            return ["ALL"] + vals
+            return [ALL_FILTER] + vals
 
         self.date_combo["values"] = values("date")
         self.scenario_combo["values"] = values("scenario_id")
         self.depot_combo["values"] = values("depot")
         self.service_combo["values"] = values("service")
 
-        self.date_var.set("ALL")
-        self.scenario_var.set("ALL")
-        self.depot_var.set("ALL")
-        self.service_var.set("ALL")
+        self.date_var.set(ALL_FILTER)
+        self.scenario_var.set(ALL_FILTER)
+        self.depot_var.set(ALL_FILTER)
+        self.service_var.set(ALL_FILTER)
 
     def _match_filter(self, m: RunMeta) -> bool:
         checks = [
@@ -411,7 +407,7 @@ class MultiRunVisualizerApp:
             (self.service_var.get(), m.service),
         ]
         for selected, actual in checks:
-            if selected != "ALL" and selected != actual:
+            if selected != ALL_FILTER and selected != actual:
                 return False
         return True
 
@@ -423,12 +419,12 @@ class MultiRunVisualizerApp:
             total_cost = _fmt_num(m.total_cost)
             total_co2 = _fmt_num(m.total_co2_kg, 3)
             txt = (
-                f"{m.run_id} | {m.status} | cost={total_cost} | co2={total_co2} | "
+                f"{m.run_id} | {m.status} | 総コスト[円]={total_cost} | 総CO2[kg-CO2]={total_co2} | "
                 f"{m.date}/{m.scenario_id}/{m.depot}/{m.service}"
             )
             self.run_listbox.insert(tk.END, txt)
 
-        self.status_var.set(f"Filtered runs: {len(self.filtered_metas):,}")
+        self.status_var.set(f"フィルタ結果: {len(self.filtered_metas):,} run")
 
     def _selected_metas(self) -> List[RunMeta]:
         idxs = list(self.run_listbox.curselection())
@@ -465,7 +461,7 @@ class MultiRunVisualizerApp:
             self.summary_tree.delete(row_id)
 
         if df.empty:
-            messagebox.showwarning("No selection", "run を1つ以上選択してください。")
+            messagebox.showwarning("未選択", "run を1つ以上選択してください。")
             return
 
         for _, r in df.iterrows():
@@ -482,7 +478,7 @@ class MultiRunVisualizerApp:
                 ),
             )
 
-        self.status_var.set(f"Text summary rows: {len(df):,}")
+        self.status_var.set(f"比較表更新: {len(df):,} 行")
 
     def _clear_canvas(self, tab: ttk.Frame, old_canvas):
         if old_canvas is not None:
@@ -495,7 +491,7 @@ class MultiRunVisualizerApp:
         self.current_df = df
 
         if df.empty:
-            messagebox.showwarning("No selection", "run を1つ以上選択してください。")
+            messagebox.showwarning("未選択", "run を1つ以上選択してください。")
             return
 
         if self.cost_fig is not None:
@@ -503,8 +499,8 @@ class MultiRunVisualizerApp:
         if self.co2_fig is not None:
             plt.close(self.co2_fig)
 
-        self.cost_fig = _plot_metric_bar(df, "total_cost", "JPY", "Total Cost by Run")
-        self.co2_fig = _plot_metric_bar(df, "total_co2_kg", "kg-CO2", "Total CO2 by Run")
+        self.cost_fig = _plot_metric_bar(df, "total_cost", "総コスト [円]", "run別 総コスト")
+        self.co2_fig = _plot_metric_bar(df, "total_co2_kg", "総CO2 [kg-CO2]", "run別 総CO2")
 
         self._clear_canvas(self.tab_cost, self.cost_canvas)
         self._clear_canvas(self.tab_co2, self.co2_canvas)
@@ -517,7 +513,7 @@ class MultiRunVisualizerApp:
         self.co2_canvas.draw()
         self.co2_canvas.get_tk_widget().pack(fill="both", expand=True)
 
-        self.status_var.set("Comparison charts rendered")
+        self.status_var.set("比較図を描画しました")
 
     def _ensure_preview_data(self) -> pd.DataFrame:
         if self.current_df.empty:
@@ -528,7 +524,7 @@ class MultiRunVisualizerApp:
     def _export_selected(self) -> None:
         selected = self._selected_metas()
         if not selected:
-            messagebox.showwarning("No selection", "run を1つ以上選択してください。")
+            messagebox.showwarning("未選択", "run を1つ以上選択してください。")
             return
 
         self._preview_text_summary()
@@ -557,7 +553,7 @@ class MultiRunVisualizerApp:
             "run_dir",
         ]].copy()
         df_out.to_csv(csv_path, index=False, encoding="utf-8-sig")
-        md_path.write_text(_build_markdown_report(df_out, "Run Summary (Total Cost and Total CO2)"), encoding="utf-8")
+        md_path.write_text(_build_markdown_report(df_out, "run比較サマリー（総コスト・総CO2）"), encoding="utf-8")
 
         # Comparison figures
         if self.cost_fig is not None:
@@ -596,8 +592,8 @@ class MultiRunVisualizerApp:
                 # Skip problematic runs and continue export.
                 continue
 
-        self.status_var.set(f"Exported: {len(selected):,} runs, per-run figures: {per_run_count}, output: {out_root}")
-        messagebox.showinfo("Export completed", f"Output directory:\n{out_root}")
+        self.status_var.set(f"出力完了: 対象run={len(selected):,}件, 個別図={per_run_count}件, 出力先={out_root}")
+        messagebox.showinfo("出力完了", f"出力先:\n{out_root}")
 
 
 def main() -> None:

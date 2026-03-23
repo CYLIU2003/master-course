@@ -9,29 +9,21 @@
 
 ---
 
-## README 早見表
+## クイックナビ
 
-この README は、**現行 core 実装の事実ベース**で記述しています。
-先に全体像を掴み、次に実行手順と注意点を確認できる構成です。
-
-読む順番の推奨:
-1. まず「何を最適化しているか」を把握する
-2. 次に「制約と目的関数の実装状況」を確認する
-3. その後「セットアップ/実行フロー」を実施する
-4. 最後に「既知問題・監査・エージェント仕様」を参照する
-
-> 補足: 本リポジトリの現行運用は Tkinter + FastAPI + Python 最適化コアが中心です。
+> [!TIP]
+> **読む順番の推奨：** 要約 → 1章（問題設定）→ 2章（数理モデル）→ 4章（起動）→ 5章（フロー）→ 7章（トラブル）
 
 | 節 | 参照先 | 使いどころ |
 |---|---|---|
 | 要約 | [このシステムが何をしているか（先生向け要約）](#このシステムが何をしているか先生向け要約) | 最初の 5 分で研究対象と全体像を掴む |
-| 1 | [1. このシステムが解く問題（先生向け概要）](#1-このシステムが解く問題先生向け概要) | 入力・決定・出力の流れを確認する |
+| 1 | [1. このシステムが解く問題](#1-このシステムが解く問題先生向け概要) | 入力・決定・出力の流れを確認する |
 | 2 | [2. 最適化モデルの説明](#2-最適化モデルの説明) | 数理モデル、変数、制約、目的関数を見る |
 | 3 | [3. 実装状況と研究フェーズ](#3-実装状況と研究フェーズ) | 実装済み範囲と未実装範囲を確認する |
 | 4 | [4. セットアップと実行手順](#4-セットアップと実行手順) | 環境構築、起動、初回接続を行う |
-| 5 | [5. 東急全体最適化の推奨フロー](#5-東急全体最適化の推奨フロー) | フロントから Prepare/最適化を流す順番を確認する |
+| 5 | [5. 東急全体最適化の推奨フロー](#5-東急全体最適化の推奨フロー) | Prepare/最適化を流す順番を確認する |
 | 6 | [6. システム構成](#6-システム構成) | ディレクトリ構成と主要 API を確認する |
-| 7 | [7. 既知の注意事項とトラブルシューティング](#7-既知の注意事項とトラブルシューティング) | timeout や dataset 不整合時の対処を見る |
+| 7 | [7. 既知の注意事項とトラブルシューティング](#7-既知の注意事項とトラブルシューティング) | dataset 不整合・エラー時の対処を見る |
 | 8 | [8. パラメータ保全リスト](#8-パラメータ保全リスト) | 研究パラメータをどこで保持しているか確認する |
 | 9 | [9. 実装詳細（技術リファレンス）](#9-実装詳細技術リファレンス) | 実装変数や dispatch 判定式を追う |
 | 10 | [10. 実測監査](#10-実測監査) | KPI と再現コマンドを確認する |
@@ -51,14 +43,18 @@ flowchart LR
 > - 実装済み/未実装は 3章で明示し、断定表現を避けています。
 > - 実行前に 4章・5章、問題発生時は 7章、検証時は 10章を参照してください。
 
-### 更新メモ（2026-03-23）
+<details>
+<summary><strong>更新メモ（2026-03-23）</strong></summary>
 
-- `objectiveMode` の定義を `total_cost/co2/balanced/utilization` で統一しました（helper/overlay/schemaを整合）。
-- `fixed_route_band_mode` を MILP 制約に反映し、1車両が複数 route family（未設定時は route_id）をまたがない運用を選択可能にしました。
-- C3 の開始/終了断片上限を固定値ではなく `max_start_fragments_per_vehicle` / `max_end_fragments_per_vehicle` で制御するようにしました。
-- `required_soc_departure_percent` を trip レベルで導出し、MILP で出発時SOC下限制約として適用しました（0-1/0-100入力を正規化）。
-- 最適化結果シリアライズに `objective_components_raw` / `objective_components_weighted` / `objective_weights` / `pv_summary` / `utilization_summary` / `termination_reason` / `effective_limits` を追加しました。
-- `energy_required_kwh_bev` が欠損/0 のタスクは、走行距離 `distance_km` と推定係数（既知タスク平均、未取得時は 1.2 kWh/km）で補完し、EV 電力量料金が「走行ベース」で必ず計上されるようにしました。
+- `objectiveMode` の定義を `total_cost/co2/balanced/utilization` で統一（helper/overlay/schema を整合）
+- `fixed_route_band_mode` を MILP 制約に反映し、1 車両が複数 route family をまたがない運用を選択可能に
+- C3 の開始/終了断片上限を `max_start_fragments_per_vehicle` / `max_end_fragments_per_vehicle` で制御
+- `required_soc_departure_percent` を trip レベルで導出し MILP の出発時 SOC 下限制約として適用（0-1/0-100 正規化）
+- 最適化結果シリアライズに `objective_components_raw` / `_weighted` / `pv_summary` / `utilization_summary` / `termination_reason` / `effective_limits` を追加
+- `energy_required_kwh_bev` が欠損/0 のタスクは走行距離と推定係数（既知タスク平均、未取得時は 1.2 kWh/km）で補完
+- `tools/bus_operation_visualizer_tk.py` / `tools/multi_run_visualizer_tk.py` の UI 表示を日本語化し、主要数値パラメータに単位（`[台]` `[秒]` `[円]` `[kg-CO2]`）を明記
+
+</details>
 
 ## このシステムが何をしているか（先生向け要約）
 
@@ -99,19 +95,6 @@ flowchart LR
 Tkinter + FastAPI BFF のみで東急全体の最適化を再現実行できるパッケージです。
 
 ---
-
-## 目次
-
-1. [このシステムが解く問題（先生向け概要）](#1-このシステムが解く問題先生向け概要)
-2. [最適化モデルの説明](#2-最適化モデルの説明)
-3. [実装状況と研究フェーズ](#3-実装状況と研究フェーズ)
-4. [セットアップと実行手順](#4-セットアップと実行手順)
-5. [東急全体最適化の推奨フロー](#5-東急全体最適化の推奨フロー)
-6. [システム構成](#6-システム構成)
-7. [既知の注意事項とトラブルシューティング](#7-既知の注意事項とトラブルシューティング)
-8. [パラメータ保全リスト](#8-パラメータ保全リスト)
-9. [実装詳細（技術リファレンス）](#9-実装詳細技術リファレンス)
-10. [実測監査](#10-実測監査)
 
 ---
 
@@ -375,68 +358,9 @@ $$
 > **コードにおける加算順序（[L330–428](src/optimization/milp/solver_adapter.py#L330)）：**
 > `objective = LinExpr()` → O2 → O1 → O3 → O4 → CO₂費（条件付き） → 劣化費（条件付き） → **欠便ペナルティ（無条件）** → `setObjective(minimize)`
 
----
-
-#### 決定変数の定義
-
-> ソルバーが最適化によって値を決定する変数です。
-
-| 記号 | 意味 | 型 | 範囲 | Python 変数 | コード行 |
-|------|------|----|----|------------|---------|
-| $y_j^k$ | 車両 $k$ が便 $j$ を担当するか | 0/1 整数 | $\{0, 1\}$ | `y[(vehicle_id, trip_id)]` | [L97](src/optimization/milp/solver_adapter.py#L97) |
-| $x_{ij}^k$ | 車両 $k$ が便 $i$ の直後に便 $j$ を担当するか（回送接続） | 0/1 整数 | $\{0, 1\}$ | `x[(vehicle_id, from_trip_id, to_trip_id)]` | [L100](src/optimization/milp/solver_adapter.py#L100) |
-| $u_j$ | 便 $j$ が担当不能（欠便）か | 0/1 整数 | $\{0, 1\}$ | `unserved[trip_id]` | [L114](src/optimization/milp/solver_adapter.py#L114) |
-| $z_k$ | 車両 $k$ が 1 日に 1 便以上使われるか | 0/1 整数 | $\{0, 1\}$ | `used_vehicle[vehicle_id]` | [L119](src/optimization/milp/solver_adapter.py#L119) |
-| $\xi_{k,t}$ | 車両 $k$ がスロット $t$ に充電 ON か | 0/1 整数 | $\{0, 1\}$ | `charge_on_var[(vehicle_id, slot_idx)]` | [L215](src/optimization/milp/solver_adapter.py#L215) |
-| $c_{k,t}$ | 車両 $k$ のスロット $t$ における充電電力 | 連続 | $[0,\, c_{\max,k}]$（kW） | `c_var[(vehicle_id, slot_idx)]` | [L216](src/optimization/milp/solver_adapter.py#L216) |
-| $s_{k,t}$ | 車両 $k$ のスロット $t$ における SOC（バッテリー残量） | 連続 | $[SOC_{\min},\, cap_k]$（kWh） | `s_var[(vehicle_id, slot_idx)]` | [L218](src/optimization/milp/solver_adapter.py#L218) |
-| $g_t$ | スロット $t$ における系統買電量 | 連続 | $\geq 0$（kWh） | `g_var[slot_idx]` | [L297](src/optimization/milp/solver_adapter.py#L297) |
-| $pv_t^{ch}$ | スロット $t$ における PV 自家消費量 | 連続 | $[0,\, PV_t^{\max} \cdot \Delta t]$（kWh） | `pv_ch_var[slot_idx]` | [L298](src/optimization/milp/solver_adapter.py#L298) |
-| $\bar{p}_t$ | スロット $t$ の平均需要電力（$= g_t / \Delta t$） | 連続 | $\geq 0$（kW） | `p_avg_var[slot_idx]` | [L299](src/optimization/milp/solver_adapter.py#L299) |
-| $W^{on}$ | オンピーク期間の最大需要電力 | 連続 | $\geq 0$（kW） | `w_on_var` | [L301](src/optimization/milp/solver_adapter.py#L301) |
-| $W^{off}$ | オフピーク期間の最大需要電力 | 連続 | $\geq 0$（kW） | `w_off_var` | [L302](src/optimization/milp/solver_adapter.py#L302) |
-
-#### パラメータの定義
-
-> 入力データとして与えられる定数です（ソルバーは変化させない）。
-
-| 記号 | 意味 | 単位 | Python 変数 | データ源 | コード行 |
-|------|------|------|------------|---------|---------|
-| $c_f$ | 軽油単価 | 円/L | `diesel_price` | `problem.scenario.diesel_price_yen_per_l` | [L337](src/optimization/milp/solver_adapter.py#L337) |
-| $f_k(j)$ | 便 $j$ における車両 $k$ の燃料消費量 | L | `fuel_l` | `trip.fuel_l`（未設定時は距離×燃費） | [L345](src/optimization/milp/solver_adapter.py#L345) |
-| $f_k^{dh}(i,j)$ | 便 $i$→$j$ 回送における燃料消費量 | L | `deadhead_km * fuel_rate` | `dispatch_context.get_deadhead_min(...)` | [L357–362](src/optimization/milp/solver_adapter.py#L357) |
-| $p_t^{grid}$ | スロット $t$ の系統電力単価（TOU） | 円/kWh | `price_by_slot[slot_idx]` | `slot.grid_buy_yen_per_kwh` | [L332](src/optimization/milp/solver_adapter.py#L332) |
-| $p^{dem,on}$ | オンピーク・デマンド単価 | 円/kW | `demand_charge_on_peak_yen_per_kw` | `scenario_overlay.cost_coefficients` | [L366](src/optimization/milp/solver_adapter.py#L366) |
-| $p^{dem,off}$ | オフピーク・デマンド単価 | 円/kW | `demand_charge_off_peak_yen_per_kw` | `scenario_overlay.cost_coefficients` | [L367](src/optimization/milp/solver_adapter.py#L367) |
-| $c_k^{veh}$ | 車両 $k$ の固定費（日割り） | 円/日 | `vehicle.fixed_use_cost_jpy` | 車両マスタ `fixed_use_cost_jpy` | [L370](src/optimization/milp/solver_adapter.py#L370) |
-| $\pi$ | 欠便ペナルティ単価 | 円/便 | `unserved_penalty_weight` | `objective_weights.unserved`（最小値 10,000 円） | [L328](src/optimization/milp/solver_adapter.py#L328) |
-| $p^{CO_2}$ | CO₂ 価格 | 円/kg | `co2_price` | `problem.scenario.co2_price_per_kg` | [L373](src/optimization/milp/solver_adapter.py#L373) |
-| $\alpha_{ICE}$ | 軽油の CO₂ 排出係数 | kg/L | `ice_co2_kg_per_l` | `problem.scenario.ice_co2_kg_per_l`（既定 2.64） | [L374](src/optimization/milp/solver_adapter.py#L374) |
-| $\alpha_{grid}$ | 系統電力の CO₂ 排出係数 | kg/kWh | `co2_factor` | `slot.co2_factor`（スロット別） | [L405](src/optimization/milp/solver_adapter.py#L405) |
-| $w^{degr}$ | 劣化費の重み | 無次元 | `degradation_weight` | `objective_weights.degradation` | [L411](src/optimization/milp/solver_adapter.py#L411) |
-| $\beta$ | 劣化費の 1 サイクル当たりコスト | 円/cycle | `unit_cost_per_cycle` | ハードコード 50.0（将来パラメータ化予定） | [L413](src/optimization/milp/solver_adapter.py#L413) |
-| $cap_k$ | 車両 $k$ のバッテリー容量 | kWh | `cap` | `vehicle.battery_capacity_kwh`（既定 300） | [L202](src/optimization/milp/solver_adapter.py#L202) |
-| $\Delta t$ | 1 時間スロットの幅 | h | `timestep_h` | `problem.scenario.timestep_min / 60.0` | [L186](src/optimization/milp/solver_adapter.py#L186) |
-| $K^{ICE}$ | ICE 車両の集合 | — | — | `vehicle.vehicle_type` が `BEV/PHEV/FCEV` 以外 | [L340](src/optimization/milp/solver_adapter.py#L340) |
-| $K^{BEV}$ | BEV 車両の集合 | — | `bev_ids` | `vehicle.vehicle_type == "BEV"` | [L415](src/optimization/milp/solver_adapter.py#L415) |
-| $J$ | 便の集合 | — | `problem.trips` | GTFS から生成 | — |
-| $T$ | 時間スロットの集合 | — | `slot_indices` | `problem.price_slots` | — |
-| $A$ | 接続可能な便ペアのアーク集合 | — | `arc_pairs` | `builder.enumerate_arc_pairs(...)` | [L93](src/optimization/milp/solver_adapter.py#L93) |
-
-> **データの流れ：** Tkinter UI → Quick Setup 保存 → BFF `PUT /quick-setup` → `dispatch_scope` / `scenario_overlay` に同期保存 →
-> `src/optimization/common/builder.py` で `CanonicalOptimizationProblem` に変換 → `solver_adapter.py` に渡る
-
-#### 各費目の役割と組み合わせ効果
-
-| 費目 | 単独で最小化すると | O1+O2+… 合算で最小化すると |
-|------|----------------|--------------------------|
-| **O1 ICE 燃料費** | ICE を全く使わなければ 0 → BEV のみが自明解 | O2 との合算で「BEV を使いすぎると電気代が増える」トレードオフが生まれ、最適な ICE/BEV 比率が決まる |
-| **O2 電気代（TOU）** | BEV を充電しなければ 0 → ICE のみが自明解 | O1 との合算で「ICE を使いすぎると燃料費が増える」トレードオフが生まれる |
-| **O3 デマンド料金** | ピーク時に充電しなければ下がるが、全便カバーが崩れる | O1+O2 の合算に加わることで、充電タイミングを深夜・オフピークにシフトさせるインセンティブが働く |
-| **O4 車両固定費** | 車両を全台使わなければ 0 | 使用車両台数の最小化を誘導する。複数便を 1 台の BEV に集約すると O4 が下がる |
-| **欠便ペナルティ** | 常に有効。欠便 1 件あたり最低 10,000 円の罰則 | 通常は全便カバーが有利になるよう大きな値に設定されているため、欠便はほぼ発生しない |
-| **CO₂費（オプション）** | `co2_price_per_kg > 0` の場合のみ加算 | ICE の CO₂ + 系統電力の CO₂ に価格を付け、低炭素な充電時間帯・車種を誘導する |
-| **劣化費（オプション）** | `degradation_weight > 0` の場合のみ加算 | 充電量に比例するコストを加えることで、必要以上の充電（過充電）を抑制する |
+> [!NOTE]
+> **データの流れ：** Tkinter UI → Quick Setup 保存 → BFF `PUT /quick-setup` → `dispatch_scope` / `scenario_overlay` →
+> `src/optimization/common/builder.py`（`CanonicalOptimizationProblem`）→ `solver_adapter.py`
 
 ### 2.4 解法モード
 
@@ -670,18 +594,23 @@ python tools/multi_run_visualizer_tk.py
 9. 実行種別を選んで `④ 実行`
 10. Job completed と Optimization / Simulation 結果を確認
 
-> **重要：** `保存` や `ソルバー設定` の変更後は必ず `Solver対応 Prepare` を実行してください。
-> Prepare を飛ばすと、最新の営業所・路線・SOC・solver mode / objective mode 設定が最適化入力に反映されません。trip / timetable の route スコープ確定も Prepare で初めて行います。
+> [!IMPORTANT]
+> **保存・ソルバー設定を変更したら必ず `Solver対応 Prepare` を再実行すること。**
+> Prepare を飛ばすと、最新の営業所・路線・SOC・solver mode / objective mode 設定が最適化入力に反映されません。
+> trip / timetable の route スコープ確定も Prepare で初めて行います。
 
-> **既存シナリオの補正について：** 旧 `tokyu_dispatch_ready` ベースなど runtime 未整備 dataset のシナリオを開くと、
-> BFF は利用可能な runtime master（現行既定は `tokyu_full`）へ自動補正します。
-> このとき無効な営業所・路線選択はクリアされるため、`Quick Setup 読込` 後に選択内容を再確認してください。
-
+> [!NOTE]
 > **台数について：** Prepare 時は「選択した営業所に登録済みの車両台数・充電器台数」をそのまま利用します。
 > 手入力は不要です。SOC 設定は `Cost / Tariff Parameters` で `initial_soc` / `soc_min` / `soc_max` を指定します。
 
-> **保存先について：** `Quick Setup 保存` では route/depot 選択を `dispatch_scope` と `scenario_overlay` の両方へ同期し、
-> `Solver対応 Prepare` は現在の route/depot/solver 設定から solver-specific prepared input を作成します。`④ 実行` はその prepared input を正本として使います。
+> [!NOTE]
+> **保存先：** `Quick Setup 保存` では route/depot 選択を `dispatch_scope` と `scenario_overlay` の両方へ同期します。
+> `Solver対応 Prepare` は現在の設定から solver-specific prepared input を作成し、`④ 実行` はその prepared input を正本として使います。
+
+> [!WARNING]
+> **既存シナリオを開いた場合：** 旧 `tokyu_dispatch_ready` ベースなど runtime 未整備 dataset のシナリオを開くと、
+> BFF は利用可能な runtime master（現行既定は `tokyu_full`）へ自動補正します。
+> 無効な営業所・路線選択はクリアされるため、`Quick Setup 読込` 後に選択内容を再確認してください。
 
 ---
 
@@ -745,22 +674,40 @@ python catalog_update_app.py refresh gtfs-pipeline `
 
 ### 7.3 runtime 未整備 dataset / stale scenario の補正
 
-- `tokyu_dispatch_ready` は 2026-03-21 時点のこの clone では runtime 用 `trips.parquet` を持たず、実行対象 dataset には使えません。
-- Tk の `datasetId` 候補は `/api/app/datasets` の `runtimeReady=true` を優先表示し、runtime 未整備 dataset は通常候補から外します。
-- 路線一覧は `data/catalog-fast/normalized/routes.jsonl` が存在する場合、それを優先して読み込みます。`routes.parquet` は主に trip/timetable 側の runtime 整合確認に使います。
-- 新規シナリオ作成時に runtime 未整備 dataset を選んだ場合、bootstrap は実行可能な `tokyu_full` へ自動フォールバックします。
-- 既存シナリオを開いた際も、BFF は stale な route/depot master を runtime 実在データへ補正します。
-- Quick Setup の営業所一覧は dataset 定義の全営業所を表示し、初期選択は runtime で route-backed な営業所だけに絞ります。`routeCount=0` の営業所は現行 runtime で対象路線が未展開です。
-- Quick Setup の路線一覧は catalog-fast 上の raw route inventory を基にしますが、表示対象は「現在選択中の `dayType` に trip を持つ route variant」のみに絞ります。Quick Setup では `linked` 件数を表示せず、営業所行・系統行・variant 行に `dayType` 別 trip 数を表示します。trip/timetable の確認は Prepare で現在選択した route のみを対象に行います。
-- route limit は `dayType` で 0 trip の候補を落とした後に適用します。0 trip route が limit を消費して有効 route が見えなくなることはありません。
-- `Prepare` 後に `tripCount=0` の場合は、現行 built/runtime 上で「選択 route × dayType × service_date」に該当する trip がありません。Quick Setup と日種別を見直してください。
-- 補正後は、以前保存された営業所・路線が現在の runtime に存在しない場合に選択が外れます。`Quick Setup 読込` 後に営業所・路線・車両配置を再確認してください。
-- `Quick Setup 保存` 後は `dispatch_scope` と `scenario_overlay` の両方に選択 route/depot が同期され、`Solver対応 Prepare` は現在の UI 選択と solver 設定から prepared input を再生成します。
-- `④ 実行` の `最適化計算` / `Preparedシミュレーション` / `再最適化` は、dispatch 再構築が不要な限り prepared input を直接使うため、従来より軽いフローです。
-- Tk の既定値どおり `最適化計算 + dispatch再構築OFF` で実行しても、BFF は prepared scope の `timetable_rows` / `trips` / `stops` を scenario artifact へ同期し、`optimization_result.prepared_input_id` と `optimization_audit.prepared_input_id` に実行入力を保存します。
-- 逆に `rebuild_dispatch=false` の run では duty 再生成は意図的に行わないため、`optimization_result` が有効でも `dutyCount=0` のままになることがあります。dispatch duty 自体が必要な確認では `dispatch再構築ON` で実行してください。
-- `timetable_rows` / `stop_timetables` を更新した場合、BFF は stale な `trips` / `graph` / `duties` / `dispatch_plan` / `simulation_result` / `optimization_result` を破棄して scenario を `draft` へ戻します。timetable-first の前提を壊さないための仕様です。
-- 大規模 scope の最適化入力では `TravelConnection` を feasible edge のみ保持する疎形式にしています。全 trip 対の O(n^2) 展開は行いません。
+**Dataset の扱い**
+
+- `tokyu_dispatch_ready` は runtime 用 `trips.parquet` を持たず実行対象 dataset には使えない
+- `datasetId` 候補は `runtimeReady=true` を優先表示（runtime 未整備は通常候補から除外）
+- 新規シナリオ作成時に runtime 未整備 dataset を選ぶと bootstrap は `tokyu_full` へ自動フォールバック
+- 既存シナリオを開くと BFF は stale な route/depot master を runtime 実在データへ補正する
+  → 選択が外れた場合は `Quick Setup 読込` 後に選び直してください
+
+**Quick Setup の表示ルール**
+
+- 営業所一覧はすべて表示し、初期選択は route-backed な営業所のみ（`routeCount=0` は路線未展開）
+- 路線一覧は「現在の `dayType` に trip を持つ route variant」のみ表示
+- route limit は 0 trip 候補を落とした後に適用（有効路線が limit で隠れることはない）
+- 路線一覧の基本は `data/catalog-fast/normalized/routes.jsonl`（存在する場合優先）
+
+> [!WARNING]
+> **`Prepare` 後に `tripCount=0`** → 「選択 route × dayType × service_date」に該当 trip なし。
+> Quick Setup で dayType と路線選択を見直してください。
+
+**Prepare・実行フロー**
+
+- `Quick Setup 保存` → `dispatch_scope` + `scenario_overlay` に route/depot を同期
+- `Solver対応 Prepare` → 現在の UI 選択と solver 設定から prepared input を再生成
+- `④ 実行` → dispatch 再構築が不要なら prepared input を直接使用（従来より軽量）
+
+**`rebuild_dispatch` と duty**
+
+- `rebuild_dispatch=false`（既定）では duty 再生成は行わないため `dutyCount=0` になる場合あり
+- dispatch duty を確認したい場合は `dispatch再構築ON` で実行
+
+**Timetable first の原則**
+
+- `timetable_rows` / `stop_timetables` を更新すると BFF は stale な `trips` / `graph` / `duties` / `dispatch_plan` / `simulation_result` / `optimization_result` を破棄し scenario を `draft` へ戻す
+- 大規模 scope では `TravelConnection` を feasible edge のみ保持する疎形式（全 trip 対の O(n²) 展開は行わない）
 
 ### 7.4 MILP 変数名の長さエラー
 
@@ -778,15 +725,17 @@ python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.s
 
 ### 7.6 job completed ≠ 最適化成功
 
-`job completed` はジョブ管理システム上の完了を意味し、数理最適化の成功とは別です。
-`solver_status` が `ERROR` / `INFEASIBLE` の場合、最適化結果ファイルが生成されないことがあります。
+> [!WARNING]
+> `job completed` はジョブ管理システム上の完了であり、数理最適化の成功とは別です。
+> `solver_status` が `ERROR` / `INFEASIBLE` の場合、最適化結果ファイルが生成されないことがあります。
 
 ---
 
 ## 8. パラメータ保全リスト
 
-最適化計算に直接関与するため、以下は削除しないでください。
-詳細は `docs/core_parameter_preservation_manifest.md` を参照してください。
+> [!CAUTION]
+> 以下のパラメータは最適化計算に直接関与します。**削除・名称変更しないでください。**
+> 詳細は [`docs/core_parameter_preservation_manifest.md`](docs/core_parameter_preservation_manifest.md) を参照してください。
 
 **ソルバー設定**
 `solverMode`, `objectiveMode`, `timeLimitSeconds`, `mipGap`, `alnsIterations`, `randomSeed`
