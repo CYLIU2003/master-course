@@ -11,6 +11,8 @@ from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
+    ChargingSlot,
+    DepotEnergyAsset,
     OptimizationConfig,
     ProblemTrip,
     RefuelSlot,
@@ -270,6 +272,16 @@ class GurobiMILPAdapter:
         g_var: Dict[int, Any] = {}
         pv_ch_var: Dict[int, Any] = {}
         p_avg_var: Dict[int, Any] = {}
+        g2bus_var: Dict[Tuple[str, int], Any] = {}
+        g2bess_var: Dict[Tuple[str, int], Any] = {}
+        pv2bess_var: Dict[Tuple[str, int], Any] = {}
+        bess2bus_var: Dict[Tuple[str, int], Any] = {}
+        pv_curt_var: Dict[Tuple[str, int], Any] = {}
+        bess_soc_var: Dict[Tuple[str, int], Any] = {}
+        grid_import_var: Dict[Tuple[str, int], Any] = {}
+        p_avg_depot_var: Dict[Tuple[str, int], Any] = {}
+        w_on_depot_var: Dict[str, Any] = {}
+        w_off_depot_var: Dict[str, Any] = {}
         end_soc_excess_dev_var: Dict[str, Any] = {}
         w_on_var = None
         w_off_var = None
@@ -547,49 +559,117 @@ class GurobiMILPAdapter:
                         + refuel_l_var[(vehicle.vehicle_id, slot_idx)]
                     )
 
-        # C15-C21: grid/PV balance, non-backflow, contract limit and demand charges.
+        # C15-C21(new): depot-level PV->BESS->Bus / Grid->Bus(+BESS) balance, demand and contract limits.
         if slot_indices:
-            for slot in problem.price_slots:
-                slot_idx = slot.slot_index
-                g_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
-                pv_ch_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
-                p_avg_var[slot_idx] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
-
-            w_on_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
-            w_off_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
-
-            pv_by_slot = {slot.slot_index: slot.pv_available_kw for slot in problem.pv_slots}
-            contract_limit_kw = max((depot.import_limit_kw for depot in problem.depots), default=1.0e6)
             on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
+            vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
+            bev_ids_by_depot: Dict[str, List[str]] = {}
+            for vehicle_id in bev_ids:
+                vehicle = vehicle_by_id.get(vehicle_id)
+                depot_key = str(getattr(vehicle, "home_depot_id", "") or "depot_default")
+                bev_ids_by_depot.setdefault(depot_key, []).append(vehicle_id)
 
-            for slot in problem.price_slots:
-                slot_idx = slot.slot_index
-                charge_kwh_expr = gp.quicksum(
-                    c_var[(vehicle_id, slot_idx)] * timestep_h
-                    for vehicle_id in bev_ids
-                    if (vehicle_id, slot_idx) in c_var
+            depot_by_id = {d.depot_id: d for d in problem.depots}
+            depot_energy_assets: Dict[str, DepotEnergyAsset] = {
+                depot_id: asset for depot_id, asset in (problem.depot_energy_assets or {}).items()
+            }
+            if not depot_energy_assets:
+                slot_count = len(slot_indices)
+                pv_by_slot_kw = {slot.slot_index: max(float(slot.pv_available_kw or 0.0), 0.0) for slot in problem.pv_slots}
+                pv_series = tuple(pv_by_slot_kw.get(slot_idx, 0.0) * timestep_h for slot_idx in slot_indices)
+                default_depot = next(iter(depot_by_id.keys()), "depot_default")
+                depot_energy_assets[default_depot] = DepotEnergyAsset(
+                    depot_id=default_depot,
+                    pv_enabled=bool(problem.pv_slots),
+                    pv_generation_kwh_by_slot=pv_series if slot_count > 0 else (),
+                    bess_enabled=False,
                 )
-                model.addConstr(g_var[slot_idx] + pv_ch_var[slot_idx] == charge_kwh_expr)  # C15
-                model.addConstr(pv_ch_var[slot_idx] <= max(pv_by_slot.get(slot_idx, 0.0), 0.0) * timestep_h)  # C16
-                model.addConstr(g_var[slot_idx] <= contract_limit_kw * timestep_h)  # C18
 
-                # C19: period average demand (one slot period).
-                model.addConstr(p_avg_var[slot_idx] == g_var[slot_idx] / timestep_h)
+            for depot_id, asset in depot_energy_assets.items():
+                w_on_depot_var[depot_id] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                w_off_depot_var[depot_id] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
 
-                operating_kwh_expr = gp.quicksum(
-                    coeff * y[key]
-                    for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, [])
-                ) + gp.quicksum(
-                    coeff * x[key]
-                    for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, [])
+                contract_limit_kw = float(
+                    getattr(depot_by_id.get(depot_id), "import_limit_kw", 0.0) or 0.0
                 )
-                operating_kw_expr = operating_kwh_expr / timestep_h
+                if contract_limit_kw <= 0.0:
+                    contract_limit_kw = 1.0e6
 
-                # C20/C21: on/off peak maximum demand tracked on BEV operating demand.
-                if slot_idx in on_peak_slots:
-                    model.addConstr(w_on_var >= operating_kw_expr)
-                if slot_idx in off_peak_slots:
-                    model.addConstr(w_off_var >= operating_kw_expr)
+                for slot_idx in slot_indices:
+                    key = (depot_id, slot_idx)
+                    g2bus_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                    g2bess_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                    pv2bess_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                    bess2bus_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                    pv_curt_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                    grid_import_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                    p_avg_depot_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                    if asset.bess_enabled:
+                        soc_lb = max(float(asset.bess_soc_min_kwh or 0.0), 0.0)
+                        soc_ub = max(float(asset.bess_soc_max_kwh or 0.0), soc_lb)
+                        bess_soc_var[key] = model.addVar(lb=soc_lb, ub=soc_ub, vtype=GRB.CONTINUOUS)
+
+                    charge_kwh_expr = gp.quicksum(
+                        c_var[(vehicle_id, slot_idx)] * timestep_h
+                        for vehicle_id in bev_ids_by_depot.get(depot_id, [])
+                        if (vehicle_id, slot_idx) in c_var
+                    )
+                    model.addConstr(bess2bus_var[key] + g2bus_var[key] == charge_kwh_expr)
+
+                    pv_gen_kwh = 0.0
+                    if asset.pv_enabled and asset.pv_generation_kwh_by_slot:
+                        pos = slot_indices.index(slot_idx)
+                        if pos < len(asset.pv_generation_kwh_by_slot):
+                            pv_gen_kwh = max(float(asset.pv_generation_kwh_by_slot[pos] or 0.0), 0.0)
+                    model.addConstr(pv2bess_var[key] + pv_curt_var[key] == pv_gen_kwh)
+
+                    model.addConstr(grid_import_var[key] == g2bus_var[key] + g2bess_var[key])
+                    model.addConstr(grid_import_var[key] <= contract_limit_kw * timestep_h)
+                    model.addConstr(p_avg_depot_var[key] == grid_import_var[key] / timestep_h)
+
+                    if slot_idx in on_peak_slots:
+                        model.addConstr(w_on_depot_var[depot_id] >= p_avg_depot_var[key])
+                    if slot_idx in off_peak_slots:
+                        model.addConstr(w_off_depot_var[depot_id] >= p_avg_depot_var[key])
+
+                    if not asset.allow_grid_to_bess:
+                        model.addConstr(g2bess_var[key] == 0.0)
+
+                    if not asset.bess_enabled:
+                        model.addConstr(pv2bess_var[key] == 0.0)
+                        model.addConstr(g2bess_var[key] == 0.0)
+                        model.addConstr(bess2bus_var[key] == 0.0)
+
+                if asset.bess_enabled and slot_indices:
+                    eta_ch = max(float(asset.bess_charge_efficiency or 0.95), 1.0e-6)
+                    eta_dis = max(float(asset.bess_discharge_efficiency or 0.95), 1.0e-6)
+                    power_limit_kwh = max(float(asset.bess_power_kw or 0.0), 0.0) * timestep_h
+                    first_slot = slot_indices[0]
+                    model.addConstr(bess_soc_var[(depot_id, first_slot)] == float(asset.bess_initial_soc_kwh or 0.0))
+                    model.addConstr(
+                        pv2bess_var[(depot_id, first_slot)] + g2bess_var[(depot_id, first_slot)] <= power_limit_kwh
+                    )
+                    model.addConstr(bess2bus_var[(depot_id, first_slot)] <= power_limit_kwh)
+                    for idx in range(len(slot_indices) - 1):
+                        slot_idx = slot_indices[idx]
+                        next_slot = slot_indices[idx + 1]
+                        cur_key = (depot_id, slot_idx)
+                        nxt_key = (depot_id, next_slot)
+                        model.addConstr(
+                            bess_soc_var[nxt_key]
+                            == bess_soc_var[cur_key]
+                            + eta_ch * (pv2bess_var[cur_key] + g2bess_var[cur_key])
+                            - (bess2bus_var[cur_key] / eta_dis)
+                        )
+                        model.addConstr(pv2bess_var[cur_key] + g2bess_var[cur_key] <= power_limit_kwh)
+                        model.addConstr(bess2bus_var[cur_key] <= power_limit_kwh)
+
+            if w_on_depot_var:
+                w_on_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                w_off_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                for depot_id in w_on_depot_var:
+                    model.addConstr(w_on_var >= w_on_depot_var[depot_id])
+                    model.addConstr(w_off_var >= w_off_depot_var[depot_id])
 
         unserved_penalty_weight = max(problem.objective_weights.unserved, 10000.0)
         objective_mode = normalize_objective_mode(problem.scenario.objective_mode)
@@ -598,16 +678,36 @@ class GurobiMILPAdapter:
         vehicle_weight = max(problem.objective_weights.vehicle, 0.0)
 
         objective = gp.LinExpr()
-        # O2: BEV traction energy cost (charging itself is not monetized).
+        # O2: electricity cost based on actual charging source flows.
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
-        for slot_idx in slot_indices:
-            price = price_by_slot.get(slot_idx, 0.0)
-            if price <= 0.0:
-                continue
-            for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, []):
-                objective += energy_weight * price * coeff * y[key]
-            for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
-                objective += energy_weight * price * coeff * x[key]
+        curtail_penalty = self._safe_nonnegative_float(
+            problem.metadata.get("pv_curtail_penalty_yen_per_kwh"),
+            default=0.0,
+        )
+        if g2bus_var or g2bess_var or bess2bus_var:
+            for (depot_id, slot_idx), var in g2bus_var.items():
+                price = max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+                objective += energy_weight * price * var
+            for (depot_id, slot_idx), var in g2bess_var.items():
+                price = max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+                objective += energy_weight * price * var
+            for (depot_id, slot_idx), var in bess2bus_var.items():
+                asset = (problem.depot_energy_assets or {}).get(depot_id)
+                bess_marginal = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
+                objective += energy_weight * bess_marginal * var
+            if curtail_penalty > 0.0:
+                for var in pv_curt_var.values():
+                    objective += energy_weight * curtail_penalty * var
+        else:
+            # Backward-compatible fallback for plans without charging-source variables.
+            for slot_idx in slot_indices:
+                price = price_by_slot.get(slot_idx, 0.0)
+                if price <= 0.0:
+                    continue
+                for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, []):
+                    objective += energy_weight * price * coeff * y[key]
+                for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
+                    objective += energy_weight * price * coeff * x[key]
 
         # O1: ICE fuel cost (revenue + deadhead).
         diesel_price = max(problem.scenario.diesel_price_yen_per_l, 0.0)
@@ -749,6 +849,78 @@ class GurobiMILPAdapter:
         duties: List[VehicleDuty] = []
         served_trip_ids: List[str] = []
         refuel_slots: List[RefuelSlot] = []
+        charging_slots: List[ChargingSlot] = []
+
+        def _var_val(var: Any) -> float:
+            try:
+                return float(var.X)
+            except Exception:
+                return 0.0
+
+        grid_to_bus_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+        bess_to_bus_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+        pv_to_bess_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+        grid_to_bess_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+        pv_curtail_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+        bess_soc_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+        for (depot_id, slot_idx), var in g2bus_var.items():
+            grid_to_bus_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        for (depot_id, slot_idx), var in bess2bus_var.items():
+            bess_to_bus_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        for (depot_id, slot_idx), var in pv2bess_var.items():
+            pv_to_bess_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        for (depot_id, slot_idx), var in g2bess_var.items():
+            grid_to_bess_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        for (depot_id, slot_idx), var in pv_curt_var.items():
+            pv_curtail_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        for (depot_id, slot_idx), var in bess_soc_var.items():
+            bess_soc_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+
+        if c_var and bev_ids:
+            vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
+            for slot_idx in slot_indices:
+                demand_by_depot_kwh: Dict[str, float] = {}
+                demand_by_vehicle_kw: Dict[Tuple[str, str], float] = {}
+                for vehicle_id in bev_ids:
+                    var = c_var.get((vehicle_id, slot_idx))
+                    if var is None:
+                        continue
+                    vehicle_kw = max(_var_val(var), 0.0)
+                    if vehicle_kw <= 0.0:
+                        continue
+                    vehicle = vehicle_by_id.get(vehicle_id)
+                    depot_id = str(getattr(vehicle, "home_depot_id", "") or "depot_default")
+                    demand_by_depot_kwh[depot_id] = demand_by_depot_kwh.get(depot_id, 0.0) + vehicle_kw * timestep_h
+                    demand_by_vehicle_kw[(vehicle_id, depot_id)] = vehicle_kw
+
+                for (vehicle_id, depot_id), vehicle_kw in demand_by_vehicle_kw.items():
+                    demand_kwh = demand_by_depot_kwh.get(depot_id, 0.0)
+                    if demand_kwh <= 0.0:
+                        continue
+                    bess_kwh = float(bess_to_bus_kwh_by_depot_slot.get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
+                    grid_kwh = float(grid_to_bus_kwh_by_depot_slot.get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
+                    bess_ratio = min(max(bess_kwh / demand_kwh, 0.0), 1.0)
+                    grid_ratio = min(max(grid_kwh / demand_kwh, 0.0), 1.0)
+                    if bess_ratio > 0.0:
+                        charging_slots.append(
+                            ChargingSlot(
+                                vehicle_id=vehicle_id,
+                                slot_index=slot_idx,
+                                charger_id=f"bess:{depot_id}",
+                                charge_kw=vehicle_kw * bess_ratio,
+                                discharge_kw=0.0,
+                            )
+                        )
+                    if grid_ratio > 0.0:
+                        charging_slots.append(
+                            ChargingSlot(
+                                vehicle_id=vehicle_id,
+                                slot_index=slot_idx,
+                                charger_id=f"grid:{depot_id}",
+                                charge_kw=vehicle_kw * grid_ratio,
+                                discharge_kw=0.0,
+                            )
+                        )
 
         for vehicle in problem.vehicles:
             assigned_trip_ids = [
@@ -814,8 +986,14 @@ class GurobiMILPAdapter:
 
         plan = AssignmentPlan(
             duties=tuple(duties),
-            charging_slots=(),
+            charging_slots=tuple(sorted(charging_slots, key=lambda item: (item.vehicle_id, item.slot_index, str(item.charger_id or "")))),
             refuel_slots=tuple(sorted(refuel_slots, key=lambda item: (item.vehicle_id, item.slot_index))),
+            grid_to_bus_kwh_by_depot_slot=grid_to_bus_kwh_by_depot_slot,
+            bess_to_bus_kwh_by_depot_slot=bess_to_bus_kwh_by_depot_slot,
+            pv_to_bess_kwh_by_depot_slot=pv_to_bess_kwh_by_depot_slot,
+            grid_to_bess_kwh_by_depot_slot=grid_to_bess_kwh_by_depot_slot,
+            pv_curtail_kwh_by_depot_slot=pv_curtail_kwh_by_depot_slot,
+            bess_soc_kwh_by_depot_slot=bess_soc_kwh_by_depot_slot,
             served_trip_ids=tuple(sorted(served_set)),
             unserved_trip_ids=tuple(unserved_trip_ids),
             metadata={

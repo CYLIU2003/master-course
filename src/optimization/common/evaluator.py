@@ -26,6 +26,18 @@ class CostBreakdown:
     pv_curtailed_kwh: float = 0.0
     grid_import_kwh: float = 0.0
     peak_grid_kw: float = 0.0
+    grid_to_bus_kwh: float = 0.0
+    bess_to_bus_kwh: float = 0.0
+    pv_to_bess_kwh: float = 0.0
+    grid_to_bess_kwh: float = 0.0
+    electricity_cost_final: float = 0.0
+    electricity_cost_provisional_leftover: float = 0.0
+    grid_purchase_cost: float = 0.0
+    bess_discharge_cost: float = 0.0
+    stationary_battery_degradation_cost: float = 0.0
+    pv_asset_cost: float = 0.0
+    bess_asset_cost: float = 0.0
+    total_cost_with_assets: float = 0.0
     total_cost: float = 0.0
     objective_value: float = 0.0
 
@@ -47,9 +59,29 @@ class CostBreakdown:
             "pv_curtailed_kwh": self.pv_curtailed_kwh,
             "grid_import_kwh": self.grid_import_kwh,
             "peak_grid_kw": self.peak_grid_kw,
+            "grid_to_bus_kwh": self.grid_to_bus_kwh,
+            "bess_to_bus_kwh": self.bess_to_bus_kwh,
+            "pv_to_bess_kwh": self.pv_to_bess_kwh,
+            "grid_to_bess_kwh": self.grid_to_bess_kwh,
+            "electricity_cost_final": self.electricity_cost_final,
+            "electricity_cost_provisional_leftover": self.electricity_cost_provisional_leftover,
+            "grid_purchase_cost": self.grid_purchase_cost,
+            "bess_discharge_cost": self.bess_discharge_cost,
+            "stationary_battery_degradation_cost": self.stationary_battery_degradation_cost,
+            "pv_asset_cost": self.pv_asset_cost,
+            "bess_asset_cost": self.bess_asset_cost,
+            "total_cost_with_assets": self.total_cost_with_assets,
             "total_cost": self.total_cost,
             "objective_value": self.objective_value,
         }
+
+
+# Driver cost heuristic constants – exposed as module-level so tests and
+# future config overrides can reference them without digging into the method body.
+_DRIVER_PREP_TIME_MIN: int = 30
+_DRIVER_WAGE_JPY_PER_H: float = 2000.0
+_DRIVER_REGULAR_HOURS_PER_DAY: float = 8.0
+_DRIVER_OVERTIME_FACTOR: float = 1.25
 
 
 class CostEvaluator:
@@ -58,10 +90,10 @@ class CostEvaluator:
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
     ) -> CostBreakdown:
-        prep_time_min = 30
-        wage_regular_jpy_per_h = 2000.0
-        regular_hours_per_day = 8.0
-        overtime_factor = 1.25
+        prep_time_min = _DRIVER_PREP_TIME_MIN
+        wage_regular_jpy_per_h = _DRIVER_WAGE_JPY_PER_H
+        regular_hours_per_day = _DRIVER_REGULAR_HOURS_PER_DAY
+        overtime_factor = _DRIVER_OVERTIME_FACTOR
 
         weights = problem.objective_weights
         vehicle_cost = 0.0
@@ -101,19 +133,39 @@ class CostEvaluator:
                         leg.deadhead_from_prev_min,
                     )
 
-        charge_slot_totals: Dict[int, float] = {}
-        for slot in plan.charging_slots:
-            net_kw = max(slot.charge_kw - slot.discharge_kw, 0.0)
-            charge_slot_totals[slot.slot_index] = charge_slot_totals.get(slot.slot_index, 0.0) + net_kw
-
         operating_slot_totals = self._operating_electric_energy_kwh_by_slot(problem, plan)
-        energy_cost += self._operating_electric_energy_cost(problem, operating_slot_totals)
-        demand_cost = self._operating_demand_charge_cost(problem, operating_slot_totals)
-        pv_generated_kwh, pv_used_direct_kwh, grid_import_kwh, peak_grid_kw = self._pv_grid_summary(
-            problem,
-            operating_slot_totals,
+
+        energy_cost_components = self._evaluate_electricity_with_overwrite(problem, plan, operating_slot_totals)
+        energy_cost += energy_cost_components["electricity_cost_final"]
+        grid_import_by_slot = self._grid_import_kwh_by_slot_from_plan(plan)
+        if grid_import_by_slot:
+            demand_cost = self._operating_demand_charge_cost(problem, grid_import_by_slot)
+            timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
+            grid_import_kwh = sum(max(float(v or 0.0), 0.0) for v in grid_import_by_slot.values())
+            peak_grid_kw = (
+                max((max(float(v or 0.0), 0.0) / timestep_h) for v in grid_import_by_slot.values())
+                if grid_import_by_slot
+                else 0.0
+            )
+            if problem.depot_energy_assets:
+                pv_generated_kwh = sum(
+                    max(float(v or 0.0), 0.0)
+                    for asset in problem.depot_energy_assets.values()
+                    for v in asset.pv_generation_kwh_by_slot
+                )
+            else:
+                pv_generated_kwh = 0.0
+            pv_used_direct_kwh = 0.0
+        else:
+            demand_cost = self._operating_demand_charge_cost(problem, operating_slot_totals)
+            pv_generated_kwh, pv_used_direct_kwh, grid_import_kwh, peak_grid_kw = self._pv_grid_summary(
+                problem,
+                operating_slot_totals,
+            )
+        pv_curtailed_kwh = max(
+            energy_cost_components.get("pv_curtailed_kwh", 0.0),
+            max(pv_generated_kwh - pv_used_direct_kwh, 0.0),
         )
-        pv_curtailed_kwh = max(pv_generated_kwh - pv_used_direct_kwh, 0.0)
 
         baseline_map = self._trip_vehicle_type_map(problem.baseline_plan) if problem.baseline_plan else {}
         current_map = self._trip_vehicle_type_map(plan)
@@ -131,6 +183,7 @@ class CostEvaluator:
             if vehicle is None:
                 continue
             charged_kwh = max(slot.charge_kw, 0.0) * slot_hours
+            capacity_kwh = max(float(vehicle.battery_capacity_kwh or 0.0), 1.0)
             degradation_cycles += charged_kwh / capacity_kwh
         degradation_cost = weights.degradation * degradation_cycles * 50.0
 
@@ -170,6 +223,9 @@ class CostEvaluator:
             + deviation_cost
             + co2_cost
         )
+        total_cost_with_assets = total_cost + float(energy_cost_components.get("pv_asset_cost", 0.0)) + float(
+            energy_cost_components.get("bess_asset_cost", 0.0)
+        )
         objective_value = objective_value_for_mode(
             objective_mode=problem.scenario.objective_mode,
             total_cost=total_cost,
@@ -198,9 +254,235 @@ class CostEvaluator:
             pv_curtailed_kwh=pv_curtailed_kwh,
             grid_import_kwh=grid_import_kwh,
             peak_grid_kw=peak_grid_kw,
+            grid_to_bus_kwh=float(energy_cost_components.get("grid_to_bus_kwh", 0.0)),
+            bess_to_bus_kwh=float(energy_cost_components.get("bess_to_bus_kwh", 0.0)),
+            pv_to_bess_kwh=float(energy_cost_components.get("pv_to_bess_kwh", 0.0)),
+            grid_to_bess_kwh=float(energy_cost_components.get("grid_to_bess_kwh", 0.0)),
+            electricity_cost_final=float(energy_cost_components.get("electricity_cost_final", 0.0)),
+            electricity_cost_provisional_leftover=float(
+                energy_cost_components.get("electricity_cost_provisional_leftover", 0.0)
+            ),
+            grid_purchase_cost=float(energy_cost_components.get("grid_purchase_cost", 0.0)),
+            bess_discharge_cost=float(energy_cost_components.get("bess_discharge_cost", 0.0)),
+            stationary_battery_degradation_cost=float(
+                energy_cost_components.get("stationary_battery_degradation_cost", 0.0)
+            ),
+            pv_asset_cost=float(energy_cost_components.get("pv_asset_cost", 0.0)),
+            bess_asset_cost=float(energy_cost_components.get("bess_asset_cost", 0.0)),
+            total_cost_with_assets=total_cost_with_assets,
             total_cost=total_cost,
             objective_value=objective_value,
         )
+
+    def _evaluate_electricity_with_overwrite(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        operating_slot_totals: Dict[int, float],
+    ) -> Dict[str, float]:
+        timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
+
+        def _sum_flow(mapping: Dict[str, Dict[int, float]]) -> float:
+            return sum(max(float(v or 0.0), 0.0) for by_slot in mapping.values() for v in by_slot.values())
+
+        grid_to_bus = {
+            str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
+            for k, by_slot in (plan.grid_to_bus_kwh_by_depot_slot or {}).items()
+        }
+        bess_to_bus = {
+            str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
+            for k, by_slot in (plan.bess_to_bus_kwh_by_depot_slot or {}).items()
+        }
+        pv_to_bess = {
+            str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
+            for k, by_slot in (plan.pv_to_bess_kwh_by_depot_slot or {}).items()
+        }
+        grid_to_bess = {
+            str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
+            for k, by_slot in (plan.grid_to_bess_kwh_by_depot_slot or {}).items()
+        }
+        pv_curtail = {
+            str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
+            for k, by_slot in (plan.pv_curtail_kwh_by_depot_slot or {}).items()
+        }
+
+        if not grid_to_bus and not bess_to_bus:
+            # Backward-compatible fallback: operating energy priced by TOU.
+            fallback_cost = self._operating_electric_energy_cost(problem, operating_slot_totals)
+            return {
+                "electricity_cost_final": fallback_cost,
+                "electricity_cost_provisional_leftover": fallback_cost,
+                "grid_purchase_cost": fallback_cost,
+                "bess_discharge_cost": 0.0,
+                "stationary_battery_degradation_cost": 0.0,
+                "pv_asset_cost": 0.0,
+                "bess_asset_cost": 0.0,
+                "grid_to_bus_kwh": 0.0,
+                "bess_to_bus_kwh": 0.0,
+                "pv_to_bess_kwh": 0.0,
+                "grid_to_bess_kwh": 0.0,
+                "pv_curtailed_kwh": 0.0,
+            }
+
+        vehicle_depot = self._vehicle_to_depot(problem)
+        provisional_price_by_depot = self._provisional_price_by_depot(problem)
+
+        drive_events = self._collect_drive_energy_events(problem, plan)
+        debts: Dict[str, list[tuple[float, float]]] = {}
+        provisional_total = 0.0
+        for vehicle_id, depot_id, _slot_idx, energy_kwh in drive_events:
+            provisional_price = provisional_price_by_depot.get(depot_id, 0.0)
+            debts.setdefault(vehicle_id, []).append((float(energy_kwh), provisional_price))
+            provisional_total += float(energy_kwh) * provisional_price
+
+        charge_events: list[tuple[int, str, str, float]] = []
+        for slot in plan.charging_slots:
+            source, depot_id = self._charging_source_and_depot(slot.charger_id, vehicle_depot.get(slot.vehicle_id, "depot_default"))
+            charge_kwh = max(float(slot.charge_kw or 0.0) - max(float(slot.discharge_kw or 0.0), 0.0), 0.0) * timestep_h
+            if charge_kwh <= 0.0:
+                continue
+            charge_events.append((int(slot.slot_index), str(slot.vehicle_id), source, charge_kwh))
+        charge_events.sort(key=lambda item: item[0])
+
+        grid_purchase_cost = 0.0
+        bess_discharge_cost = 0.0
+        rollback_cost = 0.0
+        for slot_idx, vehicle_id, source, charge_kwh in charge_events:
+            depot_id = vehicle_depot.get(vehicle_id, "depot_default")
+            if source == "bess":
+                asset = (problem.depot_energy_assets or {}).get(depot_id)
+                bess_unit = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
+                bess_discharge_cost += charge_kwh * bess_unit
+            else:
+                grid_purchase_cost += charge_kwh * self._slot_buy_price(problem, slot_idx)
+
+            remaining = charge_kwh
+            queue = debts.get(vehicle_id, [])
+            new_queue: list[tuple[float, float]] = []
+            for debt_kwh, prov_price in queue:
+                if remaining <= 1.0e-9:
+                    new_queue.append((debt_kwh, prov_price))
+                    continue
+                matched = min(debt_kwh, remaining)
+                rollback_cost += matched * prov_price
+                rest = debt_kwh - matched
+                if rest > 1.0e-9:
+                    new_queue.append((rest, prov_price))
+                remaining -= matched
+            debts[vehicle_id] = new_queue
+
+        provisional_leftover = sum(kwh * price for queue in debts.values() for kwh, price in queue)
+        electricity_cost_final = (provisional_total - rollback_cost) + grid_purchase_cost + bess_discharge_cost
+
+        stationary_battery_degradation_cost = 0.0
+        pv_asset_cost = 0.0
+        bess_asset_cost = 0.0
+        for asset in (problem.depot_energy_assets or {}).values():
+            pv_asset_cost += self._dailyized_capex_om(
+                capacity=asset.pv_capacity_kw,
+                capex_unit=asset.pv_capex_jpy_per_kw,
+                om_unit_year=asset.pv_om_jpy_per_kw_year,
+                life_years=asset.pv_life_years,
+            )
+            bess_asset_cost += self._dailyized_capex_om(
+                capacity=asset.bess_energy_kwh,
+                capex_unit=asset.bess_capex_jpy_per_kwh,
+                om_unit_year=asset.bess_om_jpy_per_kwh_year,
+                life_years=asset.bess_life_years,
+            )
+            stationary_battery_degradation_cost += _sum_flow({asset.depot_id: bess_to_bus.get(asset.depot_id, {})}) * max(
+                float(asset.bess_cycle_cost_yen_per_kwh or 0.0),
+                0.0,
+            )
+
+        return {
+            "electricity_cost_final": electricity_cost_final,
+            "electricity_cost_provisional_leftover": provisional_leftover,
+            "grid_purchase_cost": grid_purchase_cost,
+            "bess_discharge_cost": bess_discharge_cost,
+            "stationary_battery_degradation_cost": stationary_battery_degradation_cost,
+            "pv_asset_cost": pv_asset_cost,
+            "bess_asset_cost": bess_asset_cost,
+            "grid_to_bus_kwh": _sum_flow(grid_to_bus),
+            "bess_to_bus_kwh": _sum_flow(bess_to_bus),
+            "pv_to_bess_kwh": _sum_flow(pv_to_bess),
+            "grid_to_bess_kwh": _sum_flow(grid_to_bess),
+            "pv_curtailed_kwh": _sum_flow(pv_curtail),
+        }
+
+    def _collect_drive_energy_events(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> list[tuple[str, str, int, float]]:
+        events: list[tuple[str, str, int, float]] = []
+        trip_by_id = problem.trip_by_id()
+        for duty in plan.duties:
+            vehicle_id = self._vehicle_id_from_duty_id(duty.duty_id)
+            depot_id = self._vehicle_to_depot(problem).get(vehicle_id, "depot_default")
+            for leg in duty.legs:
+                trip = trip_by_id.get(leg.trip.trip_id)
+                if trip is None:
+                    continue
+                events.append((vehicle_id, depot_id, int(trip.departure_min), max(float(trip.energy_kwh or 0.0), 0.0)))
+                if leg.deadhead_from_prev_min > 0:
+                    events.append(
+                        (
+                            vehicle_id,
+                            depot_id,
+                            int(trip.departure_min),
+                            max(float(self._estimated_deadhead_energy_kwh(problem, leg, trip) or 0.0), 0.0),
+                        )
+                    )
+        events.sort(key=lambda item: item[2])
+        return events
+
+    def _vehicle_to_depot(self, problem: CanonicalOptimizationProblem) -> Dict[str, str]:
+        return {str(v.vehicle_id): str(v.home_depot_id or "depot_default") for v in problem.vehicles}
+
+    def _vehicle_id_from_duty_id(self, duty_id: str) -> str:
+        if duty_id.startswith("milp_") and len(duty_id) > 5:
+            return duty_id[5:]
+        return duty_id
+
+    def _provisional_price_by_depot(self, problem: CanonicalOptimizationProblem) -> Dict[str, float]:
+        avg_price = 0.0
+        if problem.price_slots:
+            avg_price = sum(float(slot.grid_buy_yen_per_kwh or 0.0) for slot in problem.price_slots) / len(problem.price_slots)
+        result: Dict[str, float] = {}
+        for depot in problem.depots:
+            asset = (problem.depot_energy_assets or {}).get(depot.depot_id)
+            configured = float(getattr(asset, "provisional_energy_cost_yen_per_kwh", 0.0) or 0.0) if asset else 0.0
+            result[depot.depot_id] = configured if configured > 0.0 else avg_price
+        if not result:
+            result["depot_default"] = avg_price
+        return result
+
+    def _charging_source_and_depot(self, charger_id: str | None, fallback_depot_id: str) -> tuple[str, str]:
+        raw = str(charger_id or "")
+        if ":" in raw:
+            source, depot_id = raw.split(":", 1)
+            source_norm = source.strip().lower()
+            if source_norm in {"grid", "bess"}:
+                return source_norm, depot_id.strip() or fallback_depot_id
+        return "grid", fallback_depot_id
+
+    def _dailyized_capex_om(self, capacity: float, capex_unit: float, om_unit_year: float, life_years: int) -> float:
+        cap = max(float(capacity or 0.0), 0.0)
+        capex = max(float(capex_unit or 0.0), 0.0)
+        om = max(float(om_unit_year or 0.0), 0.0)
+        life = max(int(life_years or 1), 1)
+        return (cap * capex) / (365.0 * life) + (cap * om) / 365.0
+
+    def _grid_import_kwh_by_slot_from_plan(self, plan: AssignmentPlan) -> Dict[int, float]:
+        merged: Dict[int, float] = {}
+        for by_slot in (plan.grid_to_bus_kwh_by_depot_slot or {}).values():
+            for slot_idx, value in by_slot.items():
+                merged[int(slot_idx)] = merged.get(int(slot_idx), 0.0) + max(float(value or 0.0), 0.0)
+        for by_slot in (plan.grid_to_bess_kwh_by_depot_slot or {}).values():
+            for slot_idx, value in by_slot.items():
+                merged[int(slot_idx)] = merged.get(int(slot_idx), 0.0) + max(float(value or 0.0), 0.0)
+        return merged
 
     def _pv_grid_summary(
         self,

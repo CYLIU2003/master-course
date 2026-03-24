@@ -32,6 +32,7 @@ from .problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
     ChargerDefinition,
+    DepotEnergyAsset,
     EnergyPriceSlot,
     OptimizationConfig,
     OptimizationObjectiveWeights,
@@ -47,6 +48,8 @@ from .problem import (
 
 @dataclass(frozen=True)
 class ProblemBuilder:
+    # Fallback vehicle count per type when vehicle_counts dict has no entry.
+    # This path is only hit by legacy/test callers that omit explicit counts.
     default_vehicle_count_per_type: int = 1
 
     def build_from_scenario(
@@ -144,6 +147,7 @@ class ProblemBuilder:
         return self.build_from_dispatch(
             context,
             scenario_id=str((scenario.get("meta") or {}).get("id") or ""),
+            scenario_metadata=scenario,
             config=config,
             vehicle_counts=vehicle_counts,
             chargers=chargers,
@@ -177,6 +181,7 @@ class ProblemBuilder:
         context: DispatchContext,
         *,
         scenario_id: str,
+        scenario_metadata: Optional[Dict[str, Any]] = None,
         config: Optional[OptimizationConfig] = None,
         vehicle_counts: Optional[Dict[str, int]] = None,
         chargers: Sequence[ChargerDefinition] = (),
@@ -262,6 +267,13 @@ class ProblemBuilder:
         )
         time_slots = tuple(self._build_time_slot_prices(context, price_slots))
         pv_series = tuple(self._build_pv_slots(time_slots, pv_slots))
+        depot_energy_assets = self._build_depot_energy_assets_from_scenario(
+            scenario_id=scenario_id,
+            time_slots=time_slots,
+            pv_slots=pv_series,
+            depots=depots,
+            metadata_source=scenario_metadata or {},
+        )
         feasible_connections: Dict[str, Tuple[str, ...]] = {}
         for vehicle_type in context.vehicle_profiles:
             graph = self._build_graph(context, vehicle_type)
@@ -293,6 +305,7 @@ class ProblemBuilder:
             chargers=tuple(chargers),
             price_slots=time_slots,
             pv_slots=pv_series,
+            depot_energy_assets=depot_energy_assets,
             feasible_connections=feasible_connections,
             objective_weights=objective_weights or OptimizationObjectiveWeights(),
             baseline_plan=baseline,
@@ -317,6 +330,68 @@ class ProblemBuilder:
                 "deadhead_speed_kmh": deadhead_speed_kmh,
             },
         )
+
+    def _build_depot_energy_assets_from_scenario(
+        self,
+        *,
+        scenario_id: str,
+        time_slots: Sequence[EnergyPriceSlot],
+        pv_slots: Sequence[PVSlot],
+        depots: Sequence[ProblemDepot],
+        metadata_source: Dict[str, Any],
+    ) -> Dict[str, DepotEnergyAsset]:
+        del scenario_id
+        assets: Dict[str, DepotEnergyAsset] = {}
+        overlay = (metadata_source.get("scenario_overlay") or {}) if isinstance(metadata_source, dict) else {}
+        sim_cfg = metadata_source.get("simulation_config") or {} if isinstance(metadata_source, dict) else {}
+        depot_assets_raw = list(sim_cfg.get("depot_energy_assets") or [])
+        if isinstance(overlay, dict):
+            depot_assets_raw.extend(list((overlay.get("depot_energy_assets") or [])))
+
+        slot_count = len(time_slots)
+        pv_kwh_by_slot = [0.0] * slot_count
+        for pv in pv_slots:
+            if 0 <= int(pv.slot_index) < slot_count:
+                pv_kwh_by_slot[int(pv.slot_index)] = max(float(pv.pv_available_kw or 0.0), 0.0) * 0.5
+
+        by_depot_raw: Dict[str, Dict[str, Any]] = {}
+        for item in depot_assets_raw:
+            if not isinstance(item, dict):
+                continue
+            depot_id = str(item.get("depot_id") or item.get("depotId") or "depot_default")
+            by_depot_raw[depot_id] = dict(item)
+
+        for depot in depots:
+            raw = by_depot_raw.get(depot.depot_id, {})
+            pv_series = tuple(float(v or 0.0) for v in (raw.get("pv_generation_kwh_by_slot") or pv_kwh_by_slot))
+            asset = DepotEnergyAsset(
+                depot_id=depot.depot_id,
+                pv_enabled=bool(raw.get("pv_enabled", len(pv_slots) > 0)),
+                pv_generation_kwh_by_slot=pv_series,
+                pv_case_id=str(raw.get("pv_case_id") or "default"),
+                pv_capex_jpy_per_kw=float(raw.get("pv_capex_jpy_per_kw") or 0.0),
+                pv_om_jpy_per_kw_year=float(raw.get("pv_om_jpy_per_kw_year") or 0.0),
+                pv_life_years=int(raw.get("pv_life_years") or 25),
+                pv_capacity_kw=float(raw.get("pv_capacity_kw") or 0.0),
+                bess_enabled=bool(raw.get("bess_enabled", False)),
+                bess_energy_kwh=float(raw.get("bess_energy_kwh") or 0.0),
+                bess_power_kw=float(raw.get("bess_power_kw") or 0.0),
+                bess_initial_soc_kwh=float(raw.get("bess_initial_soc_kwh") or 0.0),
+                bess_soc_min_kwh=float(raw.get("bess_soc_min_kwh") or 0.0),
+                bess_soc_max_kwh=float(raw.get("bess_soc_max_kwh") or 0.0),
+                bess_charge_efficiency=float(raw.get("bess_charge_efficiency") or 0.95),
+                bess_discharge_efficiency=float(raw.get("bess_discharge_efficiency") or 0.95),
+                bess_cycle_cost_yen_per_kwh=float(raw.get("bess_cycle_cost_yen_per_kwh") or 0.0),
+                bess_capex_jpy_per_kwh=float(raw.get("bess_capex_jpy_per_kwh") or 0.0),
+                bess_om_jpy_per_kwh_year=float(raw.get("bess_om_jpy_per_kwh_year") or 0.0),
+                bess_life_years=int(raw.get("bess_life_years") or 15),
+                allow_grid_to_bess=bool(raw.get("allow_grid_to_bess", False)),
+                grid_to_bess_price_mode=str(raw.get("grid_to_bess_price_mode") or "tou"),
+                bess_priority_mode=str(raw.get("bess_priority_mode") or "cost_driven"),
+                provisional_energy_cost_yen_per_kwh=float(raw.get("provisional_energy_cost_yen_per_kwh") or 0.0),
+            )
+            assets[depot.depot_id] = asset
+        return assets
 
     def _build_graph(
         self,

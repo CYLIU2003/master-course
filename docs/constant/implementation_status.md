@@ -33,7 +33,7 @@
 
 ---
 
-## 1. 制約一覧（C1〜C21）
+## 1. 制約一覧（C1〜C27）
 
 | No. | 内容 | 状況 | 実装詳細・差分 |
 |-----|------|------|----------------|
@@ -51,13 +51,19 @@
 | C12 | 走行中充電禁止（運行と充電の排他） | ✅ 対応 | `c[k,t] <= chargeMax * (1 - running_expr)`（走行中フラグで充電上限をゼロに） |
 | C13 | 充電電力上限（充電器定格） | ✅ 対応（MILP adapter経路） | `chi[k,t]`（ON/OFF二値）を導入し、`c[k,t] <= chargeMax * chi[k,t]` を実装 |
 | C14 | 同時充電台数制約（充電器台数上限） | ✅ 対応（MILP adapter経路） | `sum_k chi[k,t] <= total_ports`（台数）と `sum_k c[k,t] <= total_kw`（容量）を分離実装 |
-| C15 | 電力バランス（系統 + PV = 充電需要） | ✅ 対応 | `g_var + pv_ch_var == sum(c) * Δt` |
-| C16 | PV 供給上限（PV 発電量以内） | ✅ 対応 | `pv_ch_var <= pv_available * Δt` |
-| C17 | 非逆潮流（系統への注入禁止） | ✅ 対応 | `g_var` の `lb = 0` |
-| C18 | 系統受電容量上限（契約電力） | ✅ 対応 | `g_var <= contract_limit_kw * Δt` |
-| C19 | デマンド計測期間の平均需要電力定義 | ✅ 対応 | `p_avg_var[t] = g_var[t] / Δt` |
-| C20 | オンピーク最大需要電力 | 🔶 対応（改善） | `demand_charge_weight` が設定された tariff slot を優先して `w_on >= p_avg_var[t]` を適用。未設定時は中央値フォールバック |
-| C21 | オフピーク最大需要電力 | 🔶 対応（改善） | `demand_charge_weight` が設定された tariff slot を優先して `w_off >= p_avg_var[t]` を適用。未設定時は中央値フォールバック |
+| C15 | EV充電需要バランス（BESS→Bus + Grid→Bus） | ✅ 対応 | 営業所別に `bess2bus + g2bus == charge_demand` |
+| C16 | PV 収支（PV→BESS + curtail = PV発電） | ✅ 対応 | 営業所別に `pv2bess + pv_curt == pv_gen` |
+| C17 | 非逆潮流（系統への注入禁止） | ✅ 対応 | `grid_import = g2bus + g2bess` かつ下限0 |
+| C18 | 系統受電容量上限（契約電力） | ✅ 対応 | 営業所別に `grid_import <= contract_limit * Δt` |
+| C19 | デマンド計測期間の平均需要電力定義 | ✅ 対応 | 営業所別 `p_avg = grid_import / Δt` |
+| C20 | オンピーク最大需要電力 | ✅ 対応 | 営業所別 `w_on_depot >= p_avg`、全体 `w_on >= w_on_depot` |
+| C21 | オフピーク最大需要電力 | ✅ 対応 | 営業所別 `w_off_depot >= p_avg`、全体 `w_off >= w_off_depot` |
+| C22 | BESS SOC 遷移 | ✅ 対応 | `soc[t+1] = soc[t] + ηch(pv2bess+g2bess) - bess2bus/ηdis` |
+| C23 | BESS SOC 上下限 | ✅ 対応 | 変数境界で `soc_min <= soc <= soc_max` |
+| C24 | BESS 充電出力上限 | ✅ 対応 | `pv2bess + g2bess <= bess_power * Δt` |
+| C25 | BESS 放電出力上限 | ✅ 対応 | `bess2bus <= bess_power * Δt` |
+| C26 | Grid→BESS 許可フラグ | ✅ 対応 | `allow_grid_to_bess=False` なら `g2bess=0` |
+| C27 | BESS 無効時の無効化制約 | ✅ 対応 | `bess_enabled=False` なら `pv2bess=g2bess=bess2bus=0` |
 
 ---
 
@@ -66,7 +72,7 @@
 | 記号 | 内容 | 状況 | 実装詳細・差分 |
 |------|------|------|----------------|
 | O1 | ICE 燃料費（便 + deadhead） | ✅ 実装済み | `diesel_price * fuel_k(j) * y_j^k`（便）+ `diesel_price * fuel_k^{dh}(i,j) * x_{ij}^k`（回送） |
-| O2 | TOU 電力料金（系統買電費） | ✅ 実装済み | `sum_t price_t * g_t`（スロット別単価 × 買電量） |
+| O2 | 実充電源ベース電力料金 | ✅ 実装済み | `sum(price_t*(g2bus+g2bess) + bess_marginal*bess2bus + curtail_penalty*pv_curt)` |
 | O3 | デマンド料金（最大需要電力） | ✅ 実装済み | `demand_on * W^on + demand_off * W^off` |
 | O4 | 車両固定費 | ✅ 実装済み | `fixed_use_cost_k * z_k`。個別無効化: 車両の `acquisitionCost=0`。一括無効化: UI チェックボックス `disable_vehicle_acquisition_cost=true`（simulation_config 経由でマッパーが全車両の fixed_use_cost を 0 上書き） |
 | —   | 欠便ペナルティ | ✅ 実装済み | `unserved_penalty * sum_j u_j`（大きな重みで欠便を強く抑制） |
@@ -78,12 +84,12 @@
 
 ## 3. ALNS / GA / ABC における評価器の対応
 
-`src/optimization/common/evaluator.py` の `CostEvaluator` は MILP と同等の O1〜O3 を評価します。
+`src/optimization/common/evaluator.py` の `CostEvaluator` は、電力費を「仮計上→充電時上書き」の台帳方式で評価します。
 
 | 費目 | MILP | evaluator.py |
 |------|------|--------------|
 | O1 ICE 燃料費 | ✅ | ✅ |
-| O2 TOU 買電費 | ✅ | ✅（PV 自家消費差引きあり） |
+| O2 実充電源ベース電力費 | ✅ | ✅（仮コスト計上 + 充電時に source 単価で上書き） |
 | O3 デマンド料金 | ✅ | ✅ |
 | O4 車両固定費 | ✅ | ✅ |
 | 欠便ペナルティ | ✅ | ✅ |

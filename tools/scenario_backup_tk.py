@@ -30,6 +30,44 @@ from src.route_family_runtime import (
 )
 
 
+class _Tooltip:
+    """ウィジェット上にホバーすると表示されるシンプルなツールチップ。"""
+
+    def __init__(self, widget: tk.Widget, text: str) -> None:
+        self._widget = widget
+        self._text = text
+        self._tip: tk.Toplevel | None = None
+        widget.bind("<Enter>", self._show, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+
+    def _show(self, _event: Any = None) -> None:
+        if self._tip or not self._text:
+            return
+        x = self._widget.winfo_rootx() + 20
+        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        self._tip = tip = tk.Toplevel(self._widget)
+        tip.wm_overrideredirect(True)
+        tip.wm_geometry(f"+{x}+{y}")
+        tip.attributes("-topmost", True)
+        tk.Label(
+            tip,
+            text=self._text,
+            justify=tk.LEFT,
+            background="#ffffc0",
+            relief="solid",
+            borderwidth=1,
+            font=("TkDefaultFont", 8),
+            wraplength=320,
+            padx=4,
+            pady=3,
+        ).pack()
+
+    def _hide(self, _event: Any = None) -> None:
+        if self._tip:
+            self._tip.destroy()
+            self._tip = None
+
+
 def _dataset_item_id(item: Any) -> str:
     if not isinstance(item, dict):
         return ""
@@ -574,6 +612,8 @@ class App:
         self._suspend_prepare_watchers = False
         self.compare_scenario_a_var = tk.StringVar(value="")
         self.compare_scenario_b_var = tk.StringVar(value="")
+        self._busy_count: int = 0
+        self._busy_var = tk.StringVar(value="")
 
         self._build_ui()
         self._register_prepare_dependency_watchers()
@@ -601,6 +641,7 @@ class App:
         ttk.Button(top, text="営業所別充電器管理", command=self.open_vehicle_depot_manager).pack(side=tk.LEFT, padx=2)
         ttk.Button(top, text="使い方ヘルプ", command=self.open_help_window).pack(side=tk.LEFT, padx=(12, 2))
         ttk.Button(top, text="App Context", command=self.show_app_context).pack(side=tk.LEFT, padx=2)
+        ttk.Label(top, textvariable=self._busy_var, foreground="#c0392b", font=("TkDefaultFont", 9, "bold")).pack(side=tk.RIGHT, padx=8)
 
         # ── シナリオバー ──
         scenario_frame = ttk.LabelFrame(self.root, text="シナリオ", padding=(8, 4))
@@ -862,15 +903,58 @@ class App:
         self.depot_power_limit_var = tk.StringVar(value="500")
         self.deadhead_speed_kmh_var = tk.StringVar(value="18")
         self.tou_text_var = tk.StringVar(value="0-12:15,12-20:40,20-48:20")
-        self._labeled_entry(basic, "燃料単価 diesel_price_per_l", self.diesel_price_var)
-        self._labeled_entry(basic, "電気代単価 grid_flat_price_per_kwh", self.grid_flat_price_var)
-        self._labeled_entry(basic, "TOU帯 (例 0-12:15,12-20:40)", self.tou_text_var)
-        self._labeled_entry(basic, "初期SOC initial_soc", self.initial_soc_var)
-        self._labeled_entry(basic, "バッファSOC下限 soc_min", self.soc_min_var)
-        self._labeled_entry(basic, "バッファSOC上限 soc_max", self.soc_max_var)
-        self._labeled_entry(basic, "需要単価 demand_charge_cost_per_kw", self.demand_charge_var)
-        self._labeled_entry(basic, "契約上限 depot_power_limit_kw", self.depot_power_limit_var)
-        self._labeled_entry(basic, "回送速度 deadhead_speed_kmh", self.deadhead_speed_kmh_var)
+        self._labeled_entry(
+            basic, "燃料単価 diesel_price_per_l", self.diesel_price_var,
+            tooltip="軽油の単価 [円/L]。ICE バスの燃料費（O1）計算に使用。例: 145",
+        )
+        self._labeled_entry(
+            basic, "電気代単価 grid_flat_price_per_kwh", self.grid_flat_price_var,
+            tooltip="系統電力の平均単価 [円/kWh]。TOU帯が設定されていない場合にフォールバック。例: 30",
+        )
+        self._labeled_entry(
+            basic, "TOU帯 (例 0-12:15,12-20:40)", self.tou_text_var,
+            tooltip=(
+                "時間帯別電力単価（Time-of-Use）の設定。\n"
+                "形式: 開始スロット-終了スロット:単価[円/kWh], ...\n"
+                "スロット番号は 30 分刻みで 0〜48（0=0:00, 24=12:00, 48=24:00）。\n"
+                "例: 0-12:15,12-20:40,20-48:20\n"
+                "  → 0:00〜6:00 は 15円, 6:00〜10:00 は 40円, 10:00〜24:00 は 20円"
+            ),
+        )
+        self._labeled_entry(
+            basic, "初期SOC initial_soc", self.initial_soc_var,
+            tooltip="運行開始時の電池残量比率（0〜1）。1.0 = 満充電。例: 0.8",
+        )
+        self._labeled_entry(
+            basic, "バッファSOC下限 soc_min", self.soc_min_var,
+            tooltip="走行中に下回れない SOC 下限（0〜1）。小さいほど柔軟だが電欠リスクが上がる。例: 0.2",
+        )
+        self._labeled_entry(
+            basic, "バッファSOC上限 soc_max", self.soc_max_var,
+            tooltip="充電を停止する SOC 上限（0〜1）。過充電防止。例: 0.9",
+        )
+        self._labeled_entry(
+            basic, "需要単価 demand_charge_cost_per_kw", self.demand_charge_var,
+            tooltip=(
+                "ピーク需要電力 1 kW あたりの月次基本料金 [円/kW]。\n"
+                "電力会社との契約で決まる「その月の最大需要電力 × 単価」が加算される。\n"
+                "充電タイミングを分散させるインセンティブとして機能。例: 1500"
+            ),
+        )
+        self._labeled_entry(
+            basic, "契約上限 depot_power_limit_kw", self.depot_power_limit_var,
+            tooltip=(
+                "営業所の系統受電契約電力上限 [kW]。\n"
+                "この値を超える系統受電は制約違反（罰則または INFEASIBLE）になる。例: 500"
+            ),
+        )
+        self._labeled_entry(
+            basic, "回送速度 deadhead_speed_kmh", self.deadhead_speed_kmh_var,
+            tooltip=(
+                "BEV が営業所↔停留所間を回送する際の推定速度 [km/h]。\n"
+                "便連結の接続可否判定（arrival + turnaround + deadhead_time ≤ departure）に使用。例: 18"
+            ),
+        )
         ttk.Checkbutton(
             basic,
             text="バス導入費の日割り計算を無効化 (disable_vehicle_acquisition_cost)",
@@ -905,18 +989,46 @@ class App:
         self.co2_price_source_var = tk.StringVar(value="manual")
         self.co2_reference_date_var = tk.StringVar(value="")
         self.enable_vehicle_diagram_output_var = tk.BooleanVar(value=False)
-        self._labeled_entry(advanced, "売電単価 grid_sell_price_per_kwh", self.grid_sell_price_var)
-        self._labeled_entry(advanced, "未配車罰金 unserved_penalty", self.unserved_penalty_var)
-        self._labeled_entry(advanced, "契約超過罰金係数(slack_penalty)", self.contract_penalty_coeff_var)
-        self._labeled_entry(advanced, "CO2原単位 grid_co2_kg_per_kwh", self.grid_co2_var)
-        self._labeled_entry(advanced, "CO2単価 co2_price_per_kg (0=無効)", self.co2_price_var)
-        self._labeled_entry(advanced, "CO2価格ソース co2_price_source", self.co2_price_source_var)
-        self._labeled_entry(advanced, "CO2参照日 co2_reference_date", self.co2_reference_date_var)
-        self._labeled_entry(advanced, "軽油CO2係数 ice_co2_kg_per_l", self.ice_co2_kg_per_l_var)
-        self._labeled_entry(advanced, "劣化重み degradation_weight (0=無効)", self.degradation_weight_var)
-        self._labeled_entry(advanced, "目的プリセット objective_preset", self.objective_preset_var)
-        self._labeled_entry(advanced, "開始断片上限 max_start_fragments", self.max_start_fragments_var)
-        self._labeled_entry(advanced, "終了断片上限 max_end_fragments", self.max_end_fragments_var)
+        self._labeled_entry(advanced, "売電単価 grid_sell_price_per_kwh", self.grid_sell_price_var,
+            tooltip="PV 余剰電力の売電単価 [円/kWh]。現行実装では売電を目的関数に含まないため参考値。例: 0")
+        self._labeled_entry(advanced, "未配車罰金 unserved_penalty", self.unserved_penalty_var,
+            tooltip=(
+                "便が未配車になった場合のペナルティ [円/便]。\n"
+                "大きいほど欠便を嫌うが、小さすぎると欠便が許容されて費用が下がって見える。\n"
+                "最小値 10,000 円。通常は 100,000 以上推奨。"
+            ))
+        self._labeled_entry(advanced, "契約超過罰金係数(slack_penalty)", self.contract_penalty_coeff_var,
+            tooltip="系統受電が depot_power_limit_kw を超えた際の罰則係数。大きいほど制約を厳しく守る。例: 1000000")
+        self._labeled_entry(advanced, "CO2原単位 grid_co2_kg_per_kwh", self.grid_co2_var,
+            tooltip="系統電力の CO₂排出係数 [kg/kWh]。co2 モードでの排出量計算に使用。例: 0.5")
+        self._labeled_entry(advanced, "CO2単価 co2_price_per_kg (0=無効)", self.co2_price_var,
+            tooltip=(
+                "CO₂排出 1 kg あたりのコスト [円/kg]（total_cost モード用）。\n"
+                "0 = CO₂費は目的関数に加算しない。\n"
+                "co2 モードではこの値が 0 でも CO₂排出量そのものを最小化する。"
+            ))
+        self._labeled_entry(advanced, "CO2価格ソース co2_price_source", self.co2_price_source_var,
+            tooltip="CO₂価格の参照元。manual = 手動入力、jets = JETS 市場価格（co2_reference_date 要設定）")
+        self._labeled_entry(advanced, "CO2参照日 co2_reference_date", self.co2_reference_date_var,
+            tooltip="co2_price_source=jets の場合の参照日（YYYY-MM-DD）。manual の場合は不要。")
+        self._labeled_entry(advanced, "軽油CO2係数 ice_co2_kg_per_l", self.ice_co2_kg_per_l_var,
+            tooltip="軽油 1 L 燃焼時の CO₂排出量 [kg/L]。デフォルト 2.64（環境省係数）。")
+        self._labeled_entry(advanced, "劣化重み degradation_weight (0=無効)", self.degradation_weight_var,
+            tooltip=(
+                "電池劣化コストの重み係数。\n"
+                "充電量 / バッテリー容量 × 50 円/cycle × この重みが目的関数に加算される。\n"
+                "0 = 劣化費用を目的関数に含まない。"
+            ))
+        self._labeled_entry(advanced, "目的プリセット objective_preset", self.objective_preset_var,
+            tooltip="重みプリセット。cost / co2 / balanced / utilization から選択。ソルバー設定の objectiveMode と合わせること。")
+        self._labeled_entry(advanced, "開始断片上限 max_start_fragments", self.max_start_fragments_var,
+            tooltip=(
+                "各車両が 1 日に出庫できる最大回数（C3 制約）。\n"
+                "通常は 1（1 日 1 出庫）。増やすと分割シフト（午前・午後）を許容する。\n"
+                "大きくしすぎると変数数が増えソルバーが遅くなる。"
+            ))
+        self._labeled_entry(advanced, "終了断片上限 max_end_fragments", self.max_end_fragments_var,
+            tooltip="各車両が 1 日に入庫できる最大回数（C3 制約）。通常は max_start_fragments と同じ値にする。")
         self._labeled_entry(advanced, "初期SOC比 initial_soc_percent", self.initial_soc_percent_var)
         self._labeled_entry(advanced, "終了SOC床 final_soc_floor_percent", self.final_soc_floor_percent_var)
         self._labeled_entry(advanced, "終了SOC目標 final_soc_target_percent", self.final_soc_target_percent_var)
@@ -1260,10 +1372,20 @@ class App:
         self._update_template_form_visibility()
         self._bind_canvas_mousewheel(_tform_canvas, _tform_inner)
 
-    def _labeled_entry(self, parent: ttk.Frame, label: str, var: tk.StringVar, readonly: bool = False) -> ttk.Frame:
+    def _labeled_entry(
+        self,
+        parent: ttk.Frame,
+        label: str,
+        var: tk.StringVar,
+        readonly: bool = False,
+        tooltip: str = "",
+    ) -> ttk.Frame:
         row = ttk.Frame(parent)
         row.pack(fill=tk.X, pady=2)
-        ttk.Label(row, text=label, width=36).pack(side=tk.LEFT)
+        lbl = ttk.Label(row, text=label, width=36)
+        lbl.pack(side=tk.LEFT)
+        if tooltip:
+            _Tooltip(lbl, tooltip)
         state = "readonly" if readonly else "normal"
         ttk.Entry(row, textvariable=var, state=state).pack(side=tk.LEFT, fill=tk.X, expand=True)
         return row
@@ -1281,7 +1403,15 @@ class App:
         except (RuntimeError, tk.TclError):
             return False
 
+    def _update_busy_status(self) -> None:
+        if not self._widget_exists(self.root):
+            return
+        self._busy_var.set("⏳ 処理中..." if self._busy_count > 0 else "")
+
     def run_bg(self, action, done=None) -> None:
+        self._busy_count += 1
+        self._update_busy_status()
+
         def worker() -> None:
             try:
                 result = action()
@@ -1303,6 +1433,12 @@ class App:
                     messagebox.showerror("エラー", msg)
 
                 self._queue_on_ui_thread(_show_error)
+            finally:
+                def _dec() -> None:
+                    self._busy_count = max(0, self._busy_count - 1)
+                    self._update_busy_status()
+
+                self._queue_on_ui_thread(_dec)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -2159,6 +2295,7 @@ class App:
         solver_result = dict(resp.get("solver_result") or {})
         kpi = dict(resp.get("kpi") or {})
         costs = dict(resp.get("cost_breakdown") or {})
+        simulation_summary = dict(resp.get("simulation_summary") or {})
         summary = {
             "status": self._pick_text(resp.get("status"), solver_result.get("status"), "unknown"),
             "objective": self._pick_number(resp.get("objective_value"), solver_result.get("objective_value")),
@@ -2170,8 +2307,37 @@ class App:
             "unmet_trips": self._pick_number(kpi.get("unmet_trips"), resp.get("unmet_trips")),
             "energy_cost": self._pick_number(
                 costs.get("total_energy_cost"),
+                costs.get("electricity_cost_final"),
                 costs.get("energy_cost"),
                 resp.get("total_energy_cost"),
+            ),
+            "electricity_cost_final": self._pick_number(
+                costs.get("electricity_cost_final"),
+                costs.get("energy_cost"),
+                simulation_summary.get("total_energy_cost"),
+            ),
+            "electricity_cost_provisional_leftover": self._pick_number(
+                costs.get("electricity_cost_provisional_leftover"),
+                simulation_summary.get("electricity_cost_provisional_leftover_jpy"),
+                self._pick_number(
+                    simulation_summary.get("electricity_cost_provisional_jpy"),
+                    costs.get("electricity_cost_provisional"),
+                )
+                - self._pick_number(
+                    simulation_summary.get("electricity_cost_charged_jpy"),
+                    costs.get("electricity_cost_charged"),
+                    costs.get("electricity_cost_final"),
+                )
+                if self._pick_number(
+                    simulation_summary.get("electricity_cost_provisional_jpy"),
+                    costs.get("electricity_cost_provisional"),
+                ) is not None
+                and self._pick_number(
+                    simulation_summary.get("electricity_cost_charged_jpy"),
+                    costs.get("electricity_cost_charged"),
+                    costs.get("electricity_cost_final"),
+                ) is not None
+                else None,
             ),
             "fuel_cost": self._pick_number(
                 costs.get("total_fuel_cost"),
@@ -2275,6 +2441,8 @@ class App:
             "solve_time_seconds",
             "unmet_trips",
             "energy_cost",
+            "electricity_cost_final",
+            "electricity_cost_provisional_leftover",
             "fuel_cost",
             "demand_charge",
         ]
@@ -3906,64 +4074,118 @@ class App:
 【主要パラメータ説明】
 
 ■ 燃料・電気代
-  diesel_price_per_l     : 軽油単価 [円/L]（例: 145）
-  grid_flat_price_per_kwh: 電気代平均単価 [円/kWh]（例: 30）
-  TOU帯                  : 時間帯別単価 "開始-終了:価格,..." で指定
-                            例: 0-12:15,12-20:40,20-48:20
+  diesel_price_per_l      軽油単価 [円/L]（例: 145）
+  grid_flat_price_per_kwh 系統電力の平均単価 [円/kWh]（例: 30）
+                          TOU帯が設定されていない場合のフォールバック
+  TOU帯                   時間帯別単価。スロット番号は 30 分刻みで 0〜48
+                          形式: "開始-終了:単価,..."
+                          例: 0-12:15,12-20:40,20-48:20
+                            → 0:00〜6:00=15円, 6:00〜10:00=40円, 10:00〜24:00=20円
+                          ※スロット 48 は 24:00。翌日 0:00 扱い。
 
-■ SOC（充電状態）
-  initial_soc : 運行開始時の電池残量比率（0〜1、例: 0.8）
-  soc_min     : 走行中に下回れないSOC下限（例: 0.2）
-  soc_max     : 充電上限SOC（例: 0.9）
+■ SOC（State of Charge / バッテリー残量）
+  initial_soc             運行開始時の電池残量比率（0〜1、例: 0.8）
+                          1.0 = 満充電。Prepare 後は initial_soc_percent に引き継がれる
+  soc_min                 走行中に下回れない SOC 下限（0〜1）
+                          小さいほど柔軟だが電欠リスク上昇。例: 0.2
+  soc_max                 充電を停止する SOC 上限（0〜1）。例: 0.9
+  initial_soc_percent     Prepare レベルで使用される開始 SOC（通常は initial_soc と同じ値）
+  final_soc_floor_percent 帰庫後の SOC 最低保証（翌日分の確保）。例: 0.2
+  final_soc_target_percent 帰庫後 SOC の目標値（可能な範囲で目指す）。例: 0.8
+  final_soc_target_tolerance_percent
+                          目標 SOC の許容誤差（例: 0.05）。0 = 厳密な等式制約
 
 ■ 充電器・電力
-  charger_power_kw         : 充電器出力 [kW]（例: 90）
-  demand_charge_cost_per_kw: 需要単価 [円/kW]（例: 1500）
-  depot_power_limit_kw     : 営業所の契約上限 [kW]（例: 500）
+  depot_power_limit_kw    営業所の系統受電契約電力上限 [kW]（例: 500）
+                          超過すると罰則または INFEASIBLE になる
+  demand_charge_cost_per_kw
+                          ピーク需要電力 1 kW あたりの月次基本料金 [円/kW]（例: 1500）
+                          充電を分散させるインセンティブとして機能（O3）
+  deadhead_speed_kmh      回送速度の推定値 [km/h]（例: 18）
+                          接続可否判定: arrival + turnaround + deadhead_time ≤ departure
 
 ■ CO₂・劣化（詳細パラメータ）
-  co2_price_per_kg   : total_cost モード時の CO₂費単価 [円/kg]
-  degradation_weight : 電池劣化コスト重み（0 = 劣化費用無効）
+  grid_co2_kg_per_kwh     系統電力の CO₂排出係数 [kg/kWh]（例: 0.5）
+  ice_co2_kg_per_l        軽油の CO₂排出係数 [kg/L]。デフォルト: 2.64
+  co2_price_per_kg        CO₂費単価 [円/kg]（total_cost モード用）
+                          0 = CO₂費を目的関数に含まない
+                          co2 モードでは 0 でも CO₂排出量そのものを最小化
+  degradation_weight      電池劣化コストの重み（0 = 劣化費用無効）
+                          充電量 / cap × 50 円/cycle × 重みが目的関数に加算
 
 ■ ペナルティ
-  unserved_penalty   : 未配車便への罰則（大きいほど欠便を嫌う）
-  slack_penalty      : 契約電力超過への罰則
+  unserved_penalty        未配車便への罰則 [円/便]。最小 10,000 円
+                          通常は 100,000 以上推奨（欠便をほぼ禁止）
+  slack_penalty           系統受電の契約超過罰則係数（例: 1,000,000）
+
+■ 断片制約
+  max_start_fragments     各車両が 1 日に出庫できる最大回数（C3 制約）
+                          通常は 1（1 日 1 出庫）。増やすと分割シフトを許容
+  max_end_fragments       各車両の最大入庫回数。通常は start と同じ値
+
+■ ICE（エンジンバス）
+  initial_ice_fuel_percent ICE 初期燃料比率（%）。例: 100
+  min_ice_fuel_percent     最低燃料バッファ（%）。例: 10
+  max_ice_fuel_percent     燃料充填上限（%）。例: 90
+  default_ice_tank_capacity_l ICE タンク容量 [L]（未設定車両のフォールバック）。例: 300
 
 ■ ソルバー（手順②）
-  ソルバー種別 : mode_milp_only / hybrid / mode_alns_only / ga / abc
-  目的関数      : total_cost（コスト最小） / co2（CO₂排出最小）
-  時間上限(秒) : MILP / hybrid の最大計算時間（例: 300秒）
-  反復回数      : ALNS / GA / ABC の探索反復数
-  注意          : 目的関数やソルバー種別を変えたら手順③の Prepare をやり直す
+  ソルバー種別  mode_milp_only（厳密解）/ hybrid（MILP+ALNS）/ mode_alns_only / ga / abc
+  目的関数      total_cost（総コスト最小）/ co2（CO₂排出最小）
+                / balanced（コスト＋CO₂加重和）/ utilization（稼働率重視）
+  時間上限(秒)  MILP / hybrid の最大計算時間（例: 300 秒）
+  MIP gap       最適性ギャップ許容率（例: 0.01 = 1%）
+  反復回数      ALNS / GA / ABC の探索反復数（例: 500）
+  注意          objectiveMode やソルバー種別を変えたら必ず手順③の Prepare をやり直す
 """)
 
         make_tab("トラブルシューティング", """\
-【よくある問題】
+【よくある問題と対処法】
 
 ■ INFEASIBLE（解なし）になる
-  → SOC下限が高すぎる（soc_min を下げる）
-  → 契約電力上限が低すぎる（depot_power_limit_kw を増やす）
-  → 車両台数が便数に対して少なすぎる
-  → 車両管理ウィンドウで BEV 台数を確認・増加
+  → soc_min が高すぎる → 0.2 以下に下げる
+  → depot_power_limit_kw が低すぎる → 増やすか、車両台数を減らす
+  → 車両台数が便数に対して少なすぎる → 車両管理ウィンドウで BEV 台数を増加
+  → max_start_fragments が 1 の場合、時刻的に接続不可能な便がある可能性
+    → 車両台数を増やすか、対象路線を絞る
+
+■ tripCount=0（Prepare 後）
+  → 選択した dayType × route の組合せで trip が存在しない
+  → 運行種別サマリを確認し、trip 数が表示されている行を選択し直す
 
 ■ HTTP 503 エラー
-  → 別のジョブが実行中。完了を待つか、ログで状況確認
+  → 別のジョブが実行中 → 実行監視で完了を待ってから再試行
+  → BFF が起動していない → python run_app.py で再起動
 
 ■ HTTP 500 エラー
-  → Prepare が完了していない可能性。Prepare を再実行
-  → ログに詳細エラーが出ている場合は内容を確認
-  → 失敗時は実行モニターに error=... が表示されます
+  → Prepare が stale（「③ Prepare」が必要の表示あり）→ Prepare を再実行
+  → ログに詳細エラーが表示されている場合は内容を確認
 
-■ ジョブが終わらない
-  → 「② ソルバー設定」で時間上限（time_limit_seconds）を短縮
-  → ソルバー種別を mode_alns_only や hybrid に変更
+■ ジョブが終わらない（タイムアウト待ち）
+  → 「② ソルバー設定」で time_limit_seconds を短縮（例: 60 秒）
+  → ソルバー種別を mode_alns_only に変更（MILP より高速）
+  → hybrid の場合は ALNS 部分が先に動くので数分待つと改善することがある
+
+■ solver_status = OPTIMAL だがコストが異常に高い
+  → unserved_penalty が低く、欠便が許容されている可能性
+  → Optimization結果 > Details > unserved_task_count を確認
+  → unserved_penalty を 100,000 以上に増やして再実行
 
 ■ objective_value が None
-  → solver_result.objective_value を確認（ALNS/GA/ABCの場合）
-  → Summary タブの solver_status を確認
+  → solver_status を確認（ALNS/GA/ABC は独自の objective を返す場合がある）
+  → Summary タブの solver_status が OPTIMAL/FEASIBLE か確認
+
+■ "⏳ 処理中..." がずっと消えない
+  → BFF との通信に失敗している可能性 → ログエリアのエラーを確認
+  → BFF URL が正しいか（デフォルト: http://127.0.0.1:8000）
 
 ■ Gurobi ライセンスエラー
   → python -c "import gurobipy as gp; m=gp.Model(); m.optimize()" で確認
+  → "gurobi_ok" が出ればライセンス有効。エラーが出る場合はライセンス設定を確認
+
+■ Quick Setup 読込後に選択が空になる
+  → stale な保存選択が runtime 補正で外れた可能性
+  → 営業所を選択し直してから Quick Setup 保存 → Prepare を再実行
 """)
 
         ttk.Button(win, text="閉じる", command=win.destroy).pack(pady=6)

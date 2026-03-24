@@ -46,23 +46,22 @@ def log_simulation_experiment(
     scenario_doc: Dict[str, Any],
     simulation_result: Dict[str, Any],
 ) -> Dict[str, Any]:
-    method = _method_label(
-        scenario_doc,
-        (_scenario_overlay(scenario_doc).get("solver_config") or {}).get("mode"),
-    )
+    overlay = _scenario_overlay(scenario_doc)
+    simulation_cfg = _simulation_config(scenario_doc)
+    solver_config = dict(overlay.get("solver_config") or {})
+    mode = solver_config.get("mode")
+    method = _method_label(scenario_doc, mode)
     logger = ExperimentLogger(results_dir=_results_dir(scenario_id, "simulation"))
     report = logger.log(
         scenario=_logger_scenario_payload(
             scenario_doc=scenario_doc,
             objective=str(
-                (_scenario_overlay(scenario_doc).get("solver_config") or {}).get(
-                    "objective_mode"
-                )
-                or _simulation_config(scenario_doc).get("objective_mode")
+                solver_config.get("objective_mode")
+                or simulation_cfg.get("objective_mode")
                 or "total_cost"
             ),
             method=method,
-            mode=(_scenario_overlay(scenario_doc).get("solver_config") or {}).get("mode"),
+            mode=mode,
         ),
         result=_simulation_result_payload(simulation_result),
         method=method,
@@ -74,7 +73,7 @@ def log_simulation_experiment(
         scenario_id=scenario_id,
         scenario_doc=scenario_doc,
         method=method,
-        mode=(_scenario_overlay(scenario_doc).get("solver_config") or {}).get("mode"),
+        mode=mode,
     )
 
 
@@ -282,14 +281,30 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
     summary = dict(optimization_result.get("summary") or {})
     trip_count_by_type = dict(summary.get("trip_count_by_type") or {})
     simulation_summary = dict(optimization_result.get("simulation_summary") or {})
+    electricity_cost_final = (
+        cost_breakdown.get("electricity_cost_final")
+        if cost_breakdown.get("electricity_cost_final") is not None
+        else cost_breakdown.get("energy_cost")
+    )
+    electricity_cost_leftover = (
+        cost_breakdown.get("electricity_cost_provisional_leftover")
+        if cost_breakdown.get("electricity_cost_provisional_leftover") is not None
+        else simulation_summary.get("electricity_cost_provisional_leftover_jpy")
+    )
     return {
         "status": optimization_result.get("solver_status", "UNKNOWN"),
         "objective_value": optimization_result.get("objective_value"),
         "total_cost_jpy": cost_breakdown.get("total_cost"),
-        "electricity_cost_jpy": cost_breakdown.get("energy_cost"),
+        "electricity_cost_jpy": electricity_cost_final,
+        "electricity_cost_final_jpy": electricity_cost_final,
+        "electricity_cost_provisional_leftover_jpy": electricity_cost_leftover,
         "diesel_cost_jpy": cost_breakdown.get("fuel_cost"),
         "demand_charge_jpy": cost_breakdown.get("peak_demand_cost"),
         "vehicle_fixed_cost_jpy": cost_breakdown.get("vehicle_cost"),
+        "grid_to_bus_kwh": cost_breakdown.get("grid_to_bus_kwh"),
+        "bess_to_bus_kwh": cost_breakdown.get("bess_to_bus_kwh"),
+        "pv_to_bess_kwh": cost_breakdown.get("pv_to_bess_kwh"),
+        "grid_to_bess_kwh": cost_breakdown.get("grid_to_bess_kwh"),
         "co2_kg": cost_breakdown.get("total_co2_kg"),
         "bev_trips": trip_count_by_type.get("BEV"),
         "ice_trips": trip_count_by_type.get("ICE"),
@@ -344,6 +359,7 @@ def _experiment_report_payload(
     method: str,
     mode: Any,
 ) -> Dict[str, Any]:
+    simulation_cfg = _simulation_config(scenario_doc)
     fleet_entries = _fleet_template_entries(scenario_doc)
     payload = _to_jsonable(report)
     return {
@@ -356,9 +372,9 @@ def _experiment_report_payload(
         "mode": mode,
         "selected_route_labels": _route_labels(scenario_doc),
         "fleet_templates": fleet_entries,
-        "service_date": _simulation_config(scenario_doc).get("service_date"),
-        "day_type": _simulation_config(scenario_doc).get("day_type"),
-        "notes": _simulation_config(scenario_doc).get("experiment_notes"),
+        "service_date": simulation_cfg.get("service_date"),
+        "day_type": simulation_cfg.get("day_type"),
+        "notes": simulation_cfg.get("experiment_notes"),
         "report": payload,
     }
 

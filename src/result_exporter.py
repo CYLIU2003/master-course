@@ -78,6 +78,7 @@ def export_all(
     export_vehicle_schedule(run_dir, data, ms, dp, milp_result)
     export_charging_schedule(run_dir, ms, milp_result)
     export_site_power_balance(run_dir, ms, milp_result, sim_result, data)
+    export_depot_energy_flows(run_dir, ms, milp_result)
     export_experiment_report(run_dir, data, ms, milp_result, sim_result, run_label)
     export_targeted_trips(run_dir, data, milp_result)
     export_trip_type_counts(run_dir, data)
@@ -3166,6 +3167,112 @@ def export_site_power_balance(
     _write_csv(run_dir / "site_power_balance.csv", rows)
 
 
+def export_depot_energy_flows(
+    run_dir: Path,
+    ms: ModelSets,
+    milp: MILPResult,
+) -> None:
+    def _nested_slot_mapping(raw: Any) -> Dict[str, Dict[int, float]]:
+        if not isinstance(raw, dict):
+            return {}
+        out: Dict[str, Dict[int, float]] = {}
+        for depot_id, slot_map in raw.items():
+            if isinstance(slot_map, dict):
+                out[str(depot_id)] = {
+                    int(slot_idx): float(value or 0.0)
+                    for slot_idx, value in slot_map.items()
+                }
+            elif isinstance(slot_map, list):
+                out[str(depot_id)] = {
+                    int(slot_idx): float(value or 0.0)
+                    for slot_idx, value in enumerate(slot_map)
+                }
+        return out
+
+    grid_import_kw = _nested_slot_mapping(getattr(milp, "grid_import_kw", {}))
+    pv_used_kw = _nested_slot_mapping(getattr(milp, "pv_used_kw", {}))
+    grid_to_bus = _nested_slot_mapping(getattr(milp, "grid_to_bus_kwh_by_depot_slot", {}))
+    bess_to_bus = _nested_slot_mapping(getattr(milp, "bess_to_bus_kwh_by_depot_slot", {}))
+    pv_to_bess = _nested_slot_mapping(getattr(milp, "pv_to_bess_kwh_by_depot_slot", {}))
+    grid_to_bess = _nested_slot_mapping(getattr(milp, "grid_to_bess_kwh_by_depot_slot", {}))
+    pv_curtail = _nested_slot_mapping(getattr(milp, "pv_curtail_kwh_by_depot_slot", {}))
+    bess_soc = _nested_slot_mapping(getattr(milp, "bess_soc_kwh_by_depot_slot", {}))
+
+    depot_ids = sorted(
+        set(grid_import_kw.keys())
+        | set(pv_used_kw.keys())
+        | set(grid_to_bus.keys())
+        | set(bess_to_bus.keys())
+        | set(pv_to_bess.keys())
+        | set(grid_to_bess.keys())
+        | set(pv_curtail.keys())
+        | set(bess_soc.keys())
+    )
+    if not depot_ids:
+        _write_csv(run_dir / "depot_energy_flows.csv", [])
+        with open(run_dir / "depot_energy_flows.json", "w", encoding="utf-8") as f:
+            json.dump(
+                {"depot_energy_flows": [], "depot_energy_flow_summary": []},
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+        return
+
+    rows: List[Dict[str, Any]] = []
+    summary_rows: List[Dict[str, Any]] = []
+    for depot_id in depot_ids:
+        total_grid_to_bus = 0.0
+        total_bess_to_bus = 0.0
+        total_pv_to_bess = 0.0
+        total_grid_to_bess = 0.0
+        total_pv_curtail = 0.0
+        total_grid_import_kw = 0.0
+        total_pv_used_kw = 0.0
+        for t_idx in ms.T:
+            row = {
+                "depot_id": depot_id,
+                "time_idx": t_idx,
+                "grid_import_kw": float(grid_import_kw.get(depot_id, {}).get(t_idx, 0.0)),
+                "pv_used_kw": float(pv_used_kw.get(depot_id, {}).get(t_idx, 0.0)),
+                "grid_to_bus_kwh": float(grid_to_bus.get(depot_id, {}).get(t_idx, 0.0)),
+                "bess_to_bus_kwh": float(bess_to_bus.get(depot_id, {}).get(t_idx, 0.0)),
+                "pv_to_bess_kwh": float(pv_to_bess.get(depot_id, {}).get(t_idx, 0.0)),
+                "grid_to_bess_kwh": float(grid_to_bess.get(depot_id, {}).get(t_idx, 0.0)),
+                "pv_curtail_kwh": float(pv_curtail.get(depot_id, {}).get(t_idx, 0.0)),
+                "bess_soc_kwh": float(bess_soc.get(depot_id, {}).get(t_idx, 0.0)),
+            }
+            rows.append(row)
+            total_grid_import_kw += row["grid_import_kw"]
+            total_pv_used_kw += row["pv_used_kw"]
+            total_grid_to_bus += row["grid_to_bus_kwh"]
+            total_bess_to_bus += row["bess_to_bus_kwh"]
+            total_pv_to_bess += row["pv_to_bess_kwh"]
+            total_grid_to_bess += row["grid_to_bess_kwh"]
+            total_pv_curtail += row["pv_curtail_kwh"]
+
+        summary_rows.append(
+            {
+                "depot_id": depot_id,
+                "grid_import_kw_sum": total_grid_import_kw,
+                "pv_used_kw_sum": total_pv_used_kw,
+                "grid_to_bus_kwh_sum": total_grid_to_bus,
+                "bess_to_bus_kwh_sum": total_bess_to_bus,
+                "pv_to_bess_kwh_sum": total_pv_to_bess,
+                "grid_to_bess_kwh_sum": total_grid_to_bess,
+                "pv_curtail_kwh_sum": total_pv_curtail,
+            }
+        )
+
+    _write_csv(run_dir / "depot_energy_flows.csv", rows)
+    payload = {
+        "depot_energy_flows": rows,
+        "depot_energy_flow_summary": summary_rows,
+    }
+    with open(run_dir / "depot_energy_flows.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
 # ---------------------------------------------------------------------------
 # §13.1.5 experiment_report.md
 # ---------------------------------------------------------------------------
@@ -3180,6 +3287,10 @@ def export_experiment_report(
     run_label: Optional[str] = None,
 ) -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    provisional_leftover = max(
+        float(sim.provisional_energy_cost or 0.0) - float(sim.charged_energy_cost or 0.0),
+        0.0,
+    )
     lines = [
         f"# 実験レポート — {run_label or ts}",
         "",
@@ -3203,6 +3314,10 @@ def export_experiment_report(
         f"| 項目 | 値 [円] |",
         f"|------|---------|",
         f"| 電力量料金 | {sim.total_energy_cost:,.0f} |",
+        f"| 電力量料金(最終) | {sim.total_energy_cost:,.0f} |",
+        f"| 電力量料金(仮) | {sim.provisional_energy_cost:,.0f} |",
+        f"| 電力量料金(充電実績) | {sim.charged_energy_cost:,.0f} |",
+        f"| 電力量料金(仮残高) | {provisional_leftover:,.0f} |",
         f"| デマンド料金 | {sim.total_demand_charge:,.0f} |",
         f"| 燃料費 | {sim.total_fuel_cost:,.0f} |",
         f"| 電池劣化 | {sim.total_degradation_cost:,.0f} |",

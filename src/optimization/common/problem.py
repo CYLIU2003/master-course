@@ -101,6 +101,34 @@ class PVSlot:
 
 
 @dataclass(frozen=True)
+class DepotEnergyAsset:
+    depot_id: str
+    pv_enabled: bool = False
+    pv_generation_kwh_by_slot: Tuple[float, ...] = ()
+    pv_case_id: str = "none"
+    pv_capex_jpy_per_kw: float = 0.0
+    pv_om_jpy_per_kw_year: float = 0.0
+    pv_life_years: int = 25
+    pv_capacity_kw: float = 0.0
+    bess_enabled: bool = False
+    bess_energy_kwh: float = 0.0
+    bess_power_kw: float = 0.0
+    bess_initial_soc_kwh: float = 0.0
+    bess_soc_min_kwh: float = 0.0
+    bess_soc_max_kwh: float = 0.0
+    bess_charge_efficiency: float = 0.95
+    bess_discharge_efficiency: float = 0.95
+    bess_cycle_cost_yen_per_kwh: float = 0.0
+    bess_capex_jpy_per_kwh: float = 0.0
+    bess_om_jpy_per_kwh_year: float = 0.0
+    bess_life_years: int = 15
+    allow_grid_to_bess: bool = False
+    grid_to_bess_price_mode: str = "tou"
+    bess_priority_mode: str = "cost_driven"
+    provisional_energy_cost_yen_per_kwh: float = 0.0
+
+
+@dataclass(frozen=True)
 class LockedOperation:
     trip_id: str
     duty_id: Optional[str] = None
@@ -177,6 +205,12 @@ class AssignmentPlan:
     duties: Tuple[VehicleDuty, ...] = ()
     charging_slots: Tuple[ChargingSlot, ...] = ()
     refuel_slots: Tuple[RefuelSlot, ...] = ()
+    grid_to_bus_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
+    bess_to_bus_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
+    pv_to_bess_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
+    grid_to_bess_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
+    pv_curtail_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
+    bess_soc_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     served_trip_ids: Tuple[str, ...] = ()
     unserved_trip_ids: Tuple[str, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
@@ -215,6 +249,7 @@ class CanonicalOptimizationProblem:
     chargers: Tuple[ChargerDefinition, ...] = ()
     price_slots: Tuple[EnergyPriceSlot, ...] = ()
     pv_slots: Tuple[PVSlot, ...] = ()
+    depot_energy_assets: Mapping[str, DepotEnergyAsset] = field(default_factory=dict)
     feasible_connections: Mapping[str, Tuple[str, ...]] = field(default_factory=dict)
     objective_weights: OptimizationObjectiveWeights = field(
         default_factory=OptimizationObjectiveWeights
@@ -229,6 +264,28 @@ class CanonicalOptimizationProblem:
             "_trip_by_id_cache",
             {trip.trip_id: trip for trip in self.trips},
         )
+        self._validate_depot_energy_assets()
+
+    def _validate_depot_energy_assets(self) -> None:
+        if not self.depot_energy_assets:
+            return
+        slot_count = len(self.price_slots)
+        for depot_id, asset in self.depot_energy_assets.items():
+            if not isinstance(asset, DepotEnergyAsset):
+                raise ValueError(f"depot_energy_assets[{depot_id}] must be DepotEnergyAsset")
+            if asset.pv_enabled and asset.pv_generation_kwh_by_slot:
+                if slot_count > 0 and len(asset.pv_generation_kwh_by_slot) != slot_count:
+                    raise ValueError(
+                        f"Depot {depot_id} pv_generation_kwh_by_slot length ({len(asset.pv_generation_kwh_by_slot)}) "
+                        f"must match price slot count ({slot_count})"
+                    )
+            if asset.bess_enabled:
+                if asset.bess_soc_min_kwh > asset.bess_soc_max_kwh:
+                    raise ValueError(f"Depot {depot_id} has invalid BESS bounds: min > max")
+                if not (asset.bess_soc_min_kwh <= asset.bess_initial_soc_kwh <= asset.bess_soc_max_kwh):
+                    raise ValueError(
+                        f"Depot {depot_id} initial BESS SOC must be within [min, max]"
+                    )
 
     def trip_by_id(self) -> Dict[str, ProblemTrip]:
         return self._trip_by_id_cache

@@ -39,6 +39,70 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-24] BFF/Tk/exporter に最終電力費・仮残高と営業所フロー出力を反映
+
+- **目的**:
+  - 最適化で導入した `electricity_cost_final` / provisional 残高を API・UI・レポートに貫通させる。
+  - solver 出力に営業所フロー列 (`grid_to_bus`, `bess_to_bus`, `pv_to_bess`, `grid_to_bess`) を追加する。
+  - 実データで Case0〜3 を一括比較する runner を追加する。
+
+- **主変更**:
+  - `bff/mappers/solver_results.py`
+    - simulation payload に `electricity_cost_basis` / `electricity_cost_provisional_jpy` /
+      `electricity_cost_charged_jpy` / `electricity_cost_provisional_leftover_jpy` を追加。
+  - `bff/routers/optimization.py`
+    - `cost_breakdown` に `electricity_cost_final` / provisional 残高 / depot energy flow 集計キーを追加。
+  - `bff/services/experiment_reports.py`
+    - 実験ログ用 payload で `electricity_cost_jpy` を最終値ベース化し、
+      provisional 残高とフロー KPI を追加。
+  - `tools/scenario_backup_tk.py`
+    - Summary/Compare に `electricity_cost_final` と `electricity_cost_provisional_leftover` を表示。
+  - `src/result_exporter.py`
+    - `depot_energy_flows.csv` / `depot_energy_flows.json` を追加。
+    - `experiment_report.md` に最終/仮/充電実績/仮残高の電力費行を追加。
+  - `scripts/run_depot_energy_case_matrix.py`（新規）
+    - scenario JSON を入力に Case0〜3 を連続実行し、
+      `case_matrix_summary.csv` / `case_matrix_results.json` を出力。
+
+### [DEV-2026-03-24] core_pv B案: 営業所別 PV→BESS→EV 充電モデルと仮コスト上書き会計を導入
+
+- **目的**:
+  - 従来の `系統 + PV = 充電需要` 1本モデルを、営業所別の `PV→BESS→Bus` / `Grid→Bus` / `Grid→BESS` フローへ拡張。
+  - 電力費を「走行時仮計上」から「充電実績 source ベース上書き」へ移行。
+
+- **主変更**:
+  - `src/optimization/common/problem.py`
+    - `DepotEnergyAsset` 追加。
+    - `CanonicalOptimizationProblem.depot_energy_assets` 追加。
+    - `AssignmentPlan` に営業所×スロットのエネルギーフロー出力（grid_to_bus, bess_to_bus, pv_to_bess, grid_to_bess, pv_curtail, bess_soc）追加。
+    - slot 長不一致・BESS初期SOC境界のバリデーション追加。
+  - `src/optimization/milp/solver_adapter.py`
+    - C15-C21 相当を営業所別フロー制約へ置換。
+    - Grid→BESS フラグ (`allow_grid_to_bess`) を制約化。
+    - O2 を実充電源ベース（Grid/BESS/c Curtail penalty）へ変更。
+    - 解から営業所フロー時系列と source 付き `charging_slots` を復元して `AssignmentPlan` に出力。
+  - `src/optimization/common/evaluator.py`
+    - 仮計上→充電時FIFO上書きの台帳評価を追加。
+    - `electricity_cost_final` / `electricity_cost_provisional_leftover` / `grid_purchase_cost` などを `CostBreakdown` に追加。
+    - BESS/PV 資産費（日割）計算と `total_cost_with_assets` 追加。
+  - `src/optimization/common/builder.py`
+    - シナリオから `depot_energy_assets` を canonical problem へ橋渡し。
+
+- **補助スクリプト追加**:
+  - `scripts/build_pv_profiles.py`（Solcast風 CSV から営業所別 slot kWh 作成）
+  - `scripts/build_depot_energy_case.py`（Case JSON 雛形生成）
+
+- **ドキュメント更新**:
+  - `docs/constant/implementation_status.md` に C22-C27 / O2 実充電源化 を追記。
+  - `docs/constant/formulation.md` に B案追補（PV→BESS→Bus, Grid→BESSフラグ）を追記。
+
+- **テスト**:
+  - 追加: `tests/test_depot_energy_asset_schema.py`
+  - 追加: `tests/test_evaluator_provisional_overwrite.py`
+  - 回帰実行:
+    - `pytest tests/test_depot_energy_asset_schema.py tests/test_evaluator_provisional_overwrite.py tests/test_bev_energy_accounting.py tests/test_objective_modes.py -q`
+    - 結果: `10 passed`
+
 ### [DEV-2026-03-24] EV電力コストを「仮計算→充電実績上書き」に変更
 
 - **背景**:

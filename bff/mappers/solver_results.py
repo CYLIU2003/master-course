@@ -75,9 +75,18 @@ def _serialize_feasibility_report(report: FeasibilityReport | None) -> Dict[str,
 
 def serialize_simulation_result(result: SimulationResult) -> Dict[str, Any]:
     feasibility = _serialize_feasibility_report(result.feasibility_report)
+    provisional_energy_cost = float(result.provisional_energy_cost or 0.0)
+    charged_energy_cost = float(result.charged_energy_cost or 0.0)
     return {
         "total_operating_cost": result.total_operating_cost,
         "total_energy_cost": result.total_energy_cost,
+        "electricity_cost_basis": result.energy_cost_basis,
+        "electricity_cost_provisional_jpy": provisional_energy_cost,
+        "electricity_cost_charged_jpy": charged_energy_cost,
+        "electricity_cost_provisional_leftover_jpy": max(
+            provisional_energy_cost - charged_energy_cost,
+            0.0,
+        ),
         "total_demand_charge": result.total_demand_charge,
         "total_degradation_cost": result.total_degradation_cost,
         "total_fuel_cost": result.total_fuel_cost,
@@ -85,6 +94,8 @@ def serialize_simulation_result(result: SimulationResult) -> Dict[str, Any]:
         "pv_self_consumption_ratio": result.pv_self_consumption_ratio,
         "total_pv_kwh": result.total_pv_kwh,
         "total_grid_kwh": result.total_grid_kwh,
+        "grid_energy_provisional_kwh": float(result.provisional_grid_kwh or 0.0),
+        "grid_energy_charged_kwh": float(result.charged_grid_kwh or 0.0),
         "peak_demand_kw": result.peak_demand_kw,
         "charger_utilization": result.charger_utilization,
         "vehicle_utilization": result.vehicle_utilization,
