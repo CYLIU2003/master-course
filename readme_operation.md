@@ -214,11 +214,12 @@ python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.s
 |---|---|---|---|
 | 2026-03-24T06:51:40.627289+00:00 | `data/external/solcast_raw/depot_coordinates_tokyu_all.json` | 東急全営業所 12 拠点の `depot_id` / `name` / `lat` / `lon` | Solcast 一括取得入力、営業所単位の raw CSV 命名・照合 |
 | 2026-03-24T07:10:50.337433+00:00 | `data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json` | Solcast 取得台帳テンプレート（取得対象パラメータ、保存先、営業所ごとの raw CSV パス、使用日） | 研究再現ログ、取得漏れ確認、運用監査 |
+| 2026-03-24T10:02:31.731615+00:00 | `data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json` | CSV存在チェック同期後の台帳（`cached=12`, `missing=0`, 各営業所の `record_count` / `available_dates` / `min/max_period_end` を付与） | 実データ投入済み監査、欠損検知 |
 
 補足:
 
-- 現在の registry は `acquisition_status = pending_download` で初期化されています。
-- Solcast CSV を実取得したら、同ファイルの `acquisition_status` / `acquired_at` を更新してください。
+- 台帳初期化直後は `acquisition_status = pending_download` です。
+- CSV 配置後は `scripts/sync_solcast_registry.py` を実行し、`acquisition_status` / `acquired_at` / 期間情報を自動更新してください。
 
 ### 5.1 営業所座標一覧を生成
 
@@ -250,6 +251,16 @@ python scripts/build_pv_profiles.py init-registry `
 
 この registry に「いつ取得したか」「どの CSV を使うか」「どの日を導出したか」を集約します。
 
+CSV存在チェックで台帳を同期する場合:
+
+```powershell
+python scripts/sync_solcast_registry.py `
+  --registry data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json `
+  --raw-dir data/external/solcast_raw `
+  --timezone +09:00 `
+  --fallback-period-min 60
+```
+
 ### 5.3 日別 JSON へ変換
 
 ```powershell
@@ -271,6 +282,12 @@ JSON には以下が含まれます。
 - `pv_generation_kwh_by_slot`
 
 `pv_generation_kwh_by_slot[t] = pv_capacity_kw * capacity_factor_by_slot[t] * Δt` で計算されます（$Δt = slot\_minutes / 60$）。
+
+実データ投入実績（2026-03-24）:
+
+- 入力CSV: `data/external/solcast_raw/*_2025_08_60min.csv`（12営業所）
+- 一括生成コマンド実行結果: `JSON files written: 372`（2025-08-01〜2025-08-31, 12営業所）
+- 出力先: `data/derived/pv_profiles/`
 
 ### 5.4 シナリオ投入
 

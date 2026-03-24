@@ -39,6 +39,33 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-24] Solcast CSV実投入: 全営業所日別JSON生成と台帳自動同期コマンド追加
+
+- **背景**:
+  - `data/external/solcast_raw/` に 12 営業所分の `*_2025_08_60min.csv` が配置されたため、
+    全営業所一括で日別JSON生成と台帳ステータス更新を実行した。
+
+- **実行内容**:
+  - 日別JSON一括生成
+    - コマンド: `python scripts/build_pv_profiles.py --raw-dir data/external/solcast_raw --out-dir data/derived/pv_profiles --slot-minutes 60 --mode gti --overwrite`
+    - 結果: `JSON files written: 372`（12営業所 × 31日）
+    - 出力: `data/derived/pv_profiles/{depot_id}_2025-08-XX_60min.json`
+  - 台帳自動同期（新規補助コマンド）
+    - 新規: `scripts/sync_solcast_registry.py`
+    - コマンド: `python scripts/sync_solcast_registry.py --registry data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json --raw-dir data/external/solcast_raw --timezone +09:00 --fallback-period-min 60`
+    - 結果: `updated=12, cached=12, missing=0`
+
+- **更新された台帳情報**:
+  - ファイル: `data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json`
+  - `last_synced_at`: `2026-03-24T10:02:31.731615+00:00`
+  - 各営業所に以下を自動付与:
+    - `acquisition_status=cached`
+    - `acquired_at`（CSV更新時刻UTC）
+    - `record_count`
+    - `available_dates`
+    - `min_period_end`, `max_period_end`
+    - `time_column`, `irradiance_column`
+
 ### [DEV-2026-03-24] フェーズ2着手: 実車両優先生成 + depot_energy_assets 編集導線（BFF/Schema/UI）
 
 - **目的**:

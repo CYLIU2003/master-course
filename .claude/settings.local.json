@@ -39,7 +39,14 @@
       "Bash(/dev/null done:*)",
       "Bash(curl -s \"http://127.0.0.1:8000/api/scenarios/2b0a60cf-61ad-4094-807c-f766641984c6/optimization\")",
       "Bash(ls outputs/tokyu/*/optimization/2b0a60cf*/tsurumaki/WEEKDAY/)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(find C:/master-course/data -name *.json -path */scenarios/* -o -name *scenario*.json)",
+      "Bash(grep -r \"bev_count\\\\|BEV\\\\|electric\" C:/master-course/data/cases/ --include=*.json)",
+      "Bash(curl -s http://127.0.0.1:8765/health)",
+      "Bash(curl -s http://127.0.0.1:8765/api/scenarios)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f\"\"  {s[''''id''''][:8]} {s[''''status'''']:<12} {s[''''name''''][:50]}\"\"\\) for s in \\(d.get\\(''''items''''\\) or []\\)]\")",
+      "Bash(curl -s http://127.0.0.1:8765/api/scenarios/2b0a60cf-0000-0000-0000-000000000000/editor-bootstrap)",
+      "Bash(SID=\"2b0a60cf\")"
     ]
   }
 }

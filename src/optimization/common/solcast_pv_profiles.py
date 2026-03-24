@@ -192,6 +192,51 @@ def _read_solcast_records(
     return records, selected_time_col, selected_irr_col
 
 
+def inspect_csv_time_coverage(
+    csv_path: Path,
+    *,
+    timezone_offset: str,
+    fallback_period_min: int,
+    time_column: Optional[str] = None,
+    irradiance_column: Optional[str] = None,
+) -> Dict[str, Any]:
+    local_tz = parse_utc_offset(timezone_offset)
+    records, selected_time_col, selected_irr_col = _read_solcast_records(
+        csv_path,
+        local_tz=local_tz,
+        time_col=time_column,
+        irradiance_col=irradiance_column,
+        fallback_period_min=fallback_period_min,
+    )
+
+    if not records:
+        return {
+            "record_count": 0,
+            "time_column": selected_time_col,
+            "irradiance_column": selected_irr_col,
+            "min_period_end": None,
+            "max_period_end": None,
+            "available_dates": [],
+        }
+
+    min_dt = min(item[0] for item in records)
+    max_dt = max(item[0] for item in records)
+    dates = sorted(
+        {
+            (item[0] - timedelta(seconds=1)).date().isoformat()
+            for item in records
+        }
+    )
+    return {
+        "record_count": len(records),
+        "time_column": selected_time_col,
+        "irradiance_column": selected_irr_col,
+        "min_period_end": min_dt.isoformat(),
+        "max_period_end": max_dt.isoformat(),
+        "available_dates": dates,
+    }
+
+
 def _build_daily_profile(
     records: Sequence[Tuple[datetime, float, int]],
     *,

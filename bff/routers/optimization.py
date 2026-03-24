@@ -99,6 +99,8 @@ class ReoptimizeBody(BaseModel):
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 300
+    no_improvement_limit: int = 100
+    destroy_fraction: float = 0.25
     prepared_input_id: Optional[str] = None
     service_id: Optional[str] = None
     depot_id: Optional[str] = None
@@ -956,6 +958,8 @@ def _run_reoptimization(
             mip_gap=body.mip_gap,
             random_seed=body.random_seed,
             alns_iterations=body.alns_iterations,
+            no_improvement_limit=body.no_improvement_limit,
+            destroy_fraction=body.destroy_fraction,
             rolling_current_min=hhmm_to_min(body.current_time),
         )
         problem = ProblemBuilder().build_from_scenario(

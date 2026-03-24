@@ -1041,7 +1041,7 @@ class App:
         self._labeled_entry(advanced, "PVプロファイルID pv_profile_id", self.pv_profile_id_var)
         self._labeled_entry(advanced, "天気モード weather_mode", self.weather_mode_var)
         self._labeled_entry(advanced, "天気係数 weather_factor_scalar", self.weather_factor_scalar_var)
-        self._labeled_entry(
+        asset_row = self._labeled_entry(
             advanced,
             "営業所エネルギー資産 depot_energy_assets(JSON)",
             self.depot_energy_assets_json_var,
@@ -1051,6 +1051,7 @@ class App:
                 "空欄の場合は既存設定を保持します。"
             ),
         )
+        ttk.Button(asset_row, text="行編集...", command=self.open_depot_energy_assets_editor).pack(side=tk.LEFT, padx=(6, 0))
         self._labeled_entry(advanced, "拡張係数 objective_weights(JSON)", self.objective_weights_json_var)
         ttk.Checkbutton(advanced, text="車両ダイヤグラム出力", variable=self.enable_vehicle_diagram_output_var).pack(anchor="w", pady=(2, 0))
         self._labeled_entry(advanced, "車両導入費(編集は車両/テンプレ画面)", tk.StringVar(value="個別設定"), readonly=True)
@@ -2058,6 +2059,329 @@ class App:
             if isinstance(item, dict):
                 out.append(dict(item))
         return out
+
+    def open_depot_energy_assets_editor(self) -> None:
+        try:
+            current_rows = self._parse_depot_energy_assets_json_or_none() or []
+        except ValueError:
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("営業所エネルギー資産 行編集")
+        win.geometry("1160x640")
+
+        rows: list[dict[str, Any]] = [dict(item) for item in current_rows]
+
+        top_note = ttk.Label(
+            win,
+            text="depot_energy_assets を行単位で編集します。保存すると JSON 欄へ反映されます。",
+            foreground="#444",
+        )
+        top_note.pack(anchor="w", padx=10, pady=(10, 4))
+
+        tree_frame = ttk.Frame(win, padding=(10, 0, 10, 0))
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+
+        cols = (
+            "depot_id",
+            "pv_enabled",
+            "pv_capacity_kw",
+            "bess_enabled",
+            "bess_energy_kwh",
+            "bess_power_kw",
+            "allow_grid_to_bess",
+            "grid_to_bess_price_threshold_yen_per_kwh",
+            "bess_terminal_soc_min_kwh",
+        )
+        tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=10)
+        headers = {
+            "depot_id": "営業所ID",
+            "pv_enabled": "PV有効",
+            "pv_capacity_kw": "PV容量[kW]",
+            "bess_enabled": "BESS有効",
+            "bess_energy_kwh": "BESS容量[kWh]",
+            "bess_power_kw": "BESS出力[kW]",
+            "allow_grid_to_bess": "Grid→BESS",
+            "grid_to_bess_price_threshold_yen_per_kwh": "Grid→BESS閾値[円/kWh]",
+            "bess_terminal_soc_min_kwh": "終端SOC下限[kWh]",
+        }
+        widths = {
+            "depot_id": 120,
+            "pv_enabled": 70,
+            "pv_capacity_kw": 100,
+            "bess_enabled": 80,
+            "bess_energy_kwh": 120,
+            "bess_power_kw": 120,
+            "allow_grid_to_bess": 90,
+            "grid_to_bess_price_threshold_yen_per_kwh": 170,
+            "bess_terminal_soc_min_kwh": 140,
+        }
+        for col in cols:
+            tree.heading(col, text=headers[col])
+            tree.column(col, width=widths[col], anchor="center")
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        ysb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+        ysb.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.configure(yscrollcommand=ysb.set)
+
+        editor = ttk.LabelFrame(win, text="行編集", padding=10)
+        editor.pack(fill=tk.X, padx=10, pady=(8, 6))
+
+        depot_id_var = tk.StringVar(value="")
+        pv_enabled_var = tk.BooleanVar(value=False)
+        pv_capacity_kw_var = tk.StringVar(value="0")
+        bess_enabled_var = tk.BooleanVar(value=False)
+        bess_energy_kwh_var = tk.StringVar(value="0")
+        bess_power_kw_var = tk.StringVar(value="0")
+        bess_initial_soc_kwh_var = tk.StringVar(value="0")
+        bess_soc_min_kwh_var = tk.StringVar(value="0")
+        bess_soc_max_kwh_var = tk.StringVar(value="0")
+        allow_grid_to_bess_var = tk.BooleanVar(value=False)
+        grid_to_bess_price_threshold_var = tk.StringVar(value="0")
+        grid_to_bess_allowed_slots_var = tk.StringVar(value="")
+        bess_terminal_soc_min_kwh_var = tk.StringVar(value="0")
+        provisional_energy_cost_var = tk.StringVar(value="0")
+
+        depots = [str(item.get("id") or "").strip() for item in self.scope_depots if str(item.get("id") or "").strip()]
+        if depots:
+            dep_row = ttk.Frame(editor)
+            dep_row.pack(fill=tk.X, pady=2)
+            ttk.Label(dep_row, text="営業所ID", width=34).pack(side=tk.LEFT)
+            depot_combo = ttk.Combobox(dep_row, textvariable=depot_id_var, state="readonly", values=depots)
+            depot_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        else:
+            self._labeled_entry(editor, "営業所ID", depot_id_var)
+
+        flag_row = ttk.Frame(editor)
+        flag_row.pack(fill=tk.X, pady=2)
+        ttk.Checkbutton(flag_row, text="PV有効", variable=pv_enabled_var).pack(side=tk.LEFT)
+        ttk.Checkbutton(flag_row, text="BESS有効", variable=bess_enabled_var).pack(side=tk.LEFT, padx=(12, 0))
+        ttk.Checkbutton(flag_row, text="Grid→BESS許可", variable=allow_grid_to_bess_var).pack(side=tk.LEFT, padx=(12, 0))
+
+        self._labeled_entry(editor, "PV容量[kW] pv_capacity_kw", pv_capacity_kw_var)
+        self._labeled_entry(editor, "BESS容量[kWh] bess_energy_kwh", bess_energy_kwh_var)
+        self._labeled_entry(editor, "BESS出力[kW] bess_power_kw", bess_power_kw_var)
+        self._labeled_entry(editor, "BESS初期SOC[kWh] bess_initial_soc_kwh", bess_initial_soc_kwh_var)
+        self._labeled_entry(editor, "BESS最小SOC[kWh] bess_soc_min_kwh", bess_soc_min_kwh_var)
+        self._labeled_entry(editor, "BESS最大SOC[kWh] bess_soc_max_kwh", bess_soc_max_kwh_var)
+        self._labeled_entry(editor, "Grid→BESS閾値[円/kWh]", grid_to_bess_price_threshold_var)
+        self._labeled_entry(editor, "Grid→BESS許可スロット(カンマ区切り)", grid_to_bess_allowed_slots_var)
+        self._labeled_entry(editor, "終端SOC下限[kWh]", bess_terminal_soc_min_kwh_var)
+        self._labeled_entry(editor, "仮コスト単価[円/kWh]", provisional_energy_cost_var)
+
+        selected_index: list[int | None] = [None]
+
+        def _row_to_values(row: dict[str, Any]) -> tuple[Any, ...]:
+            return (
+                str(row.get("depot_id") or row.get("depotId") or ""),
+                bool(row.get("pv_enabled", False)),
+                row.get("pv_capacity_kw", 0.0),
+                bool(row.get("bess_enabled", False)),
+                row.get("bess_energy_kwh", 0.0),
+                row.get("bess_power_kw", 0.0),
+                bool(row.get("allow_grid_to_bess", False)),
+                row.get("grid_to_bess_price_threshold_yen_per_kwh", 0.0),
+                row.get("bess_terminal_soc_min_kwh", 0.0),
+            )
+
+        def _refresh_tree() -> None:
+            tree.delete(*tree.get_children())
+            for idx, row in enumerate(rows):
+                tree.insert("", tk.END, iid=str(idx), values=_row_to_values(row))
+
+        def _set_form_from_row(row: dict[str, Any]) -> None:
+            depot_id_var.set(str(row.get("depot_id") or row.get("depotId") or ""))
+            pv_enabled_var.set(bool(row.get("pv_enabled", False)))
+            pv_capacity_kw_var.set(str(row.get("pv_capacity_kw", 0.0)))
+            bess_enabled_var.set(bool(row.get("bess_enabled", False)))
+            bess_energy_kwh_var.set(str(row.get("bess_energy_kwh", 0.0)))
+            bess_power_kw_var.set(str(row.get("bess_power_kw", 0.0)))
+            bess_initial_soc_kwh_var.set(str(row.get("bess_initial_soc_kwh", 0.0)))
+            bess_soc_min_kwh_var.set(str(row.get("bess_soc_min_kwh", 0.0)))
+            bess_soc_max_kwh_var.set(str(row.get("bess_soc_max_kwh", 0.0)))
+            allow_grid_to_bess_var.set(bool(row.get("allow_grid_to_bess", False)))
+            grid_to_bess_price_threshold_var.set(
+                str(row.get("grid_to_bess_price_threshold_yen_per_kwh", 0.0))
+            )
+            grid_to_bess_allowed_slots_var.set(
+                ",".join(str(v) for v in (row.get("grid_to_bess_allowed_slot_indices") or []))
+            )
+            bess_terminal_soc_min_kwh_var.set(str(row.get("bess_terminal_soc_min_kwh", 0.0)))
+            provisional_energy_cost_var.set(str(row.get("provisional_energy_cost_yen_per_kwh", 0.0)))
+
+        def _read_form_to_row(base: dict[str, Any] | None = None) -> dict[str, Any] | None:
+            depot_id = depot_id_var.get().strip()
+            if not depot_id:
+                messagebox.showwarning("入力不足", "営業所IDを入力してください", parent=win)
+                return None
+            row = dict(base or {})
+            row["depot_id"] = depot_id
+            row["pv_enabled"] = bool(pv_enabled_var.get())
+            row["pv_capacity_kw"] = self._parse_float(pv_capacity_kw_var.get(), 0.0)
+            row["bess_enabled"] = bool(bess_enabled_var.get())
+            row["bess_energy_kwh"] = self._parse_float(bess_energy_kwh_var.get(), 0.0)
+            row["bess_power_kw"] = self._parse_float(bess_power_kw_var.get(), 0.0)
+            row["bess_initial_soc_kwh"] = self._parse_float(bess_initial_soc_kwh_var.get(), 0.0)
+            row["bess_soc_min_kwh"] = self._parse_float(bess_soc_min_kwh_var.get(), 0.0)
+            row["bess_soc_max_kwh"] = self._parse_float(bess_soc_max_kwh_var.get(), 0.0)
+            row["allow_grid_to_bess"] = bool(allow_grid_to_bess_var.get())
+            row["grid_to_bess_price_threshold_yen_per_kwh"] = self._parse_float(
+                grid_to_bess_price_threshold_var.get(),
+                0.0,
+            )
+            raw_slots = [item.strip() for item in grid_to_bess_allowed_slots_var.get().split(",") if item.strip()]
+            parsed_slots: list[int] = []
+            for item in raw_slots:
+                try:
+                    parsed_slots.append(int(item))
+                except ValueError:
+                    messagebox.showwarning("入力エラー", f"許可スロット '{item}' は整数で入力してください", parent=win)
+                    return None
+            row["grid_to_bess_allowed_slot_indices"] = parsed_slots
+            row["bess_terminal_soc_min_kwh"] = self._parse_float(bess_terminal_soc_min_kwh_var.get(), 0.0)
+            row["provisional_energy_cost_yen_per_kwh"] = self._parse_float(provisional_energy_cost_var.get(), 0.0)
+            return row
+
+        def _clear_form() -> None:
+            selected_index[0] = None
+            depot_id_var.set("")
+            pv_enabled_var.set(False)
+            pv_capacity_kw_var.set("0")
+            bess_enabled_var.set(False)
+            bess_energy_kwh_var.set("0")
+            bess_power_kw_var.set("0")
+            bess_initial_soc_kwh_var.set("0")
+            bess_soc_min_kwh_var.set("0")
+            bess_soc_max_kwh_var.set("0")
+            allow_grid_to_bess_var.set(False)
+            grid_to_bess_price_threshold_var.set("0")
+            grid_to_bess_allowed_slots_var.set("")
+            bess_terminal_soc_min_kwh_var.set("0")
+            provisional_energy_cost_var.set("0")
+
+        def _on_select(_event=None) -> None:
+            sel = tree.selection()
+            if not sel:
+                selected_index[0] = None
+                return
+            idx = int(sel[0])
+            selected_index[0] = idx
+            _set_form_from_row(rows[idx])
+
+        tree.bind("<<TreeviewSelect>>", _on_select)
+
+        btns = ttk.Frame(editor)
+        btns.pack(fill=tk.X, pady=(8, 0))
+
+        def _add_row() -> None:
+            row = _read_form_to_row()
+            if row is None:
+                return
+            rows.append(row)
+            _refresh_tree()
+            tree.selection_set(str(len(rows) - 1))
+            tree.see(str(len(rows) - 1))
+
+        def _update_row() -> None:
+            idx = selected_index[0]
+            if idx is None or idx < 0 or idx >= len(rows):
+                messagebox.showwarning("未選択", "更新する行を選択してください", parent=win)
+                return
+            row = _read_form_to_row(base=rows[idx])
+            if row is None:
+                return
+            rows[idx] = row
+            _refresh_tree()
+            tree.selection_set(str(idx))
+
+        def _delete_row() -> None:
+            idx = selected_index[0]
+            if idx is None or idx < 0 or idx >= len(rows):
+                messagebox.showwarning("未選択", "削除する行を選択してください", parent=win)
+                return
+            del rows[idx]
+            _refresh_tree()
+            _clear_form()
+
+        def _build_default_row_for_depot(depot_id: str) -> dict[str, Any]:
+            return {
+                "depot_id": depot_id,
+                "pv_enabled": False,
+                "pv_generation_kwh_by_slot": [],
+                "pv_capacity_kw": 0.0,
+                "bess_enabled": False,
+                "bess_energy_kwh": 0.0,
+                "bess_power_kw": 0.0,
+                "bess_initial_soc_kwh": 0.0,
+                "bess_soc_min_kwh": 0.0,
+                "bess_soc_max_kwh": 0.0,
+                "allow_grid_to_bess": False,
+                "grid_to_bess_price_mode": "tou",
+                "grid_to_bess_price_threshold_yen_per_kwh": 0.0,
+                "grid_to_bess_allowed_slot_indices": [],
+                "bess_priority_mode": "cost_driven",
+                "bess_terminal_soc_min_kwh": 0.0,
+                "provisional_energy_cost_yen_per_kwh": 0.0,
+            }
+
+        def _generate_rows_for_all_depots() -> None:
+            depot_ids = [
+                str(item.get("id") or "").strip()
+                for item in self.scope_depots
+                if str(item.get("id") or "").strip()
+            ]
+            if not depot_ids:
+                messagebox.showwarning("営業所なし", "営業所一覧が未ロードです。Quick Setup を読込してください", parent=win)
+                return
+
+            existing_ids = {
+                str(item.get("depot_id") or item.get("depotId") or "").strip()
+                for item in rows
+                if isinstance(item, dict)
+            }
+            added = 0
+            for depot_id in depot_ids:
+                if depot_id in existing_ids:
+                    continue
+                rows.append(_build_default_row_for_depot(depot_id))
+                existing_ids.add(depot_id)
+                added += 1
+
+            _refresh_tree()
+            if rows:
+                tree.selection_set("0")
+                _on_select()
+            self.log_line(
+                f"depot_energy_assets 初期テンプレ行を自動生成: 追加={added} / 既存維持={len(depot_ids) - added}"
+            )
+            messagebox.showinfo(
+                "自動生成完了",
+                f"営業所テンプレ行の追加: {added} 件\n既存行は保持しました。",
+                parent=win,
+            )
+
+        ttk.Button(btns, text="新規行追加", command=_add_row).pack(side=tk.LEFT)
+        ttk.Button(btns, text="営業所ごとに初期行を自動生成", command=_generate_rows_for_all_depots).pack(side=tk.LEFT, padx=6)
+        ttk.Button(btns, text="選択行更新", command=_update_row).pack(side=tk.LEFT, padx=6)
+        ttk.Button(btns, text="選択行削除", command=_delete_row).pack(side=tk.LEFT)
+        ttk.Button(btns, text="入力クリア", command=_clear_form).pack(side=tk.LEFT, padx=6)
+
+        footer = ttk.Frame(win, padding=(10, 6, 10, 10))
+        footer.pack(fill=tk.X)
+
+        def _apply_to_json() -> None:
+            dumped = json.dumps(rows, ensure_ascii=True, separators=(",", ":"))
+            self.depot_energy_assets_json_var.set(dumped)
+            self.log_line(f"depot_energy_assets を行編集から反映しました: {len(rows)}件")
+            win.destroy()
+
+        ttk.Button(footer, text="JSONへ反映して閉じる", command=_apply_to_json).pack(side=tk.RIGHT)
+        ttk.Button(footer, text="キャンセル", command=win.destroy).pack(side=tk.RIGHT, padx=(0, 6))
+
+        _refresh_tree()
+        if rows:
+            tree.selection_set("0")
+            _on_select()
 
     def _set_day_type_value(self, day_type: str) -> None:
         value = str(day_type or "WEEKDAY").strip() or "WEEKDAY"

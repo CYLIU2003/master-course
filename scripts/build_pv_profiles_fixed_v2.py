@@ -1,41 +1,4 @@
 #!/usr/bin/env python3
-"""
-build_pv_profiles.py
-
-Purpose
--------
-Convert Solcast irradiance/weather CSV files into daily depot PV profile JSON files
-for master-course.
-
-Default assumptions
--------------------
-- Raw CSV folder:  C:\master-course\data\external\solcast_raw
-- Output folder:   C:\master-course\data\derived\pv_profiles
-- Input CSV names: <depot_id>_YYYY_MM_60min.csv
-
-What it writes
---------------
-One JSON file per depot per date, containing:
-- depot_id
-- date
-- slot_minutes
-- source_csv
-- capacity_factor_by_slot
-- pv_generation_kwh_by_slot
-- metadata (mode, capacity_kw, efficiency, columns used)
-
-Model choices
--------------
-Mode "gti" (default):
-    cf = min(max((GTI / 1000) * system_efficiency, 0), 1.0)
-    pv_kwh = capacity_kw * cf * delta_h
-
-Mode "ghi":
-    same formula but using GHI.
-
-This is intentionally simple and stable for research prototyping.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -46,9 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-
 DEFAULT_DEPOT_CAPACITY_KW: Dict[str, float] = {
-    # Replace these with your chosen case if needed.
     "awashima": 234.5,
     "shimouma": 200.0,
     "tsurumaki": 675.9,
@@ -63,7 +24,6 @@ DEFAULT_DEPOT_CAPACITY_KW: Dict[str, float] = {
     "higashiyamata": 200.0,
 }
 
-
 @dataclass(frozen=True)
 class BuildConfig:
     raw_dir: Path
@@ -76,7 +36,6 @@ class BuildConfig:
     dates: Optional[List[str]]
     overwrite: bool
 
-
 def read_capacity_map(path: Optional[Path]) -> Dict[str, float]:
     if path is None:
         return dict(DEFAULT_DEPOT_CAPACITY_KW)
@@ -85,18 +44,14 @@ def read_capacity_map(path: Optional[Path]) -> Dict[str, float]:
         raise ValueError("capacity-map JSON must be an object mapping depot_id -> capacity_kw")
     return {str(k): float(v) for k, v in data.items()}
 
-
 def iter_raw_csvs(raw_dir: Path) -> Iterable[Path]:
     yield from sorted(raw_dir.glob("*_60min.csv"))
-
 
 def parse_iso_dt(text: str) -> datetime:
     return datetime.fromisoformat(text.strip())
 
-
 def clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
-
 
 def compute_cf(row: Dict[str, str], mode: str, efficiency: float) -> float:
     source_key = "gti" if mode == "gti" else "ghi"
@@ -104,14 +59,11 @@ def compute_cf(row: Dict[str, str], mode: str, efficiency: float) -> float:
     cf = (irradiance / 1000.0) * efficiency
     return clamp(cf, 0.0, 1.0)
 
-
 def depot_id_from_csv_name(path: Path) -> str:
-    # e.g. meguro_2025_08_60min.csv -> meguro
     parts = path.stem.split("_")
     if len(parts) < 4:
         raise ValueError(f"Unexpected raw CSV filename: {path.name}")
     return "_".join(parts[:-3])
-
 
 def group_rows_by_date(csv_path: Path) -> Dict[str, List[Dict[str, str]]]:
     text = csv_path.read_text(encoding="utf-8-sig")
@@ -124,7 +76,6 @@ def group_rows_by_date(csv_path: Path) -> Dict[str, List[Dict[str, str]]]:
         date_key = parse_iso_dt(period_end).date().isoformat()
         grouped.setdefault(date_key, []).append(row)
     return grouped
-
 
 def build_daily_profile(
     depot_id: str,
@@ -158,10 +109,9 @@ def build_daily_profile(
             "mode": cfg.mode,
             "system_efficiency": cfg.system_efficiency,
             "source_columns": ["period_end", cfg.mode, "air_temp"],
-            "note": "PV generation estimated from Solcast irradiance using a simple capacity-factor model.",
+            "note": "PV generation estimated from Solcast irradiance using a simple capacity-factor model."
         },
     }
-
 
 def write_json(path: Path, data: Dict[str, object], overwrite: bool) -> str:
     if path.exists() and not overwrite:
@@ -169,62 +119,27 @@ def write_json(path: Path, data: Dict[str, object], overwrite: bool) -> str:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return "written"
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build daily PV profile JSON files from Solcast CSVs.")
     parser.add_argument(
         "--raw-dir",
         type=Path,
         default=Path(r"C:\master-course\data\external\solcast_raw"),
-        help="Folder containing renamed Solcast raw CSV files.",
+        help=r"Folder containing renamed Solcast raw CSV files. Default: C:\master-course\data\external\solcast_raw",
     )
     parser.add_argument(
         "--out-dir",
         type=Path,
         default=Path(r"C:\master-course\data\derived\pv_profiles"),
-        help="Output folder for daily JSON profiles.",
+        help=r"Output folder for daily JSON profiles. Default: C:\master-course\data\derived\pv_profiles",
     )
-    parser.add_argument(
-        "--slot-minutes",
-        type=int,
-        default=60,
-        help="Optimization slot length in minutes. Default: 60",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["gti", "ghi"],
-        default="gti",
-        help="Which irradiance column to use for the simple PV model.",
-    )
-    parser.add_argument(
-        "--system-efficiency",
-        type=float,
-        default=0.85,
-        help="System efficiency multiplier applied to irradiance/1000.",
-    )
-    parser.add_argument(
-        "--capacity-default-kw",
-        type=float,
-        default=1.0,
-        help="Fallback PV capacity when depot_id is missing from the capacity map.",
-    )
-    parser.add_argument(
-        "--capacity-map",
-        type=Path,
-        default=None,
-        help="Optional JSON file mapping depot_id -> capacity_kw.",
-    )
-    parser.add_argument(
-        "--dates",
-        nargs="*",
-        default=None,
-        help="Optional list of YYYY-MM-DD dates to export. If omitted, exports all dates in each CSV.",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Overwrite existing JSON profile files.",
-    )
+    parser.add_argument("--slot-minutes", type=int, default=60)
+    parser.add_argument("--mode", choices=["gti", "ghi"], default="gti")
+    parser.add_argument("--system-efficiency", type=float, default=0.85)
+    parser.add_argument("--capacity-default-kw", type=float, default=1.0)
+    parser.add_argument("--capacity-map", type=Path, default=None)
+    parser.add_argument("--dates", nargs="*", default=None)
+    parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
     capacity_map = read_capacity_map(args.capacity_map)
@@ -248,8 +163,10 @@ def main() -> int:
 
     total_written = 0
     total_exists = 0
+    total_csv = 0
 
     for csv_path in iter_raw_csvs(cfg.raw_dir):
+        total_csv += 1
         depot_id = depot_id_from_csv_name(csv_path)
         grouped = group_rows_by_date(csv_path)
 
@@ -273,11 +190,11 @@ def main() -> int:
             print(f"[{status.upper()}] {csv_path.name} -> {out_path.name}")
 
     print()
+    print(f"Raw CSV files found: {total_csv}")
     print(f"JSON files written: {total_written}")
     print(f"JSON files skipped (already existed): {total_exists}")
     print(f"Output folder: {cfg.out_dir}")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
