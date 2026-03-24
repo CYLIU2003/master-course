@@ -46,7 +46,11 @@
       "Bash(curl -s http://127.0.0.1:8765/api/scenarios)",
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f\"\"  {s[''''id''''][:8]} {s[''''status'''']:<12} {s[''''name''''][:50]}\"\"\\) for s in \\(d.get\\(''''items''''\\) or []\\)]\")",
       "Bash(curl -s http://127.0.0.1:8765/api/scenarios/2b0a60cf-0000-0000-0000-000000000000/editor-bootstrap)",
-      "Bash(SID=\"2b0a60cf\")"
+      "Bash(SID=\"2b0a60cf\")",
+      "Bash(SID=\"2b0a60cf-61ad-4094-807c-f766641984c6\" curl -s \"http://127.0.0.1:8765/api/scenarios/$SID/editor-bootstrap\")",
+      "Bash(python -:*)",
+      "Bash(curl -s http://127.0.0.1:8765/api/jobs)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2, ensure_ascii=False\\)[:500]\\)\")"
     ]
   }
 }
