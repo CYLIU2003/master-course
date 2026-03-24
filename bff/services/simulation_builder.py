@@ -561,6 +561,12 @@ def apply_builder_configuration(
         "experiment_method": body.simulation_settings.experiment_method,
         "experiment_notes": body.simulation_settings.experiment_notes,
     }
+    if body.simulation_settings.depot_energy_assets is not None:
+        doc["simulation_config"]["depot_energy_assets"] = [
+            dict(item)
+            for item in body.simulation_settings.depot_energy_assets
+            if isinstance(item, dict)
+        ]
     doc["vehicles"] = runtime_vehicles
     doc["chargers"] = runtime_chargers
     if overlay.charging_constraints.depot_power_limit_kw is not None:

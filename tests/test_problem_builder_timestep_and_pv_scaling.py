@@ -25,6 +25,16 @@ def _scenario(timestep_min: int) -> dict:
                 "batteryKwh": 300.0,
                 "energyConsumption": 1.2,
                 "chargePowerKw": 60.0,
+                "enabled": True,
+            },
+            {
+                "id": "bev-2",
+                "depotId": "dep-2",
+                "type": "BEV",
+                "batteryKwh": 280.0,
+                "energyConsumption": 1.1,
+                "chargePowerKw": 60.0,
+                "enabled": True,
             }
         ],
         "timetable_rows": [
@@ -53,6 +63,8 @@ def test_problem_builder_uses_configured_timestep_60() -> None:
     assert problem.scenario.timestep_min == 60
     # Fallback conversion uses pv_available_kw * (timestep/60)
     assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (2.0, 4.0)
+    assert [vehicle.vehicle_id for vehicle in problem.vehicles] == ["bev-1"]
+    assert [vehicle.home_depot_id for vehicle in problem.vehicles] == ["dep-1"]
 
 
 def test_problem_builder_uses_configured_timestep_30() -> None:

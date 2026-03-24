@@ -1,9 +1,16 @@
 # 実装状況一覧（Implementation Status）
 
-**作成日：** 2026-03-18
+**作成日：** 2026-03-24（追補更新）
 **対象：** `master-course core` の MILP ソルバー（`src/optimization/milp/solver_adapter.py`）および評価器（`src/optimization/common/evaluator.py`）
 
 本文書は `docs/constant/formulation.md` の目標定式化に対し、現時点での実装状況を三段階で明記します。
+
+## 0.3 追補（2026-03-24）
+
+- ✅ `builder.py` の `timestep_min` は固定30分ではなく可変（未指定時60分既定）
+- ✅ PV換算は `pv_kw * (timestep_min / 60)` に統一（固定 `*0.5` を廃止）
+- ✅ `builder.py` の車両生成は「選択営業所の実車両情報（vehicle id / depotId）」優先
+- ✅ `depot_energy_assets` は BFF Quick Setup / Prepare 経由で `simulation_config` に保存できる
 
 ## 0. 本文書の立ち位置（3層分離）
 

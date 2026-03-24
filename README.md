@@ -66,6 +66,10 @@ flowchart LR
 - 補給イベント専用CSV `refuel_events.csv`（run直下と `graph/` 配下）を追加し、時刻順に「車両・デポ・補充L」を単独確認できるようにした
 - `refuel_events.csv` に可視化補助列として `vehicle_type` / `route_band_id` / `route_band_label` / `route_family_code` を追加し、可視化ツールから車種・路線帯別に扱えるようにした
 - `tools/bus_operation_visualizer_tk.py` / `tools/multi_run_visualizer_tk.py` の UI 表示を日本語化し、主要数値パラメータに単位（`[台]` `[秒]` `[円]` `[kg-CO2]`）を明記
+- Solcast 営業所一括取得フロー用の実データ台帳を生成：
+  - 2026-03-24T06:51:40.627289+00:00 に `data/external/solcast_raw/depot_coordinates_tokyu_all.json`（12 営業所座標）を生成
+  - 2026-03-24T07:10:50.337433+00:00 に `data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json`（取得・利用台帳）を生成
+  - 詳細運用は `readme_operation.md` の「5. 営業所別 Solcast キャッシュ運用」を参照
 
 </details>
 
@@ -374,6 +378,11 @@ $$
 > [!NOTE]
 > **データの流れ：** Tkinter UI → Quick Setup 保存 → BFF `PUT /quick-setup` → `dispatch_scope` / `scenario_overlay` →
 > `src/optimization/common/builder.py`（`CanonicalOptimizationProblem`）→ `solver_adapter.py`
+>
+> Quick Setup の `simulationSettings.depotEnergyAssets` は `simulation_config.depot_energy_assets` として保存され、
+> B 案（PV/BESS/Grid）制御の入力に使われます。
+> `builder.py` の車両展開は、選択営業所の実車両レコード（`vehicles[*].id` / `depotId`）を優先し、
+> タイプ別カウント由来の合成ID生成はフォールバック経路としてのみ使用します。
 
 ### 2.4 解法モード
 
@@ -733,6 +742,7 @@ python catalog_update_app.py refresh gtfs-pipeline `
 - 路線一覧は「現在の `dayType` に trip を持つ route variant」のみ表示
 - route limit は 0 trip 候補を落とした後に適用（有効路線が limit で隠れることはない）
 - 路線一覧の基本は `data/catalog-fast/normalized/routes.jsonl`（存在する場合優先）
+- `simulationSettings.depotEnergyAssets` を設定すると `simulation_config.depot_energy_assets` に保存され、Prepare/Runで利用される
 
 > [!WARNING]
 > **`Prepare` 後に `tripCount=0`** → 「選択 route × dayType × service_date」に該当 trip なし。

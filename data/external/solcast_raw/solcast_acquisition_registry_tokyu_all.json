@@ -1,0 +1,179 @@
+{
+  "registry_version": "2026-03-24",
+  "generated_at": "2026-03-24T07:10:50.337433+00:00",
+  "source_coordinates": "data/external/solcast_raw/depot_coordinates_tokyu_all.json",
+  "solcast_dataset": {
+    "provider": "Solcast",
+    "product": "Historical Time Series",
+    "granularity_minutes": 60,
+    "timezone": "+09:00",
+    "parameters": [
+      "gti",
+      "ghi",
+      "air_temp"
+    ]
+  },
+  "usage": {
+    "raw_dir": "data/external/solcast_raw",
+    "derived_dir": "data/derived/pv_profiles",
+    "scenario_target": "simulation_config.depot_energy_assets[].pv_generation_kwh_by_slot"
+  },
+  "depots": [
+    {
+      "depot_id": "awashima",
+      "name": "淡島営業所",
+      "lat": 35.653631,
+      "lon": 139.672728,
+      "raw_csv_path": "data/external/solcast_raw/awashima_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "shimouma",
+      "name": "下馬営業所",
+      "lat": 35.63823305555555,
+      "lon": 139.6843413888889,
+      "raw_csv_path": "data/external/solcast_raw/shimouma_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "tsurumaki",
+      "name": "弦巻営業所",
+      "lat": 35.63514694444444,
+      "lon": 139.6462427777778,
+      "raw_csv_path": "data/external/solcast_raw/tsurumaki_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "seta",
+      "name": "瀬田営業所",
+      "lat": 35.617739,
+      "lon": 139.635778,
+      "raw_csv_path": "data/external/solcast_raw/seta_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "meguro",
+      "name": "目黒営業所",
+      "lat": 35.627679,
+      "lon": 139.694185,
+      "raw_csv_path": "data/external/solcast_raw/meguro_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "ebara",
+      "name": "荏原営業所",
+      "lat": 35.602506,
+      "lon": 139.713295,
+      "raw_csv_path": "data/external/solcast_raw/ebara_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "ikegami",
+      "name": "池上営業所",
+      "lat": 35.5769382,
+      "lon": 139.7153683,
+      "raw_csv_path": "data/external/solcast_raw/ikegami_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "takatsu",
+      "name": "高津営業所",
+      "lat": 35.608029,
+      "lon": 139.615168,
+      "raw_csv_path": "data/external/solcast_raw/takatsu_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "nippa",
+      "name": "新羽営業所",
+      "lat": 35.530757,
+      "lon": 139.611279,
+      "raw_csv_path": "data/external/solcast_raw/nippa_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "aobadai",
+      "name": "青葉台営業所",
+      "lat": 35.531741,
+      "lon": 139.517907,
+      "raw_csv_path": "data/external/solcast_raw/aobadai_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "nijigaoka",
+      "name": "虹が丘営業所",
+      "lat": 35.582544,
+      "lon": 139.522771,
+      "raw_csv_path": "data/external/solcast_raw/nijigaoka_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    },
+    {
+      "depot_id": "higashiyamata",
+      "name": "東山田営業所",
+      "lat": 35.561217,
+      "lon": 139.605167,
+      "raw_csv_path": "data/external/solcast_raw/higashiyamata_YYYY_full_60min.csv",
+      "acquisition_status": "pending_download",
+      "acquired_at": "",
+      "used_dates": [
+        "2025-08-01",
+        "2025-08-02"
+      ]
+    }
+  ]
+}

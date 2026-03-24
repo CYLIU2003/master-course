@@ -65,7 +65,14 @@ class ProblemBuilder:
             depot_id=depot_id,
             service_id=service_id,
         )
+        scenario_vehicles = self._filter_scenario_vehicles_for_scope(
+            scenario,
+            depot_id=depot_id,
+        )
         simulation_cfg = scenario.get("simulation_config") or {}
+        disable_acquisition_cost = bool(
+            simulation_cfg.get("disable_vehicle_acquisition_cost", False)
+        )
         solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
         timestep_min = int(
             simulation_cfg.get("timestep_min")
@@ -194,6 +201,8 @@ class ProblemBuilder:
             depot_coordinates_by_id=depot_coordinates_by_id,
             canonical_depot_id=str(depot_id or "depot_default"),
             timestep_min=timestep_min,
+            scenario_vehicles=scenario_vehicles,
+            disable_vehicle_acquisition_cost=disable_acquisition_cost,
         )
 
     def build_from_dispatch(
@@ -232,6 +241,8 @@ class ProblemBuilder:
         depot_coordinates_by_id: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
         canonical_depot_id: str = "depot_default",
         timestep_min: int = 60,
+        scenario_vehicles: Optional[Sequence[Dict[str, Any]]] = None,
+        disable_vehicle_acquisition_cost: bool = False,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -273,12 +284,21 @@ class ProblemBuilder:
         route_nodes = self._build_routes(trip_nodes)
         vehicle_types = self._build_vehicle_types(context.vehicle_profiles)
         vehicles = tuple(
-            self._build_vehicles(
+            self._build_vehicles_from_records(
+                scenario_vehicles or (),
                 context.vehicle_profiles,
-                vehicle_counts,
                 default_home_depot_id=canonical_depot_id,
+                disable_vehicle_acquisition_cost=disable_vehicle_acquisition_cost,
             )
         )
+        if not vehicles:
+            vehicles = tuple(
+                self._build_vehicles(
+                    context.vehicle_profiles,
+                    vehicle_counts,
+                    default_home_depot_id=canonical_depot_id,
+                )
+            )
         inferred_import_limit = depot_import_limit_kw
         if inferred_import_limit is None:
             charger_capacity = sum(charger.power_kw * max(charger.simultaneous_ports, 1) for charger in chargers)
@@ -637,6 +657,84 @@ class ProblemBuilder:
                     fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )
 
+    def _build_vehicles_from_records(
+        self,
+        vehicles: Sequence[Dict[str, Any]],
+        profiles: Dict[str, VehicleProfile],
+        *,
+        default_home_depot_id: str,
+        disable_vehicle_acquisition_cost: bool,
+    ) -> Iterable[ProblemVehicle]:
+        for index, vehicle in enumerate(vehicles):
+            if not isinstance(vehicle, dict):
+                continue
+            vehicle_id = str(vehicle.get("id") or "").strip() or f"veh_{index + 1:03d}"
+            vehicle_type = str(vehicle.get("type") or "BEV").upper()
+            profile = profiles.get(vehicle_type)
+
+            battery_capacity_kwh = self._safe_float(vehicle.get("batteryKwh"))
+            if battery_capacity_kwh is None and profile is not None:
+                battery_capacity_kwh = profile.battery_capacity_kwh
+            initial_soc = self._safe_float(vehicle.get("initialSoc"))
+            if initial_soc is None:
+                initial_soc = battery_capacity_kwh
+            reserve_soc = self._safe_float(vehicle.get("reserveSoc"))
+            if reserve_soc is None and battery_capacity_kwh is not None:
+                reserve_soc = battery_capacity_kwh * 0.1
+
+            fuel_tank_capacity_l = self._safe_float(vehicle.get("fuelTankL"))
+            if fuel_tank_capacity_l is None and profile is not None:
+                fuel_tank_capacity_l = profile.fuel_tank_capacity_l
+            initial_fuel_l = self._safe_float(vehicle.get("initialFuelL"))
+            if initial_fuel_l is None:
+                initial_fuel_l = fuel_tank_capacity_l
+            fuel_reserve_l = self._safe_float(vehicle.get("fuelReserveL"))
+            if fuel_reserve_l is None and fuel_tank_capacity_l is not None:
+                fuel_reserve_l = fuel_tank_capacity_l * 0.1
+
+            fuel_l_per_km = self._safe_float(
+                vehicle.get("fuelConsumptionLPerKm")
+                or vehicle.get("fuel_consumption_l_per_km")
+            )
+            if fuel_l_per_km is None:
+                fuel_eff_km_per_l = self._safe_float(
+                    vehicle.get("fuelEfficiencyKmPerL")
+                    or vehicle.get("fuel_efficiency_km_per_l")
+                )
+                if fuel_eff_km_per_l and fuel_eff_km_per_l > 0:
+                    fuel_l_per_km = 1.0 / fuel_eff_km_per_l
+            if fuel_l_per_km is None and profile is not None:
+                fuel_l_per_km = profile.fuel_consumption_l_per_km
+
+            fixed_use_cost_jpy = self._vehicle_fixed_use_cost_jpy(
+                vehicle,
+                disable_acquisition_cost=disable_vehicle_acquisition_cost,
+            )
+            if fixed_use_cost_jpy <= 0.0 and profile is not None:
+                fixed_use_cost_jpy = profile.fixed_use_cost_jpy
+
+            home_depot_id = str(
+                vehicle.get("depotId")
+                or vehicle.get("homeDepotId")
+                or default_home_depot_id
+                or "depot_default"
+            ).strip() or "depot_default"
+
+            yield ProblemVehicle(
+                vehicle_id=vehicle_id,
+                vehicle_type=vehicle_type,
+                home_depot_id=home_depot_id,
+                initial_soc=initial_soc,
+                battery_capacity_kwh=battery_capacity_kwh,
+                reserve_soc=reserve_soc,
+                available=bool(vehicle.get("enabled", True)),
+                initial_fuel_l=initial_fuel_l,
+                fuel_tank_capacity_l=fuel_tank_capacity_l,
+                fuel_reserve_l=fuel_reserve_l,
+                fuel_consumption_l_per_km=fuel_l_per_km,
+                fixed_use_cost_jpy=fixed_use_cost_jpy,
+            )
+
     def _build_vehicle_profiles(
         self,
         vehicles: Sequence[Dict[str, Any]],
@@ -655,14 +753,10 @@ class ProblemBuilder:
             if explicit_fuel_l_per_km is not None:
                 fuel_l_per_km = explicit_fuel_l_per_km
             
-            # Compute daily fixed use cost
-            purchase_cost = self._safe_float(vehicle.get("acquisitionCost")) or 0.0
-            residual_value = self._safe_float(vehicle.get("residualValueYen") or vehicle.get("residual_value_yen")) or 0.0
-            lifetime_year = max(self._safe_float(vehicle.get("lifetimeYear") or vehicle.get("lifetime_year")) or 12.0, 1.0)
-            operation_days = max(self._safe_float(vehicle.get("operationDaysPerYear") or vehicle.get("operation_days_per_year")) or 365.0, 1.0)
-            fixed_use_cost_jpy = (purchase_cost - residual_value) / (lifetime_year * operation_days)
-            if disable_acquisition_cost:
-                fixed_use_cost_jpy = 0.0
+            fixed_use_cost_jpy = self._vehicle_fixed_use_cost_jpy(
+                vehicle,
+                disable_acquisition_cost=disable_acquisition_cost,
+            )
             fuel_tank_capacity_l = self._safe_float(vehicle.get("fuelTankL"))
             if (
                 (fuel_tank_capacity_l is None or fuel_tank_capacity_l <= 0.0)
@@ -714,6 +808,46 @@ class ProblemBuilder:
                 )
             )
         return tuple(items)
+
+    def _vehicle_fixed_use_cost_jpy(
+        self,
+        vehicle: Dict[str, Any],
+        *,
+        disable_acquisition_cost: bool,
+    ) -> float:
+        if disable_acquisition_cost:
+            return 0.0
+        purchase_cost = self._safe_float(vehicle.get("acquisitionCost")) or 0.0
+        residual_value = self._safe_float(
+            vehicle.get("residualValueYen")
+            or vehicle.get("residual_value_yen")
+        ) or 0.0
+        lifetime_year = max(
+            self._safe_float(vehicle.get("lifetimeYear") or vehicle.get("lifetime_year")) or 12.0,
+            1.0,
+        )
+        operation_days = max(
+            self._safe_float(vehicle.get("operationDaysPerYear") or vehicle.get("operation_days_per_year")) or 365.0,
+            1.0,
+        )
+        return (purchase_cost - residual_value) / (lifetime_year * operation_days)
+
+    def _filter_scenario_vehicles_for_scope(
+        self,
+        scenario: Dict[str, Any],
+        *,
+        depot_id: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        selected_depot_id = str(depot_id or "").strip()
+        scoped: List[Dict[str, Any]] = []
+        for vehicle in scenario.get("vehicles") or []:
+            if not isinstance(vehicle, dict):
+                continue
+            vehicle_depot_id = str(vehicle.get("depotId") or "").strip()
+            if selected_depot_id and vehicle_depot_id != selected_depot_id:
+                continue
+            scoped.append(dict(vehicle))
+        return scoped
 
     def _build_baseline_plan(self, context: DispatchContext) -> AssignmentPlan:
         # Build a baseline greedy plan but avoid assigning the same trip to

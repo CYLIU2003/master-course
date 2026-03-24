@@ -423,6 +423,7 @@ class UpdateQuickSetupBody(BaseModel):
     pvProfileId: Optional[str] = None
     weatherMode: Optional[str] = None
     weatherFactorScalar: Optional[float] = None
+    depotEnergyAssets: Optional[List[Dict[str, Any]]] = None
     co2PriceSource: Optional[str] = None
     co2ReferenceDate: Optional[str] = None
     enableVehicleDiagramOutput: Optional[bool] = None
@@ -985,6 +986,7 @@ def _builder_defaults(
         "pvProfileId": simulation_config.get("pv_profile_id"),
         "weatherMode": simulation_config.get("weather_mode") or "sunny",
         "weatherFactorScalar": simulation_config.get("weather_factor_scalar"),
+        "depotEnergyAssets": list(simulation_config.get("depot_energy_assets") or []),
         "degradationWeight": (
             (overlay_solver.get("objective_weights") or {}).get("degradation")
             or (overlay_solver.get("objective_weights") or {}).get("battery_degradation_cost")
@@ -1304,6 +1306,7 @@ def _build_quick_setup_payload(
             "pvProfileId": builder_defaults.get("pvProfileId"),
             "weatherMode": builder_defaults.get("weatherMode") or "sunny",
             "weatherFactorScalar": builder_defaults.get("weatherFactorScalar"),
+            "depotEnergyAssets": list(builder_defaults.get("depotEnergyAssets") or []),
             "degradationWeight": builder_defaults.get("degradationWeight"),
             "allowPartialService": bool(builder_defaults.get("allowPartialService", False)),
             "unservedPenalty": float(builder_defaults.get("unservedPenalty") or 10000.0),
@@ -1758,6 +1761,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["weather_mode"] = str(body.weatherMode)
         if body.weatherFactorScalar is not None:
             simulation_config["weather_factor_scalar"] = float(body.weatherFactorScalar)
+        if body.depotEnergyAssets is not None:
+            simulation_config["depot_energy_assets"] = [
+                dict(item) for item in body.depotEnergyAssets if isinstance(item, dict)
+            ]
         if body.co2PriceSource is not None:
             simulation_config["co2_price_source"] = str(body.co2PriceSource)
         if body.co2ReferenceDate is not None:

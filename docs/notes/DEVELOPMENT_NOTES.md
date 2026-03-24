@@ -39,6 +39,36 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-24] フェーズ2着手: 実車両優先生成 + depot_energy_assets 編集導線（BFF/Schema/UI）
+
+- **目的**:
+  - canonical problem 生成時の車両IDを、タイプ別カウント由来の合成IDから「営業所別実車両情報」優先へ移行。
+  - `depot_energy_assets` を Quick Setup/Prepare から編集・保存できる経路を確立。
+
+- **対応**:
+  - `src/optimization/common/builder.py`
+    - `build_from_scenario()` で選択営業所スコープの実車両レコードを抽出し `build_from_dispatch()` に受け渡し。
+    - `build_from_dispatch()` に `scenario_vehicles` / `disable_vehicle_acquisition_cost` 引数を追加。
+    - 実車両レコード優先の `_build_vehicles_from_records()` を追加（`vehicle_id`, `depotId`, `enabled` を反映）。
+    - 既存のタイプ別カウント生成 `_build_vehicles()` はフォールバックとして維持。
+  - `bff/routers/scenarios.py`
+    - `UpdateQuickSetupBody` に `depotEnergyAssets` を追加。
+    - `GET /quick-setup` の `simulationSettings` に `depotEnergyAssets` を返却。
+    - `PUT /quick-setup` で `simulation_config.depot_energy_assets` へ保存。
+  - `bff/routers/simulation.py` / `bff/services/simulation_builder.py`
+    - `PrepareSimulationSettingsBody` に `depot_energy_assets` を追加。
+    - Prepare 適用時に `simulation_config.depot_energy_assets` へ保存。
+  - `tools/scenario_backup_tk.py`
+    - 詳細パラメータに `depot_energy_assets(JSON)` 入力欄を追加。
+    - Quick Setup 読込/保存で JSON 往復を実装。
+    - Prepare payload に `depot_energy_assets` を追加。
+
+- **テスト**:
+  - 更新: `tests/test_problem_builder_timestep_and_pv_scaling.py`
+    - 実車両優先（`bev-1`）と所属営業所（`dep-1`）を検証。
+  - 更新: `tests/test_simulation_builder_prepare_scope.py`
+    - `depot_energy_assets` が `simulation_config` に保存されることを検証。
+
 ### [DEV-2026-03-24] フェーズ1着手: timestep可変化とPV換算のslot幅連動、depot_default依存の縮小
 
 - **目的**:

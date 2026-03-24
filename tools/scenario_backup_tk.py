@@ -986,6 +986,7 @@ class App:
         self.pv_profile_id_var = tk.StringVar(value="")
         self.weather_mode_var = tk.StringVar(value="sunny")
         self.weather_factor_scalar_var = tk.StringVar(value="1.0")
+        self.depot_energy_assets_json_var = tk.StringVar(value="")
         self.co2_price_source_var = tk.StringVar(value="manual")
         self.co2_reference_date_var = tk.StringVar(value="")
         self.enable_vehicle_diagram_output_var = tk.BooleanVar(value=False)
@@ -1040,6 +1041,16 @@ class App:
         self._labeled_entry(advanced, "PVプロファイルID pv_profile_id", self.pv_profile_id_var)
         self._labeled_entry(advanced, "天気モード weather_mode", self.weather_mode_var)
         self._labeled_entry(advanced, "天気係数 weather_factor_scalar", self.weather_factor_scalar_var)
+        self._labeled_entry(
+            advanced,
+            "営業所エネルギー資産 depot_energy_assets(JSON)",
+            self.depot_energy_assets_json_var,
+            tooltip=(
+                "営業所別のPV/BESS設定をJSON配列で入力します。\n"
+                "例: [{\"depot_id\":\"dep-1\",\"bess_enabled\":true,\"bess_energy_kwh\":500}]\n"
+                "空欄の場合は既存設定を保持します。"
+            ),
+        )
         self._labeled_entry(advanced, "拡張係数 objective_weights(JSON)", self.objective_weights_json_var)
         ttk.Checkbutton(advanced, text="車両ダイヤグラム出力", variable=self.enable_vehicle_diagram_output_var).pack(anchor="w", pady=(2, 0))
         self._labeled_entry(advanced, "車両導入費(編集は車両/テンプレ画面)", tk.StringVar(value="個別設定"), readonly=True)
@@ -2030,6 +2041,24 @@ class App:
                 continue
         return out
 
+    def _parse_depot_energy_assets_json_or_none(self) -> list[dict[str, Any]] | None:
+        raw = self.depot_energy_assets_json_var.get().strip()
+        if not raw:
+            return None
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            messagebox.showwarning("入力エラー", "depot_energy_assets は JSON 形式で入力してください")
+            raise ValueError("invalid_depot_energy_assets_json")
+        if not isinstance(payload, list):
+            messagebox.showwarning("入力エラー", "depot_energy_assets は JSON 配列で入力してください")
+            raise ValueError("invalid_depot_energy_assets_shape")
+        out: list[dict[str, Any]] = []
+        for item in payload:
+            if isinstance(item, dict):
+                out.append(dict(item))
+        return out
+
     def _set_day_type_value(self, day_type: str) -> None:
         value = str(day_type or "WEEKDAY").strip() or "WEEKDAY"
         options = list(self.day_type_options)
@@ -2659,6 +2688,13 @@ class App:
             self.pv_profile_id_var.set(str(sim.get("pvProfileId") or ""))
             self.weather_mode_var.set(str(sim.get("weatherMode") or "sunny"))
             self.weather_factor_scalar_var.set(str(sim.get("weatherFactorScalar") or 1.0))
+            depot_energy_assets = sim.get("depotEnergyAssets")
+            if isinstance(depot_energy_assets, list):
+                self.depot_energy_assets_json_var.set(
+                    json.dumps(depot_energy_assets, ensure_ascii=True, separators=(",", ":"))
+                )
+            else:
+                self.depot_energy_assets_json_var.set("")
             self._suspend_prepare_watchers = False
 
             self._refresh_depot_dropdowns(depots)
@@ -2754,6 +2790,11 @@ class App:
             "weatherMode": self.weather_mode_var.get().strip() or "sunny",
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
         }
+        try:
+            depot_energy_assets = self._parse_depot_energy_assets_json_or_none()
+        except ValueError:
+            return
+        payload["depotEnergyAssets"] = depot_energy_assets
         self.run_bg(
             lambda: self.client.put_quick_setup(scenario_id, payload),
             lambda _resp: (
@@ -3462,6 +3503,7 @@ class App:
 
     def _prepare_payload(self) -> dict[str, Any]:
         objective_weights = self._parse_objective_weights_json()
+        depot_energy_assets = self._parse_depot_energy_assets_json_or_none()
         contract_penalty = self._parse_float(self.contract_penalty_coeff_var.get(), 1000000.0)
         if contract_penalty > 0:
             objective_weights.setdefault("slack_penalty", contract_penalty)
@@ -3507,6 +3549,7 @@ class App:
                 "depot_power_limit_kw": self._parse_float(self.depot_power_limit_var.get(), 500.0),
                 "tou_pricing": self._parse_tou_text(),
                 "objective_weights": objective_weights,
+                "depot_energy_assets": depot_energy_assets,
             },
         }
 
@@ -3555,7 +3598,11 @@ class App:
                     f"tripCount={self.prepared_trip_count} のため実行対象がありません。{reason}",
                 )
 
-        self.run_bg(lambda: self.client.prepare_simulation(scenario_id, self._prepare_payload()), done)
+        try:
+            payload = self._prepare_payload()
+        except ValueError:
+            return
+        self.run_bg(lambda: self.client.prepare_simulation(scenario_id, payload), done)
 
     def _set_job_from_resp(self, resp: dict[str, Any], label: str) -> None:
         self.last_job_id = str(resp.get("job_id") or resp.get("jobId") or "")
@@ -3833,6 +3880,7 @@ class App:
             (self.pv_profile_id_var, "PVプロファイルを変更"),
             (self.weather_mode_var, "天気モードを変更"),
             (self.weather_factor_scalar_var, "天気係数を変更"),
+            (self.depot_energy_assets_json_var, "営業所エネルギー資産設定を変更"),
             (self.co2_price_source_var, "CO2価格ソースを変更"),
             (self.co2_reference_date_var, "CO2参照日を変更"),
             (self.enable_vehicle_diagram_output_var, "ダイヤグラム出力設定を変更"),

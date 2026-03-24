@@ -119,6 +119,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     service_date: Optional[str] = None
     start_time: str = "05:00"
     planning_horizon_hours: float = 20.0
+    depot_energy_assets: Optional[list[Dict[str, Any]]] = None
     alns_iterations: int = 500
     random_seed: Optional[int] = None
     experiment_method: Optional[str] = None

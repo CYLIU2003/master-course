@@ -206,6 +206,20 @@ python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.s
 
 「都度 API 取得」ではなく、`座標一覧 -> 一括取得 -> ローカルキャッシュ -> 日別 JSON` の流れで運用します。
 
+### 5.0 取得データの記録（いつ・どこ・何を使うか）
+
+2026-03-24 時点で、以下を生成済みです。
+
+| 取得日時 (UTC) | ファイル | データ内容 | 利用先 |
+|---|---|---|---|
+| 2026-03-24T06:51:40.627289+00:00 | `data/external/solcast_raw/depot_coordinates_tokyu_all.json` | 東急全営業所 12 拠点の `depot_id` / `name` / `lat` / `lon` | Solcast 一括取得入力、営業所単位の raw CSV 命名・照合 |
+| 2026-03-24T07:10:50.337433+00:00 | `data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json` | Solcast 取得台帳テンプレート（取得対象パラメータ、保存先、営業所ごとの raw CSV パス、使用日） | 研究再現ログ、取得漏れ確認、運用監査 |
+
+補足:
+
+- 現在の registry は `acquisition_status = pending_download` で初期化されています。
+- Solcast CSV を実取得したら、同ファイルの `acquisition_status` / `acquired_at` を更新してください。
+
 ### 5.1 営業所座標一覧を生成
 
 ```powershell
@@ -221,6 +235,20 @@ python scripts/build_pv_profiles.py export-coordinates `
 - 生成した座標一覧を使って Solcast Web Download（最大 20 地点/回）で CSV を取得
 - 取得した CSV を `data/external/solcast_raw/` に保存
 - ファイル名は `depot_id_*.csv` 形式を推奨（例: `meguro_2025_full_60min.csv`）
+
+取得台帳を初期化する場合:
+
+```powershell
+python scripts/build_pv_profiles.py init-registry `
+  --coordinates data/external/solcast_raw/depot_coordinates_tokyu_all.json `
+  --output data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json `
+  --slot-minutes 60 `
+  --timezone +09:00 `
+  --parameters gti,ghi,air_temp `
+  --dates 2025-08-01,2025-08-02
+```
+
+この registry に「いつ取得したか」「どの CSV を使うか」「どの日を導出したか」を集約します。
 
 ### 5.3 日別 JSON へ変換
 

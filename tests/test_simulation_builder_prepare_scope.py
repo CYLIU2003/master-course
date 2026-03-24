@@ -40,6 +40,13 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             use_selected_depot_charger_inventory=True,
             disable_vehicle_acquisition_cost=True,
             deadhead_speed_kmh=18.0,
+            depot_energy_assets=[
+                {
+                    "depot_id": "dep1",
+                    "bess_enabled": True,
+                    "bess_energy_kwh": 500.0,
+                }
+            ],
         ),
     )
 
@@ -74,3 +81,10 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["scenario_overlay"]["route_ids"] == ["route-a"]
     assert updated["simulation_config"]["disable_vehicle_acquisition_cost"] is True
     assert updated["simulation_config"]["deadhead_speed_kmh"] == 18.0
+    assert updated["simulation_config"]["depot_energy_assets"] == [
+        {
+            "depot_id": "dep1",
+            "bess_enabled": True,
+            "bess_energy_kwh": 500.0,
+        }
+    ]
