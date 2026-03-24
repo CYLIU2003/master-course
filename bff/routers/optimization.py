@@ -83,6 +83,8 @@ class RunOptimizationBody(BaseModel):
     rebuild_dispatch: bool = True
     use_existing_duties: bool = False
     alns_iterations: int = 500
+    no_improvement_limit: int = 100
+    destroy_fraction: float = 0.25
 
 
 class DelayEventBody(BaseModel):
@@ -564,6 +566,8 @@ def _run_optimization(
     rebuild_dispatch: bool,
     use_existing_duties: bool,
     alns_iterations: int,
+    no_improvement_limit: int,
+    destroy_fraction: float,
 ) -> None:
     try:
         solver_mode = _normalize_solver_mode(mode)
@@ -681,6 +685,9 @@ def _run_optimization(
                 service_id=service_id,
                 depot_id=depot_id,
             ),
+            alns_iterations=alns_iterations,
+            no_improvement_limit=no_improvement_limit,
+            destroy_fraction=destroy_fraction,
         )
         output_dir = _scoped_output_dir(
             root="outputs",
@@ -792,6 +799,8 @@ def _run_optimization(
             "random_seed": random_seed,
             "gurobi_seed": random_seed,
             "alns_iterations": alns_iterations,
+            "no_improvement_limit": no_improvement_limit,
+            "destroy_fraction": destroy_fraction,
             "git_sha": _git_sha(),
             "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
             "output_dir": output_dir,
@@ -1136,6 +1145,8 @@ def run_optimization(
             request.rebuild_dispatch,
             request.use_existing_duties,
             request.alns_iterations,
+            request.no_improvement_limit,
+            request.destroy_fraction,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

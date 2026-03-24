@@ -1050,6 +1050,8 @@ class App:
         self.time_limit_var = tk.StringVar(value="300")
         self.mip_gap_var = tk.StringVar(value="0.01")
         self.alns_iter_var = tk.StringVar(value="500")
+        self.no_improvement_limit_var = tk.StringVar(value="100")
+        self.destroy_fraction_var = tk.StringVar(value="0.25")
         self.allow_partial_service_var = tk.BooleanVar(value=False)
 
         settings_box = ttk.LabelFrame(ops, text="ソルバー詳細設定", padding=6)
@@ -2622,6 +2624,8 @@ class App:
             self.time_limit_var.set(str(solver.get("timeLimitSeconds") or 300))
             self.mip_gap_var.set(str(solver.get("mipGap") if solver.get("mipGap") is not None else 0.01))
             self.alns_iter_var.set(str(solver.get("alnsIterations") or 500))
+            self.no_improvement_limit_var.set(str(solver.get("noImprovementLimit") or 100))
+            self.destroy_fraction_var.set(str(solver.get("destroyFraction") if solver.get("destroyFraction") is not None else 0.25))
             self.objective_preset_var.set(str(solver.get("objectivePreset") or sim.get("objectivePreset") or "cost"))
             self.max_start_fragments_var.set(str(solver.get("maxStartFragmentsPerVehicle") or 100))
             self.max_end_fragments_var.set(str(solver.get("maxEndFragmentsPerVehicle") or 100))
@@ -2713,6 +2717,8 @@ class App:
             "timeLimitSeconds": self._parse_int(self.time_limit_var.get(), 300),
             "mipGap": self._parse_float(self.mip_gap_var.get(), 0.01),
             "alnsIterations": self._parse_int(self.alns_iter_var.get(), 500),
+            "noImprovementLimit": self._parse_int(self.no_improvement_limit_var.get(), 100),
+            "destroyFraction": self._parse_float(self.destroy_fraction_var.get(), 0.25),
             "maxStartFragmentsPerVehicle": self._parse_int(self.max_start_fragments_var.get(), 100),
             "maxEndFragmentsPerVehicle": self._parse_int(self.max_end_fragments_var.get(), 100),
             "enableVehicleDiagramOutput": self.enable_vehicle_diagram_output_var.get(),
@@ -3488,6 +3494,8 @@ class App:
                 "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
                 "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
                 "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
+                "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),
+                "destroy_fraction": self._parse_float(self.destroy_fraction_var.get(), 0.25),
                 "include_deadhead": self.include_deadhead_var.get(),
                 "grid_flat_price_per_kwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
                 "grid_sell_price_per_kwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
@@ -3670,6 +3678,8 @@ class App:
                 "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
                 "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
                 "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
+                "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),
+                "destroy_fraction": self._parse_float(self.destroy_fraction_var.get(), 0.25),
                 "service_id": self.day_type_var.get().strip() or None,
                 "depot_id": depots[0] if depots else None,
             }
@@ -3692,6 +3702,8 @@ class App:
             "time_limit_seconds": effective_time_limit,
             "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
             "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
+            "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),
+            "destroy_fraction": self._parse_float(self.destroy_fraction_var.get(), 0.25),
             "service_id": self.day_type_var.get().strip() or None,
             "depot_id": depots[0] if depots else None,
             "rebuild_dispatch": bool(self.rebuild_dispatch_before_opt_var.get()),
@@ -4265,6 +4277,20 @@ class App:
         ttk.Label(row_iter, text="反復回数(ALNS/GA/ABC)", width=24).pack(side=tk.LEFT)
         ttk.Entry(row_iter, textvariable=self.alns_iter_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+        row_no_improve = ttk.Frame(solver_box)
+        row_no_improve.pack(fill=tk.X, pady=3)
+        lbl_no_improve = ttk.Label(row_no_improve, text="改善なし上限(ALNS)", width=24)
+        lbl_no_improve.pack(side=tk.LEFT)
+        _Tooltip(lbl_no_improve, "ALNS: この反復数だけ目的関数が改善しなければ早期終了。\nデフォルト: 100")
+        ttk.Entry(row_no_improve, textvariable=self.no_improvement_limit_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row_destroy = ttk.Frame(solver_box)
+        row_destroy.pack(fill=tk.X, pady=3)
+        lbl_destroy = ttk.Label(row_destroy, text="破壊率上限(ALNS)", width=24)
+        lbl_destroy.pack(side=tk.LEFT)
+        _Tooltip(lbl_destroy, "ALNS: 1反復で破壊する便の割合の上限 (0.0〜1.0)。\n大きいほど探索が広いが不安定になる。デフォルト: 0.25")
+        ttk.Entry(row_destroy, textvariable=self.destroy_fraction_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
         row_partial = ttk.Frame(sim_box)
         row_partial.pack(fill=tk.X, pady=3)
         ttk.Checkbutton(row_partial, text="未配車許容", variable=self.allow_partial_service_var).pack(side=tk.LEFT)
@@ -4281,16 +4307,21 @@ class App:
             mode = self.solver_mode_var.get().strip().lower()
             is_milp_like = mode in {"mode_milp_only", "hybrid", "milp"}
             is_meta_like = mode in {"mode_alns_only", "ga", "abc", "alns"}
+            uses_alns = is_meta_like or mode == "hybrid"
 
             if is_milp_like:
                 row_gap.pack(fill=tk.X, pady=3)
             else:
                 row_gap.pack_forget()
 
-            if is_meta_like or mode == "hybrid":
+            if uses_alns:
                 row_iter.pack(fill=tk.X, pady=3)
+                row_no_improve.pack(fill=tk.X, pady=3)
+                row_destroy.pack(fill=tk.X, pady=3)
             else:
                 row_iter.pack_forget()
+                row_no_improve.pack_forget()
+                row_destroy.pack_forget()
 
             info.configure(text=f"現在のモード: {self.solver_mode_var.get()} / 表示項目を自動切替")
 

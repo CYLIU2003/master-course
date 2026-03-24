@@ -492,6 +492,9 @@ def solve_problem_data(
     mip_gap: float = 0.01,
     random_seed: int = 42,
     output_dir: str = "output",
+    alns_iterations: int = 500,
+    no_improvement_limit: int = 100,
+    destroy_fraction: float = 0.25,
 ) -> dict:
     """
     Execute the optimization pipeline directly from an in-memory ProblemData.
@@ -505,7 +508,12 @@ def solve_problem_data(
         "mip_gap": mip_gap,
         "random_seed": random_seed,
         "output_dir": output_dir,
-        "alns": {"seed": random_seed},
+        "alns": {
+            "seed": random_seed,
+            "max_iterations": alns_iterations,
+            "max_no_improve": no_improvement_limit,
+            "destroy_ratio_max": destroy_fraction,
+        },
     }
     run_mode = mode or "mode_milp_only"
     dispatch_report = getattr(data, "_dispatch_preprocess_report", None)

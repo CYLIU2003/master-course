@@ -154,6 +154,8 @@ def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback(
             False,
             False,
             100,
+            100,
+            0.25,
         )
 
     rebuild_dispatch.assert_not_called()
