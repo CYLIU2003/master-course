@@ -39,6 +39,58 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-24] 充電地点を営業所固定として座標を出力に連携
+
+- **方針**:
+  - 充電地点は営業所とみなし、車両別の推定滞在地点推論は導入せず、まず営業所経緯度を確実に出力へ流す。
+
+- **対応**:
+  - `src/optimization/common/problem.py`
+    - `ProblemDepot` に `latitude` / `longitude` を追加。
+    - `ChargingSlot` に `charging_depot_id` / `charging_latitude` / `charging_longitude` を追加。
+  - `src/optimization/common/builder.py`
+    - scenario の `depots` から営業所座標を読み取り、`metadata.depot_coordinates_by_id` に保持。
+    - 選択営業所情報を `ProblemDepot` の name/座標へ反映。
+  - `src/optimization/milp/solver_adapter.py`
+    - `ChargingSlot` 生成時に営業所IDと営業所経緯度を付与。
+  - `src/optimization/common/result.py`
+    - `charging_schedule` に営業所IDと経緯度をシリアライズ。
+
+- **テスト**:
+  - 追加: `tests/test_optimization_result_serializer.py` に営業所座標出力検証を追加。
+  - 実行:
+    - `pytest tests/test_optimization_result_serializer.py tests/test_problem_builder_depot_energy_asset_controls.py tests/test_evaluator_co2_from_actual_grid_import.py tests/test_evaluator_provisional_overwrite.py tests/test_case_comparison_pv_bess.py tests/test_depot_energy_asset_schema.py -q`
+    - 結果: `9 passed`
+
+### [DEV-2026-03-24] core_pv フォローアップ: BESS終端・同時充放電・CO2会計・Grid→BESS価格条件を修正
+
+- **背景**:
+  - 営業所別 PV/BESS フロー導入後、終端スロットの BESS 物理整合性と CO2 会計の厳密性を強化する必要があった。
+
+- **対応**:
+  - `src/optimization/milp/solver_adapter.py`
+    - BESS 充放電の同時成立を禁止（スロットごと binary mode 制約）。
+    - 充放電出力上限を全スロットに適用（終端スロット含む）。
+    - 終端 SOC 下限制約（`bess_terminal_soc_min_kwh`）を導入し、最終時刻の過放電抜け穴を抑止。
+    - `allow_grid_to_bess=True` 時でも、価格閾値・許可スロットに応じて `g2bess=0` を課すゲートを追加。
+    - CO2 目的項を BEV 走行電力量ベースから、`Grid→Bus + Grid→BESS` 実フローベースへ変更。
+  - `src/optimization/common/evaluator.py`
+    - CO2 評価を実フロー（`grid_to_bus + grid_to_bess`）優先へ変更（fallback は従来方式）。
+  - `src/optimization/common/problem.py` / `src/optimization/common/builder.py`
+    - `DepotEnergyAsset` に以下を追加し scenario から取り込み:
+      - `grid_to_bess_price_threshold_yen_per_kwh`
+      - `grid_to_bess_allowed_slot_indices`
+      - `bess_terminal_soc_min_kwh`
+  - `scripts/build_depot_energy_case.py`
+    - 上記パラメータを CLI から生成可能に拡張。
+
+- **テスト**:
+  - 追加: `tests/test_evaluator_co2_from_actual_grid_import.py`
+  - 追加: `tests/test_problem_builder_depot_energy_asset_controls.py`
+  - 実行:
+    - `pytest tests/test_problem_builder_depot_energy_asset_controls.py tests/test_evaluator_co2_from_actual_grid_import.py tests/test_evaluator_provisional_overwrite.py tests/test_case_comparison_pv_bess.py tests/test_depot_energy_asset_schema.py -q`
+    - 結果: `7 passed`
+
 ### [DEV-2026-03-24] BFF/Tk/exporter に最終電力費・仮残高と営業所フロー出力を反映
 
 - **目的**:

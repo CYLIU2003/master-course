@@ -45,6 +45,8 @@ class ProblemDepot:
     charger_ids: Tuple[str, ...] = ()
     import_limit_kw: float = 0.0
     export_limit_kw: float = 0.0
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -124,7 +126,10 @@ class DepotEnergyAsset:
     bess_life_years: int = 15
     allow_grid_to_bess: bool = False
     grid_to_bess_price_mode: str = "tou"
+    grid_to_bess_price_threshold_yen_per_kwh: float = 0.0
+    grid_to_bess_allowed_slot_indices: Tuple[int, ...] = ()
     bess_priority_mode: str = "cost_driven"
+    bess_terminal_soc_min_kwh: float = 0.0
     provisional_energy_cost_yen_per_kwh: float = 0.0
 
 
@@ -190,6 +195,9 @@ class ChargingSlot:
     charger_id: Optional[str]
     charge_kw: float = 0.0
     discharge_kw: float = 0.0
+    charging_depot_id: Optional[str] = None
+    charging_latitude: Optional[float] = None
+    charging_longitude: Optional[float] = None
 
 
 @dataclass(frozen=True)

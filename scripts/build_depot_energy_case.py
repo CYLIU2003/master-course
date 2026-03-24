@@ -13,6 +13,8 @@ def main() -> None:
     parser.add_argument("--bess-energy-kwh", type=float, default=0.0)
     parser.add_argument("--bess-power-kw", type=float, default=0.0)
     parser.add_argument("--allow-grid-to-bess", action="store_true")
+    parser.add_argument("--grid-to-bess-price-threshold-yen-per-kwh", type=float, default=0.0)
+    parser.add_argument("--bess-terminal-soc-min-kwh", type=float, default=0.0)
     parser.add_argument("--provisional-energy-cost-yen-per-kwh", type=float, default=0.0)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
@@ -31,7 +33,9 @@ def main() -> None:
         "bess_soc_max_kwh": float(args.bess_energy_kwh) if bess_enabled else 0.0,
         "allow_grid_to_bess": bool(args.allow_grid_to_bess),
         "grid_to_bess_price_mode": "tou",
+        "grid_to_bess_price_threshold_yen_per_kwh": float(args.grid_to_bess_price_threshold_yen_per_kwh),
         "bess_priority_mode": "cost_driven",
+        "bess_terminal_soc_min_kwh": float(args.bess_terminal_soc_min_kwh),
         "provisional_energy_cost_yen_per_kwh": float(args.provisional_energy_cost_yen_per_kwh),
     }
 

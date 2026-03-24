@@ -1,6 +1,7 @@
 from src.dispatch.models import DutyLeg, Trip, VehicleDuty
 from src.optimization.common.problem import (
     AssignmentPlan,
+    ChargingSlot,
     OptimizationEngineResult,
     OptimizationMode,
     RefuelSlot,
@@ -93,3 +94,34 @@ def test_result_serializer_includes_objective_components_and_limits() -> None:
     assert payload["refueling_schedule"][0]["vehicle_id"] == "veh-ice-1"
     assert payload["refueling_schedule"][0]["time_hhmm"] == "09:00"
     assert payload["refueling_schedule"][0]["refuel_liters"] == 12.5
+
+
+def test_result_serializer_includes_charging_depot_coordinates() -> None:
+    plan = AssignmentPlan(
+        charging_slots=(
+            ChargingSlot(
+                vehicle_id="bev-1",
+                slot_index=1,
+                charger_id="grid:dep-1",
+                charge_kw=20.0,
+                charging_depot_id="dep-1",
+                charging_latitude=35.621,
+                charging_longitude=139.699,
+            ),
+        ),
+    )
+    result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="optimal",
+        objective_value=1.0,
+        plan=plan,
+        feasible=True,
+        cost_breakdown={},
+        solver_metadata={},
+    )
+
+    payload = ResultSerializer.serialize_result(result)
+    row = payload["charging_schedule"][0]
+    assert row["charging_depot_id"] == "dep-1"
+    assert row["charging_latitude"] == 35.621
+    assert row["charging_longitude"] == 139.699

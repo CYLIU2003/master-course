@@ -282,6 +282,8 @@ class GurobiMILPAdapter:
         p_avg_depot_var: Dict[Tuple[str, int], Any] = {}
         w_on_depot_var: Dict[str, Any] = {}
         w_off_depot_var: Dict[str, Any] = {}
+        bess_charge_mode_var: Dict[Tuple[str, int], Any] = {}
+        bess_discharge_mode_var: Dict[Tuple[str, int], Any] = {}
         end_soc_excess_dev_var: Dict[str, Any] = {}
         w_on_var = None
         w_off_var = None
@@ -562,6 +564,7 @@ class GurobiMILPAdapter:
         # C15-C21(new): depot-level PV->BESS->Bus / Grid->Bus(+BESS) balance, demand and contract limits.
         if slot_indices:
             on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
+            price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
             vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
             bev_ids_by_depot: Dict[str, List[str]] = {}
             for vehicle_id in bev_ids:
@@ -634,6 +637,13 @@ class GurobiMILPAdapter:
 
                     if not asset.allow_grid_to_bess:
                         model.addConstr(g2bess_var[key] == 0.0)
+                    else:
+                        threshold = max(float(asset.grid_to_bess_price_threshold_yen_per_kwh or 0.0), 0.0)
+                        allowed_slots = set(int(v) for v in (asset.grid_to_bess_allowed_slot_indices or ()))
+                        if allowed_slots and slot_idx not in allowed_slots:
+                            model.addConstr(g2bess_var[key] == 0.0)
+                        if threshold > 0.0 and float(price_by_slot.get(slot_idx, 0.0) or 0.0) > threshold:
+                            model.addConstr(g2bess_var[key] == 0.0)
 
                     if not asset.bess_enabled:
                         model.addConstr(pv2bess_var[key] == 0.0)
@@ -646,10 +656,25 @@ class GurobiMILPAdapter:
                     power_limit_kwh = max(float(asset.bess_power_kw or 0.0), 0.0) * timestep_h
                     first_slot = slot_indices[0]
                     model.addConstr(bess_soc_var[(depot_id, first_slot)] == float(asset.bess_initial_soc_kwh or 0.0))
-                    model.addConstr(
-                        pv2bess_var[(depot_id, first_slot)] + g2bess_var[(depot_id, first_slot)] <= power_limit_kwh
+                    terminal_soc_floor = max(
+                        float(asset.bess_terminal_soc_min_kwh or 0.0),
+                        float(asset.bess_soc_min_kwh or 0.0),
                     )
-                    model.addConstr(bess2bus_var[(depot_id, first_slot)] <= power_limit_kwh)
+                    for slot_idx in slot_indices:
+                        key = (depot_id, slot_idx)
+                        bess_charge_mode_var[key] = model.addVar(vtype=GRB.BINARY)
+                        bess_discharge_mode_var[key] = model.addVar(vtype=GRB.BINARY)
+                        model.addConstr(
+                            pv2bess_var[key] + g2bess_var[key]
+                            <= power_limit_kwh * bess_charge_mode_var[key]
+                        )
+                        model.addConstr(
+                            bess2bus_var[key]
+                            <= power_limit_kwh * bess_discharge_mode_var[key]
+                        )
+                        model.addConstr(
+                            bess_charge_mode_var[key] + bess_discharge_mode_var[key] <= 1
+                        )
                     for idx in range(len(slot_indices) - 1):
                         slot_idx = slot_indices[idx]
                         next_slot = slot_indices[idx + 1]
@@ -661,8 +686,13 @@ class GurobiMILPAdapter:
                             + eta_ch * (pv2bess_var[cur_key] + g2bess_var[cur_key])
                             - (bess2bus_var[cur_key] / eta_dis)
                         )
-                        model.addConstr(pv2bess_var[cur_key] + g2bess_var[cur_key] <= power_limit_kwh)
-                        model.addConstr(bess2bus_var[cur_key] <= power_limit_kwh)
+                    last_key = (depot_id, slot_indices[-1])
+                    model.addConstr(
+                        bess_soc_var[last_key]
+                        + eta_ch * (pv2bess_var[last_key] + g2bess_var[last_key])
+                        - (bess2bus_var[last_key] / eta_dis)
+                        >= terminal_soc_floor
+                    )
 
             if w_on_depot_var:
                 w_on_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
@@ -778,15 +808,25 @@ class GurobiMILPAdapter:
                 )
                 dh_km = self._deadhead_distance_km(problem, dh_min)
                 objective += co2_price * ice_co2_kg_per_l * dh_km * fuel_rate * var
-            # BEV traction CO₂ (co2_factor is kg/kWh; slot totals are kWh).
+            # BEV electricity CO₂ (grid-sourced only, based on actual depot flows when available).
             co2_by_slot = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
-            for slot_idx in slot_indices:
-                co2_factor = co2_by_slot.get(slot_idx, 0.0)
-                if co2_factor > 0:
-                    for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, []):
-                        objective += co2_price * co2_factor * coeff * y[key]
-                    for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
-                        objective += co2_price * co2_factor * coeff * x[key]
+            if g2bus_var or g2bess_var:
+                for (depot_id, slot_idx), var in g2bus_var.items():
+                    co2_factor = max(float(co2_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+                    if co2_factor > 0.0:
+                        objective += co2_price * co2_factor * var
+                for (depot_id, slot_idx), var in g2bess_var.items():
+                    co2_factor = max(float(co2_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+                    if co2_factor > 0.0:
+                        objective += co2_price * co2_factor * var
+            else:
+                for slot_idx in slot_indices:
+                    co2_factor = co2_by_slot.get(slot_idx, 0.0)
+                    if co2_factor > 0:
+                        for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, []):
+                            objective += co2_price * co2_factor * coeff * y[key]
+                        for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
+                            objective += co2_price * co2_factor * coeff * x[key]
 
         # Battery degradation cost: added when weights.degradation > 0.
         # degradation_cost ≈ (charged_kwh / capacity_kwh) * unit_cost_per_cycle
@@ -850,6 +890,22 @@ class GurobiMILPAdapter:
         served_trip_ids: List[str] = []
         refuel_slots: List[RefuelSlot] = []
         charging_slots: List[ChargingSlot] = []
+        depot_coordinates_by_id: Dict[str, Dict[str, float]] = {
+            str(k): dict(v)
+            for k, v in (problem.metadata.get("depot_coordinates_by_id") or {}).items()
+            if isinstance(v, dict)
+        }
+        fallback_depot_coords = {
+            str(depot.depot_id): {
+                "lat": float(depot.latitude) if getattr(depot, "latitude", None) is not None else None,
+                "lon": float(depot.longitude) if getattr(depot, "longitude", None) is not None else None,
+            }
+            for depot in problem.depots
+        }
+
+        def _depot_latlon(depot_id: str) -> Tuple[Any, Any]:
+            point = depot_coordinates_by_id.get(depot_id) or fallback_depot_coords.get(depot_id) or {}
+            return point.get("lat"), point.get("lon")
 
         def _var_val(var: Any) -> float:
             try:
@@ -902,6 +958,7 @@ class GurobiMILPAdapter:
                     bess_ratio = min(max(bess_kwh / demand_kwh, 0.0), 1.0)
                     grid_ratio = min(max(grid_kwh / demand_kwh, 0.0), 1.0)
                     if bess_ratio > 0.0:
+                        lat, lon = _depot_latlon(depot_id)
                         charging_slots.append(
                             ChargingSlot(
                                 vehicle_id=vehicle_id,
@@ -909,9 +966,13 @@ class GurobiMILPAdapter:
                                 charger_id=f"bess:{depot_id}",
                                 charge_kw=vehicle_kw * bess_ratio,
                                 discharge_kw=0.0,
+                                charging_depot_id=depot_id,
+                                charging_latitude=lat,
+                                charging_longitude=lon,
                             )
                         )
                     if grid_ratio > 0.0:
+                        lat, lon = _depot_latlon(depot_id)
                         charging_slots.append(
                             ChargingSlot(
                                 vehicle_id=vehicle_id,
@@ -919,6 +980,9 @@ class GurobiMILPAdapter:
                                 charger_id=f"grid:{depot_id}",
                                 charge_kw=vehicle_kw * grid_ratio,
                                 discharge_kw=0.0,
+                                charging_depot_id=depot_id,
+                                charging_latitude=lat,
+                                charging_longitude=lon,
                             )
                         )
 

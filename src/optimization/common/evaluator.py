@@ -782,8 +782,17 @@ class CostEvaluator:
                     dh_km = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min)
                     total_co2_kg += ice_co2_kg_per_l * dh_km * fuel_rate
 
-        # BEV traction electricity CO₂.
-        if slot_totals_kwh and problem.price_slots:
+        # BEV electricity CO2: prefer actual grid-import flows (Grid->Bus + Grid->BESS).
+        grid_import_by_slot = self._grid_import_kwh_by_slot_from_plan(plan)
+        if grid_import_by_slot and problem.price_slots:
+            co2_factor_map = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
+            for slot_idx, imported_kwh in grid_import_by_slot.items():
+                co2_factor = co2_factor_map.get(slot_idx, 0.0)
+                if co2_factor <= 0:
+                    continue
+                total_co2_kg += co2_factor * max(imported_kwh, 0.0)
+        # Backward-compatible fallback.
+        elif slot_totals_kwh and problem.price_slots:
             co2_factor_map = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
             for slot_idx, energy_kwh in slot_totals_kwh.items():
                 co2_factor = co2_factor_map.get(slot_idx, 0.0)

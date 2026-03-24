@@ -131,6 +131,8 @@ class ProblemBuilder:
         deadhead_speed_kmh = self._safe_float(
             simulation_cfg.get("deadhead_speed_kmh")
         )
+        selected_depot_record = self._find_selected_depot_record(scenario, depot_id)
+        depot_coordinates_by_id = self._depot_coordinates_by_id(scenario)
         depot_import_limit_kw = self._safe_float(
             charging_cfg.get("depot_power_limit_kw")
             or charging_cfg.get("depotPowerLimitKw")
@@ -174,6 +176,8 @@ class ProblemBuilder:
             max_ice_fuel_percent=max_ice_fuel_percent,
             default_ice_tank_capacity_l=default_ice_tank_capacity_l,
             deadhead_speed_kmh=deadhead_speed_kmh,
+            selected_depot_record=selected_depot_record,
+            depot_coordinates_by_id=depot_coordinates_by_id,
         )
 
     def build_from_dispatch(
@@ -208,6 +212,8 @@ class ProblemBuilder:
         max_ice_fuel_percent: Optional[float] = None,
         default_ice_tank_capacity_l: Optional[float] = None,
         deadhead_speed_kmh: Optional[float] = None,
+        selected_depot_record: Optional[Dict[str, Any]] = None,
+        depot_coordinates_by_id: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -260,9 +266,11 @@ class ProblemBuilder:
         depots = (
             ProblemDepot(
                 depot_id="depot_default",
-                name="Default Depot",
+                name=str((selected_depot_record or {}).get("name") or "Default Depot"),
                 charger_ids=tuple(charger.charger_id for charger in chargers),
                 import_limit_kw=float(inferred_import_limit),
+                latitude=self._safe_float((selected_depot_record or {}).get("lat")),
+                longitude=self._safe_float((selected_depot_record or {}).get("lon")),
             ),
         )
         time_slots = tuple(self._build_time_slot_prices(context, price_slots))
@@ -328,8 +336,42 @@ class ProblemBuilder:
                 "max_ice_fuel_percent": max_ice_fuel_percent,
                 "default_ice_tank_capacity_l": default_ice_tank_capacity_l,
                 "deadhead_speed_kmh": deadhead_speed_kmh,
+                "depot_coordinates_by_id": dict(depot_coordinates_by_id or {}),
             },
         )
+
+    def _find_selected_depot_record(
+        self,
+        scenario: Dict[str, Any],
+        depot_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        selected_id = str(depot_id or "").strip()
+        depots = [item for item in (scenario.get("depots") or []) if isinstance(item, dict)]
+        if not depots:
+            return None
+        if selected_id:
+            for depot in depots:
+                candidate = str(depot.get("id") or depot.get("depotId") or "").strip()
+                if candidate == selected_id:
+                    return dict(depot)
+        return dict(depots[0])
+
+    def _depot_coordinates_by_id(
+        self,
+        scenario: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Optional[float]]]:
+        out: Dict[str, Dict[str, Optional[float]]] = {}
+        for depot in scenario.get("depots") or []:
+            if not isinstance(depot, dict):
+                continue
+            depot_id = str(depot.get("id") or depot.get("depotId") or "").strip()
+            if not depot_id:
+                continue
+            out[depot_id] = {
+                "lat": self._safe_float(depot.get("lat")),
+                "lon": self._safe_float(depot.get("lon")),
+            }
+        return out
 
     def _build_depot_energy_assets_from_scenario(
         self,
@@ -387,7 +429,16 @@ class ProblemBuilder:
                 bess_life_years=int(raw.get("bess_life_years") or 15),
                 allow_grid_to_bess=bool(raw.get("allow_grid_to_bess", False)),
                 grid_to_bess_price_mode=str(raw.get("grid_to_bess_price_mode") or "tou"),
+                grid_to_bess_price_threshold_yen_per_kwh=float(
+                    raw.get("grid_to_bess_price_threshold_yen_per_kwh") or 0.0
+                ),
+                grid_to_bess_allowed_slot_indices=tuple(
+                    int(v)
+                    for v in (raw.get("grid_to_bess_allowed_slot_indices") or [])
+                    if str(v).strip() != ""
+                ),
                 bess_priority_mode=str(raw.get("bess_priority_mode") or "cost_driven"),
+                bess_terminal_soc_min_kwh=float(raw.get("bess_terminal_soc_min_kwh") or 0.0),
                 provisional_energy_cost_yen_per_kwh=float(raw.get("provisional_energy_cost_yen_per_kwh") or 0.0),
             )
             assets[depot.depot_id] = asset

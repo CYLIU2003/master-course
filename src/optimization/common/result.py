@@ -50,6 +50,9 @@ class ResultSerializer:
                     "charger_id": slot.charger_id,
                     "charge_kw": slot.charge_kw,
                     "discharge_kw": slot.discharge_kw,
+                    "charging_depot_id": slot.charging_depot_id,
+                    "charging_latitude": slot.charging_latitude,
+                    "charging_longitude": slot.charging_longitude,
                 }
                 for slot in plan.charging_slots
             ],
