@@ -1,0 +1,79 @@
+{
+  "source_master": "tokyu_bus_depots_master_full.json",
+  "generated_at": "2026-03-24T06:51:40.627289+00:00",
+  "count": 12,
+  "coordinates": [
+    {
+      "depot_id": "awashima",
+      "name": "淡島営業所",
+      "lat": 35.653631,
+      "lon": 139.672728
+    },
+    {
+      "depot_id": "shimouma",
+      "name": "下馬営業所",
+      "lat": 35.63823305555555,
+      "lon": 139.6843413888889
+    },
+    {
+      "depot_id": "tsurumaki",
+      "name": "弦巻営業所",
+      "lat": 35.63514694444444,
+      "lon": 139.6462427777778
+    },
+    {
+      "depot_id": "seta",
+      "name": "瀬田営業所",
+      "lat": 35.617739,
+      "lon": 139.635778
+    },
+    {
+      "depot_id": "meguro",
+      "name": "目黒営業所",
+      "lat": 35.627679,
+      "lon": 139.694185
+    },
+    {
+      "depot_id": "ebara",
+      "name": "荏原営業所",
+      "lat": 35.602506,
+      "lon": 139.713295
+    },
+    {
+      "depot_id": "ikegami",
+      "name": "池上営業所",
+      "lat": 35.5769382,
+      "lon": 139.7153683
+    },
+    {
+      "depot_id": "takatsu",
+      "name": "高津営業所",
+      "lat": 35.608029,
+      "lon": 139.615168
+    },
+    {
+      "depot_id": "nippa",
+      "name": "新羽営業所",
+      "lat": 35.530757,
+      "lon": 139.611279
+    },
+    {
+      "depot_id": "aobadai",
+      "name": "青葉台営業所",
+      "lat": 35.531741,
+      "lon": 139.517907
+    },
+    {
+      "depot_id": "nijigaoka",
+      "name": "虹が丘営業所",
+      "lat": 35.582544,
+      "lon": 139.522771
+    },
+    {
+      "depot_id": "higashiyamata",
+      "name": "東山田営業所",
+      "lat": 35.561217,
+      "lon": 139.605167
+    }
+  ]
+}

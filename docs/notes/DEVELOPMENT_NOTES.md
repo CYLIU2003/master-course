@@ -39,6 +39,31 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-24] フェーズ1着手: timestep可変化とPV換算のslot幅連動、depot_default依存の縮小
+
+- **目的**:
+  - 30分固定前提を外し、Solcast 1時間データと整合する基盤へ移行する。
+  - 単一営業所（安全側）で `depot_default` 依存を下げる。
+
+- **対応**:
+  - `src/optimization/common/builder.py`
+    - `simulation_config.timestep_min` / `scenario_overlay.solver_config.timestep_min` を受け取り、未指定時 60 分を既定化。
+    - `OptimizationScenario.timestep_min` の固定 30 分を撤廃し、可変 `timestep_min` を適用。
+    - `pv_available_kw * 0.5` 固定換算を廃止し、`slot_h = timestep_min / 60` で `pv_generation_kwh_by_slot` を構成。
+    - canonical problem の depot id を選択営業所 ID（単一営業所）で生成し、車両 `home_depot_id` も同一 ID で統一。
+    - `depot_energy_assets` の fallback 読み込みで `depot_default` と canonical depot id の互換を保持。
+    - 時刻スロット生成・TOU展開・tariff展開の `delta_t_min` を `timestep_min` 連動化。
+
+- **テスト**:
+  - 追加: `tests/test_problem_builder_timestep_and_pv_scaling.py`
+    - 60分設定で `pv_generation_kwh_by_slot == (2.0, 4.0)`
+    - 30分設定で `pv_generation_kwh_by_slot == (1.0, 2.0)`
+  - 更新: `tests/test_problem_builder_depot_energy_asset_controls.py`
+    - canonical depot id を `dep-1` 前提へ再整合。
+  - 実行:
+    - `pytest tests/test_problem_builder_timestep_and_pv_scaling.py tests/test_problem_builder_depot_energy_asset_controls.py tests/test_optimization_result_serializer.py tests/test_evaluator_co2_from_actual_grid_import.py tests/test_evaluator_provisional_overwrite.py tests/test_case_comparison_pv_bess.py tests/test_depot_energy_asset_schema.py -q`
+    - 結果: `11 passed`
+
 ### [DEV-2026-03-24] 充電地点を営業所固定として座標を出力に連携
 
 - **方針**:

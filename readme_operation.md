@@ -12,6 +12,7 @@
 2. [Tkinter コンソールの操作](#2-tkinter-コンソールの操作)
 3. [研究比較の最小フロー](#3-研究比較の最小フロー)
 4. [トラブルシューティング](#4-トラブルシューティング)
+5. [営業所別 Solcast キャッシュ運用](#5-営業所別-solcast-キャッシュ運用)
 
 ---
 
@@ -198,3 +199,51 @@ python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.s
 ```
 
 `gurobi_ok` が出力されれば正常です。ライセンスエラーの場合は Gurobi のライセンスファイルを確認してください。
+
+---
+
+## 5. 営業所別 Solcast キャッシュ運用
+
+「都度 API 取得」ではなく、`座標一覧 -> 一括取得 -> ローカルキャッシュ -> 日別 JSON` の流れで運用します。
+
+### 5.1 営業所座標一覧を生成
+
+```powershell
+python scripts/build_pv_profiles.py export-coordinates `
+  --depot-master tokyu_bus_depots_master_full.json `
+  --output data/external/solcast_raw/depot_coordinates_tokyu_all.json
+```
+
+出力ファイルには `depot_id`, `lat`, `lon` が全営業所分入ります。
+
+### 5.2 Solcast 一括取得（外部作業）
+
+- 生成した座標一覧を使って Solcast Web Download（最大 20 地点/回）で CSV を取得
+- 取得した CSV を `data/external/solcast_raw/` に保存
+- ファイル名は `depot_id_*.csv` 形式を推奨（例: `meguro_2025_full_60min.csv`）
+
+### 5.3 日別 JSON へ変換
+
+```powershell
+python scripts/build_pv_profiles.py build-daily `
+  --coordinates data/external/solcast_raw/depot_coordinates_tokyu_all.json `
+  --raw-dir data/external/solcast_raw `
+  --output-dir data/derived/pv_profiles `
+  --dates 2025-08-01,2025-08-02 `
+  --slot-minutes 60 `
+  --timezone +09:00 `
+  --default-pv-capacity-kw 1.0 `
+  --require-all-depots
+```
+
+生成物は `data/derived/pv_profiles/{depot_id}_{date}_60min.json` です。
+JSON には以下が含まれます。
+
+- `capacity_factor_by_slot`
+- `pv_generation_kwh_by_slot`
+
+`pv_generation_kwh_by_slot[t] = pv_capacity_kw * capacity_factor_by_slot[t] * Δt` で計算されます（$Δt = slot\_minutes / 60$）。
+
+### 5.4 シナリオ投入
+
+`simulation_config.depot_energy_assets` の営業所ごとエントリに、変換済み `pv_generation_kwh_by_slot` を設定して最適化へ投入してください。

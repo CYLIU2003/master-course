@@ -65,8 +65,22 @@ class ProblemBuilder:
             depot_id=depot_id,
             service_id=service_id,
         )
+        simulation_cfg = scenario.get("simulation_config") or {}
+        solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
+        timestep_min = int(
+            simulation_cfg.get("timestep_min")
+            or solver_cfg.get("timestep_min")
+            or 60
+        )
+        if timestep_min <= 0:
+            timestep_min = 60
         chargers = self._build_chargers_from_scenario(scenario, depot_id)
-        price_slots = self._build_price_slots_from_scenario(scenario, context, depot_id)
+        price_slots = self._build_price_slots_from_scenario(
+            scenario,
+            context,
+            depot_id,
+            timestep_min=timestep_min,
+        )
         pv_slots = self._build_pv_slots_from_scenario(scenario)
         vehicle_counts = self._vehicle_counts_from_scenario(scenario, depot_id)
         weights = self._objective_weights_from_scenario(scenario)
@@ -178,6 +192,8 @@ class ProblemBuilder:
             deadhead_speed_kmh=deadhead_speed_kmh,
             selected_depot_record=selected_depot_record,
             depot_coordinates_by_id=depot_coordinates_by_id,
+            canonical_depot_id=str(depot_id or "depot_default"),
+            timestep_min=timestep_min,
         )
 
     def build_from_dispatch(
@@ -214,9 +230,13 @@ class ProblemBuilder:
         deadhead_speed_kmh: Optional[float] = None,
         selected_depot_record: Optional[Dict[str, Any]] = None,
         depot_coordinates_by_id: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
+        canonical_depot_id: str = "depot_default",
+        timestep_min: int = 60,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
+        timestep_min = max(int(timestep_min or 60), 1)
+        canonical_depot_id = str(canonical_depot_id or "depot_default")
         bev_reference_capacity_kwh = self._reference_bev_capacity_kwh(context)
         final_soc_floor_ratio = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
         trip_nodes_list: List[ProblemTrip] = []
@@ -256,6 +276,7 @@ class ProblemBuilder:
             self._build_vehicles(
                 context.vehicle_profiles,
                 vehicle_counts,
+                default_home_depot_id=canonical_depot_id,
             )
         )
         inferred_import_limit = depot_import_limit_kw
@@ -265,7 +286,7 @@ class ProblemBuilder:
 
         depots = (
             ProblemDepot(
-                depot_id="depot_default",
+                depot_id=canonical_depot_id,
                 name=str((selected_depot_record or {}).get("name") or "Default Depot"),
                 charger_ids=tuple(charger.charger_id for charger in chargers),
                 import_limit_kw=float(inferred_import_limit),
@@ -273,7 +294,7 @@ class ProblemBuilder:
                 longitude=self._safe_float((selected_depot_record or {}).get("lon")),
             ),
         )
-        time_slots = tuple(self._build_time_slot_prices(context, price_slots))
+        time_slots = tuple(self._build_time_slot_prices(context, price_slots, timestep_min=timestep_min))
         pv_series = tuple(self._build_pv_slots(time_slots, pv_slots))
         depot_energy_assets = self._build_depot_energy_assets_from_scenario(
             scenario_id=scenario_id,
@@ -281,6 +302,8 @@ class ProblemBuilder:
             pv_slots=pv_series,
             depots=depots,
             metadata_source=scenario_metadata or {},
+            timestep_min=timestep_min,
+            canonical_depot_id=canonical_depot_id,
         )
         feasible_connections: Dict[str, Tuple[str, ...]] = {}
         for vehicle_type in context.vehicle_profiles:
@@ -296,7 +319,7 @@ class ProblemBuilder:
                 scenario_id=scenario_id,
                 horizon_start=self._min_hhmm(context),
                 horizon_end=self._max_hhmm(context),
-                timestep_min=30,
+                timestep_min=timestep_min,
                 objective_mode=normalize_objective_mode(objective_mode),
                 diesel_price_yen_per_l=float(diesel_price_yen_per_l),
                 demand_charge_on_peak_yen_per_kw=float(demand_charge_on_peak_yen_per_kw),
@@ -381,6 +404,8 @@ class ProblemBuilder:
         pv_slots: Sequence[PVSlot],
         depots: Sequence[ProblemDepot],
         metadata_source: Dict[str, Any],
+        timestep_min: int,
+        canonical_depot_id: str,
     ) -> Dict[str, DepotEnergyAsset]:
         del scenario_id
         assets: Dict[str, DepotEnergyAsset] = {}
@@ -391,10 +416,11 @@ class ProblemBuilder:
             depot_assets_raw.extend(list((overlay.get("depot_energy_assets") or [])))
 
         slot_count = len(time_slots)
+        slot_h = max(float(timestep_min) / 60.0, 1.0e-9)
         pv_kwh_by_slot = [0.0] * slot_count
         for pv in pv_slots:
             if 0 <= int(pv.slot_index) < slot_count:
-                pv_kwh_by_slot[int(pv.slot_index)] = max(float(pv.pv_available_kw or 0.0), 0.0) * 0.5
+                pv_kwh_by_slot[int(pv.slot_index)] = max(float(pv.pv_available_kw or 0.0), 0.0) * slot_h
 
         by_depot_raw: Dict[str, Dict[str, Any]] = {}
         for item in depot_assets_raw:
@@ -405,6 +431,8 @@ class ProblemBuilder:
 
         for depot in depots:
             raw = by_depot_raw.get(depot.depot_id, {})
+            if not raw and len(depots) == 1:
+                raw = by_depot_raw.get("depot_default") or by_depot_raw.get(canonical_depot_id) or {}
             pv_series = tuple(float(v or 0.0) for v in (raw.get("pv_generation_kwh_by_slot") or pv_kwh_by_slot))
             asset = DepotEnergyAsset(
                 depot_id=depot.depot_id,
@@ -585,6 +613,8 @@ class ProblemBuilder:
         self,
         profiles: Dict[str, VehicleProfile],
         vehicle_counts: Dict[str, int],
+        *,
+        default_home_depot_id: str,
     ) -> Iterable[ProblemVehicle]:
         for vehicle_type, profile in profiles.items():
             count = vehicle_counts.get(vehicle_type, self.default_vehicle_count_per_type)
@@ -592,7 +622,7 @@ class ProblemBuilder:
                 yield ProblemVehicle(
                     vehicle_id=f"{vehicle_type}_{idx + 1:03d}",
                     vehicle_type=vehicle_type,
-                    home_depot_id="depot_default",
+                    home_depot_id=str(default_home_depot_id or "depot_default"),
                     initial_soc=profile.battery_capacity_kwh,
                     battery_capacity_kwh=profile.battery_capacity_kwh,
                     reserve_soc=profile.battery_capacity_kwh * 0.1
@@ -864,6 +894,7 @@ class ProblemBuilder:
         scenario: Dict[str, Any],
         context: DispatchContext,
         depot_id: Optional[str],
+        timestep_min: int,
     ) -> Tuple[EnergyPriceSlot, ...]:
         profile_rows = scenario.get("energy_price_profiles") or []
         if profile_rows:
@@ -908,12 +939,12 @@ class ProblemBuilder:
             default_sell = float(overlay_costs.get("grid_sell_price_per_kwh") or 0.0)
             default_co2 = float(overlay_costs.get("grid_co2_kg_per_kwh") or 0.0)
             demand_weight = float(overlay_costs.get("demand_charge_cost_per_kw") or 0.0)
-            generated_slots = list(self._build_time_slot_prices(context, ()))
+            generated_slots = list(self._build_time_slot_prices(context, (), timestep_min=timestep_min))
             if tou_bands or default_buy > 0.0 or default_sell > 0.0 or default_co2 > 0.0 or demand_weight > 0.0:
                 start_min = min((trip.departure_min for trip in context.trips), default=0)
                 expanded: List[EnergyPriceSlot] = []
                 for slot in generated_slots:
-                    minute_of_day = (start_min + slot.slot_index * 30) % (24 * 60)
+                    minute_of_day = (start_min + slot.slot_index * timestep_min) % (24 * 60)
                     half_hour_index = minute_of_day // 30
                     buy_price = default_buy
                     for band in tou_bands:
@@ -948,8 +979,8 @@ class ProblemBuilder:
             prices = build_electricity_prices_from_tariff(
                 rows,
                 site_ids=[depot_id or "depot_default"],
-                num_periods=max(1, len(list(self._build_time_slot_prices(context, ())))),
-                delta_t_min=30.0,
+                num_periods=max(1, len(list(self._build_time_slot_prices(context, (), timestep_min=timestep_min)))),
+                delta_t_min=float(timestep_min),
                 start_time=start_time,
             )
             if prices:
@@ -963,7 +994,7 @@ class ProblemBuilder:
                         co2_factor=0.0,
                     )
                 return tuple(grouped[idx] for idx in sorted(grouped))
-        return tuple(self._build_time_slot_prices(context, ()))
+        return tuple(self._build_time_slot_prices(context, (), timestep_min=timestep_min))
 
     def _build_pv_slots_from_scenario(
         self,
@@ -1097,6 +1128,8 @@ class ProblemBuilder:
         self,
         context: DispatchContext,
         price_slots: Sequence[EnergyPriceSlot],
+        *,
+        timestep_min: int,
     ) -> Iterable[EnergyPriceSlot]:
         if price_slots:
             return price_slots
@@ -1104,7 +1137,7 @@ class ProblemBuilder:
         end = max(trip.arrival_min for trip in context.trips) if context.trips else 0
         slot_index = 0
         generated: List[EnergyPriceSlot] = []
-        for minute in range(start, end + 30, 30):
+        for minute in range(start, end + timestep_min, timestep_min):
             generated.append(
                 EnergyPriceSlot(
                     slot_index=slot_index,

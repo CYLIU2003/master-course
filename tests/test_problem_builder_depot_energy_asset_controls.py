@@ -64,10 +64,8 @@ def _scenario() -> dict:
 
 
 def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
-    scenario = _scenario()
-    scenario["simulation_config"]["depot_energy_assets"][0]["depot_id"] = "depot_default"
-    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
-    asset = problem.depot_energy_assets["depot_default"]
+    problem = ProblemBuilder().build_from_scenario(_scenario(), depot_id="dep-1", service_id="WEEKDAY")
+    asset = problem.depot_energy_assets["dep-1"]
 
     assert asset.allow_grid_to_bess is True
     assert asset.grid_to_bess_price_threshold_yen_per_kwh == 15.0
