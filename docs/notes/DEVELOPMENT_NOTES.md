@@ -39,6 +39,23 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-24] EV電力コストを「仮計算→充電実績上書き」に変更
+
+- **背景**:
+  - BEVが走行していても充電が発生しないケースで、日次報告の電力コスト解釈が分かりにくかった。
+  - 充電が発生した場合は、走行時刻ではなく「実際に充電した時刻帯のTOU単価」で評価したい要件がある。
+
+- **対応**:
+  - `src/simulator.py` にて、電力コストを二段階で算出する方式へ変更。
+    - 1) 走行電力量ベースの仮コストを常時計算 (`provisional_*`)
+    - 2) 充電電力量が存在する場合は、充電時刻TOUで再計算した実コスト (`charged_*`) で上書き
+  - 採用された計算根拠を `energy_cost_basis` (`provisional_drive` / `charged_energy_override`) として保持。
+  - `src/result_exporter.py` の `summary.json` / KPI系JSONに、仮値・実値・採用basisを出力する項目を追加。
+
+- **検証**:
+  - `tests/test_bev_energy_accounting.py` に充電実績あり時の上書きテストを追加。
+  - `python -m pytest tests/test_bev_energy_accounting.py -q` で `3 passed` を確認。
+
 ### [DEV-2026-03-22] Tokyu Bus の route-scoped trip 生成を追加し、21万件 overcount の代替データを分離
 
 - **問題**:

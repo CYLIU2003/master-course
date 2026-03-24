@@ -218,6 +218,9 @@ class SimulationResult:
     # --- §8 導出量 ---
     total_operating_cost: float = 0.0       # 総運行コスト [円]
     total_energy_cost: float = 0.0          # 電力量料金合計 [円]
+    provisional_energy_cost: float = 0.0    # 走行量ベース仮電力料金 [円]
+    charged_energy_cost: float = 0.0        # 充電量ベース実電力料金 [円]
+    energy_cost_basis: str = "provisional_drive"  # provisional_drive | charged_energy_override
     total_demand_charge: float = 0.0        # デマンド料金合計 [円]
     total_vehicle_fixed_cost: float = 0.0   # 車両固定費合計 [円]
     total_driver_cost: float = 0.0          # 運転士コスト合計 [円]
@@ -228,6 +231,8 @@ class SimulationResult:
     pv_self_consumption_ratio: float = 0.0  # PV 自家消費率 [-]
     total_pv_kwh: float = 0.0               # PV 利用量 [kWh]
     total_grid_kwh: float = 0.0             # 系統受電量 [kWh]
+    provisional_grid_kwh: float = 0.0       # 走行量ベース仮受電量 [kWh]
+    charged_grid_kwh: float = 0.0           # 充電量ベース実受電量 [kWh]
     peak_demand_kw: float = 0.0             # ピーク需要 [kW]
 
     # 充電器利用率: charger_id -> utilization [0-1]
@@ -280,6 +285,64 @@ def _bev_operating_energy_kwh_by_site(
     return profile
 
 
+def _bev_charged_energy_kwh_by_site(
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    milp_result: MILPResult,
+) -> Dict[str, List[float]]:
+    profile: Dict[str, List[float]] = {}
+    horizon = len(ms.T)
+    delta_h = float(data.delta_t_hour or 0.0)
+    if delta_h <= 0.0:
+        return profile
+    for vehicle_id in ms.K_BEV:
+        by_charger = milp_result.charge_power_kw.get(vehicle_id, {})
+        if not by_charger:
+            continue
+        for charger_id, power_series in by_charger.items():
+            charger = dp.charger_lut.get(charger_id)
+            site_id = str(getattr(charger, "site_id", "") or "").strip()
+            if not site_id:
+                site_id = resolve_vehicle_energy_site_id(ms, dp, vehicle_id)
+            if not site_id:
+                continue
+            series = profile.setdefault(site_id, [0.0] * horizon)
+            for t_idx in ms.T:
+                if t_idx >= len(power_series):
+                    continue
+                kw = float(power_series[t_idx] or 0.0)
+                if kw <= 0.0:
+                    continue
+                series[t_idx] += kw * delta_h
+    return profile
+
+
+def _compute_grid_metrics(
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+    energy_kwh_by_site: Dict[str, List[float]],
+) -> tuple[float, float, float, float, Dict[str, List[float]]]:
+    total_grid = 0.0
+    total_cost = 0.0
+    total_grid_co2 = 0.0
+    peak_kw = 0.0
+    grid_import_kw_series: Dict[str, List[float]] = {}
+    delta_h = float(data.delta_t_hour or 0.0)
+    for site_id, energy_kwh_series in energy_kwh_by_site.items():
+        kw_series = [round((kwh / delta_h) if delta_h > 0 else 0.0, 4) for kwh in energy_kwh_series]
+        grid_import_kw_series[site_id] = kw_series
+        for t_idx, kwh in enumerate(energy_kwh_series):
+            total_grid += kwh
+            total_cost += get_grid_price(dp, site_id, t_idx) * kwh
+            total_grid_co2 += dp.grid_co2_factor.get(site_id, {}).get(t_idx, 0.0) * kwh
+            kw = kw_series[t_idx] if t_idx < len(kw_series) else 0.0
+            if kw > peak_kw:
+                peak_kw = kw
+    return total_grid, total_cost, total_grid_co2, peak_kw, grid_import_kw_series
+
+
 def simulate(
     data: ProblemData,
     ms: ModelSets,
@@ -323,25 +386,46 @@ def simulate(
     sim.soc_min_kwh = round(min_soc, 4) if min_soc < float("inf") else 0.0
 
     # ===== BEV 走行消費・電力料金 =====
-    total_grid = 0.0
-    total_cost = 0.0
-    total_grid_co2 = 0.0
-    peak_kw = 0.0
+    # 仕様: まず走行量ベースの仮コストを計算し、
+    # 充電実績がある場合は充電時刻TOUで再計算した実コストで上書きする。
     operating_energy_kwh_by_site = _bev_operating_energy_kwh_by_site(data, ms, dp, milp_result)
-    for site_id, energy_kwh_series in operating_energy_kwh_by_site.items():
-        kw_series = [round((kwh / delta_h) if delta_h > 0 else 0.0, 4) for kwh in energy_kwh_series]
-        sim.grid_import_kw_series[site_id] = kw_series
-        for t_idx, kwh in enumerate(energy_kwh_series):
-            total_grid += kwh
-            total_cost += get_grid_price(dp, site_id, t_idx) * kwh
-            total_grid_co2 += dp.grid_co2_factor.get(site_id, {}).get(t_idx, 0.0) * kwh
-            kw = kw_series[t_idx] if t_idx < len(kw_series) else 0.0
-            if kw > peak_kw:
-                peak_kw = kw
+    provisional_grid, provisional_cost, provisional_grid_co2, provisional_peak_kw, provisional_kw_series = _compute_grid_metrics(
+        data,
+        ms,
+        dp,
+        operating_energy_kwh_by_site,
+    )
+    charged_energy_kwh_by_site = _bev_charged_energy_kwh_by_site(data, ms, dp, milp_result)
+    charged_grid, charged_cost, charged_grid_co2, charged_peak_kw, charged_kw_series = _compute_grid_metrics(
+        data,
+        ms,
+        dp,
+        charged_energy_kwh_by_site,
+    )
 
-    sim.total_grid_kwh   = round(total_grid, 4)
+    sim.provisional_grid_kwh = round(provisional_grid, 4)
+    sim.provisional_energy_cost = round(provisional_cost, 2)
+    sim.charged_grid_kwh = round(charged_grid, 4)
+    sim.charged_energy_cost = round(charged_cost, 2)
+
+    if charged_grid > 0.0:
+        sim.energy_cost_basis = "charged_energy_override"
+        total_grid = charged_grid
+        total_cost = charged_cost
+        total_grid_co2 = charged_grid_co2
+        peak_kw = charged_peak_kw
+        sim.grid_import_kw_series = charged_kw_series
+    else:
+        sim.energy_cost_basis = "provisional_drive"
+        total_grid = provisional_grid
+        total_cost = provisional_cost
+        total_grid_co2 = provisional_grid_co2
+        peak_kw = provisional_peak_kw
+        sim.grid_import_kw_series = provisional_kw_series
+
+    sim.total_grid_kwh = round(total_grid, 4)
     sim.total_energy_cost = round(total_cost, 2)
-    sim.peak_demand_kw   = round(peak_kw, 4)
+    sim.peak_demand_kw = round(peak_kw, 4)
 
     if demand_charge_rate is None:
         demand_charge_rate = data.demand_charge_rate_per_kw

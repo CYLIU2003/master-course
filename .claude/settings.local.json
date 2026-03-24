@@ -33,7 +33,13 @@
       "Bash(netstat -ano)",
       "Bash(cmd.exe /c \"taskkill /PID 134460 /F\")",
       "Bash(cmd.exe /c \"taskkill /PID 134460 /F 2>&1\")",
-      "Bash(cmd //c \"taskkill /PID 134460 /F\")"
+      "Bash(cmd //c \"taskkill /PID 134460 /F\")",
+      "Bash(for JOB in \"226bd4ec-2f8d-4705-86b7-83698208455a\" \"2d93d3e8-a54d-4e2d-bdd1-d70fa07c60aa\")",
+      "Bash(do curl:*)",
+      "Bash(/dev/null done:*)",
+      "Bash(curl -s \"http://127.0.0.1:8000/api/scenarios/2b0a60cf-61ad-4094-807c-f766641984c6/optimization\")",
+      "Bash(ls outputs/tokyu/*/optimization/2b0a60cf*/tsurumaki/WEEKDAY/)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
