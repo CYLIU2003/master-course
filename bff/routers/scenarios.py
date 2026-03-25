@@ -36,6 +36,11 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from bff.services import research_catalog
+from bff.services.runtime_route_family import (
+    effective_route_direction,
+    effective_route_variant_type,
+    reclassify_routes_for_runtime,
+)
 from bff.services.service_ids import canonical_service_id
 from bff.store import scenario_store as store
 from src.dispatch.models import hhmm_to_min
@@ -622,6 +627,218 @@ def _normalize_variant_type(value: Any) -> str:
     return normalize_variant_type(value, direction="unknown")
 
 
+def _route_family_identity(route: Dict[str, Any]) -> str:
+    return str(
+        route.get("routeFamilyCode")
+        or route.get("routeSeriesCode")
+        or route.get("routeCode")
+        or route.get("id")
+        or ""
+    ).strip()
+
+
+def _route_variant_bucket(route: Dict[str, Any]) -> str:
+    variant = _normalize_variant_type(effective_route_variant_type(route))
+    if variant in {"main", "main_outbound", "main_inbound"}:
+        return "main"
+    if variant == "short_turn":
+        return "shortTurn"
+    if variant in {"depot", "depot_in", "depot_out"}:
+        return "depot"
+    if variant == "branch":
+        return "branch"
+    return "unknown"
+
+
+def _normalize_family_label_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _family_label_needs_derivation(label: str, family_code: str) -> bool:
+    normalized_label = _normalize_family_label_text(label)
+    normalized_code = _normalize_family_label_text(family_code)
+    if not normalized_label:
+        return True
+    return normalized_label == normalized_code
+
+
+def _route_total_trip_count(route: Dict[str, Any]) -> int:
+    raw_total = route.get("tripCountTotal")
+    try:
+        return int(float(raw_total))
+    except (TypeError, ValueError):
+        pass
+    counts = route.get("tripCountsByDayType") or {}
+    if isinstance(counts, dict) and counts:
+        total = 0
+        for value in counts.values():
+            try:
+                total += int(float(value or 0))
+            except (TypeError, ValueError):
+                continue
+        if total > 0:
+            return total
+    return _route_trip_count(route)
+
+
+def _route_terminal_pair(route: Dict[str, Any]) -> Tuple[str, str]:
+    start = _normalize_family_label_text(route.get("startStop"))
+    end = _normalize_family_label_text(route.get("endStop"))
+    if start and end:
+        return start, end
+    route_label = _normalize_family_label_text(route.get("routeLabel"))
+    match = re.search(r"\((.+?)\s*->\s*(.+?)\)", route_label)
+    if match:
+        return match.group(1).strip(), match.group(2).strip()
+    return "", ""
+
+
+def _route_family_display_label(routes: List[Dict[str, Any]]) -> str:
+    if not routes:
+        return ""
+    family_code = _route_family_identity(routes[0])
+    explicit_labels = [
+        _normalize_family_label_text(route.get("routeFamilyLabel"))
+        for route in routes
+        if not _family_label_needs_derivation(
+            _normalize_family_label_text(route.get("routeFamilyLabel")),
+            family_code,
+        )
+    ]
+    if explicit_labels:
+        return explicit_labels[0]
+
+    sorted_routes = sorted(
+        routes,
+        key=lambda route: (
+            0 if bool(route.get("isPrimaryVariant")) else 1,
+            0 if _route_variant_bucket(route) == "main" else 1,
+            -_route_total_trip_count(route),
+            int(route.get("familySortOrder") or 999),
+            str(route.get("id") or ""),
+        ),
+    )
+    main_outbound = next(
+        (
+            route
+            for route in sorted_routes
+            if _normalize_variant_type(effective_route_variant_type(route)) == "main_outbound"
+        ),
+        None,
+    )
+    main_inbound = next(
+        (
+            route
+            for route in sorted_routes
+            if _normalize_variant_type(effective_route_variant_type(route)) == "main_inbound"
+        ),
+        None,
+    )
+    if main_outbound and main_inbound:
+        out_start, out_end = _route_terminal_pair(main_outbound)
+        in_start, in_end = _route_terminal_pair(main_inbound)
+        if out_start and out_end and out_start == in_end and out_end == in_start:
+            return f"{out_start} ⇔ {out_end}"
+        if out_start and out_end and in_start and in_end:
+            return f"{out_start} -> {out_end} / {in_start} -> {in_end}"
+
+    representative = next(
+        (
+            route
+            for route in sorted_routes
+            if _route_variant_bucket(route) in {"main", "branch", "shortTurn", "depot"}
+        ),
+        sorted_routes[0],
+    )
+    start, end = _route_terminal_pair(representative)
+    if start and end:
+        return f"{start} -> {end}"
+    return family_code
+
+
+def _route_family_label_lookup(
+    routes: List[Dict[str, Any]],
+    *,
+    effective_depot_by_route: Dict[str, str],
+) -> Dict[Tuple[str, str], str]:
+    grouped: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    for route in routes:
+        route_id = str(route.get("id") or "").strip()
+        if not route_id:
+            continue
+        depot_id = str(
+            effective_depot_by_route.get(route_id)
+            or route.get("depotId")
+            or ""
+        ).strip()
+        family_code = _route_family_identity(route)
+        if not depot_id or not family_code:
+            continue
+        grouped.setdefault((depot_id, family_code), []).append(route)
+    return {
+        key: _route_family_display_label(members)
+        for key, members in grouped.items()
+    }
+
+
+def _empty_route_variant_summary() -> Dict[str, int]:
+    return {
+        "mainRouteCount": 0,
+        "mainTripCount": 0,
+        "shortTurnRouteCount": 0,
+        "shortTurnTripCount": 0,
+        "depotRouteCount": 0,
+        "depotTripCount": 0,
+        "branchRouteCount": 0,
+        "branchTripCount": 0,
+        "unknownRouteCount": 0,
+        "unknownTripCount": 0,
+    }
+
+
+def _accumulate_route_variant_summary(
+    summary: Dict[str, int],
+    route: Dict[str, Any],
+    *,
+    trip_count: int,
+) -> None:
+    bucket = _route_variant_bucket(route)
+    summary[f"{bucket}RouteCount"] += 1
+    summary[f"{bucket}TripCount"] += max(0, int(trip_count))
+
+
+def _summarize_route_collection(
+    routes: List[Dict[str, Any]],
+    *,
+    trip_count_by_route_id: Dict[str, int],
+) -> Dict[str, int]:
+    family_codes: set[str] = set()
+    summary = _empty_route_variant_summary()
+    route_count = 0
+    trip_count = 0
+
+    for route in routes:
+        route_id = str(route.get("id") or "").strip()
+        if not route_id:
+            continue
+        current_trip_count = max(0, int(trip_count_by_route_id.get(route_id, 0)))
+        if current_trip_count <= 0:
+            continue
+        route_count += 1
+        trip_count += current_trip_count
+        family_code = _route_family_identity(route)
+        if family_code:
+            family_codes.add(family_code)
+        _accumulate_route_variant_summary(summary, route, trip_count=current_trip_count)
+
+    return {
+        "familyCount": len(family_codes),
+        "routeCount": route_count,
+        "tripCount": trip_count,
+        **summary,
+    }
+
+
 def _depot_route_index(doc: Dict[str, Any]) -> Dict[str, List[str]]:
     route_ids_by_depot: Dict[str, List[str]] = {}
     route_lookup = {
@@ -733,23 +950,32 @@ def _route_trip_inventory_for_quick_setup(
     selected_depot_ids: List[str],
 ) -> Tuple[Dict[str, Dict[str, int]], List[Dict[str, Any]]]:
     available_day_types = _available_day_types(doc, dispatch_scope)
-    default_day_type_summaries = [
-        {
-            "serviceId": canonical_service_id(item.get("serviceId")),
-            "label": str(item.get("label") or item.get("serviceId") or ""),
-            "routeCount": 0,
-            "tripCount": 0,
-            "selected": bool(item.get("isDefault")),
-        }
-        for item in available_day_types
-    ]
-
     candidate_route_ids = _quick_setup_candidate_route_ids(
         doc,
         route_index,
         selected_depot_ids=selected_depot_ids,
     )
     candidate_route_set = set(candidate_route_ids) if candidate_route_ids else None
+    candidate_routes = reclassify_routes_for_runtime(
+        [
+            dict(route)
+            for route in doc.get("routes") or []
+            if candidate_route_set is None
+            or str(route.get("id") or "").strip() in candidate_route_set
+        ]
+    )
+    selected_service_id = canonical_service_id(dispatch_scope.get("serviceId"))
+    route_counts_by_day_type: Dict[str, Dict[str, int]] = {}
+    for route in candidate_routes:
+        route_id = str(route.get("id") or "").strip()
+        if not route_id:
+            continue
+        counts = {
+            canonical_service_id(service_id): int(value or 0)
+            for service_id, value in dict(route.get("tripCountsByDayType") or {}).items()
+        }
+        if counts:
+            route_counts_by_day_type[route_id] = counts
 
     summary: Optional[Dict[str, Any]] = None
     dataset_id = _scenario_dataset_id(doc)
@@ -760,24 +986,7 @@ def _route_trip_inventory_for_quick_setup(
             depot_ids=selected_depot_ids or None,
             service_ids=None,
         )
-
-    if not summary:
-        return {}, default_day_type_summaries
-
-    route_counts_by_day_type: Dict[str, Dict[str, int]] = {}
-    for route in doc.get("routes") or []:
-        route_id = str(route.get("id") or "").strip()
-        if not route_id:
-            continue
-        if candidate_route_set is not None and route_id not in candidate_route_set:
-            continue
-        counts = {
-            canonical_service_id(service_id): int(value or 0)
-            for service_id, value in dict(route.get("tripCountsByDayType") or {}).items()
-        }
-        if counts:
-            route_counts_by_day_type[route_id] = counts
-    for raw_service_id, raw_route_counts in (summary.get("routeServiceCounts") or {}).items():
+    for raw_service_id, raw_route_counts in ((summary or {}).get("routeServiceCounts") or {}).items():
         service_id = canonical_service_id(raw_service_id)
         if not isinstance(raw_route_counts, dict):
             continue
@@ -799,7 +1008,7 @@ def _route_trip_inventory_for_quick_setup(
         for item in available_day_types
     }
     summary_by_service_id: Dict[str, Dict[str, Any]] = {}
-    for entry in summary.get("byService") or []:
+    for entry in (summary or {}).get("byService") or []:
         service_id = canonical_service_id(entry.get("serviceId"))
         summary_by_service_id[service_id] = dict(entry)
     ordered_service_ids: List[str] = []
@@ -810,16 +1019,41 @@ def _route_trip_inventory_for_quick_setup(
         if service_id not in ordered_service_ids:
             ordered_service_ids.append(service_id)
 
-    selected_service_id = canonical_service_id(dispatch_scope.get("serviceId"))
     day_type_summaries: List[Dict[str, Any]] = []
     for service_id in ordered_service_ids:
-        bucket = summary_by_service_id.get(service_id) or {}
+        trip_count_by_route_id: Dict[str, int] = {}
+        for route in candidate_routes:
+            route_id = str(route.get("id") or "").strip()
+            if not route_id:
+                continue
+            explicit_counts = route_counts_by_day_type.get(route_id) or {}
+            if explicit_counts:
+                trip_count_by_route_id[route_id] = int(explicit_counts.get(service_id) or 0)
+            elif service_id == selected_service_id:
+                trip_count_by_route_id[route_id] = _route_trip_count(route)
+            else:
+                trip_count_by_route_id[route_id] = 0
+        collection_summary = _summarize_route_collection(
+            candidate_routes,
+            trip_count_by_route_id=trip_count_by_route_id,
+        )
         day_type_summaries.append(
             {
                 "serviceId": service_id,
                 "label": label_by_service_id.get(service_id) or service_id,
-                "routeCount": int(bucket.get("routeCount") or 0),
-                "tripCount": int(bucket.get("rowCount") or 0),
+                "familyCount": int(collection_summary.get("familyCount") or 0),
+                "routeCount": int(collection_summary.get("routeCount") or 0),
+                "tripCount": int(collection_summary.get("tripCount") or 0),
+                "mainRouteCount": int(collection_summary.get("mainRouteCount") or 0),
+                "mainTripCount": int(collection_summary.get("mainTripCount") or 0),
+                "shortTurnRouteCount": int(collection_summary.get("shortTurnRouteCount") or 0),
+                "shortTurnTripCount": int(collection_summary.get("shortTurnTripCount") or 0),
+                "depotRouteCount": int(collection_summary.get("depotRouteCount") or 0),
+                "depotTripCount": int(collection_summary.get("depotTripCount") or 0),
+                "branchRouteCount": int(collection_summary.get("branchRouteCount") or 0),
+                "branchTripCount": int(collection_summary.get("branchTripCount") or 0),
+                "unknownRouteCount": int(collection_summary.get("unknownRouteCount") or 0),
+                "unknownTripCount": int(collection_summary.get("unknownTripCount") or 0),
                 "selected": service_id == selected_service_id,
             }
         )
@@ -1067,7 +1301,7 @@ def _quick_route_items(
     *,
     selected_day_type: str,
     route_trip_counts_by_day_type: Dict[str, Dict[str, int]],
-    route_limit: int,
+    route_limit: Optional[int],
 ) -> List[Dict[str, Any]]:
     selected_depot_set = {
         str(item).strip() for item in selected_depot_ids if str(item).strip()
@@ -1097,6 +1331,11 @@ def _quick_route_items(
             for route in routes
             if str(route.get("id") or "").strip() in scoped_route_ids
         ]
+    routes = reclassify_routes_for_runtime([dict(route) for route in routes])
+    family_label_by_key = _route_family_label_lookup(
+        routes,
+        effective_depot_by_route=effective_depot_by_route,
+    )
 
     routes.sort(
         key=lambda route: (
@@ -1114,7 +1353,6 @@ def _quick_route_items(
         )
     )
 
-    items: List[Dict[str, Any]] = []
     normalized_day_type = canonical_service_id(selected_day_type)
     filtered_routes: List[Dict[str, Any]] = []
     for route in routes:
@@ -1137,14 +1375,18 @@ def _quick_route_items(
             effective_depot_by_route.get(route_id)
             or route.get("depotId")
         )
+        family_code = _route_family_identity(route)
         filtered_routes.append(
             {
                 "id": route_id,
                 "displayName": _route_display_name(route),
                 "routeCode": route.get("routeCode"),
                 "routeLabel": route.get("routeLabel"),
-                "routeFamilyCode": route.get("routeFamilyCode"),
-                "routeFamilyLabel": route.get("routeFamilyLabel"),
+                "routeFamilyCode": family_code,
+                "routeFamilyLabel": family_label_by_key.get(
+                    (str(effective_depot_id or "").strip(), family_code),
+                    route.get("routeFamilyLabel"),
+                ),
                 "routeSeriesCode": route.get("routeSeriesCode"),
                 "depotId": effective_depot_id,
                 "tripCount": trip_count_selected_day,
@@ -1154,19 +1396,112 @@ def _quick_route_items(
                 "familySortOrder": route.get("familySortOrder"),
                 "routeVariantId": route.get("routeVariantId"),
                 "isPrimaryVariant": route.get("isPrimaryVariant"),
-                "routeVariantType": _normalize_variant_type(
-                    route.get("routeVariantTypeManual")
-                    or route.get("routeVariantType")
-                ),
-                "canonicalDirection": _normalize_direction(
-                    route.get("canonicalDirectionManual")
-                    or route.get("canonicalDirection")
-                    or "outbound"
-                ),
+                "routeVariantType": effective_route_variant_type(route),
+                "canonicalDirection": effective_route_direction(route, default="outbound"),
                 "selected": route_id in selected_route_set,
             }
         )
+    if route_limit is None:
+        return filtered_routes
     return filtered_routes[: max(1, route_limit)]
+
+
+def _quick_setup_depots(
+    doc: Dict[str, Any],
+    route_index: Dict[str, List[str]],
+    *,
+    selected_depot_ids: List[str],
+    selected_route_ids: List[str],
+    visible_route_items: List[Dict[str, Any]],
+    vehicle_count_by_depot: Dict[str, int],
+) -> List[Dict[str, Any]]:
+    all_routes = reclassify_routes_for_runtime([dict(route) for route in doc.get("routes") or []])
+    routes_by_id = {
+        str(route.get("id") or "").strip(): route
+        for route in all_routes
+        if str(route.get("id") or "").strip()
+    }
+    visible_items_by_depot: Dict[str, List[Dict[str, Any]]] = {}
+    for item in visible_route_items:
+        depot_id = str(item.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        visible_items_by_depot.setdefault(depot_id, []).append(item)
+
+    selected_depot_set = {
+        str(item).strip() for item in selected_depot_ids if str(item).strip()
+    }
+    selected_route_set = {
+        str(item).strip() for item in selected_route_ids if str(item).strip()
+    }
+
+    depots: List[Dict[str, Any]] = []
+    for depot in doc.get("depots") or []:
+        depot_id = str(depot.get("id") or "").strip()
+        if not depot_id:
+            continue
+        total_route_ids = [
+            route_id
+            for route_id in (route_index.get(depot_id) or [])
+            if str(route_id).strip()
+        ]
+        total_family_codes = {
+            _route_family_identity(routes_by_id.get(route_id) or {})
+            for route_id in total_route_ids
+            if _route_family_identity(routes_by_id.get(route_id) or {})
+        }
+        visible_items = list(visible_items_by_depot.get(depot_id) or [])
+        visible_trip_count_by_route_id = {
+            str(item.get("id") or "").strip(): int(item.get("tripCountSelectedDay") or item.get("tripCount") or 0)
+            for item in visible_items
+            if str(item.get("id") or "").strip()
+        }
+        visible_summary = _summarize_route_collection(
+            visible_items,
+            trip_count_by_route_id=visible_trip_count_by_route_id,
+        )
+        selected_visible_items = [
+            item
+            for item in visible_items
+            if str(item.get("id") or "").strip() in selected_route_set
+        ]
+        selected_visible_trip_count_by_route_id = {
+            str(item.get("id") or "").strip(): int(item.get("tripCountSelectedDay") or item.get("tripCount") or 0)
+            for item in selected_visible_items
+            if str(item.get("id") or "").strip()
+        }
+        selected_summary = _summarize_route_collection(
+            selected_visible_items,
+            trip_count_by_route_id=selected_visible_trip_count_by_route_id,
+        )
+        depots.append(
+            {
+                "id": depot_id,
+                "name": depot.get("name") or depot_id,
+                "location": depot.get("location") or "",
+                "routeCount": len(total_route_ids),
+                "familyCount": len(total_family_codes),
+                "vehicleCount": vehicle_count_by_depot.get(depot_id, 0),
+                "visibleRouteCount": int(visible_summary.get("routeCount") or 0),
+                "visibleFamilyCount": int(visible_summary.get("familyCount") or 0),
+                "tripCountSelectedDay": int(visible_summary.get("tripCount") or 0),
+                "selectedRouteCount": int(selected_summary.get("routeCount") or 0),
+                "selectedFamilyCount": int(selected_summary.get("familyCount") or 0),
+                "selectedTripCount": int(selected_summary.get("tripCount") or 0),
+                "mainRouteCount": int(visible_summary.get("mainRouteCount") or 0),
+                "mainTripCount": int(visible_summary.get("mainTripCount") or 0),
+                "shortTurnRouteCount": int(visible_summary.get("shortTurnRouteCount") or 0),
+                "shortTurnTripCount": int(visible_summary.get("shortTurnTripCount") or 0),
+                "depotRouteCount": int(visible_summary.get("depotRouteCount") or 0),
+                "depotTripCount": int(visible_summary.get("depotTripCount") or 0),
+                "branchRouteCount": int(visible_summary.get("branchRouteCount") or 0),
+                "branchTripCount": int(visible_summary.get("branchTripCount") or 0),
+                "unknownRouteCount": int(visible_summary.get("unknownRouteCount") or 0),
+                "unknownTripCount": int(visible_summary.get("unknownTripCount") or 0),
+                "selected": depot_id in selected_depot_set,
+            }
+        )
+    return depots
 
 
 def _build_quick_setup_payload(
@@ -1185,11 +1520,16 @@ def _build_quick_setup_payload(
         for route_id in list(dispatch_scope.get("effectiveRouteIds") or [])
         if str(route_id).strip()
     ]
+    all_depot_ids = [
+        str(depot.get("id") or "").strip()
+        for depot in doc.get("depots") or []
+        if str(depot.get("id") or "").strip()
+    ]
     route_trip_counts_by_day_type, day_type_summaries = _route_trip_inventory_for_quick_setup(
         doc,
         dispatch_scope,
         route_index,
-        selected_depot_ids=selected_depot_ids,
+        selected_depot_ids=all_depot_ids,
     )
     vehicles = [dict(item) for item in doc.get("vehicles") or []]
     vehicle_count_by_depot: Dict[str, int] = {}
@@ -1199,24 +1539,22 @@ def _build_quick_setup_payload(
             continue
         vehicle_count_by_depot[depot_id] = vehicle_count_by_depot.get(depot_id, 0) + 1
 
-    depots: List[Dict[str, Any]] = []
-    selected_depot_set = {
-        str(item).strip() for item in selected_depot_ids if str(item).strip()
-    }
-    for depot in doc.get("depots") or []:
-        depot_id = str(depot.get("id") or "").strip()
-        if not depot_id:
-            continue
-        depots.append(
-            {
-                "id": depot_id,
-                "name": depot.get("name") or depot_id,
-                "location": depot.get("location") or "",
-                "routeCount": len(route_index.get(depot_id) or []),
-                "vehicleCount": vehicle_count_by_depot.get(depot_id, 0),
-                "selected": depot_id in selected_depot_set,
-            }
-        )
+    visible_route_items = _quick_route_items(
+        doc,
+        all_depot_ids,
+        selected_route_ids,
+        selected_day_type=selected_day_type,
+        route_trip_counts_by_day_type=route_trip_counts_by_day_type,
+        route_limit=None,
+    )
+    depots = _quick_setup_depots(
+        doc,
+        route_index,
+        selected_depot_ids=selected_depot_ids,
+        selected_route_ids=selected_route_ids,
+        visible_route_items=visible_route_items,
+        vehicle_count_by_depot=vehicle_count_by_depot,
+    )
 
     return {
         "scenario": {
@@ -1231,14 +1569,7 @@ def _build_quick_setup_payload(
         "selectedDepotIds": selected_depot_ids,
         "selectedRouteIds": selected_route_ids,
         "depots": depots,
-        "routes": _quick_route_items(
-            doc,
-            selected_depot_ids,
-            selected_route_ids,
-            selected_day_type=selected_day_type,
-            route_trip_counts_by_day_type=route_trip_counts_by_day_type,
-            route_limit=route_limit,
-        ),
+        "routes": visible_route_items[: max(1, route_limit)],
         "dispatchScope": {
             "dayType": selected_day_type,
             "routeSelectionMode": str(

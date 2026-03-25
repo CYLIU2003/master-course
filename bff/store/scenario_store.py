@@ -2,7 +2,7 @@
 bff/store/scenario_store.py
 
 JSON-file-backed scenario store.
-One file per scenario: outputs/scenarios/{scenario_id}.json
+One file per scenario: output/scenarios/{scenario_id}.json
 
 Each file stores the complete scenario document:
 {
@@ -67,13 +67,11 @@ from threading import Lock, RLock
 from typing import Any, Dict, List, Optional
 
 from bff.services.service_ids import canonical_service_id
-from bff.store import master_data_store, scenario_meta_store, trip_store
+from bff.store import master_data_store, output_paths, scenario_meta_store, trip_store
 from src.value_normalization import coerce_list
 
-import os
-
-_STORE_DIR = Path(os.environ.get("SCENARIO_STORE_PATH", str(Path(__file__).parent.parent.parent / "outputs" / "scenarios")))
-_APP_CONTEXT_PATH = Path(os.environ.get("MC_OUTPUTS_DIR", str(Path(__file__).parent.parent.parent / "outputs"))) / "app_context.json"
+_STORE_DIR = output_paths.scenarios_root()
+_APP_CONTEXT_PATH = output_paths.outputs_root() / "app_context.json"
 _VALID_OPERATOR_IDS = {"tokyu", "toei"}
 _MASTER_DATA_KEYS = (
     "depots",
@@ -884,6 +882,7 @@ def _repair_route_metadata_from_preload(doc: Dict[str, Any]) -> bool:
         return False
 
     from bff.services import master_defaults
+    from bff.services.runtime_route_family import reclassify_routes_for_runtime
 
     payload = master_defaults.get_preloaded_master_data(dataset_id)
     fresh_routes = [dict(route) for route in payload.get("routes") or [] if isinstance(route, dict)]
@@ -900,6 +899,10 @@ def _repair_route_metadata_from_preload(doc: Dict[str, Any]) -> bool:
         "color",
         "routeVariantTypeManual",
         "canonicalDirectionManual",
+        "classificationSource",
+        "manualClassificationLocked",
+        "classificationEditedByUser",
+        "manualOverrideSource",
     }
     changed = False
     repaired_routes: List[Dict[str, Any]] = []
@@ -917,6 +920,9 @@ def _repair_route_metadata_from_preload(doc: Dict[str, Any]) -> bool:
             changed = True
         repaired_routes.append(merged_route)
 
+    repaired_routes = reclassify_routes_for_runtime(repaired_routes)
+    if repaired_routes != current_routes:
+        changed = True
     if changed:
         doc["routes"] = repaired_routes
     return changed

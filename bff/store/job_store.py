@@ -15,13 +15,15 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
+from bff.store import output_paths
 
-_JOB_DIR = Path(__file__).resolve().parents[2] / "outputs" / "jobs"
+
+_JOB_DIR = output_paths.outputs_root() / "jobs"
 
 JOB_PERSISTENCE_INFO: Dict[str, Any] = {
     "store": "json_files",
     "survives_restart": True,
-    "warning": "Background jobs are persisted to outputs/jobs; in-progress jobs are marked failed if the BFF restarts.",
+    "warning": "Background jobs are persisted to output/jobs; in-progress jobs are marked failed if the BFF restarts.",
 }
 
 

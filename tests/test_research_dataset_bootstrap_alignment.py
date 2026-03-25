@@ -131,7 +131,7 @@ def test_master_defaults_falls_back_to_runtime_default_when_preload_has_no_trips
 
     assert payload["datasetId"] == master_defaults.DEFAULT_DATASET_ID
     assert payload["depots"] == runtime_payload["depots"]
-    assert payload["routes"] == runtime_payload["routes"]
+    assert [item["id"] for item in payload["routes"]] == ["odpt-route-1"]
 
 
 def test_master_defaults_uses_effective_dataset_id_from_bootstrap_feed_context() -> None:

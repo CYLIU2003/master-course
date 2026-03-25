@@ -27,7 +27,12 @@ from pydantic import BaseModel, Field, model_validator
 from bff.services.route_family import (
     build_route_family_detail,
     build_route_family_summary,
-    enrich_routes_with_family,
+)
+from bff.services.runtime_route_family import (
+    effective_route_direction,
+    effective_route_variant_type,
+    has_user_manual_override,
+    reclassify_routes_for_runtime,
 )
 from bff.services.ice_vehicle_reference import apply_ice_reference_defaults
 from bff.services.service_ids import canonical_service_id
@@ -825,7 +830,7 @@ def list_routes(
     requested_operator = operator if isinstance(operator, str) else None
     requested_group_by_family = group_by_family if isinstance(group_by_family, bool) else False
     items = store.list_routes(scenario_id, depot_id=requested_depot_id, operator=requested_operator)
-    items = enrich_routes_with_family([dict(route) for route in items])
+    items = reclassify_routes_for_runtime([dict(route) for route in items])
 
     route_ids = {
         str(route.get("id") or "").strip()
@@ -911,10 +916,18 @@ def list_routes(
             "routeSeriesPrefix": route.get("routeSeriesPrefix"),
             "routeSeriesNumber": route.get("routeSeriesNumber"),
             "routeVariantId": route.get("routeVariantId"),
-            "routeVariantType": _normalize_variant_type(route.get("routeVariantType")),
-            "routeVariantTypeManual": _normalize_variant_type(route.get("routeVariantTypeManual")) if route.get("routeVariantTypeManual") else None,
-            "canonicalDirection": _normalize_direction(route.get("canonicalDirection") or "outbound"),
-            "canonicalDirectionManual": _normalize_direction(route.get("canonicalDirectionManual")) if route.get("canonicalDirectionManual") else None,
+            "routeVariantType": effective_route_variant_type(route),
+            "routeVariantTypeManual": (
+                _normalize_variant_type(route.get("routeVariantTypeManual"))
+                if has_user_manual_override(route) and route.get("routeVariantTypeManual")
+                else None
+            ),
+            "canonicalDirection": effective_route_direction(route, default="outbound"),
+            "canonicalDirectionManual": (
+                _normalize_direction(route.get("canonicalDirectionManual"))
+                if has_user_manual_override(route) and route.get("canonicalDirectionManual")
+                else None
+            ),
             "isPrimaryVariant": route.get("isPrimaryVariant"),
             "familySortOrder": route.get("familySortOrder"),
         }
@@ -1090,7 +1103,7 @@ def _enrich_routes_for_display(
             )
         )
 
-    return enrich_routes_with_family(enriched)
+    return reclassify_routes_for_runtime(enriched)
 
 
 def _enrich_explorer_assignments_for_display(
@@ -1354,6 +1367,13 @@ def update_route(
             patch["canonicalDirectionManual"] = (
                 _normalize_direction(raw_direction) if raw_direction not in (None, "") else None
             )
+        if "routeVariantTypeManual" in patch or "canonicalDirectionManual" in patch:
+            if patch.get("routeVariantTypeManual") or patch.get("canonicalDirectionManual"):
+                patch["classificationSource"] = "user_manual_override"
+                patch["manualClassificationLocked"] = True
+            else:
+                patch["classificationSource"] = None
+                patch["manualClassificationLocked"] = False
         if "depotId" in patch:
             raw_depot_id = str(patch.get("depotId") or "").strip()
             patch["depotId"] = raw_depot_id or None

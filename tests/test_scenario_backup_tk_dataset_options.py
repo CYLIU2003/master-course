@@ -2,7 +2,10 @@ from tools.scenario_backup_tk import (
     App,
     _choose_dataset_options,
     _expand_selected_routes_to_family_members,
+    _scope_filter_routes,
     _group_scope_routes_by_family,
+    _scope_summarize_routes,
+    _scope_variant_mix_text,
 )
 
 
@@ -114,13 +117,68 @@ def test_expand_selected_routes_to_family_members_uses_half_width_family_code() 
 
 def test_group_scope_routes_by_family_groups_routes_under_family_per_depot() -> None:
     routes = [
-        {"id": "route-b", "depotId": "dep1", "routeFamilyCode": "黒01", "familySortOrder": 20},
-        {"id": "route-a", "depotId": "dep1", "routeFamilyCode": "黒０１", "familySortOrder": 10},
-        {"id": "route-c", "depotId": "dep1", "routeFamilyCode": "東98", "familySortOrder": 10},
+        {"id": "route-b", "depotId": "dep1", "routeFamilyCode": "黒01", "routeFamilyLabel": "目黒駅-東京駅", "familySortOrder": 20},
+        {"id": "route-a", "depotId": "dep1", "routeFamilyCode": "黒０１", "routeFamilyLabel": "目黒駅-東京駅", "familySortOrder": 10},
+        {"id": "route-c", "depotId": "dep1", "routeFamilyCode": "東98", "routeFamilyLabel": "東京駅南口-清水", "familySortOrder": 10},
     ]
 
     family_keys_by_depot, family_route_ids, family_labels = _group_scope_routes_by_family(routes)
 
     assert family_keys_by_depot["dep1"] == ["dep1::東98", "dep1::黒01"]
     assert family_route_ids["dep1::黒01"] == ["route-a", "route-b"]
-    assert family_labels["dep1::黒01"] == "黒01"
+    assert family_labels["dep1::黒01"] == "黒01 | 目黒駅-東京駅"
+
+
+def test_scope_filter_routes_matches_family_code_label_and_variant_text() -> None:
+    routes = [
+        {
+            "id": "route-main",
+            "depotId": "dep1",
+            "routeFamilyCode": "東98",
+            "routeFamilyLabel": "東京駅南口-清水",
+            "routeLabel": "東京駅南口 -> 清水",
+            "routeVariantType": "main_outbound",
+        },
+        {
+            "id": "route-depot",
+            "depotId": "dep1",
+            "routeFamilyCode": "東98",
+            "routeFamilyLabel": "東京駅南口-清水",
+            "routeLabel": "目黒郵便局 -> 等々力操車所",
+            "routeVariantType": "depot_in",
+        },
+    ]
+
+    assert [item["id"] for item in _scope_filter_routes(routes, "東98")] == ["route-main", "route-depot"]
+    assert [item["id"] for item in _scope_filter_routes(routes, "清水")] == ["route-main", "route-depot"]
+    assert [item["id"] for item in _scope_filter_routes(routes, "入庫便")] == ["route-depot"]
+
+
+def test_scope_summarize_routes_counts_family_and_variant_mix() -> None:
+    routes = [
+        {
+            "id": "route-main",
+            "depotId": "dep1",
+            "routeFamilyCode": "東98",
+            "tripCountsByDayType": {"WEEKDAY": 32},
+            "routeVariantType": "main_outbound",
+        },
+        {
+            "id": "route-depot",
+            "depotId": "dep1",
+            "routeFamilyCode": "東98",
+            "tripCountsByDayType": {"WEEKDAY": 6},
+            "routeVariantType": "depot_in",
+        },
+    ]
+
+    summary = _scope_summarize_routes(routes, day_type="WEEKDAY")
+
+    assert summary["familyCount"] == 1
+    assert summary["routeCount"] == 2
+    assert summary["tripCount"] == 38
+    assert summary["mainRouteCount"] == 1
+    assert summary["mainTripCount"] == 32
+    assert summary["depotRouteCount"] == 1
+    assert summary["depotTripCount"] == 6
+    assert _scope_variant_mix_text(summary, metric="trips") == "本線32便 / 入出庫6便"

@@ -17,6 +17,7 @@ import json
 import threading
 import tkinter as tk
 import unicodedata
+from pathlib import Path
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
@@ -27,6 +28,17 @@ from src.objective_modes import normalize_objective_mode
 from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
+)
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_DERIVED_PV_PROFILE_DIR = _REPO_ROOT / "data" / "derived" / "pv_profiles"
+_SOLCAST_AVG_PROFILE_ID = "solcast_avg_2025_08_60min"
+_WEATHER_MODE_OPTIONS = (
+    _SOLCAST_AVG_PROFILE_ID,
+    "sunny",
+    "cloudy",
+    "rainy",
 )
 
 
@@ -136,7 +148,16 @@ def _group_scope_routes_by_family(
         family_key = _scope_family_key(depot_id, family_code)
         if family_key not in family_route_ids:
             family_route_ids[family_key] = []
-            family_labels[family_key] = family_code
+            family_label = _normalize_scope_text(
+                route.get("routeFamilyLabel")
+                or route.get("displayName")
+                or route.get("routeLabel")
+            )
+            family_labels[family_key] = (
+                f"{family_code} | {family_label}"
+                if family_label and family_label != family_code
+                else family_code
+            )
             family_keys_by_depot.setdefault(depot_id, []).append(family_key)
         family_route_ids[family_key].append(route_id)
 
@@ -251,6 +272,127 @@ def _scope_trip_count_text(
     return f"{day_type_label}{selected_trip_count}便"
 
 
+def _scope_variant_bucket(route: dict[str, Any]) -> str:
+    raw_variant = str(route.get("routeVariantType") or "").strip()
+    variant = (
+        normalize_variant_type(raw_variant, direction="unknown")
+        if raw_variant
+        else "unknown"
+    )
+    if variant in {"main", "main_outbound", "main_inbound"}:
+        return "main"
+    if variant == "short_turn":
+        return "shortTurn"
+    if variant in {"depot", "depot_in", "depot_out"}:
+        return "depot"
+    if variant == "branch":
+        return "branch"
+    return "unknown"
+
+
+def _empty_scope_route_summary() -> dict[str, int]:
+    return {
+        "familyCount": 0,
+        "routeCount": 0,
+        "tripCount": 0,
+        "mainRouteCount": 0,
+        "mainTripCount": 0,
+        "shortTurnRouteCount": 0,
+        "shortTurnTripCount": 0,
+        "depotRouteCount": 0,
+        "depotTripCount": 0,
+        "branchRouteCount": 0,
+        "branchTripCount": 0,
+        "unknownRouteCount": 0,
+        "unknownTripCount": 0,
+    }
+
+
+def _scope_summarize_routes(
+    routes: list[dict[str, Any]],
+    *,
+    day_type: str,
+) -> dict[str, int]:
+    summary = _empty_scope_route_summary()
+    family_codes: set[str] = set()
+    for route in routes:
+        route_id = _normalize_scope_text(route.get("id"))
+        if not route_id:
+            continue
+        summary["routeCount"] += 1
+        trip_count = _scope_route_trip_count(route, day_type)
+        summary["tripCount"] += trip_count
+        family_code = _scope_route_family_code(route)
+        if family_code:
+            family_codes.add(family_code)
+        bucket = _scope_variant_bucket(route)
+        summary[f"{bucket}RouteCount"] += 1
+        summary[f"{bucket}TripCount"] += trip_count
+    summary["familyCount"] = len(family_codes)
+    return summary
+
+
+def _scope_variant_mix_text(summary: dict[str, Any], *, metric: str = "trips") -> str:
+    suffix = "TripCount" if metric == "trips" else "RouteCount"
+    labels = {
+        "main": "本線",
+        "shortTurn": "区間",
+        "depot": "入出庫",
+        "branch": "枝線",
+        "unknown": "未分類",
+    }
+    parts: list[str] = []
+    for bucket in ("main", "shortTurn", "depot", "branch", "unknown"):
+        raw = summary.get(f"{bucket}{suffix}")
+        try:
+            value = int(raw or 0)
+        except (TypeError, ValueError):
+            value = 0
+        if value <= 0:
+            continue
+        unit = "便" if metric == "trips" else "variant"
+        parts.append(f"{labels[bucket]}{value}{unit}")
+    return " / ".join(parts) if parts else "内訳なし"
+
+
+def _scope_route_search_text(route: dict[str, Any]) -> str:
+    fields = [
+        route.get("id"),
+        route.get("displayName"),
+        route.get("routeCode"),
+        route.get("routeLabel"),
+        route.get("routeFamilyCode"),
+        route.get("routeFamilyLabel"),
+        route.get("routeSeriesCode"),
+        route.get("canonicalDirection"),
+        route.get("depotId"),
+        _scope_variant_display_name(route),
+    ]
+    return " ".join(
+        _normalize_scope_text(value).lower()
+        for value in fields
+        if _normalize_scope_text(value)
+    )
+
+
+def _scope_filter_routes(
+    routes: list[dict[str, Any]],
+    query: str,
+) -> list[dict[str, Any]]:
+    normalized_query = _normalize_scope_text(query).lower()
+    if not normalized_query:
+        return list(routes)
+    tokens = [token for token in normalized_query.split() if token]
+    if not tokens:
+        return list(routes)
+    filtered: list[dict[str, Any]] = []
+    for route in routes:
+        haystack = _scope_route_search_text(route)
+        if all(token in haystack for token in tokens):
+            filtered.append(route)
+    return filtered
+
+
 def _scope_visible_routes_for_day(
     routes: list[dict[str, Any]],
     day_type: str,
@@ -294,6 +436,135 @@ def _choose_dataset_options(datasets_resp: dict[str, Any]) -> dict[str, Any]:
         "defaultDatasetId": default_dataset_id,
         "usedRuntimeReadyOnly": use_runtime_ready_only,
     }
+
+
+def _default_depot_energy_asset_row(depot_id: str) -> dict[str, Any]:
+    return {
+        "depot_id": depot_id,
+        "pv_enabled": False,
+        "pv_generation_kwh_by_slot": [],
+        "pv_capacity_kw": 0.0,
+        "bess_enabled": False,
+        "bess_energy_kwh": 0.0,
+        "bess_power_kw": 0.0,
+        "bess_initial_soc_kwh": 0.0,
+        "bess_soc_min_kwh": 0.0,
+        "bess_soc_max_kwh": 0.0,
+        "allow_grid_to_bess": False,
+        "grid_to_bess_price_mode": "tou",
+        "grid_to_bess_price_threshold_yen_per_kwh": 0.0,
+        "grid_to_bess_allowed_slot_indices": [],
+        "bess_priority_mode": "cost_driven",
+        "bess_terminal_soc_min_kwh": 0.0,
+        "provisional_energy_cost_yen_per_kwh": 0.0,
+    }
+
+
+def _average_monthly_pv_profile_for_depot(
+    depot_id: str,
+    *,
+    profile_root: Path = _DERIVED_PV_PROFILE_DIR,
+) -> dict[str, Any] | None:
+    paths = sorted(profile_root.glob(f"{depot_id}_2025-08-*_60min.json"))
+    if not paths:
+        return None
+
+    slot_sums: list[float] = []
+    capacity_values: list[float] = []
+    valid_paths = 0
+    for path in paths:
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            continue
+        slots = list(doc.get("pv_generation_kwh_by_slot") or [])
+        if not slots:
+            continue
+        if not slot_sums:
+            slot_sums = [0.0] * len(slots)
+        if len(slots) != len(slot_sums):
+            continue
+        valid_paths += 1
+        try:
+            capacity_values.append(float(doc.get("capacity_kw") or 0.0))
+        except (TypeError, ValueError):
+            pass
+        for idx, value in enumerate(slots):
+            try:
+                slot_sums[idx] += float(value or 0.0)
+            except (TypeError, ValueError):
+                continue
+
+    if valid_paths <= 0 or not slot_sums:
+        return None
+
+    averaged_slots = [
+        round(total / valid_paths, 6)
+        for total in slot_sums
+    ]
+    capacity_kw = round(
+        sum(capacity_values) / len(capacity_values),
+        6,
+    ) if capacity_values else 0.0
+    return {
+        "profileId": f"{depot_id}_{_SOLCAST_AVG_PROFILE_ID}",
+        "depotId": depot_id,
+        "dayCount": valid_paths,
+        "capacityKw": capacity_kw,
+        "pvGenerationKwhBySlot": averaged_slots,
+    }
+
+
+def _merge_selected_depot_pv_assets(
+    selected_depot_ids: list[str],
+    current_rows: list[dict[str, Any]] | None,
+    *,
+    profile_root: Path = _DERIVED_PV_PROFILE_DIR,
+) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    rows_by_depot: dict[str, dict[str, Any]] = {}
+    ordered_existing_ids: list[str] = []
+    for item in current_rows or []:
+        if not isinstance(item, dict):
+            continue
+        depot_id = str(item.get("depot_id") or item.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        rows_by_depot[depot_id] = dict(item)
+        ordered_existing_ids.append(depot_id)
+
+    synced_ids: list[str] = []
+    missing_ids: list[str] = []
+    for depot_id in selected_depot_ids:
+        profile = _average_monthly_pv_profile_for_depot(
+            depot_id,
+            profile_root=profile_root,
+        )
+        if profile is None:
+            missing_ids.append(depot_id)
+            continue
+        row = dict(rows_by_depot.get(depot_id) or _default_depot_energy_asset_row(depot_id))
+        row["depot_id"] = depot_id
+        row["pv_enabled"] = True
+        row["pv_case_id"] = profile["profileId"]
+        row["pv_generation_kwh_by_slot"] = list(profile["pvGenerationKwhBySlot"])
+        try:
+            current_capacity_kw = float(row.get("pv_capacity_kw") or 0.0)
+        except (TypeError, ValueError):
+            current_capacity_kw = 0.0
+        if current_capacity_kw <= 0.0:
+            row["pv_capacity_kw"] = float(profile.get("capacityKw") or 0.0)
+        rows_by_depot[depot_id] = row
+        synced_ids.append(depot_id)
+
+    ordered_ids: list[str] = []
+    for depot_id in selected_depot_ids:
+        if depot_id in rows_by_depot and depot_id not in ordered_ids:
+            ordered_ids.append(depot_id)
+    for depot_id in ordered_existing_ids:
+        if depot_id in rows_by_depot and depot_id not in ordered_ids:
+            ordered_ids.append(depot_id)
+
+    return [rows_by_depot[depot_id] for depot_id in ordered_ids], synced_ids, missing_ids
 
 
 class BFFClient:
@@ -575,6 +846,9 @@ class App:
         self.vehicle_rows: list[dict[str, Any]] = []
         self.template_rows: list[dict[str, Any]] = []
         self.route_label_file_var = tk.StringVar(value="")
+        self.scope_filter_var = tk.StringVar(value="")
+        self.scope_summary_var = tk.StringVar(value="営業所・路線が未読込です")
+        self.scope_selection_detail_var = tk.StringVar(value="")
         self.scope_depots: list[dict[str, Any]] = []
         self.scope_all_routes: list[dict[str, Any]] = []
         self.scope_routes: list[dict[str, Any]] = []
@@ -597,6 +871,7 @@ class App:
         self._suspend_day_type_summary_event = False
         self.available_dataset_ids: list[str] = []
         self.day_type_options = ["WEEKDAY", "SAT", "SUN_HOL", "SAT_HOL"]
+        self.weather_mode_options = list(_WEATHER_MODE_OPTIONS)
         self.default_dataset_id: str = "tokyu_full"
         self.depot_manager_window: tk.Toplevel | None = None
         self.optimization_window: tk.Toplevel | None = None
@@ -610,6 +885,7 @@ class App:
         self.rebuild_dispatch_before_opt_var = tk.BooleanVar(value=False)
         self.execution_mode_var: tk.StringVar | None = None
         self._suspend_prepare_watchers = False
+        self._suspend_route_lock_sync = False
         self.compare_scenario_a_var = tk.StringVar(value="")
         self.compare_scenario_b_var = tk.StringVar(value="")
         self._busy_count: int = 0
@@ -759,18 +1035,22 @@ class App:
         day_tree_wrap.pack(fill=tk.X, pady=(2, 0))
         self.day_type_summary_tree = ttk.Treeview(
             day_tree_wrap,
-            columns=("serviceId", "label", "routeCount", "tripCount"),
+            columns=("serviceId", "label", "familyCount", "routeCount", "tripCount", "variantMix"),
             show="headings",
             height=4,
         )
         self.day_type_summary_tree.heading("serviceId", text="service")
         self.day_type_summary_tree.heading("label", text="種別")
-        self.day_type_summary_tree.heading("routeCount", text="対象系統")
+        self.day_type_summary_tree.heading("familyCount", text="系統family")
+        self.day_type_summary_tree.heading("routeCount", text="variant")
         self.day_type_summary_tree.heading("tripCount", text="trip数")
+        self.day_type_summary_tree.heading("variantMix", text="運行種別内訳")
         self.day_type_summary_tree.column("serviceId", width=100, anchor="w")
         self.day_type_summary_tree.column("label", width=120, anchor="w")
-        self.day_type_summary_tree.column("routeCount", width=90, anchor="e")
+        self.day_type_summary_tree.column("familyCount", width=80, anchor="e")
+        self.day_type_summary_tree.column("routeCount", width=80, anchor="e")
         self.day_type_summary_tree.column("tripCount", width=90, anchor="e")
+        self.day_type_summary_tree.column("variantMix", width=260, anchor="w")
         self.day_type_summary_tree.pack(side=tk.LEFT, fill=tk.X, expand=True)
         day_tree_ysb = ttk.Scrollbar(day_tree_wrap, orient=tk.VERTICAL, command=self.day_type_summary_tree.yview)
         day_tree_ysb.pack(side=tk.RIGHT, fill=tk.Y)
@@ -793,9 +1073,17 @@ class App:
         ttk.Checkbutton(frow1, text="回送", variable=self.include_deadhead_var).pack(side=tk.LEFT)
         frow2 = ttk.Frame(flags_lf)
         frow2.pack(fill=tk.X)
-        ttk.Checkbutton(frow2, text="営業所内路線間トレード許可", variable=self.allow_intra_var).pack(side=tk.LEFT)
         ttk.Checkbutton(frow2, text="営業所間トレード許可", variable=self.allow_inter_var).pack(side=tk.LEFT, padx=8)
-        ttk.Checkbutton(frow2, text="固定路線バンド", variable=self.fixed_route_band_mode_var).pack(side=tk.LEFT, padx=8)
+        ttk.Checkbutton(
+            frow2,
+            text="日次路線固定（車両固定バンド）",
+            variable=self.fixed_route_band_mode_var,
+        ).pack(side=tk.LEFT, padx=8)
+        ttk.Label(
+            frow2,
+            text="ON の間は営業所内の路線トレードを止め、ダイヤグラム出力も自動で有効化します。",
+            foreground="#555",
+        ).pack(side=tk.LEFT, padx=(8, 0))
 
         # ── 営業所・路線チェックリスト（スクロール・残りスペースを全て使用）──
         scope_hdr = ttk.Frame(scope)
@@ -805,7 +1093,13 @@ class App:
         ttk.Button(scope_hdr, text="全OFF", command=lambda: self._set_all_depots_checked(False)).pack(side=tk.LEFT, padx=2)
         ttk.Button(scope_hdr, text="全展開", command=lambda: self._set_all_depots_open(True)).pack(side=tk.LEFT, padx=(6, 2))
         ttk.Button(scope_hdr, text="折りたたむ", command=lambda: self._set_all_depots_open(False)).pack(side=tk.LEFT, padx=2)
-
+        ttk.Label(scope_hdr, text="検索").pack(side=tk.LEFT, padx=(12, 2))
+        ttk.Entry(scope_hdr, textvariable=self.scope_filter_var, width=22).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(scope_hdr, text="クリア", command=lambda: self.scope_filter_var.set("")).pack(side=tk.LEFT, padx=(4, 0))
+        scope_summary = ttk.Frame(scope)
+        scope_summary.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(scope_summary, textvariable=self.scope_summary_var, foreground="#22313f").pack(anchor="w")
+        ttk.Label(scope_summary, textvariable=self.scope_selection_detail_var, foreground="#555").pack(anchor="w")
         _scope_canvas_wrap = ttk.Frame(scope)
         _scope_canvas_wrap.pack(fill=tk.BOTH, expand=True)
         self.scope_canvas = tk.Canvas(_scope_canvas_wrap, highlightthickness=0, bg="#f8f8f8")
@@ -870,6 +1164,7 @@ class App:
         result_row.pack(fill=tk.X, pady=(4, 0))
         ttk.Button(result_row, text="Optimization結果", command=self.show_optimization_result).pack(side=tk.LEFT, padx=(0, 4))
         ttk.Button(result_row, text="Simulation結果", command=self.show_simulation_result).pack(side=tk.LEFT, padx=4)
+        ttk.Button(result_row, text="ダイヤグラム表示", command=self.show_vehicle_diagram).pack(side=tk.LEFT, padx=4)
         ttk.Button(result_row, text="機能情報", command=self.show_capabilities).pack(side=tk.LEFT, padx=4)
 
         ttk.Separator(ops, orient="horizontal").pack(fill=tk.X, pady=4)
@@ -984,7 +1279,7 @@ class App:
         self.max_ice_fuel_percent_var = tk.StringVar(value="90.0")
         self.default_ice_tank_capacity_l_var = tk.StringVar(value="300.0")
         self.pv_profile_id_var = tk.StringVar(value="")
-        self.weather_mode_var = tk.StringVar(value="sunny")
+        self.weather_mode_var = tk.StringVar(value=_SOLCAST_AVG_PROFILE_ID)
         self.weather_factor_scalar_var = tk.StringVar(value="1.0")
         self.depot_energy_assets_json_var = tk.StringVar(value="")
         self.co2_price_source_var = tk.StringVar(value="manual")
@@ -1039,7 +1334,21 @@ class App:
         self._labeled_entry(advanced, "ICE燃料バッファ上限 max_ice_fuel_percent", self.max_ice_fuel_percent_var)
         self._labeled_entry(advanced, "ICE既定タンク容量[L] default_ice_tank_capacity_l", self.default_ice_tank_capacity_l_var)
         self._labeled_entry(advanced, "PVプロファイルID pv_profile_id", self.pv_profile_id_var)
-        self._labeled_entry(advanced, "天気モード weather_mode", self.weather_mode_var)
+        weather_row = ttk.Frame(advanced)
+        weather_row.pack(fill=tk.X, pady=2)
+        weather_label = ttk.Label(weather_row, text="天気モード weather_mode", width=36)
+        weather_label.pack(side=tk.LEFT)
+        _Tooltip(
+            weather_label,
+            "Solcast 平均は選択営業所の 2025/08 平均PVを使います。manual/custom は天気係数を手動で調整したい場合のみ使用してください。",
+        )
+        self.weather_mode_combo = ttk.Combobox(
+            weather_row,
+            textvariable=self.weather_mode_var,
+            state="readonly",
+            values=self.weather_mode_options,
+        )
+        self.weather_mode_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self._labeled_entry(advanced, "天気係数 weather_factor_scalar", self.weather_factor_scalar_var)
         asset_row = self._labeled_entry(
             advanced,
@@ -1052,6 +1361,11 @@ class App:
             ),
         )
         ttk.Button(asset_row, text="行編集...", command=self.open_depot_energy_assets_editor).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(
+            asset_row,
+            text="選択営業所へPV平均同期",
+            command=self.sync_selected_depot_pv_assets,
+        ).pack(side=tk.LEFT, padx=(6, 0))
         self._labeled_entry(advanced, "拡張係数 objective_weights(JSON)", self.objective_weights_json_var)
         ttk.Checkbutton(advanced, text="車両ダイヤグラム出力", variable=self.enable_vehicle_diagram_output_var).pack(anchor="w", pady=(2, 0))
         self._labeled_entry(advanced, "車両導入費(編集は車両/テンプレ画面)", tk.StringVar(value="個別設定"), readonly=True)
@@ -1570,6 +1884,66 @@ class App:
         """Canvas 内に動的生成された子ウィジェット全てにマウスホイールを伝播させる。"""
         self._bind_canvas_mousewheel(self.scope_canvas, widget)
 
+    def _refresh_scope_overview(
+        self,
+        *,
+        filtered_routes: list[dict[str, Any]],
+        day_type: str,
+    ) -> None:
+        full_summary = _scope_summarize_routes(self.scope_routes, day_type=day_type)
+        filtered_summary = _scope_summarize_routes(filtered_routes, day_type=day_type)
+        selected_routes = [
+            self.scope_route_by_id.get(route_id) or {}
+            for route_id in self.scope_selected_route_ids
+            if route_id in self.scope_route_by_id
+        ]
+        selected_summary = _scope_summarize_routes(selected_routes, day_type=day_type)
+        full_depot_count = len(
+            [depot_id for depot_id, route_ids in self.scope_routes_by_depot.items() if route_ids]
+        )
+        filtered_route_ids = {
+            _normalize_scope_text(route.get("id"))
+            for route in filtered_routes
+            if _normalize_scope_text(route.get("id"))
+        }
+        filtered_depot_count = len(
+            [
+                depot_id
+                for depot_id, route_ids in self.scope_routes_by_depot.items()
+                if any(route_id in filtered_route_ids for route_id in route_ids)
+            ]
+        )
+        selected_depot_count = len(
+            [
+                depot_id
+                for depot_id in self.scope_selected_depot_ids
+                if any(route_id in self.scope_selected_route_ids for route_id in self.scope_routes_by_depot.get(depot_id, []))
+            ]
+        )
+        query = self.scope_filter_var.get().strip()
+        day_type_label = self._current_day_type_label()
+        if query:
+            self.scope_summary_var.set(
+                f"{day_type_label} 表示一致: {filtered_depot_count}/{full_depot_count}営業所, "
+                f"{filtered_summary['familyCount']}/{full_summary['familyCount']}系統, "
+                f"{filtered_summary['routeCount']}/{full_summary['routeCount']}variant, "
+                f"{filtered_summary['tripCount']}/{full_summary['tripCount']}便"
+            )
+        else:
+            self.scope_summary_var.set(
+                f"{day_type_label} 表示: {full_depot_count}営業所, "
+                f"{full_summary['familyCount']}系統, "
+                f"{full_summary['routeCount']}variant, "
+                f"{full_summary['tripCount']}便"
+            )
+        self.scope_selection_detail_var.set(
+            f"選択: {selected_depot_count}営業所, "
+            f"{selected_summary['familyCount']}系統, "
+            f"{selected_summary['routeCount']}variant, "
+            f"{selected_summary['tripCount']}便, "
+            f"{_scope_variant_mix_text(selected_summary, metric='trips')}"
+        )
+
     def _render_scope_checklist(self) -> None:
         for child in self.scope_inner.winfo_children():
             child.destroy()
@@ -1579,18 +1953,47 @@ class App:
         self.scope_route_vars = {}
         day_type = self.day_type_var.get().strip() or "WEEKDAY"
         day_type_label = self._current_day_type_label()
+        filtered_routes = _scope_filter_routes(
+            self.scope_routes,
+            self.scope_filter_var.get(),
+        )
+        filtered_depot_ids = {
+            _scope_depot_id(route)
+            for route in filtered_routes
+            if _normalize_scope_text(route.get("id"))
+        }
+        (
+            _filtered_family_keys_by_depot,
+            filtered_family_route_ids,
+            filtered_family_label_by_key,
+        ) = _group_scope_routes_by_family(filtered_routes)
+        visible_family_keys = set(filtered_family_route_ids.keys())
+        self._refresh_scope_overview(filtered_routes=filtered_routes, day_type=day_type)
+
+        if not filtered_routes:
+            hint = "検索条件に一致する路線がありません。" if self.scope_filter_var.get().strip() else "この運行種別に該当する路線がありません。"
+            ttk.Label(
+                self.scope_inner,
+                text=hint,
+                foreground="#666",
+                padding=(6, 12),
+            ).pack(anchor="w")
+            self._bind_scope_mousewheel(self.scope_inner)
+            return
 
         for depot in self.scope_depots:
             depot_id = str(depot.get("id") or "").strip()
             if not depot_id:
                 continue
+            if depot_id not in filtered_depot_ids:
+                continue
             depot_name = str(depot.get("name") or depot_id)
             route_ids = self.scope_routes_by_depot.get(depot_id, [])
+            if not route_ids:
+                continue
             selected_count = sum(1 for rid in route_ids if rid in self.scope_selected_route_ids)
-            depot_trip_count = sum(
-                _scope_route_trip_count(self.scope_route_by_id.get(rid) or {}, day_type)
-                for rid in route_ids
-            )
+            depot_routes = [self.scope_route_by_id.get(rid) or {} for rid in route_ids]
+            depot_summary = _scope_summarize_routes(depot_routes, day_type=day_type)
 
             row = ttk.Frame(self.scope_inner)
             row.pack(fill=tk.X, pady=1)
@@ -1607,7 +2010,10 @@ class App:
                 row,
                 text=(
                     f"{depot_id} | {depot_name} "
-                    f"({selected_count}/{len(route_ids)}候補, {day_type_label}{depot_trip_count}便)"
+                    f"(選択{selected_count}/{depot_summary['routeCount']}variant, "
+                    f"{depot_summary['familyCount']}系統, "
+                    f"{day_type_label}{depot_summary['tripCount']}便, "
+                    f"{_scope_variant_mix_text(depot_summary, metric='trips')})"
                 ),
                 variable=dep_var,
                 command=lambda d=depot_id: self._on_toggle_depot(d),
@@ -1615,14 +2021,14 @@ class App:
 
             if open_var.get():
                 for family_key in self.scope_family_keys_by_depot.get(depot_id, []):
+                    if family_key not in visible_family_keys:
+                        continue
                     family_route_ids = self.scope_family_route_ids.get(family_key, [])
                     family_selected_count = sum(
                         1 for rid in family_route_ids if rid in self.scope_selected_route_ids
                     )
-                    family_trip_count = sum(
-                        _scope_route_trip_count(self.scope_route_by_id.get(rid) or {}, day_type)
-                        for rid in family_route_ids
-                    )
+                    family_routes = [self.scope_route_by_id.get(rid) or {} for rid in family_route_ids]
+                    family_summary = _scope_summarize_routes(family_routes, day_type=day_type)
                     family_row = ttk.Frame(self.scope_inner)
                     family_row.pack(fill=tk.X, padx=16, pady=1)
 
@@ -1645,13 +2051,17 @@ class App:
                         )
                     )
                     self.scope_family_vars[family_key] = family_var
-                    family_label = self.scope_family_label_by_key.get(family_key, family_key)
+                    family_label = self.scope_family_label_by_key.get(
+                        family_key,
+                        filtered_family_label_by_key.get(family_key, family_key),
+                    )
                     ttk.Checkbutton(
                         family_row,
                         text=(
                             f"{family_label} "
-                            f"({family_selected_count}/{len(family_route_ids)}バリアント, "
-                            f"{day_type_label}{family_trip_count}便)"
+                            f"(選択{family_selected_count}/{family_summary['routeCount']}variant, "
+                            f"{day_type_label}{family_summary['tripCount']}便, "
+                            f"{_scope_variant_mix_text(family_summary, metric='trips')})"
                         ),
                         variable=family_var,
                         command=lambda d=depot_id, fk=family_key: self._on_toggle_family(d, fk),
@@ -2060,6 +2470,65 @@ class App:
                 out.append(dict(item))
         return out
 
+    def _sync_pv_assets_for_selected_depots(
+        self,
+        *,
+        announce: bool,
+    ) -> list[dict[str, Any]] | None:
+        try:
+            current_rows = self._parse_depot_energy_assets_json_or_none() or []
+        except ValueError:
+            return None
+
+        selected_depot_ids = self._selected_depot_ids()
+        merged_rows, synced_ids, missing_ids = _merge_selected_depot_pv_assets(
+            selected_depot_ids,
+            current_rows,
+        )
+        if not synced_ids and not current_rows:
+            if announce:
+                messagebox.showwarning(
+                    "PV平均同期",
+                    "選択営業所に対応する 2025/08 の平均PVプロファイルが見つかりませんでした。",
+                )
+            return current_rows
+
+        if merged_rows:
+            self.depot_energy_assets_json_var.set(
+                json.dumps(merged_rows, ensure_ascii=True, separators=(",", ":"))
+            )
+        if synced_ids:
+            if len(synced_ids) == 1:
+                self.pv_profile_id_var.set(f"{synced_ids[0]}_{_SOLCAST_AVG_PROFILE_ID}")
+            else:
+                self.pv_profile_id_var.set(
+                    f"selected_depots_{_SOLCAST_AVG_PROFILE_ID}"
+                )
+            self.weather_mode_var.set(_SOLCAST_AVG_PROFILE_ID)
+            self.log_line(
+                "選択営業所へPV平均を同期: "
+                + ", ".join(synced_ids)
+            )
+        if missing_ids:
+            self.log_line(
+                "PV平均プロファイル未検出: " + ", ".join(missing_ids)
+            )
+        if announce:
+            messagebox.showinfo(
+                "PV平均同期",
+                "同期した営業所: "
+                + (", ".join(synced_ids) if synced_ids else "なし")
+                + (
+                    "\n未検出: " + ", ".join(missing_ids)
+                    if missing_ids
+                    else ""
+                ),
+            )
+        return merged_rows
+
+    def sync_selected_depot_pv_assets(self) -> None:
+        self._sync_pv_assets_for_selected_depots(announce=True)
+
     def open_depot_energy_assets_editor(self) -> None:
         try:
             current_rows = self._parse_depot_energy_assets_json_or_none() or []
@@ -2304,25 +2773,7 @@ class App:
             _clear_form()
 
         def _build_default_row_for_depot(depot_id: str) -> dict[str, Any]:
-            return {
-                "depot_id": depot_id,
-                "pv_enabled": False,
-                "pv_generation_kwh_by_slot": [],
-                "pv_capacity_kw": 0.0,
-                "bess_enabled": False,
-                "bess_energy_kwh": 0.0,
-                "bess_power_kw": 0.0,
-                "bess_initial_soc_kwh": 0.0,
-                "bess_soc_min_kwh": 0.0,
-                "bess_soc_max_kwh": 0.0,
-                "allow_grid_to_bess": False,
-                "grid_to_bess_price_mode": "tou",
-                "grid_to_bess_price_threshold_yen_per_kwh": 0.0,
-                "grid_to_bess_allowed_slot_indices": [],
-                "bess_priority_mode": "cost_driven",
-                "bess_terminal_soc_min_kwh": 0.0,
-                "provisional_energy_cost_yen_per_kwh": 0.0,
-            }
+            return _default_depot_energy_asset_row(depot_id)
 
         def _generate_rows_for_all_depots() -> None:
             depot_ids = [
@@ -2403,8 +2854,21 @@ class App:
         self.day_type_options = options
         self.day_type_combo.configure(values=options)
 
+    def _on_fixed_route_band_mode_changed(self) -> None:
+        if self._suspend_route_lock_sync:
+            return
+        if self.fixed_route_band_mode_var.get():
+            self.allow_intra_var.set(False)
+            if not self.enable_vehicle_diagram_output_var.get():
+                self.enable_vehicle_diagram_output_var.set(True)
+
     def _register_scope_ui_watchers(self) -> None:
         self.day_type_var.trace_add("write", lambda *_args: self._on_day_type_changed())
+        self.scope_filter_var.trace_add("write", lambda *_args: self._render_scope_checklist())
+        self.fixed_route_band_mode_var.trace_add(
+            "write",
+            lambda *_args: self._on_fixed_route_band_mode_changed(),
+        )
 
     def _current_day_type_label(self) -> str:
         service_id = self.day_type_var.get().strip() or "WEEKDAY"
@@ -2421,8 +2885,19 @@ class App:
                 {
                     "serviceId": service_id,
                     "label": service_id,
+                    "familyCount": 0,
                     "routeCount": 0,
                     "tripCount": 0,
+                    "mainRouteCount": 0,
+                    "mainTripCount": 0,
+                    "shortTurnRouteCount": 0,
+                    "shortTurnTripCount": 0,
+                    "depotRouteCount": 0,
+                    "depotTripCount": 0,
+                    "branchRouteCount": 0,
+                    "branchTripCount": 0,
+                    "unknownRouteCount": 0,
+                    "unknownTripCount": 0,
                     "selected": service_id == self.day_type_var.get().strip(),
                 }
                 for service_id in self.day_type_options
@@ -2453,8 +2928,10 @@ class App:
                 values=(
                     service_id,
                     str(entry.get("label") or service_id),
+                    int(entry.get("familyCount") or 0),
                     int(entry.get("routeCount") or 0),
                     int(entry.get("tripCount") or 0),
+                    _scope_variant_mix_text(entry, metric="trips"),
                 ),
             )
         if current_service_id and tree.exists(current_service_id):
@@ -2541,8 +3018,10 @@ class App:
             self.log_line(
                 "運行種別を切替: "
                 f"{self._current_day_type_label()} "
-                f"(routes={int(current_day_summary.get('routeCount') or 0)}, "
-                f"trips={int(current_day_summary.get('tripCount') or 0)})"
+                f"(families={int(current_day_summary.get('familyCount') or 0)}, "
+                f"routes={int(current_day_summary.get('routeCount') or 0)}, "
+                f"trips={int(current_day_summary.get('tripCount') or 0)}, "
+                f"{_scope_variant_mix_text(current_day_summary, metric='trips')})"
             )
 
     def _refresh_depot_dropdowns(self, depots: list[dict[str, Any]]) -> None:
@@ -2963,9 +3442,11 @@ class App:
             self.include_short_turn_var.set(bool(trip.get("includeShortTurn", True)))
             self.include_depot_moves_var.set(bool(trip.get("includeDepotMoves", True)))
             self.include_deadhead_var.set(bool(trip.get("includeDeadhead", True)))
+            self._suspend_route_lock_sync = True
             self.allow_intra_var.set(bool(dispatch_scope.get("allowIntraDepotRouteSwap", False)))
             self.allow_inter_var.set(bool(dispatch_scope.get("allowInterDepotSwap", False)))
             self.fixed_route_band_mode_var.set(bool(dispatch_scope.get("fixedRouteBandMode", False)))
+            self._suspend_route_lock_sync = False
 
             solver = dict(resp.get("solverSettings") or {})
             sim = dict(resp.get("simulationSettings") or {})
@@ -3010,7 +3491,12 @@ class App:
             self.max_ice_fuel_percent_var.set(str(sim.get("maxIceFuelPercent") or 90.0))
             self.deadhead_speed_kmh_var.set(str(sim.get("deadheadSpeedKmh") or 18.0))
             self.pv_profile_id_var.set(str(sim.get("pvProfileId") or ""))
-            self.weather_mode_var.set(str(sim.get("weatherMode") or "sunny"))
+            weather_mode = str(sim.get("weatherMode") or _SOLCAST_AVG_PROFILE_ID)
+            if weather_mode and weather_mode not in self.weather_mode_options:
+                self.weather_mode_options = [*self.weather_mode_options, weather_mode]
+                if self._widget_exists(getattr(self, "weather_mode_combo", None)):
+                    self.weather_mode_combo.configure(values=self.weather_mode_options)
+            self.weather_mode_var.set(weather_mode)
             self.weather_factor_scalar_var.set(str(sim.get("weatherFactorScalar") or 1.0))
             depot_energy_assets = sim.get("depotEnergyAssets")
             if isinstance(depot_energy_assets, list):
@@ -3019,6 +3505,8 @@ class App:
                 )
             else:
                 self.depot_energy_assets_json_var.set("")
+            if self.fixed_route_band_mode_var.get() and not self.enable_vehicle_diagram_output_var.get():
+                self.enable_vehicle_diagram_output_var.set(True)
             self._suspend_prepare_watchers = False
 
             self._refresh_depot_dropdowns(depots)
@@ -3039,8 +3527,10 @@ class App:
                 self.log_line(
                     "運行種別サマリ: "
                     f"{self._current_day_type_label()} "
-                    f"(routes={int(current_day_summary.get('routeCount') or 0)}, "
-                    f"trips={int(current_day_summary.get('tripCount') or 0)})"
+                    f"(families={int(current_day_summary.get('familyCount') or 0)}, "
+                    f"routes={int(current_day_summary.get('routeCount') or 0)}, "
+                    f"trips={int(current_day_summary.get('tripCount') or 0)}, "
+                    f"{_scope_variant_mix_text(current_day_summary, metric='trips')})"
                 )
             if routes:
                 self.log_line(
@@ -3060,6 +3550,12 @@ class App:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
 
+        synced_assets = self._sync_pv_assets_for_selected_depots(announce=False)
+        fixed_route_band_mode = self.fixed_route_band_mode_var.get()
+        allow_intra_depot_swap = (
+            False if fixed_route_band_mode else self.allow_intra_var.get()
+        )
+
         payload = {
             "selectedDepotIds": self._selected_depot_ids(),
             "selectedRouteIds": self._selected_route_ids(),
@@ -3068,9 +3564,9 @@ class App:
             "includeShortTurn": self.include_short_turn_var.get(),
             "includeDepotMoves": self.include_depot_moves_var.get(),
             "includeDeadhead": self.include_deadhead_var.get(),
-            "allowIntraDepotRouteSwap": self.allow_intra_var.get(),
+            "allowIntraDepotRouteSwap": allow_intra_depot_swap,
             "allowInterDepotSwap": self.allow_inter_var.get(),
-            "fixedRouteBandMode": self.fixed_route_band_mode_var.get(),
+            "fixedRouteBandMode": fixed_route_band_mode,
             "solverMode": self.solver_mode_var.get().strip(),
             "objectiveMode": self.objective_mode_var.get().strip(),
             "objectivePreset": self.objective_preset_var.get().strip() or "cost",
@@ -3111,14 +3607,10 @@ class App:
             ),
             "deadheadSpeedKmh": self._parse_float(self.deadhead_speed_kmh_var.get(), 18.0),
             "pvProfileId": self.pv_profile_id_var.get().strip() or None,
-            "weatherMode": self.weather_mode_var.get().strip() or "sunny",
+            "weatherMode": self.weather_mode_var.get().strip() or _SOLCAST_AVG_PROFILE_ID,
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
         }
-        try:
-            depot_energy_assets = self._parse_depot_energy_assets_json_or_none()
-        except ValueError:
-            return
-        payload["depotEnergyAssets"] = depot_energy_assets
+        payload["depotEnergyAssets"] = synced_assets
         self.run_bg(
             lambda: self.client.put_quick_setup(scenario_id, payload),
             lambda _resp: (
@@ -3827,13 +4319,17 @@ class App:
 
     def _prepare_payload(self) -> dict[str, Any]:
         objective_weights = self._parse_objective_weights_json()
-        depot_energy_assets = self._parse_depot_energy_assets_json_or_none()
+        depot_energy_assets = self._sync_pv_assets_for_selected_depots(announce=False)
         contract_penalty = self._parse_float(self.contract_penalty_coeff_var.get(), 1000000.0)
         if contract_penalty > 0:
             objective_weights.setdefault("slack_penalty", contract_penalty)
         degradation_w = self._parse_float(self.degradation_weight_var.get(), 0.0)
         if degradation_w > 0:
             objective_weights.setdefault("degradation", degradation_w)
+        fixed_route_band_mode = self.fixed_route_band_mode_var.get()
+        allow_intra_depot_swap = (
+            False if fixed_route_band_mode else self.allow_intra_var.get()
+        )
 
         return {
             "selected_depot_ids": self._selected_depot_ids(),
@@ -3843,7 +4339,7 @@ class App:
             "include_short_turn": self.include_short_turn_var.get(),
             "include_depot_moves": self.include_depot_moves_var.get(),
             "include_deadhead": self.include_deadhead_var.get(),
-            "allow_intra_depot_route_swap": self.allow_intra_var.get(),
+            "allow_intra_depot_route_swap": allow_intra_depot_swap,
             "allow_inter_depot_swap": self.allow_inter_var.get(),
             "simulation_settings": {
                 "initial_soc": self._parse_float(self.initial_soc_var.get(), 0.8),
@@ -3855,6 +4351,12 @@ class App:
                 "deadhead_speed_kmh": self._parse_float(self.deadhead_speed_kmh_var.get(), 18.0),
                 "solver_mode": self.solver_mode_var.get().strip(),
                 "objective_mode": self.objective_mode_var.get().strip(),
+                "objective_preset": self.objective_preset_var.get().strip() or "cost",
+                "fixed_route_band_mode": fixed_route_band_mode,
+                "enable_vehicle_diagram_output": (
+                    self.enable_vehicle_diagram_output_var.get()
+                    or fixed_route_band_mode
+                ),
                 "allow_partial_service": self.allow_partial_service_var.get(),
                 "unserved_penalty": self._parse_float(self.unserved_penalty_var.get(), 10000.0),
                 "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
@@ -3874,6 +4376,9 @@ class App:
                 "tou_pricing": self._parse_tou_text(),
                 "objective_weights": objective_weights,
                 "depot_energy_assets": depot_energy_assets,
+                "pv_profile_id": self.pv_profile_id_var.get().strip() or None,
+                "weather_mode": self.weather_mode_var.get().strip() or _SOLCAST_AVG_PROFILE_ID,
+                "weather_factor_scalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
             },
         }
 
@@ -4831,6 +5336,94 @@ class App:
         self.fleet_depot_var.set(depot_id)
         self.v_depot_var.set(depot_id)
         self.refresh_vehicles()
+
+    def show_vehicle_diagram(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+
+        def done(result: dict[str, Any]) -> None:
+            self._open_vehicle_diagram_window(result)
+            self.log_line("車両ダイヤグラムを表示しました")
+
+        self.run_bg(lambda: self.client.get_optimization_result(scenario_id), done)
+
+    def _open_vehicle_diagram_window(self, result: dict[str, Any]) -> None:
+        trips = (result.get("dispatch_report") or {}).get("trips") or []
+        trip_info: dict[str, dict] = {str(t.get("trip_id") or ""): t for t in trips}
+        assignment: dict[str, list] = (result.get("solver_result") or {}).get("assignment") or {}
+        unserved: list = (result.get("solver_result") or {}).get("unserved_tasks") or []
+
+        win = tk.Toplevel(self.root)
+        win.title("車両ダイヤグラム (最適化結果)")
+        win.geometry("1200x620")
+
+        # ── サマリ行 ──
+        status = str(result.get("solver_status") or result.get("status") or "-")
+        obj = result.get("objective_value")
+        obj_str = f"{obj:.1f}" if isinstance(obj, (int, float)) else str(obj or "-")
+        total_served = sum(len(v or []) for v in assignment.values())
+        dep_id = (result.get("scope") or {}).get("depotId") or "-"
+        svc_id = (result.get("scope") or {}).get("serviceId") or "-"
+        ttk.Label(
+            win,
+            text=(
+                f"営業所: {dep_id}  運行種別: {svc_id}  "
+                f"status: {status}  目的関数値: {obj_str}  "
+                f"配車便数: {total_served}  未配車便数: {len(unserved)}"
+            ),
+        ).pack(anchor="w", padx=6, pady=(6, 2))
+
+        # ── 車両スケジュール表 ──
+        cols = ("vehicle_id", "trip_count", "first_dep", "last_arr", "route_codes", "departures")
+        wrap = ttk.Frame(win)
+        wrap.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        tree = ttk.Treeview(wrap, columns=cols, show="headings", height=22)
+        tree.heading("vehicle_id", text="車両ID")
+        tree.heading("trip_count", text="便数")
+        tree.heading("first_dep", text="初便発")
+        tree.heading("last_arr", text="終便着")
+        tree.heading("route_codes", text="担当系統")
+        tree.heading("departures", text="発車時刻一覧")
+        tree.column("vehicle_id", width=220, anchor="w")
+        tree.column("trip_count", width=48, anchor="e")
+        tree.column("first_dep", width=62, anchor="center")
+        tree.column("last_arr", width=62, anchor="center")
+        tree.column("route_codes", width=160, anchor="w")
+        tree.column("departures", width=560, anchor="w")
+
+        for vehicle_id in sorted(assignment.keys()):
+            task_ids = sorted(
+                assignment[vehicle_id] or [],
+                key=lambda tid: str(trip_info.get(str(tid), {}).get("departure") or "99:99"),
+            )
+            if not task_ids:
+                continue
+            route_codes = sorted(set(
+                str(trip_info.get(str(tid), {}).get("route_family_code") or
+                    trip_info.get(str(tid), {}).get("route_id") or "")
+                for tid in task_ids
+            ))
+            deps = [str(trip_info.get(str(tid), {}).get("departure") or "") for tid in task_ids]
+            arrs = [str(trip_info.get(str(tid), {}).get("arrival") or "") for tid in task_ids]
+            first_dep = deps[0] if deps else ""
+            last_arr = arrs[-1] if arrs else ""
+            dep_summary = "  ".join(deps[:10])
+            if len(deps) > 10:
+                dep_summary += f"  … ({len(deps)}便)"
+            tree.insert("", tk.END, values=(
+                vehicle_id, len(task_ids), first_dep, last_arr,
+                "  ".join(route_codes[:5]), dep_summary,
+            ))
+
+        ysb = ttk.Scrollbar(wrap, orient=tk.VERTICAL, command=tree.yview)
+        xsb = ttk.Scrollbar(wrap, orient=tk.HORIZONTAL, command=tree.xview)
+        tree.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
+        ysb.pack(side=tk.RIGHT, fill=tk.Y)
+        xsb.pack(side=tk.BOTTOM, fill=tk.X)
+        tree.pack(fill=tk.BOTH, expand=True)
 
     def show_simulation_result(self) -> None:
         scenario_id = self._selected_scenario_id()

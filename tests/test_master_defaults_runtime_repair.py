@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest import mock
 
 from bff.services import master_defaults
+from bff.store import scenario_store
 
 
 def test_repair_missing_master_data_rebases_stale_runtime_master() -> None:
@@ -124,3 +125,106 @@ def test_repair_missing_master_data_rebases_stale_runtime_master() -> None:
     assert doc["scenario_overlay"]["depot_ids"] == []
     assert doc["scenario_overlay"]["solver_config"]["mode"] == "mode_milp_only"
     assert doc["vehicle_route_permissions"] == []
+
+
+def test_get_preloaded_master_data_reclassifies_all_generic_routes() -> None:
+    bootstrap_payload = {
+        "depots": [{"id": "seta"}],
+        "routes": [
+            {
+                "id": "route-out",
+                "name": "出入庫 (瀬田営業所 -> 二子玉川駅)",
+                "routeCode": "出入庫",
+                "routeLabel": "出入庫 (瀬田営業所 -> 二子玉川駅)",
+                "startStop": "瀬田営業所",
+                "endStop": "二子玉川駅",
+                "tripCount": 6,
+                "tripCountsByDayType": {"WEEKDAY": 6},
+            },
+            {
+                "id": "route-in",
+                "name": "出入庫 (二子玉川駅 -> 瀬田営業所)",
+                "routeCode": "出入庫",
+                "routeLabel": "出入庫 (二子玉川駅 -> 瀬田営業所)",
+                "startStop": "二子玉川駅",
+                "endStop": "瀬田営業所",
+                "tripCount": 2,
+                "tripCountsByDayType": {"WEEKDAY": 2},
+            },
+        ],
+        "vehicle_templates": [],
+        "route_depot_assignments": [],
+        "depot_route_permissions": [],
+        "dispatch_scope": {"datasetVersion": "v1"},
+        "feed_context": {"datasetId": "tokyu_full"},
+        "trips": [{"trip_id": "trip-1"}],
+    }
+
+    with mock.patch.object(
+        master_defaults,
+        "build_dataset_bootstrap",
+        return_value=bootstrap_payload,
+    ):
+        master_defaults._cached_preloaded_master_data.cache_clear()
+        payload = master_defaults.get_preloaded_master_data("tokyu_full")
+        master_defaults._cached_preloaded_master_data.cache_clear()
+
+    routes = {item["id"]: item for item in payload["routes"]}
+    assert routes["route-out"]["routeFamilyCode"] == "出入庫:二子玉川駅⇔瀬田営業所"
+    assert routes["route-out"]["routeVariantType"] == "depot_out"
+    assert routes["route-in"]["routeFamilyCode"] == "出入庫:二子玉川駅⇔瀬田営業所"
+    assert routes["route-in"]["routeVariantType"] == "depot_in"
+
+
+def test_repair_route_metadata_from_preload_reclassifies_routes_and_preserves_user_override() -> None:
+    doc = {
+        "meta": {"id": "scenario-1"},
+        "scenario_overlay": {"dataset_id": "tokyu_full"},
+        "feed_context": {"datasetId": "tokyu_full"},
+        "routes": [
+            {
+                "id": "route-out",
+                "name": "出入庫 (瀬田営業所 -> 二子玉川駅)",
+                "routeCode": "出入庫",
+                "routeLabel": "出入庫 (瀬田営業所 -> 二子玉川駅)",
+                "startStop": "瀬田営業所",
+                "endStop": "二子玉川駅",
+                "tripCount": 6,
+                "routeVariantTypeManual": "branch",
+                "canonicalDirectionManual": "outbound",
+                "classificationSource": "user_manual_override",
+                "manualClassificationLocked": True,
+            }
+        ],
+    }
+    preload_payload = {
+        "datasetId": "tokyu_full",
+        "routes": [
+            {
+                "id": "route-out",
+                "name": "出入庫 (瀬田営業所 -> 二子玉川駅)",
+                "routeCode": "出入庫",
+                "routeLabel": "出入庫 (瀬田営業所 -> 二子玉川駅)",
+                "startStop": "瀬田営業所",
+                "endStop": "二子玉川駅",
+                "tripCount": 6,
+                "tripCountsByDayType": {"WEEKDAY": 6},
+            }
+        ],
+    }
+
+    with mock.patch.object(
+        master_defaults,
+        "get_preloaded_master_data",
+        return_value=preload_payload,
+    ):
+        changed = scenario_store._repair_route_metadata_from_preload(doc)
+
+    assert changed is True
+    route = doc["routes"][0]
+    assert route["routeFamilyCode"] == "出入庫:二子玉川駅⇔瀬田営業所"
+    assert route["routeVariantTypeManual"] == "branch"
+    assert route["canonicalDirectionManual"] == "outbound"
+    assert route["classificationSource"] == "user_manual_override"
+    assert route["manualClassificationLocked"] is True
+    assert route["routeVariantType"] == "branch"

@@ -17,7 +17,7 @@ def test_list_routes_defaults_to_dispatch_scope_service_counts(monkeypatch) -> N
             }
         ],
     )
-    monkeypatch.setattr(master_data, "enrich_routes_with_family", lambda items: items)
+    monkeypatch.setattr(master_data, "reclassify_routes_for_runtime", lambda items: items)
     monkeypatch.setattr(
         master_data.store,
         "summarize_route_service_trip_counts",
@@ -58,7 +58,7 @@ def test_list_routes_explicit_service_id_overrides_dispatch_scope(monkeypatch) -
             }
         ],
     )
-    monkeypatch.setattr(master_data, "enrich_routes_with_family", lambda items: items)
+    monkeypatch.setattr(master_data, "reclassify_routes_for_runtime", lambda items: items)
     monkeypatch.setattr(
         master_data.store,
         "summarize_route_service_trip_counts",

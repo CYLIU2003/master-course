@@ -38,6 +38,10 @@ from src.schemas.duty_entities import DutyLeg, VehicleDuty
 from src.route_code_utils import extract_route_series_from_candidates
 from src.value_normalization import coerce_list
 from bff.services.ice_vehicle_reference import apply_ice_reference_defaults
+from bff.services.runtime_route_family import (
+    effective_route_direction,
+    effective_route_variant_type,
+)
 from bff.store import scenario_store
 
 
@@ -389,11 +393,11 @@ def _filter_rows_for_scope(
         for row in timetable_rows:
             route = route_lookup.get(str(row.get("route_id")) or "") or {}
             variant_type = _normalize_variant_type(
+                effective_route_variant_type(route)
+                or row.get("routeVariantTypeManual")
+                or
                 row.get("routeVariantType")
                 or row.get("route_variant_type")
-                or row.get("routeVariantTypeManual")
-                or route.get("routeVariantTypeManual")
-                or route.get("routeVariantType")
                 or "unknown"
             )
             variant_bucket = route_variant_bucket(variant_type)
@@ -581,16 +585,14 @@ def _collect_trips_for_scope(
                     or item.get("canonicalDirection")
                     or item.get("canonical_direction")
                     or item.get("canonicalDirectionManual")
-                    or route_like.get("canonicalDirectionManual")
-                    or route_like.get("canonicalDirection")
+                    or effective_route_direction(route_like, default="outbound")
                     or "outbound"
                 ),
                 "routeVariantType": _normalize_variant_type(
-                    item.get("routeVariantType")
+                    item.get("routeVariantTypeManual")
+                    or effective_route_variant_type(route_like)
+                    or item.get("routeVariantType")
                     or item.get("route_variant_type")
-                    or item.get("routeVariantTypeManual")
-                    or route_like.get("routeVariantTypeManual")
-                    or route_like.get("routeVariantType")
                     or "unknown",
                     direction=_normalize_direction(
                         item.get("direction")
@@ -598,8 +600,7 @@ def _collect_trips_for_scope(
                         or item.get("canonicalDirection")
                         or item.get("canonical_direction")
                         or item.get("canonicalDirectionManual")
-                        or route_like.get("canonicalDirectionManual")
-                        or route_like.get("canonicalDirection")
+                        or effective_route_direction(route_like, default="outbound")
                         or "outbound"
                     ),
                 ),

@@ -39,6 +39,86 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-25] 出力先ディレクトリを output に統一（output/outputs 混在解消）
+
+- **背景**:
+  - 実行経路によって `output/` と `outputs/` が混在し、成果物・ジョブ・prepared inputs の参照先が分散していた。
+
+- **対応**:
+  - 新規: `bff/store/output_paths.py`
+    - `outputs_root()` を追加し、既定を `output/` に統一（`MC_OUTPUTS_DIR` があれば優先）。
+    - `scenarios_root()` を追加し、既定を `output/scenarios/` に統一（`SCENARIO_STORE_PATH` があれば優先）。
+  - 更新:
+    - `run_app.py`（bundled mode 既定出力を `output/` に変更）
+    - `bff/store/scenario_store.py`（scenario/app_context の既定ルートを共通ヘルパー経由へ）
+    - `bff/store/job_store.py`（ジョブ保存先を `output/jobs` に変更）
+    - `bff/routers/optimization.py`（prepared_inputs と最適化出力ルートを共通化）
+    - `bff/routers/simulation.py`（prepared_inputs とシミュレーション出力ルートを共通化）
+    - `bff/routers/graph.py`（subset export 先を共通化）
+    - `bff/services/experiment_reports.py`（experiment report 出力先を共通化）
+
+- **テスト**:
+  - `pytest tests/test_prepared_scope_execution.py tests/test_run_preparation_hash.py -q`
+  - 結果: `3 passed`
+
+### [DEV-2026-03-25] Route Family runtime に公式根拠ベース override 層を追加（東98/渋41/渋42）
+
+- **背景**:
+  - runtime repair 後の真値に対し、Quick Setup 側で scenario ごとに見え方が揺れる課題が残っていた。
+  - 複雑系統（東98/渋41/渋42）は heuristic 単独より、公式公開情報に沿った固定タグ層を持つ方が再現性が高い。
+
+- **対応**:
+  - `bff/services/runtime_route_family.py`
+    - `official_manual_override` 層を追加（user manual override より下位、derived より上位）。
+    - family code + terminal pair で以下を固定:
+      - 東98: `main_outbound/main_inbound/depot_out/depot_in`
+      - 渋41: `main_outbound/main_inbound/branch/short_turn`
+      - 渋42: `main_outbound/main_inbound/branch`
+    - 公式対象 family の `routeFamilyLabel` を固定補完:
+      - 東98: `東京駅南口 ⇔ 清水`
+      - 渋41: `渋谷駅 ⇔ 大井町駅`
+      - 渋42: `渋谷駅 ⇔ 大崎駅西口`
+    - user manual が存在する route は従来通り最優先で保持。
+
+- **テスト**:
+  - `tests/test_runtime_route_family.py`
+    - 公式 override 回帰（東98/渋41/渋42の variant と source）を追加。
+    - user manual override 優先の回帰を追加。
+  - `tests/test_quick_setup_route_selection.py`
+    - Quick Setup payload で公式 family label が露出する回帰を追加。
+
+### [DEV-2026-03-24] 目黒1営業所で PVなし / PVあり / PV+BESSあり の3比較を試行
+
+- **対象シナリオ**:
+  - ベース: `outputs/prepared_inputs/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared-bb5102a730db115c.json`
+  - 生成: `outputs/scenario_meguro_pv_bess_sat.json`
+
+- **設定した基本パラメータ（目黒）**:
+  - `timestep_min = 60`
+  - `service_id = SAT`
+  - `pv_capacity_kw = 480.8`
+  - `pv_generation_kwh_by_slot` は `meguro_2025-08-01_60min.json` を基に、運行 horizon に合わせて 19 要素へ整合
+  - `bess_energy_kwh = 1000.0`
+  - `bess_power_kw = 250.0`
+  - `bess_initial_soc_kwh = 500.0`
+  - `bess_soc_min_kwh = 100.0`
+  - `bess_soc_max_kwh = 1000.0`
+  - `bess_terminal_soc_min_kwh = 300.0`
+  - `allow_grid_to_bess = false`（case matrix 側で case ごとに切替）
+
+- **実行コマンド**:
+  - `python scripts/run_depot_energy_case_matrix.py --scenario outputs/scenario_meguro_pv_bess_sat.json --depot-id meguro --service-id SAT --output-dir outputs/case_matrix_meguro_sat --mode milp --time-limit-sec 180 --mip-gap 0.05 --random-seed 42 --alns-iterations 120`
+
+- **出力**:
+  - `outputs/case_matrix_meguro_sat/case_matrix_summary.csv`
+  - `outputs/case_matrix_meguro_sat/case_matrix_results.json`
+
+- **結果要約**:
+  - case0 (PVなし): objective `3030546.0138`, `solver_status=optimal`, `feasible=false`
+  - case1 (PVあり): objective `3030546.0138`, `solver_status=optimal`, `feasible=false`
+  - case2 (PV+BESS): objective `2949002.7571`, `solver_status=optimal`, `feasible=false`
+  - 注: `allow_partial_service=true` のため未充足便が残り、`feasible=false`。比較は目的値ベースで実施。
+
 ### [DEV-2026-03-24] Solcast CSV実投入: 全営業所日別JSON生成と台帳自動同期コマンド追加
 
 - **背景**:
@@ -65,6 +145,11 @@ tests/       回帰テスト
     - `available_dates`
     - `min_period_end`, `max_period_end`
     - `time_column`, `irradiance_column`
+
+- **追記（同日）**:
+  - `build_pv_profiles.py` の `period_end` 解釈を修正（区間終端を直前スロットへ割当）。
+  - `pv_generation_kwh_by_slot` / `capacity_factor_by_slot` を 24 要素固定化。
+  - 修正後に 12営業所 × 31日（372件）を再生成し、`meguro_2025-08-01_60min.json` の 24 要素を確認。
 
 ### [DEV-2026-03-24] フェーズ2着手: 実車両優先生成 + depot_energy_assets 編集導線（BFF/Schema/UI）
 
@@ -2269,3 +2354,74 @@ master-course/
     - `tests/test_master_data_route_counts.py`
   - 確認:
     - `python -m pytest tests -q` → `82 passed`
+
+- 2026-03-24 (固定路線バンド UI 整理・全 route family/便数監査・営業所別 PV 平均自動同期)
+  - 問題として、Quick Setup 画面に「営業所内車両トレード」と「車両固定バンド」で意味の重なる操作が残っており、route 固定の要件が UI 上で曖昧だった。また route family のひも付けずれや day-type 便数ずれが front 表示だけでなく最適化入力へ混入するリスクが残っていた。
+  - `tools/scenario_backup_tk.py` では営業所内 route trade の単独チェックを見せない構成に変更し、`日次路線固定（車両固定バンド）` を ON にすると `allowIntraDepotRouteSwap=False` と `enable_vehicle_diagram_output=True` を自動適用するよう整理した。最適化結果を確認しやすいよう `ダイヤグラム表示` ボタンも追加した。
+  - 追加で自分から見つけた問題として、途中で `配車済み路線のみ` という別チェックを足すと既存 optimize 結果依存の分岐が増え、今回要件の route 固定と責務が混ざる状態だったため、その UI と処理は削除した。
+  - `bff/services/route_catalog_audit.py` を追加し、scenario の全 route を対象に `routeFamilyCode` 欠落、派生 family code との不一致、同一営業所内の family 分裂、`data/catalog-fast/tokyu_bus_data` 実便数との差分を監査するようにした。`bff/services/run_preparation.py` は prepare 時にこの監査を必ず実行し、warning と `scope_summary.route_catalog_audit` へ結果を残すよう変更した。これにより、便数や family の不整合を黙って solver へ流さない。
+  - 営業所別 PV は `data/derived/pv_profiles/*_2025-08-*_60min.json` を読み、選択営業所ごとに 2025/08 の 1 か月平均を自動生成して `depot_energy_assets` へ同期するようにした。weather mode は自由入力をやめて readonly のプルダウンに変更し、既定値を `solcast_avg_2025_08_60min` に揃えた。
+  - `bff/routers/simulation.py` / `bff/services/simulation_builder.py` も更新し、prepare payload から `fixed_route_band_mode`, `enable_vehicle_diagram_output`, `objective_preset`, `pv_profile_id`, `weather_mode`, `weather_factor_scalar` を保持できるようにした。
+  - 回帰テスト:
+    - `tests/test_route_catalog_audit.py`
+    - `tests/test_run_preparation_audit_warnings.py`
+    - `tests/test_scenario_backup_tk_pv_sync.py`
+    - `tests/test_simulation_builder_prepare_scope.py`
+    - `tests/test_scenario_backup_tk_dataset_options.py`
+    - `tests/test_master_data_route_counts.py`
+    - `tests/test_quick_setup_route_selection.py`
+    - `tests/test_run_preparation_hash.py`
+    - `tests/test_milp_route_band_settings.py`
+    - `tests/test_solcast_pv_profiles.py`
+    - `tests/test_prepared_scope_execution.py`
+    - `tests/test_problem_builder_depot_energy_asset_controls.py`
+    - `tests/test_problem_builder_timestep_and_pv_scaling.py`
+    - `tests/test_scenario_store_dispatch_scope_overlay.py`
+  - 確認:
+    - `python -m py_compile bff/services/route_catalog_audit.py bff/services/run_preparation.py bff/routers/simulation.py bff/services/simulation_builder.py tools/scenario_backup_tk.py` → pass
+    - 上記回帰テストの対象実行合計 → `49 passed`
+
+- 2026-03-24 (全営業所・全 route の family 分類ロジックを再設計し、day-type trip count 欠落を補修)
+  - 追加で自分から上げた問題として、`routeFamilyCode` の元ロジックが `高速` / `空港` / `直行` / `急行` / `出入庫` の generic code をそのまま family code にしており、無関係な長距離路線や直行便まで 1 family に束ねていた。その結果、`routeVariantTypeManual=main` の legacy override も相まって、`東98` のような入出庫便だけでなく、高速・空港系も正しい本線/区間便/入出庫便に落ちない状態だった。
+  - `bff/services/route_family.py` では stopSequence が stop ID のまま比較されていた問題を修正し、`data/catalog-fast/tokyu_bus_data/stops.jsonl` / `normalized/stops.jsonl` から stop name を解決してから corridor 判定するよう変更した。あわせて terminal 比較は `日吉駅` と `日吉駅東口`、`溝の口駅` と `溝の口駅南口` のような駅出口差分を吸収する coarse normalization を追加した。
+  - `bff/services/runtime_route_family.py` を中心に runtime 再分類を強化し、legacy `classificationSource=manual_override` は user manual override でない限り無視、同 family の depot feeder corridor まで見て `depot_in/depot_out` を判定するよう見直した。これで `東98` は `東京駅南口->清水` 系を本線、`等々力操車所` 発着や `目黒郵便局->等々力操車所` を入出庫便として正しく再分類できるようにした。
+  - family code 抽出も見直し、generic code は terminal pair ベースの family code (`高速:河口湖駅⇔渋谷駅(マークシティ)` など) に再分解した。これにより `高速` 46 variant は 11 family、`空港` 79 variant は 23 family、`直行` 10 variant は 5 family、`急行` 3 variant は 2 family、`出入庫` 7 variant は 4 family に正しく分かれた。最終監査では runtime route variant count が `main_inbound=203, main_outbound=199, short_turn=134, main=94, depot_in=47, depot_out=44, branch=43, unknown=0` になり、generic code の素通し family は 0 件になった。
+  - 便数側では `src/research_dataset_loader.py` の `_apply_route_day_type_counts()` に穴があり、Tokyu catalog の route index を `depot_ids` 付きで引くと営業所未割当 route の `tripCountsByDayType` だけ落ち、`tripCountTotal` だけ残る route が 254 件あった。ここは route 単位で `depot_ids=None` の fallback lookup を追加し、全 route が authoritative `tokyu_bus_data.route_trip_counts_by_day_type()` と一致するよう補修した。
+  - さらに `bff/services/master_defaults.py` と `bff/store/scenario_store.py` も更新し、preload master data と既存 scenario repair の両方で全 route を `reclassify_routes_for_runtime()` に通してから保存・返却するようにした。これで API 表示だけでなく、保存済み scenario の `routes` 自体が補修済み family/variant metadata を持つ。user manual override は `classificationSource/manualClassificationLocked` ごと保持したまま再適用する。
+  - 影響範囲として `bff/routers/master_data.py`, `bff/routers/scenarios.py`, `bff/routers/graph.py`, `bff/mappers/scenario_to_problemdata.py`, `src/research_dataset_loader.py` を runtime 再分類前提へ統一し、front 表示・Quick Setup・scope export・最適化入力が同じ family/variant 判定を使うよう揃えた。
+  - 回帰テスト:
+    - `tests/test_runtime_route_family.py`
+    - `tests/test_master_defaults_runtime_repair.py`
+    - `tests/test_master_data_route_counts.py`
+    - `tests/test_quick_setup_route_selection.py`
+    - `tests/test_research_dataset_bootstrap_alignment.py`
+    - `tests/test_runtime_scope_route_mapping.py`
+    - `tests/test_prepared_scope_execution.py`
+    - `tests/test_milp_route_band_settings.py`
+    - `tests/test_simulation_builder_prepare_scope.py`
+    - `tests/test_route_catalog_audit.py`
+  - 確認:
+    - `python -m py_compile bff/services/route_family.py bff/services/runtime_route_family.py src/research_dataset_loader.py tests/test_runtime_route_family.py` → pass
+    - `PYTHONPATH=C:\master-course pytest tests/test_runtime_route_family.py tests/test_master_data_route_counts.py tests/test_quick_setup_route_selection.py tests/test_research_dataset_bootstrap_alignment.py -q` → `20 passed`
+    - `PYTHONPATH=C:\master-course pytest tests/test_runtime_scope_route_mapping.py tests/test_prepared_scope_execution.py tests/test_milp_route_band_settings.py tests/test_simulation_builder_prepare_scope.py tests/test_route_catalog_audit.py -q` → `18 passed`
+
+- 2026-03-25 (Quick Setup front に route truth を出すため、運行種別サマリと営業所路線選択 UI を再設計)
+  - 問題として、route family / trip count の backend 補修後も `Quick Setup` payload が痩せており、`運行種別サマリ` は `routeCount` / `tripCount` しか持たず、`営業所・路線選択` も family label と運行種別内訳が見えなかった。そのため、`東98` のような再分類済み line でも front では「何が本線で、何が入出庫便か」が読みにくかった。
+  - 追加で自分から上げた問題として、検索を掛けた状態で family の一部 variant だけを出す UI は件数と便数の誤読を生みやすかった。ここは filter を「表示対象の depot / family を絞るだけ」に限定し、表示した family の route / trip 集計は常に full truth を返す方針に直した。
+  - `bff/routers/scenarios.py` の quick setup 集計を拡張し、`dayTypeSummaries` に `familyCount` と `main / shortTurn / depot / branch / unknown` の route / trip 内訳を追加した。`build_timetable_summary_for_scope()` が使えない fallback 時でも、current scenario の route metadata から selected day の summary が 0 固定にならないよう補修した。
+  - 同時に depot payload も拡張し、`familyCount`, `visibleFamilyCount`, `visibleRouteCount`, `tripCountSelectedDay`, `selectedTripCount`, variant 別 route / trip count を返すよう変更した。route list は route_limit のまま返しつつ、depot summary は full visible route set から集計するため、front の総量表示が route_limit に引きずられない。
+  - 2026-03-25 夜に追加で確認した問題として、Quick Setup payload が `selectedDepotIds` で route 一覧自体を絞っていたため、シナリオごとに front で見える路線が変わっていた。要件は「シナリオで変わってよいのは選択状態と曜日別便数だけ」であり、表示母集団は固定であるべきなので、payload 生成は常に全営業所・全 route を対象にし、`selectedDepotIds` / `selectedRouteIds` は check state だけへ使うよう修正した。
+  - さらに `東98 / 渋41 / 渋42` を確認すると、runtime では正しく main / branch / short_turn / depot へ再分類されている一方、family header は `routeFamilyLabel=東98` のような code-only 表示のままだった。`bff/routers/scenarios.py` に family terminal label 補完を追加し、同営業所・同 family の全 variant から主系統の terminal pair を拾って `東京駅南口 ⇔ 清水`, `渋谷駅 ⇔ 大井町駅`, `渋谷駅 ⇔ 大崎駅西口` のような表示へ置き換えた。
+  - `tools/scenario_backup_tk.py` では `運行種別サマリ` を `service / 種別 / familyCount / variantCount / tripCount / 運行種別内訳` 表示へ拡張した。`営業所・路線選択` には検索ボックス、表示/選択サマリ、family label の `code | label` 表示、depot/family 行の `本線 / 区間 / 入出庫 / 枝線` 便数内訳を追加した。
+  - route filter は `routeFamilyCode`, `routeFamilyLabel`, `routeLabel`, `variantLabel`, `depotId` などを対象に全文検索しつつ、open した family の child route は full family variant を見せるようにした。これで `東98` と打った時も、該当 family を見つけたあとに本線・入出庫便の全 variant をそのまま確認できる。
+  - 回帰テスト:
+    - `tests/test_quick_setup_route_selection.py`
+    - `tests/test_scenario_backup_tk_dataset_options.py`
+    - `tests/test_master_data_route_counts.py`
+    - `tests/test_runtime_scope_route_mapping.py`
+    - `tests/test_simulation_builder_prepare_scope.py`
+    - `tests/test_route_catalog_audit.py`
+  - 確認:
+    - `python -m py_compile bff/routers/scenarios.py tools/scenario_backup_tk.py tests/test_quick_setup_route_selection.py tests/test_scenario_backup_tk_dataset_options.py` → pass
+    - `PYTHONPATH=C:\master-course pytest tests/test_quick_setup_route_selection.py tests/test_scenario_backup_tk_dataset_options.py -q` → `20 passed`
+    - `PYTHONPATH=C:\master-course pytest tests/test_master_data_route_counts.py tests/test_runtime_scope_route_mapping.py tests/test_simulation_builder_prepare_scope.py tests/test_route_catalog_audit.py -q` → `10 passed`

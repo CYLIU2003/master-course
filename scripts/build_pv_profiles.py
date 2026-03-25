@@ -1,54 +1,16 @@
 #!/usr/bin/env python3
-"""
-build_pv_profiles.py
-
-Purpose
--------
-Convert Solcast irradiance/weather CSV files into daily depot PV profile JSON files
-for master-course.
-
-Default assumptions
--------------------
-- Raw CSV folder:  C:\master-course\data\external\solcast_raw
-- Output folder:   C:\master-course\data\derived\pv_profiles
-- Input CSV names: <depot_id>_YYYY_MM_60min.csv
-
-What it writes
---------------
-One JSON file per depot per date, containing:
-- depot_id
-- date
-- slot_minutes
-- source_csv
-- capacity_factor_by_slot
-- pv_generation_kwh_by_slot
-- metadata (mode, capacity_kw, efficiency, columns used)
-
-Model choices
--------------
-Mode "gti" (default):
-    cf = min(max((GTI / 1000) * system_efficiency, 0), 1.0)
-    pv_kwh = capacity_kw * cf * delta_h
-
-Mode "ghi":
-    same formula but using GHI.
-
-This is intentionally simple and stable for research prototyping.
-"""
-
 from __future__ import annotations
 
 import argparse
 import csv
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 
 DEFAULT_DEPOT_CAPACITY_KW: Dict[str, float] = {
-    # Replace these with your chosen case if needed.
     "awashima": 234.5,
     "shimouma": 200.0,
     "tsurumaki": 675.9,
@@ -91,7 +53,10 @@ def iter_raw_csvs(raw_dir: Path) -> Iterable[Path]:
 
 
 def parse_iso_dt(text: str) -> datetime:
-    return datetime.fromisoformat(text.strip())
+    t = text.strip()
+    if t.endswith("Z"):
+        t = t[:-1] + "+00:00"
+    return datetime.fromisoformat(t)
 
 
 def clamp(value: float, lo: float, hi: float) -> float:
@@ -106,7 +71,6 @@ def compute_cf(row: Dict[str, str], mode: str, efficiency: float) -> float:
 
 
 def depot_id_from_csv_name(path: Path) -> str:
-    # e.g. meguro_2025_08_60min.csv -> meguro
     parts = path.stem.split("_")
     if len(parts) < 4:
         raise ValueError(f"Unexpected raw CSV filename: {path.name}")
@@ -121,7 +85,9 @@ def group_rows_by_date(csv_path: Path) -> Dict[str, List[Dict[str, str]]]:
         period_end = (row.get("period_end") or "").strip()
         if not period_end:
             continue
-        date_key = parse_iso_dt(period_end).date().isoformat()
+        dt_end = parse_iso_dt(period_end)
+        # period_end belongs to the preceding interval.
+        date_key = (dt_end - timedelta(seconds=1)).date().isoformat()
         grouped.setdefault(date_key, []).append(row)
     return grouped
 
@@ -133,15 +99,30 @@ def build_daily_profile(
     csv_path: Path,
     cfg: BuildConfig,
 ) -> Dict[str, object]:
-    rows_sorted = sorted(rows, key=lambda r: parse_iso_dt(r["period_end"]))
+    rows_sorted = sorted(rows, key=lambda r: parse_iso_dt(str(r.get("period_end") or "")))
     delta_h = cfg.slot_minutes / 60.0
     capacity_kw = float(cfg.capacity_map.get(depot_id, cfg.capacity_default_kw))
 
-    capacity_factor_by_slot: List[float] = []
-    pv_generation_kwh_by_slot: List[float] = []
+    slot_count = int((24 * 60) / cfg.slot_minutes)
+    cf_sum = [0.0] * slot_count
+    cf_count = [0] * slot_count
 
     for row in rows_sorted:
+        period_end = (row.get("period_end") or "").strip()
+        if not period_end:
+            continue
+        anchor = parse_iso_dt(period_end) - timedelta(seconds=1)
+        slot_idx = int((anchor.hour * 60 + anchor.minute) // cfg.slot_minutes)
+        if slot_idx < 0 or slot_idx >= slot_count:
+            continue
         cf = compute_cf(row, cfg.mode, cfg.system_efficiency)
+        cf_sum[slot_idx] += cf
+        cf_count[slot_idx] += 1
+
+    capacity_factor_by_slot: List[float] = []
+    pv_generation_kwh_by_slot: List[float] = []
+    for idx in range(slot_count):
+        cf = (cf_sum[idx] / cf_count[idx]) if cf_count[idx] > 0 else 0.0
         pv_kwh = capacity_kw * cf * delta_h
         capacity_factor_by_slot.append(round(cf, 6))
         pv_generation_kwh_by_slot.append(round(pv_kwh, 6))
@@ -158,6 +139,7 @@ def build_daily_profile(
             "mode": cfg.mode,
             "system_efficiency": cfg.system_efficiency,
             "source_columns": ["period_end", cfg.mode, "air_temp"],
+            "slot_count": slot_count,
             "note": "PV generation estimated from Solcast irradiance using a simple capacity-factor model.",
         },
     }
@@ -175,26 +157,26 @@ def main() -> int:
     parser.add_argument(
         "--raw-dir",
         type=Path,
-        default=Path(r"C:\master-course\data\external\solcast_raw"),
+        default=Path("data/external/solcast_raw"),
         help="Folder containing renamed Solcast raw CSV files.",
     )
     parser.add_argument(
         "--out-dir",
         type=Path,
-        default=Path(r"C:\master-course\data\derived\pv_profiles"),
+        default=Path("data/derived/pv_profiles"),
         help="Output folder for daily JSON profiles.",
     )
     parser.add_argument(
         "--slot-minutes",
         type=int,
         default=60,
-        help="Optimization slot length in minutes. Default: 60",
+        help="Optimization slot length in minutes.",
     )
     parser.add_argument(
         "--mode",
         choices=["gti", "ghi"],
         default="gti",
-        help="Which irradiance column to use for the simple PV model.",
+        help="Which irradiance column to use.",
     )
     parser.add_argument(
         "--system-efficiency",
@@ -231,8 +213,8 @@ def main() -> int:
     cfg = BuildConfig(
         raw_dir=args.raw_dir,
         out_dir=args.out_dir,
-        slot_minutes=args.slot_minutes,
-        mode=args.mode,
+        slot_minutes=int(args.slot_minutes),
+        mode=str(args.mode),
         system_efficiency=float(args.system_efficiency),
         capacity_default_kw=float(args.capacity_default_kw),
         capacity_map=capacity_map,

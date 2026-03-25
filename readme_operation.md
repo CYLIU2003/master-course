@@ -289,6 +289,11 @@ JSON には以下が含まれます。
 - 一括生成コマンド実行結果: `JSON files written: 372`（2025-08-01〜2025-08-31, 12営業所）
 - 出力先: `data/derived/pv_profiles/`
 
+整合性メモ（2026-03-24 更新）:
+
+- `period_end` の日付解釈を「直前区間に帰属」へ修正し、`pv_generation_kwh_by_slot` を 24 要素固定化。
+- 例: `data/derived/pv_profiles/meguro_2025-08-01_60min.json` は `slot_minutes=60` かつ `24` 要素を満たすことを確認済み。
+
 ### 5.4 シナリオ投入
 
 `simulation_config.depot_energy_assets` の営業所ごとエントリに、変換済み `pv_generation_kwh_by_slot` を設定して最適化へ投入してください。

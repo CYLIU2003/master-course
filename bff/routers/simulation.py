@@ -42,7 +42,7 @@ from bff.services.run_preparation import (
     materialize_scenario_from_prepared_input,
     solver_prepare_profile,
 )
-from bff.store import job_store, scenario_store as store
+from bff.store import job_store, output_paths, scenario_store as store
 from src.milp_model import MILPResult
 from src.pipeline.simulate import simulate_problem_data
 
@@ -101,6 +101,9 @@ class PrepareSimulationSettingsBody(BaseModel):
     restrict_vehicle_types: list[str] = Field(default_factory=list)
     solver_mode: str = "mode_milp_only"
     objective_mode: str = "total_cost"
+    objective_preset: Optional[str] = None
+    fixed_route_band_mode: bool = False
+    enable_vehicle_diagram_output: bool = False
     allow_partial_service: bool = False
     unserved_penalty: float = 10000.0
     time_limit_seconds: int = 300
@@ -120,6 +123,9 @@ class PrepareSimulationSettingsBody(BaseModel):
     start_time: str = "05:00"
     planning_horizon_hours: float = 20.0
     depot_energy_assets: Optional[list[Dict[str, Any]]] = None
+    pv_profile_id: Optional[str] = None
+    weather_mode: Optional[str] = None
+    weather_factor_scalar: Optional[float] = None
     alns_iterations: int = 500
     random_seed: Optional[int] = None
     experiment_method: Optional[str] = None
@@ -292,7 +298,7 @@ def _require_scenario(scenario_id: str) -> None:
 
 
 def _prepared_inputs_root() -> Path:
-    return Path(__file__).resolve().parents[2] / "outputs" / "prepared_inputs"
+    return output_paths.outputs_root() / "prepared_inputs"
 
 
 def _resolve_dispatch_scope(
@@ -513,7 +519,7 @@ def _run_simulation(
         _ensure_dispatch_artifacts(scenario_id, service_id, depot_id)
         feed_context = _scenario_feed_context(scenario_id)
         output_dir = _scoped_output_dir(
-            root="outputs",
+            root=str(output_paths.outputs_root()),
             feed_context=feed_context,
             scenario_id=scenario_id,
             stage="simulation",

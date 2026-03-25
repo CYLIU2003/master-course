@@ -42,7 +42,7 @@ from bff.services.run_preparation import (
     load_prepared_input,
     materialize_scenario_from_prepared_input,
 )
-from bff.store import job_store, scenario_store as store
+from bff.store import job_store, output_paths, scenario_store as store
 from src.dispatch.models import hhmm_to_min
 from src.optimization import (
     OptimizationConfig,
@@ -293,7 +293,7 @@ def _git_sha() -> str:
 
 
 def _prepared_inputs_root() -> Path:
-    return Path(__file__).resolve().parents[2] / "outputs" / "prepared_inputs"
+    return output_paths.outputs_root() / "prepared_inputs"
 
 
 def _persist_prepared_scope_artifacts(
@@ -680,7 +680,7 @@ def _run_optimization(
             mip_gap=mip_gap,
             random_seed=random_seed,
             output_dir=_scoped_output_dir(
-                root="outputs",
+                root=str(output_paths.outputs_root()),
                 feed_context=feed_context,
                 scenario_id=scenario_id,
                 stage="optimization",
@@ -692,7 +692,7 @@ def _run_optimization(
             destroy_fraction=destroy_fraction,
         )
         output_dir = _scoped_output_dir(
-            root="outputs",
+            root=str(output_paths.outputs_root()),
             feed_context=feed_context,
             scenario_id=scenario_id,
             stage="optimization",
@@ -1089,6 +1089,19 @@ def run_optimization(
     _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    request = body or RunOptimizationBody()
+    # Apply the request's depot/service to the persisted scope BEFORE building the
+    # run preparation, so that resolve_scope sees the correct depotId/serviceId
+    # even when the scenario's dispatch_scope was left empty by a previous operation.
+    # Skip if a prepared_input_id was supplied — the prepare step already fixed the scope,
+    # and persisting again would change the scenario_hash and invalidate the prepared input.
+    if (request.service_id or request.depot_id) and not request.prepared_input_id:
+        _resolve_dispatch_scope(
+            scenario_id,
+            service_id=request.service_id,
+            depot_id=request.depot_id,
+            persist=True,
+        )
     scenario = store.get_scenario_document_shallow(scenario_id)
     prep = get_or_build_run_preparation(
         scenario=scenario,
@@ -1105,7 +1118,6 @@ def run_optimization(
             ),
         )
     _require_nonempty_prepared_scope(prep, action="Optimization preflight")
-    request = body or RunOptimizationBody()
     if request.prepared_input_id and prep.prepared_input_id != request.prepared_input_id:
         raise HTTPException(
             status_code=409,

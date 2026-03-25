@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
+from bff.services.route_catalog_audit import audit_route_catalog_consistency
 from src.value_normalization import normalize_for_python
 
 
@@ -421,6 +422,35 @@ def _prepared_input_dir(scenarios_dir: Path, scenario_id: str) -> Path:
     return scenarios_dir / scenario_id / "prepared_inputs"
 
 
+def _route_catalog_audit_warnings(audit: dict[str, Any]) -> list[str]:
+    checked_count = int(audit.get("checkedRouteCount") or 0)
+    if checked_count <= 0:
+        return []
+    issue_count = int(audit.get("issueCount") or 0)
+    family_issue_count = int(audit.get("familyIssueCount") or 0)
+    trip_count_mismatch_count = int(audit.get("tripCountMismatchCount") or 0)
+    source = str(audit.get("actualCountsSource") or "unavailable")
+    if issue_count <= 0:
+        return [
+            "Route catalog audit passed: "
+            f"checked={checked_count}, family_issues=0, trip_count_mismatches=0, source={source}"
+        ]
+
+    summary = (
+        "Route catalog audit found inconsistencies: "
+        f"checked={checked_count}, family_issues={family_issue_count}, "
+        f"trip_count_mismatches={trip_count_mismatch_count}, source={source}"
+    )
+    details: list[str] = []
+    for issue in list(audit.get("issues") or [])[:3]:
+        kind = str(issue.get("kind") or "unknown")
+        route_id = str(issue.get("routeId") or "").strip()
+        route_code = str(issue.get("routeCode") or "").strip()
+        label = route_code or route_id or "unknown-route"
+        details.append(f"audit detail: {kind} ({label})")
+    return [summary, *details]
+
+
 def _build_canonical_input(
     *,
     scenario: dict,
@@ -642,6 +672,8 @@ def _build_run_preparation(
             warnings.append("Scoped built dataset returned zero trips for the current selection.")
         if load_source == "tokyu_shard":
             warnings.append("Prepared input was assembled from Tokyu shard runtime artifacts.")
+        route_catalog_audit = audit_route_catalog_consistency(scenario)
+        warnings.extend(_route_catalog_audit_warnings(route_catalog_audit))
 
         prepared_input_id = _prepared_input_id(scenario_hash)
         solver_input = normalize_for_python(_build_canonical_input(
@@ -679,6 +711,7 @@ def _build_run_preparation(
                 "trip_count": len(trips_df),
                 "timetable_row_count": len(timetables_df),
                 "load_source": load_source,
+                "route_catalog_audit": route_catalog_audit,
             },
         )
     except Exception as exc:

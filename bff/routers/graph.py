@@ -40,8 +40,13 @@ from bff.mappers.dispatch_mappers import (
     validation_result_to_dict,
 )
 from bff.mappers.scenario_to_problemdata import _collect_trips_for_scope, _filter_rows_for_scope
-from bff.services.route_family import build_route_family_summary, enrich_routes_with_family
-from bff.store import job_store, scenario_store as store
+from bff.services.route_family import build_route_family_summary
+from bff.services.runtime_route_family import (
+    effective_route_direction,
+    effective_route_variant_type,
+    reclassify_routes_for_runtime,
+)
+from bff.store import job_store, output_paths, scenario_store as store
 from src.dispatch.graph_builder import ConnectionGraphBuilder
 from src.dispatch.models import (
     DispatchContext,
@@ -163,7 +168,7 @@ def _resolve_dispatch_scope(
 
 
 def _subset_export_dir(scenario_id: str) -> Path:
-    return Path(__file__).resolve().parents[2] / "outputs" / "subset_exports" / scenario_id
+    return output_paths.outputs_root() / "subset_exports" / scenario_id
 
 
 def _effective_scope_routes(scenario_id: str, scope: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -175,7 +180,7 @@ def _effective_scope_routes(scenario_id: str, scope: Dict[str, Any]) -> List[Dic
     routes = store.list_routes(scenario_id)
     if route_ids:
         routes = [route for route in routes if str(route.get("id") or "") in route_ids]
-    return enrich_routes_with_family([dict(route) for route in routes])
+    return reclassify_routes_for_runtime([dict(route) for route in routes])
 
 
 def _route_family_subset_summary(routes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -475,8 +480,7 @@ def _build_dispatch_context(
     def _trip_allowed_by_variant(route_id: str) -> bool:
         route = route_lookup.get(route_id) or {}
         variant_type = _normalize_variant_type(
-            route.get("routeVariantTypeManual")
-            or route.get("routeVariantType")
+            effective_route_variant_type(route)
             or "unknown"
         )
         variant_bucket = route_variant_bucket(variant_type)
@@ -562,16 +566,14 @@ def _build_dispatch_context(
                 td.get("direction")
                 or td.get("canonicalDirection")
                 or td.get("canonicalDirectionManual")
-                or route_like.get("canonicalDirectionManual")
-                or route_like.get("canonicalDirection")
+                or effective_route_direction(route_like, default="outbound")
                 or "outbound"
             )
             variant = _normalize_variant_type(
-                td.get("routeVariantType")
+                td.get("routeVariantTypeManual")
+                or effective_route_variant_type(route_like)
+                or td.get("routeVariantType")
                 or td.get("route_variant_type")
-                or td.get("routeVariantTypeManual")
-                or route_like.get("routeVariantTypeManual")
-                or route_like.get("routeVariantType")
                 or "unknown",
                 direction=direction,
             )
@@ -629,16 +631,14 @@ def _build_dispatch_context(
                 row.get("direction")
                 or row.get("canonicalDirection")
                 or row.get("canonicalDirectionManual")
-                or route_like.get("canonicalDirectionManual")
-                or route_like.get("canonicalDirection")
+                or effective_route_direction(route_like, default="outbound")
                 or "outbound"
             )
             variant = _normalize_variant_type(
-                row.get("routeVariantType")
+                row.get("routeVariantTypeManual")
+                or effective_route_variant_type(route_like)
+                or row.get("routeVariantType")
                 or row.get("route_variant_type")
-                or row.get("routeVariantTypeManual")
-                or route_like.get("routeVariantTypeManual")
-                or route_like.get("routeVariantType")
                 or "unknown",
                 direction=direction,
             )

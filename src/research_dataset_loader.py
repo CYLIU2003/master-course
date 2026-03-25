@@ -40,6 +40,7 @@ _SEED_ROOT = _DATA_ROOT / "seed" / DEFAULT_OPERATOR_ID
 _BUILT_ROOT = _DATA_ROOT / "built"
 _CATALOG_FAST_ROOT = _DATA_ROOT / "catalog-fast"
 _CATALOG_FAST_NORMALIZED_ROOT = _CATALOG_FAST_ROOT / "normalized"
+_CATALOG_FAST_TOKYU_BUS_ROOT = _CATALOG_FAST_ROOT / "tokyu_bus_data"
 
 _DEPOT_MASTER_CANDIDATES = (
     _REPO_ROOT / "tokyu_bus_depots_master_full.json",
@@ -182,6 +183,10 @@ def _built_dataset_dir(dataset_id: str) -> Path:
 
 def _catalog_fast_normalized_path(filename: str) -> Path:
     return _CATALOG_FAST_NORMALIZED_ROOT / filename
+
+
+def _catalog_fast_tokyu_bus_path(filename: str) -> Path:
+    return _CATALOG_FAST_TOKYU_BUS_ROOT / filename
 
 
 def load_seed_version() -> Dict[str, Any]:
@@ -361,6 +366,21 @@ def _apply_route_day_type_counts(
         route_ids=route_ids,
         depot_ids=depot_ids,
     )
+    missing_route_ids = [
+        route_id
+        for route_id in route_ids
+        if route_id not in counts_by_route
+    ]
+    if missing_route_ids and depot_ids:
+        fallback_counts = load_tokyu_bus_route_trip_counts_by_day_type(
+            dataset_id=dataset_id,
+            route_ids=missing_route_ids,
+            depot_ids=None,
+        )
+        counts_by_route = {
+            **counts_by_route,
+            **fallback_counts,
+        }
     enriched: List[Dict[str, Any]] = []
     for route in routes:
         route_id = str(route.get("id") or "").strip()
@@ -524,6 +544,17 @@ def _load_catalog_fast_routes(
     return _filter_built_routes(
         definition,
         _read_jsonl_rows(_catalog_fast_normalized_path("routes.jsonl")),
+        route_rows,
+    )
+
+
+def _load_tokyu_bus_catalog_routes(
+    definition: Dict[str, Any],
+    route_rows: Iterable[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    return _filter_built_routes(
+        definition,
+        _read_jsonl_rows(_catalog_fast_tokyu_bus_path("routes.jsonl")),
         route_rows,
     )
 
@@ -860,6 +891,11 @@ def build_dataset_bootstrap(
     route_rows = load_route_to_depot_rows()
     seed_routes = _seed_route_items(definition, route_rows)
     catalog_fast_routes = _load_catalog_fast_routes(definition, route_rows)
+    tokyu_bus_routes = (
+        _load_tokyu_bus_catalog_routes(definition, route_rows)
+        if tokyu_bus_data_ready(dataset_id)
+        else []
+    )
     shard_ready = bool(status.get("shardReady"))
     shard_manifest = dict(status.get("shardManifest") or {})
     runtime_features: Dict[str, Any] | None = None
@@ -886,7 +922,7 @@ def build_dataset_bootstrap(
                     schema_name="stops",
                 )
             ]
-        route_inventory = catalog_fast_routes or built_routes or seed_routes
+        route_inventory = tokyu_bus_routes or catalog_fast_routes or built_routes or seed_routes
 
         if shard_ready:
             routes = route_inventory
@@ -997,7 +1033,7 @@ def build_dataset_bootstrap(
                 ]
                 source = "built_dataset"
             else:
-                routes = catalog_fast_routes or seed_routes
+                routes = tokyu_bus_routes or catalog_fast_routes or seed_routes
                 timetable_rows = []
                 trips = []
                 stops = []
@@ -1010,7 +1046,7 @@ def build_dataset_bootstrap(
                 ]
                 source = "seed_only"
     elif shard_ready:
-        routes = catalog_fast_routes or seed_routes
+        routes = tokyu_bus_routes or catalog_fast_routes or seed_routes
         timetable_rows = []
         trips = []
         stops = []

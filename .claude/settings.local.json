@@ -50,7 +50,11 @@
       "Bash(SID=\"2b0a60cf-61ad-4094-807c-f766641984c6\" curl -s \"http://127.0.0.1:8765/api/scenarios/$SID/editor-bootstrap\")",
       "Bash(python -:*)",
       "Bash(curl -s http://127.0.0.1:8765/api/jobs)",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2, ensure_ascii=False\\)[:500]\\)\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2, ensure_ascii=False\\)[:500]\\)\")",
+      "Bash(head -5 grep -rl \"restrict_route\\\\|assigned_route\\\\|dispatch_scope\\\\|depot_id\" tools/)",
+      "Bash(curl -s http://127.0.0.1:8000/scenarios)",
+      "Bash(curl -s http://127.0.0.1:8000/app/context)",
+      "Bash(curl -s http://127.0.0.1:8000/)"
     ]
   }
 }

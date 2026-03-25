@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from experiment_logger import ExperimentLogger
+from bff.store import output_paths
 
 
 def log_optimization_experiment(
@@ -78,13 +79,7 @@ def log_simulation_experiment(
 
 
 def _results_dir(scenario_id: str, report_type: str) -> Path:
-    return (
-        Path(__file__).resolve().parents[2]
-        / "outputs"
-        / "experiments"
-        / scenario_id
-        / report_type
-    )
+    return output_paths.outputs_root() / "experiments" / scenario_id / report_type
 
 
 def _simulation_config(scenario_doc: Dict[str, Any]) -> Dict[str, Any]:

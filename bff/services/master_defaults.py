@@ -5,6 +5,7 @@ import os
 from functools import lru_cache
 from typing import Any, Dict, Optional
 
+from bff.services.runtime_route_family import reclassify_routes_for_runtime
 from src.research_dataset_loader import (
     DEFAULT_DATASET_ID,
     build_dataset_bootstrap,
@@ -99,6 +100,10 @@ def _merge_routes(
         "color",
         "routeVariantTypeManual",
         "canonicalDirectionManual",
+        "classificationSource",
+        "manualClassificationLocked",
+        "classificationEditedByUser",
+        "manualOverrideSource",
     }
     current_by_id = {
         str(item.get("id") or "").strip(): dict(item)
@@ -114,7 +119,7 @@ def _merge_routes(
             if key in current_item and current_item.get(key) is not None:
                 merged_item[key] = current_item.get(key)
         merged.append(merged_item)
-    return merged
+    return reclassify_routes_for_runtime(merged)
 
 
 def _merge_pair_items(
@@ -283,7 +288,9 @@ def _cached_preloaded_master_data(dataset_id: str) -> Dict[str, Any]:
         "datasetId": effective_dataset_id,
         "datasetVersion": (bootstrap.get("dispatch_scope") or {}).get("datasetVersion"),
         "depots": list(bootstrap.get("depots") or []),
-        "routes": list(bootstrap.get("routes") or []),
+        "routes": reclassify_routes_for_runtime(
+            [dict(item) for item in list(bootstrap.get("routes") or []) if isinstance(item, dict)]
+        ),
         "vehicleTemplates": list(
             bootstrap.get("vehicle_templates") or default_vehicle_templates()
         ),

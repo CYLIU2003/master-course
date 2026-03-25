@@ -4,6 +4,45 @@ from bff.routers import scenarios
 from bff.routers.scenarios import _quick_route_items, _quick_setup_route_selection_patch
 
 
+def _summary_entry(
+    service_id: str,
+    label: str,
+    *,
+    family_count: int,
+    route_count: int,
+    trip_count: int,
+    selected: bool,
+    main_route_count: int = 0,
+    main_trip_count: int = 0,
+    short_turn_route_count: int = 0,
+    short_turn_trip_count: int = 0,
+    depot_route_count: int = 0,
+    depot_trip_count: int = 0,
+    branch_route_count: int = 0,
+    branch_trip_count: int = 0,
+    unknown_route_count: int = 0,
+    unknown_trip_count: int = 0,
+) -> dict[str, int | str | bool]:
+    return {
+        "serviceId": service_id,
+        "label": label,
+        "familyCount": family_count,
+        "routeCount": route_count,
+        "tripCount": trip_count,
+        "mainRouteCount": main_route_count,
+        "mainTripCount": main_trip_count,
+        "shortTurnRouteCount": short_turn_route_count,
+        "shortTurnTripCount": short_turn_trip_count,
+        "depotRouteCount": depot_route_count,
+        "depotTripCount": depot_trip_count,
+        "branchRouteCount": branch_route_count,
+        "branchTripCount": branch_trip_count,
+        "unknownRouteCount": unknown_route_count,
+        "unknownTripCount": unknown_trip_count,
+        "selected": selected,
+    }
+
+
 def test_quick_setup_route_selection_turns_unchecked_routes_into_excludes() -> None:
     doc = {
         "routes": [
@@ -145,6 +184,7 @@ def test_build_quick_setup_payload_preserves_selected_routes_without_link_filter
                 "routeFamilyCode": "黒01",
                 "name": "黒01",
                 "tripCount": 3,
+                "routeVariantType": "main",
             },
             {
                 "id": "route-b",
@@ -152,6 +192,7 @@ def test_build_quick_setup_payload_preserves_selected_routes_without_link_filter
                 "routeCode": "黒02",
                 "routeFamilyCode": "黒02",
                 "name": "黒02",
+                "routeVariantType": "depot_in",
             },
         ],
         "route_depot_assignments": [],
@@ -193,6 +234,190 @@ def test_build_quick_setup_payload_preserves_selected_routes_without_link_filter
     assert payload["routes"][0]["tripCount"] == 3
 
 
+def test_build_quick_setup_payload_keeps_all_routes_visible_across_scenarios() -> None:
+    doc = {
+        "depots": [
+            {"id": "dep1", "name": "Depot 1"},
+            {"id": "dep2", "name": "Depot 2"},
+        ],
+        "routes": [
+            {
+                "id": "route-a",
+                "depotId": "dep1",
+                "routeCode": "東98",
+                "routeFamilyCode": "東98",
+                "routeFamilyLabel": "東98",
+                "routeLabel": "東９８ (東京駅南口 -> 清水)",
+                "startStop": "東京駅南口",
+                "endStop": "清水",
+                "tripCountsByDayType": {"WEEKDAY": 21, "SAT": 16},
+                "tripCountTotal": 37,
+                "routeVariantType": "main_outbound",
+                "canonicalDirection": "outbound",
+                "isPrimaryVariant": True,
+            },
+            {
+                "id": "route-b",
+                "depotId": "dep1",
+                "routeCode": "東98",
+                "routeFamilyCode": "東98",
+                "routeFamilyLabel": "東98",
+                "routeLabel": "東９８ (清水 -> 東京駅南口)",
+                "startStop": "清水",
+                "endStop": "東京駅南口",
+                "tripCountsByDayType": {"WEEKDAY": 14, "SAT": 0},
+                "tripCountTotal": 14,
+                "routeVariantType": "main_inbound",
+                "canonicalDirection": "inbound",
+                "isPrimaryVariant": True,
+            },
+            {
+                "id": "route-c",
+                "depotId": "dep2",
+                "routeCode": "渋42",
+                "routeFamilyCode": "渋42",
+                "routeFamilyLabel": "渋42",
+                "routeLabel": "渋４２ (渋谷駅 -> 大崎駅西口)",
+                "startStop": "渋谷駅",
+                "endStop": "大崎駅西口",
+                "tripCountsByDayType": {"WEEKDAY": 58, "SAT": 0},
+                "tripCountTotal": 58,
+                "routeVariantType": "main_outbound",
+                "canonicalDirection": "outbound",
+                "isPrimaryVariant": True,
+            },
+        ],
+        "route_depot_assignments": [],
+        "vehicles": [],
+        "chargers": [],
+        "vehicle_templates": [],
+        "scenario_overlay": {},
+        "simulation_config": {},
+        "calendar": [
+            {"service_id": "WEEKDAY", "name": "平日"},
+            {"service_id": "SAT", "name": "土曜"},
+        ],
+    }
+    scenario = {
+        "id": "scenario-1",
+        "name": "Scenario 1",
+        "operatorId": "tokyu",
+        "datasetVersion": "v1",
+        "datasetId": "tokyu_full",
+        "status": "draft",
+        "feedContext": {},
+        "stats": {},
+    }
+    dispatch_scope = {
+        "serviceId": "WEEKDAY",
+        "effectiveRouteIds": ["route-a"],
+        "depotSelection": {"depotIds": ["dep1"], "primaryDepotId": "dep1"},
+        "routeSelection": {"mode": "refine", "includeRouteIds": [], "excludeRouteIds": []},
+        "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+        "tripSelection": {"includeDeadhead": True},
+    }
+
+    payload = scenarios._build_quick_setup_payload(
+        scenario,
+        doc,
+        dispatch_scope,
+        selected_depot_ids=["dep1"],
+        route_limit=20,
+    )
+
+    assert [item["id"] for item in payload["routes"]] == ["route-a", "route-b", "route-c"]
+    route_a = next(item for item in payload["routes"] if item["id"] == "route-a")
+    route_b = next(item for item in payload["routes"] if item["id"] == "route-b")
+    assert route_a["routeFamilyLabel"] == "東京駅南口 ⇔ 清水"
+    assert route_b["routeFamilyLabel"] == "東京駅南口 ⇔ 清水"
+    assert payload["selectedDepotIds"] == ["dep1"]
+    assert [depot["selected"] for depot in payload["depots"]] == [True, False]
+
+
+def test_build_quick_setup_payload_surfaces_official_family_labels() -> None:
+    doc = {
+        "depots": [
+            {"id": "dep1", "name": "Depot 1"},
+            {"id": "dep2", "name": "Depot 2"},
+        ],
+        "routes": [
+            {
+                "id": "east98-main",
+                "depotId": "dep1",
+                "routeCode": "東98",
+                "routeLabel": "東98 (東京駅南口 -> 清水)",
+                "routeFamilyCode": "東98",
+                "startStop": "東京駅南口",
+                "endStop": "清水",
+                "tripCountsByDayType": {"WEEKDAY": 5},
+                "tripCountTotal": 5,
+            },
+            {
+                "id": "shibu41-main",
+                "depotId": "dep1",
+                "routeCode": "渋41",
+                "routeLabel": "渋41 (渋谷駅 -> 大井町駅)",
+                "routeFamilyCode": "渋41",
+                "startStop": "渋谷駅",
+                "endStop": "大井町駅",
+                "tripCountsByDayType": {"WEEKDAY": 3},
+                "tripCountTotal": 3,
+            },
+            {
+                "id": "shibu42-main",
+                "depotId": "dep2",
+                "routeCode": "渋42",
+                "routeLabel": "渋42 (渋谷駅 -> 大崎駅西口)",
+                "routeFamilyCode": "渋42",
+                "startStop": "渋谷駅",
+                "endStop": "大崎駅西口",
+                "tripCountsByDayType": {"WEEKDAY": 2},
+                "tripCountTotal": 2,
+            },
+        ],
+        "route_depot_assignments": [],
+        "vehicles": [],
+        "chargers": [],
+        "vehicle_templates": [],
+        "scenario_overlay": {},
+        "simulation_config": {},
+        "calendar": [
+            {"service_id": "WEEKDAY", "name": "平日"},
+        ],
+    }
+    scenario = {
+        "id": "scenario-official-family-label",
+        "name": "Scenario Official",
+        "operatorId": "tokyu",
+        "datasetVersion": "v1",
+        "datasetId": "tokyu_full",
+        "status": "draft",
+        "feedContext": {},
+        "stats": {},
+    }
+    dispatch_scope = {
+        "serviceId": "WEEKDAY",
+        "effectiveRouteIds": ["east98-main"],
+        "depotSelection": {"depotIds": ["dep1"], "primaryDepotId": "dep1"},
+        "routeSelection": {"mode": "refine", "includeRouteIds": [], "excludeRouteIds": []},
+        "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+        "tripSelection": {"includeDeadhead": True},
+    }
+
+    payload = scenarios._build_quick_setup_payload(
+        scenario,
+        doc,
+        dispatch_scope,
+        selected_depot_ids=["dep1"],
+        route_limit=20,
+    )
+
+    labels = {item["routeFamilyCode"]: item["routeFamilyLabel"] for item in payload["routes"]}
+    assert labels["東98"] == "東京駅南口 ⇔ 清水"
+    assert labels["渋41"] == "渋谷駅 ⇔ 大井町駅"
+    assert labels["渋42"] == "渋谷駅 ⇔ 大崎駅西口"
+
+
 def test_build_quick_setup_payload_falls_back_to_route_trip_count_when_shards_unavailable(
     monkeypatch,
 ) -> None:
@@ -207,6 +432,7 @@ def test_build_quick_setup_payload_falls_back_to_route_trip_count_when_shards_un
                 "routeFamilyCode": "黒01",
                 "name": "黒01",
                 "tripCount": 5,
+                "routeVariantType": "main",
             },
             {
                 "id": "route-b",
@@ -215,6 +441,7 @@ def test_build_quick_setup_payload_falls_back_to_route_trip_count_when_shards_un
                 "routeFamilyCode": "黒02",
                 "name": "黒02",
                 "tripCount": 3,
+                "routeVariantType": "depot_in",
             },
         ],
         "route_depot_assignments": [],
@@ -274,6 +501,26 @@ def test_build_quick_setup_payload_falls_back_to_route_trip_count_when_shards_un
     assert route_b["tripCount"] == 3
     assert route_b["tripCountTotal"] == 3
     assert route_b["tripCountsByDayType"] == {}
+    assert payload["dayTypeSummaries"] == [
+        _summary_entry(
+            "WEEKDAY",
+            "平日",
+            family_count=2,
+            route_count=2,
+            trip_count=8,
+            selected=True,
+            main_route_count=2,
+            main_trip_count=8,
+        ),
+        _summary_entry(
+            "SAT",
+            "土曜",
+            family_count=0,
+            route_count=0,
+            trip_count=0,
+            selected=False,
+        ),
+    ]
 
 
 def test_build_quick_setup_payload_uses_tokyu_bus_data_when_shards_unavailable(
@@ -289,6 +536,7 @@ def test_build_quick_setup_payload_uses_tokyu_bus_data_when_shards_unavailable(
                 "routeFamilyCode": "黒01",
                 "name": "黒01",
                 "tripCount": 999,
+                "routeVariantType": "main",
             },
             {
                 "id": "route-b",
@@ -297,6 +545,7 @@ def test_build_quick_setup_payload_uses_tokyu_bus_data_when_shards_unavailable(
                 "routeFamilyCode": "黒02",
                 "name": "黒02",
                 "tripCount": 999,
+                "routeVariantType": "depot_in",
             },
         ],
         "route_depot_assignments": [],
@@ -359,20 +608,53 @@ def test_build_quick_setup_payload_uses_tokyu_bus_data_when_shards_unavailable(
     assert payload["routes"][0]["tripCountSelectedDay"] == 2
     assert payload["routes"][0]["tripCountTotal"] == 3
     assert payload["dayTypeSummaries"] == [
+        _summary_entry(
+            "WEEKDAY",
+            "平日",
+            family_count=2,
+            route_count=2,
+            trip_count=6,
+            selected=False,
+            main_route_count=2,
+            main_trip_count=6,
+        ),
+        _summary_entry(
+            "SAT",
+            "土曜",
+            family_count=1,
+            route_count=1,
+            trip_count=2,
+            selected=True,
+            main_route_count=1,
+            main_trip_count=2,
+        ),
+    ]
+    assert payload["depots"] == [
         {
-            "serviceId": "WEEKDAY",
-            "label": "平日",
+            "id": "dep1",
+            "name": "Depot 1",
+            "location": "",
             "routeCount": 2,
-            "tripCount": 6,
-            "selected": False,
-        },
-        {
-            "serviceId": "SAT",
-            "label": "土曜",
-            "routeCount": 1,
-            "tripCount": 2,
+            "familyCount": 2,
+            "vehicleCount": 0,
+            "visibleRouteCount": 1,
+            "visibleFamilyCount": 1,
+            "tripCountSelectedDay": 2,
+            "selectedRouteCount": 1,
+            "selectedFamilyCount": 1,
+            "selectedTripCount": 2,
+            "mainRouteCount": 1,
+            "mainTripCount": 2,
+            "shortTurnRouteCount": 0,
+            "shortTurnTripCount": 0,
+            "depotRouteCount": 0,
+            "depotTripCount": 0,
+            "branchRouteCount": 0,
+            "branchTripCount": 0,
+            "unknownRouteCount": 0,
+            "unknownTripCount": 0,
             "selected": True,
-        },
+        }
     ]
 
 
@@ -388,6 +670,7 @@ def test_build_quick_setup_payload_filters_routes_by_selected_day_type_and_expos
                 "routeCode": "黒01",
                 "routeFamilyCode": "黒01",
                 "name": "黒01",
+                "routeVariantType": "main",
             },
             {
                 "id": "route-b",
@@ -395,6 +678,7 @@ def test_build_quick_setup_payload_filters_routes_by_selected_day_type_and_expos
                 "routeCode": "黒02",
                 "routeFamilyCode": "黒02",
                 "name": "黒02",
+                "routeVariantType": "depot_in",
             },
         ],
         "route_depot_assignments": [],
@@ -458,20 +742,26 @@ def test_build_quick_setup_payload_filters_routes_by_selected_day_type_and_expos
     assert payload["routes"][0]["tripCountsByDayType"] == {"WEEKDAY": 1, "SAT": 2}
     assert payload["dispatchScope"]["dayType"] == "SAT"
     assert payload["dayTypeSummaries"] == [
-        {
-            "serviceId": "WEEKDAY",
-            "label": "平日",
-            "routeCount": 2,
-            "tripCount": 6,
-            "selected": False,
-        },
-        {
-            "serviceId": "SAT",
-            "label": "土曜",
-            "routeCount": 1,
-            "tripCount": 2,
-            "selected": True,
-        },
+        _summary_entry(
+            "WEEKDAY",
+            "平日",
+            family_count=2,
+            route_count=2,
+            trip_count=6,
+            selected=False,
+            main_route_count=2,
+            main_trip_count=6,
+        ),
+        _summary_entry(
+            "SAT",
+            "土曜",
+            family_count=1,
+            route_count=1,
+            trip_count=2,
+            selected=True,
+            main_route_count=1,
+            main_trip_count=2,
+        ),
     ]
 
 

@@ -417,6 +417,20 @@ def apply_builder_configuration(
     overlay.solver_config.objective_mode = normalize_objective_mode(  # type: ignore[assignment]
         body.simulation_settings.objective_mode or "total_cost"
     )
+    if body.simulation_settings.objective_preset is not None:
+        overlay.solver_config.objective_preset = str(
+            body.simulation_settings.objective_preset
+        )
+    overlay.solver_config.fixed_route_band_mode = bool(
+        body.simulation_settings.fixed_route_band_mode
+    )
+    overlay.solver_config.enable_vehicle_diagram_output = bool(
+        body.simulation_settings.enable_vehicle_diagram_output
+        or body.simulation_settings.fixed_route_band_mode
+    )
+    overlay.solver_config.output_vehicle_diagram = (
+        overlay.solver_config.enable_vehicle_diagram_output
+    )
     overlay.solver_config.allow_partial_service = bool(
         body.simulation_settings.allow_partial_service
     )
@@ -465,6 +479,18 @@ def apply_builder_configuration(
         overlay.cost_coefficients.co2_price_per_kg = (
             body.simulation_settings.co2_price_per_kg
         )
+    if body.simulation_settings.pv_profile_id is not None:
+        overlay.cost_coefficients.pv_profile_id = str(
+            body.simulation_settings.pv_profile_id
+        )
+    if body.simulation_settings.weather_mode is not None:
+        overlay.cost_coefficients.weather_mode = str(
+            body.simulation_settings.weather_mode
+        )
+    if body.simulation_settings.weather_factor_scalar is not None:
+        overlay.cost_coefficients.weather_factor_scalar = float(
+            body.simulation_settings.weather_factor_scalar
+        )
     if body.simulation_settings.tou_pricing:
         overlay.cost_coefficients.tou_pricing = [
             TimeOfUseBand(**item.model_dump())
@@ -495,6 +521,8 @@ def apply_builder_configuration(
         if hasattr(body, "allow_inter_depot_swap") and body.allow_inter_depot_swap is not None
         else bool(current_scope.get("allowInterDepotSwap", False))
     )
+    if overlay.solver_config.fixed_route_band_mode:
+        allow_intra_depot_swap = False
 
     primary_depot_id = selected_depot_ids[0]
     doc["dispatch_scope"] = {
@@ -519,6 +547,7 @@ def apply_builder_configuration(
         },
         "allowIntraDepotRouteSwap": allow_intra_depot_swap,
         "allowInterDepotSwap": allow_inter_depot_swap,
+        "fixedRouteBandMode": overlay.solver_config.fixed_route_band_mode,
         "depotId": primary_depot_id,
         "serviceId": selected_day_type,
     }
@@ -550,6 +579,10 @@ def apply_builder_configuration(
         "disable_vehicle_acquisition_cost": body.simulation_settings.disable_vehicle_acquisition_cost,
         "solver_mode": body.simulation_settings.solver_mode,
         "objective_mode": overlay.solver_config.objective_mode,
+        "objective_preset": overlay.solver_config.objective_preset,
+        "fixed_route_band_mode": overlay.solver_config.fixed_route_band_mode,
+        "enable_vehicle_diagram_output": overlay.solver_config.enable_vehicle_diagram_output,
+        "output_vehicle_diagram": overlay.solver_config.output_vehicle_diagram,
         "allow_partial_service": overlay.solver_config.allow_partial_service,
         "unserved_penalty": overlay.solver_config.unserved_penalty,
         "objective_weights": dict(overlay.solver_config.objective_weights),
@@ -557,6 +590,9 @@ def apply_builder_configuration(
         "mip_gap": body.simulation_settings.mip_gap,
         "alns_iterations": overlay.solver_config.alns_iterations,
         "deadhead_speed_kmh": body.simulation_settings.deadhead_speed_kmh,
+        "pv_profile_id": overlay.cost_coefficients.pv_profile_id,
+        "weather_mode": overlay.cost_coefficients.weather_mode,
+        "weather_factor_scalar": overlay.cost_coefficients.weather_factor_scalar,
         "random_seed": overlay.random_seed,
         "experiment_method": body.simulation_settings.experiment_method,
         "experiment_notes": body.simulation_settings.experiment_notes,

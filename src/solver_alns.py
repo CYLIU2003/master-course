@@ -693,6 +693,7 @@ def _to_milp_result(
     dp: DerivedParams,
     solve_time: float,
     iteration_log: List[Dict[str, Any]],
+    data=None,
 ) -> MILPResult:
     """ALNS 結果を MILPResult に変換"""
     cost = details["objective"] if details else float("inf")
@@ -893,7 +894,7 @@ def solve_alns(
 
     elapsed = time.perf_counter() - t_start
 
-    return _to_milp_result(best_sol, best_details, ms, dp, elapsed, iteration_log)
+    return _to_milp_result(best_sol, best_details, ms, dp, elapsed, iteration_log, data=data)
 
 
 def _roulette_select(weights: List[float], rng: random.Random) -> int:

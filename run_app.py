@@ -102,7 +102,7 @@ def setup_paths():
         # Force paths so app_cache.py finds the datasets in the Pyinstaller bundle
         os.environ["BUILT_ROOT"] = str(base_dir / "data" / "built")
         # Ensure outputs go to the real user folder, not inside _internal
-        out_dir = exe_dir / "outputs"
+        out_dir = exe_dir / "output"
         scen_dir = out_dir / "scenarios"
         os.environ["SCENARIO_STORE_PATH"] = str(scen_dir)
         os.environ["MC_OUTPUTS_DIR"] = str(out_dir)

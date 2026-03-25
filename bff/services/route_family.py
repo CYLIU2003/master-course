@@ -14,12 +14,19 @@ Design principles:
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from src.route_code_utils import extract_route_series_from_candidates, normalize_route_code, route_code_sort_key
+from src.route_family_runtime import (
+    normalize_direction as runtime_normalize_direction,
+    normalize_variant_type as runtime_normalize_variant_type,
+)
 from src.value_normalization import coerce_str_list
 
 # ── Type aliases ───────────────────────────────────────────────
@@ -36,6 +43,14 @@ VariantType = Literal[
 ]
 
 DirectionType = Literal["outbound", "inbound", "circular", "unknown"]
+
+_LEGACY_IMPORTED_MANUAL_SOURCES = {"manual_override"}
+_USER_MANUAL_SOURCES = {"user_manual_override", "scenario_manual_override"}
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_STOP_CATALOG_CANDIDATES = (
+    _REPO_ROOT / "data" / "catalog-fast" / "tokyu_bus_data" / "stops.jsonl",
+    _REPO_ROOT / "data" / "catalog-fast" / "normalized" / "stops.jsonl",
+)
 
 
 # ── Data classes ───────────────────────────────────────────────
@@ -132,6 +147,44 @@ def normalize_stop_name(name: Optional[str]) -> str:
     return s
 
 
+def normalize_terminal_name(name: Optional[str]) -> str:
+    """Coarser normalization for terminal pairing and station-exit variants."""
+    s = normalize_stop_name(name)
+    s = re.sub(r"駅(?:東口|西口|南口|北口|中央口)$", "駅", s)
+    s = re.sub(r"駅前$", "駅", s)
+    return s
+
+
+@lru_cache(maxsize=1)
+def _stop_name_lookup() -> Dict[str, str]:
+    lookup: Dict[str, str] = {}
+    for path in _STOP_CATALOG_CANDIDATES:
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                text = line.strip()
+                if not text:
+                    continue
+                payload = json.loads(text)
+                if not isinstance(payload, dict):
+                    continue
+                stop_id = str(payload.get("id") or "").strip()
+                stop_name = str(payload.get("name") or "").strip()
+                if stop_id and stop_name:
+                    lookup.setdefault(stop_id, stop_name)
+    return lookup
+
+
+def _resolve_stop_sequence_item(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.startswith("odpt.BusstopPole:"):
+        return _stop_name_lookup().get(text, text)
+    return text
+
+
 # ── Route code extraction ──────────────────────────────────────
 
 _ROUTE_CODE_PATTERNS = [
@@ -139,6 +192,22 @@ _ROUTE_CODE_PATTERNS = [
     r"\b([A-Za-z]+\d+)\b",   # alphanumeric code like TW01
     r"\b([^\s]+?\d+)\b",     # any token ending in digits
 ]
+_GENERIC_ROUTE_CODES = {"高速", "空港", "直行", "急行", "出入庫"}
+
+
+def _generic_family_code_from_terminals(route: RawRoute, route_code: str) -> Optional[str]:
+    start = normalize_terminal_name(route.start_stop)
+    end = normalize_terminal_name(route.end_stop)
+    if not start and not end:
+        return None
+    if start == end and start:
+        return f"{route_code}:{start}"
+    pair = sorted(item for item in {start, end} if item)
+    if len(pair) == 2:
+        return f"{route_code}:{pair[0]}⇔{pair[1]}"
+    if pair:
+        return f"{route_code}:{pair[0]}"
+    return None
 
 
 def extract_route_family_code(route: RawRoute) -> str:
@@ -152,6 +221,10 @@ def extract_route_family_code(route: RawRoute) -> str:
         route.route_label,
         route.name,
     )
+    if series_code in _GENERIC_ROUTE_CODES:
+        generic_family_code = _generic_family_code_from_terminals(route, series_code)
+        if generic_family_code:
+            return generic_family_code
     if series_code:
         return series_code
 
@@ -203,12 +276,62 @@ def _direction_for_variant_type(
     return fallback
 
 
+def has_user_manual_override(route: Dict[str, Any]) -> bool:
+    manual_variant = route.get("routeVariantTypeManual")
+    manual_direction = route.get("canonicalDirectionManual")
+    if manual_variant in (None, "") and manual_direction in (None, ""):
+        return False
+    source = normalize_text(
+        str(route.get("classificationSource") or route.get("classification_source") or "")
+    ).lower()
+    if source in _LEGACY_IMPORTED_MANUAL_SOURCES:
+        return False
+    if source in _USER_MANUAL_SOURCES:
+        return True
+    return bool(
+        route.get("manualClassificationLocked")
+        or route.get("classificationEditedByUser")
+        or route.get("manualOverrideSource") == "user"
+        or not source
+    )
+
+
+def effective_route_direction(route: Dict[str, Any], default: str = "unknown") -> str:
+    if has_user_manual_override(route):
+        return runtime_normalize_direction(
+            route.get("canonicalDirectionManual") or route.get("canonicalDirection") or default,
+            default=default,
+        )
+    return runtime_normalize_direction(
+        route.get("canonicalDirection")
+        or route.get("canonical_direction")
+        or route.get("direction")
+        or default,
+        default=default,
+    )
+
+
+def effective_route_variant_type(route: Dict[str, Any], default: str = "unknown") -> str:
+    direction = effective_route_direction(route, default="unknown")
+    if has_user_manual_override(route):
+        return runtime_normalize_variant_type(
+            route.get("routeVariantTypeManual") or route.get("routeVariantType") or default,
+            direction=direction,
+        )
+    return runtime_normalize_variant_type(
+        route.get("routeVariantType")
+        or route.get("route_variant_type")
+        or default,
+        direction=direction,
+    )
+
+
 # ── Terminal pair helpers ──────────────────────────────────────
 
 def _terminal_pair(route: RawRoute) -> Tuple[str, str]:
     return (
-        normalize_stop_name(route.start_stop),
-        normalize_stop_name(route.end_stop),
+        normalize_terminal_name(route.start_stop),
+        normalize_terminal_name(route.end_stop),
     )
 
 
@@ -234,9 +357,9 @@ def _score_as_main(route: RawRoute) -> Tuple[int, int, float]:
 
 def _normalized_stop_sequence(route: RawRoute) -> List[str]:
     return [
-        normalize_stop_name(x)
+        normalize_stop_name(_resolve_stop_sequence_item(x))
         for x in (route.stop_sequence or [])
-        if normalize_stop_name(x)
+        if normalize_stop_name(_resolve_stop_sequence_item(x))
     ]
 
 
@@ -259,6 +382,55 @@ def _common_prefix_ratio(a: List[str], b: List[str]) -> float:
         else:
             break
     return same / max(len(a), len(b), 1)
+
+
+def _common_suffix_ratio(a: List[str], b: List[str]) -> float:
+    return _common_prefix_ratio(list(reversed(a)), list(reversed(b)))
+
+
+def _stop_overlap_ratio(a: List[str], b: List[str]) -> float:
+    if not a or not b:
+        return 0.0
+    bset = set(b)
+    hits = sum(1 for item in a if item in bset)
+    return hits / max(len(a), 1)
+
+
+def _terminal_membership_flags(
+    candidate: RawRoute,
+    reference: RawRoute,
+) -> Tuple[bool, bool, bool, bool]:
+    start, end = _terminal_pair(candidate)
+    reference_seq = [normalize_terminal_name(item) for item in _normalized_stop_sequence(reference)]
+    interior = reference_seq[1:-1]
+    return (
+        start in reference_seq,
+        end in reference_seq,
+        start in interior,
+        end in interior,
+    )
+
+
+def _route_overlap_score(candidate: RawRoute, reference: Optional[RawRoute]) -> float:
+    if reference is None:
+        return 0.0
+    cseq = _normalized_stop_sequence(candidate)
+    rseq = _normalized_stop_sequence(reference)
+    scores = [
+        _common_prefix_ratio(cseq, rseq),
+        _common_suffix_ratio(cseq, rseq),
+        _stop_overlap_ratio(cseq, rseq),
+    ]
+    if _is_subsequence(cseq, rseq):
+        scores.append(1.0)
+    start_on, end_on, _start_interior, _end_interior = _terminal_membership_flags(
+        candidate, reference
+    )
+    if start_on and end_on:
+        scores.append(0.8)
+    elif start_on or end_on:
+        scores.append(0.6)
+    return max(scores)
 
 
 # ── Short-turn / branch detection ─────────────────────────────
@@ -405,6 +577,20 @@ def classify_family(routes: List[RawRoute]) -> Dict[str, RouteDerivedMeta]:
             sort_order = 20
             confidence = 0.95
             reasons.append("reverse pair of primary outbound")
+
+        elif main_out and _is_same_pair(route, main_out):
+            variant_type = "main_outbound" if main_in else "main"
+            direction = "outbound" if main_in else "unknown"
+            sort_order = 10
+            confidence = 0.90
+            reasons.append("terminal pair matches main outbound")
+
+        elif main_in and _is_same_pair(route, main_in):
+            variant_type = "main_inbound"
+            direction = "inbound"
+            sort_order = 20
+            confidence = 0.90
+            reasons.append("terminal pair matches main inbound")
 
         # ── 2) Additional reverse pair detection ─────────────
         elif main_out and _is_reverse_pair(route, main_out):

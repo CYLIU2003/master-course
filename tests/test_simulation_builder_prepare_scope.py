@@ -40,6 +40,12 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             use_selected_depot_charger_inventory=True,
             disable_vehicle_acquisition_cost=True,
             deadhead_speed_kmh=18.0,
+            objective_preset="cost",
+            fixed_route_band_mode=True,
+            enable_vehicle_diagram_output=False,
+            pv_profile_id="meguro_solcast_avg_2025_08_60min",
+            weather_mode="solcast_avg_2025_08_60min",
+            weather_factor_scalar=1.0,
             depot_energy_assets=[
                 {
                     "depot_id": "dep1",
@@ -79,8 +85,15 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["dispatch_scope"]["routeSelection"]["includeRouteIds"] == ["route-a"]
     assert updated["dispatch_scope"]["effectiveRouteIds"] == ["route-a"]
     assert updated["scenario_overlay"]["route_ids"] == ["route-a"]
+    assert updated["dispatch_scope"]["fixedRouteBandMode"] is True
+    assert updated["dispatch_scope"]["allowIntraDepotRouteSwap"] is False
     assert updated["simulation_config"]["disable_vehicle_acquisition_cost"] is True
     assert updated["simulation_config"]["deadhead_speed_kmh"] == 18.0
+    assert updated["simulation_config"]["objective_preset"] == "cost"
+    assert updated["simulation_config"]["fixed_route_band_mode"] is True
+    assert updated["simulation_config"]["enable_vehicle_diagram_output"] is True
+    assert updated["simulation_config"]["weather_mode"] == "solcast_avg_2025_08_60min"
+    assert updated["simulation_config"]["pv_profile_id"] == "meguro_solcast_avg_2025_08_60min"
     assert updated["simulation_config"]["depot_energy_assets"] == [
         {
             "depot_id": "dep1",
