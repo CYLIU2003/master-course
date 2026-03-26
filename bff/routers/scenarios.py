@@ -401,6 +401,8 @@ class UpdateQuickSetupBody(BaseModel):
     timeLimitSeconds: Optional[int] = None
     mipGap: Optional[float] = None
     alnsIterations: Optional[int] = None
+    noImprovementLimit: Optional[int] = None
+    destroyFraction: Optional[float] = None
     allowPartialService: Optional[bool] = None
     unservedPenalty: Optional[float] = None
     gridFlatPricePerKwh: Optional[float] = None
@@ -423,6 +425,11 @@ class UpdateQuickSetupBody(BaseModel):
     minIceFuelPercent: Optional[float] = None
     maxIceFuelPercent: Optional[float] = None
     defaultIceTankCapacityL: Optional[float] = None
+    initialSoc: Optional[float] = None
+    socMin: Optional[float] = None
+    socMax: Optional[float] = None
+    disableVehicleAcquisitionCost: Optional[bool] = None
+    touPricing: Optional[List[Dict[str, Any]]] = None
     deadheadSpeedKmh: Optional[float] = None
     objectivePreset: Optional[str] = None
     pvProfileId: Optional[str] = None
@@ -1207,6 +1214,11 @@ def _builder_defaults(
         "co2ReferenceDate": simulation_config.get("co2_reference_date"),
         "iceCo2KgPerL": overlay_cost.get("ice_co2_kg_per_l"),
         "depotPowerLimitKw": overlay_charging.get("depot_power_limit_kw"),
+        "socMin": simulation_config.get("soc_min", 0.2),
+        "socMax": simulation_config.get("soc_max", 0.9),
+        "disableVehicleAcquisitionCost": bool(
+            simulation_config.get("disable_vehicle_acquisition_cost", False)
+        ),
         "initialSocPercent": simulation_config.get("initial_soc_percent"),
         "finalSocFloorPercent": simulation_config.get("final_soc_floor_percent"),
         "finalSocTargetPercent": simulation_config.get(
@@ -1238,6 +1250,16 @@ def _builder_defaults(
             overlay_solver.get("alns_iterations")
             or simulation_config.get("alns_iterations")
             or 500
+        ),
+        "noImprovementLimit": int(
+            overlay_solver.get("no_improvement_limit")
+            or simulation_config.get("no_improvement_limit")
+            or 100
+        ),
+        "destroyFraction": float(
+            overlay_solver.get("destroy_fraction")
+            or simulation_config.get("destroy_fraction")
+            or 0.25
         ),
         "randomSeed": next(
             (
@@ -1602,6 +1624,8 @@ def _build_quick_setup_payload(
             "timeLimitSeconds": int(builder_defaults.get("timeLimitSeconds") or 300),
             "mipGap": float(builder_defaults.get("mipGap") or 0.01),
             "alnsIterations": int(builder_defaults.get("alnsIterations") or 500),
+            "noImprovementLimit": int(builder_defaults.get("noImprovementLimit") or 100),
+            "destroyFraction": float(builder_defaults.get("destroyFraction") or 0.25),
             "fixedRouteBandMode": bool(builder_defaults.get("fixedRouteBandMode", False)),
             "maxStartFragmentsPerVehicle": int(
                 builder_defaults.get("maxStartFragmentsPerVehicle") or 100
@@ -1630,6 +1654,12 @@ def _build_quick_setup_payload(
             "co2ReferenceDate": builder_defaults.get("co2ReferenceDate"),
             "iceCo2KgPerL": builder_defaults.get("iceCo2KgPerL"),
             "depotPowerLimitKw": builder_defaults.get("depotPowerLimitKw"),
+            "initialSoc": builder_defaults.get("initialSoc"),
+            "socMin": builder_defaults.get("socMin"),
+            "socMax": builder_defaults.get("socMax"),
+            "disableVehicleAcquisitionCost": bool(
+                builder_defaults.get("disableVehicleAcquisitionCost", False)
+            ),
             "initialSocPercent": builder_defaults.get("initialSocPercent"),
             "finalSocFloorPercent": builder_defaults.get("finalSocFloorPercent"),
             "finalSocTargetPercent": builder_defaults.get("finalSocTargetPercent"),
@@ -1643,6 +1673,7 @@ def _build_quick_setup_payload(
             "weatherMode": builder_defaults.get("weatherMode") or "sunny",
             "weatherFactorScalar": builder_defaults.get("weatherFactorScalar"),
             "depotEnergyAssets": list(builder_defaults.get("depotEnergyAssets") or []),
+            "touPricing": list(builder_defaults.get("touPricing") or []),
             "degradationWeight": builder_defaults.get("degradationWeight"),
             "allowPartialService": bool(builder_defaults.get("allowPartialService", False)),
             "unservedPenalty": float(builder_defaults.get("unservedPenalty") or 10000.0),
@@ -1990,6 +2021,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["mip_gap"] = float(body.mipGap)
         if body.alnsIterations is not None:
             solver_config["alns_iterations"] = int(body.alnsIterations)
+        if body.noImprovementLimit is not None:
+            solver_config["no_improvement_limit"] = int(body.noImprovementLimit)
+        if body.destroyFraction is not None:
+            solver_config["destroy_fraction"] = float(body.destroyFraction)
         if body.allowPartialService is not None:
             solver_config["allow_partial_service"] = bool(body.allowPartialService)
         if body.unservedPenalty is not None:
@@ -2025,6 +2060,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             overlay_cost["co2_price_per_kg"] = float(body.co2PricePerKg)
         if body.iceCo2KgPerL is not None:
             overlay_cost["ice_co2_kg_per_l"] = float(body.iceCo2KgPerL)
+        if body.touPricing is not None:
+            overlay_cost["tou_pricing"] = [
+                dict(item) for item in body.touPricing if isinstance(item, dict)
+            ]
 
         if body.degradationWeight is not None:
             saved_weights["degradation"] = float(body.degradationWeight)
@@ -2061,6 +2100,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["mip_gap"] = float(body.mipGap)
         if body.alnsIterations is not None:
             simulation_config["alns_iterations"] = int(body.alnsIterations)
+        if body.noImprovementLimit is not None:
+            simulation_config["no_improvement_limit"] = int(body.noImprovementLimit)
+        if body.destroyFraction is not None:
+            simulation_config["destroy_fraction"] = float(body.destroyFraction)
         if body.allowPartialService is not None:
             simulation_config["allow_partial_service"] = bool(body.allowPartialService)
         if body.unservedPenalty is not None:
@@ -2089,6 +2132,16 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["max_ice_fuel_percent"] = float(body.maxIceFuelPercent)
         if body.defaultIceTankCapacityL is not None:
             simulation_config["default_ice_tank_capacity_l"] = float(body.defaultIceTankCapacityL)
+        if body.initialSoc is not None:
+            simulation_config["initial_soc"] = float(body.initialSoc)
+        if body.socMin is not None:
+            simulation_config["soc_min"] = float(body.socMin)
+        if body.socMax is not None:
+            simulation_config["soc_max"] = float(body.socMax)
+        if body.disableVehicleAcquisitionCost is not None:
+            simulation_config["disable_vehicle_acquisition_cost"] = bool(
+                body.disableVehicleAcquisitionCost
+            )
         if body.deadheadSpeedKmh is not None:
             simulation_config["deadhead_speed_kmh"] = float(body.deadheadSpeedKmh)
         if body.objectivePreset is not None:

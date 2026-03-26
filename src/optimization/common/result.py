@@ -68,11 +68,58 @@ class ResultSerializer:
             ],
             "served_trip_ids": list(plan.served_trip_ids),
             "unserved_trip_ids": list(plan.unserved_trip_ids),
+            "contract_over_limit_kwh_by_depot_slot": {
+                str(depot_id): {int(slot_idx): float(value or 0.0) for slot_idx, value in (slot_map or {}).items()}
+                for depot_id, slot_map in (plan.contract_over_limit_kwh_by_depot_slot or {}).items()
+            },
             "metadata": metadata,
         }
 
     @classmethod
     def serialize_result(cls, result: OptimizationEngineResult) -> Dict[str, Any]:
+        # Backward-compatible path: some direct MILP callers still pass legacy
+        # MILPResult which has obj_breakdown/assignment instead of plan/result metadata.
+        if not hasattr(result, "plan"):
+            cost_breakdown = dict(getattr(result, "cost_breakdown", {}) or getattr(result, "obj_breakdown", {}) or {})
+            assignment = dict(getattr(result, "assignment", {}) or {})
+            served_trip_ids = sorted({trip_id for trips in assignment.values() for trip_id in (trips or [])})
+            infeasibility_info = str(getattr(result, "infeasibility_info", "") or "")
+            fleet_size = len(assignment)
+            used_vehicle_count = sum(1 for trip_ids in assignment.values() if trip_ids)
+            utilization_ratio = float(used_vehicle_count) / float(fleet_size) if fleet_size > 0 else 0.0
+            return {
+                "solver_mode": str(getattr(getattr(result, "mode", None), "value", "mode_milp_only") or "mode_milp_only"),
+                "solver_status": str(getattr(result, "status", "UNKNOWN") or "UNKNOWN"),
+                "objective_mode": "total_cost",
+                "objective_value": getattr(result, "objective_value", None),
+                "feasible": str(getattr(result, "status", "")).upper() in {"OPTIMAL", "TIME_LIMIT", "SUBOPTIMAL", "FEASIBLE"},
+                "warnings": [],
+                "infeasibility_reasons": [infeasibility_info] if infeasibility_info else [],
+                "cost_breakdown": cost_breakdown,
+                "objective_components_raw": {},
+                "objective_components_weighted": {},
+                "objective_weights": {},
+                "pv_summary": {},
+                "utilization_summary": {
+                    "fleet_size": fleet_size,
+                    "used_vehicle_count": used_vehicle_count,
+                    "utilization_ratio": utilization_ratio,
+                },
+                "termination_reason": None,
+                "effective_limits": {},
+                "solver_metadata": {},
+                "operator_stats": {},
+                "incumbent_history": [],
+                "duties": [],
+                "vehicle_paths": assignment,
+                "charging_schedule": [],
+                "refueling_schedule": [],
+                "served_trip_ids": served_trip_ids,
+                "unserved_trip_ids": list(getattr(result, "unserved_tasks", []) or []),
+                "contract_over_limit_kwh_by_depot_slot": {},
+                "metadata": {},
+            }
+
         cost_breakdown = dict(result.cost_breakdown)
         solver_metadata = dict(result.solver_metadata)
         objective_weights = dict(solver_metadata.get("objective_weights") or {})
@@ -85,6 +132,7 @@ class ResultSerializer:
             "deviation_cost": float(cost_breakdown.get("deviation_cost", 0.0) or 0.0),
             "degradation_cost": float(cost_breakdown.get("degradation_cost", 0.0) or 0.0),
             "co2_cost": float(cost_breakdown.get("co2_cost", 0.0) or 0.0),
+            "contract_overage_cost": float(cost_breakdown.get("contract_overage_cost", 0.0) or 0.0),
         }
         weighted_components = {
             "energy_cost": raw_components["energy_cost"] * float(objective_weights.get("electricity_cost", 1.0) or 1.0),
@@ -95,6 +143,7 @@ class ResultSerializer:
             "deviation_cost": raw_components["deviation_cost"] * float(objective_weights.get("deviation_cost", 1.0) or 1.0),
             "degradation_cost": raw_components["degradation_cost"] * float(objective_weights.get("degradation", 1.0) or 1.0),
             "co2_cost": raw_components["co2_cost"] * float(objective_weights.get("emission_cost", 1.0) or 1.0),
+            "contract_overage_cost": raw_components["contract_overage_cost"],
         }
         fleet_size = len(result.plan.vehicle_paths())
         used_vehicle_count = sum(1 for trip_ids in result.plan.vehicle_paths().values() if trip_ids)

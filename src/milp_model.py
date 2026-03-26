@@ -198,47 +198,50 @@ def pre_solve_check(
             )
 
     # ─── 3. 全体の充電器容量 vs BEV 必要充電量 ────────────────────────────
+    # 「必要充電量」= 全トリップの走行エネルギー合計 + 全BEV の soc_target_end 合計
+    #                 - 全BEV の soc_init 合計
+    # （各車両の feasible タスク全量を合計する旧実装は70倍の過大見積もりになるため廃止）
     if K_BEV and C:
-        total_energy_deficit = 0.0
+        # 全タスクの BEV 走行エネルギー合計（全トリップはいずれかの BEV が担当する）
+        total_all_task_kwh = sum(dp.task_energy_bev.get(r, 0.0) for r in R)
+
+        total_soc_init  = 0.0
+        total_soc_end   = 0.0
         for k in K_BEV:
             veh = dp.vehicle_lut.get(k)
             if veh is None:
                 continue
             cap      = veh.battery_capacity if veh.battery_capacity is not None else 200.0
-            soc_init = veh.soc_init if veh.soc_init is not None else cap * 0.8
-            soc_end  = getattr(veh, "soc_target_end", None)
-            # 全タスク走行エネルギー(最悪見積もり:この車両の feasible タスク全量)
-            feasible_tasks = ms.vehicle_task_feasible.get(k, set())
-            total_trip_kwh = sum(
-                dp.task_energy_bev.get(r, 0.0)
-                for r in feasible_tasks
-                if r in dp.task_energy_bev
-            )
-            # 最低でも必要な SOC = soc_end (なければ 0)
-            required_end = soc_end if soc_end is not None else 0.0
-            deficit = max(0.0, total_trip_kwh + required_end - soc_init)
-            total_energy_deficit += deficit
+            soc_i    = veh.soc_init if veh.soc_init is not None else cap * 0.8
+            soc_e    = getattr(veh, "soc_target_end", None)
+            total_soc_init += soc_i
+            total_soc_end  += soc_e if soc_e is not None else 0.0
 
-        # 全充電器の理論最大供給量
-        max_supply_kwh = 0.0
+        # 必要充電量 = トリップ消費 + 終端SOC目標 - 初期SOC
+        total_energy_deficit = max(0.0, total_all_task_kwh + total_soc_end - total_soc_init)
+
+        # 全充電器の理論最大供給量（グリッド上限・サイト上限も考慮）
+        # サイトごとに: min(充電器合計kW, grid_import_limit_kw) × 時間
+        from collections import defaultdict
+        chargers_by_site: dict = defaultdict(list)
         for c in C:
             charger = dp.charger_lut.get(c)
-            if charger is None:
-                continue
-            site_id = getattr(charger, "site_id", None)
-            site_max = None
-            if site_id and site_id in dp.site_lut:
-                site = dp.site_lut[site_id]
-                site_max = getattr(site, "grid_capacity_kw", None)
-            effective_kw = charger.power_max_kw
-            if site_max is not None:
-                effective_kw = min(effective_kw, site_max)
+            if charger:
+                chargers_by_site[charger.site_id].append(charger)
+        max_supply_kwh = 0.0
+        for site_id, site_chargers in chargers_by_site.items():
+            site = dp.site_lut.get(site_id)
+            grid_limit_kw = site.grid_import_limit_kw if site else 9999.0
+            charger_total_kw = sum(c.power_max_kw for c in site_chargers)
+            effective_kw = min(charger_total_kw, grid_limit_kw)
             max_supply_kwh += effective_kw * delta_h * len(T)
 
-        if total_energy_deficit > max_supply_kwh * 1.1:  # 10% マージン
+        if total_energy_deficit > max_supply_kwh * 1.05:  # 5% マージン
             warnings.append(
-                f"[WARNING] 全 BEV 必要充電量合計(最悪見積)={total_energy_deficit:.0f} kWh > "
-                f"全充電器最大供給量={max_supply_kwh:.0f} kWh — 充電容量不足の可能性"
+                f"[WARNING] 全 BEV 必要充電量合計={total_energy_deficit:.0f} kWh > "
+                f"全充電器最大供給量={max_supply_kwh:.0f} kWh — 充電容量不足の可能性\n"
+                f"  (内訳: 走行消費={total_all_task_kwh:.0f}, SOC終端目標={total_soc_end:.0f}, "
+                f"SOC初期値={total_soc_init:.0f})"
             )
 
     return warnings

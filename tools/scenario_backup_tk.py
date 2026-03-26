@@ -2255,6 +2255,22 @@ class App:
         return bands
 
     @staticmethod
+    def _format_tou_text(bands: Any) -> str:
+        if not isinstance(bands, list):
+            return ""
+        chunks: list[str] = []
+        for item in bands:
+            if not isinstance(item, dict):
+                continue
+            s = item.get("start_hour")
+            e = item.get("end_hour")
+            p = item.get("price_per_kwh")
+            if s is None or e is None or p is None:
+                continue
+            chunks.append(f"{int(s)}-{int(e)}:{float(p):g}")
+        return ",".join(chunks)
+
+    @staticmethod
     def _parse_bool(value: Any) -> bool | None:
         if value is None:
             return None
@@ -3505,6 +3521,12 @@ class App:
             self.ice_co2_kg_per_l_var.set(str(sim.get("iceCo2KgPerL") or 2.64))
             self.degradation_weight_var.set(str(sim.get("degradationWeight") or 0))
             self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
+            self.initial_soc_var.set(str(sim.get("initialSoc") or 0.8))
+            self.soc_min_var.set(str(sim.get("socMin") or 0.2))
+            self.soc_max_var.set(str(sim.get("socMax") or 0.9))
+            self.disable_vehicle_acquisition_cost_var.set(
+                bool(sim.get("disableVehicleAcquisitionCost", False))
+            )
             self.initial_soc_percent_var.set(str(sim.get("initialSocPercent") or 0.8))
             self.final_soc_floor_percent_var.set(str(sim.get("finalSocFloorPercent") or 0.2))
             self.final_soc_target_percent_var.set(
@@ -3526,6 +3548,7 @@ class App:
                     self.weather_mode_combo.configure(values=self.weather_mode_options)
             self.weather_mode_var.set(weather_mode)
             self.weather_factor_scalar_var.set(str(sim.get("weatherFactorScalar") or 1.0))
+            self.tou_text_var.set(self._format_tou_text(sim.get("touPricing") or []))
             depot_energy_assets = sim.get("depotEnergyAssets")
             if isinstance(depot_energy_assets, list):
                 self.depot_energy_assets_json_var.set(
@@ -3613,12 +3636,17 @@ class App:
             "enableVehicleDiagramOutput": self.enable_vehicle_diagram_output_var.get(),
             "allowPartialService": self.allow_partial_service_var.get(),
             "unservedPenalty": self._parse_float(self.unserved_penalty_var.get(), 10000.0),
+            "initialSoc": self._parse_float(self.initial_soc_var.get(), 0.8),
+            "socMin": self._parse_float(self.soc_min_var.get(), 0.2),
+            "socMax": self._parse_float(self.soc_max_var.get(), 0.9),
+            "disableVehicleAcquisitionCost": self.disable_vehicle_acquisition_cost_var.get(),
             "gridFlatPricePerKwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
             "gridSellPricePerKwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
             "demandChargeCostPerKw": self._parse_float(self.demand_charge_var.get(), 0.0),
             "dieselPricePerL": self._parse_float(self.diesel_price_var.get(), 145.0),
             "gridCo2KgPerKwh": self._parse_float(self.grid_co2_var.get(), 0.0),
             "co2PricePerKg": self._parse_float(self.co2_price_var.get(), 0.0),
+            "touPricing": self._parse_tou_text(),
             "co2PriceSource": self.co2_price_source_var.get().strip() or "manual",
             "co2ReferenceDate": self.co2_reference_date_var.get().strip() or None,
             "iceCo2KgPerL": self._parse_float(self.ice_co2_kg_per_l_var.get(), 2.64),

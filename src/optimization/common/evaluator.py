@@ -30,10 +30,12 @@ class CostBreakdown:
     bess_to_bus_kwh: float = 0.0
     pv_to_bess_kwh: float = 0.0
     grid_to_bess_kwh: float = 0.0
+    contract_over_limit_kwh: float = 0.0
     electricity_cost_final: float = 0.0
     electricity_cost_provisional_leftover: float = 0.0
     grid_purchase_cost: float = 0.0
     bess_discharge_cost: float = 0.0
+    contract_overage_cost: float = 0.0
     stationary_battery_degradation_cost: float = 0.0
     pv_asset_cost: float = 0.0
     bess_asset_cost: float = 0.0
@@ -63,10 +65,12 @@ class CostBreakdown:
             "bess_to_bus_kwh": self.bess_to_bus_kwh,
             "pv_to_bess_kwh": self.pv_to_bess_kwh,
             "grid_to_bess_kwh": self.grid_to_bess_kwh,
+            "contract_over_limit_kwh": self.contract_over_limit_kwh,
             "electricity_cost_final": self.electricity_cost_final,
             "electricity_cost_provisional_leftover": self.electricity_cost_provisional_leftover,
             "grid_purchase_cost": self.grid_purchase_cost,
             "bess_discharge_cost": self.bess_discharge_cost,
+            "contract_overage_cost": self.contract_overage_cost,
             "stationary_battery_degradation_cost": self.stationary_battery_degradation_cost,
             "pv_asset_cost": self.pv_asset_cost,
             "bess_asset_cost": self.bess_asset_cost,
@@ -258,12 +262,14 @@ class CostEvaluator:
             bess_to_bus_kwh=float(energy_cost_components.get("bess_to_bus_kwh", 0.0)),
             pv_to_bess_kwh=float(energy_cost_components.get("pv_to_bess_kwh", 0.0)),
             grid_to_bess_kwh=float(energy_cost_components.get("grid_to_bess_kwh", 0.0)),
+            contract_over_limit_kwh=float(energy_cost_components.get("contract_over_limit_kwh", 0.0)),
             electricity_cost_final=float(energy_cost_components.get("electricity_cost_final", 0.0)),
             electricity_cost_provisional_leftover=float(
                 energy_cost_components.get("electricity_cost_provisional_leftover", 0.0)
             ),
             grid_purchase_cost=float(energy_cost_components.get("grid_purchase_cost", 0.0)),
             bess_discharge_cost=float(energy_cost_components.get("bess_discharge_cost", 0.0)),
+            contract_overage_cost=float(energy_cost_components.get("contract_overage_cost", 0.0)),
             stationary_battery_degradation_cost=float(
                 energy_cost_components.get("stationary_battery_degradation_cost", 0.0)
             ),
@@ -305,6 +311,10 @@ class CostEvaluator:
             str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
             for k, by_slot in (plan.pv_curtail_kwh_by_depot_slot or {}).items()
         }
+        contract_over_limit = {
+            str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
+            for k, by_slot in (plan.contract_over_limit_kwh_by_depot_slot or {}).items()
+        }
 
         if not grid_to_bus and not bess_to_bus:
             # Backward-compatible fallback: operating energy priced by TOU.
@@ -322,6 +332,8 @@ class CostEvaluator:
                 "pv_to_bess_kwh": 0.0,
                 "grid_to_bess_kwh": 0.0,
                 "pv_curtailed_kwh": 0.0,
+                "contract_over_limit_kwh": 0.0,
+                "contract_overage_cost": 0.0,
             }
 
         vehicle_depot = self._vehicle_to_depot(problem)
@@ -373,6 +385,18 @@ class CostEvaluator:
 
         provisional_leftover = sum(kwh * price for queue in debts.values() for kwh, price in queue)
         electricity_cost_final = (provisional_total - rollback_cost) + grid_purchase_cost + bess_discharge_cost
+        contract_over_limit_kwh = _sum_flow(contract_over_limit)
+        enable_contract_overage_penalty = bool(problem.metadata.get("enable_contract_overage_penalty", True))
+        contract_overage_penalty = max(
+            float(problem.metadata.get("contract_overage_penalty_yen_per_kwh", 500.0) or 0.0),
+            0.0,
+        )
+        contract_overage_cost = (
+            contract_over_limit_kwh * contract_overage_penalty
+            if enable_contract_overage_penalty
+            else 0.0
+        )
+        electricity_cost_final += contract_overage_cost
 
         stationary_battery_degradation_cost = 0.0
         pv_asset_cost = 0.0
@@ -408,6 +432,8 @@ class CostEvaluator:
             "pv_to_bess_kwh": _sum_flow(pv_to_bess),
             "grid_to_bess_kwh": _sum_flow(grid_to_bess),
             "pv_curtailed_kwh": _sum_flow(pv_curtail),
+            "contract_over_limit_kwh": contract_over_limit_kwh,
+            "contract_overage_cost": contract_overage_cost,
         }
 
     def _collect_drive_energy_events(

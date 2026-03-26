@@ -810,6 +810,9 @@ def _build_tasks(
 
     bev_rate = _mean_consumption(scenario_vehicles, "BEV", 1.2)
     ice_rate = _mean_consumption(scenario_vehicles, "ICE", 0.4)
+    _ROAD_FACTOR = 1.3          # Haversine → 実道路距離係数（都市部標準）
+    _AVG_SPEED_KMH = 17.0       # runtime_min フォールバック時の平均速度 [km/h]
+    dist_fallback_count = 0
     tasks: List[Task] = []
     trip_id_seen: Dict[str, int] = {}
     duplicate_trip_id_count = 0
@@ -828,6 +831,24 @@ def _build_tasks(
             duplicate_trip_id_count += 1
         allowed_types = [item.upper() for item in trip["allowed_vehicle_types"]]
         required_vehicle_type = allowed_types[0] if len(allowed_types) == 1 else None
+
+        # distance_km フォールバック
+        # 0 の場合: 1) Haversine×道路係数、2) runtime_min×平均速度 の順に推定
+        distance_km = _safe_float(trip.get("distance_km"), 0.0)
+        if distance_km <= 0.0:
+            olat = _safe_float(trip.get("origin_lat"), 0.0)
+            olon = _safe_float(trip.get("origin_lon"), 0.0)
+            dlat = _safe_float(trip.get("destination_lat"), 0.0)
+            dlon = _safe_float(trip.get("destination_lon"), 0.0)
+            if olat and olon and dlat and dlon and (olat != dlat or olon != dlon):
+                distance_km = _haversine_km(olat, olon, dlat, dlon) * _ROAD_FACTOR
+            else:
+                runtime_min = _safe_float(trip.get("runtime_min"), 0.0)
+                if runtime_min > 0.0:
+                    distance_km = runtime_min / 60.0 * _AVG_SPEED_KMH
+            if distance_km > 0.0:
+                dist_fallback_count += 1
+
         tasks.append(
             Task(
                 task_id=task_id,
@@ -835,9 +856,9 @@ def _build_tasks(
                 end_time_idx=end_idx,
                 origin=trip["origin"],
                 destination=trip["destination"],
-                distance_km=trip["distance_km"],
-                energy_required_kwh_bev=trip["distance_km"] * bev_rate,
-                fuel_required_liter_ice=trip["distance_km"] * ice_rate,
+                distance_km=distance_km,
+                energy_required_kwh_bev=distance_km * bev_rate,
+                fuel_required_liter_ice=distance_km * ice_rate,
                 required_vehicle_type=required_vehicle_type,
                 demand_cover=True,
                 penalty_unserved=10000.0,
@@ -856,6 +877,12 @@ def _build_tasks(
         logger.warning(
             "Detected %d duplicate trip_id values while building tasks; generated unique task_id suffixes.",
             duplicate_trip_id_count,
+        )
+    if dist_fallback_count > 0:
+        logger.warning(
+            "distance_km が 0 だったため %d 件のトリップで距離を推定しました "
+            "(Haversine×%.1f または runtime_min×%.1f km/h)。",
+            dist_fallback_count, _ROAD_FACTOR, _AVG_SPEED_KMH,
         )
     return tasks
 
@@ -1594,7 +1621,10 @@ def build_problem_data_from_scenario(
     solver_cfg = _scenario_overlay_solver(scenario)
     cost_cfg = _scenario_overlay_costs(scenario)
     start_time = str(simulation_cfg.get("start_time") or "05:00")
-    delta_t_min = _safe_float(simulation_cfg.get("time_step_min"), 15.0)
+    delta_t_min = _safe_float(
+        simulation_cfg.get("timestep_min"),
+        _safe_float(simulation_cfg.get("time_step_min"), 60.0),
+    )
     delta_t_hour = delta_t_min / 60.0
     planning_horizon_hours = _safe_float(
         simulation_cfg.get("planning_horizon_hours"),

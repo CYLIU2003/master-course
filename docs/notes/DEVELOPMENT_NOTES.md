@@ -2425,3 +2425,10 @@ master-course/
     - `python -m py_compile bff/routers/scenarios.py tools/scenario_backup_tk.py tests/test_quick_setup_route_selection.py tests/test_scenario_backup_tk_dataset_options.py` → pass
     - `PYTHONPATH=C:\master-course pytest tests/test_quick_setup_route_selection.py tests/test_scenario_backup_tk_dataset_options.py -q` → `20 passed`
     - `PYTHONPATH=C:\master-course pytest tests/test_master_data_route_counts.py tests/test_runtime_scope_route_mapping.py tests/test_simulation_builder_prepare_scope.py tests/test_route_catalog_audit.py -q` → `10 passed`
+
+- 2026-03-26 (Quick Setup「設定保存」で基本パラメータ一式が保存されない不具合を修正)
+  - 問題として、`tools/scenario_backup_tk.py` の `設定保存`（`save_quick_setup`）が `initial_soc / soc_min / soc_max / disable_vehicle_acquisition_cost / tou_pricing / no_improvement_limit / destroy_fraction` を API へ送っておらず、再読込時に基本パラメータ欄と ALNS 関連が既定値へ戻る状態だった。
+  - 追加で backend 側でも `bff/routers/scenarios.py` の `UpdateQuickSetupBody` が上記キーを受理しておらず、フロントで送っても保存できない経路があった。
+  - 対応として、Quick Setup API の request/response を拡張し、`solverSettings` と `simulationSettings` の双方で `noImprovementLimit / destroyFraction / initialSoc / socMin / socMax / disableVehicleAcquisitionCost / touPricing` を往復できるようにした。
+  - `update_quick_setup()` では `scenario_overlay`（solver/cost）と `simulation_config` へ同キーを保存する処理を追加し、`load_quick_setup()` は TOU 配列を UI テキストへ復元するフォーマッタを追加して再表示できるようにした。
+  - これにより、`バス導入費の日割り計算を無効化` を含む基本パラメータの保存漏れが解消され、再Prepare時の設定ドリフトを抑制した。

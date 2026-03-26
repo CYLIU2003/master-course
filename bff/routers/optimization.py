@@ -662,16 +662,18 @@ def _run_optimization(
             and int(build_report.task_count or 0) > int(build_report.vehicle_count or 0)
             and not bool(getattr(data, "allow_partial_service", False))
         ):
-            raise RuntimeError(
+            setattr(data, "allow_partial_service", True)
+            auto_relax_msg = (
                 "No travel connections generated while allow_partial_service is OFF. "
+                "Auto-relaxed allow_partial_service=True for this run to avoid hard infeasible stop. "
                 f"tasks={build_report.task_count}, vehicles={build_report.vehicle_count}, "
                 f"travel_connections={build_report.travel_connection_count}, "
-                f"allow_partial_service={bool(getattr(data, 'allow_partial_service', False))}, "
                 f"prepared_input_id={prepared_input_id}, "
                 f"requested_prepared_input_id={requested_prepared_input_id or '-'}, "
-                f"prepared_input_path={prepared_input_path}. "
-                "Turn on allowPartialService or narrow route scope and rerun Prepare."
+                f"prepared_input_path={prepared_input_path}."
             )
+            if hasattr(build_report, "warnings"):
+                build_report.warnings.append(auto_relax_msg)
 
         price_slots = list(getattr(data, "electricity_prices", []) or [])
         pv_slots = list(getattr(data, "pv_profiles", []) or [])
@@ -696,6 +698,7 @@ def _run_optimization(
                         "vehicles": len(getattr(data, "vehicles", []) or []),
                         "chargers": len(getattr(data, "chargers", []) or []),
                         "travel_connections": build_report.travel_connection_count,
+                        "allow_partial_service_effective": bool(getattr(data, "allow_partial_service", False)),
                         "price_slots": len(price_slots),
                         "pv_slots": len(pv_slots),
                         "time_limit_seconds_requested": time_limit_seconds,

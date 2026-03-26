@@ -76,7 +76,9 @@ class ProblemBuilder:
         solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
         timestep_min = int(
             simulation_cfg.get("timestep_min")
+            or simulation_cfg.get("time_step_min")
             or solver_cfg.get("timestep_min")
+            or solver_cfg.get("time_step_min")
             or 60
         )
         if timestep_min <= 0:
@@ -158,6 +160,47 @@ class ProblemBuilder:
         deadhead_speed_kmh = self._safe_float(
             simulation_cfg.get("deadhead_speed_kmh")
         )
+        enable_contract_overage_penalty = simulation_cfg.get("enable_contract_overage_penalty")
+        if enable_contract_overage_penalty is None:
+            enable_contract_overage_penalty = solver_cfg.get("enable_contract_overage_penalty")
+        if enable_contract_overage_penalty is None:
+            enable_contract_overage_penalty = cost_cfg.get("enable_contract_overage_penalty")
+
+        contract_overage_penalty_yen_per_kwh = self._safe_float(
+            simulation_cfg.get("contract_overage_penalty_yen_per_kwh")
+        )
+        if contract_overage_penalty_yen_per_kwh is None:
+            contract_overage_penalty_yen_per_kwh = self._safe_float(
+                solver_cfg.get("contract_overage_penalty_yen_per_kwh")
+            )
+        if contract_overage_penalty_yen_per_kwh is None:
+            contract_overage_penalty_yen_per_kwh = self._safe_float(
+                cost_cfg.get("contract_overage_penalty_yen_per_kwh")
+            )
+
+        grid_to_bus_priority_penalty_yen_per_kwh = self._safe_float(
+            simulation_cfg.get("grid_to_bus_priority_penalty_yen_per_kwh")
+        )
+        if grid_to_bus_priority_penalty_yen_per_kwh is None:
+            grid_to_bus_priority_penalty_yen_per_kwh = self._safe_float(
+                solver_cfg.get("grid_to_bus_priority_penalty_yen_per_kwh")
+            )
+        if grid_to_bus_priority_penalty_yen_per_kwh is None:
+            grid_to_bus_priority_penalty_yen_per_kwh = self._safe_float(
+                cost_cfg.get("grid_to_bus_priority_penalty_yen_per_kwh")
+            )
+
+        grid_to_bess_priority_penalty_yen_per_kwh = self._safe_float(
+            simulation_cfg.get("grid_to_bess_priority_penalty_yen_per_kwh")
+        )
+        if grid_to_bess_priority_penalty_yen_per_kwh is None:
+            grid_to_bess_priority_penalty_yen_per_kwh = self._safe_float(
+                solver_cfg.get("grid_to_bess_priority_penalty_yen_per_kwh")
+            )
+        if grid_to_bess_priority_penalty_yen_per_kwh is None:
+            grid_to_bess_priority_penalty_yen_per_kwh = self._safe_float(
+                cost_cfg.get("grid_to_bess_priority_penalty_yen_per_kwh")
+            )
         selected_depot_record = self._find_selected_depot_record(scenario, depot_id)
         depot_coordinates_by_id = self._depot_coordinates_by_id(scenario)
         depot_import_limit_kw = self._safe_float(
@@ -204,6 +247,12 @@ class ProblemBuilder:
             max_ice_fuel_percent=max_ice_fuel_percent,
             default_ice_tank_capacity_l=default_ice_tank_capacity_l,
             deadhead_speed_kmh=deadhead_speed_kmh,
+            enable_contract_overage_penalty=bool(enable_contract_overage_penalty)
+            if enable_contract_overage_penalty is not None
+            else True,
+            contract_overage_penalty_yen_per_kwh=contract_overage_penalty_yen_per_kwh,
+            grid_to_bus_priority_penalty_yen_per_kwh=grid_to_bus_priority_penalty_yen_per_kwh,
+            grid_to_bess_priority_penalty_yen_per_kwh=grid_to_bess_priority_penalty_yen_per_kwh,
             selected_depot_record=selected_depot_record,
             depot_coordinates_by_id=depot_coordinates_by_id,
             canonical_depot_id=str(depot_id or "depot_default"),
@@ -245,6 +294,10 @@ class ProblemBuilder:
         max_ice_fuel_percent: Optional[float] = None,
         default_ice_tank_capacity_l: Optional[float] = None,
         deadhead_speed_kmh: Optional[float] = None,
+        enable_contract_overage_penalty: bool = True,
+        contract_overage_penalty_yen_per_kwh: Optional[float] = None,
+        grid_to_bus_priority_penalty_yen_per_kwh: Optional[float] = None,
+        grid_to_bess_priority_penalty_yen_per_kwh: Optional[float] = None,
         selected_depot_record: Optional[Dict[str, Any]] = None,
         depot_coordinates_by_id: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
         canonical_depot_id: str = "depot_default",
@@ -388,6 +441,10 @@ class ProblemBuilder:
                 "max_ice_fuel_percent": max_ice_fuel_percent,
                 "default_ice_tank_capacity_l": default_ice_tank_capacity_l,
                 "deadhead_speed_kmh": deadhead_speed_kmh,
+                "enable_contract_overage_penalty": bool(enable_contract_overage_penalty),
+                "contract_overage_penalty_yen_per_kwh": contract_overage_penalty_yen_per_kwh,
+                "grid_to_bus_priority_penalty_yen_per_kwh": grid_to_bus_priority_penalty_yen_per_kwh,
+                "grid_to_bess_priority_penalty_yen_per_kwh": grid_to_bess_priority_penalty_yen_per_kwh,
                 "depot_coordinates_by_id": dict(depot_coordinates_by_id or {}),
             },
         )

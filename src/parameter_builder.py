@@ -50,6 +50,8 @@ class DerivedParams:
     task_active: Dict[str, List[int]] = field(default_factory=dict)
     # task_energy_per_slot[r][t] = その時刻に消費する BEV エネルギー [kWh]
     task_energy_per_slot: Dict[str, List[float]] = field(default_factory=dict)
+    # task_energy_event_per_slot[r][t] = tripイベント時点で一括計上する BEV エネルギー [kWh]
+    task_energy_event_per_slot: Dict[str, List[float]] = field(default_factory=dict)
 
     # --- §6.4 電力・PV (site_id, time_idx → value) ---
     pv_gen_kw: Dict[str, Dict[int, float]] = field(default_factory=dict)
@@ -130,25 +132,39 @@ def build_derived_params(data: ProblemData, ms: ModelSets) -> DerivedParams:
         )
 
     # --- §10.5 時刻別タスク状態 ---
+    # end_time_idx は半開区間 [start, end) の終端として扱う。
+    # これにより「到着スロット」は次トリップの「出発スロット」と重複せず、
+    # 連続運行（折返し）を正しくモデル化できる。
     T = data.num_periods
     for t in data.tasks:
         active = [0] * T
         energy = [0.0] * T
-        span = t.end_time_idx - t.start_time_idx + 1
+        energy_event = [0.0] * T
+        span = t.end_time_idx - t.start_time_idx  # 半開区間 [start, end)
+        if span <= 0:
+            span = 1  # 最低1スロット保証（mapper 側で end > start が保証されるが念のため）
         task_energy_kwh = float(dp.task_energy_bev.get(t.task_id, t.energy_required_kwh_bev) or 0.0)
-        per_slot = task_energy_kwh / span if span > 0 else 0.0
+        per_slot = task_energy_kwh / span
         for ti in range(T):
-            if t.start_time_idx <= ti <= t.end_time_idx:
+            if t.start_time_idx <= ti < t.end_time_idx:  # 半開区間
                 active[ti] = 1
                 energy[ti] = per_slot
+        # Event-based SOC bookkeeping: apply full trip energy at trip end slot.
+        # This reflects trip-by-trip verification/update while preserving no_run_charge behavior.
+        if T > 0:
+            event_idx = min(max(int(t.end_time_idx) - 1, 0), T - 1)
+            energy_event[event_idx] = task_energy_kwh
         dp.task_active[t.task_id] = active
         dp.task_energy_per_slot[t.task_id] = energy
+        dp.task_energy_event_per_slot[t.task_id] = energy_event
 
     # --- 重複ペア ---
+    # 半開区間 [start, end) を用いた厳密重複判定。
+    # t1.end == t2.start の「折返し接続」は重複とみなさない。
     task_list = data.tasks
     for i, t1 in enumerate(task_list):
         for t2 in task_list[i+1:]:
-            if not (t1.end_time_idx < t2.start_time_idx or t2.end_time_idx < t1.start_time_idx):
+            if t1.start_time_idx < t2.end_time_idx and t2.start_time_idx < t1.end_time_idx:
                 dp.overlap_pairs.append((t1.task_id, t2.task_id))
 
     # --- §6.1.2 タスク間接続 ---

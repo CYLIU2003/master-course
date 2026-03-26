@@ -219,6 +219,7 @@ class AssignmentPlan:
     grid_to_bess_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     pv_curtail_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     bess_soc_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
+    contract_over_limit_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     served_trip_ids: Tuple[str, ...] = ()
     unserved_trip_ids: Tuple[str, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)

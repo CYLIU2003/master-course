@@ -3197,6 +3197,7 @@ def export_depot_energy_flows(
     grid_to_bess = _nested_slot_mapping(getattr(milp, "grid_to_bess_kwh_by_depot_slot", {}))
     pv_curtail = _nested_slot_mapping(getattr(milp, "pv_curtail_kwh_by_depot_slot", {}))
     bess_soc = _nested_slot_mapping(getattr(milp, "bess_soc_kwh_by_depot_slot", {}))
+    contract_over_limit = _nested_slot_mapping(getattr(milp, "contract_over_limit_kwh_by_depot_slot", {}))
 
     depot_ids = sorted(
         set(grid_import_kw.keys())
@@ -3207,6 +3208,7 @@ def export_depot_energy_flows(
         | set(grid_to_bess.keys())
         | set(pv_curtail.keys())
         | set(bess_soc.keys())
+        | set(contract_over_limit.keys())
     )
     if not depot_ids:
         _write_csv(run_dir / "depot_energy_flows.csv", [])
@@ -3241,6 +3243,7 @@ def export_depot_energy_flows(
                 "grid_to_bess_kwh": float(grid_to_bess.get(depot_id, {}).get(t_idx, 0.0)),
                 "pv_curtail_kwh": float(pv_curtail.get(depot_id, {}).get(t_idx, 0.0)),
                 "bess_soc_kwh": float(bess_soc.get(depot_id, {}).get(t_idx, 0.0)),
+                "contract_over_limit_kwh": float(contract_over_limit.get(depot_id, {}).get(t_idx, 0.0)),
             }
             rows.append(row)
             total_grid_import_kw += row["grid_import_kw"]
@@ -3261,6 +3264,7 @@ def export_depot_energy_flows(
                 "pv_to_bess_kwh_sum": total_pv_to_bess,
                 "grid_to_bess_kwh_sum": total_grid_to_bess,
                 "pv_curtail_kwh_sum": total_pv_curtail,
+                "contract_over_limit_kwh_sum": sum(float(v) for v in contract_over_limit.get(depot_id, {}).values()),
             }
         )
 

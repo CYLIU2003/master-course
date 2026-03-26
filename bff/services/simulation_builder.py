@@ -560,7 +560,8 @@ def apply_builder_configuration(
         "soc_max": soc_max,
         "start_time": body.simulation_settings.start_time,
         "planning_horizon_hours": body.simulation_settings.planning_horizon_hours,
-        "time_step_min": 15,
+        "time_step_min": 60,
+        "timestep_min": 60,
         "vehicle_template_id": primary_template.get("id"),
         "fleet_templates": [
             {

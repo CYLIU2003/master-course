@@ -241,18 +241,16 @@ class GurobiMILPAdapter:
                 key = (vehicle.vehicle_id, trip.trip_id)
                 if key not in y:
                     continue
-                trip_slot_indices = self._slot_indices_for_interval(
+                trip_energy_kwh = max(trip.energy_kwh, 0.0)
+                if trip_energy_kwh <= 0.0:
+                    continue
+                # Event-based accounting: consume trip energy at the trip-end slot.
+                event_slot_idx = self._trip_event_slot_index(
                     problem,
                     trip.departure_min,
                     trip.arrival_min,
                 )
-                if not trip_slot_indices:
-                    continue
-                energy_per_slot = max(trip.energy_kwh, 0.0) / len(trip_slot_indices)
-                if energy_per_slot <= 0.0:
-                    continue
-                for slot_idx in trip_slot_indices:
-                    electric_trip_kwh_by_slot.setdefault(slot_idx, []).append((energy_per_slot, key))
+                electric_trip_kwh_by_slot.setdefault(event_slot_idx, []).append((trip_energy_kwh, key))
             for vehicle_id, from_trip_id, to_trip_id in arc_pairs:
                 if vehicle_id != vehicle.vehicle_id:
                     continue
@@ -285,6 +283,7 @@ class GurobiMILPAdapter:
         pv_curt_var: Dict[Tuple[str, int], Any] = {}
         bess_soc_var: Dict[Tuple[str, int], Any] = {}
         grid_import_var: Dict[Tuple[str, int], Any] = {}
+        contract_over_limit_var: Dict[Tuple[str, int], Any] = {}
         p_avg_depot_var: Dict[Tuple[str, int], Any] = {}
         w_on_depot_var: Dict[str, Any] = {}
         w_off_depot_var: Dict[str, Any] = {}
@@ -293,6 +292,7 @@ class GurobiMILPAdapter:
         end_soc_excess_dev_var: Dict[str, Any] = {}
         w_on_var = None
         w_off_var = None
+        effective_depot_energy_assets: Dict[str, DepotEnergyAsset] = {}
 
         if bev_ids and slot_indices:
             initial_soc_ratio_override = self._percent_to_ratio(problem.metadata.get("initial_soc_percent"))
@@ -314,6 +314,12 @@ class GurobiMILPAdapter:
                     soc_min = reserve
 
                 charge_max_kw = self._charge_power_max_kw(problem, vehicle.vehicle_type)
+                if problem.chargers:
+                    # Charger assignment is aggregated in this model, so use the strongest
+                    # available charger as the charger-side per-vehicle cap.
+                    max_charger_kw = max(float(charger.power_kw or 0.0) for charger in problem.chargers)
+                    if max_charger_kw > 0.0:
+                        charge_max_kw = min(charge_max_kw, max_charger_kw)
                 discharge_max_kw = self._discharge_power_max_kw(problem, vehicle.vehicle_type)
 
                 for slot_idx in slot_indices:
@@ -387,11 +393,17 @@ class GurobiMILPAdapter:
                 for pos in range(len(slot_indices) - 1):
                     slot_idx = slot_indices[pos]
                     next_slot_idx = slot_indices[pos + 1]
+                    # Event-based SOC update: apply trip consumption at the slot where each trip ends.
                     trip_energy_expr = gp.quicksum(
-                        trip.energy_kwh * y[(vehicle.vehicle_id, trip.trip_id)]
+                        max(trip.energy_kwh, 0.0) * y[(vehicle.vehicle_id, trip.trip_id)]
                         for trip in problem.trips
                         if (vehicle.vehicle_id, trip.trip_id) in y
-                        and self._slot_index(problem, trip.departure_min) == slot_idx
+                        and self._trip_event_slot_index(
+                            problem,
+                            trip.departure_min,
+                            trip.arrival_min,
+                        )
+                        == slot_idx
                     )
                     # C8: deadhead energy consumption linked with selected connection arcs.
                     deadhead_energy_expr = gp.quicksum(
@@ -571,6 +583,9 @@ class GurobiMILPAdapter:
         if slot_indices:
             on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
             price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
+            enable_contract_overage_penalty = bool(
+                problem.metadata.get("enable_contract_overage_penalty", True)
+            )
             vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
             bev_ids_by_depot: Dict[str, List[str]] = {}
             for vehicle_id in bev_ids:
@@ -593,6 +608,7 @@ class GurobiMILPAdapter:
                     pv_generation_kwh_by_slot=pv_series if slot_count > 0 else (),
                     bess_enabled=False,
                 )
+            effective_depot_energy_assets = depot_energy_assets
 
             for depot_id, asset in depot_energy_assets.items():
                 w_on_depot_var[depot_id] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
@@ -633,7 +649,14 @@ class GurobiMILPAdapter:
                     model.addConstr(pv2bess_var[key] + pv_curt_var[key] == pv_gen_kwh)
 
                     model.addConstr(grid_import_var[key] == g2bus_var[key] + g2bess_var[key])
-                    model.addConstr(grid_import_var[key] <= contract_limit_kw * timestep_h)
+                    if enable_contract_overage_penalty:
+                        contract_over_limit_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                        model.addConstr(
+                            grid_import_var[key]
+                            <= contract_limit_kw * timestep_h + contract_over_limit_var[key]
+                        )
+                    else:
+                        model.addConstr(grid_import_var[key] <= contract_limit_kw * timestep_h)
                     model.addConstr(p_avg_depot_var[key] == grid_import_var[key] / timestep_h)
 
                     if slot_idx in on_peak_slots:
@@ -716,6 +739,18 @@ class GurobiMILPAdapter:
         objective = gp.LinExpr()
         # O2: electricity cost based on actual charging source flows.
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
+        grid_to_bus_priority_penalty = self._safe_nonnegative_float(
+            problem.metadata.get("grid_to_bus_priority_penalty_yen_per_kwh"),
+            default=10.0,
+        )
+        grid_to_bess_priority_penalty = self._safe_nonnegative_float(
+            problem.metadata.get("grid_to_bess_priority_penalty_yen_per_kwh"),
+            default=2.0,
+        )
+        contract_overage_penalty = self._safe_nonnegative_float(
+            problem.metadata.get("contract_overage_penalty_yen_per_kwh"),
+            default=500.0,
+        )
         curtail_penalty = self._safe_nonnegative_float(
             problem.metadata.get("pv_curtail_penalty_yen_per_kwh"),
             default=0.0,
@@ -724,16 +759,25 @@ class GurobiMILPAdapter:
             for (depot_id, slot_idx), var in g2bus_var.items():
                 price = max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
                 objective += energy_weight * price * var
+                asset = effective_depot_energy_assets.get(depot_id)
+                if asset is not None and asset.bess_enabled and grid_to_bus_priority_penalty > 0.0:
+                    objective += energy_weight * grid_to_bus_priority_penalty * var
             for (depot_id, slot_idx), var in g2bess_var.items():
                 price = max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
                 objective += energy_weight * price * var
+                asset = effective_depot_energy_assets.get(depot_id)
+                if asset is not None and asset.bess_enabled and grid_to_bess_priority_penalty > 0.0:
+                    objective += energy_weight * grid_to_bess_priority_penalty * var
             for (depot_id, slot_idx), var in bess2bus_var.items():
-                asset = (problem.depot_energy_assets or {}).get(depot_id)
+                asset = effective_depot_energy_assets.get(depot_id) or (problem.depot_energy_assets or {}).get(depot_id)
                 bess_marginal = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
                 objective += energy_weight * bess_marginal * var
             if curtail_penalty > 0.0:
                 for var in pv_curt_var.values():
                     objective += energy_weight * curtail_penalty * var
+            if contract_overage_penalty > 0.0:
+                for var in contract_over_limit_var.values():
+                    objective += contract_overage_penalty * var
         else:
             # Backward-compatible fallback for plans without charging-source variables.
             for slot_idx in slot_indices:
@@ -925,6 +969,7 @@ class GurobiMILPAdapter:
         grid_to_bess_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         pv_curtail_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         bess_soc_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+        contract_over_limit_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         for (depot_id, slot_idx), var in g2bus_var.items():
             grid_to_bus_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
         for (depot_id, slot_idx), var in bess2bus_var.items():
@@ -937,6 +982,8 @@ class GurobiMILPAdapter:
             pv_curtail_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
         for (depot_id, slot_idx), var in bess_soc_var.items():
             bess_soc_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        for (depot_id, slot_idx), var in contract_over_limit_var.items():
+            contract_over_limit_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
 
         if c_var and bev_ids:
             vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
@@ -1064,6 +1111,7 @@ class GurobiMILPAdapter:
             grid_to_bess_kwh_by_depot_slot=grid_to_bess_kwh_by_depot_slot,
             pv_curtail_kwh_by_depot_slot=pv_curtail_kwh_by_depot_slot,
             bess_soc_kwh_by_depot_slot=bess_soc_kwh_by_depot_slot,
+            contract_over_limit_kwh_by_depot_slot=contract_over_limit_kwh_by_depot_slot,
             served_trip_ids=tuple(sorted(served_set)),
             unserved_trip_ids=tuple(unserved_trip_ids),
             metadata={
@@ -1072,6 +1120,10 @@ class GurobiMILPAdapter:
                 "objective_value": float(model.ObjVal),
                 "horizon_start": str(problem.scenario.horizon_start or "00:00"),
                 "timestep_min": int(problem.scenario.timestep_min),
+                "enable_contract_overage_penalty": bool(problem.metadata.get("enable_contract_overage_penalty", True)),
+                "contract_overage_penalty_yen_per_kwh": contract_overage_penalty,
+                "grid_to_bus_priority_penalty_yen_per_kwh": grid_to_bus_priority_penalty,
+                "grid_to_bess_priority_penalty_yen_per_kwh": grid_to_bess_priority_penalty,
             },
         )
         return (
@@ -1109,6 +1161,15 @@ class GurobiMILPAdapter:
         if end_idx < start_idx:
             end_idx = start_idx
         return tuple(range(start_idx, end_idx + 1))
+
+    def _trip_event_slot_index(
+        self,
+        problem: CanonicalOptimizationProblem,
+        departure_min: int,
+        arrival_min: int,
+    ) -> int:
+        adjusted_arrival = max(arrival_min - 1, departure_min)
+        return self._slot_index(problem, adjusted_arrival)
 
     def _charge_power_max_kw(self, problem: CanonicalOptimizationProblem, vehicle_type: str) -> float:
         vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type), None)

@@ -141,7 +141,14 @@ def add_soc_constraints(
         for t in T:
             # 走行消費 [kWh]
             drive_energy = gp.quicksum(
-                dp.task_energy_per_slot[r][t] * x[k, r]
+                (
+                    (
+                        (dp.task_energy_event_per_slot.get(r) or dp.task_energy_per_slot.get(r) or [0.0] * len(T))[t]
+                        if t < len((dp.task_energy_event_per_slot.get(r) or dp.task_energy_per_slot.get(r) or []))
+                        else 0.0
+                    )
+                )
+                * x[k, r]
                 for r in R
                 if r in ms.vehicle_task_feasible.get(k, set())
             )
