@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict
 
+_SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+
+def _validate_id(raw_id: str) -> str:
+    """Sanitise user-supplied IDs to prevent path-traversal attacks."""
+    text = str(raw_id or "").strip()
+    if not text or not _SAFE_ID_RE.match(text):
+        raise ValueError(f"Invalid ID (path traversal blocked): {raw_id!r}")
+    return text
+
 
 def scenario_path(store_dir: Path, scenario_id: str) -> Path:
-    return store_dir / f"{scenario_id}.json"
+    return store_dir / f"{_validate_id(scenario_id)}.json"
 
 
 def artifact_dir(store_dir: Path, scenario_id: str) -> Path:
-    return store_dir / scenario_id
+    return store_dir / _validate_id(scenario_id)
 
 
 def default_refs(store_dir: Path, scenario_id: str) -> Dict[str, str]:

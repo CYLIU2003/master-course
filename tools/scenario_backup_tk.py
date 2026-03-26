@@ -898,10 +898,12 @@ class App:
         self.compare_scenario_b_var = tk.StringVar(value="")
         self._busy_count: int = 0
         self._busy_var = tk.StringVar(value="")
+        self._scope_filter_debounce_id: str | None = None
 
         self._build_ui()
         self._register_prepare_dependency_watchers()
         self._register_scope_ui_watchers()
+        self._bind_keyboard_shortcuts()
 
     def _build_ui(self) -> None:
         # ── レスポンシブウィンドウサイズ ──
@@ -1790,7 +1792,7 @@ class App:
             return False
         try:
             return bool(widget.winfo_exists())
-        except Exception:
+        except (tk.TclError, RuntimeError, AttributeError):
             return False
 
     def _fleet_window_ready(self) -> bool:
@@ -1953,8 +1955,14 @@ class App:
         )
 
     def _render_scope_checklist(self) -> None:
-        for child in self.scope_inner.winfo_children():
-            child.destroy()
+        self._scope_filter_debounce_id = None
+        try:
+            if not self._widget_exists(self.scope_inner):
+                return
+            for child in self.scope_inner.winfo_children():
+                child.destroy()
+        except tk.TclError:
+            return
 
         self.scope_depot_vars = {}
         self.scope_family_vars = {}
@@ -2870,9 +2878,22 @@ class App:
             if not self.enable_vehicle_diagram_output_var.get():
                 self.enable_vehicle_diagram_output_var.set(True)
 
+    def _bind_keyboard_shortcuts(self) -> None:
+        """Register global keyboard shortcuts for common operations."""
+        self.root.bind("<F5>", lambda _e: self.refresh_scenarios())
+        self.root.bind("<Control-s>", lambda _e: self.save_quick_setup())
+        self.root.bind("<Control-n>", lambda _e: self.create_scenario())
+        self.root.bind("<Control-r>", lambda _e: self.refresh_scenarios())
+
+    def _debounced_render_scope_checklist(self) -> None:
+        """Debounce scope filter to avoid rebuilding UI on every keystroke."""
+        if self._scope_filter_debounce_id is not None:
+            self.root.after_cancel(self._scope_filter_debounce_id)
+        self._scope_filter_debounce_id = self.root.after(250, self._render_scope_checklist)
+
     def _register_scope_ui_watchers(self) -> None:
         self.day_type_var.trace_add("write", lambda *_args: self._on_day_type_changed())
-        self.scope_filter_var.trace_add("write", lambda *_args: self._render_scope_checklist())
+        self.scope_filter_var.trace_add("write", lambda *_args: self._debounced_render_scope_checklist())
         self.fixed_route_band_mode_var.trace_add(
             "write",
             lambda *_args: self._on_fixed_route_band_mode_changed(),
@@ -3084,9 +3105,8 @@ class App:
         def done(resp: dict[str, Any]) -> None:
             self.scenarios = list(resp.get("items") or [])
             labels = [f"{i.get('name', '(名称なし)')} [{i.get('id', '')}]" for i in self.scenarios]
-            self.scenario_combo["values"] = labels
-            self.compare_a_combo["values"] = labels
-            self.compare_b_combo["values"] = labels
+            for combo in (self.scenario_combo, self.compare_a_combo, self.compare_b_combo):
+                combo["values"] = labels
             if labels:
                 self.scenario_combo.current(0)
                 self.on_scenario_changed()
@@ -3641,25 +3661,28 @@ class App:
 
         def done(resp: dict[str, Any]) -> None:
             self.vehicle_rows = list(resp.get("items") or [])
-            if not self._widget_exists(self.vehicle_tree):
+            try:
+                if not self._widget_exists(self.vehicle_tree):
+                    return
+                self.vehicle_tree.delete(*self.vehicle_tree.get_children())
+                for row in self.vehicle_rows:
+                    self.vehicle_tree.insert(
+                        "",
+                        tk.END,
+                        iid=str(row.get("id") or ""),
+                        values=(
+                            row.get("id"),
+                            row.get("depotId"),
+                            row.get("type"),
+                            row.get("modelName"),
+                            row.get("acquisitionCost"),
+                            row.get("energyConsumption"),
+                            row.get("chargePowerKw"),
+                            row.get("enabled"),
+                        ),
+                    )
+            except tk.TclError:
                 return
-            self.vehicle_tree.delete(*self.vehicle_tree.get_children())
-            for row in self.vehicle_rows:
-                self.vehicle_tree.insert(
-                    "",
-                    tk.END,
-                    iid=str(row.get("id") or ""),
-                    values=(
-                        row.get("id"),
-                        row.get("depotId"),
-                        row.get("type"),
-                        row.get("modelName"),
-                        row.get("acquisitionCost"),
-                        row.get("energyConsumption"),
-                        row.get("chargePowerKw"),
-                        row.get("enabled"),
-                    ),
-                )
             self.log_line(f"車両一覧取得: {len(self.vehicle_rows)} 件")
 
         self.run_bg(lambda: self.client.list_vehicles(scenario_id, depot_id), done)

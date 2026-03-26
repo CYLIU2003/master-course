@@ -8,6 +8,7 @@ timetable-first dispatch pipeline.
 from __future__ import annotations
 
 import math
+import re
 import unicodedata
 from dataclasses import dataclass
 
@@ -49,6 +50,29 @@ def _normalize_vehicle_type(raw: str) -> str:
 
 def _normalize_terminal_label(raw: str) -> str:
     return unicodedata.normalize("NFKC", str(raw or "")).strip().lower()
+
+
+def _normalize_pole_id(raw: str) -> str:
+    """Strip the trailing pole/platform suffix from ODPT BusstopPole IDs.
+
+    ODPT bus stop pole IDs follow the pattern:
+        ``odpt.BusstopPole:Operator.StopName.NNNNNNNN.X``
+    where ``X`` is the pole indicator (``a``, ``b``, ``1``, ``4``, etc.)
+    which may be absent (trailing ``.`` only).
+
+    Origin stop IDs typically carry the pole suffix (e.g. ``.4``, ``.b``)
+    whereas destination stop IDs often omit it (trailing ``.``).
+    This mismatch causes location-continuity checks to reject connections
+    between trips that use the *same* physical stop.
+
+    By stripping the trailing ``.<pole>`` after the 8-digit code, both
+    forms normalise to the same base ID.
+    """
+    s = str(raw or "").strip()
+    if not s:
+        return s
+    # Match 8-digit stop code followed by optional pole suffix: .NNNNNNNN.X
+    return re.sub(r"(\.\d{8})\.\w*$", r"\1", s)
 
 
 def _hhmm_to_minutes(raw: str) -> int:
@@ -133,8 +157,8 @@ def _build_dispatch_context_from_problem_data(
                 allowed_vehicle_types=_allowed_vehicle_types(
                     task.required_vehicle_type
                 ),
-                origin_stop_id=str(getattr(task, "origin_stop_id", None) or ""),
-                destination_stop_id=str(getattr(task, "destination_stop_id", None) or ""),
+                origin_stop_id=_normalize_pole_id(str(getattr(task, "origin_stop_id", None) or "")),
+                destination_stop_id=_normalize_pole_id(str(getattr(task, "destination_stop_id", None) or "")),
                 route_family_code=str(getattr(task, "route_family_code", None) or ""),
                 direction=str(getattr(task, "direction", None) or ""),
                 route_variant_type=str(getattr(task, "route_variant_type", None) or ""),

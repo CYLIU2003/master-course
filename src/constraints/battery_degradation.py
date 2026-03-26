@@ -47,7 +47,9 @@ def add_battery_degradation_constraints(
         veh = dp.vehicle_lut[k]
         coeff = veh.battery_degradation_cost_coeff  # [円/kWh-throughput]
         eff_charge = veh.charge_efficiency
-        eff_discharge = veh.discharge_efficiency if hasattr(veh, "discharge_efficiency") else 0.95
+        eff_discharge = getattr(veh, "discharge_efficiency", None) or 0.95
+        if eff_discharge <= 0:
+            eff_discharge = 0.95
 
         compatible_c = [c for c in C if c in ms.vehicle_charger_feasible.get(k, set())]
 

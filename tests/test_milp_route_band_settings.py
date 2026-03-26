@@ -83,7 +83,24 @@ def test_solver_adapter_route_band_key_prefers_family_code() -> None:
         allowed_vehicle_types=trip.allowed_vehicle_types,
         route_family_code="",
     )
-    assert adapter._route_band_key(trip_without_family, "fallback_route") == "fallback_route"
+    assert adapter._route_band_key(trip_without_family, "fallback_route") == "r01"
+
+
+def test_solver_adapter_route_band_key_normalizes_family_variants_to_series() -> None:
+    adapter = GurobiMILPAdapter()
+    trip = Trip(
+        trip_id="t_series",
+        route_id="odpt-route-xyz",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="08:30",
+        distance_km=1.0,
+        allowed_vehicle_types=("BEV",),
+        route_family_code="黒07(入出庫便)",
+    )
+
+    assert adapter._route_band_key(trip, "fallback_route") == "黒07"
 
 
 def test_solver_adapter_safe_positive_int_uses_default_for_invalid_values() -> None:

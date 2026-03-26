@@ -416,10 +416,22 @@ def _load_scope_frames(
     return (_rows_to_frame([]), _rows_to_frame([]), "built_parquet")
 
 
+_SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+
+def _validate_path_segment(raw: str) -> str:
+    """Reject path-traversal payloads in user-supplied IDs."""
+    text = str(raw or "").strip()
+    if not text or not _SAFE_ID_RE.match(text):
+        raise ValueError(f"Invalid ID (path traversal blocked): {raw!r}")
+    return text
+
+
 def _prepared_input_dir(scenarios_dir: Path, scenario_id: str) -> Path:
+    sid = _validate_path_segment(scenario_id)
     if scenarios_dir.name == "prepared_inputs":
-        return scenarios_dir / scenario_id
-    return scenarios_dir / scenario_id / "prepared_inputs"
+        return scenarios_dir / sid
+    return scenarios_dir / sid / "prepared_inputs"
 
 
 def _route_catalog_audit_warnings(audit: dict[str, Any]) -> list[str]:
@@ -732,7 +744,7 @@ def load_prepared_input(
     prepared_input_id: str,
     scenarios_dir: Path,
 ) -> dict[str, Any]:
-    path = _prepared_input_dir(scenarios_dir, scenario_id) / f"{prepared_input_id}.json"
+    path = _prepared_input_dir(scenarios_dir, scenario_id) / f"{_validate_path_segment(prepared_input_id)}.json"
     if not path.exists():
         raise FileNotFoundError(str(path))
     payload = json.loads(path.read_text(encoding="utf-8"))

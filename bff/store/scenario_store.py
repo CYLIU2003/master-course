@@ -139,6 +139,12 @@ def _scenario_lock(scenario_id: str) -> RLock:
         return lock
 
 
+def _release_scenario_lock(scenario_id: str) -> None:
+    """Remove a scenario's lock entry to prevent unbounded memory growth."""
+    with _SCENARIO_LOCKS_GUARD:
+        _SCENARIO_LOCKS.pop(scenario_id, None)
+
+
 def _default_dispatch_scope() -> Dict[str, Any]:
     return {
         "scopeId": None,
@@ -2147,6 +2153,7 @@ def delete_scenario(scenario_id: str) -> None:
         context["activeScenarioId"] = None
         context["updatedAt"] = _now_iso()
         _save_app_context(context)
+    _release_scenario_lock(scenario_id)
 
 
 def duplicate_scenario(

@@ -7,6 +7,7 @@ from src.dispatch.models import DutyLeg, VehicleDuty
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.milp.model_builder import MILPModelBuilder
+from src.route_code_utils import extract_route_series_from_candidates
 
 from src.optimization.common.problem import (
     AssignmentPlan,
@@ -1248,8 +1249,19 @@ class GurobiMILPAdapter:
 
     def _route_band_key(self, dispatch_trip: Any, fallback_route_id: str) -> str:
         family_code = str(getattr(dispatch_trip, "route_family_code", "") or "").strip()
+        trip_route_id = str(getattr(dispatch_trip, "route_id", "") or "").strip()
+        # Fixed-route mode is family-level: collapse main/short-turn/depot variants.
+        series_code, _prefix, _number, _source = extract_route_series_from_candidates(
+            family_code,
+            trip_route_id,
+            str(fallback_route_id or "").strip(),
+        )
+        if series_code:
+            return series_code
         if family_code:
             return family_code
+        if trip_route_id:
+            return trip_route_id
         return str(fallback_route_id or "").strip()
 
     def _percent_to_ratio(self, value: Any) -> float | None:

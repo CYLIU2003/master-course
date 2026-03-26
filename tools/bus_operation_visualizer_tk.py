@@ -234,7 +234,9 @@ def _load_bundle(run_dir: Path) -> TimelineBundle:
         sub = sub[sub["vehicle_type"] != ""]
         if not sub.empty:
             # Use mode to robustly classify each vehicle.
-            mode = sub.groupby("vehicle_id")["vehicle_type"].agg(lambda s: s.mode().iat[0] if not s.mode().empty else s.iloc[0])
+            mode = sub.groupby("vehicle_id")["vehicle_type"].agg(
+                lambda s: s.mode().iat[0] if not s.mode().empty else (s.iloc[0] if not s.empty else "UNKNOWN")
+            )
             vehicle_types = {str(k): str(v) for k, v in mode.items()}
 
     charging = _read_csv_or_empty(

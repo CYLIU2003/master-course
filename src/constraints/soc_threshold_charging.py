@@ -126,7 +126,7 @@ def add_soc_threshold_to_alns_repair(
 
         cap = veh.battery_capacity or 200.0
         trigger = cap * trigger_ratio
-        soc_current = veh.soc_init or cap * 0.8
+        soc_current = veh.soc_init if veh.soc_init is not None else cap * 0.8
 
         for i, task_id in enumerate(task_list):
             task = dp.task_lut.get(task_id)

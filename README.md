@@ -73,6 +73,7 @@ flowchart LR
 - 距離推定で `zero distance ratio` が高くなるケース向けに、`distance`/`stop` のキー揺れ吸収、座標欠損時の `stop_count`・所要時間ベース補完、Prepare監査ログ（座標カバレッジ/route距離件数）を追加
 - 最適化モニターの失敗時診断を強化し、`problemdata_build_audit` 未取得時でもエラー文から `tasks/vehicles/travel_connections` を抽出し、さらに prepared input サマリ（trip/route/vehicle/depot/timetable_rows とファイル位置）を表示するようにした
 - 最適化ジョブで「要求 prepared_input_id」と「実使用 prepared_input_id / JSONパス」をメタデータと失敗メッセージに表示し、UI 側でも `payload_effective` を出して stale 自動同期後の実効入力を追跡できるようにした
+- `fixed_route_band_mode` の拘束粒度を系統 family ベースへ寄せ、`黒07(本線/区間便/入出庫便)` のような variant 差分は同一 band（例: `黒07`）として扱うよう正規化した
 
 </details>
 

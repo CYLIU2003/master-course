@@ -13,8 +13,14 @@ from typing import Dict, List, Optional, Tuple
 
 def hhmm_to_min(hhmm: str) -> int:
     """Convert 'HH:MM' string to integer minutes from midnight."""
-    h, m = hhmm.split(":")
-    return int(h) * 60 + int(m)
+    text = str(hhmm or "00:00").strip()
+    parts = text.split(":", 1)
+    try:
+        h = int(parts[0])
+        m = int(parts[1]) if len(parts) > 1 else 0
+    except (TypeError, ValueError):
+        return 0
+    return max(h, 0) * 60 + max(m, 0)
 
 
 # ---------------------------------------------------------------------------

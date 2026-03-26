@@ -251,7 +251,10 @@ def main(input_path="input.json", out_dir="outputs"):
             if v["vehicle_type"] != "ev_bus":
                 continue
             vid = v["vehicle_id"]
-            row = op_df[(op_df["time"] == t.isoformat(timespec="minutes")) & (op_df["vehicle_id"] == vid)].iloc[0]
+            matched = op_df[(op_df["time"] == t.isoformat(timespec="minutes")) & (op_df["vehicle_id"] == vid)]
+            if matched.empty:
+                continue
+            row = matched.iloc[0]
             if row["state"] == "idle":
                 idle_evs.append(v)
 

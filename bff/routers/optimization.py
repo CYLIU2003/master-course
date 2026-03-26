@@ -164,10 +164,13 @@ def shutdown_optimization_executor() -> None:
     global _OPTIMIZATION_EXECUTOR, _OPTIMIZATION_FUTURE
     with _OPTIMIZATION_FUTURE_LOCK:
         executor = _OPTIMIZATION_EXECUTOR
+        future = _OPTIMIZATION_FUTURE
         _OPTIMIZATION_EXECUTOR = None
         _OPTIMIZATION_FUTURE = None
+    if future is not None and not future.done():
+        future.cancel()
     if executor is not None:
-        executor.shutdown(wait=False, cancel_futures=True)
+        executor.shutdown(wait=True, cancel_futures=True)
 
 
 def _register_optimization_future(

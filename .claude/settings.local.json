@@ -65,7 +65,8 @@
       "Bash(python -m pytest tests/test_runtime_route_family.py -x -q)",
       "Bash(python -m pytest tests/test_quick_setup_route_selection.py -x -q)",
       "Bash(python -m pytest tests/test_master_defaults_runtime_repair.py -x -q)",
-      "Bash(grep -E \"\\\\.py$\")"
+      "Bash(grep -E \"\\\\.py$\")",
+      "Bash(python -c \"import json; d=json.load\\(open\\(''C:/master-course/output/prepared_inputs/237d5623-aa94-4f72-9da1-17b9070264be/prepared-a04f296d42df0e60.json'',''r'',encoding=''utf-8''\\)\\); print\\(''keys:'', list\\(d.keys\\(\\)\\)\\); tc=d.get\\(''travel_connections'',d.get\\(''travelConnections'',[]\\)\\); print\\(''travel_connections count:'', len\\(tc\\)\\); print\\(''tasks:'', len\\(d.get\\(''tasks'',d.get\\(''trips'',[]\\)\\)\\)\\); print\\(''vehicles:'', len\\(d.get\\(''vehicles'',[]\\)\\)\\); print\\(''allow_partial:'', d.get\\(''allow_partial_service'', d.get\\(''allowPartialService'',''N/A''\\)\\)\\)\")"
     ]
   }
 }
