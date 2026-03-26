@@ -54,7 +54,17 @@
       "Bash(head -5 grep -rl \"restrict_route\\\\|assigned_route\\\\|dispatch_scope\\\\|depot_id\" tools/)",
       "Bash(curl -s http://127.0.0.1:8000/scenarios)",
       "Bash(curl -s http://127.0.0.1:8000/app/context)",
-      "Bash(curl -s http://127.0.0.1:8000/)"
+      "Bash(curl -s http://127.0.0.1:8000/)",
+      "Bash(find c:/master-course -name *.tsx -o -name *.jsx)",
+      "Bash(find c:/master-course -name *.vue)",
+      "Bash(find c:/master-course/output -name *.json)",
+      "Bash(find c:/master-course/outputs -name *.json)",
+      "Bash(find c:/master-course -name *.json -path */scenarios/*)",
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(python -c \"import sys; sys.stdout.buffer.write\\(sys.stdin.buffer.read\\(\\)\\)\")",
+      "Bash(python -m pytest tests/test_runtime_route_family.py -x -q)",
+      "Bash(python -m pytest tests/test_quick_setup_route_selection.py -x -q)",
+      "Bash(python -m pytest tests/test_master_defaults_runtime_repair.py -x -q)"
     ]
   }
 }

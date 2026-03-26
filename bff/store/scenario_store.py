@@ -1024,6 +1024,8 @@ _HEAVY_ARTIFACT_FIELDS = frozenset({
 
 def _load_shallow(
     scenario_id: str,
+    *,
+    repair_route_metadata: bool = True,
 ) -> Dict[str, Any]:
     """Load only meta + master data (depots, vehicles, routes, etc.).
 
@@ -1082,7 +1084,8 @@ def _load_shallow(
     doc.setdefault("public_data", _default_public_data_state())
     if _needs_master_repair(doc):
         _repair_missing_master_defaults(doc)
-    _repair_route_metadata_from_preload(doc)
+    if repair_route_metadata:
+        _repair_route_metadata_from_preload(doc)
     doc.setdefault("stats", _scenario_stats(doc))
     for key, value in _default_v1_2_fields().items():
         doc.setdefault(key, value)
@@ -1094,6 +1097,7 @@ def _load(
     *,
     repair_missing_master: bool = True,
     skip_graph_arcs: bool = False,
+    repair_route_metadata: bool = True,
 ) -> Dict[str, Any]:
     if _incomplete_marker_path(scenario_id).exists() and not _complete_marker_path(scenario_id).exists():
         raise RuntimeError(
@@ -1204,7 +1208,8 @@ def _load(
     doc.setdefault("public_data", _default_public_data_state())
     if repair_missing_master and _needs_master_repair(doc):
         _repair_missing_master_defaults(doc)
-    _repair_route_metadata_from_preload(doc)
+    if repair_route_metadata:
+        _repair_route_metadata_from_preload(doc)
     doc.setdefault("stats", _scenario_stats(doc))
     for key, value in _default_v1_2_fields().items():
         doc.setdefault(key, value)
@@ -2073,6 +2078,7 @@ def ensure_runtime_master_data(scenario_id: str) -> bool:
             scenario_id,
             repair_missing_master=False,
             skip_graph_arcs=True,
+            repair_route_metadata=False,
         )
         needs_master_refresh = _needs_master_repair(doc) or _needs_runtime_master_alignment(doc)
         route_metadata_repaired = _repair_route_metadata_from_preload(doc)

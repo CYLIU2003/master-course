@@ -3510,6 +3510,11 @@ class App:
             self._suspend_prepare_watchers = False
 
             self._refresh_depot_dropdowns(depots)
+            if resp.get("routeMetadataRepaired"):
+                self.log_line(
+                    "[路線分類] 路線メタデータを自動補正しました "
+                    f"({len(routes)}件の routeVariantType / routeFamilyCode を最新カタログから再分類)"
+                )
             self.log_line(
                 "Quick Setup を読み込みました "
                 f"(depots={len(depots)}件/{len(selected_depots)}選択, "
@@ -3611,13 +3616,12 @@ class App:
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
         }
         payload["depotEnergyAssets"] = synced_assets
-        self.run_bg(
-            lambda: self.client.put_quick_setup(scenario_id, payload),
-            lambda _resp: (
-                self.log_line("Quick Setup を保存しました"),
-                self._mark_prepared_stale("Quick Setup 保存後のため再Prepareが必要です", announce=True),
-            ),
-        )
+        def _on_save_done(_resp: dict[str, Any]) -> None:
+            self.log_line("Quick Setup を保存しました")
+            self._mark_prepared_stale("Quick Setup 保存後のため再Prepareが必要です", announce=True)
+            self.load_quick_setup()
+
+        self.run_bg(lambda: self.client.put_quick_setup(scenario_id, payload), _on_save_done)
 
     def refresh_vehicles(self) -> None:
         scenario_id = self._selected_scenario_id()

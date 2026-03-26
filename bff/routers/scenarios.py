@@ -481,9 +481,9 @@ def _runtime_err_to_http(e: RuntimeError) -> HTTPException:
     raise e
 
 
-def _ensure_runtime_master_data(scenario_id: str) -> None:
+def _ensure_runtime_master_data(scenario_id: str) -> bool:
     try:
-        store.ensure_runtime_master_data(scenario_id)
+        return store.ensure_runtime_master_data(scenario_id)
     except KeyError:
         raise _not_found(scenario_id)
     except RuntimeError as e:
@@ -1872,7 +1872,7 @@ def get_quick_setup(
     depot_ids: Optional[str] = Query(default=None, alias="depotIds"),
     route_limit: int = Query(default=300, ge=50, le=1000, alias="routeLimit"),
 ) -> Dict[str, Any]:
-    _ensure_runtime_master_data(scenario_id)
+    route_metadata_repaired = _ensure_runtime_master_data(scenario_id)
     try:
         doc = store.get_scenario_document_shallow(scenario_id)
         scenario = store.get_scenario(scenario_id)
@@ -1896,13 +1896,15 @@ def get_quick_setup(
         if parsed_depots:
             selected_depot_ids = parsed_depots
 
-    return _build_quick_setup_payload(
+    payload = _build_quick_setup_payload(
         scenario,
         doc,
         dispatch_scope,
         selected_depot_ids=selected_depot_ids,
         route_limit=route_limit,
     )
+    payload["routeMetadataRepaired"] = bool(route_metadata_repaired)
+    return payload
 
 
 @router.put("/scenarios/{scenario_id}/quick-setup")
