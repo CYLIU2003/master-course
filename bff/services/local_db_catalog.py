@@ -29,6 +29,7 @@ DB_PATH = Path(os.environ.get("TOKYU_DB_PATH", str(_DEFAULT_DB_PATH)))
 OPERATOR_ID = "odpt.Operator:TokyuBus"
 DEFAULT_ALLOWED_VEHICLE_TYPES = ("BEV", "ICE")
 DEFAULT_DISTANCE_KM = 0.0
+DEFAULT_KM_PER_STOP_HOP = 0.6
 _DEPOT_KEYWORDS = ("営業所", "操車所", "操車場", "車庫")
 
 
@@ -146,6 +147,17 @@ def _straight_line_distance_km(record: dict[str, Any]) -> float:
         ),
         4,
     )
+
+
+def _estimate_pattern_distance_km(record: dict[str, Any]) -> float:
+    straight_km = _straight_line_distance_km(record)
+    if straight_km > 0.0:
+        # Apply a modest detour factor so route length is not underestimated.
+        return round(straight_km * 1.2, 4)
+    stop_count = _safe_int(record.get("stop_count"), 0)
+    if stop_count > 1:
+        return round((stop_count - 1) * DEFAULT_KM_PER_STOP_HOP, 4)
+    return DEFAULT_DISTANCE_KM
 
 
 def _attach_depot_scope(
@@ -405,6 +417,10 @@ def _load_route_pattern_records(
             rp.title_ja,
             rp.direction,
             rp.stop_count,
+            origin_stop.lat AS origin_lat,
+            origin_stop.lon AS origin_lon,
+            dest_stop.lat AS destination_lat,
+            dest_stop.lon AS destination_lon,
             COALESCE(origin_stop.title_ja, rp.origin_stop_id) AS origin_name,
             COALESCE(dest_stop.title_ja, rp.dest_stop_id) AS destination_name
         FROM route_patterns rp
@@ -440,7 +456,7 @@ def _load_route_pattern_records(
             "endStop": str(row.get("destination_name") or ""),
             "stopSequence": stop_names.get(str(row.get("pattern_id") or ""), []),
             "tripCount": sum(trip_counts.get(str(row.get("pattern_id") or ""), {}).values()),
-            "distanceKm": float(row.get("stop_count") or 0.0),
+            "distanceKm": _estimate_pattern_distance_km(row),
             "source": "local_sqlite",
         }
         for row in rows

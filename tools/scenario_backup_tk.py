@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 import csv
 import json
+import re
 import threading
 import tkinter as tk
 import unicodedata
@@ -818,6 +819,9 @@ class BFFClient:
     def get_optimization_result(self, scenario_id: str) -> dict[str, Any]:
         return self._request("GET", f"/scenarios/{scenario_id}/optimization")
 
+    def get_scenario(self, scenario_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/scenarios/{scenario_id}")
+
     def get_job(self, job_id: str) -> dict[str, Any]:
         return self._request("GET", f"/jobs/{job_id}")
 
@@ -881,6 +885,10 @@ class App:
         self.optimization_job_id = ""
         self.optimization_polling = False
         self.optimization_last_message = ""
+        self.optimization_last_status = ""
+        self.optimization_last_progress = -1.0
+        self.optimization_poll_count = 0
+        self.optimization_last_snapshot_json = ""
         self.wait_until_finish_var = tk.BooleanVar(value=False)
         self.rebuild_dispatch_before_opt_var = tk.BooleanVar(value=False)
         self.execution_mode_var: tk.StringVar | None = None
@@ -4603,9 +4611,13 @@ class App:
         self.optimization_progress_var.set(0.0)
         self.optimization_status_var.set("送信中")
         self.optimization_last_message = ""
+        self.optimization_last_status = ""
+        self.optimization_last_progress = -1.0
+        self.optimization_poll_count = 0
+        self.optimization_last_snapshot_json = ""
         self._optimization_console_log(f"{action_label}を開始します")
         if payload is not None:
-            self._optimization_console_log("payload=" + json.dumps(payload, ensure_ascii=False))
+            self._optimization_console_log("payload=" + json.dumps(payload, ensure_ascii=False, indent=2))
         self.log_line(f"{action_label}を開始します")
 
         def done(resp: dict[str, Any]) -> None:
@@ -4613,6 +4625,13 @@ class App:
             self.optimization_job_id = self.last_job_id
             self.optimization_status_var.set("実行中")
             self._optimization_console_log(f"ジョブ開始: {self.optimization_job_id}")
+            if payload is not None:
+                self._optimization_console_log(
+                    "payload_effective=" + json.dumps(payload, ensure_ascii=False, indent=2)
+                )
+            self._optimization_console_log(
+                "start_response=" + json.dumps(resp or {}, ensure_ascii=False, indent=2)
+            )
             self._start_optimization_polling(action_label)
 
         self.run_bg(request_action, done)
@@ -4861,6 +4880,163 @@ class App:
         self.optimization_console.insert(tk.END, f"[{stamp}] {text}\n")
         self.optimization_console.see(tk.END)
 
+    def _log_build_audit_summary(self, scenario_doc: dict[str, Any]) -> None:
+        audit = dict(scenario_doc.get("problemdata_build_audit") or {})
+        if not audit:
+            self._optimization_console_log("build_audit: 取得なし")
+            return
+        self._optimization_console_log(
+            "build_audit: "
+            f"trips={audit.get('trip_count')}, "
+            f"tasks={audit.get('task_count')}, "
+            f"vehicles={audit.get('vehicle_count')}, "
+            f"graph_edges={audit.get('graph_edge_count')}, "
+            f"travel_connections={audit.get('travel_connection_count')}"
+        )
+        for warning in list(audit.get("warnings") or []):
+            self._optimization_console_log(f"build_audit.warning: {warning}")
+        for err in list(audit.get("errors") or []):
+            self._optimization_console_log(f"build_audit.error: {err}")
+
+    def _parse_connection_metrics_from_error(self, error_text: str) -> dict[str, int]:
+        text = str(error_text or "")
+        match = re.search(
+            r"tasks\s*=\s*(\d+)\s*,\s*vehicles\s*=\s*(\d+)\s*,\s*travel_connections\s*=\s*(\d+)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return {}
+        try:
+            return {
+                "task_count": int(match.group(1)),
+                "vehicle_count": int(match.group(2)),
+                "travel_connection_count": int(match.group(3)),
+            }
+        except Exception:
+            return {}
+
+    def _load_prepared_input_summary(
+        self,
+        *,
+        scenario_id: str,
+        prepared_input_id: str,
+    ) -> dict[str, Any]:
+        if not scenario_id or not prepared_input_id:
+            return {}
+
+        candidates = [
+            _REPO_ROOT / "output" / "prepared_inputs" / scenario_id / f"{prepared_input_id}.json",
+            _REPO_ROOT / "outputs" / "prepared_inputs" / scenario_id / f"{prepared_input_id}.json",
+        ]
+        for file_path in candidates:
+            if not file_path.exists():
+                continue
+            try:
+                raw = json.loads(file_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            counts = dict(raw.get("counts") or {})
+            return {
+                "path": str(file_path),
+                "trip_count": raw.get("trip_count") if raw.get("trip_count") is not None else counts.get("trip_count"),
+                "route_count": counts.get("route_count"),
+                "vehicle_count": counts.get("vehicle_count"),
+                "depot_count": counts.get("depot_count"),
+                "timetable_row_count": raw.get("timetable_row_count") if raw.get("timetable_row_count") is not None else counts.get("timetable_row_count"),
+            }
+        return {}
+
+    def _log_failure_guidance(self, error_text: str) -> None:
+        lowered = str(error_text or "").lower()
+        if "no travel connections generated" in lowered and "allow_partial_service" in lowered:
+            self._optimization_console_log("対処ガイド: 接続グラフが0件です。")
+            self._optimization_console_log("  1) Quick Setupで『未配車許容(allowPartialService)』をON")
+            self._optimization_console_log("  2) Quick Setup保存 → Solver対応 Prepare を再実行")
+            self._optimization_console_log("  3) それでもNGなら route scope を絞って travel_connection_count > 0 を確認")
+            self._optimization_console_log("  4) 厳格運用(未配車許容OFF)時は travel_connection_count=0 のまま実行不可")
+
+    def _log_runtime_failure_diagnostics(self, *, error_text: str = "") -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            return
+        prepared_input_id = str(self.prepared_input_id or "").strip()
+        try:
+            scenario_doc = self.client.get_scenario(scenario_id)
+        except Exception as exc:
+            self._optimization_console_log(f"診断取得失敗: {exc}")
+            scenario_doc = {}
+
+        has_build_audit = bool((scenario_doc or {}).get("problemdata_build_audit"))
+        self._log_build_audit_summary(scenario_doc or {})
+        if not has_build_audit:
+            fallback_metrics = self._parse_connection_metrics_from_error(error_text)
+            if fallback_metrics:
+                self._optimization_console_log(
+                    "build_audit(fallback:error): "
+                    f"tasks={fallback_metrics.get('task_count')}, "
+                    f"vehicles={fallback_metrics.get('vehicle_count')}, "
+                    f"travel_connections={fallback_metrics.get('travel_connection_count')}"
+                )
+            prepared_summary = self._load_prepared_input_summary(
+                scenario_id=scenario_id,
+                prepared_input_id=prepared_input_id,
+            )
+            if prepared_summary:
+                self._optimization_console_log(
+                    "prepared_input_summary: "
+                    f"trips={prepared_summary.get('trip_count')}, "
+                    f"routes={prepared_summary.get('route_count')}, "
+                    f"vehicles={prepared_summary.get('vehicle_count')}, "
+                    f"depots={prepared_summary.get('depot_count')}, "
+                    f"timetable_rows={prepared_summary.get('timetable_row_count')}"
+                )
+                self._optimization_console_log(
+                    f"prepared_input_path: {prepared_summary.get('path')}"
+                )
+        opt_audit = dict(scenario_doc.get("optimization_audit") or {})
+        if opt_audit:
+            self._optimization_console_log(
+                "optimization_audit: "
+                f"status={opt_audit.get('solver_status')}, "
+                f"warnings={len(list(opt_audit.get('warnings') or []))}, "
+                f"errors={len(list(opt_audit.get('errors') or []))}"
+            )
+
+    @staticmethod
+    def _compact_job_snapshot(job: dict[str, Any]) -> dict[str, Any]:
+        metadata = dict(job.get("metadata") or {}) if isinstance(job.get("metadata"), dict) else {}
+        prepared_input_id = metadata.get("prepared_input_id")
+        requested_prepared_input_id = metadata.get("requested_prepared_input_id")
+        prepared_input_path = metadata.get("prepared_input_path")
+        return {
+            "job_id": job.get("job_id") or job.get("jobId"),
+            "status": job.get("status"),
+            "progress": job.get("progress"),
+            "message": job.get("message"),
+            "result_key": job.get("result_key") or job.get("resultKey"),
+            "error": job.get("error"),
+            "metadata": {
+                "started_at": metadata.get("started_at"),
+                "updated_at": metadata.get("updated_at"),
+                "pid": metadata.get("pid"),
+                "orphaned": metadata.get("orphaned"),
+                "scenario_id": metadata.get("scenario_id") or metadata.get("scenarioId"),
+                "mode": metadata.get("mode"),
+                "prepared_input_id": prepared_input_id,
+                "requested_prepared_input_id": requested_prepared_input_id,
+                "prepared_input_path": prepared_input_path,
+            },
+        }
+
+    def _log_job_snapshot_if_changed(self, job: dict[str, Any], *, force: bool = False) -> None:
+        snapshot = self._compact_job_snapshot(job)
+        encoded = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+        if not force and encoded == self.optimization_last_snapshot_json:
+            return
+        self.optimization_last_snapshot_json = encoded
+        self._optimization_console_log("job_snapshot=" + json.dumps(snapshot, ensure_ascii=False, indent=2))
+
     def _start_optimization_polling(self, action_label: str) -> None:
         if not self.optimization_job_id:
             return
@@ -4875,12 +5051,29 @@ class App:
             job_id = self.optimization_job_id
 
             def done(job: dict[str, Any]) -> None:
+                self.optimization_poll_count += 1
                 status = str(job.get("status") or "").lower()
                 progress = self._extract_job_progress_percent(job)
                 message = str(job.get("message") or "")
+
+                status_changed = status != self.optimization_last_status
+                progress_changed = abs(progress - self.optimization_last_progress) >= 0.1
+                message_changed = bool(message and message != self.optimization_last_message)
+
                 if message and message != self.optimization_last_message:
                     self.optimization_last_message = message
                     self._optimization_console_log(message)
+
+                if status_changed or progress_changed or message_changed:
+                    self._optimization_console_log(
+                        f"poll#{self.optimization_poll_count} status={status or 'running'} progress={progress:.1f}% message={message or '-'}"
+                    )
+
+                if status_changed or message_changed or (self.optimization_poll_count % 5 == 0):
+                    self._log_job_snapshot_if_changed(job, force=status_changed or message_changed)
+
+                self.optimization_last_status = status
+                self.optimization_last_progress = progress
                 self.optimization_progress_var.set(progress)
                 shown = status or "running"
                 self.optimization_status_var.set(shown)
@@ -4892,18 +5085,20 @@ class App:
                     self.optimization_polling = False
                     error_text = str(job.get("error") or "").strip()
                     if error_text:
-                        first_line = next(
-                            (line.strip() for line in error_text.splitlines() if line.strip()),
-                            error_text,
-                        )
-                        self._optimization_console_log("error=" + first_line)
+                        self._optimization_console_log("error(traceback/full)=\n" + error_text)
+                        self._log_failure_guidance(error_text)
+                    self._log_job_snapshot_if_changed(job, force=True)
+                    self._log_runtime_failure_diagnostics(error_text=error_text)
                     self._optimization_console_log(f"ジョブ終了: status={shown}")
                     if error_text:
                         first_line = next(
                             (line.strip() for line in error_text.splitlines() if line.strip()),
                             error_text,
                         )
-                        messagebox.showerror("実行ジョブ", f"{action_label} が失敗しました。\n{first_line}")
+                        messagebox.showerror(
+                            "実行ジョブ",
+                            f"{action_label} が失敗しました。\n{first_line}\n\n詳細は最適化実行モニターのログを確認してください。",
+                        )
                     else:
                         messagebox.showinfo("実行ジョブ", f"{action_label} が完了しました。\nstatus={shown}")
                     return

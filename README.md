@@ -70,6 +70,9 @@ flowchart LR
   - 2026-03-24T06:51:40.627289+00:00 に `data/external/solcast_raw/depot_coordinates_tokyu_all.json`（12 営業所座標）を生成
   - 2026-03-24T07:10:50.337433+00:00 に `data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json`（取得・利用台帳）を生成
   - 詳細運用は `readme_operation.md` の「5. 営業所別 Solcast キャッシュ運用」を参照
+- 距離推定で `zero distance ratio` が高くなるケース向けに、`distance`/`stop` のキー揺れ吸収、座標欠損時の `stop_count`・所要時間ベース補完、Prepare監査ログ（座標カバレッジ/route距離件数）を追加
+- 最適化モニターの失敗時診断を強化し、`problemdata_build_audit` 未取得時でもエラー文から `tasks/vehicles/travel_connections` を抽出し、さらに prepared input サマリ（trip/route/vehicle/depot/timetable_rows とファイル位置）を表示するようにした
+- 最適化ジョブで「要求 prepared_input_id」と「実使用 prepared_input_id / JSONパス」をメタデータと失敗メッセージに表示し、UI 側でも `payload_effective` を出して stale 自動同期後の実効入力を追跡できるようにした
 
 </details>
 
@@ -765,6 +768,12 @@ python catalog_update_app.py refresh gtfs-pipeline `
 - `build_report.travel_connection_count=0` かつ `allowPartialService=false` のまま `tripCount > vehicleCount` で実行すると、MILP は厳格配車条件により INFEASIBLE になります
 - まずは `未配車許容`（`allowPartialService`）を ON にして `Quick Setup 保存` → `Solver対応 Prepare` → `実行` の順で回避してください
 - 恒久的には route スコープを段階的に絞り、`travel_connection_count` が 0 にならない構成へ調整してください
+
+**`Distance estimation audit: zero distance ratio ...` が高い場合**
+
+- Prepare ログの `stop_coords=x/y` と `routes_with_distance=a/b` を確認し、座標欠損か route 距離欠損かを先に切り分ける
+- 2026-03-26 以降は `distance_km/distanceKm/distance`、`lat/lon/latitude/longitude` などのキー揺れを吸収して補完する
+- それでも比率が高い場合は、対象 dataset の stop 座標（`stops`）と route 停留所連鎖（`stopSequence`）の欠損を優先修正する
 
 **Timetable first の原則**
 

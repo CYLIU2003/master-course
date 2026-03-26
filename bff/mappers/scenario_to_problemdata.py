@@ -51,6 +51,8 @@ logger = logging.getLogger(__name__)
 _DEFAULT_LIFETIME_YEAR = 12.0
 _DEFAULT_OPERATION_DAYS_PER_YEAR = 300.0
 _DEFAULT_RESIDUAL_VALUE_YEN = 0.0
+_DEFAULT_KM_PER_STOP_HOP = 0.6
+_DEFAULT_SERVICE_SPEED_KMH = 15.0
 _CATALOG_FAST_ROUTE_STOP_TIMES_DIR = (
     Path(__file__).resolve().parents[2]
     / "data"
@@ -213,11 +215,11 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def _build_stop_coord_lookup(scenario: Dict[str, Any]) -> Dict[str, Tuple[float, float]]:
     lookup: Dict[str, Tuple[float, float]] = {}
     for stop in _as_list(scenario.get("stops")):
-        stop_id = str(stop.get("id") or stop.get("stop_id") or "").strip()
+        stop_id = str(stop.get("id") or stop.get("stop_id") or stop.get("stopId") or "").strip()
         if not stop_id:
             continue
-        lat = _safe_float(stop.get("lat"), 0.0)
-        lon = _safe_float(stop.get("lon"), 0.0)
+        lat = _safe_float(stop.get("lat", stop.get("latitude")), 0.0)
+        lon = _safe_float(stop.get("lon", stop.get("lng", stop.get("longitude"))), 0.0)
         if lat == 0.0 and lon == 0.0:
             continue
         lookup[stop_id] = (lat, lon)
@@ -293,11 +295,62 @@ def _estimate_distance_from_trip_stop_times_km(
 
 
 def _route_stop_sequence(route_like: Dict[str, Any]) -> List[str]:
-    return [
-        str(item)
-        for item in coerce_list(route_like.get("stopSequence") or route_like.get("stop_sequence"))
-        if str(item or "").strip()
-    ]
+    sequence: List[str] = []
+    for item in coerce_list(route_like.get("stopSequence") or route_like.get("stop_sequence")):
+        if isinstance(item, dict):
+            stop_id = str(item.get("stop_id") or item.get("stopId") or item.get("id") or "").strip()
+        else:
+            stop_id = str(item or "").strip()
+        if stop_id:
+            sequence.append(stop_id)
+    return sequence
+
+
+def _trip_stop_count(trip_like: Dict[str, Any], route_like: Dict[str, Any]) -> int:
+    trip_count = _safe_int(trip_like.get("stop_count", trip_like.get("stopCount")), 0)
+    if trip_count > 1:
+        return trip_count
+    sequence = _stop_sequence_from_trip_stop_times(trip_like)
+    if len(sequence) > 1:
+        return len(sequence)
+    route_count = _safe_int(route_like.get("stop_count", route_like.get("stopCount")), 0)
+    if route_count > 1:
+        return route_count
+    route_sequence = _route_stop_sequence(route_like)
+    return len(route_sequence)
+
+
+def _estimate_distance_from_stop_count_km(trip_like: Dict[str, Any], route_like: Dict[str, Any]) -> float:
+    stop_count = _trip_stop_count(trip_like, route_like)
+    if stop_count <= 1:
+        return 0.0
+    hop_count = max(stop_count - 1, 1)
+    return round(hop_count * _DEFAULT_KM_PER_STOP_HOP, 4)
+
+
+def _estimate_distance_from_duration_km(trip_like: Dict[str, Any]) -> float:
+    departure = str(
+        trip_like.get("departure")
+        or trip_like.get("departure_time")
+        or trip_like.get("departureTime")
+        or ""
+    ).strip()
+    arrival = str(
+        trip_like.get("arrival")
+        or trip_like.get("arrival_time")
+        or trip_like.get("arrivalTime")
+        or ""
+    ).strip()
+    if not departure or not arrival:
+        return 0.0
+    dep_min = _hhmm_to_minutes(departure)
+    arr_min = _hhmm_to_minutes(arrival)
+    if arr_min < dep_min:
+        arr_min += 24 * 60
+    duration_min = max(0, arr_min - dep_min)
+    if duration_min <= 0:
+        return 0.0
+    return round((duration_min / 60.0) * _DEFAULT_SERVICE_SPEED_KMH, 4)
 
 
 def _estimate_route_distance_from_sequence_km(
@@ -452,7 +505,10 @@ def _estimate_trip_distance_km(
     stop_coords: Dict[str, Tuple[float, float]],
 ) -> float:
     detour_factor = _variant_distance_factor(trip_like, route_like)
-    explicit_distance = _safe_float(trip_like.get("distance_km"), 0.0)
+    explicit_distance = _safe_float(
+        trip_like.get("distance_km", trip_like.get("distanceKm", trip_like.get("distance"))),
+        0.0,
+    )
     if explicit_distance > 0.0:
         return explicit_distance
 
@@ -465,15 +521,15 @@ def _estimate_trip_distance_km(
         return round(stop_times_distance, 4)
 
     base_distance = _safe_float(
-        route_like.get("distanceKm", route_like.get("distance_km")),
+        route_like.get("distanceKm", route_like.get("distance_km", route_like.get("distance"))),
         0.0,
     )
     if base_distance <= 0.0:
         base_distance = _estimate_route_distance_from_sequence_km(route_like, stop_coords, detour_factor)
 
     stop_sequence = _route_stop_sequence(route_like)
-    origin_stop_id = str(trip_like.get("origin_stop_id") or "").strip()
-    destination_stop_id = str(trip_like.get("destination_stop_id") or "").strip()
+    origin_stop_id = str(trip_like.get("origin_stop_id") or trip_like.get("originStopId") or "").strip()
+    destination_stop_id = str(trip_like.get("destination_stop_id") or trip_like.get("destinationStopId") or "").strip()
     if (
         base_distance > 0.0
         and origin_stop_id
@@ -502,6 +558,15 @@ def _estimate_trip_distance_km(
         )
         if straight_km > 0.0:
             return round(straight_km * detour_factor, 4)
+
+    count_based_distance = _estimate_distance_from_stop_count_km(trip_like, route_like)
+    if count_based_distance > 0.0:
+        return count_based_distance
+
+    duration_based_distance = _estimate_distance_from_duration_km(trip_like)
+    if duration_based_distance > 0.0:
+        return duration_based_distance
+
     return 0.0
 
 
@@ -513,6 +578,16 @@ def _collect_trips_for_scope(
 ) -> List[Dict[str, Any]]:
     scoped_rows = _filter_rows_for_scope(scenario, depot_id, service_id, analysis_scope)
     stop_coords = _build_stop_coord_lookup(scenario)
+    total_stops = len(_as_list(scenario.get("stops")))
+    if total_stops > 0:
+        stop_coord_ratio = len(stop_coords) / float(total_stops)
+        if stop_coord_ratio < 0.5:
+            logger.warning(
+                "Stop coordinate coverage is low: %.2f%% (%d/%d). Distance fallback quality may degrade.",
+                stop_coord_ratio * 100.0,
+                len(stop_coords),
+                total_stops,
+            )
     scope = dict(analysis_scope or scenario.get("dispatch_scope") or {})
     effective_route_ids = {
         str(item)
@@ -628,11 +703,33 @@ def _collect_trips_for_scope(
     zero_distance_count = sum(1 for trip in trips if _safe_float(trip.get("distance_km"), 0.0) <= 0.0)
     zero_distance_ratio = (zero_distance_count / len(trips)) if trips else 0.0
     if zero_distance_ratio >= 0.05:
+        route_ids = {str(trip.get("route_id") or "") for trip in trips if str(trip.get("route_id") or "").strip()}
+        route_lookup = {
+            str(route.get("id") or ""): route
+            for route in _as_list(scenario.get("routes"))
+            if str(route.get("id") or "").strip()
+        }
+        positive_route_distance_count = sum(
+            1
+            for route_id in route_ids
+            if _safe_float(
+                (route_lookup.get(route_id) or {}).get(
+                    "distanceKm",
+                    (route_lookup.get(route_id) or {}).get("distance_km"),
+                ),
+                0.0,
+            )
+            > 0.0
+        )
         logger.warning(
-            "Distance estimation audit: zero distance ratio is %.2f%% (%d/%d)",
+            "Distance estimation audit: zero distance ratio is %.2f%% (%d/%d), stop_coords=%d/%d, routes_with_distance=%d/%d",
             zero_distance_ratio * 100.0,
             zero_distance_count,
             len(trips),
+            len(stop_coords),
+            total_stops,
+            positive_route_distance_count,
+            len(route_ids),
         )
     return trips
 

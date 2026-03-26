@@ -559,6 +559,7 @@ def _run_optimization(
     scenario_id: str,
     job_id: str,
     prepared_input_id: str,
+    requested_prepared_input_id: Optional[str],
     mode: str,
     time_limit_seconds: int,
     mip_gap: float,
@@ -591,6 +592,7 @@ def _run_optimization(
             raise ValueError("No depot selected. Configure dispatch scope first.")
 
         base_scenario = store.get_scenario_document_shallow(scenario_id)
+        prepared_input_path = _prepared_inputs_root() / scenario_id / f"{prepared_input_id}.json"
         prepared_payload = load_prepared_input(
             scenario_id=scenario_id,
             prepared_input_id=prepared_input_id,
@@ -636,6 +638,9 @@ def _run_optimization(
                 extra={
                     "rebuild_dispatch": rebuild_dispatch,
                     "use_existing_duties": use_existing_duties,
+                    "prepared_input_id": prepared_input_id,
+                    "requested_prepared_input_id": requested_prepared_input_id,
+                    "prepared_input_path": str(prepared_input_path),
                 },
             ),
         )
@@ -657,7 +662,11 @@ def _run_optimization(
             raise RuntimeError(
                 "No travel connections generated while allow_partial_service is OFF. "
                 f"tasks={build_report.task_count}, vehicles={build_report.vehicle_count}, "
-                f"travel_connections={build_report.travel_connection_count}. "
+                f"travel_connections={build_report.travel_connection_count}, "
+                f"allow_partial_service={bool(getattr(data, 'allow_partial_service', False))}, "
+                f"prepared_input_id={prepared_input_id}, "
+                f"requested_prepared_input_id={requested_prepared_input_id or '-'}, "
+                f"prepared_input_path={prepared_input_path}. "
                 "Turn on allowPartialService or narrow route scope and rerun Prepare."
             )
 
@@ -676,6 +685,9 @@ def _run_optimization(
                 stage="solve",
                 mode=mode,
                 extra={
+                    "prepared_input_id": prepared_input_id,
+                    "requested_prepared_input_id": requested_prepared_input_id,
+                    "prepared_input_path": str(prepared_input_path),
                     "problem_summary": {
                         "trips": len(getattr(data, "tasks", []) or []),
                         "vehicles": len(getattr(data, "vehicles", []) or []),
@@ -1165,6 +1177,7 @@ def run_optimization(
             scenario_id,
             job.job_id,
             prep.prepared_input_id or "",
+            request.prepared_input_id,
             request.mode,
             request.time_limit_seconds,
             request.mip_gap,
