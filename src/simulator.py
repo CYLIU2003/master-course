@@ -231,6 +231,7 @@ class SimulationResult:
     pv_self_consumption_ratio: float = 0.0  # PV 自家消費率 [-]
     total_pv_kwh: float = 0.0               # PV 利用量 [kWh]
     total_grid_kwh: float = 0.0             # 系統受電量 [kWh]
+    total_grid_export_kwh: float = 0.0      # 系統売電量 [kWh]
     provisional_grid_kwh: float = 0.0       # 走行量ベース仮受電量 [kWh]
     charged_grid_kwh: float = 0.0           # 充電量ベース実受電量 [kWh]
     peak_demand_kw: float = 0.0             # ピーク需要 [kW]
@@ -251,6 +252,7 @@ class SimulationResult:
 
     # 時系列: site_id -> [kW/kWh, ...]
     grid_import_kw_series: Dict[str, List[float]] = field(default_factory=dict)
+    grid_export_kw_series: Dict[str, List[float]] = field(default_factory=dict)
     pv_used_kw_series: Dict[str, List[float]] = field(default_factory=dict)
 
     # 実行可能性診断 (agent.md §6.3)
@@ -266,13 +268,24 @@ def _bev_operating_energy_kwh_by_site(
     profile: Dict[str, List[float]] = {}
     horizon = len(ms.T)
     for vehicle_id in ms.K_BEV:
-        assigned_tasks = milp_result.assignment.get(vehicle_id) or []
-        if not assigned_tasks:
-            continue
         site_id = resolve_vehicle_energy_site_id(ms, dp, vehicle_id)
         if not site_id:
             continue
         series = profile.setdefault(site_id, [0.0] * horizon)
+
+        # Prefer SOC deltas when available because they reflect slot-level
+        # realized traction energy across long trips and midnight boundaries.
+        soc_series = milp_result.soc_series.get(vehicle_id) or []
+        if len(soc_series) >= horizon + 1:
+            for t_idx in ms.T:
+                discharge_kwh = float(soc_series[t_idx] - soc_series[t_idx + 1])
+                if discharge_kwh > 0.0:
+                    series[t_idx] += discharge_kwh
+            continue
+
+        assigned_tasks = milp_result.assignment.get(vehicle_id) or []
+        if not assigned_tasks:
+            continue
         for task_id in assigned_tasks:
             energy_per_slot = dp.task_energy_per_slot.get(task_id, [])
             for t_idx in ms.T:
@@ -426,6 +439,14 @@ def simulate(
     sim.total_grid_kwh = round(total_grid, 4)
     sim.total_energy_cost = round(total_cost, 2)
     sim.peak_demand_kw = round(peak_kw, 4)
+
+    # Export series is reported from MILP result when available.
+    export_total = 0.0
+    for site_id, series in (milp_result.grid_export_kw or {}).items():
+        norm = [float(v or 0.0) for v in series]
+        sim.grid_export_kw_series[site_id] = norm
+        export_total += sum(norm) * delta_h
+    sim.total_grid_export_kwh = round(export_total, 4)
 
     if demand_charge_rate is None:
         demand_charge_rate = data.demand_charge_rate_per_kw

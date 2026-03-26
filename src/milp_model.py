@@ -35,7 +35,7 @@ from .data_schema import ProblemData
 from .model_sets import ModelSets
 from .parameter_builder import DerivedParams
 from .constraints.assignment import add_assignment_constraints
-from .constraints.charging import add_charging_constraints, add_soc_constraints
+from .constraints.charging import add_charging_constraints, add_soc_constraints, add_ice_fuel_constraints
 from .constraints.charger_capacity import add_charger_capacity_constraints
 from .constraints.energy_balance import (
     add_energy_balance_constraints,
@@ -75,6 +75,9 @@ class MILPResult:
 
     # § 7.5 系統受電: site_id -> [kW, ...]
     grid_import_kw: Dict[str, List[float]] = field(default_factory=dict)
+
+    # § 7.5 系統売電: site_id -> [kW, ...]
+    grid_export_kw: Dict[str, List[float]] = field(default_factory=dict)
 
     # § 7.5 PV: site_id -> [kW, ...]
     pv_used_kw: Dict[str, List[float]] = field(default_factory=dict)
@@ -301,24 +304,57 @@ def build_milp_model(
 
     # ===== §7.1 割当変数 =====
     # x_assign[k, r]: 車両 k がタスク r を担当するなら 1
-    vars["x_assign"] = model.addVars(K_ALL, R, vtype=GRB.BINARY, name="x_assign")
+    # feasible な組み合わせのみ変数を作成してモデル規模を削減する。
+    x_index = [
+        (k, r)
+        for k in K_ALL
+        for r in ms.vehicle_task_feasible.get(k, set())
+    ]
+    vars["x_assign"] = model.addVars(x_index, vtype=GRB.BINARY, name="x_assign")
+
+    # y_follow[k, r1, r2]: 車両 k が r1 の直後に r2 を担当するなら 1
+    follow_index = []
+    for k in K_ALL:
+        feasible_tasks = ms.vehicle_task_feasible.get(k, set())
+        for r1 in feasible_tasks:
+            for r2, can in dp.can_follow.get(r1, {}).items():
+                if not can or r2 == r1:
+                    continue
+                if r2 not in feasible_tasks:
+                    continue
+                follow_index.append((k, r1, r2))
+    if follow_index:
+        vars["y_follow"] = model.addVars(follow_index, vtype=GRB.BINARY, name="y_follow")
 
     # u_vehicle[k]: 車両 k を使用するなら 1
     vars["u_vehicle"] = model.addVars(K_ALL, vtype=GRB.BINARY, name="u_vehicle")
 
     # ===== §7.3 充電関連変数 (BEV のみ) =====
     if flags.get("charging", True) and K_BEV and C:
+        charge_index = [
+            (k, c, t)
+            for k in K_BEV
+            for c in ms.vehicle_charger_feasible.get(k, set())
+            if c in C
+            for t in T
+        ]
         # z_charge[k, c, t]: 充電器利用バイナリ
-        vars["z_charge"] = model.addVars(K_BEV, C, T, vtype=GRB.BINARY, name="z_charge")
+        vars["z_charge"] = model.addVars(charge_index, vtype=GRB.BINARY, name="z_charge")
 
         # p_charge[k, c, t]: 充電電力 [kW]
-        vars["p_charge"] = model.addVars(K_BEV, C, T, lb=0.0, vtype=GRB.CONTINUOUS, name="p_charge")
+        vars["p_charge"] = model.addVars(charge_index, lb=0.0, vtype=GRB.CONTINUOUS, name="p_charge")
 
     # ===== §7.4 SOC 変数 =====
     if flags.get("soc", True) and K_BEV:
         # soc[k, t]: t = 0 ... num_periods
         vars["soc"] = model.addVars(
             K_BEV, range(len(T) + 1), lb=0.0, vtype=GRB.CONTINUOUS, name="soc"
+        )
+
+    # ===== ICE 燃料残量変数 =====
+    if K_ICE:
+        vars["fuel"] = model.addVars(
+            K_ICE, range(len(T) + 1), lb=0.0, vtype=GRB.CONTINUOUS, name="fuel"
         )
 
     # ===== §7.4.2 劣化変数 (BEV) =====
@@ -330,6 +366,9 @@ def build_milp_model(
         vars["p_grid_import"] = model.addVars(
             I_CHARGE, T, lb=0.0, vtype=GRB.CONTINUOUS, name="p_grid_import"
         )
+        vars["p_grid_export"] = model.addVars(
+            I_CHARGE, T, lb=0.0, vtype=GRB.CONTINUOUS, name="p_grid_export"
+        )
         vars["peak_demand"] = model.addVars(
             I_CHARGE, lb=0.0, vtype=GRB.CONTINUOUS, name="peak_demand"
         )
@@ -340,12 +379,19 @@ def build_milp_model(
 
     # ===== §7.3.4 V2G 変数 =====
     if flags.get("v2g", False) and data.enable_v2g and K_BEV and C:
-        vars["p_discharge"]  = model.addVars(K_BEV, C, T, lb=0.0, vtype=GRB.CONTINUOUS, name="p_discharge")
+        discharge_index = [
+            (k, c, t)
+            for k in K_BEV
+            for c in ms.vehicle_charger_feasible.get(k, set())
+            if c in C
+            for t in T
+        ]
+        vars["p_discharge"]  = model.addVars(discharge_index, lb=0.0, vtype=GRB.CONTINUOUS, name="p_discharge")
         vars["z_discharge"]  = model.addVars(K_BEV, T, vtype=GRB.BINARY, name="z_discharge")
 
     # ===== §7.6 緩和変数 =====
     if data.allow_partial_service:
-        vars["slack_cover"] = model.addVars(R, lb=0.0, vtype=GRB.CONTINUOUS, name="slack_cover")
+        vars["slack_cover"] = model.addVars(R, vtype=GRB.BINARY, name="slack_cover")
 
     if data.use_soft_soc_constraint and K_BEV:
         vars["slack_soc"] = model.addVars(
@@ -363,6 +409,9 @@ def build_milp_model(
 
     if flags.get("soc", True) and "soc" in vars and "p_charge" in vars:
         add_soc_constraints(model, data, ms, dp, vars)
+
+    if "fuel" in vars:
+        add_ice_fuel_constraints(model, data, ms, dp, vars)
 
     if flags.get("charger_capacity", True) and "z_charge" in vars:
         add_charger_capacity_constraints(model, data, ms, dp, vars)
@@ -485,6 +534,7 @@ def extract_result(
     z   = vars.get("z_charge")
     p   = vars.get("p_charge")
     p_grid = vars.get("p_grid_import")
+    p_grid_export = vars.get("p_grid_export")
     p_pv   = vars.get("p_pv_used")
     peak   = vars.get("peak_demand")
     slack_cover = vars.get("slack_cover")
@@ -492,14 +542,14 @@ def extract_result(
     # --- 割当 ---
     if x is not None:
         for k in K_ALL:
-            assigned = [r for r in R if x[k, r].X > 0.5]
+            assigned = [r for r in R if (k, r) in x and x[k, r].X > 0.5]
             if assigned:
                 result.assignment[k] = assigned
 
     # --- 未割当 ---
     if x is not None:
         for r_id in R:
-            total = sum(x[k, r_id].X for k in K_ALL)
+            total = sum(x[k, r_id].X for k in K_ALL if (k, r_id) in x)
             if total < 0.5:
                 result.unserved_tasks.append(r_id)
 
@@ -518,7 +568,7 @@ def extract_result(
         for k in K_BEV:
             sched: Dict[str, List[int]] = {}
             for c in C:
-                series = [int(round(z[k, c, t].X)) for t in T]
+                series = [int(round(z[k, c, t].X)) if (k, c, t) in z else 0 for t in T]
                 if any(v > 0 for v in series):
                     sched[c] = series
             if sched:
@@ -528,7 +578,7 @@ def extract_result(
         for k in K_BEV:
             pwr: Dict[str, List[float]] = {}
             for c in C:
-                series = [round(float(p[k, c, t].X), 4) for t in T]
+                series = [round(float(p[k, c, t].X), 4) if (k, c, t) in p else 0.0 for t in T]
                 if any(abs(v) > 1e-9 for v in series):
                     pwr[c] = series
             if pwr:
@@ -539,6 +589,12 @@ def extract_result(
         for site_id in I_CHARGE:
             result.grid_import_kw[site_id] = [
                 round(float(p_grid[site_id, t].X), 4) for t in T
+            ]
+
+    if p_grid_export is not None:
+        for site_id in I_CHARGE:
+            result.grid_export_kw[site_id] = [
+                round(float(p_grid_export[site_id, t].X), 4) for t in T
             ]
 
     # --- PV ---

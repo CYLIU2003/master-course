@@ -39,6 +39,87 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-26] MILP妥当性修正: ICE燃料上限・売電変数・課金/デマンド定義を実測整合へ
+
+- **背景**:
+  - MILPにおいて、ICEの燃料状態が制約化されておらず、タンク容量超過の割当が理論上許容される。
+  - 電力収支は系統受電のみで表現され、PV余剰/V2G時の逆潮流を扱えない。
+  - 電力料金が「走行消費」課金になっており、充電時刻最適化やPV自家消費効果が反映されない。
+  - デマンド料金制約が走行エネルギーを需要電力に加算していた。
+
+- **対応**:
+  - `src/constraints/assignment.py`
+    - ICE車両に `fuel_tank_cap` 制約を追加（`sum(task_fuel_ice * x) <= fuel_tank_capacity`）。
+    - `use_link` を車両ごとの集約制約へ変更（制約本数削減）。
+  - `src/milp_model.py`
+    - `p_grid_export` 変数を追加（非負連続）。
+    - `slack_cover` を `CONTINUOUS` から `BINARY` へ変更。
+    - ICE向け `fuel[k,t]` 変数を追加し、燃料時系列制約を組み込み。
+  - `src/constraints/energy_balance.py`
+    - 電力収支式に `p_grid_export` を導入し、逆潮流を表現可能化。
+    - デマンド追跡を `p_grid_import <= peak_demand` に統一（走行消費の混入を除去）。
+  - `src/objective.py`
+    - 電力量料金を「メーター課金」へ変更：`buy_price * p_grid_import * delta_h`。
+    - 売電時は `sell_back_price * p_grid_export * delta_h` を控除。
+    - `energy_balance` 非使用時は旧ロジックをフォールバックとして保持。
+  - `src/constraints/charging.py`
+    - SOC遷移の充電項を `charger_efficiency * vehicle.charge_efficiency` で換算するよう明示。
+    - ICE燃料遷移 `fuel[k,t+1] = fuel[k,t] - burn[k,t]` と上下限制約を追加。
+
+- **テスト**:
+  - `pytest tests/test_objective_modes.py tests/test_milp_route_band_settings.py -q`
+  - 結果: `12 passed`
+  - `pytest tests/test_bev_energy_accounting.py -q`
+  - 結果: `3 passed`
+
+- **追加対応（同日）**:
+  - `src/simulator.py`
+    - 仮電力量の算定を改善し、BEVは `soc[t]-soc[t+1]` の放電量を優先利用（SOC系列がある場合）。
+    - これにより長時間便・深夜跨ぎ時のスロット課金整合を改善。
+    - `total_grid_export_kwh` / `grid_export_kw_series` を `SimulationResult` に追加。
+  - `src/milp_model.py`
+    - `MILPResult` に `grid_export_kw` を追加し、`p_grid_export` の抽出を実装。
+    - `y_follow[k,r1,r2]` 変数を実際に生成するよう更新。
+  - `src/constraints/assignment.py`
+    - `y_follow` の連結パス制約を追加（in/out次数上限、edge_count整合）。
+    - これにより回送コスト・回送エネルギーで参照する遷移弧が有効化。
+  - `src/constraints/charging.py`
+    - SOC遷移式に回送消費項（`deadhead_energy_kwh * y_follow`）を追加。
+    - 後続便の出発直前スロットへ回送消費を計上する方式で反映。
+  - `src/objective.py`
+    - 回送コスト計算を全ペア総当たりから `y_follow` 既存弧のみ走査へ最適化。
+
+- **追加対応（同日・本格実装）**:
+  - `src/milp_model.py`
+    - `x_assign` を feasible `(k,r)` のみ生成するスパース化へ変更。
+    - `z_charge` / `p_charge` / `p_discharge` を feasible `(k,c,t)` のみ生成へ変更。
+    - 結果抽出部をスパースkey存在チェック対応に更新。
+  - `src/constraints/assignment.py`
+    - 不適合ペア `x==0` 制約を削除（変数未生成で表現）。
+  - `src/constraints/charging.py`
+    - スパース `z/p` 前提で制約生成を更新（互換性0固定ループを廃止）。
+  - `src/constraints/charger_capacity.py`
+    - スパース `z_charge` での容量制約に対応。
+  - `src/constraints/optional_v2g.py`
+    - スパース `z_charge/p_discharge` 参照に対応。
+  - `src/constraints/battery_degradation.py`
+    - スパース `p_charge/p_discharge` 参照に対応。
+  - `src/model_factory.py`
+    - `mode_A_journey_charge` の固定割当をスパース変数対応に更新。
+
+- **テスト**:
+  - `pytest tests/test_objective_modes.py tests/test_milp_route_band_settings.py tests/test_bev_energy_accounting.py -q`
+  - 結果: `15 passed`
+  - `pytest -q`
+  - 結果: `113 passed`
+  - `src/result_exporter.py`
+    - `summary.json` の `kpi` に `total_grid_export_kwh` を追加。
+  - `tools/bus_operation_visualizer_tk.py`
+    - サマリー表示に以下を追加:
+      - 電力コスト基準（provisional/charged）
+      - 電力コスト(仮) / 電力コスト(充電実績)
+      - 系統受電量 / 系統売電量
+
 ### [DEV-2026-03-25] 出力先ディレクトリを output に統一（output/outputs 混在解消）
 
 - **背景**:

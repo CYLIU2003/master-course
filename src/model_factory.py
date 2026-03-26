@@ -303,9 +303,13 @@ def build_model_by_mode(
         for k in ms.K_ALL:
             for r in ms.R:
                 if r in fixed_assignment.get(k, []):
-                    model.addConstr(x[k, r] == 1, name=f"fix_assign_{k}_{r}")
+                    if (k, r) in x:
+                        model.addConstr(x[k, r] == 1, name=f"fix_assign_{k}_{r}")
+                    else:
+                        model.addConstr(0 == 1, name=f"fix_assign_infeasible_{k}_{r}")
                 else:
-                    model.addConstr(x[k, r] == 0, name=f"fix_noassign_{k}_{r}")
+                    if (k, r) in x:
+                        model.addConstr(x[k, r] == 0, name=f"fix_noassign_{k}_{r}")
         # u_vehicle も固定
         u = vars_.get("u_vehicle")
         if u is not None:

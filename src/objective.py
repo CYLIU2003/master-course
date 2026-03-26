@@ -26,7 +26,7 @@ from typing import Any, Dict
 from .data_schema import ProblemData
 from .gurobi_runtime import ensure_gurobi
 from .model_sets import ModelSets
-from .parameter_builder import DerivedParams, get_grid_price, resolve_vehicle_energy_site_id
+from .parameter_builder import DerivedParams, get_grid_price, get_sell_back_price, resolve_vehicle_energy_site_id
 
 
 def build_objective(
@@ -62,6 +62,7 @@ def build_objective(
     x     = vars["x_assign"]
     u     = vars.get("u_vehicle")
     p_grid = vars.get("p_grid_import")
+    p_grid_export = vars.get("p_grid_export")
     peak  = vars.get("peak_demand")
     deg   = vars.get("deg")
     slack_cover = vars.get("slack_cover")
@@ -87,22 +88,31 @@ def build_objective(
 
     # ===== w2: 電力量料金 =====
     if w.get("electricity_cost", 0.0) > 0:
-        # BEV は「充電量」ではなく「走行で消費した電力量」で課金する。
-        # 充電は SOC feasibility のためだけに残し、追加コストは課さない。
         term = gp.LinExpr()
-        for k in K_BEV:
-            site_id = resolve_vehicle_energy_site_id(ms, dp, k)
-            feasible_tasks = ms.vehicle_task_feasible.get(k, set())
-            for r in feasible_tasks:
-                energy_per_slot = dp.task_energy_per_slot.get(r, [])
+        if p_grid is not None:
+            delta_h = data.delta_t_hour
+            for site_id in ms.I_CHARGE:
                 for t in T:
-                    if t >= len(energy_per_slot):
-                        continue
-                    energy_kwh = float(energy_per_slot[t] or 0.0)
-                    if energy_kwh <= 0.0:
-                        continue
-                    price = get_grid_price(dp, site_id, t)
-                    term += w["electricity_cost"] * price * energy_kwh * x[k, r]
+                    buy_price = get_grid_price(dp, site_id, t)
+                    term += w["electricity_cost"] * buy_price * p_grid[site_id, t] * delta_h
+                    if p_grid_export is not None:
+                        sell_price = get_sell_back_price(dp, site_id, t)
+                        term += -w["electricity_cost"] * sell_price * p_grid_export[site_id, t] * delta_h
+        else:
+            # energy_balance を使わない旧モード互換: 既存の走行消費課金をフォールバック
+            for k in K_BEV:
+                site_id = resolve_vehicle_energy_site_id(ms, dp, k)
+                feasible_tasks = ms.vehicle_task_feasible.get(k, set())
+                for r in feasible_tasks:
+                    energy_per_slot = dp.task_energy_per_slot.get(r, [])
+                    for t in T:
+                        if t >= len(energy_per_slot):
+                            continue
+                        energy_kwh = float(energy_per_slot[t] or 0.0)
+                        if energy_kwh <= 0.0:
+                            continue
+                        price = get_grid_price(dp, site_id, t)
+                        term += w["electricity_cost"] * price * energy_kwh * x[k, r]
         _append_term("electricity_cost", term)
 
     # ===== w3: デマンド料金 =====
@@ -128,18 +138,13 @@ def build_objective(
     if w.get("deadhead_cost", 0.0) > 0:
         dh_cost_per_km = 50.0  # 円/km (デフォルト; 拡張可能)
         term = gp.LinExpr()
-        for k in K_ALL:
-            for r1_id in R:
-                for r2_id in R:
-                    if r1_id == r2_id:
-                        continue
-                    dh_dist = dp.deadhead_distance_km.get(r1_id, {}).get(r2_id, 0.0)
-                    if dh_dist <= 0:
-                        continue
-                    # 変数 y_follow[k,r1,r2] があれば使う
-                    y = vars.get("y_follow")
-                    if y is not None and (k, r1_id, r2_id) in y:
-                        term += w["deadhead_cost"] * dh_cost_per_km * dh_dist * y[k, r1_id, r2_id]
+        y = vars.get("y_follow")
+        if y is not None:
+            for (k, r1_id, r2_id) in y.keys():
+                dh_dist = float(dp.deadhead_distance_km.get(r1_id, {}).get(r2_id, 0.0) or 0.0)
+                if dh_dist <= 0.0:
+                    continue
+                term += w["deadhead_cost"] * dh_cost_per_km * dh_dist * y[k, r1_id, r2_id]
         _append_term("deadhead_cost", term)
 
     # ===== w6: 電池劣化コスト =====

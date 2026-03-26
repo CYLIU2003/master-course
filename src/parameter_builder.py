@@ -50,6 +50,8 @@ class DerivedParams:
     task_active: Dict[str, List[int]] = field(default_factory=dict)
     # task_energy_per_slot[r][t] = その時刻に消費する BEV エネルギー [kWh]
     task_energy_per_slot: Dict[str, List[float]] = field(default_factory=dict)
+    # task_fuel_per_slot[r][t] = その時刻に消費する ICE 燃料 [L]
+    task_fuel_per_slot: Dict[str, List[float]] = field(default_factory=dict)
     # task_energy_event_per_slot[r][t] = tripイベント時点で一括計上する BEV エネルギー [kWh]
     task_energy_event_per_slot: Dict[str, List[float]] = field(default_factory=dict)
 
@@ -139,16 +141,20 @@ def build_derived_params(data: ProblemData, ms: ModelSets) -> DerivedParams:
     for t in data.tasks:
         active = [0] * T
         energy = [0.0] * T
+        fuel = [0.0] * T
         energy_event = [0.0] * T
         span = t.end_time_idx - t.start_time_idx  # 半開区間 [start, end)
         if span <= 0:
             span = 1  # 最低1スロット保証（mapper 側で end > start が保証されるが念のため）
         task_energy_kwh = float(dp.task_energy_bev.get(t.task_id, t.energy_required_kwh_bev) or 0.0)
+        task_fuel_l = float(dp.task_fuel_ice.get(t.task_id, t.fuel_required_liter_ice) or 0.0)
         per_slot = task_energy_kwh / span
+        fuel_per_slot = task_fuel_l / span
         for ti in range(T):
             if t.start_time_idx <= ti < t.end_time_idx:  # 半開区間
                 active[ti] = 1
                 energy[ti] = per_slot
+                fuel[ti] = fuel_per_slot
         # Event-based SOC bookkeeping: apply full trip energy at trip end slot.
         # This reflects trip-by-trip verification/update while preserving no_run_charge behavior.
         if T > 0:
@@ -156,6 +162,7 @@ def build_derived_params(data: ProblemData, ms: ModelSets) -> DerivedParams:
             energy_event[event_idx] = task_energy_kwh
         dp.task_active[t.task_id] = active
         dp.task_energy_per_slot[t.task_id] = energy
+        dp.task_fuel_per_slot[t.task_id] = fuel
         dp.task_energy_event_per_slot[t.task_id] = energy_event
 
     # --- 重複ペア ---
@@ -231,6 +238,12 @@ def get_grid_price(dp: DerivedParams, site_id: str, t_idx: int,
                    default: float = 25.0) -> float:
     """地点・時刻の系統電力料金を返す [円/kWh]"""
     return dp.grid_price.get(site_id, {}).get(t_idx, default)
+
+
+def get_sell_back_price(dp: DerivedParams, site_id: str, t_idx: int,
+                        default: float = 0.0) -> float:
+    """地点・時刻の売電価格を返す [円/kWh]"""
+    return dp.sell_back_price.get(site_id, {}).get(t_idx, default)
 
 
 def get_pv_gen(dp: DerivedParams, site_id: str, t_idx: int) -> float:

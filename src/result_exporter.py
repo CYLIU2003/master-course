@@ -2425,6 +2425,7 @@ def export_summary_json(
             "served_task_ratio": sim.served_task_ratio,
             "unserved_tasks": sim.unserved_tasks,
             "total_grid_kwh": sim.total_grid_kwh,
+            "total_grid_export_kwh": sim.total_grid_export_kwh,
             "grid_kwh_provisional": sim.provisional_grid_kwh,
             "grid_kwh_charged": sim.charged_grid_kwh,
             "total_pv_kwh": sim.total_pv_kwh,

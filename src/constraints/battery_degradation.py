@@ -56,13 +56,15 @@ def add_battery_degradation_constraints(
         for t in T:
             # 充電エネルギー (バッテリに入る量) [kWh]
             charge_kwh = gp.quicksum(
-                eff_charge * p[k, c, t] * delta_h for c in compatible_c
+                eff_charge * p[k, c, t] * delta_h for c in compatible_c if (k, c, t) in p
             )
             # 放電エネルギー (バッテリから出る量) [kWh]
             discharge_kwh = 0.0
             if data.enable_v2g and p_dis is not None:
                 discharge_kwh = gp.quicksum(
-                    (1.0 / eff_discharge) * p_dis[k, c, t] * delta_h for c in compatible_c
+                    (1.0 / eff_discharge) * p_dis[k, c, t] * delta_h
+                    for c in compatible_c
+                    if (k, c, t) in p_dis
                 )
                 
             # deg[k,t] >= coeff * (charge_kwh + discharge_kwh) (線形近似)

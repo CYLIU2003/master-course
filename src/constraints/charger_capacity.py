@@ -41,6 +41,6 @@ def add_charger_capacity_constraints(
             if not compatible_k:
                 continue
             model.addConstr(
-                gp.quicksum(z[k, c, t] for k in compatible_k) <= 1,
+                gp.quicksum(z[k, c, t] for k in compatible_k if (k, c, t) in z) <= 1,
                 name=f"charger_cap[{c},{t}]",
             )

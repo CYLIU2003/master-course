@@ -19,7 +19,6 @@ from ..parameter_builder import (
     DerivedParams,
     get_base_load,
     get_pv_gen,
-    resolve_vehicle_energy_site_id,
 )
 
 
@@ -43,6 +42,7 @@ def add_energy_balance_constraints(
     gp, _ = ensure_gurobi()
     p           = vars["p_charge"]
     p_grid      = vars["p_grid_import"]
+    p_grid_exp  = vars.get("p_grid_export")
     p_pv_used   = vars.get("p_pv_used")
     p_pv_cur    = vars.get("p_pv_curtail")
     p_dis       = vars.get("p_discharge")
@@ -98,13 +98,15 @@ def add_energy_balance_constraints(
                 )
                 # 電力収支
                 model.addConstr(
-                    p_grid[site_id, t] + p_pv_used[site_id, t] + total_discharge_kw == total_charge_kw + base,
+                    p_grid[site_id, t] + p_pv_used[site_id, t] + total_discharge_kw
+                    == total_charge_kw + base + (p_grid_exp[site_id, t] if p_grid_exp is not None else 0.0),
                     name=f"power_balance[{site_id},{t}]",
                 )
             else:
                 # PV なし: 系統受電 = 充電需要 + 基礎負荷
                 model.addConstr(
-                    p_grid[site_id, t] + total_discharge_kw == total_charge_kw + base,
+                    p_grid[site_id, t] + total_discharge_kw
+                    == total_charge_kw + base + (p_grid_exp[site_id, t] if p_grid_exp is not None else 0.0),
                     name=f"power_balance_no_pv[{site_id},{t}]",
                 )
 
@@ -133,33 +135,18 @@ def add_demand_charge_constraints(
     if not data.enable_demand_charge:
         return
 
-    x_assign  = vars.get("x_assign")
+    p_grid    = vars.get("p_grid_import")
     peak      = vars.get("peak_demand")
-    if peak is None:
+    if peak is None or p_grid is None:
         return
 
     charge_sites = ms.I_CHARGE
-    delta_h = max(float(data.delta_t_hour or 0.0), 1.0e-9)
-
     for site_id in charge_sites:
         site = dp.site_lut.get(site_id)
         contract_kw = site.contract_demand_limit_kw if site else 9999.0
 
         for t in ms.T:
-            operating_demand_kw = 0.0
-            if x_assign is not None:
-                for vehicle_id in ms.K_BEV:
-                    if resolve_vehicle_energy_site_id(ms, dp, vehicle_id) != site_id:
-                        continue
-                    for task_id in ms.vehicle_task_feasible.get(vehicle_id, set()):
-                        energy_per_slot = dp.task_energy_per_slot.get(task_id, [])
-                        if t >= len(energy_per_slot):
-                            continue
-                        energy_kwh = float(energy_per_slot[t] or 0.0)
-                        if energy_kwh <= 0.0:
-                            continue
-                        operating_demand_kw += (energy_kwh / delta_h) * x_assign[vehicle_id, task_id]
-            model.addConstr(operating_demand_kw <= peak[site_id], name=f"peak_track[{site_id},{t}]")
+            model.addConstr(p_grid[site_id, t] <= peak[site_id], name=f"peak_track[{site_id},{t}]")
         model.addConstr(
             peak[site_id] <= contract_kw,
             name=f"contract_demand[{site_id}]",

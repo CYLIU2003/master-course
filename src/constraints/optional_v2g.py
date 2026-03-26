@@ -62,7 +62,7 @@ def add_v2g_constraints(
         for t in T:
             # § 10.9 充放電同時禁止
             if z_c is not None and z_d is not None:
-                charge_flag = gp.quicksum(z_c[k, c, t] for c in compatible_c)
+                charge_flag = gp.quicksum(z_c[k, c, t] for c in compatible_c if (k, c, t) in z_c)
                 model.addConstr(
                     charge_flag + z_d[k, t] <= 1,
                     name=f"no_sim_charge_discharge[{k},{t}]",
@@ -70,6 +70,8 @@ def add_v2g_constraints(
 
             # 放電電力上限
             for c in compatible_c:
+                if (k, c, t) not in p_d:
+                    continue
                 model.addConstr(
                     p_d[k, c, t] <= dis_max * (z_d[k, t] if z_d else 1),
                     name=f"dis_pwr_ub[{k},{c},{t}]",
