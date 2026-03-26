@@ -122,6 +122,87 @@ def test_solver_adapter_percent_to_ratio_supports_percent_and_ratio() -> None:
     assert adapter._percent_to_ratio(-1) is None
 
 
+def test_solver_adapter_required_departure_soc_kwh_is_vehicle_specific() -> None:
+    context = _minimal_dispatch_context()
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="s_required_soc",
+        vehicle_counts={"BEV": 1},
+        final_soc_floor_percent=15.0,
+    )
+    adapter = GurobiMILPAdapter()
+    trip = problem.trips[0]
+
+    required_200 = adapter._required_departure_soc_kwh(
+        problem,
+        problem.vehicles[0],
+        trip,
+        cap_kwh=200.0,
+        final_soc_floor_kwh=30.0,
+    )
+    required_300 = adapter._required_departure_soc_kwh(
+        problem,
+        problem.vehicles[0],
+        trip,
+        cap_kwh=300.0,
+        final_soc_floor_kwh=45.0,
+    )
+
+    # 200kWh 車では trip.energy(12) + floor(30) = 42kWh が必要。
+    assert required_200 >= 42.0
+    # 300kWh 車では trip.energy(12) + floor(45) = 57kWh が必要。
+    assert required_300 >= 57.0
+
+
+def test_solver_adapter_trip_energy_prefers_vehicle_rate() -> None:
+    context = _minimal_dispatch_context()
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="s_energy_rate",
+        vehicle_counts={"BEV": 1},
+    )
+    adapter = GurobiMILPAdapter()
+    trip = problem.trips[0]
+    vehicle = problem.vehicles[0]
+
+    # distance=10km, profile energy rate=1.2kWh/km -> 12kWh
+    assert abs(adapter._trip_energy_kwh(problem, vehicle, trip.trip_id) - 12.0) < 1.0e-9
+
+
+def test_solver_adapter_trip_fuel_prefers_vehicle_rate_over_trip_constant() -> None:
+    context = _minimal_dispatch_context()
+    context.trips = [
+        Trip(
+            trip_id="t_ice",
+            route_id="r_ice",
+            origin="A",
+            destination="B",
+            departure_time="08:00",
+            arrival_time="08:30",
+            distance_km=10.0,
+            allowed_vehicle_types=("ICE",),
+        )
+    ]
+    context.vehicle_profiles = {
+        "ICE": VehicleProfile(
+            vehicle_type="ICE",
+            fuel_tank_capacity_l=200.0,
+            fuel_consumption_l_per_km=0.5,
+        )
+    }
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="s_fuel_rate",
+        vehicle_counts={"ICE": 1},
+    )
+    adapter = GurobiMILPAdapter()
+    trip = problem.trips[0]
+    vehicle = problem.vehicles[0]
+
+    # vehicle rate-based fuel = 10km * 0.5 = 5L
+    assert abs(adapter._trip_fuel_l(problem, vehicle, trip.trip_id) - 5.0) < 1.0e-9
+
+
 def test_solver_adapter_safe_nonnegative_float_uses_default_for_invalid_values() -> None:
     adapter = GurobiMILPAdapter()
 

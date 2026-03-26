@@ -241,7 +241,7 @@ class GurobiMILPAdapter:
                 key = (vehicle.vehicle_id, trip.trip_id)
                 if key not in y:
                     continue
-                trip_energy_kwh = max(trip.energy_kwh, 0.0)
+                trip_energy_kwh = self._trip_energy_kwh(problem, vehicle, trip.trip_id)
                 if trip_energy_kwh <= 0.0:
                     continue
                 # Event-based accounting: consume trip energy at the trip-end slot.
@@ -256,7 +256,7 @@ class GurobiMILPAdapter:
                     continue
                 deadhead_kwh = self._deadhead_energy_kwh(
                     problem,
-                    vehicle.vehicle_type,
+                    vehicle,
                     from_trip_id,
                     to_trip_id,
                 )
@@ -277,6 +277,7 @@ class GurobiMILPAdapter:
         pv_ch_var: Dict[int, Any] = {}
         p_avg_var: Dict[int, Any] = {}
         g2bus_var: Dict[Tuple[str, int], Any] = {}
+        pv2bus_var: Dict[Tuple[str, int], Any] = {}
         g2bess_var: Dict[Tuple[str, int], Any] = {}
         pv2bess_var: Dict[Tuple[str, int], Any] = {}
         bess2bus_var: Dict[Tuple[str, int], Any] = {}
@@ -293,6 +294,32 @@ class GurobiMILPAdapter:
         w_on_var = None
         w_off_var = None
         effective_depot_energy_assets: Dict[str, DepotEnergyAsset] = {}
+
+        home_depot_slot_proxy_terms: Dict[Tuple[str, int], List[Any]] = {}
+        if slot_indices:
+            first_slot_idx = slot_indices[0]
+            last_slot_idx = slot_indices[-1]
+            for vehicle in problem.vehicles:
+                vehicle_id = vehicle.vehicle_id
+                home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "depot_default")
+                for trip in problem.trips:
+                    key = (vehicle_id, trip.trip_id)
+                    if key not in y:
+                        continue
+                    if str(trip.origin) != home_depot_id and str(trip.destination) != home_depot_id:
+                        continue
+                    dep_slot_idx = self._slot_index(problem, trip.departure_min)
+                    arr_slot_idx = self._trip_event_slot_index(problem, trip.departure_min, trip.arrival_min)
+                    candidate_slots = {
+                        dep_slot_idx,
+                        max(dep_slot_idx - 1, first_slot_idx),
+                        arr_slot_idx,
+                        min(arr_slot_idx + 1, last_slot_idx),
+                    }
+                    for slot_idx in candidate_slots:
+                        if slot_idx < first_slot_idx or slot_idx > last_slot_idx:
+                            continue
+                        home_depot_slot_proxy_terms.setdefault((vehicle_id, slot_idx), []).append(y[key])
 
         if bev_ids and slot_indices:
             initial_soc_ratio_override = self._percent_to_ratio(problem.metadata.get("initial_soc_percent"))
@@ -379,15 +406,21 @@ class GurobiMILPAdapter:
                     key = (vehicle.vehicle_id, trip.trip_id)
                     if key not in y:
                         continue
-                    required_ratio = self._percent_to_ratio(trip.required_soc_departure_percent)
-                    if required_ratio is None or required_ratio <= 0.0:
-                        continue
                     depart_slot_idx = self._slot_index(problem, trip.departure_min)
                     if (vehicle.vehicle_id, depart_slot_idx) not in s_var:
                         continue
+                    required_departure_kwh = self._required_departure_soc_kwh(
+                        problem,
+                        vehicle,
+                        trip,
+                        cap_kwh=cap,
+                        final_soc_floor_kwh=final_soc_floor_kwh,
+                    )
+                    if required_departure_kwh <= 0.0:
+                        continue
                     model.addConstr(
                         s_var[(vehicle.vehicle_id, depart_slot_idx)]
-                        >= (required_ratio * cap) * y[key]
+                        >= required_departure_kwh * y[key]
                     )
 
                 for pos in range(len(slot_indices) - 1):
@@ -395,7 +428,8 @@ class GurobiMILPAdapter:
                     next_slot_idx = slot_indices[pos + 1]
                     # Event-based SOC update: apply trip consumption at the slot where each trip ends.
                     trip_energy_expr = gp.quicksum(
-                        max(trip.energy_kwh, 0.0) * y[(vehicle.vehicle_id, trip.trip_id)]
+                        self._trip_energy_kwh(problem, vehicle, trip.trip_id)
+                        * y[(vehicle.vehicle_id, trip.trip_id)]
                         for trip in problem.trips
                         if (vehicle.vehicle_id, trip.trip_id) in y
                         and self._trip_event_slot_index(
@@ -407,7 +441,7 @@ class GurobiMILPAdapter:
                     )
                     # C8: deadhead energy consumption linked with selected connection arcs.
                     deadhead_energy_expr = gp.quicksum(
-                        self._deadhead_energy_kwh(problem, vehicle.vehicle_type, from_trip_id, to_trip_id)
+                        self._deadhead_energy_kwh(problem, vehicle, from_trip_id, to_trip_id)
                         * x[(vehicle.vehicle_id, from_trip_id, to_trip_id)]
                         for from_trip_id, to_trip_id in [
                             (f_trip, t_trip)
@@ -433,26 +467,47 @@ class GurobiMILPAdapter:
                         and self._trip_active_in_slot(problem, trip.departure_min, trip.arrival_min, slot_idx)
                     )
                     model.addConstr(charge_on_var[(vehicle.vehicle_id, slot_idx)] <= 1 - running_expr)
+                    proxy_terms = home_depot_slot_proxy_terms.get((vehicle.vehicle_id, slot_idx), [])
+                    if proxy_terms:
+                        # Depot-stay approximation: allow charging only around assigned trips
+                        # that touch the vehicle's home depot.
+                        model.addConstr(
+                            charge_on_var[(vehicle.vehicle_id, slot_idx)] <= gp.quicksum(proxy_terms)
+                        )
                     model.addConstr(
                         c_var[(vehicle.vehicle_id, slot_idx)]
                         <= charge_max_kw * charge_on_var[(vehicle.vehicle_id, slot_idx)]
                     )
 
             if problem.chargers:
-                total_ports = sum(max(charger.simultaneous_ports, 1) for charger in problem.chargers)
-                total_kw = sum(
-                    charger.power_kw * max(charger.simultaneous_ports, 1)
-                    for charger in problem.chargers
-                )
+                ports_by_depot: Dict[str, float] = {}
+                kw_by_depot: Dict[str, float] = {}
+                for charger in problem.chargers:
+                    depot_id = str(charger.depot_id or "depot_default")
+                    ports = max(int(charger.simultaneous_ports or 1), 1)
+                    power_kw = max(float(charger.power_kw or 0.0), 0.0)
+                    ports_by_depot[depot_id] = ports_by_depot.get(depot_id, 0.0) + float(ports)
+                    kw_by_depot[depot_id] = kw_by_depot.get(depot_id, 0.0) + power_kw * float(ports)
+
+                vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
+                bev_ids_by_depot_for_charge: Dict[str, List[str]] = {}
+                for vehicle_id in bev_ids:
+                    vehicle = vehicle_by_id.get(vehicle_id)
+                    depot_id = str(getattr(vehicle, "home_depot_id", "") or "depot_default")
+                    bev_ids_by_depot_for_charge.setdefault(depot_id, []).append(vehicle_id)
+
                 for slot_idx in slot_indices:
-                    model.addConstr(
-                        gp.quicksum(charge_on_var[(vehicle_id, slot_idx)] for vehicle_id in bev_ids)
-                        <= total_ports
-                    )
-                    model.addConstr(
-                        gp.quicksum(c_var[(vehicle_id, slot_idx)] for vehicle_id in bev_ids)
-                        <= total_kw
-                    )
+                    for depot_id, vehicle_ids in bev_ids_by_depot_for_charge.items():
+                        port_limit = float(ports_by_depot.get(depot_id, 0.0))
+                        kw_limit = float(kw_by_depot.get(depot_id, 0.0))
+                        model.addConstr(
+                            gp.quicksum(charge_on_var[(vehicle_id, slot_idx)] for vehicle_id in vehicle_ids)
+                            <= port_limit
+                        )
+                        model.addConstr(
+                            gp.quicksum(c_var[(vehicle_id, slot_idx)] for vehicle_id in vehicle_ids)
+                            <= kw_limit
+                        )
 
         # ICE finite-fuel constraints: check before departure and update after operation.
         if slot_indices:
@@ -549,6 +604,12 @@ class GurobiMILPAdapter:
                         refuel_l_var[(vehicle.vehicle_id, slot_idx)]
                         <= max(refuel_per_slot_l, 0.0) * (1 - running_expr)
                     )
+                    proxy_terms = home_depot_slot_proxy_terms.get((vehicle.vehicle_id, slot_idx), [])
+                    if proxy_terms:
+                        model.addConstr(
+                            refuel_l_var[(vehicle.vehicle_id, slot_idx)]
+                            <= max(refuel_per_slot_l, 0.0) * gp.quicksum(proxy_terms)
+                        )
 
                 vehicle_arcs = [
                     (f_trip, t_trip)
@@ -623,6 +684,7 @@ class GurobiMILPAdapter:
                 for slot_idx in slot_indices:
                     key = (depot_id, slot_idx)
                     g2bus_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                    pv2bus_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
                     g2bess_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
                     pv2bess_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
                     bess2bus_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
@@ -639,14 +701,14 @@ class GurobiMILPAdapter:
                         for vehicle_id in bev_ids_by_depot.get(depot_id, [])
                         if (vehicle_id, slot_idx) in c_var
                     )
-                    model.addConstr(bess2bus_var[key] + g2bus_var[key] == charge_kwh_expr)
+                    model.addConstr(bess2bus_var[key] + g2bus_var[key] + pv2bus_var[key] == charge_kwh_expr)
 
                     pv_gen_kwh = 0.0
                     if asset.pv_enabled and asset.pv_generation_kwh_by_slot:
                         pos = slot_indices.index(slot_idx)
                         if pos < len(asset.pv_generation_kwh_by_slot):
                             pv_gen_kwh = max(float(asset.pv_generation_kwh_by_slot[pos] or 0.0), 0.0)
-                    model.addConstr(pv2bess_var[key] + pv_curt_var[key] == pv_gen_kwh)
+                    model.addConstr(pv2bus_var[key] + pv2bess_var[key] + pv_curt_var[key] == pv_gen_kwh)
 
                     model.addConstr(grid_import_var[key] == g2bus_var[key] + g2bess_var[key])
                     if enable_contract_overage_penalty:
@@ -798,9 +860,7 @@ class GurobiMILPAdapter:
             trip = trip_by_id.get(trip_id)
             if trip is None:
                 continue
-            fuel_l = max(trip.fuel_l, 0.0)
-            if fuel_l <= 0 and vehicle.fuel_consumption_l_per_km:
-                fuel_l = max(trip.distance_km, 0.0) * vehicle.fuel_consumption_l_per_km
+            fuel_l = self._trip_fuel_l(problem, vehicle, trip_id)
             objective += energy_weight * diesel_price * fuel_l * var
 
         for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
@@ -840,9 +900,7 @@ class GurobiMILPAdapter:
                 trip = trip_by_id.get(trip_id)
                 if trip is None:
                     continue
-                fuel_l = max(trip.fuel_l, 0.0)
-                if fuel_l <= 0 and vehicle.fuel_consumption_l_per_km:
-                    fuel_l = max(trip.distance_km, 0.0) * vehicle.fuel_consumption_l_per_km
+                fuel_l = self._trip_fuel_l(problem, vehicle, trip_id)
                 objective += co2_price * ice_co2_kg_per_l * fuel_l * var
             # ICE CO₂ from deadhead fuel consumption.
             for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
@@ -964,6 +1022,7 @@ class GurobiMILPAdapter:
                 return 0.0
 
         grid_to_bus_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+        pv_to_bus_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         bess_to_bus_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         pv_to_bess_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         grid_to_bess_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
@@ -972,6 +1031,8 @@ class GurobiMILPAdapter:
         contract_over_limit_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         for (depot_id, slot_idx), var in g2bus_var.items():
             grid_to_bus_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        for (depot_id, slot_idx), var in pv2bus_var.items():
+            pv_to_bus_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
         for (depot_id, slot_idx), var in bess2bus_var.items():
             bess_to_bus_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
         for (depot_id, slot_idx), var in pv2bess_var.items():
@@ -1007,8 +1068,10 @@ class GurobiMILPAdapter:
                     if demand_kwh <= 0.0:
                         continue
                     bess_kwh = float(bess_to_bus_kwh_by_depot_slot.get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
+                    pv_kwh = float(pv_to_bus_kwh_by_depot_slot.get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
                     grid_kwh = float(grid_to_bus_kwh_by_depot_slot.get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
                     bess_ratio = min(max(bess_kwh / demand_kwh, 0.0), 1.0)
+                    pv_ratio = min(max(pv_kwh / demand_kwh, 0.0), 1.0)
                     grid_ratio = min(max(grid_kwh / demand_kwh, 0.0), 1.0)
                     if bess_ratio > 0.0:
                         lat, lon = _depot_latlon(depot_id)
@@ -1018,6 +1081,20 @@ class GurobiMILPAdapter:
                                 slot_index=slot_idx,
                                 charger_id=f"bess:{depot_id}",
                                 charge_kw=vehicle_kw * bess_ratio,
+                                discharge_kw=0.0,
+                                charging_depot_id=depot_id,
+                                charging_latitude=lat,
+                                charging_longitude=lon,
+                            )
+                        )
+                    if pv_ratio > 0.0:
+                        lat, lon = _depot_latlon(depot_id)
+                        charging_slots.append(
+                            ChargingSlot(
+                                vehicle_id=vehicle_id,
+                                slot_index=slot_idx,
+                                charger_id=f"pv:{depot_id}",
+                                charge_kw=vehicle_kw * pv_ratio,
                                 discharge_kw=0.0,
                                 charging_depot_id=depot_id,
                                 charging_latitude=lat,
@@ -1106,6 +1183,7 @@ class GurobiMILPAdapter:
             charging_slots=tuple(sorted(charging_slots, key=lambda item: (item.vehicle_id, item.slot_index, str(item.charger_id or "")))),
             refuel_slots=tuple(sorted(refuel_slots, key=lambda item: (item.vehicle_id, item.slot_index))),
             grid_to_bus_kwh_by_depot_slot=grid_to_bus_kwh_by_depot_slot,
+            pv_to_bus_kwh_by_depot_slot=pv_to_bus_kwh_by_depot_slot,
             bess_to_bus_kwh_by_depot_slot=bess_to_bus_kwh_by_depot_slot,
             pv_to_bess_kwh_by_depot_slot=pv_to_bess_kwh_by_depot_slot,
             grid_to_bess_kwh_by_depot_slot=grid_to_bess_kwh_by_depot_slot,
@@ -1218,7 +1296,7 @@ class GurobiMILPAdapter:
     def _deadhead_energy_kwh(
         self,
         problem: CanonicalOptimizationProblem,
-        vehicle_type: str,
+        vehicle: Any,
         from_trip_id: str,
         to_trip_id: str,
     ) -> float:
@@ -1231,11 +1309,41 @@ class GurobiMILPAdapter:
             to_trip.origin,
         )
         deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
-        vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type), None)
+        vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle.vehicle_type), None)
         if vt and vt.powertrain_type.upper() in {"BEV", "PHEV", "FCEV"}:
-            drive_rate = max((from_trip.energy_kwh / max(from_trip.distance_km, 1e-6)), 0.0)
+            drive_rate = self._vehicle_energy_rate_kwh_per_km(problem, vehicle, from_trip)
             return deadhead_km * drive_rate
         return 0.0
+
+    def _trip_energy_kwh(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        trip_id: str,
+    ) -> float:
+        trip = problem.trip_by_id().get(trip_id)
+        if trip is None:
+            return 0.0
+        drive_rate = self._vehicle_energy_rate_kwh_per_km(problem, vehicle, trip)
+        if drive_rate > 0.0:
+            return max(float(trip.distance_km or 0.0), 0.0) * drive_rate
+        return max(float(trip.energy_kwh or 0.0), 0.0)
+
+    def _vehicle_energy_rate_kwh_per_km(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        fallback_trip: ProblemTrip,
+    ) -> float:
+        vehicle_rate = max(float(getattr(vehicle, "energy_consumption_kwh_per_km", 0.0) or 0.0), 0.0)
+        if vehicle_rate > 0.0:
+            return vehicle_rate
+        vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle.vehicle_type), None)
+        if vt is not None:
+            vt_rate = max(float(getattr(vt, "energy_consumption_kwh_per_km", 0.0) or 0.0), 0.0)
+            if vt_rate > 0.0:
+                return vt_rate
+        return max(float(fallback_trip.energy_kwh or 0.0), 0.0) / max(float(fallback_trip.distance_km or 0.0), 1e-6)
 
     def _trip_fuel_l(
         self,
@@ -1246,11 +1354,10 @@ class GurobiMILPAdapter:
         trip = problem.trip_by_id().get(trip_id)
         if trip is None:
             return 0.0
-        fuel_l = max(float(trip.fuel_l or 0.0), 0.0)
-        if fuel_l > 0.0:
-            return fuel_l
         fuel_rate = max(float(vehicle.fuel_consumption_l_per_km or 0.0), 0.0)
-        return max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
+        if fuel_rate > 0.0:
+            return max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
+        return max(float(trip.fuel_l or 0.0), 0.0)
 
     def _deadhead_fuel_l(
         self,
@@ -1337,4 +1444,22 @@ class GurobiMILPAdapter:
         if parsed > 1.0:
             parsed = parsed / 100.0
         return min(parsed, 1.0)
+
+    def _required_departure_soc_kwh(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        trip: ProblemTrip,
+        *,
+        cap_kwh: float,
+        final_soc_floor_kwh: float,
+    ) -> float:
+        # Vehicle-specific readiness uses trip energy + terminal floor reserve.
+        # Keep required_soc_departure_percent as a backward-compatible lower bound.
+        trip_energy_kwh = self._trip_energy_kwh(problem, vehicle, trip.trip_id)
+        required_kwh = trip_energy_kwh + max(float(final_soc_floor_kwh or 0.0), 0.0)
+        required_ratio = self._percent_to_ratio(trip.required_soc_departure_percent)
+        if required_ratio is not None and required_ratio > 0.0 and cap_kwh > 0.0:
+            required_kwh = max(required_kwh, required_ratio * cap_kwh)
+        return max(required_kwh, 0.0)
 

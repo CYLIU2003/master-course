@@ -79,6 +79,11 @@ flowchart LR
 - BESS 有効営業所では `grid_to_bus_priority_penalty_yen_per_kwh` / `grid_to_bess_priority_penalty_yen_per_kwh` を目的関数に追加し、PV/BESS 優先・Grid 後順位の運用をコスト面で強化
 - 最適化の時間刻み既定を 1 時間（`time_step_min=60` / `timestep_min=60`）へ統一し、PV 発電量・BESS/SOC 遷移・契約上限制約の評価を同一スロット幅で整合化
 - SOCカウントを trip イベント照合型へ調整し、各 trip の終了時点で消費電力量を一括反映する運用（運行中充電禁止制約は維持）を追加
+- デポ電力フローに `PV->Bus` 直給を追加し、`PV->BESS` のみだった供給構造を `PV->Bus/PV->BESS/PV Curtail` に拡張
+- 充電器容量制約を「全体合算」から「デポ単位合算（同時台数・総kW）」へ変更
+- 充電・給油について、非走行条件に加えて home depot 接続便の前後スロット近傍でのみ許可する近似拘束を追加
+- 出発時SOC下限制約を `required_soc_departure_percent` のみの判定から、車両ごとの `trip_energy_kwh + floor_kwh` 必要量判定へ変更（旧 percent は後方互換の補助下限として併用）
+- MILP 内の trip 電費/燃料消費は `trip.energy_kwh` / `trip.fuel_l` 固定値優先から、車両レート（`energy_consumption_kwh_per_km` / `fuel_consumption_l_per_km`）優先へ変更
 
 </details>
 
@@ -107,7 +112,7 @@ flowchart LR
 > **実装上の重要な注意点（誠実な開示）**
 >
 > - **C1 欠便制約**：「全便を必ず割り当てる」は絶対制約ではなく、欠便変数に大きな罰則を課す**罰則付き緩和**として実装しています（通常は欠便が抑止されますが、解なし状態の回避が目的です）。
-> - **C14 充電器制約**：「各充電器にどの車両が接続されているか」を厳密に追うのではなく、全充電器の合計容量（kW）の上限制約として実装しています。
+> - **C14 充電器制約**：「各充電器にどの車両が接続されているか」を厳密に追うのではなく、デポ単位の合計容量（同時台数・総kW）制約として実装しています。
 > - **C20/C21 ピーク判定**：tariff テーブルが設定されている場合はそれを優先しますが、未設定時は時間帯別価格の中央値で on/off を近似的に分類しています。
 > - **目的関数モード**：`objectiveMode=total_cost` は従来のコスト最小、`objectiveMode=co2` は CO₂排出量最小、`objectiveMode=balanced` はコストと排出の加重和、`objectiveMode=utilization` は運行達成を維持しつつ車両稼働の効率化を重視します。`co2` モードでは `co2_price_per_kg=0` でも排出量そのものを最小化します。
 > - **CO₂費・劣化費**：`total_cost` モードでは、パラメータ（`co2_price_per_kg`・`degradation` 重み）に正の値を設定すると目的関数へ加算されます。

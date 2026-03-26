@@ -1023,6 +1023,7 @@ def _run_reoptimization(
             problem,
             config=config,
             current_min=hhmm_to_min(body.current_time),
+            actual_soc=body.actual_soc,
         )
         payload = {
             "scenario_id": scenario_id,

@@ -27,6 +27,7 @@ class CostBreakdown:
     grid_import_kwh: float = 0.0
     peak_grid_kw: float = 0.0
     grid_to_bus_kwh: float = 0.0
+    pv_to_bus_kwh: float = 0.0
     bess_to_bus_kwh: float = 0.0
     pv_to_bess_kwh: float = 0.0
     grid_to_bess_kwh: float = 0.0
@@ -62,6 +63,7 @@ class CostBreakdown:
             "grid_import_kwh": self.grid_import_kwh,
             "peak_grid_kw": self.peak_grid_kw,
             "grid_to_bus_kwh": self.grid_to_bus_kwh,
+            "pv_to_bus_kwh": self.pv_to_bus_kwh,
             "bess_to_bus_kwh": self.bess_to_bus_kwh,
             "pv_to_bess_kwh": self.pv_to_bess_kwh,
             "grid_to_bess_kwh": self.grid_to_bess_kwh,
@@ -157,9 +159,10 @@ class CostEvaluator:
                     for asset in problem.depot_energy_assets.values()
                     for v in asset.pv_generation_kwh_by_slot
                 )
+                pv_used_direct_kwh = max(float(energy_cost_components.get("pv_to_bus_kwh", 0.0) or 0.0), 0.0)
             else:
                 pv_generated_kwh = 0.0
-            pv_used_direct_kwh = 0.0
+                pv_used_direct_kwh = 0.0
         else:
             demand_cost = self._operating_demand_charge_cost(problem, operating_slot_totals)
             pv_generated_kwh, pv_used_direct_kwh, grid_import_kwh, peak_grid_kw = self._pv_grid_summary(
@@ -259,6 +262,7 @@ class CostEvaluator:
             grid_import_kwh=grid_import_kwh,
             peak_grid_kw=peak_grid_kw,
             grid_to_bus_kwh=float(energy_cost_components.get("grid_to_bus_kwh", 0.0)),
+            pv_to_bus_kwh=float(energy_cost_components.get("pv_to_bus_kwh", 0.0)),
             bess_to_bus_kwh=float(energy_cost_components.get("bess_to_bus_kwh", 0.0)),
             pv_to_bess_kwh=float(energy_cost_components.get("pv_to_bess_kwh", 0.0)),
             grid_to_bess_kwh=float(energy_cost_components.get("grid_to_bess_kwh", 0.0)),
@@ -295,6 +299,10 @@ class CostEvaluator:
             str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
             for k, by_slot in (plan.grid_to_bus_kwh_by_depot_slot or {}).items()
         }
+        pv_to_bus = {
+            str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
+            for k, by_slot in (plan.pv_to_bus_kwh_by_depot_slot or {}).items()
+        }
         bess_to_bus = {
             str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
             for k, by_slot in (plan.bess_to_bus_kwh_by_depot_slot or {}).items()
@@ -316,7 +324,7 @@ class CostEvaluator:
             for k, by_slot in (plan.contract_over_limit_kwh_by_depot_slot or {}).items()
         }
 
-        if not grid_to_bus and not bess_to_bus:
+        if not grid_to_bus and not pv_to_bus and not bess_to_bus:
             # Backward-compatible fallback: operating energy priced by TOU.
             fallback_cost = self._operating_electric_energy_cost(problem, operating_slot_totals)
             return {
@@ -328,6 +336,7 @@ class CostEvaluator:
                 "pv_asset_cost": 0.0,
                 "bess_asset_cost": 0.0,
                 "grid_to_bus_kwh": 0.0,
+                "pv_to_bus_kwh": 0.0,
                 "bess_to_bus_kwh": 0.0,
                 "pv_to_bess_kwh": 0.0,
                 "grid_to_bess_kwh": 0.0,
@@ -428,6 +437,7 @@ class CostEvaluator:
             "pv_asset_cost": pv_asset_cost,
             "bess_asset_cost": bess_asset_cost,
             "grid_to_bus_kwh": _sum_flow(grid_to_bus),
+            "pv_to_bus_kwh": _sum_flow(pv_to_bus),
             "bess_to_bus_kwh": _sum_flow(bess_to_bus),
             "pv_to_bess_kwh": _sum_flow(pv_to_bess),
             "grid_to_bess_kwh": _sum_flow(grid_to_bess),

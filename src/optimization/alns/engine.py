@@ -68,8 +68,24 @@ class ALNSOptimizer:
         )
         destroy_ops: Dict[str, Callable[..., object]] = {
             "random_trip_removal": lambda plan: random_trip_removal(plan, rng, config.destroy_fraction),
-            "peak_hour_removal": lambda plan: peak_hour_removal(plan, rng, config.destroy_fraction),
-            "worst_trip_removal": lambda plan: worst_trip_removal(plan, rng, config.destroy_fraction),
+            "peak_hour_removal": lambda plan: peak_hour_removal(
+                plan,
+                rng,
+                config.destroy_fraction,
+                problem=problem,
+                use_data_driven_peak=bool(config.use_data_driven_peak_removal),
+                fallback_windows_min=tuple(config.peak_hour_windows_min),
+            ),
+            "worst_trip_removal": lambda plan: worst_trip_removal(
+                plan,
+                rng,
+                config.destroy_fraction,
+                objective_fn=(
+                    (lambda p: self._evaluator.evaluate(problem, p).objective_value)
+                    if str(config.worst_trip_scoring).lower() == "marginal_cost"
+                    else None
+                ),
+            ),
             "vehicle_path_removal": lambda plan: vehicle_path_removal(plan, rng, config.destroy_fraction),
             "unlocked_future_only_removal": lambda plan: unlocked_future_only_removal(
                 plan,

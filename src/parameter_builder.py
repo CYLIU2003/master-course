@@ -222,7 +222,7 @@ def _default_can_follow(data: ProblemData, dp: DerivedParams) -> None:
             dp.deadhead_distance_km[t1.task_id][t2.task_id] = 0.0 if same_loc else 15.0
 
 
-def _estimate_bev_energy_rate_kwh_per_km(data: ProblemData, default: float = 1.2) -> float:
+def _estimate_bev_energy_rate_kwh_per_km(data: ProblemData, default: float = 1.8) -> float:
     ratios: List[float] = []
     for task in data.tasks:
         distance_km = float(task.distance_km or 0.0)

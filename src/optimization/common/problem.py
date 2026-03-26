@@ -59,6 +59,7 @@ class ProblemVehicleType:
     reserve_soc: Optional[float] = None
     fuel_tank_capacity_l: Optional[float] = None
     fuel_consumption_l_per_km: Optional[float] = None
+    energy_consumption_kwh_per_km: Optional[float] = None
     fixed_use_cost_jpy: float = 0.0
 
 
@@ -75,6 +76,7 @@ class ProblemVehicle:
     fuel_tank_capacity_l: Optional[float] = None
     fuel_reserve_l: Optional[float] = None
     fuel_consumption_l_per_km: Optional[float] = None
+    energy_consumption_kwh_per_km: Optional[float] = None
     fixed_use_cost_jpy: float = 0.0
 
 
@@ -186,6 +188,9 @@ class OptimizationConfig:
     warm_start: bool = True
     acceptance: str = "simulated_annealing"
     operator_selection: str = "adaptive_roulette"
+    use_data_driven_peak_removal: bool = True
+    peak_hour_windows_min: Tuple[Tuple[int, int], ...] = ((7 * 60, 9 * 60),)
+    worst_trip_scoring: str = "marginal_cost"
 
 
 @dataclass(frozen=True)
@@ -214,6 +219,7 @@ class AssignmentPlan:
     charging_slots: Tuple[ChargingSlot, ...] = ()
     refuel_slots: Tuple[RefuelSlot, ...] = ()
     grid_to_bus_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
+    pv_to_bus_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     bess_to_bus_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     pv_to_bess_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     grid_to_bess_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)

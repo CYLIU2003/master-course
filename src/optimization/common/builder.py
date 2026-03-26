@@ -720,6 +720,7 @@ class ProblemBuilder:
                     if profile.fuel_tank_capacity_l
                     else None,
                     fuel_consumption_l_per_km=profile.fuel_consumption_l_per_km,
+                    energy_consumption_kwh_per_km=profile.energy_consumption_kwh_per_km,
                     fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )
 
@@ -772,6 +773,13 @@ class ProblemBuilder:
             if fuel_l_per_km is None and profile is not None:
                 fuel_l_per_km = profile.fuel_consumption_l_per_km
 
+            energy_kwh_per_km = self._safe_float(
+                vehicle.get("energyConsumption")
+                or vehicle.get("energy_consumption_kwh_per_km")
+            )
+            if energy_kwh_per_km is None and profile is not None:
+                energy_kwh_per_km = profile.energy_consumption_kwh_per_km
+
             fixed_use_cost_jpy = self._vehicle_fixed_use_cost_jpy(
                 vehicle,
                 disable_acquisition_cost=disable_vehicle_acquisition_cost,
@@ -798,6 +806,7 @@ class ProblemBuilder:
                 fuel_tank_capacity_l=fuel_tank_capacity_l,
                 fuel_reserve_l=fuel_reserve_l,
                 fuel_consumption_l_per_km=fuel_l_per_km,
+                energy_consumption_kwh_per_km=energy_kwh_per_km,
                 fixed_use_cost_jpy=fixed_use_cost_jpy,
             )
 
@@ -870,6 +879,7 @@ class ProblemBuilder:
                     else None,
                     fuel_tank_capacity_l=profile.fuel_tank_capacity_l,
                     fuel_consumption_l_per_km=profile.fuel_consumption_l_per_km,
+                    energy_consumption_kwh_per_km=profile.energy_consumption_kwh_per_km,
                     fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )
             )

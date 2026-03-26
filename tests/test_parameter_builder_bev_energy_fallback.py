@@ -37,7 +37,8 @@ def test_backfill_bev_energy_from_distance_when_missing() -> None:
     ms = build_model_sets(data)
     dp = build_derived_params(data, ms)
 
-    assert abs(dp.task_energy_bev["t1"] - 12.0) < 1.0e-9
+    # Default fallback rate is 1.8 kWh/km when no empirical rate is available.
+    assert abs(dp.task_energy_bev["t1"] - 18.0) < 1.0e-9
     assert sum(dp.task_energy_per_slot["t1"]) > 0.0
 
 

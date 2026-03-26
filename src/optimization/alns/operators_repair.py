@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from src.dispatch.dispatcher import DispatchGenerator
 from src.dispatch.models import DispatchContext, DutyLeg, VehicleDuty
@@ -49,13 +49,16 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
 
     served = tuple(trip_id for duty in existing for trip_id in duty.trip_ids)
     unserved = sorted(set(problem.eligible_trip_ids()) - set(served))
-    return AssignmentPlan(
+    return _with_recomputed_charging(
+        problem,
+        AssignmentPlan(
         duties=tuple(existing),
         charging_slots=plan.charging_slots,
         refuel_slots=plan.refuel_slots,
         served_trip_ids=served,
         unserved_trip_ids=tuple(unserved),
         metadata={**dict(plan.metadata), "repair_operator": "greedy_trip_insertion"},
+        ),
     )
 
 
@@ -106,13 +109,16 @@ def baseline_dispatch_repair(
         )
         return greedy_trip_insertion(problem, repaired)
 
-    return AssignmentPlan(
+    return _with_recomputed_charging(
+        problem,
+        AssignmentPlan(
         duties=tuple(existing),
         charging_slots=plan.charging_slots,
         refuel_slots=plan.refuel_slots,
         served_trip_ids=tuple(sorted(served)),
         unserved_trip_ids=tuple(),
         metadata={**dict(plan.metadata), "repair_operator": "baseline_dispatch_repair"},
+        ),
     )
 
 
@@ -182,13 +188,16 @@ def partial_milp_repair(problem: CanonicalOptimizationProblem, plan: AssignmentP
 
     all_eligible = set(problem.eligible_trip_ids())
     unserved = tuple(sorted(all_eligible - existing_served))
-    return AssignmentPlan(
+    return _with_recomputed_charging(
+        problem,
+        AssignmentPlan(
         duties=tuple(existing_duties),
         charging_slots=plan.charging_slots,
         refuel_slots=plan.refuel_slots,
         served_trip_ids=tuple(sorted(existing_served)),
         unserved_trip_ids=unserved,
         metadata={**dict(plan.metadata), "repair_operator": "partial_milp_repair"},
+        ),
     )
 
 
@@ -271,13 +280,16 @@ def regret_k_insertion(problem: CanonicalOptimizationProblem, plan: AssignmentPl
         return greedy_trip_insertion(problem, fallback_plan)
 
     served = tuple(sorted({trip_id for duty in duties for trip_id in duty.trip_ids}))
-    return AssignmentPlan(
+    return _with_recomputed_charging(
+        problem,
+        AssignmentPlan(
         duties=tuple(duties),
         charging_slots=plan.charging_slots,
         refuel_slots=plan.refuel_slots,
         served_trip_ids=served,
         unserved_trip_ids=tuple(),
         metadata={**dict(plan.metadata), "repair_operator": "regret_k_insertion"},
+        ),
     )
 
 
@@ -386,3 +398,103 @@ def soc_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> A
         unserved_trip_ids=plan.unserved_trip_ids,
         metadata={**dict(plan.metadata), "repair_operator": "soc_repair"},
     )
+
+
+def _with_recomputed_charging(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> AssignmentPlan:
+    slots = _recompute_charging_slots(problem, plan)
+    return AssignmentPlan(
+        duties=plan.duties,
+        charging_slots=slots,
+        refuel_slots=plan.refuel_slots,
+        served_trip_ids=plan.served_trip_ids,
+        unserved_trip_ids=plan.unserved_trip_ids,
+        metadata=plan.metadata,
+    )
+
+
+def _vehicle_id_from_duty_id(duty_id: str) -> str:
+    if duty_id.startswith("milp_") and len(duty_id) > 5:
+        return duty_id[5:]
+    return duty_id
+
+
+def _slot_index(problem: CanonicalOptimizationProblem, minute: int) -> int:
+    step = max(problem.scenario.timestep_min, 1)
+    start = 0
+    if problem.scenario.horizon_start:
+        try:
+            hh, mm = problem.scenario.horizon_start.split(":", 1)
+            start = int(hh) * 60 + int(mm)
+        except ValueError:
+            start = 0
+    m = int(minute)
+    if m < start:
+        m += 24 * 60
+    return max((m - start) // step, 0)
+
+
+def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> Tuple[ChargingSlot, ...]:
+    if not problem.chargers:
+        return plan.charging_slots
+
+    trip_map = problem.trip_by_id()
+    vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
+    type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
+    chargers = list(problem.chargers)
+    dt_h = max(problem.scenario.timestep_min, 1) / 60.0
+    out: List[ChargingSlot] = []
+
+    for duty in plan.duties:
+        vehicle_id = _vehicle_id_from_duty_id(duty.duty_id)
+        vehicle = vehicle_by_id.get(vehicle_id)
+        vtype = type_by_id.get(duty.vehicle_type)
+
+        capacity = float((vehicle.battery_capacity_kwh if vehicle else None) or (vtype.battery_capacity_kwh if vtype else 0.0) or 300.0)
+        reserve = float((vehicle.reserve_soc if vehicle else None) or (vtype.reserve_soc if vtype else None) or (0.15 * capacity))
+        soc = float((vehicle.initial_soc if vehicle else None) or (0.8 * capacity))
+        if soc <= 1.0 and capacity > 1.0:
+            soc = soc * capacity
+        soc = min(max(soc, 0.0), capacity)
+
+        prev_arrival = duty.legs[0].trip.departure_min if duty.legs else 0
+        for leg in duty.legs:
+            trip = trip_map.get(leg.trip.trip_id)
+            if trip is None:
+                prev_arrival = leg.trip.arrival_min
+                continue
+            trip_energy = max(float(trip.energy_kwh or 0.0), 0.0)
+            deadhead_energy = 0.0
+            if leg.deadhead_from_prev_min > 0:
+                dist_km = max(float(leg.deadhead_from_prev_min), 0.0) * 18.0 / 60.0
+                per_km = trip_energy / max(float(trip.distance_km or 0.0), 1.0e-6)
+                deadhead_energy = max(dist_km * per_km, 0.0)
+
+            needed_before_depart = reserve + trip_energy + deadhead_energy
+            first_slot = _slot_index(problem, prev_arrival)
+            last_slot = _slot_index(problem, trip.departure_min) - 1
+            slot_idx = first_slot
+            while soc + 1.0e-9 < needed_before_depart and slot_idx <= last_slot:
+                charger = chargers[(slot_idx + len(out)) % len(chargers)]
+                power_kw = max(float(charger.power_kw or 0.0), 0.0)
+                if power_kw <= 0.0:
+                    break
+                charge_kwh = min(power_kw * dt_h, max(capacity - soc, 0.0))
+                if charge_kwh <= 1.0e-9:
+                    break
+                out.append(
+                    ChargingSlot(
+                        vehicle_id=vehicle_id,
+                        slot_index=int(slot_idx),
+                        charger_id=charger.charger_id,
+                        charge_kw=charge_kwh / dt_h,
+                        discharge_kw=0.0,
+                    )
+                )
+                soc = min(capacity, soc + charge_kwh * 0.95)
+                slot_idx += 1
+
+            soc -= (trip_energy + deadhead_energy)
+            prev_arrival = leg.trip.arrival_min
+
+    out.sort(key=lambda s: (str(s.vehicle_id), int(s.slot_index), str(s.charger_id or "")))
+    return tuple(out)

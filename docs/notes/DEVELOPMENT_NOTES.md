@@ -112,6 +112,47 @@ tests/       回帰テスト
   - 結果: `15 passed`
   - `pytest -q`
   - 結果: `113 passed`
+
+### [DEV-2026-03-27] ALNS/Rolling 本格修正（論文前提の致命ギャップ解消）
+
+- **背景**:
+  - ALNS の多くの repair operator が `charging_slots` を更新せず、
+    評価関数の電力コスト/需要料金がダミー化するリスクがあった。
+  - rolling reoptimize で API 入力 `actual_soc` が canonical problem の車両初期SOCへ反映されていなかった。
+  - `peak_hour_removal` が 7-9 時ハードコード、`worst_trip_removal` が経験式スコアのまま。
+
+- **対応**:
+  - `src/optimization/rolling/reoptimizer.py`
+    - `reoptimize(..., actual_soc=...)` を追加。
+    - `actual_soc` を車両 `initial_soc` へ適用してから再最適化する実装を追加。
+  - `bff/routers/optimization.py`
+    - reopt worker から `RollingReoptimizer.reoptimize()` へ `actual_soc` を明示伝播。
+  - `src/optimization/alns/operators_repair.py`
+    - `greedy_trip_insertion` / `baseline_dispatch_repair` / `partial_milp_repair` / `regret_k_insertion` の返却時に
+      充電スロット再計算を実行する `_with_recomputed_charging()` を追加。
+    - 簡易SOC追跡で不足時に idle 窓へ充電を挿入する `_recompute_charging_slots()` を追加。
+  - `src/optimization/alns/operators_destroy.py`
+    - `peak_hour_removal` をデータ駆動化（`classify_peak_slots(price_slots)` を優先、fallback は設定窓）。
+    - `worst_trip_removal` に `objective_fn` を導入し、限界改善量ベース除去を実装。
+  - `src/optimization/alns/engine.py`
+    - `peak_hour_removal` に問題データ（price slots）と設定を渡す。
+    - `worst_trip_removal` に `CostEvaluator` ベースの限界改善スコア関数を渡す。
+  - `src/optimization/common/feasibility.py`
+    - `charging_slots` と trip energy に基づく SOC 妥当性チェックを追加（出発時必要SOC/下限違反を errors 化）。
+  - `src/optimization/common/problem.py`
+    - `OptimizationConfig` に `use_data_driven_peak_removal`, `peak_hour_windows_min`, `worst_trip_scoring` を追加。
+  - `src/parameter_builder.py`
+    - BEV 電費 fallback 既定値を `1.2 -> 1.8 kWh/km` へ上方修正。
+
+- **テスト**:
+  - 追加: `tests/test_reopt_alns_critical_fixes.py`
+    - rolling actual_soc 伝播
+    - data-driven peak removal
+    - marginal-cost worst trip removal
+    - feasibility SOC shortage 検出
+  - 実行:
+    - `pytest tests/test_reopt_alns_critical_fixes.py -q` → `4 passed`
+    - `pytest tests/test_milp_route_band_settings.py tests/test_bev_energy_accounting.py tests/test_evaluator_provisional_overwrite.py tests/test_case_comparison_pv_bess.py -q` → `17 passed`
   - `src/result_exporter.py`
     - `summary.json` の `kpi` に `total_grid_export_kwh` を追加。
   - `tools/bus_operation_visualizer_tk.py`
