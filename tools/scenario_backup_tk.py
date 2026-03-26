@@ -4396,13 +4396,8 @@ class App:
         messagebox.showinfo("実行開始", "入力データ作成(Prepare)を開始します")
 
         def done(resp: dict[str, Any]) -> None:
-            self.prepared_input_id = str(resp.get("preparedInputId") or "")
-            self.prepared_ready = bool(resp.get("ready"))
-            self.prepared_trip_count = int(resp.get("tripCount") or 0)
+            self._sync_prepared_state_from_response(resp)
             prepare_profile = dict(resp.get("prepareProfile") or {})
-            self.prepared_dirty_reason = ""
-            self.prepared_profile_name = str(prepare_profile.get("profile") or "")
-            self._update_prepared_status_label()
             self.log_line(
                 f"Prepare完了: ready={resp.get('ready')} / tripCount={resp.get('tripCount')} / primaryDepot={resp.get('primaryDepotId')}"
             )
@@ -4442,6 +4437,103 @@ class App:
         self.job_var.set(f"job: {self.last_job_id or '-'}")
         self.manual_job_id_var.set(self.last_job_id)
         self.log_line(f"{label}: {self.last_job_id}")
+
+    def _is_stale_prepared_input_error(self, message: str) -> bool:
+        text = str(message or "")
+        return "HTTP 409" in text and "Prepared input is stale" in text
+
+    def _extract_stale_prepared_input_ids(self, message: str) -> tuple[str, str]:
+        text = str(message or "")
+        marker = "HTTP 409:"
+        marker_index = text.find(marker)
+        if marker_index < 0:
+            return "", ""
+        payload = text[marker_index + len(marker):].strip()
+        if not payload:
+            return "", ""
+        try:
+            body = json.loads(payload)
+        except Exception:
+            return "", ""
+        detail = body.get("detail") if isinstance(body, dict) else {}
+        if not isinstance(detail, dict):
+            return "", ""
+        stale = str(detail.get("preparedInputId") or "")
+        current = str(detail.get("currentPreparedInputId") or "")
+        return stale, current
+
+    def _sync_prepared_state_from_response(self, resp: dict[str, Any]) -> None:
+        self.prepared_input_id = str(resp.get("preparedInputId") or "")
+        self.prepared_ready = bool(resp.get("ready"))
+        self.prepared_trip_count = int(resp.get("tripCount") or 0)
+        prepare_profile = dict(resp.get("prepareProfile") or {})
+        self.prepared_dirty_reason = ""
+        self.prepared_profile_name = str(prepare_profile.get("profile") or "")
+        self._update_prepared_status_label()
+
+    def _wrap_execution_with_prepare_retry(
+        self,
+        *,
+        scenario_id: str,
+        action_label: str,
+        prepare_payload: dict[str, Any],
+        payload: dict[str, Any],
+        request_action,
+    ):
+        def wrapped() -> dict[str, Any]:
+            max_attempts = 3
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return request_action()
+                except RuntimeError as exc:
+                    message = str(exc)
+                    if not self._is_stale_prepared_input_error(message) or attempt >= max_attempts:
+                        raise
+
+                    stale_id, current_id = self._extract_stale_prepared_input_ids(message)
+                    current_payload_id = str(payload.get("prepared_input_id") or "")
+                    if current_id and current_id != current_payload_id:
+                        payload["prepared_input_id"] = current_id
+
+                        def sync_with_server_current() -> None:
+                            self.prepared_input_id = current_id
+                            self._update_prepared_status_label()
+                            if stale_id:
+                                self.log_line(
+                                    f"{action_label}: stale検知 ({stale_id} -> {current_id})。server 現在IDへ自動同期して再送します"
+                                )
+                            else:
+                                self.log_line(
+                                    f"{action_label}: stale検知。server 現在ID {current_id} へ自動同期して再送します"
+                                )
+
+                        self._queue_on_ui_thread(sync_with_server_current)
+                        continue
+
+                    self._queue_on_ui_thread(
+                        lambda: self.log_line(
+                            f"{action_label}: prepared input が stale だったため Prepare を自動再実行します"
+                        )
+                    )
+                    prep_resp = self.client.prepare_simulation(scenario_id, prepare_payload)
+                    new_prepared_input_id = str(prep_resp.get("preparedInputId") or "")
+                    if not new_prepared_input_id or not bool(prep_resp.get("ready")):
+                        raise RuntimeError(
+                            "自動Prepareに失敗しました。Prepare を手動で再実行してください。"
+                        )
+
+                    payload["prepared_input_id"] = new_prepared_input_id
+
+                    def sync_state() -> None:
+                        self._sync_prepared_state_from_response(prep_resp)
+                        self.log_line(f"自動Prepare完了: prepared_input_id: {new_prepared_input_id}")
+                        for warning in prep_resp.get("warnings") or []:
+                            self.log_line(f"警告: {warning}")
+
+                    self._queue_on_ui_thread(sync_state)
+            raise RuntimeError("実行に失敗しました。Prepare を再実行してから再試行してください。")
+
+        return wrapped
 
     def _ensure_prepared_before_execution(self, action_label: str) -> str | None:
         scenario_id = self._selected_scenario_id()
@@ -4531,18 +4623,27 @@ class App:
             scenario_id = self._ensure_prepared_before_execution("Preparedシミュレーション")
             if not scenario_id:
                 return
+            prepare_payload = self._prepare_payload()
             payload = {
                 "prepared_input_id": self.prepared_input_id,
                 "source": "duties",
             }
+            request_action = self._wrap_execution_with_prepare_retry(
+                scenario_id=scenario_id,
+                action_label="Preparedシミュレーション",
+                prepare_payload=prepare_payload,
+                payload=payload,
+                request_action=lambda: self.client.run_prepared_simulation(
+                    scenario_id,
+                    payload["prepared_input_id"],
+                    payload["source"],
+                ),
+            )
             self._submit_execution_job(
                 window_title="Preparedシミュレーションモニター",
                 action_label="Preparedシミュレーション",
                 payload=payload,
-                request_action=lambda: self.client.run_prepared_simulation(
-                    scenario_id,
-                    self.prepared_input_id,
-                ),
+                request_action=request_action,
             )
             return
 
@@ -4551,6 +4652,7 @@ class App:
             if not scenario_id:
                 return
             depots = self._selected_depot_ids()
+            prepare_payload = self._prepare_payload()
             payload = {
                 "mode": self.solver_mode_var.get().strip(),
                 "prepared_input_id": self.prepared_input_id,
@@ -4563,11 +4665,18 @@ class App:
                 "service_id": self.day_type_var.get().strip() or None,
                 "depot_id": depots[0] if depots else None,
             }
+            request_action = self._wrap_execution_with_prepare_retry(
+                scenario_id=scenario_id,
+                action_label="再最適化",
+                prepare_payload=prepare_payload,
+                payload=payload,
+                request_action=lambda: self.client.reoptimize(scenario_id, payload),
+            )
             self._submit_execution_job(
                 window_title="再最適化モニター",
                 action_label="再最適化",
                 payload=payload,
-                request_action=lambda: self.client.reoptimize(scenario_id, payload),
+                request_action=request_action,
             )
             return
 
@@ -4576,6 +4685,7 @@ class App:
             return
         depots = self._selected_depot_ids()
         effective_time_limit = self._effective_optimization_time_limit_seconds()
+        prepare_payload = self._prepare_payload()
         payload = {
             "mode": self.solver_mode_var.get().strip(),
             "prepared_input_id": self.prepared_input_id,
@@ -4588,6 +4698,13 @@ class App:
             "depot_id": depots[0] if depots else None,
             "rebuild_dispatch": bool(self.rebuild_dispatch_before_opt_var.get()),
         }
+        request_action = self._wrap_execution_with_prepare_retry(
+            scenario_id=scenario_id,
+            action_label="最適化計算",
+            prepare_payload=prepare_payload,
+            payload=payload,
+            request_action=lambda: self.client.run_optimization(scenario_id, payload),
+        )
         if payload["mode"] == "mode_milp_only" and self.prepared_trip_count >= 2000:
             continue_run = messagebox.askyesno(
                 "大規模MILP警告",
@@ -4608,7 +4725,7 @@ class App:
             window_title="最適化実行モニター",
             action_label="最適化計算",
             payload=payload,
-            request_action=lambda: self.client.run_optimization(scenario_id, payload),
+            request_action=request_action,
         )
 
     def run_prepared(self) -> None:

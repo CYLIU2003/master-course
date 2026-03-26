@@ -986,6 +986,9 @@ def _route_trip_inventory_for_quick_setup(
             depot_ids=selected_depot_ids or None,
             service_ids=None,
         )
+    # Build catalog counts from route_index.json data; these fully REPLACE stored counts
+    # for any route found in the catalog so that bus catalog data is always authoritative.
+    catalog_counts: Dict[str, Dict[str, int]] = {}
     for raw_service_id, raw_route_counts in ((summary or {}).get("routeServiceCounts") or {}).items():
         service_id = canonical_service_id(raw_service_id)
         if not isinstance(raw_route_counts, dict):
@@ -1000,8 +1003,10 @@ def _route_trip_inventory_for_quick_setup(
                 count = 0
             if count <= 0:
                 continue
-            bucket = route_counts_by_day_type.setdefault(normalized_route_id, {})
-            bucket[service_id] = count
+            catalog_counts.setdefault(normalized_route_id, {})[service_id] = count
+    # Replace (not merge) stored counts for every route found in the catalog
+    for route_id, counts in catalog_counts.items():
+        route_counts_by_day_type[route_id] = counts
 
     label_by_service_id = {
         canonical_service_id(item.get("serviceId")): str(item.get("label") or item.get("serviceId") or "")

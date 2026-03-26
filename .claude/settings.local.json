@@ -64,7 +64,8 @@
       "Bash(python -c \"import sys; sys.stdout.buffer.write\\(sys.stdin.buffer.read\\(\\)\\)\")",
       "Bash(python -m pytest tests/test_runtime_route_family.py -x -q)",
       "Bash(python -m pytest tests/test_quick_setup_route_selection.py -x -q)",
-      "Bash(python -m pytest tests/test_master_defaults_runtime_repair.py -x -q)"
+      "Bash(python -m pytest tests/test_master_defaults_runtime_repair.py -x -q)",
+      "Bash(grep -E \"\\\\.py$\")"
     ]
   }
 }

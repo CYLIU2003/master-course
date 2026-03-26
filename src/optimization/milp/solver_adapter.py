@@ -126,6 +126,11 @@ class GurobiMILPAdapter:
             ]
             model.addConstr(gp.quicksum(assign_terms) + unserved[trip.trip_id] == 1)
 
+        allow_partial_service = bool(problem.metadata.get("allow_partial_service", False))
+        if not allow_partial_service:
+            for trip in problem.trips:
+                model.addConstr(unserved[trip.trip_id] == 0)
+
         # Vehicle-use linkage.
         for (vehicle_id, trip_id), var in y.items():
             model.addConstr(var <= used_vehicle[vehicle_id])

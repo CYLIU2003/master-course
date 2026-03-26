@@ -8,6 +8,7 @@ timetable-first dispatch pipeline.
 from __future__ import annotations
 
 import math
+import unicodedata
 from dataclasses import dataclass
 
 from src.data_schema import ProblemData, TravelConnection
@@ -44,6 +45,25 @@ def _normalize_vehicle_type(raw: str) -> str:
     if "ICE" in text or "ENGINE" in text or "DIESEL" in text:
         return "ICE"
     return "BEV"
+
+
+def _normalize_terminal_label(raw: str) -> str:
+    return unicodedata.normalize("NFKC", str(raw or "")).strip().lower()
+
+
+def _hhmm_to_minutes(raw: str) -> int:
+    text = str(raw or "00:00").strip()
+    parts = text.split(":", 1)
+    try:
+        hh = int(parts[0])
+        mm = int(parts[1]) if len(parts) > 1 else 0
+    except (TypeError, ValueError):
+        return 0
+    if hh < 0:
+        hh = 0
+    if mm < 0:
+        mm = 0
+    return hh * 60 + mm
 
 
 def _allowed_vehicle_types(required_vehicle_type: str | None) -> tuple[str, ...]:
@@ -178,6 +198,42 @@ def build_travel_connections_via_dispatch(
             for to_trip in successors:
                 feasible_edges.add((from_trip, to_trip))
         warnings.extend([f"[{vehicle_type}] {w}" for w in result.warnings])
+
+    # Fallback: if dispatch graph is empty, allow only same-terminal handoffs
+    # (normalized terminal label match) with no deadhead assumption.
+    # This keeps the fallback conservative and avoids introducing arbitrary moves.
+    if not feasible_edges and context.trips:
+        fallback_edges: set[tuple[str, str]] = set()
+        for vehicle_type in vehicle_types:
+            for from_trip in context.trips:
+                if vehicle_type not in from_trip.allowed_vehicle_types:
+                    continue
+                from_terminal = _normalize_terminal_label(
+                    from_trip.destination_stop_id or from_trip.destination
+                )
+                if not from_terminal:
+                    continue
+                from_ready_min = (
+                    _hhmm_to_minutes(from_trip.arrival_time)
+                    + context.get_turnaround_min(from_trip.destination_stop_id or from_trip.destination)
+                )
+                for to_trip in context.trips:
+                    if from_trip.trip_id == to_trip.trip_id:
+                        continue
+                    if vehicle_type not in to_trip.allowed_vehicle_types:
+                        continue
+                    to_terminal = _normalize_terminal_label(
+                        to_trip.origin_stop_id or to_trip.origin
+                    )
+                    if from_terminal != to_terminal:
+                        continue
+                    if from_ready_min <= _hhmm_to_minutes(to_trip.departure_time):
+                        fallback_edges.add((from_trip.trip_id, to_trip.trip_id))
+        if fallback_edges:
+            feasible_edges = fallback_edges
+            warnings.append(
+                "[fallback] dispatch graph was empty; generated same-terminal continuity edges only."
+            )
 
     slot_minutes = max(1, int(round(data.delta_t_hour * 60.0)))
     trip_by_id = {trip.trip_id: trip for trip in context.trips}

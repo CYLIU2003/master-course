@@ -292,7 +292,6 @@ def has_user_manual_override(route: Dict[str, Any]) -> bool:
         route.get("manualClassificationLocked")
         or route.get("classificationEditedByUser")
         or route.get("manualOverrideSource") == "user"
-        or not source
     )
 
 

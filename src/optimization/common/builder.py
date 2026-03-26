@@ -121,6 +121,12 @@ class ProblemBuilder:
             )
             or 1
         )
+        allow_partial_service = bool(
+            simulation_cfg.get(
+                "allow_partial_service",
+                solver_cfg.get("allow_partial_service", False),
+            )
+        )
         initial_soc_percent = self._safe_float(
             simulation_cfg.get("initial_soc_percent")
             or charging_cfg.get("initial_soc_percent")
@@ -188,6 +194,7 @@ class ProblemBuilder:
             fixed_route_band_mode=fixed_route_band_mode,
             max_start_fragments_per_vehicle=max(1, max_start_fragments_per_vehicle),
             max_end_fragments_per_vehicle=max(1, max_end_fragments_per_vehicle),
+            allow_partial_service=allow_partial_service,
             initial_soc_percent=initial_soc_percent,
             final_soc_floor_percent=final_soc_floor_percent,
             final_soc_target_percent=final_soc_target_percent,
@@ -228,6 +235,7 @@ class ProblemBuilder:
         fixed_route_band_mode: bool = False,
         max_start_fragments_per_vehicle: int = 1,
         max_end_fragments_per_vehicle: int = 1,
+        allow_partial_service: bool = False,
         initial_soc_percent: Optional[float] = None,
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
@@ -370,6 +378,7 @@ class ProblemBuilder:
                 "fixed_route_band_mode": bool(fixed_route_band_mode),
                 "max_start_fragments_per_vehicle": int(max(1, max_start_fragments_per_vehicle)),
                 "max_end_fragments_per_vehicle": int(max(1, max_end_fragments_per_vehicle)),
+                "allow_partial_service": bool(allow_partial_service),
                 "initial_soc_percent": initial_soc_percent,
                 "final_soc_floor_percent": final_soc_floor_percent,
                 "final_soc_target_percent": final_soc_target_percent,

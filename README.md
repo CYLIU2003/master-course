@@ -753,11 +753,18 @@ python catalog_update_app.py refresh gtfs-pipeline `
 - `Quick Setup 保存` → `dispatch_scope` + `scenario_overlay` に route/depot を同期
 - `Solver対応 Prepare` → 現在の UI 選択と solver 設定から prepared input を再生成
 - `④ 実行` → dispatch 再構築が不要なら prepared input を直接使用（従来より軽量）
+- 実行時に prepared input の stale 409 が返った場合は、Tkinter が `currentPreparedInputId` へ自動同期して再送し、必要時のみ自動 Prepare を再実行して再送する
 
 **`rebuild_dispatch` と duty**
 
 - `rebuild_dispatch=false`（既定）では duty 再生成は行わないため `dutyCount=0` になる場合あり
 - dispatch duty を確認したい場合は `dispatch再構築ON` で実行
+
+**`No travel connections generated` と INFEASIBLE**
+
+- `build_report.travel_connection_count=0` かつ `allowPartialService=false` のまま `tripCount > vehicleCount` で実行すると、MILP は厳格配車条件により INFEASIBLE になります
+- まずは `未配車許容`（`allowPartialService`）を ON にして `Quick Setup 保存` → `Solver対応 Prepare` → `実行` の順で回避してください
+- 恒久的には route スコープを段階的に絞り、`travel_connection_count` が 0 にならない構成へ調整してください
 
 **Timetable first の原則**
 

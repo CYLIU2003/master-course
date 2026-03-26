@@ -648,6 +648,19 @@ def _run_optimization(
             analysis_scope=scenario.get("dispatch_scope") or store.get_dispatch_scope(scenario_id),
         )
         store.set_field(scenario_id, "problemdata_build_audit", build_report.to_dict())
+
+        if (
+            int(build_report.travel_connection_count or 0) <= 0
+            and int(build_report.task_count or 0) > int(build_report.vehicle_count or 0)
+            and not bool(getattr(data, "allow_partial_service", False))
+        ):
+            raise RuntimeError(
+                "No travel connections generated while allow_partial_service is OFF. "
+                f"tasks={build_report.task_count}, vehicles={build_report.vehicle_count}, "
+                f"travel_connections={build_report.travel_connection_count}. "
+                "Turn on allowPartialService or narrow route scope and rerun Prepare."
+            )
+
         price_slots = list(getattr(data, "electricity_prices", []) or [])
         pv_slots = list(getattr(data, "pv_profiles", []) or [])
 
