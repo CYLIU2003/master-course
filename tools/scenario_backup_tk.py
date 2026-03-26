@@ -4780,11 +4780,23 @@ class App:
             self.execution_mode_var.set("最適化計算")
         self.run_selected_execution()
 
+    # ソルバー側ハードキャップ（bff 側の _MAX_TIME_LIMIT_SECONDS と同値）
+    _SOLVER_HARD_CAP_SECONDS = 86400  # 1 日
+
     def _effective_optimization_time_limit_seconds(self) -> int:
         if self.wait_until_finish_var.get():
-            # Practically-unbounded wait for large scenarios.
-            return 60 * 60 * 24 * 7
-        return self._parse_int(self.time_limit_var.get(), 300)
+            # 「終了まで待機」モードでもサーバー側ハードキャップ (1 日) を使う。
+            # かつてここで 604800 (7 日) を返していたが、Gurobi が
+            # OutputFlag=0 のまま 7 日間ブロックする事故が発生したため廃止。
+            return self._SOLVER_HARD_CAP_SECONDS
+        raw = self._parse_int(self.time_limit_var.get(), 300)
+        if raw > self._SOLVER_HARD_CAP_SECONDS:
+            self.log_line(
+                f"[警告] time_limit {raw}s はハードキャップ {self._SOLVER_HARD_CAP_SECONDS}s を超えています。"
+                f" → {self._SOLVER_HARD_CAP_SECONDS}s に制限します。"
+            )
+            return self._SOLVER_HARD_CAP_SECONDS
+        return raw
 
     def _execution_mode_kind(self) -> str:
         raw = str((self.execution_mode_var.get() if self.execution_mode_var else "") or "").strip()
@@ -5465,13 +5477,19 @@ class App:
         row_tl = ttk.Frame(solver_box)
         row_tl.pack(fill=tk.X, pady=3)
         ttk.Label(row_tl, text="時間上限(秒)", width=24).pack(side=tk.LEFT)
-        ttk.Entry(row_tl, textvariable=self.time_limit_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Entry(row_tl, textvariable=self.time_limit_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(
+            row_tl,
+            text=f"(上限 {self._SOLVER_HARD_CAP_SECONDS}s = 24h。MILP初期確認は 300〜600s 推奨)",
+            foreground="#888",
+            font=("TkDefaultFont", 8),
+        ).pack(side=tk.LEFT, padx=(6, 0))
 
         row_wait = ttk.Frame(solver_box)
         row_wait.pack(fill=tk.X, pady=3)
         ttk.Checkbutton(
             row_wait,
-            text="終了まで待つ（大規模向け・長時間実行）",
+            text="終了まで待つ（ハードキャップ内で最大時間を使う）",
             variable=self.wait_until_finish_var,
         ).pack(side=tk.LEFT)
 

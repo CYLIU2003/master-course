@@ -92,6 +92,158 @@ class MILPResult:
     infeasibility_info: str = ""
 
 
+def pre_solve_check(
+    data: ProblemData,
+    ms: ModelSets,
+    dp: DerivedParams,
+) -> List[str]:
+    """
+    MILP 求解前に数理的に不可能な条件を早期検出する。
+
+    Returns
+    -------
+    warnings : List[str]
+        問題が見つかった場合の警告文リスト。空なら問題なし。
+    """
+    warnings: List[str] = []
+
+    K_ALL = ms.K_ALL
+    K_BEV = ms.K_BEV
+    R     = ms.R
+    C     = ms.C
+    T     = ms.T
+    delta_h = data.delta_t_hour  # [hour/slot]
+
+    # ─── 1. カバー不可能タスクの検出 ───────────────────────────────────
+    # demand_cover=True かつ allow_partial_service=False なのに
+    # いずれの車両にも割り当て不可能なタスクがあれば即 INFEASIBLE
+    if not data.allow_partial_service:
+        uncoverable: List[str] = []
+        for r in R:
+            task = dp.task_lut.get(r)
+            if task is None or not getattr(task, "demand_cover", True):
+                continue
+            feasible_vehicles = [
+                k for k in K_ALL
+                if r in ms.vehicle_task_feasible.get(k, set())
+            ]
+            if not feasible_vehicles:
+                uncoverable.append(r)
+        if uncoverable:
+            warnings.append(
+                f"[INFEASIBLE] カバー不可能タスク {len(uncoverable)} 件 "
+                f"(担当可能車両ゼロ, allow_partial_service=False): "
+                f"{uncoverable[:10]}{'...' if len(uncoverable) > 10 else ''}"
+            )
+
+    # ─── 2. BEV ごとの SOC エネルギー収支チェック ────────────────────────
+    for k in K_BEV:
+        veh = dp.vehicle_lut.get(k)
+        if veh is None:
+            continue
+
+        cap = veh.battery_capacity if veh.battery_capacity is not None else 200.0
+        soc_min   = veh.soc_min   if veh.soc_min   is not None else 0.0
+        soc_max   = veh.soc_max   if veh.soc_max   is not None else cap
+        soc_init  = veh.soc_init  if veh.soc_init  is not None else cap * 0.8
+        soc_end   = getattr(veh, "soc_target_end", None)
+        eff       = getattr(veh, "charge_efficiency", 1.0) or 1.0
+
+        # (a) soc_target_end が soc_max を超えている
+        if soc_end is not None and soc_end > soc_max + 1e-6:
+            warnings.append(
+                f"[INFEASIBLE] 車両 {k}: soc_target_end={soc_end:.1f} kWh > "
+                f"soc_max={soc_max:.1f} kWh — 物理的に到達不能"
+            )
+
+        # (b) 最大充電量でも soc_target_end に届かない
+        # (1 スロットも走行せず充電のみで最大充電した場合の上限)
+        if soc_end is not None and C:
+            compat_chargers = ms.vehicle_charger_feasible.get(k, set())
+            max_charge_kw = sum(
+                min(
+                    dp.charger_lut[c].power_max_kw,
+                    veh.charge_power_max if veh.charge_power_max else dp.charger_lut[c].power_max_kw,
+                )
+                for c in compat_chargers
+                if c in dp.charger_lut
+            )
+            # 同時に 1 台しか充電できないので実効最大電力 = compat 内の最大 1 基
+            max_single_kw = max(
+                (
+                    min(
+                        dp.charger_lut[c].power_max_kw,
+                        veh.charge_power_max if veh.charge_power_max else dp.charger_lut[c].power_max_kw,
+                    )
+                    for c in compat_chargers
+                    if c in dp.charger_lut
+                ),
+                default=0.0,
+            )
+            max_chargeable_kwh = eff * max_single_kw * delta_h * len(T)
+            theoretical_max_soc = min(soc_max, soc_init + max_chargeable_kwh)
+            if soc_end > theoretical_max_soc + 1e-6:
+                warnings.append(
+                    f"[INFEASIBLE] 車両 {k}: soc_target_end={soc_end:.1f} kWh, "
+                    f"理論最大 SOC={theoretical_max_soc:.1f} kWh "
+                    f"(soc_init={soc_init:.1f}, max_charge_kW={max_single_kw:.1f}, "
+                    f"slots={len(T)}, eff={eff:.2f}) — 充電のみでは届かない"
+                )
+
+        # (c) soc_min が soc_init より高い (開始時点で既に制約違反)
+        if soc_min > soc_init + 1e-6 and not data.use_soft_soc_constraint:
+            warnings.append(
+                f"[INFEASIBLE] 車両 {k}: soc_min={soc_min:.1f} kWh > "
+                f"soc_init={soc_init:.1f} kWh — 初期 SOC が最小制約を既に下回っている"
+            )
+
+    # ─── 3. 全体の充電器容量 vs BEV 必要充電量 ────────────────────────────
+    if K_BEV and C:
+        total_energy_deficit = 0.0
+        for k in K_BEV:
+            veh = dp.vehicle_lut.get(k)
+            if veh is None:
+                continue
+            cap      = veh.battery_capacity if veh.battery_capacity is not None else 200.0
+            soc_init = veh.soc_init if veh.soc_init is not None else cap * 0.8
+            soc_end  = getattr(veh, "soc_target_end", None)
+            # 全タスク走行エネルギー(最悪見積もり:この車両の feasible タスク全量)
+            feasible_tasks = ms.vehicle_task_feasible.get(k, set())
+            total_trip_kwh = sum(
+                dp.task_energy_bev.get(r, 0.0)
+                for r in feasible_tasks
+                if r in dp.task_energy_bev
+            )
+            # 最低でも必要な SOC = soc_end (なければ 0)
+            required_end = soc_end if soc_end is not None else 0.0
+            deficit = max(0.0, total_trip_kwh + required_end - soc_init)
+            total_energy_deficit += deficit
+
+        # 全充電器の理論最大供給量
+        max_supply_kwh = 0.0
+        for c in C:
+            charger = dp.charger_lut.get(c)
+            if charger is None:
+                continue
+            site_id = getattr(charger, "site_id", None)
+            site_max = None
+            if site_id and site_id in dp.site_lut:
+                site = dp.site_lut[site_id]
+                site_max = getattr(site, "grid_capacity_kw", None)
+            effective_kw = charger.power_max_kw
+            if site_max is not None:
+                effective_kw = min(effective_kw, site_max)
+            max_supply_kwh += effective_kw * delta_h * len(T)
+
+        if total_energy_deficit > max_supply_kwh * 1.1:  # 10% マージン
+            warnings.append(
+                f"[WARNING] 全 BEV 必要充電量合計(最悪見積)={total_energy_deficit:.0f} kWh > "
+                f"全充電器最大供給量={max_supply_kwh:.0f} kWh — 充電容量不足の可能性"
+            )
+
+    return warnings
+
+
 def build_milp_model(
     data: ProblemData,
     ms: ModelSets,
@@ -130,9 +282,9 @@ def build_milp_model(
         }
 
     model = gp.Model("ebus_milp")
-    # Long route/trip identifiers can exceed Gurobi's 255-char name limit.
-    # Ignore explicit variable/constraint names to keep model construction robust.
-    model.Params.IgnoreNames = 1
+    # IgnoreNames=0: 制約名を保持することで IIS 診断を可能にする。
+    # 255 文字超の名前は Gurobi 側で自動截断されるため問題ない。
+    model.Params.IgnoreNames = 0
 
     K_ALL = ms.K_ALL
     K_BEV = ms.K_BEV
@@ -272,7 +424,32 @@ def extract_result(
             try:
                 model.computeIIS()
                 iis_constrs = [c.ConstrName for c in model.getConstrs() if c.IISConstr]
-                result.infeasibility_info = f"IIS constraints: {iis_constrs[:20]}"
+                total = len(iis_constrs)
+
+                # 制約名プレフィックスでグループ化 (名前が "prefix[...]" の形式を仮定)
+                from collections import defaultdict
+                groups: dict = defaultdict(list)
+                for cname in iis_constrs:
+                    prefix = cname.split("[")[0] if "[" in cname else cname
+                    groups[prefix].append(cname)
+
+                lines = [f"IIS: {total} 件の制約が矛盾 (IgnoreNames=0)"]
+                for prefix, members in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+                    sample = members[0]
+                    lines.append(f"  {prefix}: {len(members):>6} 件  例: {sample}")
+
+                # IIS に含まれる変数上下限も確認
+                try:
+                    iis_lb_vars = [v.VarName for v in model.getVars() if v.IISLB]
+                    iis_ub_vars = [v.VarName for v in model.getVars() if v.IISUB]
+                    if iis_lb_vars:
+                        lines.append(f"  [LB violated] {len(iis_lb_vars)} vars: {iis_lb_vars[:5]}")
+                    if iis_ub_vars:
+                        lines.append(f"  [UB violated] {len(iis_ub_vars)} vars: {iis_ub_vars[:5]}")
+                except Exception:
+                    pass
+
+                result.infeasibility_info = "\n".join(lines)
             except Exception as e:
                 result.infeasibility_info = str(e)
         return result

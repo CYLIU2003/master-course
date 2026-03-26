@@ -695,8 +695,11 @@ def _run_optimization(
                         "trips": len(getattr(data, "tasks", []) or []),
                         "vehicles": len(getattr(data, "vehicles", []) or []),
                         "chargers": len(getattr(data, "chargers", []) or []),
+                        "travel_connections": build_report.travel_connection_count,
                         "price_slots": len(price_slots),
                         "pv_slots": len(pv_slots),
+                        "time_limit_seconds_requested": time_limit_seconds,
+                        "time_limit_seconds_effective": min(time_limit_seconds, 86400),
                     }
                 },
             ),

@@ -72,6 +72,54 @@ def _report_field(report: Any, key: str, default: Any = None) -> Any:
     return getattr(report, key, default)
 
 
+_MAX_TIME_LIMIT_SECONDS = 86400.0  # ハードキャップ: 1 日
+
+
+def _make_gurobi_callback(t0: float, time_limit: float, log_path: Optional[Path] = None):
+    """
+    Gurobi 向けコールバック。
+    - 60 秒ごとに経過時間・最良境界・ギャップを標準出力へ表示する。
+    - log_path が指定されていれば追記書き込みも行う。
+    """
+    _last_report = [0.0]
+
+    def _cb(model, where):
+        try:
+            import gurobipy as gp
+
+            if where != gp.GRB.Callback.MIP:
+                return
+            elapsed = _time.perf_counter() - t0
+            if elapsed - _last_report[0] < 60.0:
+                return
+            _last_report[0] = elapsed
+
+            obj_best = model.cbGet(gp.GRB.Callback.MIP_OBJBST)
+            obj_bnd = model.cbGet(gp.GRB.Callback.MIP_OBJBND)
+            node_cnt = int(model.cbGet(gp.GRB.Callback.MIP_NODCNT))
+            if obj_best < 1e29 and abs(obj_bnd) > 1e-9:
+                gap_pct = abs(obj_best - obj_bnd) / max(abs(obj_best), 1e-9) * 100
+            else:
+                gap_pct = float("inf")
+            remaining = max(0.0, time_limit - elapsed)
+            line = (
+                f"  [Gurobi] {elapsed:.0f}s elapsed | nodes={node_cnt}"
+                f" | best={obj_best:.4g} | bound={obj_bnd:.4g}"
+                f" | gap={gap_pct:.2f}% | remaining≈{remaining:.0f}s"
+            )
+            print(line, flush=True)
+            if log_path is not None:
+                try:
+                    with open(log_path, "a", encoding="utf-8") as fh:
+                        fh.write(line + "\n")
+                except OSError:
+                    pass
+        except Exception:
+            pass
+
+    return _cb
+
+
 def _solve_milp_core(
     cfg, data, ms, dp, run_mode, fixed_assignment=None, flag_overrides=None
 ):
@@ -91,18 +139,58 @@ def _solve_milp_core(
         fixed_assignment=fixed,
         flag_overrides=flag_overrides,
     )
-    model.Params.OutputFlag = 0
-    model.Params.TimeLimit = cfg.get(
-        "time_limit_sec", cfg.get("solver", {}).get("time_limit_sec", 300.0)
-    )
+
+    # ── Gurobi パラメータ設定 ──────────────────────────────────────
+    raw_limit = cfg.get("time_limit_sec", cfg.get("solver", {}).get("time_limit_sec", 300.0))
+    time_limit = min(float(raw_limit), _MAX_TIME_LIMIT_SECONDS)
+    if time_limit < float(raw_limit):
+        print(
+            f"  [warn] time_limit {raw_limit}s > ハードキャップ {_MAX_TIME_LIMIT_SECONDS}s → "
+            f"{time_limit}s に制限します",
+            flush=True,
+        )
+
     mip_gap = cfg.get("mip_gap", cfg.get("solver", {}).get("mip_gap", 0.01))
-    model.Params.MIPGap = mip_gap
     seed = cfg.get("random_seed", cfg.get("solver", {}).get("seed"))
+
+    model.Params.TimeLimit = time_limit
+    model.Params.MIPGap = mip_gap
     if seed is not None:
         model.Params.Seed = int(seed)
 
+    # ── ログファイルを output_dir に保存 ──────────────────────────
+    output_dir = cfg.get("output_dir", "output")
+    log_dir = Path(output_dir)
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        gurobi_log_path = log_dir / "gurobi_solve.log"
+        model.Params.LogFile = str(gurobi_log_path)
+        model.Params.OutputFlag = 1  # コンソール出力も有効化
+    except Exception:
+        gurobi_log_path = None
+        model.Params.OutputFlag = 1
+
+    # ── モデルサイズを事前表示 ─────────────────────────────────────
+    try:
+        n_vars = model.NumVars
+        n_constrs = model.NumConstrs
+        n_binvars = model.NumBinVars
+        print(
+            f"  [MILP] vars={n_vars} (bin={n_binvars}), constrs={n_constrs}, "
+            f"time_limit={time_limit}s, mip_gap={mip_gap}",
+            flush=True,
+        )
+    except Exception:
+        pass
+
+    # ── 求解 (コールバックで 60 秒おきに進捗表示) ─────────────────
     t0 = _time.perf_counter()
-    model.optimize()
+    cb = _make_gurobi_callback(t0, time_limit, log_path=gurobi_log_path)
+    try:
+        model.optimize(cb)
+    except TypeError:
+        # 古い gurobipy バージョンはコールバック引数不可
+        model.optimize()
     elapsed = _time.perf_counter() - t0
 
     result = extract_result(model, data, ms, dp, _vars, elapsed)
@@ -523,6 +611,20 @@ def solve_problem_data(
     ms = build_model_sets(data)
     dp = build_derived_params(data, ms)
 
+    # ── ソルバー前の実行可能性チェック (BFF 経由でも出力に含める) ────
+    _pre_solve_warnings: list = []
+    try:
+        from src.milp_model import pre_solve_check
+        _pre_solve_warnings = pre_solve_check(data, ms, dp)
+        if _pre_solve_warnings:
+            print("  [pre_solve_check] ⚠ 実行可能性に問題の可能性:", flush=True)
+            for _w in _pre_solve_warnings:
+                print(f"    {_w}", flush=True)
+        else:
+            print("  [pre_solve_check] OK (明らかな矛盾なし)", flush=True)
+    except Exception as _psc_err:
+        print(f"  [pre_solve_check] スキップ (エラー): {_psc_err}", flush=True)
+
     t_total_start = _time.perf_counter()
     alns_time = 0.0
     milp_time = 0.0
@@ -571,6 +673,14 @@ def solve_problem_data(
         result = MILPResult(status=status, infeasibility_info=message)
 
     total_time = _time.perf_counter() - t_total_start
+
+    # ── pre-solve 警告を infeasibility_info に追記 ────────────────────
+    if _pre_solve_warnings and result.status not in ("OPTIMAL", "TIME_LIMIT", "SUBOPTIMAL"):
+        prefix = "\n".join(_pre_solve_warnings)
+        if result.infeasibility_info:
+            result.infeasibility_info = prefix + "\n---\n" + result.infeasibility_info
+        else:
+            result.infeasibility_info = prefix
 
     sim_result = None
     try:
