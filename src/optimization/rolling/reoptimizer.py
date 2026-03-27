@@ -24,16 +24,8 @@ class RollingReoptimizer:
 
         if problem.baseline_plan is not None:
             locked_plan = lock_started_trips(problem.baseline_plan, current_min)
-            problem = CanonicalOptimizationProblem(
-                scenario=problem.scenario,
-                dispatch_context=problem.dispatch_context,
-                trips=problem.trips,
-                vehicles=problem.vehicles,
-                chargers=problem.chargers,
-                price_slots=problem.price_slots,
-                pv_slots=problem.pv_slots,
-                feasible_connections=problem.feasible_connections,
-                objective_weights=problem.objective_weights,
+            problem = replace(
+                problem,
                 baseline_plan=locked_plan,
                 metadata=dict(problem.metadata),
             )

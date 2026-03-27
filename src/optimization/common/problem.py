@@ -169,6 +169,11 @@ class OptimizationScenario:
     demand_charge_off_peak_yen_per_kw: float = 0.0
     co2_price_per_kg: float = 0.0
     ice_co2_kg_per_l: float = 2.64
+    planning_days: int = 1
+    allow_overnight_depot_moves: str = "forbid"
+    overnight_window_start: str = "23:00"
+    overnight_window_end: str = "05:00"
+    overnight_charge_target_mode: str = "minimum_required"
     fixed_operations_before_t0: Tuple[LockedOperation, ...] = ()
     uncertainty_flags: Mapping[str, bool] = field(default_factory=dict)
 
@@ -214,6 +219,36 @@ class RefuelSlot:
 
 
 @dataclass(frozen=True)
+class VehicleCostLedgerEntry:
+    vehicle_id: str
+    day_index: int
+    provisional_drive_cost_jpy: float = 0.0
+    provisional_leftover_cost_jpy: float = 0.0
+    realized_charge_cost_jpy: float = 0.0
+    realized_refuel_cost_jpy: float = 0.0
+    realized_bess_discharge_cost_jpy: float = 0.0
+    contract_overage_allocated_jpy: float = 0.0
+    start_soc_kwh: Optional[float] = None
+    end_soc_kwh: Optional[float] = None
+    start_fuel_l: Optional[float] = None
+    end_fuel_l: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class DailyCostLedgerEntry:
+    day_index: int
+    service_date: Optional[str] = None
+    ev_provisional_drive_cost_jpy: float = 0.0
+    ev_realized_charge_cost_jpy: float = 0.0
+    ev_leftover_provisional_cost_jpy: float = 0.0
+    ice_provisional_drive_cost_jpy: float = 0.0
+    ice_realized_refuel_cost_jpy: float = 0.0
+    ice_leftover_provisional_cost_jpy: float = 0.0
+    demand_charge_jpy: float = 0.0
+    total_cost_jpy: float = 0.0
+
+
+@dataclass(frozen=True)
 class AssignmentPlan:
     duties: Tuple[VehicleDuty, ...] = ()
     charging_slots: Tuple[ChargingSlot, ...] = ()
@@ -226,6 +261,8 @@ class AssignmentPlan:
     pv_curtail_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     bess_soc_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     contract_over_limit_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
+    vehicle_cost_ledger: Tuple[VehicleCostLedgerEntry, ...] = ()
+    daily_cost_ledger: Tuple[DailyCostLedgerEntry, ...] = ()
     served_trip_ids: Tuple[str, ...] = ()
     unserved_trip_ids: Tuple[str, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)

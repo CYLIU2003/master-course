@@ -77,16 +77,41 @@ def serialize_simulation_result(result: SimulationResult) -> Dict[str, Any]:
     feasibility = _serialize_feasibility_report(result.feasibility_report)
     provisional_energy_cost = float(result.provisional_energy_cost or 0.0)
     charged_energy_cost = float(result.charged_energy_cost or 0.0)
+    ev_leftover = max(provisional_energy_cost - charged_energy_cost, 0.0)
+    ice_provisional = float(result.total_fuel_cost or 0.0)
+    ice_realized = float(result.total_fuel_cost or 0.0)
+    ice_leftover = 0.0
     return {
         "total_operating_cost": result.total_operating_cost,
         "total_energy_cost": result.total_energy_cost,
         "electricity_cost_basis": result.energy_cost_basis,
         "electricity_cost_provisional_jpy": provisional_energy_cost,
         "electricity_cost_charged_jpy": charged_energy_cost,
-        "electricity_cost_provisional_leftover_jpy": max(
-            provisional_energy_cost - charged_energy_cost,
-            0.0,
-        ),
+        "electricity_cost_provisional_leftover_jpy": ev_leftover,
+        "operating_cost_provisional_jpy": provisional_energy_cost + ice_provisional,
+        "operating_cost_realized_jpy": charged_energy_cost + ice_realized,
+        "operating_cost_leftover_jpy": ev_leftover + ice_leftover,
+        "ev_provisional_drive_cost_jpy": provisional_energy_cost,
+        "ev_realized_charge_cost_jpy": charged_energy_cost,
+        "ev_leftover_provisional_cost_jpy": ev_leftover,
+        "ice_provisional_drive_cost_jpy": ice_provisional,
+        "ice_realized_refuel_cost_jpy": ice_realized,
+        "ice_leftover_provisional_cost_jpy": ice_leftover,
+        "vehicle_cost_ledger": [],
+        "daily_cost_ledger": [
+            {
+                "day_index": 0,
+                "service_date": None,
+                "ev_provisional_drive_cost_jpy": provisional_energy_cost,
+                "ev_realized_charge_cost_jpy": charged_energy_cost,
+                "ev_leftover_provisional_cost_jpy": ev_leftover,
+                "ice_provisional_drive_cost_jpy": ice_provisional,
+                "ice_realized_refuel_cost_jpy": ice_realized,
+                "ice_leftover_provisional_cost_jpy": ice_leftover,
+                "demand_charge_jpy": float(result.total_demand_charge or 0.0),
+                "total_cost_jpy": float(result.total_operating_cost or 0.0),
+            }
+        ],
         "total_demand_charge": result.total_demand_charge,
         "total_degradation_cost": result.total_degradation_cost,
         "total_fuel_cost": result.total_fuel_cost,

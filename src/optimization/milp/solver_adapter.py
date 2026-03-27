@@ -291,6 +291,10 @@ class GurobiMILPAdapter:
         bess_charge_mode_var: Dict[Tuple[str, int], Any] = {}
         bess_discharge_mode_var: Dict[Tuple[str, int], Any] = {}
         end_soc_excess_dev_var: Dict[str, Any] = {}
+        charge_session_start_var: Dict[Tuple[str, int], Any] = {}
+        soc_upper_excess_var: Dict[Tuple[str, int], Any] = {}
+        slot_concurrency_excess_var: Dict[Tuple[str, int], Any] = {}
+        charge_ports_by_depot: Dict[str, float] = {}
         w_on_var = None
         w_off_var = None
         effective_depot_energy_assets: Dict[str, DepotEnergyAsset] = {}
@@ -351,6 +355,7 @@ class GurobiMILPAdapter:
 
                 for slot_idx in slot_indices:
                     charge_on_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(vtype=GRB.BINARY)
+                    charge_session_start_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(vtype=GRB.BINARY)
                     c_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=charge_max_kw, vtype=GRB.CONTINUOUS)
                     d_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=discharge_max_kw, vtype=GRB.CONTINUOUS)
                     s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=soc_min, ub=cap, vtype=GRB.CONTINUOUS)
@@ -400,6 +405,21 @@ class GurobiMILPAdapter:
                         - s_var[(vehicle.vehicle_id, last_slot)]
                         - cap * (1 - used_vehicle[vehicle.vehicle_id])
                     )
+
+                upper_buffer_ratio = self._percent_to_ratio(
+                    problem.metadata.get("charge_upper_buffer_ratio")
+                )
+                if upper_buffer_ratio is not None:
+                    upper_buffer_kwh = min(max(upper_buffer_ratio * cap, soc_min), cap)
+                    for slot_idx in slot_indices:
+                        excess_key = (vehicle.vehicle_id, slot_idx)
+                        soc_upper_excess_var[excess_key] = model.addVar(lb=0.0, ub=cap, vtype=GRB.CONTINUOUS)
+                        model.addConstr(
+                            soc_upper_excess_var[excess_key]
+                            >= s_var[excess_key]
+                            - upper_buffer_kwh
+                            - cap * (1 - used_vehicle[vehicle.vehicle_id])
+                        )
 
                 # C10 (departure readiness): each assigned BEV trip must start with sufficient SOC.
                 for trip in problem.trips:
@@ -479,6 +499,19 @@ class GurobiMILPAdapter:
                         <= charge_max_kw * charge_on_var[(vehicle.vehicle_id, slot_idx)]
                     )
 
+                    prev_slot_idx = slot_indices[pos - 1] if pos > 0 else None
+                    start_key = (vehicle.vehicle_id, slot_idx)
+                    if prev_slot_idx is None:
+                        model.addConstr(
+                            charge_session_start_var[start_key]
+                            >= charge_on_var[start_key]
+                        )
+                    else:
+                        model.addConstr(
+                            charge_session_start_var[start_key]
+                            >= charge_on_var[start_key] - charge_on_var[(vehicle.vehicle_id, prev_slot_idx)]
+                        )
+
             if problem.chargers:
                 ports_by_depot: Dict[str, float] = {}
                 kw_by_depot: Dict[str, float] = {}
@@ -488,6 +521,7 @@ class GurobiMILPAdapter:
                     power_kw = max(float(charger.power_kw or 0.0), 0.0)
                     ports_by_depot[depot_id] = ports_by_depot.get(depot_id, 0.0) + float(ports)
                     kw_by_depot[depot_id] = kw_by_depot.get(depot_id, 0.0) + power_kw * float(ports)
+                charge_ports_by_depot = dict(ports_by_depot)
 
                 vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
                 bev_ids_by_depot_for_charge: Dict[str, List[str]] = {}
@@ -507,6 +541,18 @@ class GurobiMILPAdapter:
                         model.addConstr(
                             gp.quicksum(c_var[(vehicle_id, slot_idx)] for vehicle_id in vehicle_ids)
                             <= kw_limit
+                        )
+                        soft_ratio = self._safe_nonnegative_float(
+                            problem.metadata.get("charge_concurrency_soft_limit_ratio"),
+                            default=0.7,
+                        )
+                        soft_limit = self._soft_charge_concurrency_limit(port_limit, soft_ratio)
+                        excess_key = (depot_id, slot_idx)
+                        slot_concurrency_excess_var[excess_key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                        model.addConstr(
+                            slot_concurrency_excess_var[excess_key]
+                            >= gp.quicksum(charge_on_var[(vehicle_id, slot_idx)] for vehicle_id in vehicle_ids)
+                            - float(soft_limit)
                         )
 
         # ICE finite-fuel constraints: check before departure and update after operation.
@@ -797,6 +843,22 @@ class GurobiMILPAdapter:
         energy_weight = max(problem.objective_weights.energy, 0.0)
         demand_weight = max(problem.objective_weights.demand, 0.0)
         vehicle_weight = max(problem.objective_weights.vehicle, 0.0)
+        charge_session_start_penalty = self._safe_nonnegative_float(
+            problem.metadata.get("charge_session_start_penalty_yen"),
+            default=2.0,
+        )
+        slot_concurrency_penalty = self._safe_nonnegative_float(
+            problem.metadata.get("slot_concurrency_penalty_yen"),
+            default=1.0,
+        )
+        early_charge_penalty_per_kwh = self._safe_nonnegative_float(
+            problem.metadata.get("early_charge_penalty_yen_per_kwh"),
+            default=0.5,
+        )
+        charge_upper_buffer_penalty_per_kwh = self._safe_nonnegative_float(
+            problem.metadata.get("charge_to_upper_buffer_penalty_yen_per_kwh"),
+            default=0.2,
+        )
 
         objective = gp.LinExpr()
         # O2: electricity cost based on actual charging source flows.
@@ -960,6 +1022,25 @@ class GurobiMILPAdapter:
             )
             for dev in end_soc_excess_dev_var.values():
                 objective += target_penalty_per_kwh * dev
+
+        if charge_session_start_penalty > 0.0:
+            for var in charge_session_start_var.values():
+                objective += charge_session_start_penalty * var
+
+        if slot_concurrency_penalty > 0.0:
+            for var in slot_concurrency_excess_var.values():
+                objective += slot_concurrency_penalty * var
+
+        if early_charge_penalty_per_kwh > 0.0 and c_var:
+            for (vehicle_id, slot_idx), var in c_var.items():
+                early_weight = self._early_charge_weight(slot_idx, slot_indices)
+                if early_weight <= 0.0:
+                    continue
+                objective += early_charge_penalty_per_kwh * early_weight * timestep_h * var
+
+        if charge_upper_buffer_penalty_per_kwh > 0.0 and soc_upper_excess_var:
+            for var in soc_upper_excess_var.values():
+                objective += charge_upper_buffer_penalty_per_kwh * var
 
         for trip in problem.trips:
             objective += unserved_penalty_weight * unserved[trip.trip_id]
@@ -1202,6 +1283,10 @@ class GurobiMILPAdapter:
                 "contract_overage_penalty_yen_per_kwh": contract_overage_penalty,
                 "grid_to_bus_priority_penalty_yen_per_kwh": grid_to_bus_priority_penalty,
                 "grid_to_bess_priority_penalty_yen_per_kwh": grid_to_bess_priority_penalty,
+                "charge_session_start_penalty_yen": charge_session_start_penalty,
+                "slot_concurrency_penalty_yen": slot_concurrency_penalty,
+                "early_charge_penalty_yen_per_kwh": early_charge_penalty_per_kwh,
+                "charge_to_upper_buffer_penalty_yen_per_kwh": charge_upper_buffer_penalty_per_kwh,
             },
         )
         return (
@@ -1414,6 +1499,22 @@ class GurobiMILPAdapter:
         except (TypeError, ValueError):
             return default
         return parsed if parsed >= 0.0 else default
+
+    def _soft_charge_concurrency_limit(self, port_limit: float, ratio: float) -> int:
+        ports = max(int(round(float(port_limit or 0.0))), 1)
+        r = min(max(float(ratio or 0.0), 0.0), 1.0)
+        return max(1, min(ports, int(round(ports * r))))
+
+    def _early_charge_weight(self, slot_idx: int, slot_indices: List[int]) -> float:
+        if not slot_indices:
+            return 0.0
+        ordered = sorted(int(v) for v in slot_indices)
+        first = ordered[0]
+        last = ordered[-1]
+        if last <= first:
+            return 0.0
+        position = min(max(int(slot_idx), first), last)
+        return float(last - position) / float(last - first)
 
     def _route_band_key(self, dispatch_trip: Any, fallback_route_id: str) -> str:
         family_code = str(getattr(dispatch_trip, "route_family_code", "") or "").strip()

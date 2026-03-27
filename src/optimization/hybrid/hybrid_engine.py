@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from src.optimization.alns.engine import ALNSOptimizer
 from src.optimization.hybrid.column_generation import ColumnPool, PricingProblem
 from src.optimization.common.problem import (
@@ -31,10 +33,18 @@ class HybridOptimizer:
             from src.optimization.common.problem import SolutionState
 
             report = FeasibilityChecker().evaluate(problem, milp_result.plan)
-            costs = CostEvaluator().evaluate(problem, milp_result.plan).to_dict()
+            evaluator = CostEvaluator()
+            breakdown = evaluator.evaluate(problem, milp_result.plan)
+            vehicle_ledger, daily_ledger = evaluator.build_plan_ledgers(problem, milp_result.plan, breakdown)
+            seeded_plan = replace(
+                milp_result.plan,
+                vehicle_cost_ledger=vehicle_ledger,
+                daily_cost_ledger=daily_ledger,
+            )
+            costs = breakdown.to_dict()
             initial_state = SolutionState(
                 problem=problem,
-                plan=milp_result.plan,
+                plan=seeded_plan,
                 cost_breakdown=costs,
                 feasible=report.feasible,
                 infeasibility_reasons=report.errors,

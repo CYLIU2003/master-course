@@ -6,9 +6,12 @@ from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
+    DepotEnergyAsset,
     EnergyPriceSlot,
     OptimizationConfig,
     OptimizationScenario,
+    ProblemDepot,
+    ProblemRoute,
     ProblemTrip,
     ProblemVehicle,
     ProblemVehicleType,
@@ -88,6 +91,41 @@ def test_rolling_reoptimizer_applies_actual_soc_kwh() -> None:
     assert result["ok"] is True
     assert capture.last_problem is not None
     assert capture.last_problem.vehicles[0].initial_soc == 120.0
+
+
+def test_rolling_reoptimizer_preserves_problem_fields_when_locking_baseline() -> None:
+    optimizer = RollingReoptimizer()
+    capture = _CaptureEngine()
+    optimizer._engine = capture  # type: ignore[attr-defined]
+
+    base = _minimal_problem(initial_soc=220.0)
+    baseline_plan = AssignmentPlan()
+    problem = CanonicalOptimizationProblem(
+        scenario=base.scenario,
+        dispatch_context=base.dispatch_context,
+        trips=base.trips,
+        vehicles=base.vehicles,
+        routes=(ProblemRoute(route_id="r1", trip_ids=("t1",), route_name="R1"),),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot 1", charger_ids=("c1",), import_limit_kw=500.0),),
+        vehicle_types=base.vehicle_types,
+        chargers=base.chargers,
+        price_slots=base.price_slots,
+        pv_slots=base.pv_slots,
+        depot_energy_assets={"dep-1": DepotEnergyAsset(depot_id="dep-1", pv_enabled=True)},
+        feasible_connections=base.feasible_connections,
+        objective_weights=base.objective_weights,
+        baseline_plan=baseline_plan,
+        metadata={"k": "v"},
+    )
+
+    optimizer.reoptimize(problem, config=OptimizationConfig(), current_min=600)
+
+    assert capture.last_problem is not None
+    assert capture.last_problem.routes == problem.routes
+    assert capture.last_problem.depots == problem.depots
+    assert capture.last_problem.vehicle_types == problem.vehicle_types
+    assert capture.last_problem.depot_energy_assets == problem.depot_energy_assets
+    assert capture.last_problem.metadata == problem.metadata
 
 
 def test_peak_hour_removal_uses_data_driven_peak_slots() -> None:

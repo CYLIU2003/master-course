@@ -72,6 +72,38 @@ class ResultSerializer:
                 str(depot_id): {int(slot_idx): float(value or 0.0) for slot_idx, value in (slot_map or {}).items()}
                 for depot_id, slot_map in (plan.contract_over_limit_kwh_by_depot_slot or {}).items()
             },
+            "vehicle_cost_ledger": [
+                {
+                    "vehicle_id": row.vehicle_id,
+                    "day_index": row.day_index,
+                    "provisional_drive_cost_jpy": row.provisional_drive_cost_jpy,
+                    "provisional_leftover_cost_jpy": row.provisional_leftover_cost_jpy,
+                    "realized_charge_cost_jpy": row.realized_charge_cost_jpy,
+                    "realized_refuel_cost_jpy": row.realized_refuel_cost_jpy,
+                    "realized_bess_discharge_cost_jpy": row.realized_bess_discharge_cost_jpy,
+                    "contract_overage_allocated_jpy": row.contract_overage_allocated_jpy,
+                    "start_soc_kwh": row.start_soc_kwh,
+                    "end_soc_kwh": row.end_soc_kwh,
+                    "start_fuel_l": row.start_fuel_l,
+                    "end_fuel_l": row.end_fuel_l,
+                }
+                for row in plan.vehicle_cost_ledger
+            ],
+            "daily_cost_ledger": [
+                {
+                    "day_index": row.day_index,
+                    "service_date": row.service_date,
+                    "ev_provisional_drive_cost_jpy": row.ev_provisional_drive_cost_jpy,
+                    "ev_realized_charge_cost_jpy": row.ev_realized_charge_cost_jpy,
+                    "ev_leftover_provisional_cost_jpy": row.ev_leftover_provisional_cost_jpy,
+                    "ice_provisional_drive_cost_jpy": row.ice_provisional_drive_cost_jpy,
+                    "ice_realized_refuel_cost_jpy": row.ice_realized_refuel_cost_jpy,
+                    "ice_leftover_provisional_cost_jpy": row.ice_leftover_provisional_cost_jpy,
+                    "demand_charge_jpy": row.demand_charge_jpy,
+                    "total_cost_jpy": row.total_cost_jpy,
+                }
+                for row in plan.daily_cost_ledger
+            ],
             "metadata": metadata,
         }
 
@@ -157,6 +189,15 @@ class ResultSerializer:
             "warnings": list(result.warnings),
             "infeasibility_reasons": list(result.infeasibility_reasons),
             "cost_breakdown": cost_breakdown,
+            "operating_cost_provisional_jpy": float(cost_breakdown.get("operating_cost_provisional_total", 0.0) or 0.0),
+            "operating_cost_realized_jpy": float(cost_breakdown.get("operating_cost_realized_total", 0.0) or 0.0),
+            "operating_cost_leftover_jpy": float(cost_breakdown.get("operating_cost_leftover_total", 0.0) or 0.0),
+            "ev_provisional_drive_cost_jpy": float(cost_breakdown.get("provisional_ev_drive_cost", 0.0) or 0.0),
+            "ev_realized_charge_cost_jpy": float(cost_breakdown.get("realized_ev_charge_cost", 0.0) or 0.0),
+            "ev_leftover_provisional_cost_jpy": float(cost_breakdown.get("leftover_ev_provisional_cost", 0.0) or 0.0),
+            "ice_provisional_drive_cost_jpy": float(cost_breakdown.get("provisional_ice_drive_cost", 0.0) or 0.0),
+            "ice_realized_refuel_cost_jpy": float(cost_breakdown.get("realized_ice_refuel_cost", 0.0) or 0.0),
+            "ice_leftover_provisional_cost_jpy": float(cost_breakdown.get("leftover_ice_provisional_cost", 0.0) or 0.0),
             "objective_components_raw": raw_components,
             "objective_components_weighted": weighted_components,
             "objective_weights": objective_weights,

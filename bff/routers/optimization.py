@@ -132,7 +132,7 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "Optimization runs against canonical ProblemData built from the scenario snapshot.",
             "Dispatch artifacts can be rebuilt before solve when requested.",
             "Results are persisted to the scenario snapshot; job state is not.",
-            "Optimization/re-optimization runs in a dedicated process pool so API polling stays responsive.",
+            "Optimization/re-optimization runs in a dedicated executor (thread or process) so API polling stays responsive.",
             "Only one optimization/re-optimization job is allowed at a time in this BFF process.",
         ],
     }

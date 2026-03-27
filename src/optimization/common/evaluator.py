@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from src.objective_modes import objective_value_for_mode
 
-from .problem import AssignmentPlan, CanonicalOptimizationProblem, classify_peak_slots
+from .problem import (
+    AssignmentPlan,
+    CanonicalOptimizationProblem,
+    DailyCostLedgerEntry,
+    VehicleCostLedgerEntry,
+    classify_peak_slots,
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +40,15 @@ class CostBreakdown:
     contract_over_limit_kwh: float = 0.0
     electricity_cost_final: float = 0.0
     electricity_cost_provisional_leftover: float = 0.0
+    provisional_ev_drive_cost: float = 0.0
+    realized_ev_charge_cost: float = 0.0
+    leftover_ev_provisional_cost: float = 0.0
+    provisional_ice_drive_cost: float = 0.0
+    realized_ice_refuel_cost: float = 0.0
+    leftover_ice_provisional_cost: float = 0.0
+    operating_cost_provisional_total: float = 0.0
+    operating_cost_realized_total: float = 0.0
+    operating_cost_leftover_total: float = 0.0
     grid_purchase_cost: float = 0.0
     bess_discharge_cost: float = 0.0
     contract_overage_cost: float = 0.0
@@ -70,6 +85,15 @@ class CostBreakdown:
             "contract_over_limit_kwh": self.contract_over_limit_kwh,
             "electricity_cost_final": self.electricity_cost_final,
             "electricity_cost_provisional_leftover": self.electricity_cost_provisional_leftover,
+            "provisional_ev_drive_cost": self.provisional_ev_drive_cost,
+            "realized_ev_charge_cost": self.realized_ev_charge_cost,
+            "leftover_ev_provisional_cost": self.leftover_ev_provisional_cost,
+            "provisional_ice_drive_cost": self.provisional_ice_drive_cost,
+            "realized_ice_refuel_cost": self.realized_ice_refuel_cost,
+            "leftover_ice_provisional_cost": self.leftover_ice_provisional_cost,
+            "operating_cost_provisional_total": self.operating_cost_provisional_total,
+            "operating_cost_realized_total": self.operating_cost_realized_total,
+            "operating_cost_leftover_total": self.operating_cost_leftover_total,
             "grid_purchase_cost": self.grid_purchase_cost,
             "bess_discharge_cost": self.bess_discharge_cost,
             "contract_overage_cost": self.contract_overage_cost,
@@ -129,20 +153,12 @@ class CostEvaluator:
                     + overtime_hours * wage_regular_jpy_per_h * overtime_factor
                 )
 
-            for leg in duty.legs:
-                # O1: apply fuel cost for non-electric powertrains.
-                if self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
-                    energy_cost += self._trip_fuel_cost(problem, duty.vehicle_type, leg.trip.trip_id)
-                    energy_cost += self._deadhead_fuel_cost(
-                        problem,
-                        duty.vehicle_type,
-                        leg.deadhead_from_prev_min,
-                    )
-
         operating_slot_totals = self._operating_electric_energy_kwh_by_slot(problem, plan)
 
         energy_cost_components = self._evaluate_electricity_with_overwrite(problem, plan, operating_slot_totals)
+        fuel_cost_components = self._evaluate_liquid_fuel_with_overwrite(problem, plan)
         energy_cost += energy_cost_components["electricity_cost_final"]
+        energy_cost += fuel_cost_components["fuel_cost_final"]
         grid_import_by_slot = self._grid_import_kwh_by_slot_from_plan(plan)
         if grid_import_by_slot:
             demand_cost = self._operating_demand_charge_cost(problem, grid_import_by_slot)
@@ -271,6 +287,18 @@ class CostEvaluator:
             electricity_cost_provisional_leftover=float(
                 energy_cost_components.get("electricity_cost_provisional_leftover", 0.0)
             ),
+            provisional_ev_drive_cost=float(energy_cost_components.get("ev_provisional_drive_cost", 0.0)),
+            realized_ev_charge_cost=float(energy_cost_components.get("ev_realized_charge_cost", 0.0)),
+            leftover_ev_provisional_cost=float(energy_cost_components.get("ev_leftover_provisional_cost", 0.0)),
+            provisional_ice_drive_cost=float(fuel_cost_components.get("fuel_cost_provisional", 0.0)),
+            realized_ice_refuel_cost=float(fuel_cost_components.get("realized_refuel_cost", 0.0)),
+            leftover_ice_provisional_cost=float(fuel_cost_components.get("fuel_cost_provisional_leftover", 0.0)),
+            operating_cost_provisional_total=float(energy_cost_components.get("ev_provisional_drive_cost", 0.0))
+            + float(fuel_cost_components.get("fuel_cost_provisional", 0.0)),
+            operating_cost_realized_total=float(energy_cost_components.get("ev_realized_charge_cost", 0.0))
+            + float(fuel_cost_components.get("realized_refuel_cost", 0.0)),
+            operating_cost_leftover_total=float(energy_cost_components.get("ev_leftover_provisional_cost", 0.0))
+            + float(fuel_cost_components.get("fuel_cost_provisional_leftover", 0.0)),
             grid_purchase_cost=float(energy_cost_components.get("grid_purchase_cost", 0.0)),
             bess_discharge_cost=float(energy_cost_components.get("bess_discharge_cost", 0.0)),
             contract_overage_cost=float(energy_cost_components.get("contract_overage_cost", 0.0)),
@@ -330,6 +358,9 @@ class CostEvaluator:
             return {
                 "electricity_cost_final": fallback_cost,
                 "electricity_cost_provisional_leftover": fallback_cost,
+                "ev_provisional_drive_cost": fallback_cost,
+                "ev_realized_charge_cost": 0.0,
+                "ev_leftover_provisional_cost": fallback_cost,
                 "grid_purchase_cost": fallback_cost,
                 "bess_discharge_cost": 0.0,
                 "stationary_battery_degradation_cost": 0.0,
@@ -343,6 +374,9 @@ class CostEvaluator:
                 "pv_curtailed_kwh": 0.0,
                 "contract_over_limit_kwh": 0.0,
                 "contract_overage_cost": 0.0,
+                "ev_provisional_by_vehicle": {},
+                "ev_realized_by_vehicle": {},
+                "ev_leftover_by_vehicle": {},
             }
 
         vehicle_depot = self._vehicle_to_depot(problem)
@@ -351,10 +385,12 @@ class CostEvaluator:
         drive_events = self._collect_drive_energy_events(problem, plan)
         debts: Dict[str, list[tuple[float, float]]] = {}
         provisional_total = 0.0
+        provisional_by_vehicle: Dict[str, float] = {}
         for vehicle_id, depot_id, _slot_idx, energy_kwh in drive_events:
             provisional_price = provisional_price_by_depot.get(depot_id, 0.0)
             debts.setdefault(vehicle_id, []).append((float(energy_kwh), provisional_price))
             provisional_total += float(energy_kwh) * provisional_price
+            provisional_by_vehicle[vehicle_id] = provisional_by_vehicle.get(vehicle_id, 0.0) + float(energy_kwh) * provisional_price
 
         charge_events: list[tuple[int, str, str, float]] = []
         for slot in plan.charging_slots:
@@ -368,14 +404,18 @@ class CostEvaluator:
         grid_purchase_cost = 0.0
         bess_discharge_cost = 0.0
         rollback_cost = 0.0
+        realized_by_vehicle: Dict[str, float] = {}
         for slot_idx, vehicle_id, source, charge_kwh in charge_events:
             depot_id = vehicle_depot.get(vehicle_id, "depot_default")
             if source == "bess":
                 asset = (problem.depot_energy_assets or {}).get(depot_id)
                 bess_unit = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
-                bess_discharge_cost += charge_kwh * bess_unit
+                realized = charge_kwh * bess_unit
+                bess_discharge_cost += realized
             else:
-                grid_purchase_cost += charge_kwh * self._slot_buy_price(problem, slot_idx)
+                realized = charge_kwh * self._slot_buy_price(problem, slot_idx)
+                grid_purchase_cost += realized
+            realized_by_vehicle[vehicle_id] = realized_by_vehicle.get(vehicle_id, 0.0) + realized
 
             remaining = charge_kwh
             queue = debts.get(vehicle_id, [])
@@ -393,6 +433,10 @@ class CostEvaluator:
             debts[vehicle_id] = new_queue
 
         provisional_leftover = sum(kwh * price for queue in debts.values() for kwh, price in queue)
+        leftover_by_vehicle = {
+            vehicle_id: sum(kwh * price for kwh, price in queue)
+            for vehicle_id, queue in debts.items()
+        }
         electricity_cost_final = (provisional_total - rollback_cost) + grid_purchase_cost + bess_discharge_cost
         contract_over_limit_kwh = _sum_flow(contract_over_limit)
         enable_contract_overage_penalty = bool(problem.metadata.get("enable_contract_overage_penalty", True))
@@ -431,6 +475,9 @@ class CostEvaluator:
         return {
             "electricity_cost_final": electricity_cost_final,
             "electricity_cost_provisional_leftover": provisional_leftover,
+            "ev_provisional_drive_cost": provisional_total,
+            "ev_realized_charge_cost": grid_purchase_cost + bess_discharge_cost,
+            "ev_leftover_provisional_cost": provisional_leftover,
             "grid_purchase_cost": grid_purchase_cost,
             "bess_discharge_cost": bess_discharge_cost,
             "stationary_battery_degradation_cost": stationary_battery_degradation_cost,
@@ -444,6 +491,9 @@ class CostEvaluator:
             "pv_curtailed_kwh": _sum_flow(pv_curtail),
             "contract_over_limit_kwh": contract_over_limit_kwh,
             "contract_overage_cost": contract_overage_cost,
+            "ev_provisional_by_vehicle": provisional_by_vehicle,
+            "ev_realized_by_vehicle": realized_by_vehicle,
+            "ev_leftover_by_vehicle": leftover_by_vehicle,
         }
 
     def _collect_drive_energy_events(
@@ -453,7 +503,10 @@ class CostEvaluator:
     ) -> list[tuple[str, str, int, float]]:
         events: list[tuple[str, str, int, float]] = []
         trip_by_id = problem.trip_by_id()
+        vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
         for duty in plan.duties:
+            if self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
+                continue
             vehicle_id = self._vehicle_id_from_duty_id(duty.duty_id)
             depot_id = self._vehicle_to_depot(problem).get(vehicle_id, "depot_default")
             for leg in duty.legs:
@@ -472,6 +525,316 @@ class CostEvaluator:
                     )
         events.sort(key=lambda item: item[2])
         return events
+
+    def _evaluate_liquid_fuel_with_overwrite(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> Dict[str, Any]:
+        drive_events = self._collect_fuel_drive_events(problem, plan)
+        if not drive_events:
+            return {
+                "fuel_cost_final": 0.0,
+                "fuel_cost_provisional": 0.0,
+                "fuel_cost_provisional_leftover": 0.0,
+                "realized_refuel_cost": 0.0,
+                "fuel_provisional_by_vehicle": {},
+                "fuel_realized_by_vehicle": {},
+                "fuel_leftover_by_vehicle": {},
+            }
+
+        provisional_price_by_depot = self._provisional_fuel_price_by_depot(problem)
+        debts: Dict[str, List[Tuple[float, float]]] = {}
+        provisional_total = 0.0
+        provisional_by_vehicle: Dict[str, float] = {}
+        for vehicle_id, depot_id, _slot_idx, fuel_l in drive_events:
+            unit = provisional_price_by_depot.get(depot_id, max(problem.scenario.diesel_price_yen_per_l, 0.0))
+            debts.setdefault(vehicle_id, []).append((fuel_l, unit))
+            amount = fuel_l * unit
+            provisional_total += amount
+            provisional_by_vehicle[vehicle_id] = provisional_by_vehicle.get(vehicle_id, 0.0) + amount
+
+        realized_refuel_cost = 0.0
+        rollback_cost = 0.0
+        realized_by_vehicle: Dict[str, float] = {}
+        for slot_idx, vehicle_id, depot_id, refuel_l in self._collect_refuel_events(problem, plan):
+            unit_price = self._fuel_unit_price(problem, depot_id, slot_idx)
+            realized = refuel_l * unit_price
+            realized_refuel_cost += realized
+            realized_by_vehicle[vehicle_id] = realized_by_vehicle.get(vehicle_id, 0.0) + realized
+
+            remaining = refuel_l
+            queue = debts.get(vehicle_id, [])
+            new_queue: List[Tuple[float, float]] = []
+            for debt_l, prov_unit in queue:
+                if remaining <= 1.0e-9:
+                    new_queue.append((debt_l, prov_unit))
+                    continue
+                matched = min(debt_l, remaining)
+                rollback_cost += matched * prov_unit
+                rest = debt_l - matched
+                if rest > 1.0e-9:
+                    new_queue.append((rest, prov_unit))
+                remaining -= matched
+            debts[vehicle_id] = new_queue
+
+        leftover = sum(l * unit for queue in debts.values() for l, unit in queue)
+        leftover_by_vehicle = {
+            vehicle_id: sum(l * unit for l, unit in queue)
+            for vehicle_id, queue in debts.items()
+        }
+        fuel_cost_final = (provisional_total - rollback_cost) + realized_refuel_cost
+        return {
+            "fuel_cost_final": fuel_cost_final,
+            "fuel_cost_provisional": provisional_total,
+            "fuel_cost_provisional_leftover": leftover,
+            "realized_refuel_cost": realized_refuel_cost,
+            "fuel_provisional_by_vehicle": provisional_by_vehicle,
+            "fuel_realized_by_vehicle": realized_by_vehicle,
+            "fuel_leftover_by_vehicle": leftover_by_vehicle,
+        }
+
+    def build_plan_ledgers(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        breakdown: CostBreakdown,
+    ) -> tuple[Tuple[VehicleCostLedgerEntry, ...], Tuple[DailyCostLedgerEntry, ...]]:
+        day_count = max(int(problem.scenario.planning_days or 1), 1)
+        daily: List[DailyCostLedgerEntry] = []
+        for idx in range(day_count):
+            if idx == 0:
+                daily.append(
+                    DailyCostLedgerEntry(
+                        day_index=idx,
+                        service_date=problem.scenario.scenario_id,
+                        ev_provisional_drive_cost_jpy=float(breakdown.provisional_ev_drive_cost or 0.0),
+                        ev_realized_charge_cost_jpy=float(breakdown.realized_ev_charge_cost or 0.0),
+                        ev_leftover_provisional_cost_jpy=float(breakdown.leftover_ev_provisional_cost or 0.0),
+                        ice_provisional_drive_cost_jpy=float(breakdown.provisional_ice_drive_cost or 0.0),
+                        ice_realized_refuel_cost_jpy=float(breakdown.realized_ice_refuel_cost or 0.0),
+                        ice_leftover_provisional_cost_jpy=float(breakdown.leftover_ice_provisional_cost or 0.0),
+                        demand_charge_jpy=float(breakdown.demand_cost or 0.0),
+                        total_cost_jpy=float(breakdown.total_cost or 0.0),
+                    )
+                )
+            else:
+                daily.append(
+                    DailyCostLedgerEntry(
+                        day_index=idx,
+                        service_date=problem.scenario.scenario_id,
+                    )
+                )
+
+        ev_comp = self._evaluate_electricity_with_overwrite(
+            problem,
+            plan,
+            self._operating_electric_energy_kwh_by_slot(problem, plan),
+        )
+        fuel_comp = self._evaluate_liquid_fuel_with_overwrite(problem, plan)
+        ev_prov_by_vehicle = dict(ev_comp.get("ev_provisional_by_vehicle", {}) or {})
+        ev_real_by_vehicle = dict(ev_comp.get("ev_realized_by_vehicle", {}) or {})
+        ev_left_by_vehicle = dict(ev_comp.get("ev_leftover_by_vehicle", {}) or {})
+        fuel_prov_by_vehicle = dict(fuel_comp.get("fuel_provisional_by_vehicle", {}) or {})
+        fuel_real_by_vehicle = dict(fuel_comp.get("fuel_realized_by_vehicle", {}) or {})
+        fuel_left_by_vehicle = dict(fuel_comp.get("fuel_leftover_by_vehicle", {}) or {})
+
+        vehicles = {str(v.vehicle_id): v for v in problem.vehicles}
+        entries: List[VehicleCostLedgerEntry] = []
+        for vehicle_id, vehicle in vehicles.items():
+            start_soc = self._vehicle_initial_soc_kwh(vehicle)
+            end_soc = self._estimate_vehicle_end_soc_kwh(problem, plan, vehicle_id, start_soc)
+            start_fuel = self._vehicle_initial_fuel_l(vehicle)
+            end_fuel = self._estimate_vehicle_end_fuel_l(problem, plan, vehicle_id, start_fuel)
+            entries.append(
+                VehicleCostLedgerEntry(
+                    vehicle_id=vehicle_id,
+                    day_index=0,
+                    provisional_drive_cost_jpy=float(ev_prov_by_vehicle.get(vehicle_id, 0.0))
+                    + float(fuel_prov_by_vehicle.get(vehicle_id, 0.0)),
+                    provisional_leftover_cost_jpy=float(ev_left_by_vehicle.get(vehicle_id, 0.0))
+                    + float(fuel_left_by_vehicle.get(vehicle_id, 0.0)),
+                    realized_charge_cost_jpy=float(ev_real_by_vehicle.get(vehicle_id, 0.0)),
+                    realized_refuel_cost_jpy=float(fuel_real_by_vehicle.get(vehicle_id, 0.0)),
+                    start_soc_kwh=start_soc,
+                    end_soc_kwh=end_soc,
+                    start_fuel_l=start_fuel,
+                    end_fuel_l=end_fuel,
+                )
+            )
+            prev_end_soc = end_soc
+            prev_end_fuel = end_fuel
+            for idx in range(1, day_count):
+                entries.append(
+                    VehicleCostLedgerEntry(
+                        vehicle_id=vehicle_id,
+                        day_index=idx,
+                        provisional_drive_cost_jpy=0.0,
+                        provisional_leftover_cost_jpy=0.0,
+                        realized_charge_cost_jpy=0.0,
+                        realized_refuel_cost_jpy=0.0,
+                        start_soc_kwh=prev_end_soc,
+                        end_soc_kwh=prev_end_soc,
+                        start_fuel_l=prev_end_fuel,
+                        end_fuel_l=prev_end_fuel,
+                    )
+                )
+        entries.sort(key=lambda item: (item.vehicle_id, item.day_index))
+        return tuple(entries), tuple(daily)
+
+    def _collect_fuel_drive_events(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> List[Tuple[str, str, int, float]]:
+        events: List[Tuple[str, str, int, float]] = []
+        vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
+        vehicle_depot = self._vehicle_to_depot(problem)
+        for duty in plan.duties:
+            if not self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
+                continue
+            vehicle_id = self._vehicle_id_from_duty_id(duty.duty_id)
+            depot_id = vehicle_depot.get(vehicle_id, "depot_default")
+            fuel_rate = self._fuel_rate_l_per_km(problem, duty.vehicle_type)
+            for leg in duty.legs:
+                trip = problem.trip_by_id().get(leg.trip.trip_id)
+                if trip is None:
+                    continue
+                trip_fuel_l = max(float(trip.fuel_l or 0.0), 0.0)
+                if trip_fuel_l <= 0.0 and fuel_rate > 0.0:
+                    trip_fuel_l = max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
+                if trip_fuel_l > 0.0:
+                    events.append((vehicle_id, depot_id, int(trip.departure_min), trip_fuel_l))
+                if leg.deadhead_from_prev_min > 0 and fuel_rate > 0.0:
+                    dh_fuel_l = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min) * fuel_rate
+                    if dh_fuel_l > 0.0:
+                        events.append((vehicle_id, depot_id, int(trip.departure_min), dh_fuel_l))
+        events.sort(key=lambda item: item[2])
+        return events
+
+    def _collect_refuel_events(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> List[Tuple[int, str, str, float]]:
+        vehicle_depot = self._vehicle_to_depot(problem)
+        events: List[Tuple[int, str, str, float]] = []
+        for slot in plan.refuel_slots:
+            liters = max(float(slot.refuel_liters or 0.0), 0.0)
+            if liters <= 0.0:
+                continue
+            depot_id = str(slot.location_id or vehicle_depot.get(str(slot.vehicle_id), "depot_default"))
+            events.append((int(slot.slot_index), str(slot.vehicle_id), depot_id, liters))
+        events.sort(key=lambda item: item[0])
+        return events
+
+    def _provisional_fuel_price_by_depot(self, problem: CanonicalOptimizationProblem) -> Dict[str, float]:
+        default_price = max(float(problem.scenario.diesel_price_yen_per_l or 0.0), 0.0)
+        configured = dict((problem.metadata or {}).get("provisional_fuel_price_by_depot", {}) or {})
+        out: Dict[str, float] = {}
+        for depot in problem.depots:
+            raw = configured.get(str(depot.depot_id))
+            if raw is None:
+                out[str(depot.depot_id)] = default_price
+            else:
+                out[str(depot.depot_id)] = max(float(raw or 0.0), 0.0)
+        if not out:
+            out["depot_default"] = default_price
+        return out
+
+    def _fuel_unit_price(self, problem: CanonicalOptimizationProblem, depot_id: str, slot_idx: int) -> float:
+        default_price = max(float(problem.scenario.diesel_price_yen_per_l or 0.0), 0.0)
+        by_depot_slot = dict((problem.metadata or {}).get("fuel_price_by_depot_slot", {}) or {})
+        if depot_id in by_depot_slot:
+            by_slot = dict(by_depot_slot.get(depot_id) or {})
+            if slot_idx in by_slot:
+                return max(float(by_slot.get(slot_idx) or 0.0), 0.0)
+        by_depot = dict((problem.metadata or {}).get("fuel_price_by_depot", {}) or {})
+        if depot_id in by_depot:
+            return max(float(by_depot.get(depot_id) or 0.0), 0.0)
+        return default_price
+
+    def _vehicle_initial_soc_kwh(self, vehicle: object) -> float | None:
+        cap = float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0)
+        initial_soc = getattr(vehicle, "initial_soc", None)
+        if initial_soc is None:
+            return None if cap <= 0.0 else 0.8 * cap
+        value = float(initial_soc)
+        if cap > 0.0 and 0.0 <= value <= 1.0:
+            value = value * cap
+        if cap > 0.0:
+            value = min(max(value, 0.0), cap)
+        return value
+
+    def _vehicle_initial_fuel_l(self, vehicle: object) -> float | None:
+        tank = float(getattr(vehicle, "fuel_tank_capacity_l", 0.0) or 0.0)
+        initial = getattr(vehicle, "initial_fuel_l", None)
+        if initial is None:
+            return None if tank <= 0.0 else tank
+        value = float(initial)
+        if tank > 0.0:
+            value = min(max(value, 0.0), tank)
+        return value
+
+    def _estimate_vehicle_end_soc_kwh(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        vehicle_id: str,
+        start_soc: float | None,
+    ) -> float | None:
+        if start_soc is None:
+            return None
+        dt_h = max(problem.scenario.timestep_min, 1) / 60.0
+        soc = float(start_soc)
+        for slot in plan.charging_slots:
+            if str(slot.vehicle_id) != vehicle_id:
+                continue
+            soc += max(float(slot.charge_kw or 0.0), 0.0) * dt_h * 0.95
+            soc -= max(float(slot.discharge_kw or 0.0), 0.0) * dt_h / 0.95
+        for duty in plan.duties:
+            if self._vehicle_id_from_duty_id(duty.duty_id) != vehicle_id:
+                continue
+            for leg in duty.legs:
+                trip = problem.trip_by_id().get(leg.trip.trip_id)
+                if trip is None:
+                    continue
+                soc -= max(float(trip.energy_kwh or 0.0), 0.0)
+                soc -= self._estimated_deadhead_energy_kwh(problem, leg, trip)
+        return soc
+
+    def _estimate_vehicle_end_fuel_l(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        vehicle_id: str,
+        start_fuel: float | None,
+    ) -> float | None:
+        if start_fuel is None:
+            return None
+        fuel = float(start_fuel)
+        vehicle_map = {v.vehicle_id: v for v in problem.vehicles}
+        vehicle = vehicle_map.get(vehicle_id)
+        if vehicle is None:
+            return fuel
+        fuel_rate = max(float(getattr(vehicle, "fuel_consumption_l_per_km", 0.0) or 0.0), 0.0)
+        for duty in plan.duties:
+            if self._vehicle_id_from_duty_id(duty.duty_id) != vehicle_id:
+                continue
+            for leg in duty.legs:
+                trip = problem.trip_by_id().get(leg.trip.trip_id)
+                if trip is None:
+                    continue
+                trip_fuel_l = max(float(trip.fuel_l or 0.0), 0.0)
+                if trip_fuel_l <= 0.0 and fuel_rate > 0.0:
+                    trip_fuel_l = max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
+                fuel -= trip_fuel_l
+                if leg.deadhead_from_prev_min > 0 and fuel_rate > 0.0:
+                    fuel -= self._deadhead_distance_km(problem, leg.deadhead_from_prev_min) * fuel_rate
+        for slot in plan.refuel_slots:
+            if str(slot.vehicle_id) == vehicle_id:
+                fuel += max(float(slot.refuel_liters or 0.0), 0.0)
+        return fuel
 
     def _vehicle_to_depot(self, problem: CanonicalOptimizationProblem) -> Dict[str, str]:
         return {str(v.vehicle_id): str(v.home_depot_id or "depot_default") for v in problem.vehicles}

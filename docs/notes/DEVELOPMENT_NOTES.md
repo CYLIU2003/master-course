@@ -153,6 +153,112 @@ tests/       回帰テスト
   - 実行:
     - `pytest tests/test_reopt_alns_critical_fixes.py -q` → `4 passed`
     - `pytest tests/test_milp_route_band_settings.py tests/test_bev_energy_accounting.py tests/test_evaluator_provisional_overwrite.py tests/test_case_comparison_pv_bess.py -q` → `17 passed`
+
+### [DEV-2026-03-27] 再レビュー対応（reopt 安全化 + BFF実経路テスト）
+
+- **背景**:
+  - `RollingReoptimizer.reoptimize()` の baseline lock 分岐が `CanonicalOptimizationProblem(...)` 手組み再構築だったため、
+    将来のフィールド追加時に情報欠落リスクがあった。
+  - `actual_soc` は BFF 実装で伝播済みだが、BFF worker 経路を直接検証する回帰テストが未整備だった。
+  - capabilities note が process 固定の文言で、Windows 既定 thread 実装と説明が不整合だった。
+
+- **対応**:
+  - `src/optimization/rolling/reoptimizer.py`
+    - baseline lock 分岐を `replace(problem, baseline_plan=locked_plan, metadata=dict(problem.metadata))` に変更。
+    - 問題定義フィールドを保ったまま lock 済み baseline だけ差し替える形へ統一。
+  - `tests/test_reopt_alns_critical_fixes.py`
+    - baseline lock 時に `routes/depots/vehicle_types/depot_energy_assets/metadata` が保持される回帰テストを追加。
+  - `tests/test_bff_reoptimization_actual_soc_forwarding.py`（新規）
+    - `_run_reoptimization()` worker 経路で `actual_soc` が `RollingReoptimizer.reoptimize(..., actual_soc=...)` へ渡ることを検証。
+  - `bff/routers/optimization.py`
+    - capabilities note を "dedicated executor (thread or process)" へ修正。
+
+- **連続実行安定性チェック（Windows 実測）**:
+  - full suite を 5 連続実行:
+    - 各回 `122 passed`（失敗 0）
+    - 実行時間: 約 23 秒/回
+  - 最適化関連ターゲットを 10 連続実行:
+    - `tests/test_milp_route_band_settings.py`
+    - `tests/test_reopt_alns_critical_fixes.py`
+    - `tests/test_bff_reoptimization_actual_soc_forwarding.py`
+    - 各回 `18 passed`（失敗 0）
+    - 実行時間: 約 0.82-0.92 秒/回
+
+### [DEV-2026-03-27] EV/ICE 共通 ledger 化 + 補給イベント再設計
+
+- **背景**:
+  - 既存は EV 電力のみ provisional/final 分離があり、ICE 燃料の同等会計と
+    vehicle/day ledger の統一構造が不足していた。
+  - ALNS の補給再計算は前倒し補給寄りで、必要時遅延補給に寄せる改善余地があった。
+
+- **対応**:
+  - `src/optimization/common/problem.py`
+    - `VehicleCostLedgerEntry`, `DailyCostLedgerEntry` を追加。
+    - `AssignmentPlan` に `vehicle_cost_ledger`, `daily_cost_ledger` を追加。
+    - `OptimizationScenario` に multi-day / overnight 制御パラメータを追加。
+  - `src/optimization/common/evaluator.py`
+    - EV: provisional/final/leftover を ledger 指標として明示。
+    - ICE: `_evaluate_liquid_fuel_with_overwrite()` を追加し、
+      provisional fuel debt → refuel event で rollback/realize を実装。
+    - `CostBreakdown` を provisional/realized/leftover の運用コスト系列で拡張。
+    - `build_plan_ledgers()` を追加し、車両別・日別 ledger を生成。
+  - `src/optimization/milp/engine.py`, `src/optimization/alns/engine.py`, `src/optimization/hybrid/hybrid_engine.py`
+    - evaluator 生成 ledger を `AssignmentPlan` へ注入して返却。
+  - `src/optimization/common/result.py`
+    - `vehicle_cost_ledger`, `daily_cost_ledger` を API payload へ出力。
+    - operating/EV/ICE provisional-realized-leftover のトップレベル出力を追加。
+  - `src/optimization/alns/operators_repair.py`
+    - `_recompute_charging_slots()` を「遅いスロット優先の必要量補給」に更新。
+    - depot/port/slot電力の簡易上限制御を追加。
+    - overnight window を見た補給禁止（forbid）ゲートを追加。
+    - `_recompute_refuel_slots()` を追加し ICE の補給イベント再生成を実装。
+  - `bff/mappers/solver_results.py`
+    - simulator 出力にも operating/EV/ICE provisional-realized-leftover キーを追加（互換拡張）。
+
+- **テスト**:
+  - `tests/test_evaluator_provisional_overwrite.py`
+    - ICE 補給なし leftover 検証
+    - ICE 補給あり rollback + realized 検証
+  - `tests/test_optimization_result_serializer.py`
+    - ledger payload と operating split のシリアライズ検証
+  - 実行結果:
+    - `pytest tests/test_evaluator_provisional_overwrite.py tests/test_optimization_result_serializer.py tests/test_reopt_alns_critical_fixes.py tests/test_bff_reoptimization_actual_soc_forwarding.py -q` → `12 passed`
+    - `pytest tests/test_milp_route_band_settings.py tests/test_case_comparison_pv_bess.py tests/test_bev_energy_accounting.py -q` → `16 passed`
+    - `pytest -q` → `125 passed`
+
+### [DEV-2026-03-27] 残タスク完了（MILP補給挙動ペナルティ + multi-day carryover）
+
+- **背景**:
+  - 前段で未着手だった 2 点:
+    - MILP objective における全台同時/早期充電の抑制ペナルティ
+    - multi-day ledger の day 間 carryover 継続性
+
+- **対応**:
+  - `src/optimization/milp/solver_adapter.py`
+    - 追加した soft penalty フック:
+      - `charge_session_start_penalty_yen`
+      - `slot_concurrency_penalty_yen`
+      - `early_charge_penalty_yen_per_kwh`
+      - `charge_to_upper_buffer_penalty_yen_per_kwh`
+    - 追加変数/制約:
+      - charge session start binary
+      - slot concurrency excess
+      - SOC upper-buffer excess
+    - metadata へ penalty 設定値を書き戻し。
+  - `src/optimization/common/evaluator.py`
+    - `build_plan_ledgers()` を multi-day 対応強化。
+    - `planning_days > 1` のとき vehicle ledger を day ごとに展開し、
+      `end(day n) == start(day n+1)` を満たす carryover 連鎖を生成。
+
+- **テスト**:
+  - 追加: `tests/test_milp_solver_penalty_helpers.py`
+    - soft concurrency limit と early-charge weight の挙動を検証。
+  - 追加: `tests/test_evaluator_multiday_ledger.py`
+    - 3日 ledger の件数と day 間 carryover 継続性を検証。
+  - 実行結果:
+    - `pytest tests/test_milp_solver_penalty_helpers.py tests/test_evaluator_multiday_ledger.py tests/test_evaluator_provisional_overwrite.py tests/test_milp_route_band_settings.py -q` → `18 passed`
+    - `pytest -q` → `128 passed`
+
   - `src/result_exporter.py`
     - `summary.json` の `kpi` に `total_grid_export_kwh` を追加。
   - `tools/bus_operation_visualizer_tk.py`

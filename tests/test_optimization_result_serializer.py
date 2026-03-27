@@ -2,9 +2,11 @@ from src.dispatch.models import DutyLeg, Trip, VehicleDuty
 from src.optimization.common.problem import (
     AssignmentPlan,
     ChargingSlot,
+    DailyCostLedgerEntry,
     OptimizationEngineResult,
     OptimizationMode,
     RefuelSlot,
+    VehicleCostLedgerEntry,
 )
 from src.optimization.common.result import ResultSerializer
 
@@ -125,3 +127,58 @@ def test_result_serializer_includes_charging_depot_coordinates() -> None:
     assert row["charging_depot_id"] == "dep-1"
     assert row["charging_latitude"] == 35.621
     assert row["charging_longitude"] == 139.699
+
+
+def test_result_serializer_includes_cost_ledgers_and_operating_splits() -> None:
+    plan = AssignmentPlan(
+        vehicle_cost_ledger=(
+            VehicleCostLedgerEntry(
+                vehicle_id="veh-1",
+                day_index=0,
+                provisional_drive_cost_jpy=1200.0,
+                provisional_leftover_cost_jpy=100.0,
+                realized_charge_cost_jpy=300.0,
+                realized_refuel_cost_jpy=200.0,
+            ),
+        ),
+        daily_cost_ledger=(
+            DailyCostLedgerEntry(
+                day_index=0,
+                service_date="2026-03-27",
+                ev_provisional_drive_cost_jpy=700.0,
+                ev_realized_charge_cost_jpy=300.0,
+                ev_leftover_provisional_cost_jpy=100.0,
+                ice_provisional_drive_cost_jpy=500.0,
+                ice_realized_refuel_cost_jpy=200.0,
+                ice_leftover_provisional_cost_jpy=50.0,
+                demand_charge_jpy=40.0,
+                total_cost_jpy=1490.0,
+            ),
+        ),
+    )
+    result = OptimizationEngineResult(
+        mode=OptimizationMode.ALNS,
+        solver_status="feasible",
+        objective_value=1490.0,
+        plan=plan,
+        feasible=True,
+        cost_breakdown={
+            "operating_cost_provisional_total": 1200.0,
+            "operating_cost_realized_total": 500.0,
+            "operating_cost_leftover_total": 150.0,
+            "provisional_ev_drive_cost": 700.0,
+            "realized_ev_charge_cost": 300.0,
+            "leftover_ev_provisional_cost": 100.0,
+            "provisional_ice_drive_cost": 500.0,
+            "realized_ice_refuel_cost": 200.0,
+            "leftover_ice_provisional_cost": 50.0,
+        },
+        solver_metadata={},
+    )
+
+    payload = ResultSerializer.serialize_result(result)
+    assert payload["operating_cost_provisional_jpy"] == 1200.0
+    assert payload["ev_realized_charge_cost_jpy"] == 300.0
+    assert payload["ice_leftover_provisional_cost_jpy"] == 50.0
+    assert payload["vehicle_cost_ledger"][0]["vehicle_id"] == "veh-1"
+    assert payload["daily_cost_ledger"][0]["service_date"] == "2026-03-27"

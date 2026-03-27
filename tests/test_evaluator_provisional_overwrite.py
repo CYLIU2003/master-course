@@ -14,6 +14,7 @@ from src.optimization.common.problem import (
     ProblemTrip,
     ProblemVehicle,
     ProblemVehicleType,
+    RefuelSlot,
 )
 
 
@@ -114,3 +115,141 @@ def test_evaluator_applies_provisional_then_overwrites_with_charge_source_cost()
     assert breakdown.electricity_cost_provisional_leftover == 120.0
     assert breakdown.grid_purchase_cost == 200.0
     assert breakdown.grid_to_bus_kwh == 10.0
+    assert breakdown.provisional_ev_drive_cost == 240.0
+    assert breakdown.realized_ev_charge_cost == 200.0
+    assert breakdown.leftover_ev_provisional_cost == 120.0
+
+
+def test_evaluator_keeps_ice_provisional_leftover_without_refuel() -> None:
+    trip = Trip(
+        trip_id="trip-ice-1",
+        route_id="route-1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="09:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("ICE",),
+    )
+    duty = VehicleDuty(
+        duty_id="milp_ice-1",
+        vehicle_type="ICE",
+        legs=(DutyLeg(trip=trip),),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="scenario-ice-1",
+            horizon_start="08:00",
+            timestep_min=60,
+            objective_mode="total_cost",
+            diesel_price_yen_per_l=160.0,
+        ),
+        dispatch_context=None,
+        trips=(
+            ProblemTrip(
+                trip_id="trip-ice-1",
+                route_id="route-1",
+                origin="A",
+                destination="B",
+                departure_min=480,
+                arrival_min=540,
+                distance_km=10.0,
+                allowed_vehicle_types=("ICE",),
+                fuel_l=5.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="ice-1",
+                vehicle_type="ICE",
+                home_depot_id="dep-1",
+                initial_fuel_l=100.0,
+                fuel_tank_capacity_l=120.0,
+                fuel_consumption_l_per_km=0.5,
+            ),
+        ),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        vehicle_types=(ProblemVehicleType(vehicle_type_id="ICE", powertrain_type="ICE"),),
+        price_slots=(EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),),
+        objective_weights=OptimizationObjectiveWeights(),
+    )
+    plan = AssignmentPlan(duties=(duty,), served_trip_ids=("trip-ice-1",))
+
+    breakdown = CostEvaluator().evaluate(problem, plan)
+    assert breakdown.provisional_ice_drive_cost == 800.0
+    assert breakdown.realized_ice_refuel_cost == 0.0
+    assert breakdown.leftover_ice_provisional_cost == 800.0
+
+
+def test_evaluator_overwrites_ice_provisional_with_refuel_event_cost() -> None:
+    trip = Trip(
+        trip_id="trip-ice-2",
+        route_id="route-1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="09:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("ICE",),
+    )
+    duty = VehicleDuty(
+        duty_id="milp_ice-2",
+        vehicle_type="ICE",
+        legs=(DutyLeg(trip=trip),),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="scenario-ice-2",
+            horizon_start="08:00",
+            timestep_min=60,
+            objective_mode="total_cost",
+            diesel_price_yen_per_l=170.0,
+        ),
+        dispatch_context=None,
+        trips=(
+            ProblemTrip(
+                trip_id="trip-ice-2",
+                route_id="route-1",
+                origin="A",
+                destination="B",
+                departure_min=480,
+                arrival_min=540,
+                distance_km=10.0,
+                allowed_vehicle_types=("ICE",),
+                fuel_l=5.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="ice-2",
+                vehicle_type="ICE",
+                home_depot_id="dep-1",
+                initial_fuel_l=100.0,
+                fuel_tank_capacity_l=120.0,
+                fuel_consumption_l_per_km=0.5,
+            ),
+        ),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        vehicle_types=(ProblemVehicleType(vehicle_type_id="ICE", powertrain_type="ICE"),),
+        price_slots=(EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),),
+        objective_weights=OptimizationObjectiveWeights(),
+        metadata={
+            "provisional_fuel_price_by_depot": {"dep-1": 160.0},
+            "fuel_price_by_depot": {"dep-1": 200.0},
+        },
+    )
+    plan = AssignmentPlan(
+        duties=(duty,),
+        refuel_slots=(
+            # Refuel only 2L: partially overwrite 5L provisional debt.
+            # final fuel = 5*160 - 2*160 + 2*200 = 880
+            # leftover provisional = 3*160 = 480
+            RefuelSlot(vehicle_id="ice-2", slot_index=0, refuel_liters=2.0, location_id="dep-1"),
+        ),
+        served_trip_ids=("trip-ice-2",),
+    )
+
+    breakdown = CostEvaluator().evaluate(problem, plan)
+    assert breakdown.provisional_ice_drive_cost == 800.0
+    assert breakdown.realized_ice_refuel_cost == 400.0
+    assert breakdown.leftover_ice_provisional_cost == 480.0

@@ -234,7 +234,10 @@ class ALNSOptimizer:
         plan,
     ) -> SolutionState:
         report = self._feasibility.evaluate(problem, plan)
-        costs = self._evaluator.evaluate(problem, plan).to_dict()
+        breakdown = self._evaluator.evaluate(problem, plan)
+        vehicle_ledger, daily_ledger = self._evaluator.build_plan_ledgers(problem, plan, breakdown)
+        plan = replace(plan, vehicle_cost_ledger=vehicle_ledger, daily_cost_ledger=daily_ledger)
+        costs = breakdown.to_dict()
         return SolutionState(
             problem=problem,
             plan=plan,
