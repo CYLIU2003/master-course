@@ -66,16 +66,27 @@ def add_assignment_constraints(
     # infeasible (k,r) は変数を生成しない設計に変更したため、
     # 明示的な x[k,r]==0 制約は不要。
 
-    # ===== §10.1.2 重複便禁止 =====
+    # ===== §10.1.2 同一時刻に複数タスク担当禁止（時刻ベース実装）=====
+    # 旧実装: no_overlap ペア列挙 → O(|K|×|R|²) ≈ 22,275本
+    # 新実装: one_task_per_slot[k,t]       → O(|K|×|T|)  ≈    480本
     for k in K_ALL:
-        for r1, r2 in dp.overlap_pairs:
-            c1 = r1 in ms.vehicle_task_feasible.get(k, set())
-            c2 = r2 in ms.vehicle_task_feasible.get(k, set())
-            if c1 and c2:
-                model.addConstr(
-                    x[k, r1] + x[k, r2] <= 1,
-                    name=f"no_overlap[{k},{r1},{r2}]",
-                )
+        feasible_r = list(ms.vehicle_task_feasible.get(k, set()))
+        if not feasible_r:
+            continue
+        for t in ms.T:
+            active_vars = [
+                x[k, r]
+                for r in feasible_r
+                if (k, r) in x
+                and t < len(dp.task_active.get(r, []))
+                and dp.task_active[r][t] > 0
+            ]
+            if len(active_vars) <= 1:
+                continue
+            model.addConstr(
+                gp.quicksum(active_vars) <= 1,
+                name=f"one_task_per_slot[{k},{t}]",
+            )
 
     # ===== §10.1.3 u[k] リンク =====
     if u is not None:
@@ -90,6 +101,13 @@ def add_assignment_constraints(
             )
 
     # ===== タスク連結アーク制約 (y_follow) =====
+    # 【既知の制限 — TODO(future)】
+    # 現実装は depot を source/sink とする仮想ノードを持たない。
+    # 「辺数 = タスク数 - 1」のみで連結を保証するため、時系列的に
+    # 非連続な複数ブロック（例: 朝シフト+夜シフト）が同一車両に
+    # 割り当てられても辺数制約を満たす可能性がある。
+    # 完全修正: depot_start / depot_end 仮想ノードを追加し、
+    # §6.1 の VSP フロー定式化に depot フロー制約を追加すること。
     if y is not None and u is not None:
         for k in K_ALL:
             feasible_r = [r for r in R if r in ms.vehicle_task_feasible.get(k, set())]

@@ -82,6 +82,10 @@ class MILPResult:
     # § 7.5 PV: site_id -> [kW, ...]
     pv_used_kw: Dict[str, List[float]] = field(default_factory=dict)
 
+    # § 7.5 PV自家消費量合計 [kWh/day]: site_id -> kWh
+    # ALNS の pv_to_bus_kwh と対称になるよう計算する。
+    pv_to_bus_kwh: Dict[str, float] = field(default_factory=dict)
+
     # § 7.5 ピーク需要: site_id -> kW
     peak_demand_kw: Dict[str, float] = field(default_factory=dict)
 
@@ -93,6 +97,13 @@ class MILPResult:
 
     # infeasible 原因 (IIS など)
     infeasibility_info: str = ""
+
+    # SOC モデリング仮定の注記（論文引用用）
+    soc_modeling_note: str = (
+        "SOC energy is event-based (end-of-trip lump-sum). "
+        "Real-world mid-trip SOC may be lower than reported. "
+        "See thesis §10.5 for details."
+    )
 
 
 def pre_solve_check(
@@ -245,6 +256,26 @@ def pre_solve_check(
                 f"全充電器最大供給量={max_supply_kwh:.0f} kWh — 充電容量不足の可能性\n"
                 f"  (内訳: 走行消費={total_all_task_kwh:.0f}, SOC終端目標={total_soc_end:.0f}, "
                 f"SOC初期値={total_soc_init:.0f})"
+            )
+
+    # ─── 4. SOC 安全マージンチェック（イベントベース計上リスク）──────────────
+    for k in K_BEV:
+        veh = dp.vehicle_lut.get(k)
+        if veh is None:
+            continue
+        soc_min = veh.soc_min if veh.soc_min is not None else 0.0
+        max_trip_kwh = max(
+            (dp.task_energy_bev.get(r, 0.0)
+             for r in ms.vehicle_task_feasible.get(k, set())),
+            default=0.0,
+        )
+        recommended_margin = max_trip_kwh * 0.5
+        if soc_min < recommended_margin - 1e-6:
+            warnings.append(
+                f"[WARNING] 車両 {k}: soc_min={soc_min:.1f} kWh < "
+                f"推奨安全マージン {recommended_margin:.1f} kWh "
+                f"(最大単一トリップ {max_trip_kwh:.1f} kWh × 50%)。"
+                f"イベントベースSOC計上により実運用でsoc_lb違反リスクあり。"
             )
 
     return warnings
@@ -604,6 +635,18 @@ def extract_result(
                 result.pv_used_kw[site_id] = [
                     round(float(p_pv[site_id, t].X), 4) for t in T
                 ]
+            except Exception:
+                pass
+
+    # --- PV自家消費量合計 (kWh換算) ---
+    # ALNS evaluator.py の pv_to_bus_kwh と単位・定義を合わせる
+    if p_pv is not None:
+        delta_h = data.delta_t_hour
+        for site_id in I_CHARGE:
+            try:
+                result.pv_to_bus_kwh[site_id] = round(
+                    sum(float(p_pv[site_id, t].X) * delta_h for t in T), 4
+                )
             except Exception:
                 pass
 

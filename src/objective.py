@@ -118,8 +118,17 @@ def build_objective(
     # ===== w3: デマンド料金 =====
     if w.get("demand_charge_cost", 0.0) > 0 and peak is not None and data.enable_demand_charge:
         term = gp.LinExpr()
+        # demand_charge_rate_per_kw は月額 [円/kW/月]。
+        # 最適化ホライズン（planning_horizon_hours）に合わせて日割り換算する。
+        horizon_days = data.planning_horizon_hours / 24.0
+        monthly_to_horizon_factor = horizon_days / 30.0
         for site_id in ms.I_CHARGE:
-            term += w["demand_charge_cost"] * data.demand_charge_rate_per_kw * peak[site_id]
+            term += (
+                w["demand_charge_cost"]
+                * data.demand_charge_rate_per_kw
+                * monthly_to_horizon_factor
+                * peak[site_id]
+            )
         _append_term("demand_charge_cost", term)
 
     # ===== w4: ICE 燃料費 =====

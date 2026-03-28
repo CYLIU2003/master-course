@@ -91,11 +91,9 @@ def add_energy_balance_constraints(
                     p_pv_used[site_id, t] + p_pv_cur[site_id, t] <= pv_cap,
                     name=f"pv_cap[{site_id},{t}]",
                 )
-                # §10.8 自家消費優先
-                model.addConstr(
-                    p_pv_used[site_id, t] <= total_charge_kw + base - total_discharge_kw,
-                    name=f"pv_self_consume[{site_id},{t}]",
-                )
+                # NOTE: p_pv_used の上限は power_balance 制約から自動的に
+                # p_pv_used <= total_charge + base に制限されるため、
+                # 明示的な pv_self_consume 制約は冗長につき削除済み。
                 # 電力収支
                 model.addConstr(
                     p_grid[site_id, t] + p_pv_used[site_id, t] + total_discharge_kw
