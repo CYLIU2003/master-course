@@ -39,6 +39,33 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-28] MILP重大バグ7件の一括修正（core_pv）
+
+- **背景**:
+  - コードレビューで、目的関数のデマンド料金換算、割当制約の計算量、SOCモデリング注記不足、logger import 破損、PV KPI 不足、冗長制約、既知制限の明示不足が指摘された。
+
+- **対応**:
+  - `src/objective.py`
+    - デマンド料金を月額 [円/kW/月] からホライズン日数換算（`horizon_days/30.0`）へ修正。
+  - `src/constraints/assignment.py`
+    - `no_overlap` ペア列挙を削除し、`one_task_per_slot[k,t]` の時刻ベース実装へ置換。
+    - `y_follow` 直前に depot 仮想ノード未実装の既知制限コメント（TODO）を追記。
+  - `src/constraints/charging.py`
+    - `add_soc_constraints()` docstring 冒頭へ、イベントベースSOC計上の仮定と安全マージン推奨を追記。
+  - `src/milp_model.py`
+    - `MILPResult` に `soc_modeling_note` と `pv_to_bus_kwh` を追加。
+    - `pre_solve_check()` に SOC 安全マージン警告（最大単一トリップ消費の50%基準）を追加。
+    - `extract_result()` で `pv_to_bus_kwh`（kWh換算）を集計。
+  - `src/constraints/energy_balance.py`
+    - 冗長な `pv_self_consume` 制約を削除し、`power_balance` 由来で上限制約される旨の NOTE を追記。
+  - `src/experiment_logger.py`
+    - 壊れた自己参照 import を廃止し、`src/pipeline/logger.py` からの公開エントリポイントへ置換。
+
+- **検証**:
+  - AC-1 ～ AC-6: すべて PASS（import確認、属性確認、換算係数、旧制約除去、冗長制約除去、py_compile）。
+  - AC-7: `pytest tests/ -q` 実行で `148 passed`。
+  - PR: `core_pv <- fix/milp-bugs-7items` として作成済み（#2）。
+
 ### [DEV-2026-03-27] Quick Setup保存整合 / SOC override / prepared stop coordinates
 
 - **背景**:
