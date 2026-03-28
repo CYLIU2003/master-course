@@ -166,8 +166,8 @@ class OptimizationScenario:
     timestep_min: int = 30
     objective_mode: str = "total_cost"
     diesel_price_yen_per_l: float = 0.0
-    demand_charge_on_peak_yen_per_kw: float = 0.0
-    demand_charge_off_peak_yen_per_kw: float = 0.0
+    demand_charge_on_peak_yen_per_kw: float = 0.0  # Monthly rate [yen/kW/month], converted to horizon in evaluator
+    demand_charge_off_peak_yen_per_kw: float = 0.0  # Monthly rate [yen/kW/month], converted to horizon in evaluator
     co2_price_per_kg: float = 0.0
     ice_co2_kg_per_l: float = 2.64
     planning_days: int = 1
@@ -177,6 +177,26 @@ class OptimizationScenario:
     overnight_charge_target_mode: str = "minimum_required"
     fixed_operations_before_t0: Tuple[LockedOperation, ...] = ()
     uncertainty_flags: Mapping[str, bool] = field(default_factory=dict)
+    
+    @property
+    def planning_horizon_hours(self) -> float:
+        """Calculate planning horizon in hours from scenario configuration.
+        
+        Uses horizon_start/horizon_end if available, otherwise planning_days * 24.
+        """
+        if not self.horizon_start or not self.horizon_end:
+            return float(self.planning_days) * 24.0
+        try:
+            h_start, m_start = map(int, self.horizon_start.split(":"))
+            h_end, m_end = map(int, self.horizon_end.split(":"))
+            start_min = h_start * 60 + m_start
+            end_min = h_end * 60 + m_end
+            if end_min <= start_min:
+                end_min += 24 * 60
+            duration_hours = (end_min - start_min) / 60.0
+            return max(duration_hours, 1.0)
+        except (ValueError, AttributeError):
+            return float(self.planning_days) * 24.0
 
 
 @dataclass(frozen=True)

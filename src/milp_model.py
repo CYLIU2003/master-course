@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .gurobi_runtime import (
     configure_gurobipy_sys_path as _configure_gurobipy_sys_path,
@@ -88,6 +88,18 @@ class MILPResult:
 
     # § 7.5 ピーク需要: site_id -> kW
     peak_demand_kw: Dict[str, float] = field(default_factory=dict)
+    
+    # Detailed energy flow breakdown (Phase 2.3)
+    # Per-slot energy flow [kWh]: (depot_id, slot_idx) -> kWh
+    grid_to_bus_kwh_by_slot: Dict[Tuple[str, int], float] = field(default_factory=dict)
+    pv_to_bus_kwh_by_slot: Dict[Tuple[str, int], float] = field(default_factory=dict)
+    bess_to_bus_kwh_by_slot: Dict[Tuple[str, int], float] = field(default_factory=dict)
+    grid_to_bess_kwh_by_slot: Dict[Tuple[str, int], float] = field(default_factory=dict)
+    pv_to_bess_kwh_by_slot: Dict[Tuple[str, int], float] = field(default_factory=dict)
+    pv_curtailed_kwh_by_slot: Dict[Tuple[str, int], float] = field(default_factory=dict)
+    
+    # BESS SOC series: (depot_id, slot_idx) -> kWh
+    bess_soc_kwh_by_slot: Dict[Tuple[str, int], float] = field(default_factory=dict)
 
     # 目的関数内訳 (§13.1.1)
     obj_breakdown: Dict[str, float] = field(default_factory=dict)

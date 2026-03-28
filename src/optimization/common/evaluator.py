@@ -1078,6 +1078,11 @@ class CostEvaluator:
         problem: CanonicalOptimizationProblem,
         slot_totals_kwh: Dict[int, float],
     ) -> float:
+        """Calculate demand charge cost from peak demand.
+        
+        Demand charge rates in scenario are monthly [yen/kW/month].
+        Convert to horizon-normalized rate before applying.
+        """
         if not slot_totals_kwh or not problem.price_slots:
             return 0.0
 
@@ -1093,10 +1098,15 @@ class CostEvaluator:
         ]
         w_on = max(on_peak, default=0.0)
         w_off = max(off_peak, default=0.0)
-        return (
-            max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on
-            + max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off
-        )
+        
+        # Convert monthly rate to horizon-normalized rate
+        horizon_hours = problem.scenario.planning_horizon_hours
+        monthly_to_horizon_factor = (horizon_hours / 24.0) / 30.0
+        
+        on_rate = max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * monthly_to_horizon_factor
+        off_rate = max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * monthly_to_horizon_factor
+        
+        return on_rate * w_on + off_rate * w_off
 
     def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
         return classify_peak_slots(problem.price_slots)

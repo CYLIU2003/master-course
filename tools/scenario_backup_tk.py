@@ -1277,10 +1277,11 @@ class App:
             tooltip="充電を停止する SOC 上限（0〜1）。過充電防止。例: 0.9",
         )
         self._labeled_entry(
-            basic, "需要単価 demand_charge_cost_per_kw", self.demand_charge_var,
+            basic, "需要単価 (月額) demand_charge_cost_per_kw", self.demand_charge_var,
             tooltip=(
-                "ピーク需要電力 1 kW あたりの月次基本料金 [円/kW]。\n"
+                "ピーク需要電力 1 kW あたりの月額基本料金 [円/kW/月]。\n"
                 "電力会社との契約で決まる「その月の最大需要電力 × 単価」が加算される。\n"
+                "計画期間に応じて日割り換算されます（例: 1日計画 = 月額/30）。\n"
                 "充電タイミングを分散させるインセンティブとして機能。例: 1500"
             ),
         )

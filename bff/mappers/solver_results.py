@@ -7,7 +7,8 @@ from src.simulator import FeasibilityIssue, FeasibilityReport, SimulationResult
 
 
 def serialize_milp_result(result: MILPResult) -> Dict[str, Any]:
-    return {
+    """Serialize MILPResult to dict, preserving all energy flow fields (Phase 2.3)."""
+    serialized = {
         "status": result.status,
         "objective_value": result.objective_value,
         "solve_time_seconds": result.solve_time_sec,
@@ -18,15 +19,73 @@ def serialize_milp_result(result: MILPResult) -> Dict[str, Any]:
         "charge_power_kw": result.charge_power_kw,
         "refuel_schedule_l": result.refuel_schedule_l,
         "grid_import_kw": result.grid_import_kw,
+        "grid_export_kw": result.grid_export_kw,
         "pv_used_kw": result.pv_used_kw,
+        "pv_to_bus_kwh": result.pv_to_bus_kwh,
         "peak_demand_kw": result.peak_demand_kw,
         "obj_breakdown": result.obj_breakdown,
         "unserved_tasks": result.unserved_tasks,
         "infeasibility_info": result.infeasibility_info,
     }
+    
+    # Phase 2.3: Include detailed energy flow breakdown if available
+    if result.grid_to_bus_kwh_by_slot:
+        serialized["grid_to_bus_kwh_by_slot"] = {
+            f"{depot_id}_{slot_idx}": value
+            for (depot_id, slot_idx), value in result.grid_to_bus_kwh_by_slot.items()
+        }
+    if result.pv_to_bus_kwh_by_slot:
+        serialized["pv_to_bus_kwh_by_slot"] = {
+            f"{depot_id}_{slot_idx}": value
+            for (depot_id, slot_idx), value in result.pv_to_bus_kwh_by_slot.items()
+        }
+    if result.bess_to_bus_kwh_by_slot:
+        serialized["bess_to_bus_kwh_by_slot"] = {
+            f"{depot_id}_{slot_idx}": value
+            for (depot_id, slot_idx), value in result.bess_to_bus_kwh_by_slot.items()
+        }
+    if result.grid_to_bess_kwh_by_slot:
+        serialized["grid_to_bess_kwh_by_slot"] = {
+            f"{depot_id}_{slot_idx}": value
+            for (depot_id, slot_idx), value in result.grid_to_bess_kwh_by_slot.items()
+        }
+    if result.pv_to_bess_kwh_by_slot:
+        serialized["pv_to_bess_kwh_by_slot"] = {
+            f"{depot_id}_{slot_idx}": value
+            for (depot_id, slot_idx), value in result.pv_to_bess_kwh_by_slot.items()
+        }
+    if result.pv_curtailed_kwh_by_slot:
+        serialized["pv_curtailed_kwh_by_slot"] = {
+            f"{depot_id}_{slot_idx}": value
+            for (depot_id, slot_idx), value in result.pv_curtailed_kwh_by_slot.items()
+        }
+    if result.bess_soc_kwh_by_slot:
+        serialized["bess_soc_kwh_by_slot"] = {
+            f"{depot_id}_{slot_idx}": value
+            for (depot_id, slot_idx), value in result.bess_soc_kwh_by_slot.items()
+        }
+    
+    return serialized
 
 
 def deserialize_milp_result(payload: Dict[str, Any]) -> MILPResult:
+    """Deserialize dict to MILPResult, preserving all energy flow fields (Phase 2.3)."""
+    # Parse detailed energy flow breakdown if available
+    def _parse_slot_dict(data: Dict[str, float] | None) -> Dict[tuple[str, int], float]:
+        if not data:
+            return {}
+        result = {}
+        for key, value in data.items():
+            parts = key.rsplit("_", 1)
+            if len(parts) == 2:
+                depot_id, slot_str = parts
+                try:
+                    slot_idx = int(slot_str)
+                    result[(depot_id, slot_idx)] = float(value)
+                except ValueError:
+                    pass
+        return result
+    
     return MILPResult(
         status=str(payload.get("status") or "UNKNOWN"),
         objective_value=payload.get("objective_value"),
@@ -38,8 +97,17 @@ def deserialize_milp_result(payload: Dict[str, Any]) -> MILPResult:
         charge_power_kw=dict(payload.get("charge_power_kw") or {}),
         refuel_schedule_l=dict(payload.get("refuel_schedule_l") or {}),
         grid_import_kw=dict(payload.get("grid_import_kw") or {}),
+        grid_export_kw=dict(payload.get("grid_export_kw") or {}),
         pv_used_kw=dict(payload.get("pv_used_kw") or {}),
+        pv_to_bus_kwh=dict(payload.get("pv_to_bus_kwh") or {}),
         peak_demand_kw=dict(payload.get("peak_demand_kw") or {}),
+        grid_to_bus_kwh_by_slot=_parse_slot_dict(payload.get("grid_to_bus_kwh_by_slot")),
+        pv_to_bus_kwh_by_slot=_parse_slot_dict(payload.get("pv_to_bus_kwh_by_slot")),
+        bess_to_bus_kwh_by_slot=_parse_slot_dict(payload.get("bess_to_bus_kwh_by_slot")),
+        grid_to_bess_kwh_by_slot=_parse_slot_dict(payload.get("grid_to_bess_kwh_by_slot")),
+        pv_to_bess_kwh_by_slot=_parse_slot_dict(payload.get("pv_to_bess_kwh_by_slot")),
+        pv_curtailed_kwh_by_slot=_parse_slot_dict(payload.get("pv_curtailed_kwh_by_slot")),
+        bess_soc_kwh_by_slot=_parse_slot_dict(payload.get("bess_soc_kwh_by_slot")),
         obj_breakdown=dict(payload.get("obj_breakdown") or {}),
         unserved_tasks=list(payload.get("unserved_tasks") or []),
         infeasibility_info=str(payload.get("infeasibility_info") or ""),

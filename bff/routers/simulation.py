@@ -492,6 +492,98 @@ def _result_from_duties(data, duties_raw: list[dict]) -> MILPResult:
     return result
 
 
+def _deserialize_canonical_result(canonical_dict: Dict[str, Any]) -> MILPResult:
+    """Convert canonical optimization result dict to MILPResult for simulation (Phase 3).
+    
+    Canonical results have more structure (plan, ledger, metadata).
+    Extract the parts needed for simulation and map to MILPResult.
+    """
+    plan = canonical_dict.get("plan") or {}
+    metadata = canonical_dict.get("solver_metadata") or {}
+    ledger_entries = canonical_dict.get("vehicle_cost_ledger") or []
+    
+    # Extract vehicle assignments from plan
+    assignment = plan.get("vehicle_paths") or {}
+    
+    # Extract SOC series
+    soc_series = plan.get("soc_kwh_by_vehicle_slot") or {}
+    
+    # Extract charging info
+    charging_slots = plan.get("charging_slots") or []
+    charge_schedule: Dict[str, Dict[str, List[int]]] = {}
+    charge_power_kw: Dict[str, Dict[str, List[float]]] = {}
+    
+    # Group charging slots by vehicle and charger
+    from collections import defaultdict
+    by_vehicle: Dict[str, Dict[str, List[tuple[int, float]]]] = defaultdict(lambda: defaultdict(list))
+    for slot_dict in charging_slots:
+        vehicle_id = slot_dict.get("vehicle_id")
+        charger_id = slot_dict.get("charger_id")
+        slot_idx = slot_dict.get("slot_index")
+        charge_kw = slot_dict.get("charge_kw", 0.0)
+        if vehicle_id and charger_id is not None and slot_idx is not None:
+            by_vehicle[vehicle_id][charger_id].append((slot_idx, charge_kw))
+    
+    # Convert to charge_schedule and charge_power_kw format
+    for vehicle_id, by_charger in by_vehicle.items():
+        charge_schedule[vehicle_id] = {}
+        charge_power_kw[vehicle_id] = {}
+        for charger_id, slots in by_charger.items():
+            # Assuming slots are ordered
+            max_slot = max(s[0] for s in slots) if slots else 0
+            schedule = [0] * (max_slot + 1)
+            power = [0.0] * (max_slot + 1)
+            for slot_idx, charge_kw in slots:
+                schedule[slot_idx] = 1 if charge_kw > 0.01 else 0
+                power[slot_idx] = charge_kw
+            charge_schedule[vehicle_id][charger_id] = schedule
+            charge_power_kw[vehicle_id][charger_id] = power
+    
+    # Extract refuel info (if any)
+    refuel_slots = plan.get("refuel_slots") or []
+    refuel_schedule_l: Dict[str, List[float]] = defaultdict(list)
+    for slot_dict in refuel_slots:
+        vehicle_id = slot_dict.get("vehicle_id")
+        slot_idx = slot_dict.get("slot_index")
+        refuel_liters = slot_dict.get("refuel_liters", 0.0)
+        if vehicle_id and slot_idx is not None:
+            # Extend list if needed
+            while len(refuel_schedule_l[vehicle_id]) <= slot_idx:
+                refuel_schedule_l[vehicle_id].append(0.0)
+            refuel_schedule_l[vehicle_id][slot_idx] = refuel_liters
+    
+    # Extract peak demand and objective breakdown
+    peak_demand_kw = {}
+    depot_ledger = canonical_dict.get("depot_cost_ledger") or []
+    for entry in depot_ledger:
+        depot_id = entry.get("depot_id")
+        peak = entry.get("peak_demand_kw")
+        if depot_id and peak is not None:
+            peak_demand_kw[depot_id] = peak
+    
+    obj_breakdown = canonical_dict.get("cost_breakdown") or {}
+    
+    return MILPResult(
+        status=metadata.get("solver_status", "OPTIMAL"),
+        objective_value=canonical_dict.get("total_cost"),
+        solve_time_sec=metadata.get("solve_time_sec", 0.0),
+        mip_gap=metadata.get("mip_gap"),
+        assignment=assignment,
+        soc_series=soc_series,
+        charge_schedule=charge_schedule,
+        charge_power_kw=charge_power_kw,
+        refuel_schedule_l=dict(refuel_schedule_l),
+        grid_import_kw={},  # Can extract from ledger if needed
+        grid_export_kw={},
+        pv_used_kw={},
+        pv_to_bus_kwh={},
+        peak_demand_kw=peak_demand_kw,
+        obj_breakdown=obj_breakdown,
+        unserved_tasks=list(plan.get("unserved_trip_ids") or []),
+        infeasibility_info="",
+    )
+
+
 def _run_simulation(
     scenario_id: str,
     job_id: str,
@@ -540,12 +632,21 @@ def _run_simulation(
             optimization_result = (
                 store.get_field(scenario_id, "optimization_result") or {}
             )
-            solver_result = optimization_result.get("solver_result")
-            if not solver_result:
+            
+            # Phase 3: Prefer canonical_solver_result if available
+            canonical_result = optimization_result.get("canonical_solver_result")
+            legacy_result = optimization_result.get("solver_result")
+            
+            if canonical_result:
+                # Use canonical result (full fidelity, all PV/grid/BESS fields preserved)
+                milp_result = _deserialize_canonical_result(canonical_result)
+            elif legacy_result:
+                # Fallback to legacy format
+                milp_result = deserialize_milp_result(legacy_result)
+            else:
                 raise ValueError(
                     "No optimization_result found. Run optimization first."
                 )
-            milp_result = deserialize_milp_result(solver_result)
         else:
             duties = store.get_field(scenario_id, "duties") or []
             if not duties:
