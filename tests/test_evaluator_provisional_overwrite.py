@@ -181,6 +181,89 @@ def test_evaluator_keeps_ice_provisional_leftover_without_refuel() -> None:
     assert breakdown.leftover_ice_provisional_cost == 800.0
 
 
+def test_evaluator_fallback_keeps_provisional_energy_without_fake_demand_charge() -> None:
+    trip = Trip(
+        trip_id="trip-fallback-1",
+        route_id="route-1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="09:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    duty = VehicleDuty(
+        duty_id="veh-1",
+        vehicle_type="BEV",
+        legs=(DutyLeg(trip=trip),),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="scenario-fallback-1",
+            horizon_start="08:00",
+            timestep_min=60,
+            objective_mode="total_cost",
+            demand_charge_on_peak_yen_per_kw=1000.0,
+            demand_charge_off_peak_yen_per_kw=1000.0,
+        ),
+        dispatch_context=None,
+        trips=(
+            ProblemTrip(
+                trip_id="trip-fallback-1",
+                route_id="route-1",
+                origin="A",
+                destination="B",
+                departure_min=480,
+                arrival_min=540,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=20.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="veh-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                battery_capacity_kwh=200.0,
+            ),
+        ),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=200.0,
+            ),
+        ),
+        price_slots=(
+            EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=12.0),
+        ),
+        objective_weights=OptimizationObjectiveWeights(),
+        depot_energy_assets={
+            "dep-1": DepotEnergyAsset(
+                depot_id="dep-1",
+                pv_enabled=True,
+                pv_generation_kwh_by_slot=(30.0,),
+                provisional_energy_cost_yen_per_kwh=12.0,
+            )
+        },
+    )
+    plan = AssignmentPlan(duties=(duty,), served_trip_ids=("trip-fallback-1",))
+
+    breakdown = CostEvaluator().evaluate(problem, plan)
+
+    assert breakdown.energy_cost == 240.0
+    assert breakdown.demand_cost == 0.0
+    assert breakdown.grid_purchase_cost == 0.0
+    assert breakdown.realized_ev_charge_cost == 0.0
+    assert breakdown.leftover_ev_provisional_cost == 240.0
+    assert breakdown.grid_import_kwh == 0.0
+    assert breakdown.peak_grid_kw == 0.0
+    assert breakdown.pv_used_direct_kwh == 0.0
+    assert breakdown.pv_curtailed_kwh == 30.0
+
+
 def test_evaluator_overwrites_ice_provisional_with_refuel_event_cost() -> None:
     trip = Trip(
         trip_id="trip-ice-2",

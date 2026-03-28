@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import Enum
+import re
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from src.dispatch.models import VehicleDuty
@@ -267,11 +268,89 @@ class AssignmentPlan:
     unserved_trip_ids: Tuple[str, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
-    def vehicle_paths(self) -> Dict[str, Tuple[str, ...]]:
+    def duty_vehicle_map(self) -> Dict[str, str]:
+        raw = self.metadata.get("duty_vehicle_map") if isinstance(self.metadata, Mapping) else {}
+        if not isinstance(raw, Mapping):
+            raw = {}
+        normalized: Dict[str, str] = {}
+        for duty in self.duties:
+            duty_id = str(duty.duty_id)
+            mapped = str(raw.get(duty_id) or "").strip()
+            normalized[duty_id] = mapped or _fallback_vehicle_id_from_duty_id(duty_id)
+        return normalized
+
+    def vehicle_id_for_duty(self, duty_id: str) -> str:
+        duty_key = str(duty_id or "")
+        raw = self.metadata.get("duty_vehicle_map") if isinstance(self.metadata, Mapping) else {}
+        if isinstance(raw, Mapping):
+            mapped = str(raw.get(duty_key) or "").strip()
+            if mapped:
+                return mapped
+        return _fallback_vehicle_id_from_duty_id(duty_key)
+
+    def duties_by_vehicle(self) -> Dict[str, Tuple[VehicleDuty, ...]]:
+        grouped: Dict[str, List[VehicleDuty]] = {}
+        for duty in self.duties:
+            grouped.setdefault(self.vehicle_id_for_duty(duty.duty_id), []).append(duty)
         return {
-            duty.duty_id: tuple(duty.trip_ids)
-            for duty in self.duties
+            vehicle_id: tuple(
+                sorted(
+                    duties,
+                    key=lambda duty: (
+                        duty.legs[0].trip.departure_min if duty.legs else 10**9,
+                        duty.legs[-1].trip.arrival_min if duty.legs else 10**9,
+                        duty.duty_id,
+                    ),
+                )
+            )
+            for vehicle_id, duties in grouped.items()
         }
+
+    def vehicle_fragment_counts(self) -> Dict[str, int]:
+        return {
+            vehicle_id: len(duties)
+            for vehicle_id, duties in self.duties_by_vehicle().items()
+        }
+
+    def vehicle_paths(self) -> Dict[str, Tuple[str, ...]]:
+        paths: Dict[str, List[str]] = {}
+        for vehicle_id, duties in self.duties_by_vehicle().items():
+            vehicle_path: List[str] = []
+            for duty in duties:
+                vehicle_path.extend(duty.trip_ids)
+            paths[vehicle_id] = vehicle_path
+        return {
+            vehicle_id: tuple(trip_ids)
+            for vehicle_id, trip_ids in paths.items()
+        }
+
+
+_FRAGMENT_SUFFIX_RE = re.compile(r"(?:__frag\d+)(?:__[^_]+\d*)*$")
+
+
+def _fallback_vehicle_id_from_duty_id(duty_id: str) -> str:
+    raw = str(duty_id or "").strip()
+    if raw.startswith("milp_") and len(raw) > 5:
+        raw = raw[5:]
+    return _FRAGMENT_SUFFIX_RE.sub("", raw)
+
+
+def normalize_required_soc_departure_ratio(
+    raw_value: Any,
+    *,
+    treat_values_le_one_as_percent: bool = False,
+) -> Optional[float]:
+    if raw_value is None:
+        return None
+    try:
+        parsed = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0.0:
+        return None
+    if parsed > 1.0 or treat_values_le_one_as_percent:
+        parsed = parsed / 100.0
+    return min(parsed, 1.0)
 
 
 @dataclass(frozen=True)

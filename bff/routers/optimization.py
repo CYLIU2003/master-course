@@ -14,9 +14,11 @@ import json
 import threading
 import multiprocessing
 import os
+import time
 from concurrent.futures import Executor, Future, ProcessPoolExecutor, ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,7 +26,10 @@ from pydantic import BaseModel
 
 from bff.dependencies import require_built
 from bff.errors import AppErrorCode, make_error
-from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
+from bff.mappers.scenario_to_problemdata import (
+    ScenarioBuildReport,
+    build_problem_data_from_scenario,
+)
 from bff.mappers.solver_results import (
     serialize_milp_result,
     serialize_simulation_result,
@@ -46,6 +51,7 @@ from bff.store import job_store, output_paths, scenario_store as store
 from src.dispatch.models import hhmm_to_min
 from src.optimization import (
     OptimizationConfig,
+    OptimizationEngine,
     OptimizationMode,
     ProblemBuilder,
     ResultSerializer,
@@ -483,6 +489,149 @@ def _persist_json_outputs(output_dir: str, payloads: Dict[str, Dict[str, Any]]) 
         )
 
 
+def _canonical_vehicle_timeline_rows(
+    *,
+    problem,
+    engine_result,
+    scenario_id: str,
+    graph_context: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    from src.result_exporter import _route_band_key
+
+    rows: List[Dict[str, Any]] = []
+    problem_trip_by_id = problem.trip_by_id()
+    vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+    band_labels_by_band_id = dict((graph_context or {}).get("band_labels_by_band_id") or {})
+    base_date = _canonical_output_base_date(problem, graph_context)
+
+    for duty in engine_result.plan.duties:
+        vehicle_id = str(engine_result.plan.vehicle_id_for_duty(duty.duty_id))
+        vehicle = vehicle_by_id.get(vehicle_id)
+        depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+        vehicle_type = str(getattr(vehicle, "vehicle_type", duty.vehicle_type) or duty.vehicle_type)
+        for leg in duty.legs:
+            dispatch_trip = leg.trip
+            trip_id = str(dispatch_trip.trip_id or "")
+            problem_trip = problem_trip_by_id.get(trip_id)
+            if problem_trip is None:
+                continue
+            route_family_code = str(getattr(dispatch_trip, "route_family_code", "") or "")
+            route_id = str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id)
+            band_id = _route_band_key(route_family_code, route_id)
+            band_label = str(band_labels_by_band_id.get(band_id) or band_id)
+            start_dt = _canonical_datetime_from_min(base_date, int(dispatch_trip.departure_min))
+            end_min = int(dispatch_trip.arrival_min)
+            if end_min <= int(dispatch_trip.departure_min):
+                end_min += 24 * 60
+            end_dt = _canonical_datetime_from_min(base_date, end_min)
+            variant = str(getattr(dispatch_trip, "route_variant_type", "") or "")
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "depot_id": depot_id,
+                    "vehicle_id": vehicle_id,
+                    "vehicle_type": vehicle_type,
+                    "band_id": band_id,
+                    "band_label": band_label,
+                    "vehicle_primary_band_id": band_id,
+                    "vehicle_primary_band_label": band_label,
+                    "start_time": start_dt.isoformat(),
+                    "end_time": end_dt.isoformat(),
+                    "state": "service",
+                    "route_id": route_id,
+                    "route_family_code": route_family_code,
+                    "route_series_code": band_id,
+                    "event_route_band_id": band_id,
+                    "trip_id": trip_id,
+                    "from_location_id": str(dispatch_trip.origin or ""),
+                    "to_location_id": str(dispatch_trip.destination or ""),
+                    "from_location_type": "terminal",
+                    "to_location_type": "terminal",
+                    "direction": str(getattr(dispatch_trip, "direction", "") or ""),
+                    "route_variant_type": variant,
+                    "energy_delta_kwh": -max(float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0), 0.0),
+                    "distance_km": max(float(getattr(problem_trip, "distance_km", 0.0) or 0.0), 0.0),
+                    "duration_min": max((end_dt - start_dt).total_seconds() / 60.0, 0.0),
+                    "is_deadhead": False,
+                    "is_charge": False,
+                    "is_service": True,
+                    "is_idle": False,
+                    "is_depot_move": variant in {"depot_move", "depot_in", "depot_out"},
+                    "is_short_turn": variant == "short_turn",
+                    "charger_id": "",
+                    "charge_power_kw": "",
+                    "refuel_liters": "",
+                }
+            )
+    rows.sort(key=lambda row: (str(row.get("vehicle_id") or ""), str(row.get("start_time") or ""), str(row.get("trip_id") or "")))
+    return rows
+
+
+def _canonical_output_base_date(problem, graph_context: Optional[Dict[str, Any]]) -> date:
+    service_date = str((problem.metadata or {}).get("service_date") or "").strip()
+    if service_date:
+        try:
+            return datetime.fromisoformat(service_date[:10]).date()
+        except ValueError:
+            pass
+    return datetime.now().date()
+
+
+def _canonical_datetime_from_min(base_date, minute_from_midnight: int) -> datetime:
+    return datetime.combine(base_date, datetime.min.time()) + timedelta(minutes=int(minute_from_midnight))
+
+
+def _persist_canonical_graph_exports(
+    *,
+    scenario: Dict[str, Any],
+    problem,
+    engine_result,
+    scenario_id: str,
+    output_dir: str,
+) -> Dict[str, Any]:
+    from bff.mappers.scenario_to_problemdata import _build_graph_export_context
+    from src.result_exporter import (
+        _build_route_band_diagram_assets,
+        _write_csv,
+        _write_route_band_diagram_assets,
+    )
+
+    if not bool(((scenario.get("simulation_config") or {}).get("enable_vehicle_diagram_output", True))):
+        return {"enabled": False, "diagram_count": 0}
+
+    trips = [
+        dict(item)
+        for item in list(scenario.get("trips") or scenario.get("timetable_rows") or [])
+        if isinstance(item, dict)
+    ]
+    tasks = [SimpleNamespace(task_id=str(trip.get("trip_id") or "")) for trip in trips]
+    graph_context = _build_graph_export_context(scenario, trips, tasks)
+    timeline_rows = _canonical_vehicle_timeline_rows(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id=scenario_id,
+        graph_context=graph_context,
+    )
+    graph_dir = Path(output_dir) / "graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    _write_csv(graph_dir / "vehicle_timeline.csv", timeline_rows)
+    assets = _build_route_band_diagram_assets(
+        timeline_rows,
+        scenario_id,
+        graph_context=graph_context,
+    )
+    _write_route_band_diagram_assets(graph_dir, assets)
+    manifest_relpath = None
+    if assets.get("entries"):
+        manifest_relpath = "graph/route_band_diagrams/manifest.json"
+    return {
+        "enabled": bool(assets.get("entries")),
+        "diagram_count": len(list(assets.get("entries") or [])),
+        "manifest_path": manifest_relpath,
+        "vehicle_timeline_path": "graph/vehicle_timeline.csv",
+    }
+
+
 def _cost_breakdown(
     result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None
 ) -> Dict[str, float]:
@@ -627,104 +776,6 @@ def _run_optimization(
                 "infeasible_arcs": 0,
             }
         feed_context = _scenario_feed_context(scenario_id)
-        job_store.update_job(
-            job_id,
-            status="running",
-            progress=25,
-            message="Building ProblemData from scenario...",
-            metadata=_job_metadata(
-                scenario_id=scenario_id,
-                service_id=service_id,
-                depot_id=depot_id,
-                stage="build_problemdata",
-                mode=mode,
-                extra={
-                    "rebuild_dispatch": rebuild_dispatch,
-                    "use_existing_duties": use_existing_duties,
-                    "prepared_input_id": prepared_input_id,
-                    "requested_prepared_input_id": requested_prepared_input_id,
-                    "prepared_input_path": str(prepared_input_path),
-                },
-            ),
-        )
-        data, build_report = build_problem_data_from_scenario(
-            scenario,
-            depot_id=depot_id,
-            service_id=service_id,
-            mode=solver_mode,
-            use_existing_duties=use_existing_duties,
-            analysis_scope=scenario.get("dispatch_scope") or store.get_dispatch_scope(scenario_id),
-        )
-        store.set_field(scenario_id, "problemdata_build_audit", build_report.to_dict())
-
-        if (
-            int(build_report.travel_connection_count or 0) <= 0
-            and int(build_report.task_count or 0) > int(build_report.vehicle_count or 0)
-            and not bool(getattr(data, "allow_partial_service", False))
-        ):
-            setattr(data, "allow_partial_service", True)
-            auto_relax_msg = (
-                "No travel connections generated while allow_partial_service is OFF. "
-                "Auto-relaxed allow_partial_service=True for this run to avoid hard infeasible stop. "
-                f"tasks={build_report.task_count}, vehicles={build_report.vehicle_count}, "
-                f"travel_connections={build_report.travel_connection_count}, "
-                f"prepared_input_id={prepared_input_id}, "
-                f"requested_prepared_input_id={requested_prepared_input_id or '-'}, "
-                f"prepared_input_path={prepared_input_path}."
-            )
-            if hasattr(build_report, "warnings"):
-                build_report.warnings.append(auto_relax_msg)
-
-        price_slots = list(getattr(data, "electricity_prices", []) or [])
-        pv_slots = list(getattr(data, "pv_profiles", []) or [])
-
-        job_store.update_job(
-            job_id,
-            status="running",
-            progress=55,
-            message=f"Running optimizer ({mode})...",
-            metadata=_job_metadata(
-                scenario_id=scenario_id,
-                service_id=service_id,
-                depot_id=depot_id,
-                stage="solve",
-                mode=mode,
-                extra={
-                    "prepared_input_id": prepared_input_id,
-                    "requested_prepared_input_id": requested_prepared_input_id,
-                    "prepared_input_path": str(prepared_input_path),
-                    "problem_summary": {
-                        "trips": len(getattr(data, "tasks", []) or []),
-                        "vehicles": len(getattr(data, "vehicles", []) or []),
-                        "chargers": len(getattr(data, "chargers", []) or []),
-                        "travel_connections": build_report.travel_connection_count,
-                        "allow_partial_service_effective": bool(getattr(data, "allow_partial_service", False)),
-                        "price_slots": len(price_slots),
-                        "pv_slots": len(pv_slots),
-                        "time_limit_seconds_requested": time_limit_seconds,
-                        "time_limit_seconds_effective": min(time_limit_seconds, 86400),
-                    }
-                },
-            ),
-        )
-        solve_output = solve_problem_data(
-            data,
-            mode=solver_mode,
-            time_limit_seconds=time_limit_seconds,
-            mip_gap=mip_gap,
-            random_seed=random_seed,
-            output_dir=_scoped_output_dir(
-                root=str(output_paths.outputs_root()),
-                feed_context=feed_context,
-                scenario_id=scenario_id,
-                stage="optimization",
-                service_id=service_id,
-                depot_id=depot_id,
-            ),
-            alns_iterations=alns_iterations,
-            no_improvement_limit=no_improvement_limit,
-            destroy_fraction=destroy_fraction,
-        )
         output_dir = _scoped_output_dir(
             root=str(output_paths.outputs_root()),
             feed_context=feed_context,
@@ -733,16 +784,237 @@ def _run_optimization(
             service_id=service_id,
             depot_id=depot_id,
         )
-        result_payload = serialize_milp_result(solve_output["result"])
-        sim_payload = (
-            serialize_simulation_result(solve_output["sim_result"])
-            if solve_output.get("sim_result") is not None
-            else None
-        )
-        vehicle_type_by_id = {
-            vehicle.vehicle_id: vehicle.vehicle_type
-            for vehicle in data.vehicles
-        }
+
+        if solver_mode in {"mode_milp_only", "mode_alns_only", "mode_ga_only", "mode_abc_only"}:
+            opt_mode = _parse_optimization_mode(solver_mode)
+            engine_label = str(opt_mode.value or "optimization").upper()
+            job_store.update_job(
+                job_id,
+                status="running",
+                progress=25,
+                message="Building canonical problem...",
+                metadata=_job_metadata(
+                    scenario_id=scenario_id,
+                    service_id=service_id,
+                    depot_id=depot_id,
+                    stage="build_canonical",
+                    mode=mode,
+                    extra={
+                        "rebuild_dispatch": rebuild_dispatch,
+                        "use_existing_duties": use_existing_duties,
+                        "prepared_input_id": prepared_input_id,
+                        "prepared_input_path": str(prepared_input_path),
+                    },
+                ),
+            )
+            opt_config = OptimizationConfig(
+                mode=opt_mode,
+                time_limit_sec=time_limit_seconds,
+                mip_gap=mip_gap,
+                random_seed=random_seed,
+                alns_iterations=alns_iterations,
+                no_improvement_limit=no_improvement_limit,
+                destroy_fraction=destroy_fraction,
+                warm_start=opt_mode != OptimizationMode.MILP,
+            )
+            problem = ProblemBuilder().build_from_scenario(
+                scenario,
+                depot_id=depot_id,
+                service_id=service_id,
+                config=opt_config,
+            )
+            feasible_arc_count = sum(
+                len(v) for v in (problem.feasible_connections or {}).values()
+            )
+            build_report = ScenarioBuildReport(
+                scenario_id=scenario_id,
+                depot_id=depot_id or "",
+                service_id=service_id,
+                trip_count=len(problem.trips),
+                task_count=len(problem.trips),
+                vehicle_count=len(problem.vehicles),
+                charger_count=len(problem.chargers),
+                travel_connection_count=feasible_arc_count,
+            )
+            store.set_field(scenario_id, "problemdata_build_audit", build_report.to_dict())
+
+            price_slots = list(problem.price_slots or [])
+            pv_slots = list(problem.pv_slots or [])
+
+            job_store.update_job(
+                job_id,
+                status="running",
+                progress=55,
+                message=f"Running {engine_label} optimizer ({mode})...",
+                metadata=_job_metadata(
+                    scenario_id=scenario_id,
+                    service_id=service_id,
+                    depot_id=depot_id,
+                    stage="solve",
+                    mode=mode,
+                    extra={
+                        "prepared_input_id": prepared_input_id,
+                        "problem_summary": {
+                            "trips": len(problem.trips),
+                            "vehicles": len(problem.vehicles),
+                            "chargers": len(problem.chargers),
+                            "feasible_arcs": feasible_arc_count,
+                            "price_slots": len(price_slots),
+                            "pv_slots": len(pv_slots),
+                            "time_limit_seconds_requested": time_limit_seconds,
+                        },
+                    },
+                ),
+            )
+            solve_started_at = time.perf_counter()
+            engine_result = OptimizationEngine().solve(problem, opt_config)
+            solve_elapsed = time.perf_counter() - solve_started_at
+            graph_artifacts = _persist_canonical_graph_exports(
+                scenario=scenario,
+                problem=problem,
+                engine_result=engine_result,
+                scenario_id=scenario_id,
+                output_dir=output_dir,
+            )
+            smeta = dict(engine_result.solver_metadata or {})
+            smeta.setdefault("solve_time_sec", float(solve_elapsed))
+            _cb = dict(engine_result.cost_breakdown or {})
+            # Alias keys so _cost_breakdown() can read both naming conventions
+            _cb.setdefault("electricity_cost", _cb.get("energy_cost", 0.0))
+            _cb.setdefault("demand_charge_cost", _cb.get("demand_cost", 0.0))
+            _cb.setdefault("battery_degradation_cost", _cb.get("degradation_cost", 0.0))
+            _cb.setdefault("emission_cost", _cb.get("co2_cost", 0.0))
+            result_payload = {
+                "status": engine_result.solver_status,
+                "objective_value": engine_result.objective_value,
+                "solve_time_seconds": float(smeta.get("solve_time_sec", 0.0) or solve_elapsed),
+                "mip_gap": float(smeta.get("mip_gap") or 0.0),
+                "assignment": {
+                    k: list(v)
+                    for k, v in engine_result.plan.vehicle_paths().items()
+                },
+                "unserved_tasks": list(engine_result.plan.unserved_trip_ids),
+                "obj_breakdown": _cb,
+                "solver_metadata": smeta,
+            }
+            sim_payload = None
+            vehicle_type_by_id = {
+                v.vehicle_id: v.vehicle_type for v in problem.vehicles
+            }
+            # Expose full new-system result for solver_result field
+            _full_new_result = ResultSerializer.serialize_result(engine_result)
+        else:
+            # ── OLD PATH: legacy thesis_mode via solve_problem_data ────────────────
+            job_store.update_job(
+                job_id,
+                status="running",
+                progress=25,
+                message="Building ProblemData from scenario...",
+                metadata=_job_metadata(
+                    scenario_id=scenario_id,
+                    service_id=service_id,
+                    depot_id=depot_id,
+                    stage="build_problemdata",
+                    mode=mode,
+                    extra={
+                        "rebuild_dispatch": rebuild_dispatch,
+                        "use_existing_duties": use_existing_duties,
+                        "prepared_input_id": prepared_input_id,
+                        "requested_prepared_input_id": requested_prepared_input_id,
+                        "prepared_input_path": str(prepared_input_path),
+                    },
+                ),
+            )
+            data, build_report = build_problem_data_from_scenario(
+                scenario,
+                depot_id=depot_id,
+                service_id=service_id,
+                mode=solver_mode,
+                use_existing_duties=use_existing_duties,
+                analysis_scope=scenario.get("dispatch_scope") or store.get_dispatch_scope(scenario_id),
+            )
+            store.set_field(scenario_id, "problemdata_build_audit", build_report.to_dict())
+
+            if (
+                int(build_report.travel_connection_count or 0) <= 0
+                and int(build_report.task_count or 0) > int(build_report.vehicle_count or 0)
+                and not bool(getattr(data, "allow_partial_service", False))
+            ):
+                setattr(data, "allow_partial_service", True)
+                auto_relax_msg = (
+                    "No travel connections generated while allow_partial_service is OFF. "
+                    "Auto-relaxed allow_partial_service=True for this run to avoid hard infeasible stop. "
+                    f"tasks={build_report.task_count}, vehicles={build_report.vehicle_count}, "
+                    f"travel_connections={build_report.travel_connection_count}, "
+                    f"prepared_input_id={prepared_input_id}, "
+                    f"requested_prepared_input_id={requested_prepared_input_id or '-'}, "
+                    f"prepared_input_path={prepared_input_path}."
+                )
+                if hasattr(build_report, "warnings"):
+                    build_report.warnings.append(auto_relax_msg)
+
+            price_slots = list(getattr(data, "electricity_prices", []) or [])
+            pv_slots = list(getattr(data, "pv_profiles", []) or [])
+
+            job_store.update_job(
+                job_id,
+                status="running",
+                progress=55,
+                message=f"Running optimizer ({mode})...",
+                metadata=_job_metadata(
+                    scenario_id=scenario_id,
+                    service_id=service_id,
+                    depot_id=depot_id,
+                    stage="solve",
+                    mode=mode,
+                    extra={
+                        "prepared_input_id": prepared_input_id,
+                        "requested_prepared_input_id": requested_prepared_input_id,
+                        "prepared_input_path": str(prepared_input_path),
+                        "problem_summary": {
+                            "trips": len(getattr(data, "tasks", []) or []),
+                            "vehicles": len(getattr(data, "vehicles", []) or []),
+                            "chargers": len(getattr(data, "chargers", []) or []),
+                            "travel_connections": build_report.travel_connection_count,
+                            "allow_partial_service_effective": bool(getattr(data, "allow_partial_service", False)),
+                            "price_slots": len(price_slots),
+                            "pv_slots": len(pv_slots),
+                            "time_limit_seconds_requested": time_limit_seconds,
+                            "time_limit_seconds_effective": min(time_limit_seconds, 86400),
+                        },
+                    },
+                ),
+            )
+            solve_output = solve_problem_data(
+                data,
+                mode=solver_mode,
+                time_limit_seconds=time_limit_seconds,
+                mip_gap=mip_gap,
+                random_seed=random_seed,
+                output_dir=_scoped_output_dir(
+                    root=str(output_paths.outputs_root()),
+                    feed_context=feed_context,
+                    scenario_id=scenario_id,
+                    stage="optimization",
+                    service_id=service_id,
+                    depot_id=depot_id,
+                ),
+                alns_iterations=alns_iterations,
+                no_improvement_limit=no_improvement_limit,
+                destroy_fraction=destroy_fraction,
+            )
+            result_payload = serialize_milp_result(solve_output["result"])
+            sim_payload = (
+                serialize_simulation_result(solve_output["sim_result"])
+                if solve_output.get("sim_result") is not None
+                else None
+            )
+            vehicle_type_by_id = {
+                vehicle.vehicle_id: vehicle.vehicle_type
+                for vehicle in data.vehicles
+            }
+            _full_new_result = None
+            graph_artifacts = {"enabled": False, "diagram_count": 0}
         vehicle_count_by_type: Dict[str, int] = {}
         trip_count_by_type: Dict[str, int] = {}
         for vehicle_id, task_ids in (result_payload.get("assignment") or {}).items():
@@ -795,13 +1067,15 @@ def _run_optimization(
                 "trip_count_unserved": len(result_payload.get("unserved_tasks") or []),
             },
             "solver_result": result_payload,
+            "canonical_solver_result": _full_new_result,
             "canonical_problem_summary": {
-                "trip_count": len(getattr(data, "tasks", []) or []),
-                "vehicle_count": len(getattr(data, "vehicles", []) or []),
-                "charger_count": len(getattr(data, "chargers", []) or []),
+                "trip_count": build_report.task_count,
+                "vehicle_count": build_report.vehicle_count,
+                "charger_count": build_report.charger_count,
                 "price_slot_count": len(price_slots),
                 "pv_slot_count": len(pv_slots),
             },
+            "graph_artifacts": graph_artifacts,
         }
         if sim_payload is not None:
             optimization_result["simulation_summary"] = sim_payload

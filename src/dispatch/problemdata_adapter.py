@@ -173,7 +173,7 @@ def _build_dispatch_context_from_problem_data(
         (from_stop, to_stop): DeadheadRule(
             from_stop=from_stop,
             to_stop=to_stop,
-            travel_time_min=max(1, int(mins)),
+            travel_time_min=max(0, int(mins)),
         )
         for (from_stop, to_stop), mins in (deadhead_rules or {}).items()
         if from_stop != to_stop

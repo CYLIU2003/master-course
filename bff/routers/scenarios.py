@@ -414,6 +414,7 @@ class UpdateQuickSetupBody(BaseModel):
     iceCo2KgPerL: Optional[float] = None
     depotPowerLimitKw: Optional[float] = None
     degradationWeight: Optional[float] = None
+    objectiveWeights: Optional[Dict[str, Any]] = None
     fixedRouteBandMode: Optional[bool] = None
     maxStartFragmentsPerVehicle: Optional[int] = None
     maxEndFragmentsPerVehicle: Optional[int] = None
@@ -439,6 +440,11 @@ class UpdateQuickSetupBody(BaseModel):
     co2PriceSource: Optional[str] = None
     co2ReferenceDate: Optional[str] = None
     enableVehicleDiagramOutput: Optional[bool] = None
+    randomSeed: Optional[int] = None
+    startTime: Optional[str] = None
+    planningHorizonHours: Optional[float] = None
+    experimentMethod: Optional[str] = None
+    experimentNotes: Optional[str] = None
 
 
 class TimetableRowBody(BaseModel):
@@ -471,6 +477,18 @@ class ImportCsvBody(BaseModel):
 
 def _not_found(scenario_id: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
+
+
+def _coerce_float_mapping(value: Any) -> Dict[str, float]:
+    if not isinstance(value, dict):
+        return {}
+    out: Dict[str, float] = {}
+    for key, raw in value.items():
+        try:
+            out[str(key)] = float(raw)
+        except (TypeError, ValueError):
+            continue
+    return out
 
 
 def _runtime_err_to_http(e: RuntimeError) -> HTTPException:
@@ -1117,6 +1135,11 @@ def _builder_defaults(
     overlay_cost = dict(overlay.get("cost_coefficients") or {})
     overlay_charging = dict(overlay.get("charging_constraints") or {})
     overlay_solver = dict(overlay.get("solver_config") or {})
+    raw_objective_weights = _coerce_float_mapping(
+        simulation_config.get("objective_weights")
+        or overlay_solver.get("objective_weights")
+        or {}
+    )
     grouped_fleet_templates: Dict[str, Dict[str, Any]] = {}
     for vehicle in existing_vehicles:
         template_id = str(vehicle.get("vehicleTemplateId") or "")
@@ -1168,7 +1191,7 @@ def _builder_defaults(
             or "cost"
         ),
         "fixedRouteBandMode": bool(
-            simulation_config.get("fixed_route_band_mode", overlay_solver.get("fixed_route_band_mode", False))
+            simulation_config.get("fixed_route_band_mode", overlay_solver.get("fixed_route_band_mode", True))
         ),
         "maxStartFragmentsPerVehicle": int(
             simulation_config.get("max_start_fragments_per_vehicle")
@@ -1187,7 +1210,7 @@ def _builder_defaults(
                     "output_vehicle_diagram",
                     overlay_solver.get(
                         "enable_vehicle_diagram_output",
-                        overlay_solver.get("output_vehicle_diagram", False),
+                        overlay_solver.get("output_vehicle_diagram", True),
                     ),
                 ),
             )
@@ -1238,9 +1261,13 @@ def _builder_defaults(
         "weatherMode": simulation_config.get("weather_mode") or "sunny",
         "weatherFactorScalar": simulation_config.get("weather_factor_scalar"),
         "depotEnergyAssets": list(simulation_config.get("depot_energy_assets") or []),
+        "objectiveWeights": raw_objective_weights,
         "degradationWeight": (
-            (overlay_solver.get("objective_weights") or {}).get("degradation")
-            or (overlay_solver.get("objective_weights") or {}).get("battery_degradation_cost")
+            raw_objective_weights["degradation"]
+            if "degradation" in raw_objective_weights
+            else (overlay_solver.get("objective_weights") or {}).get("degradation")
+            if "degradation" in dict(overlay_solver.get("objective_weights") or {})
+            else (overlay_solver.get("objective_weights") or {}).get("battery_degradation_cost")
         ),
         "touPricing": list(overlay_cost.get("tou_pricing") or []),
         "fleetTemplates": fleet_templates,
@@ -1610,7 +1637,7 @@ def _build_quick_setup_payload(
                 dispatch_scope.get("allowInterDepotSwap", False)
             ),
             "fixedRouteBandMode": bool(
-                dispatch_scope.get("fixedRouteBandMode", False)
+                dispatch_scope.get("fixedRouteBandMode", True)
             ),
         },
         "availableDayTypes": _available_day_types(doc, dispatch_scope),
@@ -1626,7 +1653,7 @@ def _build_quick_setup_payload(
             "alnsIterations": int(builder_defaults.get("alnsIterations") or 500),
             "noImprovementLimit": int(builder_defaults.get("noImprovementLimit") or 100),
             "destroyFraction": float(builder_defaults.get("destroyFraction") or 0.25),
-            "fixedRouteBandMode": bool(builder_defaults.get("fixedRouteBandMode", False)),
+            "fixedRouteBandMode": bool(builder_defaults.get("fixedRouteBandMode", True)),
             "maxStartFragmentsPerVehicle": int(
                 builder_defaults.get("maxStartFragmentsPerVehicle") or 100
             ),
@@ -1634,8 +1661,13 @@ def _build_quick_setup_payload(
                 builder_defaults.get("maxEndFragmentsPerVehicle") or 100
             ),
             "enableVehicleDiagramOutput": bool(
-                builder_defaults.get("enableVehicleDiagramOutput", False)
+                builder_defaults.get("enableVehicleDiagramOutput", True)
             ),
+            "randomSeed": int(builder_defaults.get("randomSeed") or 42),
+            "startTime": builder_defaults.get("startTime") or "05:00",
+            "planningHorizonHours": float(builder_defaults.get("planningHorizonHours") or 20.0),
+            "experimentMethod": builder_defaults.get("experimentMethod"),
+            "experimentNotes": builder_defaults.get("experimentNotes"),
         },
         "simulationSettings": {
             "serviceDate": builder_defaults.get("serviceDate"),
@@ -1673,6 +1705,7 @@ def _build_quick_setup_payload(
             "weatherMode": builder_defaults.get("weatherMode") or "sunny",
             "weatherFactorScalar": builder_defaults.get("weatherFactorScalar"),
             "depotEnergyAssets": list(builder_defaults.get("depotEnergyAssets") or []),
+            "objectiveWeights": dict(builder_defaults.get("objectiveWeights") or {}),
             "touPricing": list(builder_defaults.get("touPricing") or []),
             "degradationWeight": builder_defaults.get("degradationWeight"),
             "allowPartialService": bool(builder_defaults.get("allowPartialService", False)),
@@ -2043,7 +2076,14 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         current_unserved_penalty = float(
             solver_config.get("unserved_penalty") or 10000.0
         )
-        saved_weights = dict(solver_config.get("objective_weights") or {})
+        simulation_config = store.get_field(scenario_id, "simulation_config") or {}
+        if not isinstance(simulation_config, dict):
+            simulation_config = {}
+        saved_weights = _coerce_float_mapping(simulation_config.get("objective_weights") or {})
+        if not saved_weights:
+            saved_weights = _coerce_float_mapping(solver_config.get("objective_weights") or {})
+        if body.objectiveWeights is not None:
+            saved_weights = _coerce_float_mapping(body.objectiveWeights)
 
         overlay_cost = dict(overlay.get("cost_coefficients") or {})
         if body.gridFlatPricePerKwh is not None:
@@ -2087,9 +2127,6 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         if solver_config or overlay_cost or overlay_charging:
             store.set_scenario_overlay(scenario_id, overlay)
 
-        simulation_config = store.get_field(scenario_id, "simulation_config") or {}
-        if not isinstance(simulation_config, dict):
-            simulation_config = {}
         if body.serviceDate is not None:
             simulation_config["service_date"] = body.serviceDate
         if body.objectiveMode is not None:
@@ -2108,6 +2145,8 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["allow_partial_service"] = bool(body.allowPartialService)
         if body.unservedPenalty is not None:
             simulation_config["unserved_penalty"] = float(body.unservedPenalty)
+        if body.objectiveWeights is not None or saved_weights:
+            simulation_config["objective_weights"] = dict(saved_weights)
         if body.fixedRouteBandMode is not None:
             simulation_config["fixed_route_band_mode"] = bool(body.fixedRouteBandMode)
         if body.maxStartFragmentsPerVehicle is not None:
@@ -2168,6 +2207,16 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["output_vehicle_diagram"] = enabled_diagram_output
             overlay["solver_config"] = solver_config
             store.set_scenario_overlay(scenario_id, overlay)
+        if body.randomSeed is not None:
+            simulation_config["random_seed"] = int(body.randomSeed)
+        if body.startTime is not None:
+            simulation_config["start_time"] = str(body.startTime)
+        if body.planningHorizonHours is not None:
+            simulation_config["planning_horizon_hours"] = float(body.planningHorizonHours)
+        if body.experimentMethod is not None:
+            simulation_config["experiment_method"] = str(body.experimentMethod)
+        if body.experimentNotes is not None:
+            simulation_config["experiment_notes"] = str(body.experimentNotes)
         if simulation_config:
             store.set_field(scenario_id, "simulation_config", simulation_config)
 

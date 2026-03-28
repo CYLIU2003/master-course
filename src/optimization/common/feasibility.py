@@ -6,7 +6,11 @@ from typing import Dict, List
 from src.dispatch.models import ValidationResult, VehicleDuty
 from src.dispatch.validator import DutyValidator
 
-from .problem import AssignmentPlan, CanonicalOptimizationProblem
+from .problem import (
+    AssignmentPlan,
+    CanonicalOptimizationProblem,
+    normalize_required_soc_departure_ratio,
+)
 
 
 @dataclass(frozen=True)
@@ -67,6 +71,8 @@ class FeasibilityChecker:
             duty_id for duty_id, result in validation.items() if not result.valid
         )
 
+        errors.extend(self._evaluate_vehicle_fragment_integrity(problem, plan))
+
         soc_errors = self._evaluate_soc(problem, plan)
         errors.extend(soc_errors)
 
@@ -94,6 +100,7 @@ class FeasibilityChecker:
         vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
         type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
         dt_h = max(problem.scenario.timestep_min, 1) / 60.0
+        duty_vehicle_map = plan.duty_vehicle_map()
 
         charge_by_vehicle: Dict[str, Dict[int, float]] = {}
         for slot in plan.charging_slots:
@@ -102,7 +109,7 @@ class FeasibilityChecker:
             by_slot[int(slot.slot_index)] = by_slot.get(int(slot.slot_index), 0.0) + max(float(slot.charge_kw or 0.0), 0.0)
 
         for duty in plan.duties:
-            vehicle_id = self._vehicle_id_from_duty_id(duty.duty_id)
+            vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
             vehicle = vehicle_by_id.get(vehicle_id)
             vtype = type_by_id.get(duty.vehicle_type)
             powertrain = str((vtype.powertrain_type if vtype else duty.vehicle_type) or "").upper()
@@ -129,8 +136,14 @@ class FeasibilityChecker:
                     soc = min(capacity, soc + charge_by_vehicle[vehicle_id][slot_idx] * dt_h * 0.95)
                 last_slot = dep_slot
 
-                req_dep = float(trip.required_soc_departure_percent or 0.0)
-                req_dep_kwh = req_dep * capacity if req_dep <= 1.0 else (req_dep / 100.0) * capacity
+                req_dep_ratio = normalize_required_soc_departure_ratio(
+                    trip.required_soc_departure_percent,
+                    treat_values_le_one_as_percent=(
+                        str((problem.metadata or {}).get("required_soc_departure_unit") or "").strip().lower()
+                        == "percent_0_100"
+                    ),
+                )
+                req_dep_kwh = float(req_dep_ratio or 0.0) * capacity
                 min_departure = max(reserve, req_dep_kwh)
                 if soc + 1.0e-6 < min_departure:
                     errors.append(
@@ -147,10 +160,56 @@ class FeasibilityChecker:
 
         return errors
 
-    def _vehicle_id_from_duty_id(self, duty_id: str) -> str:
-        if duty_id.startswith("milp_") and len(duty_id) > 5:
-            return duty_id[5:]
-        return duty_id
+    def _evaluate_vehicle_fragment_integrity(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> List[str]:
+        errors: List[str] = []
+        max_start_fragments = int(problem.metadata.get("max_start_fragments_per_vehicle") or 1)
+        max_end_fragments = int(problem.metadata.get("max_end_fragments_per_vehicle") or 1)
+        duties_by_vehicle = plan.duties_by_vehicle()
+        for vehicle_id, duties in duties_by_vehicle.items():
+            fragment_count = len(duties)
+            if fragment_count > max_start_fragments:
+                errors.append(
+                    f"[FRAGMENT] vehicle={vehicle_id} fragment_count={fragment_count} exceeds max_start_fragments_per_vehicle={max_start_fragments}"
+                )
+            if fragment_count > max_end_fragments:
+                errors.append(
+                    f"[FRAGMENT] vehicle={vehicle_id} fragment_count={fragment_count} exceeds max_end_fragments_per_vehicle={max_end_fragments}"
+                )
+            ordered = sorted(
+                duties,
+                key=lambda duty: (
+                    duty.legs[0].trip.departure_min if duty.legs else 10**9,
+                    duty.legs[-1].trip.arrival_min if duty.legs else 10**9,
+                    duty.duty_id,
+                ),
+            )
+            for index, prev_duty in enumerate(ordered):
+                for next_duty in ordered[index + 1 :]:
+                    if not self._duties_overlap_in_time(prev_duty, next_duty):
+                        continue
+                    errors.append(
+                        f"[FRAGMENT] vehicle={vehicle_id} has overlapping fragments {prev_duty.duty_id} and {next_duty.duty_id}"
+                    )
+        return errors
+
+    def _duties_overlap_in_time(
+        self,
+        duty_a: VehicleDuty,
+        duty_b: VehicleDuty,
+    ) -> bool:
+        for leg_a in duty_a.legs:
+            start_a = int(leg_a.trip.departure_min)
+            end_a = int(leg_a.trip.arrival_min)
+            for leg_b in duty_b.legs:
+                start_b = int(leg_b.trip.departure_min)
+                end_b = int(leg_b.trip.arrival_min)
+                if start_a < end_b and start_b < end_a:
+                    return True
+        return False
 
     def _slot_index(self, problem: CanonicalOptimizationProblem, minute: int) -> int:
         step = max(problem.scenario.timestep_min, 1)

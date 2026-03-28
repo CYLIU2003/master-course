@@ -80,6 +80,7 @@ class ScenarioBuildReport:
     task_count: int = 0
     travel_connection_count: int = 0
     vehicle_count: int = 0
+    charger_count: int = 0
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
 
@@ -107,6 +108,13 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return default
+
+
+def _first_defined(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
 
 
 def _normalize_direction(value: Any, default: str = "outbound") -> str:
@@ -745,23 +753,43 @@ def _vehicles_for_scope(
     ]
 
 
-def _build_vehicle(vehicle_like: Dict[str, Any]) -> Vehicle:
+def _build_vehicle(
+    vehicle_like: Dict[str, Any],
+    simulation_cfg: Optional[Dict[str, Any]] = None,
+) -> Vehicle:
     vehicle_like = apply_ice_reference_defaults(vehicle_like)
+    simulation_cfg = dict(simulation_cfg or {})
     vehicle_type = str(vehicle_like.get("type") or "BEV").upper()
     battery_kwh = _safe_float(vehicle_like.get("batteryKwh"), 0.0) or None
     fuel_cost_coeff = _safe_float(vehicle_like.get("fuelCostPerL"), 145.0)
     co2_emission_coeff = _safe_float(vehicle_like.get("co2EmissionKgPerL"), 2.58)
+    initial_soc_raw = _first_defined(
+        simulation_cfg.get("initial_soc_percent"),
+        simulation_cfg.get("initial_soc"),
+        vehicle_like.get("initialSoc"),
+    )
+    soc_min_raw = _first_defined(
+        simulation_cfg.get("soc_min"),
+        simulation_cfg.get("final_soc_floor_percent"),
+        vehicle_like.get("minSoc"),
+    )
+    soc_max_raw = _first_defined(
+        simulation_cfg.get("soc_max"),
+        vehicle_like.get("maxSoc"),
+    )
+    soc_target_end_raw = _first_defined(
+        simulation_cfg.get("final_soc_target_percent"),
+        vehicle_like.get("targetEndSoc"),
+    )
     return Vehicle(
         vehicle_id=str(vehicle_like.get("id")),
         vehicle_type=vehicle_type,
         home_depot=str(vehicle_like.get("depotId") or ""),
         battery_capacity=battery_kwh,
-        soc_init=_normalize_soc_value(vehicle_like.get("initialSoc"), battery_kwh, 0.8),
-        soc_min=_normalize_soc_value(vehicle_like.get("minSoc"), battery_kwh, 0.15),
-        soc_max=_normalize_soc_value(vehicle_like.get("maxSoc"), battery_kwh, 0.9),
-        soc_target_end=_normalize_soc_value(
-            vehicle_like.get("targetEndSoc"), battery_kwh, 0.6
-        ),
+        soc_init=_normalize_soc_value(initial_soc_raw, battery_kwh, 0.8),
+        soc_min=_normalize_soc_value(soc_min_raw, battery_kwh, 0.15),
+        soc_max=_normalize_soc_value(soc_max_raw, battery_kwh, 0.9),
+        soc_target_end=_normalize_soc_value(soc_target_end_raw, battery_kwh, 0.6),
         charge_power_max=_safe_float(vehicle_like.get("chargePowerKw"), 0.0) or None,
         fuel_tank_capacity=_safe_float(vehicle_like.get("fuelTankL"), 0.0) or None,
         fuel_cost_coeff=fuel_cost_coeff,
@@ -1651,7 +1679,7 @@ def build_problem_data_from_scenario(
     for item in scope_vehicles_raw:
         vehicle_like = dict(item)
         vehicle_like.setdefault("fuelCostPerL", diesel_price_per_l)
-        v = _build_vehicle(vehicle_like)
+        v = _build_vehicle(vehicle_like, simulation_cfg)
         if disable_acquisition_cost:
             v = dc_replace(v, fixed_use_cost=0.0)
         vehicles.append(v)

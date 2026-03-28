@@ -39,6 +39,55 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-03-27] Quick Setup保存整合 / SOC override / prepared stop coordinates
+
+- **背景**:
+  - 237d シナリオの cost-min 再実行で、Quick Setup の詳細設定と実ソルバー入力の間にドリフトが残っていた。
+  - legacy ProblemData 側では `final_soc_target_percent` が車両 `soc_target_end` に反映されず、既定 `targetEndSoc=0.6` が優先されるケースがあった。
+  - prepared input の `stops` が座標なし推論停止 (`prepared_input_inferred`) に落ちると、deadhead 距離/時間が 0 の接続が残り物理説明性が弱くなった。
+
+- **対応**:
+  - `bff/mappers/scenario_to_problemdata.py`
+    - legacy `Vehicle` 生成時に `initial_soc_percent` / `soc_min` / `final_soc_floor_percent` / `final_soc_target_percent` を優先反映するよう修正。
+  - `src/optimization/common/builder.py`
+    - canonical vehicle state でも `initial_soc_percent` / `final_soc_floor_percent` / ICE燃料比 override を実車両へ反映し、ALNS/GA/ABC と MILP の初期条件差を縮小。
+  - `bff/services/run_preparation.py`
+    - scoped trip / timetable から参照 stop_id を収集し、`tokyu_bus_data.load_stops()` の座標付き stop を優先採用するよう変更。
+    - 座標付き stop と inferred stop をマージし、missing name は補いながら deadhead 推論に必要な緯度経度を保持。
+  - `bff/routers/scenarios.py` / `tools/scenario_backup_tk.py`
+    - Quick Setup で `objectiveWeights` と `randomSeed` を保存・再読込。
+    - frontend では `slack_penalty` / `degradation` を専用欄と JSON 欄で分解・再構成し、保存後のドリフトを抑制。
+
+- **テスト**:
+  - `tests/test_problemdata_soc_overrides.py`
+  - `tests/test_run_preparation_stop_coords.py`
+  - `tests/test_quick_setup_advanced_persistence.py`
+
+### [DEV-2026-03-27] 充電物理妥当性の強化: timetable-based home-depot charging windows
+
+- **背景**:
+  - 既存 MILP は `home depot` 接続便の前後1スロット近傍に依存した proxy 拘束が中心で、
+    発表時に「実際にその時刻に充電可能窓だったか」の説明が弱かった。
+  - 学会向け説明では、厳密扱い領域と近似領域の切り分けをコード・README双方で一致させる必要があった。
+
+- **対応**:
+  - `src/optimization/common/builder.py`
+    - `charging_window_mode`（`timetable_layover` / `home_depot_proxy`）を metadata へ保存。
+    - `home_depot_charge_pre_window_min` / `home_depot_charge_post_window_min` を追加。
+  - `src/optimization/milp/solver_adapter.py`
+    - `timetable_layover` 時、trip の出発前/到着後ウィンドウを時刻ベースで列挙し、
+      そのスロットでのみ充電・給油を許可する制約へ更新。
+    - 互換性のため `home_depot_proxy` を残し、窓列挙が空になるケースには proxy へフォールバック。
+    - `_slot_indices_for_interval()` の日跨ぎ処理を補強（`arrival <= departure` 時の 24h 補正）。
+  - `README.md`
+    - 充電窓モードの説明を追加。
+    - デマンド料金の単日 proxy 前提を明記。
+
+- **テスト**:
+  - `tests/test_milp_route_band_settings.py`
+    - builder metadata 反映（`charging_window_mode` と window 幅）を追加検証。
+    - timetable-based 窓列挙ヘルパーのスロット整合テストを追加。
+
 ### [DEV-2026-03-26] MILP妥当性修正: ICE燃料上限・売電変数・課金/デマンド定義を実測整合へ
 
 - **背景**:
@@ -2418,6 +2467,53 @@ master-course/
     - small-scope smoke: `tokyu_core` 1 route + 1 BEV で duties 生成後 `simulate_problem_data()` 実行 → pass
     - `python scripts/build_tokyu_gtfs_db.py --dataset-id tokyu_core --out data/tokyu_core_gtfs.sqlite` → pass
     - `python scripts/export_tokyu_sqlite_to_built.py --db data/tokyu_core_gtfs.sqlite --dataset-id tokyu_core --built-root data/gtfs_sqlite_export_test` → pass (`stops.parquet` / `stop_timetables.parquet` も出力)
+
+- 2026-03-28 (237d total_cost canonical rerun hardening)
+  - 対象 scenario `237d5623-aa94-4f72-9da1-17b9070264be` / prepared input `prepared-c954365437b0f8f6` の total_cost 再実行で、canonical path の main blockers を順に潰した。
+  - `bff/services/run_preparation.py`
+    - `materialize_scenario_from_prepared_input()` でも catalog stop を再参照し、prepared JSON 側 `stops` が stale / inferred-only でも座標を backfill するよう修正した。
+    - これにより 237d scoped case で `ConnectionGraphBuilder().build(..., "BEV")` の outgoing edge が `0` 件しか出ない状態を解消した（座標 backfill 後は多数の feasible successor を再獲得）。
+    - `_scenario_hash()` から `optimization_audit` / `simulation_audit` / `problemdata_build_audit` / `__unloaded_artifact_fields__` も除外し、Prepare 直後に `prepared_input_id` が即 stale 化するドリフトを止めた。
+  - `src/route_family_runtime.py`
+    - `BusstopPole` の番線 suffix 違いを同一 stop family とみなし、`stop_platform_alias` の 0 分 deadhead rule を双方向に自動補完するよう変更した。
+    - `...00240050.` / `...00240050.4`、`...00240324.` / `...00240324.1` のような terminal bay 差分で location continuity が壊れていたのを是正した。
+  - `src/optimization/milp/model_builder.py`
+    - MILP arc enumeration を `milp_max_successors_per_trip`（既定 8）で pruning するよう変更し、237d の dense feasible graph で Gurobi が極端に重くなる問題を抑えた。
+  - `src/optimization/milp/solver_adapter.py`
+    - MILP 解の duty 復元を `y` の単純 departure sort から、選択 `x/start_arc` をたどる fragment 復元へ変更した。
+    - これで solver 自体は full service でも、post validation で「存在しない trip 直結」を拾って infeasible 扱いになる問題を除去した。
+  - `src/optimization/common/problem.py`, `src/optimization/common/feasibility.py`, `src/optimization/milp/solver_adapter.py`
+    - `required_soc_departure_percent` の小数値 (`0.939` = 0.939%) を 93.9% ratio と誤解する経路を修正した。
+    - builder-generated canonical problem では `required_soc_departure_unit="percent_0_100"` を明示し、feasibility / MILP の両方で同じ解釈を使うようにした。
+  - `src/optimization/common/evaluator.py`
+    - actual charging flow が無い provisional-only plan では fake demand charge / fake grid import を立てないよう修正した。
+    - `grid_purchase_cost=0`, `demand_cost=0`, `pv_curtailed_kwh=total PV` を返す fallback に整理し、metaheuristic result の cost breakdown を物理的に誤解しにくい形へ寄せた。
+  - `src/optimization/common/feasibility.py`
+    - vehicle fragment overlap 判定を duty envelope ベースから actual trip interval ベースへ変更し、同一車両の sparse fragment を false positive で弾かないようにした。
+  - `bff/routers/scenarios.py`, `bff/store/scenario_store.py`, `tools/scenario_backup_tk.py`
+    - `fixedRouteBandMode=true` / `enableVehicleDiagramOutput=true` を標準デフォルトへ寄せ、route-band diagram を基本出力にした。
+    - fragment 上限は scenario 互換性と solve stability を優先して configurable のまま維持した。
+  - `bff/routers/optimization.py`
+    - canonical solve 完了後に `graph/vehicle_timeline.csv` と `graph/route_band_diagrams/manifest.json` / `*.svg` を直接生成する helper を追加した。
+    - これにより BFF/Tk 経由の `mode_milp_only` でも route-band diagram を確認できるようになった。
+  - 追加/更新テスト:
+    - `tests/test_run_preparation_stop_coords.py`
+    - `tests/test_route_family_deadhead_inference.py`
+    - `tests/test_milp_route_band_settings.py`
+    - `tests/test_reopt_alns_critical_fixes.py`
+    - `tests/test_evaluator_provisional_overwrite.py`
+    - `tests/test_bev_energy_accounting.py`
+    - `tests/test_optimization_canonical_metaheuristics.py`
+  - 確認:
+    - `python -m pytest tests/test_milp_route_band_settings.py tests/test_reopt_alns_critical_fixes.py tests/test_run_preparation_stop_coords.py tests/test_route_family_deadhead_inference.py tests/test_optimization_canonical_metaheuristics.py tests/test_evaluator_provisional_overwrite.py tests/test_bev_energy_accounting.py` → `38 passed`
+    - canonical direct rerun (`output/tmp_canonical_237d/*_cap100.json`):
+      - `MILP`: `OPTIMAL`, `served=488/488`, `objective=1640378.9059`
+      - `ALNS`: `feasible`, `served=488/488`, `objective=1843087.2393`
+      - `GA`: `feasible`, `served=488/488`, `objective=1843520.5726`
+      - `ABC`: `feasible`, `served=488/488`, `objective=1827362.2393`
+    - いずれも `disable_vehicle_acquisition_cost=true`, `objective_mode=total_cost`, `fixed_route_band_mode=true` で再現した。
+    - BFF route sync smoke (`run_optimization()` を同期 submit patch で直実行): `solver_status=optimal`, `served=488/488`, `graph_artifacts.enabled=true`, `diagram_count=4` を確認
+    - Tk E2E smoke（withdrawn Tk root + sync run_bg + TestClient 経由）: `Quick Setup保存 -> Prepare -> run-optimization` の一連で `prepared_id_stable=true`, `solver_status=optimal`, `served=488`, `route_band_diagrams=4` を確認
 
 - 2026-03-14 (Catalog-backed dispatch scope for runtime route selection)
   - `bff/services/local_db_catalog.py` に depot / route-family summary 読み出しを追加し、`/api/catalog/depots`, `/api/catalog/depots/{depot_id}/routes`, `/api/catalog/route-families/{route_family_id}/patterns` を `bff/routers/catalog_local.py` から公開した。

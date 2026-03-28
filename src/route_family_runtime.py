@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import re
 import unicodedata
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
@@ -34,6 +35,13 @@ def _normalize_text(value: Any) -> str:
 
 def _normalize_stop_name(value: Any) -> str:
     return _normalize_text(value).replace(" ", "")
+
+
+def _normalize_stop_platform_family(value: Any) -> str:
+    raw = _normalize_text(value)
+    if not raw:
+        return ""
+    return re.sub(r"(\.\d{8})\.\w*$", r"\1", raw)
 
 
 def normalize_direction(value: Any, default: str = "outbound") -> str:
@@ -242,6 +250,33 @@ def merge_deadhead_metrics(
 
     stop_coords = _stop_coord_lookup(stops)
     stop_ids_by_name = _stop_name_lookup(stops)
+    stop_ids_by_platform_family: Dict[str, set[str]] = {}
+    for stop in stops:
+        if not isinstance(stop, Mapping):
+            continue
+        stop_id = str(stop.get("id") or stop.get("stop_id") or stop.get("stopId") or "").strip()
+        family_id = _normalize_stop_platform_family(stop_id)
+        if not stop_id or not family_id:
+            continue
+        stop_ids_by_platform_family.setdefault(family_id, set()).add(stop_id)
+    for family_stop_ids in stop_ids_by_platform_family.values():
+        if len(family_stop_ids) < 2:
+            continue
+        for from_stop in sorted(family_stop_ids):
+            for to_stop in sorted(family_stop_ids):
+                if from_stop == to_stop:
+                    continue
+                key = (from_stop, to_stop)
+                if key in metrics:
+                    continue
+                metrics[key] = DeadheadMetric(
+                    from_stop=from_stop,
+                    to_stop=to_stop,
+                    travel_time_min=0,
+                    distance_km=0.0,
+                    source="stop_platform_alias",
+                    route_family_code=None,
+                )
     if not stop_coords:
         return metrics
 

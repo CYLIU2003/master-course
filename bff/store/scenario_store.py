@@ -1802,7 +1802,7 @@ def _normalize_dispatch_scope(doc: Dict[str, Any]) -> Dict[str, Any]:
         "tripSelection": normalized_trip_selection,
         "allowIntraDepotRouteSwap": bool(scope.get("allowIntraDepotRouteSwap", False)),
         "allowInterDepotSwap": bool(scope.get("allowInterDepotSwap", False)),
-        "fixedRouteBandMode": bool(scope.get("fixedRouteBandMode", False)),
+        "fixedRouteBandMode": bool(scope.get("fixedRouteBandMode", True)),
         "depotId": primary_depot_id,
         "serviceId": selected_service_ids[0],
         "candidateRouteIds": candidate_route_ids,
@@ -3738,7 +3738,7 @@ def set_dispatch_scope(scenario_id: str, scope: Dict[str, Any]) -> Dict[str, Any
         ),
         "fixedRouteBandMode": scope.get(
             "fixedRouteBandMode",
-            current.get("fixedRouteBandMode", False),
+            current.get("fixedRouteBandMode", True),
         ),
         "depotId": depot_selection.get("primaryDepotId"),
         "serviceId": (

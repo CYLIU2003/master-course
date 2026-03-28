@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -44,6 +45,7 @@ from .problem import (
     ProblemVehicleType,
     PVSlot,
 )
+from .vehicle_assignment import assign_duty_fragments_to_vehicles, merge_duty_vehicle_maps
 
 
 @dataclass(frozen=True)
@@ -160,6 +162,31 @@ class ProblemBuilder:
         deadhead_speed_kmh = self._safe_float(
             simulation_cfg.get("deadhead_speed_kmh")
         )
+        charging_window_mode = str(
+            simulation_cfg.get("charging_window_mode")
+            or solver_cfg.get("charging_window_mode")
+            or "timetable_layover"
+        ).strip().lower()
+        if charging_window_mode not in {"home_depot_proxy", "timetable_layover"}:
+            charging_window_mode = "timetable_layover"
+        home_depot_charge_pre_window_min = self._safe_float(
+            simulation_cfg.get("home_depot_charge_pre_window_min")
+        )
+        if home_depot_charge_pre_window_min is None:
+            home_depot_charge_pre_window_min = self._safe_float(
+                solver_cfg.get("home_depot_charge_pre_window_min")
+            )
+        if home_depot_charge_pre_window_min is None:
+            home_depot_charge_pre_window_min = float(timestep_min)
+        home_depot_charge_post_window_min = self._safe_float(
+            simulation_cfg.get("home_depot_charge_post_window_min")
+        )
+        if home_depot_charge_post_window_min is None:
+            home_depot_charge_post_window_min = self._safe_float(
+                solver_cfg.get("home_depot_charge_post_window_min")
+            )
+        if home_depot_charge_post_window_min is None:
+            home_depot_charge_post_window_min = float(timestep_min)
         enable_contract_overage_penalty = simulation_cfg.get("enable_contract_overage_penalty")
         if enable_contract_overage_penalty is None:
             enable_contract_overage_penalty = solver_cfg.get("enable_contract_overage_penalty")
@@ -247,6 +274,9 @@ class ProblemBuilder:
             max_ice_fuel_percent=max_ice_fuel_percent,
             default_ice_tank_capacity_l=default_ice_tank_capacity_l,
             deadhead_speed_kmh=deadhead_speed_kmh,
+            charging_window_mode=charging_window_mode,
+            home_depot_charge_pre_window_min=home_depot_charge_pre_window_min,
+            home_depot_charge_post_window_min=home_depot_charge_post_window_min,
             enable_contract_overage_penalty=bool(enable_contract_overage_penalty)
             if enable_contract_overage_penalty is not None
             else True,
@@ -294,6 +324,9 @@ class ProblemBuilder:
         max_ice_fuel_percent: Optional[float] = None,
         default_ice_tank_capacity_l: Optional[float] = None,
         deadhead_speed_kmh: Optional[float] = None,
+        charging_window_mode: str = "timetable_layover",
+        home_depot_charge_pre_window_min: Optional[float] = None,
+        home_depot_charge_post_window_min: Optional[float] = None,
         enable_contract_overage_penalty: bool = True,
         contract_overage_penalty_yen_per_kwh: Optional[float] = None,
         grid_to_bus_priority_penalty_yen_per_kwh: Optional[float] = None,
@@ -308,6 +341,10 @@ class ProblemBuilder:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
         timestep_min = max(int(timestep_min or 60), 1)
+        if home_depot_charge_pre_window_min is None:
+            home_depot_charge_pre_window_min = float(timestep_min)
+        if home_depot_charge_post_window_min is None:
+            home_depot_charge_post_window_min = float(timestep_min)
         canonical_depot_id = str(canonical_depot_id or "depot_default")
         bev_reference_capacity_kwh = self._reference_bev_capacity_kwh(context)
         final_soc_floor_ratio = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
@@ -350,6 +387,11 @@ class ProblemBuilder:
                 context.vehicle_profiles,
                 default_home_depot_id=canonical_depot_id,
                 disable_vehicle_acquisition_cost=disable_vehicle_acquisition_cost,
+                initial_soc_percent=initial_soc_percent,
+                final_soc_floor_percent=final_soc_floor_percent,
+                initial_ice_fuel_percent=initial_ice_fuel_percent,
+                min_ice_fuel_percent=min_ice_fuel_percent,
+                max_ice_fuel_percent=max_ice_fuel_percent,
             )
         )
         if not vehicles:
@@ -394,7 +436,18 @@ class ProblemBuilder:
                 merged.update(successors)
                 feasible_connections[trip_id] = tuple(sorted(merged))
 
-        baseline = baseline_plan or self._build_baseline_plan(context)
+        baseline_source = baseline_plan or self._build_baseline_plan(context)
+        max_fragments = max(
+            int(max_start_fragments_per_vehicle or 1),
+            int(max_end_fragments_per_vehicle or 1),
+            1,
+        )
+        baseline = self._materialize_baseline_plan(
+            baseline_source,
+            vehicles,
+            max_fragments_per_vehicle=max_fragments,
+            all_trip_ids={trip.trip_id for trip in trip_nodes},
+        )
         return CanonicalOptimizationProblem(
             scenario=OptimizationScenario(
                 scenario_id=scenario_id,
@@ -436,11 +489,15 @@ class ProblemBuilder:
                 "final_soc_floor_percent": final_soc_floor_percent,
                 "final_soc_target_percent": final_soc_target_percent,
                 "final_soc_target_tolerance_percent": final_soc_target_tolerance_percent,
+                "required_soc_departure_unit": "percent_0_100",
                 "initial_ice_fuel_percent": initial_ice_fuel_percent,
                 "min_ice_fuel_percent": min_ice_fuel_percent,
                 "max_ice_fuel_percent": max_ice_fuel_percent,
                 "default_ice_tank_capacity_l": default_ice_tank_capacity_l,
                 "deadhead_speed_kmh": deadhead_speed_kmh,
+                "charging_window_mode": str(charging_window_mode or "timetable_layover").strip().lower(),
+                "home_depot_charge_pre_window_min": float(home_depot_charge_pre_window_min or 0.0),
+                "home_depot_charge_post_window_min": float(home_depot_charge_post_window_min or 0.0),
                 "enable_contract_overage_penalty": bool(enable_contract_overage_penalty),
                 "contract_overage_penalty_yen_per_kwh": contract_overage_penalty_yen_per_kwh,
                 "grid_to_bus_priority_penalty_yen_per_kwh": grid_to_bus_priority_penalty_yen_per_kwh,
@@ -519,7 +576,10 @@ class ProblemBuilder:
             raw = by_depot_raw.get(depot.depot_id, {})
             if not raw and len(depots) == 1:
                 raw = by_depot_raw.get("depot_default") or by_depot_raw.get(canonical_depot_id) or {}
-            pv_series = tuple(float(v or 0.0) for v in (raw.get("pv_generation_kwh_by_slot") or pv_kwh_by_slot))
+            pv_series = self._align_energy_series_to_slot_count(
+                raw.get("pv_generation_kwh_by_slot") or pv_kwh_by_slot,
+                slot_count,
+            )
             asset = DepotEnergyAsset(
                 depot_id=depot.depot_id,
                 pv_enabled=bool(raw.get("pv_enabled", len(pv_slots) > 0)),
@@ -558,12 +618,107 @@ class ProblemBuilder:
             assets[depot.depot_id] = asset
         return assets
 
+    def _align_energy_series_to_slot_count(
+        self,
+        values: Sequence[Any],
+        slot_count: int,
+    ) -> Tuple[float, ...]:
+        series = [float(v or 0.0) for v in values]
+        if slot_count <= 0:
+            return tuple()
+        if not series:
+            return tuple(0.0 for _ in range(slot_count))
+        if len(series) == slot_count:
+            return tuple(series)
+        if slot_count % len(series) == 0:
+            expand_factor = slot_count // len(series)
+            aligned: List[float] = []
+            for value in series:
+                distributed = value / float(expand_factor)
+                aligned.extend([distributed] * expand_factor)
+            return tuple(aligned)
+        if len(series) % slot_count == 0:
+            compress_factor = len(series) // slot_count
+            return tuple(
+                sum(series[idx * compress_factor : (idx + 1) * compress_factor])
+                for idx in range(slot_count)
+            )
+        aligned = [0.0] * slot_count
+        scale = len(series) / float(slot_count)
+        for slot_idx in range(slot_count):
+            start = slot_idx * scale
+            end = (slot_idx + 1) * scale
+            left = int(start)
+            right = int(math.ceil(end))
+            energy = 0.0
+            for raw_idx in range(left, min(right, len(series))):
+                overlap_start = max(start, raw_idx)
+                overlap_end = min(end, raw_idx + 1)
+                overlap = max(0.0, overlap_end - overlap_start)
+                if overlap > 0.0:
+                    energy += series[raw_idx] * overlap
+            aligned[slot_idx] = energy
+        return tuple(aligned)
+
     def _build_graph(
         self,
         context: DispatchContext,
         vehicle_type: str,
     ) -> Dict[str, List[str]]:
         return ConnectionGraphBuilder().build(context, vehicle_type)
+
+    def _estimate_trip_distance_km(
+        self,
+        row: Dict[str, Any],
+        route_like: Dict[str, Any],
+    ) -> float:
+        explicit = self._safe_float(
+            row.get("distance_km")
+            or row.get("distanceKm")
+            or route_like.get("distanceKm")
+            or route_like.get("distance_km")
+        )
+        if explicit is not None and explicit > 0.0:
+            return explicit
+
+        origin_lat = self._safe_float(row.get("origin_lat") or row.get("originLat"))
+        origin_lon = self._safe_float(row.get("origin_lon") or row.get("originLon"))
+        destination_lat = self._safe_float(row.get("destination_lat") or row.get("destinationLat"))
+        destination_lon = self._safe_float(row.get("destination_lon") or row.get("destinationLon"))
+        if None not in (origin_lat, origin_lon, destination_lat, destination_lon):
+            straight_km = self._haversine_km(
+                float(origin_lat),
+                float(origin_lon),
+                float(destination_lat),
+                float(destination_lon),
+            )
+            if straight_km > 0.0:
+                return straight_km * 1.3
+
+        runtime_min = self._safe_float(
+            row.get("runtime_min") or row.get("runtimeMin") or row.get("durationMin")
+        )
+        if runtime_min is not None and runtime_min > 0.0:
+            return runtime_min / 60.0 * 17.0
+        return 0.0
+
+    def _haversine_km(
+        self,
+        lat1: float,
+        lon1: float,
+        lat2: float,
+        lon2: float,
+    ) -> float:
+        radius_km = 6371.0
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = (
+            math.sin(dlat / 2.0) ** 2
+            + math.cos(math.radians(lat1))
+            * math.cos(math.radians(lat2))
+            * math.sin(dlon / 2.0) ** 2
+        )
+        return radius_km * 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
 
     def _build_dispatch_context_from_scenario(
         self,
@@ -629,7 +784,7 @@ class ProblemBuilder:
                     destination=str(row.get("destination") or ""),
                     departure_time=str(row.get("departure") or "00:00"),
                     arrival_time=str(row.get("arrival") or "00:00"),
-                    distance_km=float(row.get("distance_km") or 0.0),
+                    distance_km=self._estimate_trip_distance_km(row, route_like),
                     allowed_vehicle_types=allowed,
                     origin_stop_id=str(row.get("origin_stop_id") or ""),
                     destination_stop_id=str(row.get("destination_stop_id") or ""),
@@ -679,7 +834,7 @@ class ProblemBuilder:
             key: DeadheadRule(
                 from_stop=metric.from_stop,
                 to_stop=metric.to_stop,
-                travel_time_min=max(1, int(metric.travel_time_min)),
+                travel_time_min=max(0, int(metric.travel_time_min)),
             )
             for key, metric in deadhead_metrics.items()
         }
@@ -731,7 +886,17 @@ class ProblemBuilder:
         *,
         default_home_depot_id: str,
         disable_vehicle_acquisition_cost: bool,
+        initial_soc_percent: Optional[float] = None,
+        final_soc_floor_percent: Optional[float] = None,
+        initial_ice_fuel_percent: Optional[float] = None,
+        min_ice_fuel_percent: Optional[float] = None,
+        max_ice_fuel_percent: Optional[float] = None,
     ) -> Iterable[ProblemVehicle]:
+        initial_soc_ratio_override = self._normalize_percent_like_to_ratio(initial_soc_percent)
+        reserve_soc_ratio_override = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
+        initial_fuel_ratio_override = self._normalize_percent_like_to_ratio(initial_ice_fuel_percent)
+        min_fuel_ratio_override = self._normalize_percent_like_to_ratio(min_ice_fuel_percent)
+        max_fuel_ratio_override = self._normalize_percent_like_to_ratio(max_ice_fuel_percent)
         for index, vehicle in enumerate(vehicles):
             if not isinstance(vehicle, dict):
                 continue
@@ -743,9 +908,13 @@ class ProblemBuilder:
             if battery_capacity_kwh is None and profile is not None:
                 battery_capacity_kwh = profile.battery_capacity_kwh
             initial_soc = self._safe_float(vehicle.get("initialSoc"))
+            if initial_soc_ratio_override is not None and battery_capacity_kwh is not None:
+                initial_soc = initial_soc_ratio_override * battery_capacity_kwh
             if initial_soc is None:
                 initial_soc = battery_capacity_kwh
             reserve_soc = self._safe_float(vehicle.get("reserveSoc"))
+            if reserve_soc_ratio_override is not None and battery_capacity_kwh is not None:
+                reserve_soc = reserve_soc_ratio_override * battery_capacity_kwh
             if reserve_soc is None and battery_capacity_kwh is not None:
                 reserve_soc = battery_capacity_kwh * 0.1
 
@@ -753,9 +922,15 @@ class ProblemBuilder:
             if fuel_tank_capacity_l is None and profile is not None:
                 fuel_tank_capacity_l = profile.fuel_tank_capacity_l
             initial_fuel_l = self._safe_float(vehicle.get("initialFuelL"))
+            if initial_fuel_ratio_override is not None and fuel_tank_capacity_l is not None:
+                initial_fuel_l = initial_fuel_ratio_override * fuel_tank_capacity_l
+            if max_fuel_ratio_override is not None and fuel_tank_capacity_l is not None and initial_fuel_l is not None:
+                initial_fuel_l = min(initial_fuel_l, max_fuel_ratio_override * fuel_tank_capacity_l)
             if initial_fuel_l is None:
                 initial_fuel_l = fuel_tank_capacity_l
             fuel_reserve_l = self._safe_float(vehicle.get("fuelReserveL"))
+            if min_fuel_ratio_override is not None and fuel_tank_capacity_l is not None:
+                fuel_reserve_l = min_fuel_ratio_override * fuel_tank_capacity_l
             if fuel_reserve_l is None and fuel_tank_capacity_l is not None:
                 fuel_reserve_l = fuel_tank_capacity_l * 0.1
 
@@ -968,6 +1143,46 @@ class ProblemBuilder:
             served_trip_ids=tuple(sorted(assigned_trip_ids)),
             unserved_trip_ids=tuple(sorted(all_trip_ids - assigned_trip_ids)),
             metadata={"source": "dispatch_greedy_baseline"},
+        )
+
+    def _materialize_baseline_plan(
+        self,
+        plan: Optional[AssignmentPlan],
+        vehicles: Sequence[ProblemVehicle],
+        *,
+        max_fragments_per_vehicle: int,
+        all_trip_ids: set[str],
+    ) -> AssignmentPlan:
+        if plan is None:
+            return AssignmentPlan(
+                duties=(),
+                charging_slots=(),
+                refuel_slots=(),
+                served_trip_ids=(),
+                unserved_trip_ids=tuple(sorted(all_trip_ids)),
+                metadata={"source": "dispatch_greedy_baseline", "duty_vehicle_map": {}},
+            )
+        assigned_duties, duty_vehicle_map, skipped_trip_ids = assign_duty_fragments_to_vehicles(
+            plan.duties,
+            vehicles=vehicles,
+            max_fragments_per_vehicle=max_fragments_per_vehicle,
+        )
+        served_trip_ids = tuple(
+            sorted({trip_id for duty in assigned_duties for trip_id in duty.trip_ids})
+        )
+        unserved_trip_ids = tuple(
+            sorted((all_trip_ids - set(served_trip_ids)).union(set(skipped_trip_ids)))
+        )
+        return AssignmentPlan(
+            duties=assigned_duties,
+            charging_slots=(),
+            refuel_slots=(),
+            served_trip_ids=served_trip_ids,
+            unserved_trip_ids=unserved_trip_ids,
+            metadata={
+                **dict(plan.metadata),
+                "duty_vehicle_map": merge_duty_vehicle_maps(duty_vehicle_map),
+            },
         )
 
     def _build_baseline_plan_from_scenario(

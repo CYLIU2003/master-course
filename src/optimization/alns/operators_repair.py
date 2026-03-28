@@ -6,6 +6,10 @@ from typing import Dict, List, Tuple
 from src.dispatch.dispatcher import DispatchGenerator
 from src.dispatch.models import DispatchContext, DutyLeg, VehicleDuty
 from src.optimization.common.problem import AssignmentPlan, CanonicalOptimizationProblem, ChargingSlot, OptimizationConfig, OptimizationMode, RefuelSlot
+from src.optimization.common.vehicle_assignment import (
+    assign_duty_fragments_to_vehicles,
+    merge_duty_vehicle_maps,
+)
 from src.optimization.milp.engine import MILPOptimizer
 
 
@@ -15,7 +19,6 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
 
     trip_map = problem.dispatch_context.trips_by_id()
     remaining = [trip_map[trip_id] for trip_id in plan.unserved_trip_ids if trip_id in trip_map]
-    existing = list(plan.duties)
     by_type: Dict[str, List] = {}
     for trip in remaining:
         preferred_type = trip.allowed_vehicle_types[0] if trip.allowed_vehicle_types else None
@@ -23,7 +26,7 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
             continue
         by_type.setdefault(preferred_type, []).append(trip)
 
-    next_index = len(existing) + 1
+    candidate_duties: List[VehicleDuty] = []
     for vehicle_type, trips in by_type.items():
         ctx = DispatchContext(
             service_date=problem.dispatch_context.service_date,
@@ -34,30 +37,25 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
             default_turnaround_min=problem.dispatch_context.default_turnaround_min,
         )
         new_duties = DispatchGenerator().generate_greedy_duties(ctx, vehicle_type)
-        for duty in new_duties:
-            existing.append(
-                VehicleDuty(
-                    duty_id=f"{duty.duty_id}-R{next_index:04d}",
-                    vehicle_type=duty.vehicle_type,
-                    legs=tuple(
-                        DutyLeg(trip=leg.trip, deadhead_from_prev_min=leg.deadhead_from_prev_min)
-                        for leg in duty.legs
-                    ),
-                )
+        candidate_duties.extend(
+            VehicleDuty(
+                duty_id=str(duty.duty_id),
+                vehicle_type=duty.vehicle_type,
+                legs=tuple(
+                    DutyLeg(trip=leg.trip, deadhead_from_prev_min=leg.deadhead_from_prev_min)
+                    for leg in duty.legs
+                ),
             )
-            next_index += 1
+            for duty in new_duties
+        )
 
-    served = tuple(trip_id for duty in existing for trip_id in duty.trip_ids)
-    unserved = sorted(set(problem.eligible_trip_ids()) - set(served))
     return _with_recomputed_charging(
         problem,
-        AssignmentPlan(
-        duties=tuple(existing),
-        charging_slots=plan.charging_slots,
-        refuel_slots=plan.refuel_slots,
-        served_trip_ids=served,
-        unserved_trip_ids=tuple(unserved),
-        metadata={**dict(plan.metadata), "repair_operator": "greedy_trip_insertion"},
+        _append_generated_duties(
+            problem,
+            plan,
+            candidate_duties,
+            operator_name="greedy_trip_insertion",
         ),
     )
 
@@ -70,9 +68,9 @@ def baseline_dispatch_repair(
     if baseline is None or not baseline.duties:
         return greedy_trip_insertion(problem, plan)
 
-    existing = list(plan.duties)
     served = set(plan.served_trip_ids)
     missing = set(plan.unserved_trip_ids)
+    candidate_duties: List[VehicleDuty] = []
 
     for duty in baseline.duties:
         duty_trip_ids = set(duty.trip_ids)
@@ -82,9 +80,9 @@ def baseline_dispatch_repair(
             continue
         if duty_trip_ids.intersection(served):
             continue
-        existing.append(
+        candidate_duties.append(
             VehicleDuty(
-                duty_id=f"{duty.duty_id}-B",
+                duty_id=str(duty.duty_id),
                 vehicle_type=duty.vehicle_type,
                 legs=tuple(
                     DutyLeg(
@@ -95,30 +93,18 @@ def baseline_dispatch_repair(
                 ),
             )
         )
-        served.update(duty_trip_ids)
-        missing.difference_update(duty_trip_ids)
-
-    if missing:
-        repaired = AssignmentPlan(
-            duties=tuple(existing),
-            charging_slots=plan.charging_slots,
-            refuel_slots=plan.refuel_slots,
-            served_trip_ids=tuple(sorted(served)),
-            unserved_trip_ids=tuple(sorted(missing)),
-            metadata={**dict(plan.metadata), "repair_operator": "baseline_dispatch_repair"},
-        )
+    repaired = _append_generated_duties(
+        problem,
+        plan,
+        candidate_duties,
+        operator_name="baseline_dispatch_repair",
+    )
+    if repaired.unserved_trip_ids:
         return greedy_trip_insertion(problem, repaired)
 
     return _with_recomputed_charging(
         problem,
-        AssignmentPlan(
-        duties=tuple(existing),
-        charging_slots=plan.charging_slots,
-        refuel_slots=plan.refuel_slots,
-        served_trip_ids=tuple(sorted(served)),
-        unserved_trip_ids=tuple(),
-        metadata={**dict(plan.metadata), "repair_operator": "baseline_dispatch_repair"},
-        ),
+        repaired,
     )
 
 
@@ -168,8 +154,8 @@ def partial_milp_repair(problem: CanonicalOptimizationProblem, plan: AssignmentP
         ),
     )
 
-    existing_duties = list(plan.duties)
     existing_served = set(plan.served_trip_ids)
+    candidate_duties: List[VehicleDuty] = []
     for duty in sub_result.plan.duties:
         new_trip_ids = [trip_id for trip_id in duty.trip_ids if trip_id not in existing_served]
         if not new_trip_ids:
@@ -177,26 +163,21 @@ def partial_milp_repair(problem: CanonicalOptimizationProblem, plan: AssignmentP
         filtered_legs = tuple(leg for leg in duty.legs if leg.trip.trip_id in new_trip_ids)
         if not filtered_legs:
             continue
-        existing_duties.append(
+        candidate_duties.append(
             VehicleDuty(
-                duty_id=f"{duty.duty_id}-PMR",
+                duty_id=str(duty.duty_id),
                 vehicle_type=duty.vehicle_type,
                 legs=filtered_legs,
             )
         )
-        existing_served.update(new_trip_ids)
 
-    all_eligible = set(problem.eligible_trip_ids())
-    unserved = tuple(sorted(all_eligible - existing_served))
     return _with_recomputed_charging(
         problem,
-        AssignmentPlan(
-        duties=tuple(existing_duties),
-        charging_slots=plan.charging_slots,
-        refuel_slots=plan.refuel_slots,
-        served_trip_ids=tuple(sorted(existing_served)),
-        unserved_trip_ids=unserved,
-        metadata={**dict(plan.metadata), "repair_operator": "partial_milp_repair"},
+        _append_generated_duties(
+            problem,
+            plan,
+            candidate_duties,
+            operator_name="partial_milp_repair",
         ),
     )
 
@@ -354,9 +335,7 @@ def soc_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> A
     existing_slot_keys = {(slot.vehicle_id, slot.slot_index) for slot in repaired_slots}
 
     for duty in plan.duties:
-        duty_vehicle_id = None
-        if duty.duty_id.startswith("milp_"):
-            duty_vehicle_id = duty.duty_id.replace("milp_", "", 1)
+        duty_vehicle_id = plan.vehicle_id_for_duty(duty.duty_id)
         if duty_vehicle_id is None or duty_vehicle_id not in vehicle_map:
             continue
         vehicle = vehicle_map[duty_vehicle_id]
@@ -413,14 +392,6 @@ def _with_recomputed_charging(problem: CanonicalOptimizationProblem, plan: Assig
         unserved_trip_ids=plan.unserved_trip_ids,
         metadata=plan.metadata,
     )
-
-
-def _vehicle_id_from_duty_id(duty_id: str) -> str:
-    if duty_id.startswith("milp_") and len(duty_id) > 5:
-        return duty_id[5:]
-    return duty_id
-
-
 def _slot_index(problem: CanonicalOptimizationProblem, minute: int) -> int:
     step = max(problem.scenario.timestep_min, 1)
     start = 0
@@ -459,7 +430,7 @@ def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: Assig
     out: List[ChargingSlot] = []
 
     for duty in plan.duties:
-        vehicle_id = _vehicle_id_from_duty_id(duty.duty_id)
+        vehicle_id = plan.vehicle_id_for_duty(duty.duty_id)
         vehicle = vehicle_by_id.get(vehicle_id)
         vtype = type_by_id.get(duty.vehicle_type)
         powertrain = str((vtype.powertrain_type if vtype else duty.vehicle_type) or "").upper()
@@ -558,7 +529,7 @@ def _recompute_refuel_slots(problem: CanonicalOptimizationProblem, plan: Assignm
 
     out: List[RefuelSlot] = []
     for duty in plan.duties:
-        vehicle_id = _vehicle_id_from_duty_id(duty.duty_id)
+        vehicle_id = plan.vehicle_id_for_duty(duty.duty_id)
         vehicle = vehicle_by_id.get(vehicle_id)
         vtype = type_by_id.get(duty.vehicle_type)
         powertrain = str((vtype.powertrain_type if vtype else duty.vehicle_type) or "").upper()
@@ -664,3 +635,42 @@ def _is_in_overnight_window(minute_of_day: int, start_hhmm: str, end_hhmm: str) 
     if start <= end:
         return start <= value <= end
     return value >= start or value <= end
+
+
+def _append_generated_duties(
+    problem: CanonicalOptimizationProblem,
+    plan: AssignmentPlan,
+    duties: List[VehicleDuty],
+    *,
+    operator_name: str,
+) -> AssignmentPlan:
+    existing_map = plan.duty_vehicle_map()
+    all_duties, duty_vehicle_map, skipped_trip_ids = assign_duty_fragments_to_vehicles(
+        duties,
+        vehicles=problem.vehicles,
+        max_fragments_per_vehicle=max(
+            int(problem.metadata.get("max_start_fragments_per_vehicle") or 1),
+            int(problem.metadata.get("max_end_fragments_per_vehicle") or 1),
+            1,
+        ),
+        existing_duties=plan.duties,
+        existing_duty_vehicle_map=existing_map,
+    )
+    served = tuple(sorted({trip_id for duty in all_duties for trip_id in duty.trip_ids}))
+    unserved = tuple(
+        sorted((set(problem.eligible_trip_ids()) - set(served)).union(set(skipped_trip_ids)))
+    )
+    return AssignmentPlan(
+        duties=all_duties,
+        charging_slots=plan.charging_slots,
+        refuel_slots=plan.refuel_slots,
+        vehicle_cost_ledger=plan.vehicle_cost_ledger,
+        daily_cost_ledger=plan.daily_cost_ledger,
+        served_trip_ids=served,
+        unserved_trip_ids=unserved,
+        metadata={
+            **dict(plan.metadata),
+            "repair_operator": operator_name,
+            "duty_vehicle_map": merge_duty_vehicle_maps(existing_map, duty_vehicle_map),
+        },
+    )

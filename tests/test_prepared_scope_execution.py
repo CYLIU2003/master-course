@@ -5,6 +5,7 @@ from unittest import mock
 
 from bff.routers import optimization
 from bff.services.run_preparation import (
+    _scenario_hash,
     materialize_scenario_from_prepared_input,
     solver_prepare_profile,
 )
@@ -94,6 +95,7 @@ def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback(
         to_dict=lambda: {},
         vehicle_count=1,
         task_count=1,
+        charger_count=0,
         travel_connection_count=0,
         warnings=[],
         errors=[],
@@ -167,3 +169,21 @@ def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback(
     assert stored_fields["timetable_rows"][0]["trip_id"] == "trip-1"
     assert stored_fields["optimization_result"]["prepared_input_id"] == "prepared-1"
     assert stored_fields["optimization_audit"]["prepared_input_id"] == "prepared-1"
+
+
+def test_scenario_hash_ignores_optimization_and_build_audits() -> None:
+    base = {
+        "meta": {"id": "scenario-1"},
+        "scenario_overlay": {"dataset_id": "tokyu_full"},
+        "dispatch_scope": {"serviceId": "WEEKDAY", "depotId": "dep1"},
+        "simulation_config": {"solver_mode": "mode_milp_only"},
+    }
+    with_audits = {
+        **base,
+        "__unloaded_artifact_fields__": ["trips", "graph"],
+        "optimization_audit": {"executed_at": "2026-03-28T09:00:00+00:00", "output_dir": "output/x"},
+        "problemdata_build_audit": {"task_count": 488, "vehicle_count": 70},
+        "simulation_audit": {"executed_at": "2026-03-28T09:05:00+00:00"},
+    }
+
+    assert _scenario_hash(base) == _scenario_hash(with_audits)

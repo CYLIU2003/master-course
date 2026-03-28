@@ -108,6 +108,7 @@ class RunPreparation:
 
 _prep_cache: dict[tuple[str, str, str], RunPreparation] = {}
 _VOLATILE_HASH_KEYS = {
+    "__unloaded_artifact_fields__",
     "updatedAt",
     "createdAt",
     "status",
@@ -122,7 +123,13 @@ _VOLATILE_HASH_KEYS = {
     "duties",
     "dispatch_plan",
     "simulation_result",
+    "simulation_audit",
+    "simulationAudit",
     "optimization_result",
+    "optimization_audit",
+    "optimizationAudit",
+    "problemdata_build_audit",
+    "problemdataBuildAudit",
     "datasetStatus",
     "dataset_status",
     "prepared_input_id",
@@ -269,71 +276,176 @@ def _select_items_by_ids(items: list[dict[str, Any]], ids: list[str]) -> list[di
     ]
 
 
-def _load_optional_stops(built_dir: Path, timetables_df: pd.DataFrame) -> list[dict[str, Any]]:
-    stops_path = built_dir / "stops.parquet"
-    if not stops_path.exists():
-        return _derived_stops_from_timetables(timetables_df)
-    frame = pd.read_parquet(stops_path)
-    if frame.empty:
-        return _derived_stops_from_timetables(timetables_df)
-    if timetables_df.empty:
-        return _as_records(frame)
+def _collect_referenced_stop_ids(
+    trips_df: pd.DataFrame,
+    timetables_df: pd.DataFrame,
+) -> set[str]:
     referenced_stop_ids: set[str] = set()
-    for column in ("stop_id", "stopId", "origin", "destination"):
-        if column in timetables_df.columns:
+    frame_columns = (
+        (trips_df, ("origin_stop_id", "destination_stop_id", "originStopId", "destinationStopId")),
+        (timetables_df, ("stop_id", "stopId", "origin_stop_id", "destination_stop_id", "originStopId", "destinationStopId")),
+    )
+    for frame, columns in frame_columns:
+        if frame.empty:
+            continue
+        for column in columns:
+            if column not in frame.columns:
+                continue
             referenced_stop_ids.update(
                 str(value)
-                for value in timetables_df[column].dropna().astype(str).tolist()
+                for value in frame[column].dropna().astype(str).tolist()
                 if str(value).strip()
             )
-    if not referenced_stop_ids:
-        return _as_records(frame)
-    for column in ("id", "stop_id", "stopId"):
-        if column in frame.columns:
-            filtered = frame[frame[column].astype(str).isin(referenced_stop_ids)].reset_index(drop=True)
-            if not filtered.empty:
-                return _as_records(filtered)
-    return _derived_stops_from_timetables(timetables_df) or _as_records(frame)
+    return referenced_stop_ids
 
 
-def _derived_stops_from_timetables(timetables_df: pd.DataFrame) -> list[dict[str, Any]]:
-    if timetables_df.empty:
+def _filter_stop_records(
+    stops: list[dict[str, Any]],
+    referenced_stop_ids: set[str],
+) -> list[dict[str, Any]]:
+    if not stops:
         return []
-    rows = timetables_df.to_dict(orient="records")
+    if not referenced_stop_ids:
+        return [dict(item) for item in stops if isinstance(item, dict)]
+    filtered: list[dict[str, Any]] = []
+    for item in stops:
+        if not isinstance(item, dict):
+            continue
+        stop_id = str(item.get("id") or item.get("stop_id") or item.get("stopId") or "").strip()
+        if stop_id and stop_id in referenced_stop_ids:
+            filtered.append(dict(item))
+    return filtered
+
+
+def _load_catalog_stops(
+    scenario: dict,
+    referenced_stop_ids: set[str],
+) -> list[dict[str, Any]]:
+    try:
+        from src import tokyu_bus_data
+
+        dataset_id = _dataset_id(scenario)
+        if not tokyu_bus_data.tokyu_bus_data_ready(dataset_id):
+            return []
+        return _filter_stop_records(
+            tokyu_bus_data.load_stops(dataset_id=dataset_id),
+            referenced_stop_ids,
+        )
+    except Exception as exc:
+        log.warning("Catalog stop load failed; falling back to inferred stops: %s", exc)
+        return []
+
+
+def _merge_stop_records(
+    primary_rows: list[dict[str, Any]],
+    fallback_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    ordered_ids: list[str] = []
+    for rows in (primary_rows, fallback_rows):
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            stop_id = str(item.get("id") or item.get("stop_id") or item.get("stopId") or "").strip()
+            if not stop_id:
+                continue
+            normalized = dict(item)
+            if stop_id in merged:
+                existing = merged[stop_id]
+                for key, value in normalized.items():
+                    if existing.get(key) in (None, "", 0.0) and value not in (None, ""):
+                        existing[key] = value
+                continue
+            merged[stop_id] = normalized
+            ordered_ids.append(stop_id)
+    return [merged[stop_id] for stop_id in ordered_ids]
+
+
+def _load_optional_stops(
+    built_dir: Path,
+    scenario: dict,
+    trips_df: pd.DataFrame,
+    timetables_df: pd.DataFrame,
+) -> list[dict[str, Any]]:
+    referenced_stop_ids = _collect_referenced_stop_ids(trips_df, timetables_df)
+    stops_path = built_dir / "stops.parquet"
+    if not stops_path.exists():
+        catalog_rows = _load_catalog_stops(scenario, referenced_stop_ids)
+        return _merge_stop_records(
+            catalog_rows,
+            _derived_stops_from_frames(trips_df, timetables_df),
+        )
+    frame = pd.read_parquet(stops_path)
+    if frame.empty:
+        catalog_rows = _load_catalog_stops(scenario, referenced_stop_ids)
+        return _merge_stop_records(
+            catalog_rows,
+            _derived_stops_from_frames(trips_df, timetables_df),
+        )
+    frame_rows = _as_records(frame)
+    filtered_frame_rows = _filter_stop_records(frame_rows, referenced_stop_ids)
+    if filtered_frame_rows:
+        catalog_rows = _load_catalog_stops(scenario, referenced_stop_ids)
+        return _merge_stop_records(
+            filtered_frame_rows,
+            _merge_stop_records(
+                catalog_rows,
+                _derived_stops_from_frames(trips_df, timetables_df),
+            ),
+        )
+    catalog_rows = _load_catalog_stops(scenario, referenced_stop_ids)
+    return _merge_stop_records(
+        catalog_rows or frame_rows,
+        _derived_stops_from_frames(trips_df, timetables_df),
+    )
+
+
+def _derived_stops_from_frames(
+    trips_df: pd.DataFrame,
+    timetables_df: pd.DataFrame,
+) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
-    stop_id_column = "stop_id" if "stop_id" in timetables_df.columns else "stopId" if "stopId" in timetables_df.columns else None
-    stop_name_column = "stop_name" if "stop_name" in timetables_df.columns else "stopName" if "stopName" in timetables_df.columns else None
-    if stop_id_column:
-        for row in rows:
-            stop_id = str(row.get(stop_id_column) or "").strip()
-            if not stop_id or stop_id in seen_ids:
-                continue
-            seen_ids.add(stop_id)
-            items.append(
-                {
-                    "id": stop_id,
-                    "name": str(row.get(stop_name_column) or stop_id) if stop_name_column else stop_id,
-                    "source": "prepared_input_inferred",
-                }
-            )
-        if items:
-            return items
-    for column, name_column in (("origin_stop_id", "origin"), ("destination_stop_id", "destination")):
-        if column not in timetables_df.columns:
+    frames = (
+        (
+            timetables_df,
+            (
+                ("stop_id", "stop_name"),
+                ("stopId", "stopName"),
+                ("origin_stop_id", "origin"),
+                ("destination_stop_id", "destination"),
+                ("originStopId", "origin"),
+                ("destinationStopId", "destination"),
+            ),
+        ),
+        (
+            trips_df,
+            (
+                ("origin_stop_id", "origin"),
+                ("destination_stop_id", "destination"),
+                ("originStopId", "origin"),
+                ("destinationStopId", "destination"),
+            ),
+        ),
+    )
+    for frame, column_pairs in frames:
+        if frame.empty:
             continue
-        for row in rows:
-            stop_id = str(row.get(column) or "").strip()
-            if not stop_id or stop_id in seen_ids:
-                continue
-            seen_ids.add(stop_id)
-            items.append(
-                {
-                    "id": stop_id,
-                    "name": str(row.get(name_column) or stop_id),
-                    "source": "prepared_input_inferred",
-                }
-            )
+        for row in frame.to_dict(orient="records"):
+            for column, name_column in column_pairs:
+                if column not in row:
+                    continue
+                stop_id = str(row.get(column) or "").strip()
+                if not stop_id or stop_id in seen_ids:
+                    continue
+                seen_ids.add(stop_id)
+                items.append(
+                    {
+                        "id": stop_id,
+                        "name": str(row.get(name_column) or stop_id),
+                        "source": "prepared_input_inferred",
+                    }
+                )
     return items
 
 
@@ -626,6 +738,36 @@ def materialize_scenario_from_prepared_input(
             if isinstance(item, dict)
         ]
 
+    referenced_stop_ids: set[str] = set()
+    for stop in hydrated.get("stops") or []:
+        if not isinstance(stop, dict):
+            continue
+        stop_id = str(stop.get("id") or stop.get("stop_id") or stop.get("stopId") or "").strip()
+        if stop_id:
+            referenced_stop_ids.add(stop_id)
+    for row in hydrated.get("timetable_rows") or []:
+        if not isinstance(row, dict):
+            continue
+        for key in ("origin_stop_id", "destination_stop_id", "originStopId", "destinationStopId", "stop_id", "stopId"):
+            stop_id = str(row.get(key) or "").strip()
+            if stop_id:
+                referenced_stop_ids.add(stop_id)
+    for row in hydrated.get("stop_timetables") or []:
+        if not isinstance(row, dict):
+            continue
+        for key in ("stop_id", "stopId"):
+            stop_id = str(row.get(key) or "").strip()
+            if stop_id:
+                referenced_stop_ids.add(stop_id)
+
+    if referenced_stop_ids:
+        catalog_stops = _load_catalog_stops(hydrated, referenced_stop_ids)
+        if catalog_stops:
+            hydrated["stops"] = _merge_stop_records(
+                list(hydrated.get("stops") or []),
+                catalog_stops,
+            )
+
     hydrated["prepared_input_id"] = str(prepared_input.get("prepared_input_id") or "")
     hydrated["prepared_scope_summary"] = dict(prepared_input.get("scope") or {})
     hydrated["prepare_profile"] = dict(prepared_input.get("prepare_profile") or {})
@@ -674,7 +816,12 @@ def _build_run_preparation(
             built_dir=built_dir,
             scope=scope,
         )
-        stops = _load_optional_stops(built_dir, timetables_df)
+        stops = _load_optional_stops(
+            built_dir,
+            scenario,
+            trips_df,
+            timetables_df,
+        )
         warnings: list[str] = []
         if not scope.depot_ids:
             warnings.append("No depot is selected in the current builder scope.")

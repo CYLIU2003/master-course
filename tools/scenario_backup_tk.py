@@ -133,6 +133,44 @@ def _scope_route_sort_key(route: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _sanitize_objective_weights(payload: Any) -> dict[str, float]:
+    if not isinstance(payload, dict):
+        return {}
+    out: dict[str, float] = {}
+    for key, value in payload.items():
+        try:
+            out[str(key)] = float(value)
+        except Exception:
+            continue
+    return out
+
+
+def _compose_saved_objective_weights(
+    base_weights: dict[str, float],
+    *,
+    slack_penalty: float | None,
+    degradation_weight: float | None,
+) -> dict[str, float]:
+    saved = _sanitize_objective_weights(base_weights)
+    if slack_penalty is not None and slack_penalty > 0:
+        saved["slack_penalty"] = float(slack_penalty)
+    if degradation_weight is not None and degradation_weight > 0:
+        saved["degradation"] = float(degradation_weight)
+    return saved
+
+
+def _split_saved_objective_weights(
+    payload: Any,
+) -> tuple[dict[str, float], float | None, float | None]:
+    saved = _sanitize_objective_weights(payload)
+    slack_penalty = saved.pop("slack_penalty", None)
+    degradation_weight = saved.pop("degradation", None)
+    legacy_degradation = saved.pop("battery_degradation_cost", None)
+    if degradation_weight is None:
+        degradation_weight = legacy_degradation
+    return saved, slack_penalty, degradation_weight
+
+
 def _group_scope_routes_by_family(
     routes: list[dict[str, Any]],
 ) -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, str]]:
@@ -1075,7 +1113,7 @@ class App:
         self.include_deadhead_var = tk.BooleanVar(value=True)
         self.allow_intra_var = tk.BooleanVar(value=False)
         self.allow_inter_var = tk.BooleanVar(value=False)
-        self.fixed_route_band_mode_var = tk.BooleanVar(value=False)
+        self.fixed_route_band_mode_var = tk.BooleanVar(value=True)
         frow1 = ttk.Frame(flags_lf)
         frow1.pack(fill=tk.X)
         ttk.Checkbutton(frow1, text="区間便", variable=self.include_short_turn_var).pack(side=tk.LEFT)
@@ -1294,7 +1332,7 @@ class App:
         self.depot_energy_assets_json_var = tk.StringVar(value="")
         self.co2_price_source_var = tk.StringVar(value="manual")
         self.co2_reference_date_var = tk.StringVar(value="")
-        self.enable_vehicle_diagram_output_var = tk.BooleanVar(value=False)
+        self.enable_vehicle_diagram_output_var = tk.BooleanVar(value=True)
         self._labeled_entry(advanced, "売電単価 grid_sell_price_per_kwh", self.grid_sell_price_var,
             tooltip="PV 余剰電力の売電単価 [円/kWh]。現行実装では売電を目的関数に含まないため参考値。例: 0")
         self._labeled_entry(advanced, "未配車罰金 unserved_penalty", self.unserved_penalty_var,
@@ -3489,7 +3527,7 @@ class App:
             self._suspend_route_lock_sync = True
             self.allow_intra_var.set(bool(dispatch_scope.get("allowIntraDepotRouteSwap", False)))
             self.allow_inter_var.set(bool(dispatch_scope.get("allowInterDepotSwap", False)))
-            self.fixed_route_band_mode_var.set(bool(dispatch_scope.get("fixedRouteBandMode", False)))
+            self.fixed_route_band_mode_var.set(bool(dispatch_scope.get("fixedRouteBandMode", True)))
             self._suspend_route_lock_sync = False
 
             solver = dict(resp.get("solverSettings") or {})
@@ -3504,10 +3542,11 @@ class App:
             self.alns_iter_var.set(str(solver.get("alnsIterations") or 500))
             self.no_improvement_limit_var.set(str(solver.get("noImprovementLimit") or 100))
             self.destroy_fraction_var.set(str(solver.get("destroyFraction") if solver.get("destroyFraction") is not None else 0.25))
+            self.random_seed_var.set(str(solver.get("randomSeed") or 42))
             self.objective_preset_var.set(str(solver.get("objectivePreset") or sim.get("objectivePreset") or "cost"))
             self.max_start_fragments_var.set(str(solver.get("maxStartFragmentsPerVehicle") or 100))
             self.max_end_fragments_var.set(str(solver.get("maxEndFragmentsPerVehicle") or 100))
-            self.enable_vehicle_diagram_output_var.set(bool(solver.get("enableVehicleDiagramOutput", False)))
+            self.enable_vehicle_diagram_output_var.set(bool(solver.get("enableVehicleDiagramOutput", True)))
             self.allow_partial_service_var.set(bool(sim.get("allowPartialService", False)))
             self.unserved_penalty_var.set(str(sim.get("unservedPenalty") or 10000))
             self.grid_flat_price_var.set(str(sim.get("gridFlatPricePerKwh") or 30))
@@ -3556,6 +3595,17 @@ class App:
                 )
             else:
                 self.depot_energy_assets_json_var.set("")
+            objective_weights_raw, slack_penalty, degradation_weight = _split_saved_objective_weights(
+                sim.get("objectiveWeights") or {}
+            )
+            self.objective_weights_json_var.set(
+                json.dumps(objective_weights_raw, ensure_ascii=True, separators=(",", ":"))
+                if objective_weights_raw
+                else ""
+            )
+            self.contract_penalty_coeff_var.set(str(slack_penalty if slack_penalty is not None else 1000000.0))
+            if degradation_weight is not None:
+                self.degradation_weight_var.set(str(degradation_weight))
             if self.fixed_route_band_mode_var.get() and not self.enable_vehicle_diagram_output_var.get():
                 self.enable_vehicle_diagram_output_var.set(True)
             self._suspend_prepare_watchers = False
@@ -3610,6 +3660,11 @@ class App:
         fixed_route_band_mode = self.fixed_route_band_mode_var.get()
         allow_intra_depot_swap = (
             False if fixed_route_band_mode else self.allow_intra_var.get()
+        )
+        objective_weights = _compose_saved_objective_weights(
+            self._parse_objective_weights_json(),
+            slack_penalty=self._parse_float(self.contract_penalty_coeff_var.get(), 1000000.0),
+            degradation_weight=self._parse_float(self.degradation_weight_var.get(), 0.0),
         )
 
         payload = {
@@ -3670,6 +3725,8 @@ class App:
             "pvProfileId": self.pv_profile_id_var.get().strip() or None,
             "weatherMode": self.weather_mode_var.get().strip() or _SOLCAST_AVG_PROFILE_ID,
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
+            "objectiveWeights": objective_weights,
+            "randomSeed": self._parse_int(self.random_seed_var.get(), 42),
         }
         payload["depotEnergyAssets"] = synced_assets
         def _on_save_done(_resp: dict[str, Any]) -> None:
@@ -4381,14 +4438,12 @@ class App:
         )
 
     def _prepare_payload(self) -> dict[str, Any]:
-        objective_weights = self._parse_objective_weights_json()
+        objective_weights = _compose_saved_objective_weights(
+            self._parse_objective_weights_json(),
+            slack_penalty=self._parse_float(self.contract_penalty_coeff_var.get(), 1000000.0),
+            degradation_weight=self._parse_float(self.degradation_weight_var.get(), 0.0),
+        )
         depot_energy_assets = self._sync_pv_assets_for_selected_depots(announce=False)
-        contract_penalty = self._parse_float(self.contract_penalty_coeff_var.get(), 1000000.0)
-        if contract_penalty > 0:
-            objective_weights.setdefault("slack_penalty", contract_penalty)
-        degradation_w = self._parse_float(self.degradation_weight_var.get(), 0.0)
-        if degradation_w > 0:
-            objective_weights.setdefault("degradation", degradation_w)
         fixed_route_band_mode = self.fixed_route_band_mode_var.get()
         allow_intra_depot_swap = (
             False if fixed_route_band_mode else self.allow_intra_var.get()
@@ -4442,6 +4497,7 @@ class App:
                 "pv_profile_id": self.pv_profile_id_var.get().strip() or None,
                 "weather_mode": self.weather_mode_var.get().strip() or _SOLCAST_AVG_PROFILE_ID,
                 "weather_factor_scalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
+                "random_seed": self._parse_int(self.random_seed_var.get(), 42),
             },
         }
 

@@ -52,11 +52,37 @@ class MILPModelBuilder:
         trip_by_id: Dict[str, object],
     ) -> List[Tuple[str, str, str]]:
         pairs: List[Tuple[str, str, str]] = []
+        fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
+        max_successors_per_trip = self._safe_positive_int(
+            problem.metadata.get("milp_max_successors_per_trip"),
+            default=8,
+        )
+        dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
+        route_band_by_trip_id = {
+            trip.trip_id: str(
+                getattr(dispatch_trip_by_id.get(trip.trip_id), "route_family_code", "")
+                or trip.route_id
+            )
+            for trip in problem.trips
+        }
         for vehicle in problem.vehicles:
             for trip_i in problem.trips:
                 if vehicle.vehicle_type not in trip_i.allowed_vehicle_types:
                     continue
-                for trip_j_id in problem.feasible_connections.get(trip_i.trip_id, ()):  # feasible edges only
+                candidate_successors = [
+                    trip_j_id
+                    for trip_j_id in problem.feasible_connections.get(trip_i.trip_id, ())
+                    if not fixed_route_band_mode
+                    or route_band_by_trip_id.get(trip_i.trip_id) == route_band_by_trip_id.get(trip_j_id)
+                ]
+                candidate_successors.sort(
+                    key=lambda trip_j_id: (
+                        getattr(trip_by_id.get(trip_j_id), "departure_min", 10**9),
+                        getattr(trip_by_id.get(trip_j_id), "arrival_min", 10**9),
+                        trip_j_id,
+                    )
+                )
+                for trip_j_id in candidate_successors[:max_successors_per_trip]:
                     trip_j = trip_by_id.get(trip_j_id)
                     if trip_j is None:
                         continue
@@ -64,6 +90,13 @@ class MILPModelBuilder:
                         continue
                     pairs.append((vehicle.vehicle_id, trip_i.trip_id, trip_j_id))
         return pairs
+
+    def _safe_positive_int(self, value: object, *, default: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed > 0 else default
 
     def build(self, problem: CanonicalOptimizationProblem) -> MILPModelDescription:
         variables: List[MILPVariableDefinition] = []

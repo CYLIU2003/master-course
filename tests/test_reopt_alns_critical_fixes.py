@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.dispatch.models import DutyLeg, Trip, VehicleDuty
+from src.dispatch.models import DispatchContext, DutyLeg, Trip, VehicleDuty, VehicleProfile
 from src.optimization.alns.operators_destroy import peak_hour_removal, worst_trip_removal
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
@@ -242,3 +242,141 @@ def test_feasibility_checker_detects_soc_shortage() -> None:
 
     assert report.feasible is False
     assert any(msg.startswith("[SOC]") for msg in report.errors)
+
+
+def test_feasibility_checker_treats_small_builder_required_soc_as_percent() -> None:
+    trip_dispatch = Trip(
+        trip_id="t1",
+        route_id="r1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="09:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="veh-1",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trip=trip_dispatch),),
+            ),
+        ),
+        served_trip_ids=("t1",),
+        unserved_trip_ids=(),
+    )
+    base = _minimal_problem(initial_soc=50.0)
+    problem = CanonicalOptimizationProblem(
+        scenario=base.scenario,
+        dispatch_context=base.dispatch_context,
+        trips=base.trips,
+        vehicles=base.vehicles,
+        routes=base.routes,
+        depots=base.depots,
+        vehicle_types=base.vehicle_types,
+        chargers=base.chargers,
+        price_slots=base.price_slots,
+        pv_slots=base.pv_slots,
+        depot_energy_assets=base.depot_energy_assets,
+        feasible_connections=base.feasible_connections,
+        objective_weights=base.objective_weights,
+        baseline_plan=base.baseline_plan,
+        metadata={"required_soc_departure_unit": "percent_0_100"},
+    )
+
+    report = FeasibilityChecker().evaluate(problem, plan)
+
+    assert not any(msg.startswith("[SOC]") for msg in report.errors)
+
+
+def test_feasibility_checker_allows_sparse_fragments_in_same_vehicle_gap() -> None:
+    trip_a1 = Trip(
+        trip_id="a1",
+        route_id="r1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="08:30",
+        distance_km=5.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    trip_a2 = Trip(
+        trip_id="a2",
+        route_id="r1",
+        origin="B",
+        destination="C",
+        departure_time="12:00",
+        arrival_time="12:30",
+        distance_km=5.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    trip_b = Trip(
+        trip_id="b1",
+        route_id="r1",
+        origin="X",
+        destination="Y",
+        departure_time="10:00",
+        arrival_time="10:30",
+        distance_km=5.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="frag-gap",
+            horizon_start="00:00",
+            timestep_min=60,
+            objective_mode="total_cost",
+        ),
+        dispatch_context=DispatchContext(
+            service_date="2026-03-23",
+            trips=[trip_a1, trip_a2, trip_b],
+            turnaround_rules={},
+            deadhead_rules={},
+            vehicle_profiles={"BEV": VehicleProfile(vehicle_type="BEV", battery_capacity_kwh=300.0)},
+        ),
+        trips=(
+            ProblemTrip("a1", "r1", "A", "B", 480, 510, 5.0, ("BEV",), energy_kwh=5.0),
+            ProblemTrip("a2", "r1", "B", "C", 720, 750, 5.0, ("BEV",), energy_kwh=5.0),
+            ProblemTrip("b1", "r1", "X", "Y", 600, 630, 5.0, ("BEV",), energy_kwh=5.0),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="veh-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                initial_soc=200.0,
+                battery_capacity_kwh=300.0,
+                reserve_soc=30.0,
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=300.0,
+                reserve_soc=30.0,
+            ),
+        ),
+        metadata={"max_start_fragments_per_vehicle": 4, "max_end_fragments_per_vehicle": 4},
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="veh-1",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trip=trip_a1), DutyLeg(trip=trip_a2)),
+            ),
+            VehicleDuty(
+                duty_id="veh-1__frag2",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trip=trip_b),),
+            ),
+        ),
+        served_trip_ids=("a1", "a2", "b1"),
+        metadata={"duty_vehicle_map": {"veh-1": "veh-1", "veh-1__frag2": "veh-1"}},
+    )
+
+    report = FeasibilityChecker().evaluate(problem, plan)
+
+    assert not any(msg.startswith("[FRAGMENT]") for msg in report.errors)

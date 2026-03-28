@@ -71,3 +71,15 @@ def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
     assert asset.grid_to_bess_price_threshold_yen_per_kwh == 15.0
     assert tuple(asset.grid_to_bess_allowed_slot_indices) == (0,)
     assert asset.bess_terminal_soc_min_kwh == 20.0
+
+
+def test_problem_builder_resamples_hourly_depot_pv_series_to_price_slot_count() -> None:
+    scenario = _scenario()
+    scenario["simulation_config"]["depot_energy_assets"][0]["pv_generation_kwh_by_slot"] = [3.0, 6.0]
+    scenario["energy_price_profiles"] = [{"site_id": "dep-1", "values": [10.0, 20.0, 30.0, 40.0]}]
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    asset = problem.depot_energy_assets["dep-1"]
+
+    assert len(asset.pv_generation_kwh_by_slot) == len(problem.price_slots)
+    assert tuple(asset.pv_generation_kwh_by_slot) == (1.5, 1.5, 3.0, 3.0)

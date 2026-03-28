@@ -18,6 +18,7 @@ from src.optimization.common.problem import (
     ProblemTrip,
     RefuelSlot,
     classify_peak_slots,
+    normalize_required_soc_departure_ratio,
 )
 
 
@@ -89,6 +90,19 @@ class GurobiMILPAdapter:
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         assignment_pairs = builder.enumerate_assignment_pairs(problem)
         arc_pairs = builder.enumerate_arc_pairs(problem, trip_by_id)
+        assignment_trip_ids_by_vehicle: Dict[str, List[str]] = {}
+        assignment_vehicle_ids_by_trip: Dict[str, List[str]] = {}
+        for vehicle_id, trip_id in assignment_pairs:
+            assignment_trip_ids_by_vehicle.setdefault(vehicle_id, []).append(trip_id)
+            assignment_vehicle_ids_by_trip.setdefault(trip_id, []).append(vehicle_id)
+        fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
+        route_band_by_trip_id = {
+            trip.trip_id: self._route_band_key(
+                dispatch_trip_by_id.get(trip.trip_id),
+                trip.route_id,
+            )
+            for trip in problem.trips
+        }
 
         y: Dict[Tuple[str, str], Any] = {}
         for vehicle_id, trip_id in assignment_pairs:
@@ -120,11 +134,7 @@ class GurobiMILPAdapter:
 
         # Each trip must be assigned exactly once or marked as unserved.
         for trip in problem.trips:
-            assign_terms = [
-                y[(vehicle.vehicle_id, trip.trip_id)]
-                for vehicle in problem.vehicles
-                if (vehicle.vehicle_id, trip.trip_id) in y
-            ]
+            assign_terms = [y[(vehicle_id, trip.trip_id)] for vehicle_id in assignment_vehicle_ids_by_trip.get(trip.trip_id, [])]
             model.addConstr(gp.quicksum(assign_terms) + unserved[trip.trip_id] == 1)
 
         allow_partial_service = bool(problem.metadata.get("allow_partial_service", False))
@@ -159,8 +169,8 @@ class GurobiMILPAdapter:
         for vehicle in problem.vehicles:
             vehicle_terms_start: List[Any] = []
             vehicle_terms_end: List[Any] = []
-            for trip in problem.trips:
-                key = (vehicle.vehicle_id, trip.trip_id)
+            for trip_id in assignment_trip_ids_by_vehicle.get(vehicle.vehicle_id, []):
+                key = (vehicle.vehicle_id, trip_id)
                 if key not in y:
                     continue
                 incoming = gp.quicksum(incoming_by_node.get(key, []))
@@ -173,12 +183,7 @@ class GurobiMILPAdapter:
             model.addConstr(gp.quicksum(vehicle_terms_end) <= max_end_fragments_per_vehicle)
 
         # Fixed route-band mode: one vehicle can serve at most one route family (fallback: route_id).
-        fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
         if fixed_route_band_mode:
-            route_band_by_trip_id = {
-                trip.trip_id: self._route_band_key(dispatch_trip_by_id.get(trip.trip_id), trip.route_id)
-                for trip in problem.trips
-            }
             route_bands = sorted({band for band in route_band_by_trip_id.values() if band})
             route_band_use: Dict[Tuple[str, str], Any] = {
                 (vehicle.vehicle_id, band): model.addVar(vtype=GRB.BINARY)
@@ -203,22 +208,26 @@ class GurobiMILPAdapter:
                     for band_var in vehicle_band_vars:
                         model.addConstr(band_var <= used_vehicle[vehicle.vehicle_id])
 
-        # C5: Explicit time-overlap prohibition.
-        # For each vehicle k and each overlapping trip pair (i, j) add y[k,i] + y[k,j] <= 1.
-        trip_list = list(problem.trips)
-        for veh in problem.vehicles:
-            for a_idx in range(len(trip_list)):
-                t_a = trip_list[a_idx]
-                key_a = (veh.vehicle_id, t_a.trip_id)
-                if key_a not in y:
-                    continue
-                for b_idx in range(a_idx + 1, len(trip_list)):
-                    t_b = trip_list[b_idx]
-                    key_b = (veh.vehicle_id, t_b.trip_id)
-                    if key_b not in y:
+        # C5: per-slot single-trip occupancy replaces pairwise overlap constraints.
+        if problem.price_slots:
+            active_assignment_terms: Dict[Tuple[str, int], List[Any]] = {}
+            for vehicle in problem.vehicles:
+                for trip_id in assignment_trip_ids_by_vehicle.get(vehicle.vehicle_id, []):
+                    trip = trip_by_id.get(trip_id)
+                    if trip is None:
                         continue
-                    if self._trips_overlap(t_a, t_b):
-                        model.addConstr(y[key_a] + y[key_b] <= 1)
+                    for slot_idx in self._slot_indices_for_interval(
+                        problem,
+                        trip.departure_min,
+                        trip.arrival_min,
+                    ):
+                        active_assignment_terms.setdefault((vehicle.vehicle_id, slot_idx), []).append(
+                            y[(vehicle.vehicle_id, trip_id)]
+                        )
+            for (_vehicle_id, _slot_idx), terms in active_assignment_terms.items():
+                if len(terms) <= 1:
+                    continue
+                model.addConstr(gp.quicksum(terms) <= 1)
 
         bev_ids = [
             vehicle.vehicle_id
@@ -300,6 +309,19 @@ class GurobiMILPAdapter:
         effective_depot_energy_assets: Dict[str, DepotEnergyAsset] = {}
 
         home_depot_slot_proxy_terms: Dict[Tuple[str, int], List[Any]] = {}
+        charging_window_mode = str(
+            problem.metadata.get("charging_window_mode") or "timetable_layover"
+        ).strip().lower()
+        if charging_window_mode not in {"home_depot_proxy", "timetable_layover"}:
+            charging_window_mode = "timetable_layover"
+        pre_window_min = self._safe_nonnegative_float(
+            problem.metadata.get("home_depot_charge_pre_window_min"),
+            default=float(max(problem.scenario.timestep_min, 1)),
+        )
+        post_window_min = self._safe_nonnegative_float(
+            problem.metadata.get("home_depot_charge_post_window_min"),
+            default=float(max(problem.scenario.timestep_min, 1)),
+        )
         if slot_indices:
             first_slot_idx = slot_indices[0]
             last_slot_idx = slot_indices[-1]
@@ -312,14 +334,40 @@ class GurobiMILPAdapter:
                         continue
                     if str(trip.origin) != home_depot_id and str(trip.destination) != home_depot_id:
                         continue
-                    dep_slot_idx = self._slot_index(problem, trip.departure_min)
-                    arr_slot_idx = self._trip_event_slot_index(problem, trip.departure_min, trip.arrival_min)
-                    candidate_slots = {
-                        dep_slot_idx,
-                        max(dep_slot_idx - 1, first_slot_idx),
-                        arr_slot_idx,
-                        min(arr_slot_idx + 1, last_slot_idx),
-                    }
+                    candidate_slots: Set[int] = set()
+                    if charging_window_mode == "home_depot_proxy":
+                        dep_slot_idx = self._slot_index(problem, trip.departure_min)
+                        arr_slot_idx = self._trip_event_slot_index(problem, trip.departure_min, trip.arrival_min)
+                        candidate_slots.update(
+                            {
+                                dep_slot_idx,
+                                max(dep_slot_idx - 1, first_slot_idx),
+                                arr_slot_idx,
+                                min(arr_slot_idx + 1, last_slot_idx),
+                            }
+                        )
+                    else:
+                        candidate_slots.update(
+                            self._collect_home_depot_window_slots(
+                                problem,
+                                trip,
+                                home_depot_id=home_depot_id,
+                                pre_window_min=pre_window_min,
+                                post_window_min=post_window_min,
+                            )
+                        )
+                        if not candidate_slots:
+                            # Keep backward compatibility when no explicit window can be derived.
+                            dep_slot_idx = self._slot_index(problem, trip.departure_min)
+                            arr_slot_idx = self._trip_event_slot_index(problem, trip.departure_min, trip.arrival_min)
+                            candidate_slots.update(
+                                {
+                                    dep_slot_idx,
+                                    max(dep_slot_idx - 1, first_slot_idx),
+                                    arr_slot_idx,
+                                    min(arr_slot_idx + 1, last_slot_idx),
+                                }
+                            )
                     for slot_idx in candidate_slots:
                         if slot_idx < first_slot_idx or slot_idx > last_slot_idx:
                             continue
@@ -947,6 +995,14 @@ class GurobiMILPAdapter:
         for vehicle in problem.vehicles:
             objective += vehicle_weight * vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
 
+        driver_fragment_start_cost = self._safe_nonnegative_float(
+            problem.metadata.get("driver_fragment_start_cost_yen"),
+            default=0.0,
+        )
+        if driver_fragment_start_cost > 0.0:
+            for var in start_arc.values():
+                objective += driver_fragment_start_cost * var
+
         # CO₂ objective/cost: in CO2 mode, co2_price_per_kg is treated as a
         # positive scaling factor (defaulted to 1.0 upstream when omitted).
         co2_price = max(problem.scenario.co2_price_per_kg, 0.0)
@@ -1197,41 +1253,15 @@ class GurobiMILPAdapter:
                             )
                         )
 
-        for vehicle in problem.vehicles:
-            assigned_trip_ids = [
-                trip.trip_id
-                for trip in problem.trips
-                if (vehicle.vehicle_id, trip.trip_id) in y
-                and y[(vehicle.vehicle_id, trip.trip_id)].X > 0.5
-            ]
-            if not assigned_trip_ids:
-                continue
-
-            assigned_trip_ids.sort(key=lambda trip_id: trip_by_id[trip_id].departure_min)
-            legs: List[DutyLeg] = []
-            prev_trip = None
-            for trip_id in assigned_trip_ids:
-                dispatch_trip = dispatch_trip_by_id.get(trip_id)
-                if dispatch_trip is None:
-                    continue
-                deadhead = 0
-                if prev_trip is not None:
-                    deadhead = problem.dispatch_context.get_deadhead_min(
-                        prev_trip.destination,
-                        dispatch_trip.origin,
-                    )
-                legs.append(DutyLeg(trip=dispatch_trip, deadhead_from_prev_min=deadhead))
-                prev_trip = dispatch_trip
-                served_trip_ids.append(trip_id)
-
-            if legs:
-                duties.append(
-                    VehicleDuty(
-                        duty_id=f"milp_{vehicle.vehicle_id}",
-                        vehicle_type=vehicle.vehicle_type,
-                        legs=tuple(legs),
-                    )
-                )
+        duty_vehicle_map: Dict[str, str] = {}
+        duties, served_trip_ids, duty_vehicle_map = self._build_vehicle_duties_from_solution(
+            problem=problem,
+            trip_by_id=trip_by_id,
+            dispatch_trip_by_id=dispatch_trip_by_id,
+            y=y,
+            x=x,
+            start_arc=start_arc,
+        )
 
         served_set = set(served_trip_ids)
         unserved_trip_ids = sorted(trip.trip_id for trip in problem.trips if trip.trip_id not in served_set)
@@ -1277,6 +1307,7 @@ class GurobiMILPAdapter:
                 "source": "milp_gurobi",
                 "status": solver_status,
                 "objective_value": float(model.ObjVal),
+                "duty_vehicle_map": duty_vehicle_map,
                 "horizon_start": str(problem.scenario.horizon_start or "00:00"),
                 "timestep_min": int(problem.scenario.timestep_min),
                 "enable_contract_overage_penalty": bool(problem.metadata.get("enable_contract_overage_penalty", True)),
@@ -1319,11 +1350,205 @@ class GurobiMILPAdapter:
         arrival_min: int,
     ) -> Tuple[int, ...]:
         start_idx = self._slot_index(problem, departure_min)
-        adjusted_arrival = max(arrival_min - 1, departure_min)
+        adjusted_arrival = arrival_min
+        if adjusted_arrival <= departure_min:
+            adjusted_arrival += 24 * 60
+        adjusted_arrival = max(adjusted_arrival - 1, departure_min)
         end_idx = self._slot_index(problem, adjusted_arrival)
         if end_idx < start_idx:
             end_idx = start_idx
         return tuple(range(start_idx, end_idx + 1))
+
+    def _collect_home_depot_window_slots(
+        self,
+        problem: CanonicalOptimizationProblem,
+        trip: ProblemTrip,
+        *,
+        home_depot_id: str,
+        pre_window_min: float,
+        post_window_min: float,
+    ) -> Tuple[int, ...]:
+        slots: Set[int] = set()
+        horizon_start_min = self._horizon_start_min(problem)
+        dep = int(trip.departure_min)
+        arr = int(trip.arrival_min)
+        if arr <= dep:
+            arr += 24 * 60
+
+        if str(trip.origin) == home_depot_id:
+            pre_min = max(int(round(pre_window_min)), 0)
+            start = max(dep - pre_min, horizon_start_min)
+            end = max(dep, start + 1)
+            slots.update(self._slot_indices_for_interval(problem, start, end))
+
+        if str(trip.destination) == home_depot_id:
+            post_min = max(int(round(post_window_min)), 0)
+            start = max(arr, horizon_start_min)
+            end = max(start + post_min, start + 1)
+            slots.update(self._slot_indices_for_interval(problem, start, end))
+
+        return tuple(sorted(slots))
+
+    def _build_vehicle_duties_from_solution(
+        self,
+        *,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Dict[str, ProblemTrip],
+        dispatch_trip_by_id: Dict[str, Any],
+        y: Dict[Tuple[str, str], Any],
+        x: Dict[Tuple[str, str, str], Any],
+        start_arc: Dict[Tuple[str, str], Any],
+    ) -> Tuple[List[VehicleDuty], List[str], Dict[str, str]]:
+        duties: List[VehicleDuty] = []
+        served_trip_ids: List[str] = []
+        duty_vehicle_map: Dict[str, str] = {}
+
+        for vehicle in problem.vehicles:
+            vehicle_id = str(vehicle.vehicle_id)
+            assigned_trip_ids = {
+                trip.trip_id
+                for trip in problem.trips
+                if (vehicle_id, trip.trip_id) in y and self._binary_value(y[(vehicle_id, trip.trip_id)])
+            }
+            if not assigned_trip_ids:
+                continue
+
+            successor_by_trip: Dict[str, str] = {}
+            predecessor_by_trip: Dict[str, str] = {}
+            for v_id, from_trip_id, to_trip_id in x:
+                if v_id != vehicle_id or not self._binary_value(x[(v_id, from_trip_id, to_trip_id)]):
+                    continue
+                if from_trip_id not in assigned_trip_ids or to_trip_id not in assigned_trip_ids:
+                    continue
+                successor_by_trip[from_trip_id] = to_trip_id
+                predecessor_by_trip[to_trip_id] = from_trip_id
+
+            start_trip_ids = [
+                trip_id
+                for trip_id in assigned_trip_ids
+                if (vehicle_id, trip_id) in start_arc and self._binary_value(start_arc[(vehicle_id, trip_id)])
+            ]
+            if not start_trip_ids:
+                start_trip_ids = [
+                    trip_id for trip_id in assigned_trip_ids if trip_id not in predecessor_by_trip
+                ]
+            start_trip_ids = sorted(
+                set(start_trip_ids),
+                key=lambda trip_id: (
+                    trip_by_id[trip_id].departure_min,
+                    trip_by_id[trip_id].arrival_min,
+                    trip_id,
+                ),
+            )
+
+            visited: Set[str] = set()
+            fragments: List[List[str]] = []
+
+            for start_trip_id in start_trip_ids:
+                fragment = self._walk_vehicle_fragment(
+                    start_trip_id,
+                    successor_by_trip,
+                    visited,
+                )
+                if fragment:
+                    fragments.append(fragment)
+
+            orphan_trip_ids = sorted(
+                assigned_trip_ids - visited,
+                key=lambda trip_id: (
+                    trip_by_id[trip_id].departure_min,
+                    trip_by_id[trip_id].arrival_min,
+                    trip_id,
+                ),
+            )
+            for orphan_trip_id in orphan_trip_ids:
+                fragment = self._walk_vehicle_fragment(
+                    orphan_trip_id,
+                    successor_by_trip,
+                    visited,
+                )
+                if fragment:
+                    fragments.append(fragment)
+
+            for fragment_index, trip_chain in enumerate(fragments, start=1):
+                duty_id = f"milp_{vehicle_id}" if fragment_index == 1 else f"milp_{vehicle_id}__frag{fragment_index}"
+                duty = self._vehicle_duty_from_trip_chain(
+                    duty_id=duty_id,
+                    vehicle_type=str(vehicle.vehicle_type),
+                    trip_chain=trip_chain,
+                    dispatch_trip_by_id=dispatch_trip_by_id,
+                    problem=problem,
+                )
+                if duty is None:
+                    continue
+                duties.append(duty)
+                duty_vehicle_map[duty_id] = vehicle_id
+                served_trip_ids.extend(trip_chain)
+
+        return duties, served_trip_ids, duty_vehicle_map
+
+    def _walk_vehicle_fragment(
+        self,
+        start_trip_id: str,
+        successor_by_trip: Dict[str, str],
+        visited: Set[str],
+    ) -> List[str]:
+        fragment: List[str] = []
+        current_trip_id = str(start_trip_id)
+        while current_trip_id and current_trip_id not in visited:
+            visited.add(current_trip_id)
+            fragment.append(current_trip_id)
+            next_trip_id = successor_by_trip.get(current_trip_id)
+            if not next_trip_id or next_trip_id in visited:
+                break
+            current_trip_id = next_trip_id
+        return fragment
+
+    def _vehicle_duty_from_trip_chain(
+        self,
+        *,
+        duty_id: str,
+        vehicle_type: str,
+        trip_chain: List[str],
+        dispatch_trip_by_id: Dict[str, Any],
+        problem: CanonicalOptimizationProblem,
+    ) -> VehicleDuty | None:
+        legs: List[DutyLeg] = []
+        prev_trip = None
+        for trip_id in trip_chain:
+            dispatch_trip = dispatch_trip_by_id.get(trip_id)
+            if dispatch_trip is None:
+                continue
+            deadhead = 0
+            if prev_trip is not None:
+                deadhead = problem.dispatch_context.get_deadhead_min(
+                    prev_trip.destination,
+                    dispatch_trip.origin,
+                )
+            legs.append(DutyLeg(trip=dispatch_trip, deadhead_from_prev_min=deadhead))
+            prev_trip = dispatch_trip
+        if not legs:
+            return None
+        return VehicleDuty(
+            duty_id=duty_id,
+            vehicle_type=vehicle_type,
+            legs=tuple(legs),
+        )
+
+    def _binary_value(self, var: Any) -> bool:
+        try:
+            return float(var.X) > 0.5
+        except Exception:
+            return False
+
+    def _horizon_start_min(self, problem: CanonicalOptimizationProblem) -> int:
+        if not problem.scenario.horizon_start:
+            return 0
+        try:
+            hh, mm = str(problem.scenario.horizon_start).split(":")
+            return int(hh) * 60 + int(mm)
+        except ValueError:
+            return 0
 
     def _trip_event_slot_index(
         self,
@@ -1559,7 +1784,13 @@ class GurobiMILPAdapter:
         # Keep required_soc_departure_percent as a backward-compatible lower bound.
         trip_energy_kwh = self._trip_energy_kwh(problem, vehicle, trip.trip_id)
         required_kwh = trip_energy_kwh + max(float(final_soc_floor_kwh or 0.0), 0.0)
-        required_ratio = self._percent_to_ratio(trip.required_soc_departure_percent)
+        required_ratio = normalize_required_soc_departure_ratio(
+            trip.required_soc_departure_percent,
+            treat_values_le_one_as_percent=(
+                str((problem.metadata or {}).get("required_soc_departure_unit") or "").strip().lower()
+                == "percent_0_100"
+            ),
+        )
         if required_ratio is not None and required_ratio > 0.0 and cap_kwh > 0.0:
             required_kwh = max(required_kwh, required_ratio * cap_kwh)
         return max(required_kwh, 0.0)

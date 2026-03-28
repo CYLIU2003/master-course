@@ -5,7 +5,7 @@ from unittest import mock
 from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
 from bff.routers import graph as graph_router
 from src.dispatch.graph_builder import ConnectionGraphBuilder
-from src.route_family_runtime import normalize_variant_type, route_variant_bucket
+from src.route_family_runtime import merge_deadhead_metrics, normalize_variant_type, route_variant_bucket
 
 
 def _family_scenario() -> dict:
@@ -214,3 +214,39 @@ def test_graph_context_uses_stop_ids_for_family_deadhead_inference() -> None:
     assert context.trips_by_id()["trip-1"].destination_stop_id == "stop-b-out"
     assert context.trips_by_id()["trip-2"].origin_stop_id == "stop-b-in"
     assert "trip-2" in graph_payload["trip-1"]
+
+
+def test_merge_deadhead_metrics_adds_zero_cost_rules_for_platform_aliases() -> None:
+    metrics = merge_deadhead_metrics(
+        existing_rules=[],
+        trip_rows=[],
+        routes=[],
+        stops=[
+            {
+                "id": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.",
+                "name": "渋谷駅",
+                "lat": 35.0,
+                "lon": 139.0,
+            },
+            {
+                "id": "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.4",
+                "name": "渋谷駅 4番",
+                "lat": 35.0,
+                "lon": 139.0,
+            },
+        ],
+    )
+
+    forward = metrics[(
+        "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.",
+        "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.4",
+    )]
+    backward = metrics[(
+        "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.4",
+        "odpt.BusstopPole:TokyuBus.Shibuyaeki.00240050.",
+    )]
+
+    assert forward.travel_time_min == 0
+    assert backward.travel_time_min == 0
+    assert forward.source == "stop_platform_alias"
+    assert backward.source == "stop_platform_alias"
