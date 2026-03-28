@@ -1419,7 +1419,7 @@ class App:
         self._labeled_entry(advanced, "車両導入費(編集は車両/テンプレ画面)", tk.StringVar(value="個別設定"), readonly=True)
 
         # ── ソルバー詳細設定 ──
-        self.solver_mode_var = tk.StringVar(value="hybrid")
+        self.solver_mode_var = tk.StringVar(value="mode_hybrid")  # Default to canonical hybrid mode
         self.objective_mode_var = tk.StringVar(value="total_cost")
         self.time_limit_var = tk.StringVar(value="300")
         self.mip_gap_var = tk.StringVar(value="0.01")
@@ -5525,14 +5525,23 @@ class App:
             foreground="#444",
         ).pack(anchor="w", padx=10, pady=(10, 2))
 
-        ttk.Label(win, text="ソルバー種別", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=10, pady=(8, 4))
+        ttk.Label(win, text="ソルバー種別 (canonical optimization engine)", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=10, pady=(8, 4))
         solver_combo = ttk.Combobox(
             win,
             state="readonly",
             textvariable=self.solver_mode_var,
-            values=["mode_milp_only", "mode_alns_only", "hybrid", "ga", "abc"],
+            values=["mode_milp_only", "mode_alns_only", "mode_hybrid", "mode_ga_only", "mode_abc_only"],
         )
         solver_combo.pack(fill=tk.X, padx=10)
+        _Tooltip(
+            solver_combo,
+            "mode_milp_only: 厳密MILP (大規模で遅い)\n"
+            "mode_alns_only: メタヒューリスティック (高速、近似解)\n"
+            "mode_hybrid: ALNS+MILP混合 (推奨、バランス型)\n"
+            "mode_ga_only: 遺伝的アルゴリズム (実験的)\n"
+            "mode_abc_only: 人工蜂コロニー (実験的)\n\n"
+            "注意: 旧thesis_mode/mode_alns_milp等は非推奨です",
+        )
 
         body = ttk.Frame(win)
         body.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)

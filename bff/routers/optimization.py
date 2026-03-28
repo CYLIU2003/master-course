@@ -122,23 +122,42 @@ def _optimization_capabilities() -> Dict[str, Any]:
         "async_job": True,
         "job_persistence": dict(job_store.JOB_PERSISTENCE_INFO),
         "supported_modes": [
-            "milp",
-            "alns",
-            "hybrid",
-            "ga",
-            "abc",
             "mode_milp_only",
             "mode_alns_only",
-            "mode_alns_milp",
+            "mode_ga_only",
+            "mode_abc_only",
+            "mode_hybrid",
         ],
+        "mode_aliases": {
+            "milp": "mode_milp_only",
+            "exact": "mode_milp_only",
+            "alns": "mode_alns_only",
+            "heuristic": "mode_alns_only",
+            "ga": "mode_ga_only",
+            "genetic": "mode_ga_only",
+            "abc": "mode_abc_only",
+            "colony": "mode_abc_only",
+            "hybrid": "mode_hybrid",
+        },
+        "deprecated_modes": {
+            "mode_alns_milp": "mode_hybrid (auto-routed)",
+            "thesis_mode": "BLOCKED - no longer supported",
+            "mode_a_journey_charge": "BLOCKED - no longer supported",
+            "mode_b_optimistic": "BLOCKED - no longer supported",
+        },
+        "default_mode": "mode_milp_only",
+        "authoritative_engine": "canonical (src/optimization/)",
         "supports_reoptimization": True,
         "max_concurrent_jobs": 1,
         "execution_model": f"{_executor_mode()}_pool",
         "notes": [
-            "Optimization runs against canonical ProblemData built from the scenario snapshot.",
+            "All supported modes use the canonical optimization engine (src/optimization/).",
+            "Legacy thesis modes have been deprecated for consistency and maintainability.",
+            "mode_alns_milp is auto-routed to mode_hybrid (ALNS+MILP hybrid).",
+            "Optimization runs against canonical CanonicalOptimizationProblem built from scenario.",
             "Dispatch artifacts can be rebuilt before solve when requested.",
             "Results are persisted to the scenario snapshot; job state is not.",
-            "Optimization/re-optimization runs in a dedicated executor (thread or process) so API polling stays responsive.",
+            "Optimization/re-optimization runs in a dedicated executor so API polling stays responsive.",
             "Only one optimization/re-optimization job is allowed at a time in this BFF process.",
         ],
     }
@@ -785,7 +804,8 @@ def _run_optimization(
             depot_id=depot_id,
         )
 
-        if solver_mode in {"mode_milp_only", "mode_alns_only", "mode_ga_only", "mode_abc_only"}:
+        if solver_mode in {"mode_milp_only", "mode_alns_only", "mode_ga_only", "mode_abc_only", "mode_hybrid"}:
+            # CANONICAL PATH: Uses src/optimization/ engine stack
             opt_mode = _parse_optimization_mode(solver_mode)
             engine_label = str(opt_mode.value or "optimization").upper()
             job_store.update_job(
@@ -904,7 +924,16 @@ def _run_optimization(
             # Expose full new-system result for solver_result field
             _full_new_result = ResultSerializer.serialize_result(engine_result)
         else:
-            # ── OLD PATH: legacy thesis_mode via solve_problem_data ────────────────
+            # ── LEGACY PATH: Should not reach here due to _normalize_solver_mode gating ──
+            # This branch is kept temporarily for backward compatibility during migration.
+            import warnings
+            warnings.warn(
+                f"Legacy solver path triggered for mode '{mode}' (normalized: '{solver_mode}'). "
+                f"This path is deprecated and will be removed. "
+                f"Please update to canonical modes: mode_milp_only, mode_alns_only, mode_hybrid, etc.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             job_store.update_job(
                 job_id,
                 status="running",
@@ -1193,17 +1222,64 @@ def _parse_optimization_mode(mode: str) -> OptimizationMode:
 
 
 def _normalize_solver_mode(mode: str) -> str:
+    """Normalize and validate solver mode.
+    
+    Canonical modes use src/optimization/ engine stack.
+    Legacy modes are DEPRECATED and will raise errors unless explicitly allowed.
+    """
     normalized = (mode or "").strip().lower()
     alias_map = {
         "milp": "mode_milp_only",
         "exact": "mode_milp_only",
         "alns": "mode_alns_only",
         "heuristic": "mode_alns_only",
-        "hybrid": "mode_alns_milp",
         "ga": "mode_ga_only",
+        "genetic": "mode_ga_only",
         "abc": "mode_abc_only",
+        "colony": "mode_abc_only",
+        "hybrid": "mode_hybrid",
     }
-    return alias_map.get(normalized, mode)
+    
+    resolved_mode = alias_map.get(normalized, normalized or "mode_milp_only")
+    
+    # Hard-gate legacy modes
+    _LEGACY_MODES = {
+        "thesis_mode",
+        "mode_a_journey_charge",
+        "mode_a",
+        "mode_b_optimistic",
+        "mode_b",
+        "mode_alns_milp",  # Deprecated: use mode_hybrid instead
+    }
+    
+    if resolved_mode.lower() in _LEGACY_MODES:
+        legacy_to_canonical = {
+            "mode_alns_milp": "mode_hybrid",
+            "thesis_mode": None,
+            "mode_a_journey_charge": None,
+            "mode_a": None,
+            "mode_b_optimistic": None,
+            "mode_b": None,
+        }
+        canonical_replacement = legacy_to_canonical.get(resolved_mode.lower())
+        if canonical_replacement:
+            import warnings
+            warnings.warn(
+                f"Solver mode '{mode}' is deprecated. "
+                f"Auto-routing to canonical mode '{canonical_replacement}'.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return canonical_replacement
+        else:
+            raise ValueError(
+                f"Solver mode '{mode}' (normalized: '{resolved_mode}') is no longer supported. "
+                f"Legacy thesis modes have been deprecated. "
+                f"Supported modes: mode_milp_only, mode_alns_only, mode_ga_only, mode_abc_only, mode_hybrid. "
+                f"These use the canonical optimization engine (src/optimization/)."
+            )
+    
+    return resolved_mode
 
 
 def _apply_reoptimization_inputs(
