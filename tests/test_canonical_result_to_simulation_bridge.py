@@ -399,5 +399,150 @@ class TestSimulationBridgeDoesNotZeroFields:
         assert result.pv_to_bus_kwh["depot_1"] == 45.0
 
 
+class TestCostBreakdownKeyMapping:
+    """
+    Test that cost breakdown keys are correctly mapped from canonical names to UI expected names.
+    
+    The canonical evaluator uses names like:
+    - energy_cost
+    - demand_cost
+    - degradation_cost
+    - co2_cost
+    
+    But the UI expects names like:
+    - energy_cost (same)
+    - demand_charge, total_demand_charge
+    - battery_degradation_cost, degradation_cost, total_degradation_cost
+    - co2_cost
+    - total_fuel_cost
+    """
+    
+    def test_canonical_cost_breakdown_keys(self):
+        """CostBreakdown.to_dict() should return canonical keys."""
+        from src.optimization.common.evaluator import CostBreakdown
+        
+        breakdown = CostBreakdown(
+            energy_cost=1000.0,
+            demand_cost=500.0,
+            degradation_cost=200.0,
+            co2_cost=100.0,
+        )
+        
+        d = breakdown.to_dict()
+        
+        # Canonical keys
+        assert d["energy_cost"] == 1000.0
+        assert d["demand_cost"] == 500.0
+        assert d["degradation_cost"] == 200.0
+        assert d["co2_cost"] == 100.0
+    
+    def test_cost_breakdown_function_maps_to_ui_keys(self):
+        """_cost_breakdown() should include both canonical and UI-expected keys."""
+        from bff.routers.optimization import _cost_breakdown
+        
+        # Simulate canonical result payload with obj_breakdown
+        result_payload = {
+            "obj_breakdown": {
+                "energy_cost": 1000.0,
+                "demand_cost": 500.0,
+                "degradation_cost": 200.0,
+                "co2_cost": 100.0,
+            }
+        }
+        
+        cb = _cost_breakdown(result_payload, sim_payload=None)
+        
+        # Should have UI-expected keys
+        assert "energy_cost" in cb
+        assert "demand_charge" in cb
+        assert "total_demand_charge" in cb
+        assert "battery_degradation_cost" in cb
+        assert "degradation_cost" in cb
+        assert "total_degradation_cost" in cb
+        assert "co2_cost" in cb
+        
+        # Values should be correct
+        assert cb["energy_cost"] == 1000.0
+        assert cb["demand_charge"] == 500.0
+        assert cb["total_demand_charge"] == 500.0
+        assert cb["battery_degradation_cost"] == 200.0
+        assert cb["degradation_cost"] == 200.0
+        assert cb["total_degradation_cost"] == 200.0
+        assert cb["co2_cost"] == 100.0
+    
+    def test_cost_breakdown_aliases_electricity_to_energy(self):
+        """_cost_breakdown() should accept electricity_cost as energy_cost alias."""
+        from bff.routers.optimization import _cost_breakdown
+        
+        result_payload = {
+            "obj_breakdown": {
+                "electricity_cost": 1000.0,  # legacy key
+            }
+        }
+        
+        cb = _cost_breakdown(result_payload, sim_payload=None)
+        
+        assert cb["energy_cost"] == 1000.0
+    
+    def test_cost_breakdown_aliases_demand_charge_cost_to_demand(self):
+        """_cost_breakdown() should accept demand_charge_cost as demand_cost alias."""
+        from bff.routers.optimization import _cost_breakdown
+        
+        result_payload = {
+            "obj_breakdown": {
+                "demand_charge_cost": 500.0,  # legacy key
+            }
+        }
+        
+        cb = _cost_breakdown(result_payload, sim_payload=None)
+        
+        assert cb["demand_charge"] == 500.0
+        assert cb["total_demand_charge"] == 500.0
+    
+    def test_cost_breakdown_aliases_emission_to_co2(self):
+        """_cost_breakdown() should accept emission_cost as co2_cost alias."""
+        from bff.routers.optimization import _cost_breakdown
+        
+        result_payload = {
+            "obj_breakdown": {
+                "emission_cost": 100.0,  # legacy key
+            }
+        }
+        
+        cb = _cost_breakdown(result_payload, sim_payload=None)
+        
+        assert cb["co2_cost"] == 100.0
+    
+    def test_cost_breakdown_total_cost_from_multiple_sources(self):
+        """total_cost should come from sim_payload, result_payload, or obj_breakdown."""
+        from bff.routers.optimization import _cost_breakdown
+        
+        # Test 1: from obj_breakdown.total_cost
+        result_payload = {
+            "obj_breakdown": {
+                "total_cost": 5000.0,
+            }
+        }
+        cb = _cost_breakdown(result_payload, sim_payload=None)
+        assert cb["total_cost"] == 5000.0
+        
+        # Test 2: from objective_value
+        result_payload = {
+            "objective_value": 6000.0,
+            "obj_breakdown": {},
+        }
+        cb = _cost_breakdown(result_payload, sim_payload=None)
+        assert cb["total_cost"] == 6000.0
+        
+        # Test 3: from sim_payload (highest priority)
+        result_payload = {
+            "objective_value": 6000.0,
+            "obj_breakdown": {"total_cost": 5000.0},
+        }
+        sim_payload = {"total_operating_cost": 7000.0}
+        cb = _cost_breakdown(result_payload, sim_payload=sim_payload)
+        assert cb["total_cost"] == 7000.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
