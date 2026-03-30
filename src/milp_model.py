@@ -112,9 +112,19 @@ class MILPResult:
 
     # SOC モデリング仮定の注記（論文引用用）
     soc_modeling_note: str = (
-        "SOC energy is event-based (end-of-trip lump-sum). "
-        "Real-world mid-trip SOC may be lower than reported. "
-        "See thesis §10.5 for details."
+        "SOC energy is slot-spread (proportional across trip duration). "
+        "This ensures mid-trip SOC safety constraints are enforced, not just "
+        "end-trip constraints. See thesis §10.5 for details."
+    )
+    
+    # Vehicle-level energy provenance honesty flag (Phase 1.3)
+    # True = vehicle-level PV/grid/BESS attribution is exact MILP decision
+    # False = depot-level flows are exact, vehicle attribution is derived/reconstructed
+    vehicle_provenance_is_exact: bool = field(default=False)
+    vehicle_provenance_note: str = (
+        "Vehicle-level energy provenance (pv_to_bus, grid_to_bus per vehicle) is "
+        "reconstructed from depot-level MILP decisions via proportional allocation. "
+        "Depot-level totals are exact MILP decisions; vehicle-level breakdowns are derived."
     )
 
 

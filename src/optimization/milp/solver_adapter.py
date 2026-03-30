@@ -494,18 +494,31 @@ class GurobiMILPAdapter:
                 for pos in range(len(slot_indices) - 1):
                     slot_idx = slot_indices[pos]
                     next_slot_idx = slot_indices[pos + 1]
-                    # Event-based SOC update: apply trip consumption at the slot where each trip ends.
+                    # Slot-spread SOC update: distribute trip energy proportionally
+                    # across all slots where the trip is active. This prevents hidden
+                    # mid-trip SOC violations where a vehicle appears safe at trip-end
+                    # but actually goes below minimum SOC mid-trip.
+                    #
+                    # For a trip spanning multiple slots, each slot contributes:
+                    #   trip_energy * (overlap_duration / trip_duration)
+                    # This ensures mid-trip SOC is checked, not just end-trip SOC.
                     trip_energy_expr = gp.quicksum(
                         self._trip_energy_kwh(problem, vehicle, trip.trip_id)
-                        * y[(vehicle.vehicle_id, trip.trip_id)]
-                        for trip in problem.trips
-                        if (vehicle.vehicle_id, trip.trip_id) in y
-                        and self._trip_event_slot_index(
+                        * self._trip_slot_energy_fraction(
                             problem,
                             trip.departure_min,
                             trip.arrival_min,
+                            slot_idx,
                         )
-                        == slot_idx
+                        * y[(vehicle.vehicle_id, trip.trip_id)]
+                        for trip in problem.trips
+                        if (vehicle.vehicle_id, trip.trip_id) in y
+                        and self._trip_active_in_slot(
+                            problem,
+                            trip.departure_min,
+                            trip.arrival_min,
+                            slot_idx,
+                        )
                     )
                     # C8: deadhead energy consumption linked with selected connection arcs.
                     deadhead_energy_expr = gp.quicksum(
@@ -1591,6 +1604,60 @@ class GurobiMILPAdapter:
             dep += 24 * 60
             arr += 24 * 60
         return dep < slot_end and arr > slot_start
+
+    def _trip_slot_energy_fraction(
+        self,
+        problem: CanonicalOptimizationProblem,
+        departure_min: int,
+        arrival_min: int,
+        slot_idx: int,
+    ) -> float:
+        """
+        Compute the fraction of trip energy to attribute to the given slot.
+        
+        For mid-trip SOC safety, we spread trip energy proportionally across
+        the slots where the trip is active, rather than concentrating it at
+        the trip-end slot.
+        
+        This prevents hidden mid-trip SOC violations where a vehicle appears
+        safe at trip-end but actually goes below minimum SOC mid-trip.
+        """
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        slot_start = self._slot_absolute_min(problem, slot_idx)
+        slot_end = slot_start + timestep_min
+        
+        dep = departure_min
+        arr = arrival_min
+        if arr < dep:
+            arr += 24 * 60
+        if dep < slot_start - 24 * 60:
+            dep += 24 * 60
+            arr += 24 * 60
+        
+        # No overlap with this slot
+        if dep >= slot_end or arr <= slot_start:
+            return 0.0
+        
+        trip_duration = max(arr - dep, 1)
+        overlap_start = max(dep, slot_start)
+        overlap_end = min(arr, slot_end)
+        overlap_duration = max(overlap_end - overlap_start, 0)
+        
+        return overlap_duration / trip_duration
+
+    def _trip_active_slot_count(
+        self,
+        problem: CanonicalOptimizationProblem,
+        departure_min: int,
+        arrival_min: int,
+        slot_indices: List[int],
+    ) -> int:
+        """Count how many slots a trip is active in."""
+        count = 0
+        for slot_idx in slot_indices:
+            if self._trip_active_in_slot(problem, departure_min, arrival_min, slot_idx):
+                count += 1
+        return max(count, 1)
 
     def _slot_absolute_min(self, problem: CanonicalOptimizationProblem, slot_idx: int) -> int:
         timestep_min = max(problem.scenario.timestep_min, 1)

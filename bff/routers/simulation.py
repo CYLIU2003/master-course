@@ -1000,6 +1000,7 @@ def run_simulation(
         args=(
             scenario_id,
             job.job_id,
+            prep.prepared_input_id,  # Fixed: was missing, required by _run_simulation signature
             scope.get("serviceId") or "WEEKDAY",
             scope.get("depotId"),
             request.source,

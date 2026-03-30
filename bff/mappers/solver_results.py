@@ -26,6 +26,10 @@ def serialize_milp_result(result: MILPResult) -> Dict[str, Any]:
         "obj_breakdown": result.obj_breakdown,
         "unserved_tasks": result.unserved_tasks,
         "infeasibility_info": result.infeasibility_info,
+        # Phase 1.3: Vehicle-level energy provenance honesty
+        "soc_modeling_note": result.soc_modeling_note,
+        "vehicle_provenance_is_exact": result.vehicle_provenance_is_exact,
+        "vehicle_provenance_note": result.vehicle_provenance_note,
     }
     
     # Phase 2.3: Include detailed energy flow breakdown if available
@@ -111,6 +115,10 @@ def deserialize_milp_result(payload: Dict[str, Any]) -> MILPResult:
         obj_breakdown=dict(payload.get("obj_breakdown") or {}),
         unserved_tasks=list(payload.get("unserved_tasks") or []),
         infeasibility_info=str(payload.get("infeasibility_info") or ""),
+        # Phase 1.3: Vehicle-level energy provenance honesty
+        soc_modeling_note=str(payload.get("soc_modeling_note") or MILPResult.soc_modeling_note),
+        vehicle_provenance_is_exact=bool(payload.get("vehicle_provenance_is_exact", False)),
+        vehicle_provenance_note=str(payload.get("vehicle_provenance_note") or MILPResult.vehicle_provenance_note),
     )
 
 
