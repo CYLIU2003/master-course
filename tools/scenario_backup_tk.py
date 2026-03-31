@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 import csv
 import json
 import re
@@ -35,12 +35,138 @@ from src.route_family_runtime import (
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DERIVED_PV_PROFILE_DIR = _REPO_ROOT / "data" / "derived" / "pv_profiles"
 _SOLCAST_AVG_PROFILE_ID = "solcast_avg_2025_08_60min"
+_ACTUAL_DATE_PV_PROFILE_ID = "actual_date_profile"
 _WEATHER_MODE_OPTIONS = (
-    _SOLCAST_AVG_PROFILE_ID,
+    _ACTUAL_DATE_PV_PROFILE_ID,
     "sunny",
     "cloudy",
     "rainy",
 )
+_RESULT_METRIC_LABELS = {
+    "status": "状態",
+    "mode": "実行モード",
+    "objective": "目的値",
+    "total_cost": "総コスト",
+    "total_cost_with_assets": "総コスト(資産込み)",
+    "served_trips": "担当便数",
+    "unserved_trips": "未担当便数",
+    "vehicle_count_used": "使用車両数",
+    "solve_time_seconds": "計算時間[s]",
+    "energy_cost": "電力コスト",
+    "electricity_cost_final": "確定電力コスト",
+    "electricity_cost_provisional_leftover": "暫定電力コスト残",
+    "vehicle_cost": "車両コスト",
+    "driver_cost": "乗務員コスト",
+    "penalty_unserved": "未担当ペナルティ",
+    "fuel_cost": "燃料コスト",
+    "demand_charge": "デマンド料金",
+    "battery_degradation_cost": "電池劣化コスト",
+    "co2_cost": "CO2コスト",
+    "total_co2_kg": "CO2排出量[kg]",
+}
+_PRIMARY_COST_BREAKDOWN_KEYS = (
+    "total_cost",
+    "total_cost_with_assets",
+    "energy_cost",
+    "electricity_cost_final",
+    "vehicle_cost",
+    "driver_cost",
+    "penalty_unserved",
+    "demand_charge",
+    "fuel_cost",
+    "battery_degradation_cost",
+    "co2_cost",
+)
+_RESULT_COMPARE_KEYS = (
+    "status",
+    "mode",
+    "total_cost",
+    "objective",
+    "served_trips",
+    "unserved_trips",
+    "vehicle_count_used",
+    "solve_time_seconds",
+    "energy_cost",
+    "vehicle_cost",
+    "driver_cost",
+    "penalty_unserved",
+    "electricity_cost_final",
+    "electricity_cost_provisional_leftover",
+    "fuel_cost",
+    "demand_charge",
+    "battery_degradation_cost",
+    "co2_cost",
+)
+
+
+def _result_metric_label(key: str) -> str:
+    return _RESULT_METRIC_LABELS.get(str(key), str(key))
+
+
+def _result_numeric(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _format_result_value(value: Any) -> str:
+    numeric = _result_numeric(value)
+    if numeric is None:
+        return "" if value is None else str(value)
+    if abs(numeric - round(numeric)) < 1e-9:
+        return f"{int(round(numeric)):,}"
+    return f"{numeric:,.3f}".rstrip("0").rstrip(".")
+
+
+def _ordered_cost_breakdown_items(costs: Any) -> list[dict[str, Any]]:
+    if not isinstance(costs, dict):
+        return []
+    total_cost = _result_numeric(costs.get("total_cost"))
+    if total_cost is None or abs(total_cost) <= 1e-9:
+        total_cost = _result_numeric(costs.get("total_cost_with_assets"))
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    ordered_keys = [*list(_PRIMARY_COST_BREAKDOWN_KEYS), *[str(key) for key in costs.keys()]]
+    total_keys = {"total_cost", "total_cost_with_assets"}
+    for order, key in enumerate(ordered_keys):
+        if key in seen:
+            continue
+        if key not in costs:
+            continue
+        seen.add(key)
+        value = costs.get(key)
+        numeric = _result_numeric(value)
+        non_zero = numeric is not None and abs(numeric) > 1e-9
+        share = None
+        if (
+            numeric is not None
+            and total_cost is not None
+            and abs(total_cost) > 1e-9
+            and key not in total_keys
+        ):
+            share = numeric / total_cost
+        items.append(
+            {
+                "key": key,
+                "label": _result_metric_label(key),
+                "value": value,
+                "numeric": numeric,
+                "share": share,
+                "non_zero": non_zero,
+                "sort_rank": order,
+            }
+        )
+    items.sort(
+        key=lambda row: (
+            0 if row["key"] in total_keys else 1 if row["non_zero"] else 2,
+            row["sort_rank"],
+            row["key"],
+        )
+    )
+    return items
 
 
 class _Tooltip:
@@ -499,64 +625,235 @@ def _default_depot_energy_asset_row(depot_id: str) -> dict[str, Any]:
     }
 
 
-def _average_monthly_pv_profile_for_depot(
+def _coerce_float_list(values: Any) -> list[float]:
+    out: list[float] = []
+    for item in list(values or []):
+        try:
+            out.append(float(item or 0.0))
+        except (TypeError, ValueError):
+            out.append(0.0)
+    return out
+
+
+def _parse_iso_date_or_none(value: str) -> date | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw[:10]).date()
+    except ValueError:
+        return None
+
+
+def _build_service_dates(
+    start_date_text: str,
+    *,
+    planning_days: int,
+) -> list[str] | None:
+    start_date = _parse_iso_date_or_none(start_date_text)
+    if start_date is None:
+        return [] if not str(start_date_text or "").strip() else None
+    day_count = max(int(planning_days or 1), 1)
+    return [
+        (start_date + timedelta(days=offset)).isoformat()
+        for offset in range(day_count)
+    ]
+
+
+def _format_service_dates_summary(service_dates: list[str]) -> str:
+    if not service_dates:
+        return "未設定"
+    if len(service_dates) == 1:
+        return service_dates[0]
+    return f"{service_dates[0]} .. {service_dates[-1]} ({len(service_dates)}日)"
+
+
+def _load_daily_pv_profile_for_depot(
     depot_id: str,
+    service_date: str,
     *,
     profile_root: Path = _DERIVED_PV_PROFILE_DIR,
 ) -> dict[str, Any] | None:
-    paths = sorted(profile_root.glob(f"{depot_id}_2025-08-*_60min.json"))
-    if not paths:
+    path = profile_root / f"{depot_id}_{service_date}_60min.json"
+    if not path.exists():
+        return None
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
         return None
 
-    slot_sums: list[float] = []
-    capacity_values: list[float] = []
-    valid_paths = 0
-    for path in paths:
-        try:
-            doc = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError):
-            continue
-        slots = list(doc.get("pv_generation_kwh_by_slot") or [])
-        if not slots:
-            continue
-        if not slot_sums:
-            slot_sums = [0.0] * len(slots)
-        if len(slots) != len(slot_sums):
-            continue
-        valid_paths += 1
-        try:
-            capacity_values.append(float(doc.get("capacity_kw") or 0.0))
-        except (TypeError, ValueError):
-            pass
-        for idx, value in enumerate(slots):
-            try:
-                slot_sums[idx] += float(value or 0.0)
-            except (TypeError, ValueError):
-                continue
-
-    if valid_paths <= 0 or not slot_sums:
+    try:
+        slot_minutes = max(int(doc.get("slot_minutes") or 60), 1)
+    except (TypeError, ValueError):
+        slot_minutes = 60
+    duration_h = max(slot_minutes / 60.0, 1.0e-9)
+    try:
+        capacity_kw = float(doc.get("capacity_kw") or 0.0)
+    except (TypeError, ValueError):
+        capacity_kw = 0.0
+    slots = _coerce_float_list(doc.get("pv_generation_kwh_by_slot") or [])
+    capacity_factors = _coerce_float_list(doc.get("capacity_factor_by_slot") or [])
+    if not capacity_factors and slots and capacity_kw > 0.0:
+        capacity_factors = [
+            round(max(value, 0.0) / (capacity_kw * duration_h), 6)
+            for value in slots
+        ]
+    if not slots and capacity_factors:
+        slots = [
+            round(max(capacity_kw, 0.0) * max(value, 0.0) * duration_h, 6)
+            for value in capacity_factors
+        ]
+    if capacity_factors and len(capacity_factors) != len(slots):
+        if slots and capacity_kw > 0.0:
+            capacity_factors = [
+                round(max(value, 0.0) / (capacity_kw * duration_h), 6)
+                for value in slots
+            ]
+        elif capacity_factors:
+            slots = [
+                round(max(capacity_kw, 0.0) * max(value, 0.0) * duration_h, 6)
+                for value in capacity_factors
+            ]
+    if not slots:
         return None
-
-    averaged_slots = [
-        round(total / valid_paths, 6)
-        for total in slot_sums
-    ]
-    capacity_kw = round(
-        sum(capacity_values) / len(capacity_values),
-        6,
-    ) if capacity_values else 0.0
     return {
-        "profileId": f"{depot_id}_{_SOLCAST_AVG_PROFILE_ID}",
+        "date": service_date,
         "depotId": depot_id,
-        "dayCount": valid_paths,
+        "path": str(path),
+        "slotMinutes": slot_minutes,
         "capacityKw": capacity_kw,
-        "pvGenerationKwhBySlot": averaged_slots,
+        "capacityFactorBySlot": capacity_factors,
+        "pvGenerationKwhBySlot": slots,
     }
+
+
+def _compose_pv_generation_from_capacity_factors(
+    capacity_kw: float,
+    factor_rows: list[dict[str, Any]],
+) -> tuple[list[float], list[dict[str, Any]]]:
+    combined_slots: list[float] = []
+    generation_rows: list[dict[str, Any]] = []
+    effective_capacity_kw = max(float(capacity_kw or 0.0), 0.0)
+    for item in factor_rows:
+        slot_minutes = max(
+            int(item.get("slot_minutes") or item.get("slotMinutes") or 60),
+            1,
+        )
+        duration_h = max(slot_minutes / 60.0, 1.0e-9)
+        factors = _coerce_float_list(
+            item.get("capacity_factor_by_slot") or item.get("capacityFactorBySlot") or []
+        )
+        daily_slots = [
+            round(effective_capacity_kw * max(value, 0.0) * duration_h, 6)
+            for value in factors
+        ]
+        generation_rows.append(
+            {
+                "date": str(item.get("date") or ""),
+                "slot_minutes": slot_minutes,
+                "pv_generation_kwh_by_slot": daily_slots,
+            }
+        )
+        combined_slots.extend(daily_slots)
+    return combined_slots, generation_rows
+
+
+def _rebuild_pv_generation_for_row(row: dict[str, Any]) -> dict[str, Any]:
+    factor_rows = list(row.get("pv_capacity_factor_by_date") or [])
+    if not factor_rows:
+        return row
+    capacity_kw = 0.0
+    try:
+        capacity_kw = float(row.get("pv_capacity_kw") or 0.0)
+    except (TypeError, ValueError):
+        capacity_kw = 0.0
+    combined_slots, generation_rows = _compose_pv_generation_from_capacity_factors(
+        capacity_kw,
+        factor_rows,
+    )
+    row["pv_generation_kwh_by_slot"] = combined_slots
+    row["pv_generation_kwh_by_date"] = generation_rows
+    row["pv_profile_dates"] = [
+        str(item.get("date") or "")
+        for item in generation_rows
+        if str(item.get("date") or "").strip()
+    ]
+    return row
+
+
+def _load_selected_date_pv_profile_for_depot(
+    depot_id: str,
+    service_dates: list[str],
+    *,
+    current_capacity_kw: float = 0.0,
+    profile_root: Path = _DERIVED_PV_PROFILE_DIR,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    profiles: list[dict[str, Any]] = []
+    missing_dates: list[str] = []
+    for service_date in service_dates:
+        profile = _load_daily_pv_profile_for_depot(
+            depot_id,
+            service_date,
+            profile_root=profile_root,
+        )
+        if profile is None:
+            missing_dates.append(service_date)
+            continue
+        profiles.append(profile)
+    if missing_dates:
+        return None, missing_dates
+    if not profiles:
+        return None, list(service_dates)
+
+    default_capacity_kw = 0.0
+    for item in profiles:
+        try:
+            value = float(item.get("capacityKw") or 0.0)
+        except (TypeError, ValueError):
+            value = 0.0
+        if value > 0.0:
+            default_capacity_kw = value
+            break
+    effective_capacity_kw = (
+        float(current_capacity_kw)
+        if float(current_capacity_kw or 0.0) > 0.0
+        else default_capacity_kw
+    )
+    factor_rows = [
+        {
+            "date": item["date"],
+            "slot_minutes": item["slotMinutes"],
+            "capacity_factor_by_slot": list(item.get("capacityFactorBySlot") or []),
+        }
+        for item in profiles
+    ]
+    combined_slots, generation_rows = _compose_pv_generation_from_capacity_factors(
+        effective_capacity_kw,
+        factor_rows,
+    )
+    first_date = service_dates[0]
+    last_date = service_dates[-1]
+    profile_range = first_date if len(service_dates) == 1 else f"{first_date}_to_{last_date}"
+    return (
+        {
+            "profileId": f"{depot_id}_{profile_range}_{profiles[0]['slotMinutes']}min",
+            "depotId": depot_id,
+            "serviceDates": list(service_dates),
+            "slotMinutes": int(profiles[0]["slotMinutes"]),
+            "capacityKw": round(effective_capacity_kw, 6),
+            "defaultCapacityKw": round(default_capacity_kw, 6),
+            "pvGenerationKwhBySlot": combined_slots,
+            "pvGenerationKwhByDate": generation_rows,
+            "pvCapacityFactorByDate": factor_rows,
+        },
+        [],
+    )
 
 
 def _merge_selected_depot_pv_assets(
     selected_depot_ids: list[str],
     current_rows: list[dict[str, Any]] | None,
+    service_dates: list[str],
     *,
     profile_root: Path = _DERIVED_PV_PROFILE_DIR,
 ) -> tuple[list[dict[str, Any]], list[str], list[str]]:
@@ -574,24 +871,47 @@ def _merge_selected_depot_pv_assets(
     synced_ids: list[str] = []
     missing_ids: list[str] = []
     for depot_id in selected_depot_ids:
-        profile = _average_monthly_pv_profile_for_depot(
-            depot_id,
-            profile_root=profile_root,
-        )
-        if profile is None:
-            missing_ids.append(depot_id)
-            continue
         row = dict(rows_by_depot.get(depot_id) or _default_depot_energy_asset_row(depot_id))
         row["depot_id"] = depot_id
-        row["pv_enabled"] = True
-        row["pv_case_id"] = profile["profileId"]
-        row["pv_generation_kwh_by_slot"] = list(profile["pvGenerationKwhBySlot"])
         try:
             current_capacity_kw = float(row.get("pv_capacity_kw") or 0.0)
         except (TypeError, ValueError):
             current_capacity_kw = 0.0
-        if current_capacity_kw <= 0.0:
-            row["pv_capacity_kw"] = float(profile.get("capacityKw") or 0.0)
+        profile, missing_dates = _load_selected_date_pv_profile_for_depot(
+            depot_id,
+            service_dates,
+            current_capacity_kw=current_capacity_kw,
+            profile_root=profile_root,
+        )
+        if profile is None:
+            if missing_dates:
+                missing_ids.append(f"{depot_id} ({', '.join(missing_dates)})")
+            else:
+                missing_ids.append(depot_id)
+            continue
+        row["pv_enabled"] = True
+        row["pv_case_id"] = profile["profileId"]
+        row["pv_profile_source"] = "derived_daily"
+        row["pv_profile_dates"] = list(profile["serviceDates"])
+        row["pv_slot_minutes"] = int(profile["slotMinutes"])
+        row["pv_generation_kwh_by_slot"] = list(profile["pvGenerationKwhBySlot"])
+        row["pv_generation_kwh_by_date"] = [
+            {
+                "date": str(item.get("date") or ""),
+                "slot_minutes": int(item.get("slot_minutes") or 60),
+                "pv_generation_kwh_by_slot": list(item.get("pv_generation_kwh_by_slot") or []),
+            }
+            for item in profile.get("pvGenerationKwhByDate") or []
+        ]
+        row["pv_capacity_factor_by_date"] = [
+            {
+                "date": str(item.get("date") or ""),
+                "slot_minutes": int(item.get("slot_minutes") or 60),
+                "capacity_factor_by_slot": list(item.get("capacity_factor_by_slot") or []),
+            }
+            for item in profile.get("pvCapacityFactorByDate") or []
+        ]
+        row["pv_capacity_kw"] = float(profile.get("capacityKw") or 0.0)
         rows_by_depot[depot_id] = row
         synced_ids.append(depot_id)
 
@@ -939,6 +1259,7 @@ class App:
         self._scope_filter_debounce_id: str | None = None
 
         self._build_ui()
+        self._refresh_service_dates_preview()
         self._register_prepare_dependency_watchers()
         self._register_scope_ui_watchers()
         self._bind_keyboard_shortcuts()
@@ -1060,6 +1381,8 @@ class App:
         # ── 運行設定（常時表示）── canvas より上に置くことで常に見える
         self.day_type_var = tk.StringVar(value="WEEKDAY")
         self.service_date_var = tk.StringVar(value="")
+        self.planning_days_var = tk.StringVar(value="1")
+        self.service_dates_preview_var = tk.StringVar(value="対象日: 未設定")
         self.route_limit_var = tk.StringVar(value="600")
 
         day_row = ttk.Frame(scope)
@@ -1071,6 +1394,12 @@ class App:
         self.day_type_combo.pack(side=tk.LEFT)
         ttk.Label(day_row, text="運行日(YYYY-MM-DD)", width=18).pack(side=tk.LEFT, padx=(8, 2))
         ttk.Entry(day_row, textvariable=self.service_date_var, width=12).pack(side=tk.LEFT)
+        ttk.Label(day_row, text="計画日数", width=10).pack(side=tk.LEFT, padx=(8, 2))
+        ttk.Entry(day_row, textvariable=self.planning_days_var, width=4).pack(side=tk.LEFT)
+        ttk.Label(day_row, textvariable=self.service_dates_preview_var, foreground="#444").pack(
+            side=tk.LEFT,
+            padx=(8, 0),
+        )
 
         day_table = ttk.LabelFrame(scope, text="運行種別サマリ", padding=(4, 2))
         day_table.pack(fill=tk.X, pady=(2, 4))
@@ -1237,6 +1566,9 @@ class App:
         self.soc_min_var = tk.StringVar(value="0.2")
         self.soc_max_var = tk.StringVar(value="0.9")
         self.disable_vehicle_acquisition_cost_var = tk.BooleanVar(value=False)
+        self.enable_vehicle_cost_var = tk.BooleanVar(value=True)
+        self.enable_driver_cost_var = tk.BooleanVar(value=True)
+        self.enable_other_cost_var = tk.BooleanVar(value=True)
         # ── よく使うパラメータ（最上部）──
         basic = ttk.LabelFrame(ops, text="基本パラメータ", padding=6)
         basic.pack(fill=tk.X, pady=(0, 4))
@@ -1304,6 +1636,35 @@ class App:
             text="バス導入費の日割り計算を無効化 (disable_vehicle_acquisition_cost)",
             variable=self.disable_vehicle_acquisition_cost_var,
         ).pack(anchor="w", pady=(2, 0))
+        cost_toggle_frame = ttk.LabelFrame(basic, text="コスト成分ON/OFF", padding=6)
+        cost_toggle_frame.pack(fill=tk.X, pady=(6, 0))
+        ttk.Label(cost_toggle_frame, text="項目").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        ttk.Label(cost_toggle_frame, text="目的関数に含める").grid(row=0, column=1, sticky="w", padx=(0, 8))
+        ttk.Label(cost_toggle_frame, text="内容").grid(row=0, column=2, sticky="w")
+        for row_idx, (label, variable, description) in enumerate(
+            [
+                (
+                    "車両コスト",
+                    self.enable_vehicle_cost_var,
+                    "車両固定費・導入関連の日割りコストを目的関数へ加えます。",
+                ),
+                (
+                    "運転士コスト",
+                    self.enable_driver_cost_var,
+                    "拘束時間ベースの運転士コストを目的関数へ加えます。",
+                ),
+                (
+                    "その他コスト",
+                    self.enable_other_cost_var,
+                    "電力・燃料・需要料金・劣化・CO2・欠便ペナルティなどをまとめて加えます。",
+                ),
+            ],
+            start=1,
+        ):
+            ttk.Label(cost_toggle_frame, text=label).grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=2)
+            ttk.Checkbutton(cost_toggle_frame, variable=variable).grid(row=row_idx, column=1, sticky="w", padx=(0, 8), pady=2)
+            ttk.Label(cost_toggle_frame, text=description, foreground="#555").grid(row=row_idx, column=2, sticky="w", pady=2)
+        cost_toggle_frame.columnconfigure(2, weight=1)
 
         # ── 詳細・ペナルティ・CO₂パラメータ（スクロール下部）──
         advanced = ttk.LabelFrame(ops, text="詳細パラメータ / CO₂・劣化費", padding=6)
@@ -1328,7 +1689,7 @@ class App:
         self.max_ice_fuel_percent_var = tk.StringVar(value="90.0")
         self.default_ice_tank_capacity_l_var = tk.StringVar(value="300.0")
         self.pv_profile_id_var = tk.StringVar(value="")
-        self.weather_mode_var = tk.StringVar(value=_SOLCAST_AVG_PROFILE_ID)
+        self.weather_mode_var = tk.StringVar(value=_ACTUAL_DATE_PV_PROFILE_ID)
         self.weather_factor_scalar_var = tk.StringVar(value="1.0")
         self.depot_energy_assets_json_var = tk.StringVar(value="")
         self.co2_price_source_var = tk.StringVar(value="manual")
@@ -1389,7 +1750,7 @@ class App:
         weather_label.pack(side=tk.LEFT)
         _Tooltip(
             weather_label,
-            "Solcast 平均は選択営業所の 2025/08 平均PVを使います。manual/custom は天気係数を手動で調整したい場合のみ使用してください。",
+            "actual_date_profile は運行日と計画日数で選ばれた実日のPVを使います。sunny/cloudy/rainy は手動係数に寄せたい場合の補助です。",
         )
         self.weather_mode_combo = ttk.Combobox(
             weather_row,
@@ -1412,7 +1773,7 @@ class App:
         ttk.Button(asset_row, text="行編集...", command=self.open_depot_energy_assets_editor).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(
             asset_row,
-            text="選択営業所へPV平均同期",
+            text="選択営業所へ実日PV同期",
             command=self.sync_selected_depot_pv_assets,
         ).pack(side=tk.LEFT, padx=(6, 0))
         self._labeled_entry(advanced, "拡張係数 objective_weights(JSON)", self.objective_weights_json_var)
@@ -2541,6 +2902,28 @@ class App:
                 out.append(dict(item))
         return out
 
+    def _planning_days_value(self) -> int:
+        return max(self._parse_int(self.planning_days_var.get(), 1), 1)
+
+    def _selected_service_dates(self, *, announce: bool) -> list[str] | None:
+        raw_service_date = self.service_date_var.get().strip()
+        service_dates = _build_service_dates(
+            raw_service_date,
+            planning_days=self._planning_days_value(),
+        )
+        if service_dates is None and announce:
+            messagebox.showwarning("入力エラー", "運行日は YYYY-MM-DD 形式で入力してください")
+        return service_dates
+
+    def _refresh_service_dates_preview(self) -> None:
+        service_dates = self._selected_service_dates(announce=False)
+        if service_dates is None:
+            self.service_dates_preview_var.set("対象日: 日付形式エラー")
+            return
+        self.service_dates_preview_var.set(
+            "対象日: " + _format_service_dates_summary(service_dates)
+        )
+
     def _sync_pv_assets_for_selected_depots(
         self,
         *,
@@ -2551,16 +2934,25 @@ class App:
         except ValueError:
             return None
 
+        service_dates = self._selected_service_dates(announce=announce)
+        if service_dates is None:
+            return None
+        if not service_dates:
+            if announce:
+                messagebox.showwarning("入力不足", "運行日を入力してからPV同期してください")
+            return None
+
         selected_depot_ids = self._selected_depot_ids()
         merged_rows, synced_ids, missing_ids = _merge_selected_depot_pv_assets(
             selected_depot_ids,
             current_rows,
+            service_dates,
         )
         if not synced_ids and not current_rows:
             if announce:
                 messagebox.showwarning(
-                    "PV平均同期",
-                    "選択営業所に対応する 2025/08 の平均PVプロファイルが見つかりませんでした。",
+                    "実日PV同期",
+                    "選択営業所に対応する実日PVプロファイルが見つかりませんでした。",
                 )
             return current_rows
 
@@ -2569,26 +2961,33 @@ class App:
                 json.dumps(merged_rows, ensure_ascii=True, separators=(",", ":"))
             )
         if synced_ids:
+            profile_range = (
+                service_dates[0]
+                if len(service_dates) == 1
+                else f"{service_dates[0]}_to_{service_dates[-1]}"
+            )
             if len(synced_ids) == 1:
-                self.pv_profile_id_var.set(f"{synced_ids[0]}_{_SOLCAST_AVG_PROFILE_ID}")
+                self.pv_profile_id_var.set(f"{synced_ids[0]}_{profile_range}_60min")
             else:
                 self.pv_profile_id_var.set(
-                    f"selected_depots_{_SOLCAST_AVG_PROFILE_ID}"
+                    f"selected_depots_{profile_range}_60min"
                 )
-            self.weather_mode_var.set(_SOLCAST_AVG_PROFILE_ID)
+            self.weather_mode_var.set(_ACTUAL_DATE_PV_PROFILE_ID)
             self.log_line(
-                "選択営業所へPV平均を同期: "
+                "選択営業所へ実日PVを同期: "
                 + ", ".join(synced_ids)
+                + f" / dates={_format_service_dates_summary(service_dates)}"
             )
         if missing_ids:
             self.log_line(
-                "PV平均プロファイル未検出: " + ", ".join(missing_ids)
+                "実日PVプロファイル未検出: " + ", ".join(missing_ids)
             )
         if announce:
             messagebox.showinfo(
-                "PV平均同期",
+                "実日PV同期",
                 "同期した営業所: "
                 + (", ".join(synced_ids) if synced_ids else "なし")
+                + f"\n対象日: {_format_service_dates_summary(service_dates)}"
                 + (
                     "\n未検出: " + ", ".join(missing_ids)
                     if missing_ids
@@ -2611,10 +3010,14 @@ class App:
         win.geometry("1160x640")
 
         rows: list[dict[str, Any]] = [dict(item) for item in current_rows]
+        service_dates = self._selected_service_dates(announce=False) or []
 
         top_note = ttk.Label(
             win,
-            text="depot_energy_assets を行単位で編集します。保存すると JSON 欄へ反映されます。",
+            text=(
+                "depot_energy_assets を行単位で編集します。保存すると JSON 欄へ反映されます。"
+                f" 実日PV同期の対象日: {_format_service_dates_summary(service_dates)}"
+            ),
             foreground="#444",
         )
         top_note.pack(anchor="w", padx=10, pady=(10, 4))
@@ -2624,6 +3027,8 @@ class App:
 
         cols = (
             "depot_id",
+            "pv_period",
+            "pv_slots",
             "pv_enabled",
             "pv_capacity_kw",
             "bess_enabled",
@@ -2636,6 +3041,8 @@ class App:
         tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=10)
         headers = {
             "depot_id": "営業所ID",
+            "pv_period": "PV対象日",
+            "pv_slots": "PVスロット数",
             "pv_enabled": "PV有効",
             "pv_capacity_kw": "PV容量[kW]",
             "bess_enabled": "BESS有効",
@@ -2647,6 +3054,8 @@ class App:
         }
         widths = {
             "depot_id": 120,
+            "pv_period": 180,
+            "pv_slots": 90,
             "pv_enabled": 70,
             "pv_capacity_kw": 100,
             "bess_enabled": 80,
@@ -2681,6 +3090,8 @@ class App:
         grid_to_bess_allowed_slots_var = tk.StringVar(value="")
         bess_terminal_soc_min_kwh_var = tk.StringVar(value="0")
         provisional_energy_cost_var = tk.StringVar(value="0")
+        pv_dates_info_var = tk.StringVar(value="")
+        pv_slot_count_info_var = tk.StringVar(value="0")
 
         depots = [str(item.get("id") or "").strip() for item in self.scope_depots if str(item.get("id") or "").strip()]
         if depots:
@@ -2708,12 +3119,18 @@ class App:
         self._labeled_entry(editor, "Grid→BESS許可スロット(カンマ区切り)", grid_to_bess_allowed_slots_var)
         self._labeled_entry(editor, "終端SOC下限[kWh]", bess_terminal_soc_min_kwh_var)
         self._labeled_entry(editor, "仮コスト単価[円/kWh]", provisional_energy_cost_var)
+        self._labeled_entry(editor, "PV対象日(読取専用)", pv_dates_info_var, readonly=True)
+        self._labeled_entry(editor, "PVスロット数(読取専用)", pv_slot_count_info_var, readonly=True)
 
         selected_index: list[int | None] = [None]
 
         def _row_to_values(row: dict[str, Any]) -> tuple[Any, ...]:
+            pv_dates = list(row.get("pv_profile_dates") or [])
+            pv_slots = list(row.get("pv_generation_kwh_by_slot") or [])
             return (
                 str(row.get("depot_id") or row.get("depotId") or ""),
+                _format_service_dates_summary(pv_dates),
+                len(pv_slots),
                 bool(row.get("pv_enabled", False)),
                 row.get("pv_capacity_kw", 0.0),
                 bool(row.get("bess_enabled", False)),
@@ -2748,6 +3165,9 @@ class App:
             )
             bess_terminal_soc_min_kwh_var.set(str(row.get("bess_terminal_soc_min_kwh", 0.0)))
             provisional_energy_cost_var.set(str(row.get("provisional_energy_cost_yen_per_kwh", 0.0)))
+            pv_dates = list(row.get("pv_profile_dates") or [])
+            pv_dates_info_var.set(_format_service_dates_summary(pv_dates))
+            pv_slot_count_info_var.set(str(len(row.get("pv_generation_kwh_by_slot") or [])))
 
         def _read_form_to_row(base: dict[str, Any] | None = None) -> dict[str, Any] | None:
             depot_id = depot_id_var.get().strip()
@@ -2780,6 +3200,7 @@ class App:
             row["grid_to_bess_allowed_slot_indices"] = parsed_slots
             row["bess_terminal_soc_min_kwh"] = self._parse_float(bess_terminal_soc_min_kwh_var.get(), 0.0)
             row["provisional_energy_cost_yen_per_kwh"] = self._parse_float(provisional_energy_cost_var.get(), 0.0)
+            row = _rebuild_pv_generation_for_row(row)
             return row
 
         def _clear_form() -> None:
@@ -2798,6 +3219,8 @@ class App:
             grid_to_bess_allowed_slots_var.set("")
             bess_terminal_soc_min_kwh_var.set("0")
             provisional_energy_cost_var.set("0")
+            pv_dates_info_var.set("")
+            pv_slot_count_info_var.set("0")
 
         def _on_select(_event=None) -> None:
             sel = tree.selection()
@@ -2948,6 +3371,8 @@ class App:
 
     def _register_scope_ui_watchers(self) -> None:
         self.day_type_var.trace_add("write", lambda *_args: self._on_day_type_changed())
+        self.service_date_var.trace_add("write", lambda *_args: self._refresh_service_dates_preview())
+        self.planning_days_var.trace_add("write", lambda *_args: self._refresh_service_dates_preview())
         self.scope_filter_var.trace_add("write", lambda *_args: self._debounced_render_scope_checklist())
         self.fixed_route_band_mode_var.trace_add(
             "write",
@@ -3211,17 +3636,38 @@ class App:
     def _extract_result_summary(self, resp: dict[str, Any]) -> dict[str, Any]:
         solver_result = dict(resp.get("solver_result") or {})
         kpi = dict(resp.get("kpi") or {})
+        run_summary = dict(resp.get("summary") or {})
         costs = dict(resp.get("cost_breakdown") or {})
         simulation_summary = dict(resp.get("simulation_summary") or {})
         summary = {
             "status": self._pick_text(resp.get("status"), solver_result.get("status"), "unknown"),
+            "mode": self._pick_text(resp.get("mode"), resp.get("solver_mode"), solver_result.get("mode")),
+            "total_cost": self._pick_number(
+                costs.get("total_cost"),
+                costs.get("total_cost_with_assets"),
+                resp.get("objective_value"),
+                solver_result.get("objective_value"),
+            ),
             "objective": self._pick_number(resp.get("objective_value"), solver_result.get("objective_value")),
+            "served_trips": self._pick_number(
+                run_summary.get("trip_count_served"),
+                kpi.get("served_trips"),
+                resp.get("served_trips"),
+            ),
+            "unserved_trips": self._pick_number(
+                run_summary.get("trip_count_unserved"),
+                kpi.get("unmet_trips"),
+                resp.get("unmet_trips"),
+            ),
+            "vehicle_count_used": self._pick_number(
+                run_summary.get("vehicle_count_used"),
+                kpi.get("vehicle_count_used"),
+            ),
             "solve_time_seconds": self._pick_number(
                 solver_result.get("solve_time_seconds"),
                 kpi.get("solve_time_sec"),
                 resp.get("solve_time_seconds"),
             ),
-            "unmet_trips": self._pick_number(kpi.get("unmet_trips"), resp.get("unmet_trips")),
             "energy_cost": self._pick_number(
                 costs.get("total_energy_cost"),
                 costs.get("electricity_cost_final"),
@@ -3233,6 +3679,12 @@ class App:
                 costs.get("energy_cost"),
                 simulation_summary.get("total_energy_cost"),
             ),
+            "vehicle_cost": self._pick_number(
+                costs.get("vehicle_cost"),
+                costs.get("vehicle_fixed_cost"),
+            ),
+            "driver_cost": self._pick_number(costs.get("driver_cost")),
+            "penalty_unserved": self._pick_number(costs.get("penalty_unserved")),
             "electricity_cost_provisional_leftover": self._pick_number(
                 costs.get("electricity_cost_provisional_leftover"),
                 simulation_summary.get("electricity_cost_provisional_leftover_jpy"),
@@ -3287,27 +3739,88 @@ class App:
     def _open_kv_window(self, title: str, data: dict[str, Any]) -> None:
         win = tk.Toplevel(self.root)
         win.title(title)
-        win.geometry("860x620")
+        win.geometry("980x680")
         notebook = ttk.Notebook(win)
         notebook.pack(fill=tk.BOTH, expand=True)
 
         summary_tab = ttk.Frame(notebook, padding=6)
+        cost_tab = ttk.Frame(notebook, padding=6)
         details_tab = ttk.Frame(notebook, padding=6)
         raw_tab = ttk.Frame(notebook, padding=6)
         notebook.add(summary_tab, text="Summary")
+        notebook.add(cost_tab, text="Cost Breakdown")
         notebook.add(details_tab, text="Details")
         notebook.add(raw_tab, text="Raw JSON")
 
-        summary_tree = ttk.Treeview(summary_tab, columns=("key", "value"), show="headings")
-        summary_tree.heading("key", text="key")
+        summary = self._extract_result_summary(data)
+        cost_rows = _ordered_cost_breakdown_items(data.get("cost_breakdown") or {})
+        non_zero_cost_rows = [row for row in cost_rows if row.get("non_zero")]
+
+        ttk.Label(
+            summary_tab,
+            text=(
+                f"主要KPIと内訳を表示します。非ゼロ内訳 {len(non_zero_cost_rows)} 件"
+                if non_zero_cost_rows
+                else "主要KPIと内訳を表示します。"
+            ),
+            foreground="#555",
+        ).pack(anchor="w", pady=(0, 6))
+
+        summary_tree = ttk.Treeview(summary_tab, columns=("item", "value"), show="headings")
+        summary_tree.heading("item", text="項目")
         summary_tree.heading("value", text="value")
-        summary_tree.column("key", width=260, anchor="w")
-        summary_tree.column("value", width=540, anchor="w")
+        summary_tree.column("item", width=320, anchor="w")
+        summary_tree.column("value", width=580, anchor="w")
+        summary_tree.tag_configure("nonzero", background="#fff4cf")
         summary_tree.pack(fill=tk.BOTH, expand=True)
 
-        summary = self._extract_result_summary(data)
         for key, value in summary.items():
-            summary_tree.insert("", tk.END, values=(key, "" if value is None else value))
+            if value is None or value == "":
+                continue
+            tags = ()
+            numeric = _result_numeric(value)
+            if key in {"total_cost", "energy_cost", "vehicle_cost", "driver_cost", "penalty_unserved"} and numeric is not None and abs(numeric) > 1e-9:
+                tags = ("nonzero",)
+            summary_tree.insert(
+                "",
+                tk.END,
+                values=(_result_metric_label(key), _format_result_value(value)),
+                tags=tags,
+            )
+
+        ttk.Label(
+            cost_tab,
+            text="総コストを先頭に、非ゼロの内訳を上段へ並べています。",
+            foreground="#555",
+        ).pack(anchor="w", pady=(0, 6))
+        cost_tree = ttk.Treeview(cost_tab, columns=("item", "key", "value", "share"), show="headings")
+        cost_tree.heading("item", text="項目")
+        cost_tree.heading("key", text="key")
+        cost_tree.heading("value", text="value")
+        cost_tree.heading("share", text="share")
+        cost_tree.column("item", width=260, anchor="w")
+        cost_tree.column("key", width=220, anchor="w")
+        cost_tree.column("value", width=220, anchor="e")
+        cost_tree.column("share", width=120, anchor="e")
+        cost_tree.tag_configure("nonzero", background="#fff4cf")
+        cost_tree.pack(fill=tk.BOTH, expand=True)
+
+        for row in cost_rows:
+            share_text = ""
+            share = row.get("share")
+            if isinstance(share, float):
+                share_text = f"{share * 100:.1f}%"
+            cost_tree.insert(
+                "",
+                tk.END,
+                values=(
+                    row["label"],
+                    row["key"],
+                    _format_result_value(row.get("value")),
+                    share_text,
+                ),
+                tags=("nonzero",) if row.get("non_zero") else (),
+            )
 
         detail_tree = ttk.Treeview(details_tab, columns=("section", "key", "value"), show="headings")
         detail_tree.heading("section", text="section")
@@ -3318,14 +3831,19 @@ class App:
         detail_tree.column("value", width=420, anchor="w")
         detail_tree.pack(fill=tk.BOTH, expand=True)
 
-        for section in ("kpi", "cost_breakdown", "solver_result"):
+        for section in ("summary", "kpi", "cost_breakdown", "solver_result"):
             block = data.get(section)
             if isinstance(block, dict):
-                for key, value in block.items():
+                entries = (
+                    [(row["key"], row.get("value")) for row in cost_rows]
+                    if section == "cost_breakdown"
+                    else list(block.items())
+                )
+                for key, value in entries:
                     if isinstance(value, (dict, list, tuple)):
                         shown = json.dumps(value, ensure_ascii=False, default=str)
                     else:
-                        shown = value
+                        shown = _format_result_value(value)
                     detail_tree.insert("", tk.END, values=(section, key, shown))
 
         raw = ScrolledText(raw_tab)
@@ -3352,24 +3870,22 @@ class App:
         tree.column("delta", width=220, anchor="w")
         tree.pack(fill=tk.BOTH, expand=True)
 
-        metrics = [
-            "status",
-            "objective",
-            "solve_time_seconds",
-            "unmet_trips",
-            "energy_cost",
-            "electricity_cost_final",
-            "electricity_cost_provisional_leftover",
-            "fuel_cost",
-            "demand_charge",
-        ]
-        for key in metrics:
+        for key in _RESULT_COMPARE_KEYS:
             av = a_summary.get(key)
             bv = b_summary.get(key)
             delta: Any = ""
             if isinstance(av, (int, float)) and isinstance(bv, (int, float)):
-                delta = float(bv) - float(av)
-            tree.insert("", tk.END, values=(key, av, bv, delta))
+                delta = _format_result_value(float(bv) - float(av))
+            tree.insert(
+                "",
+                tk.END,
+                values=(
+                    _result_metric_label(key),
+                    _format_result_value(av),
+                    _format_result_value(bv),
+                    delta,
+                ),
+            )
 
     def compare_optimization_results(self) -> None:
         scenario_a, scenario_b = self._compare_ids()
@@ -3534,6 +4050,11 @@ class App:
             solver = dict(resp.get("solverSettings") or {})
             sim = dict(resp.get("simulationSettings") or {})
             self.service_date_var.set(str(sim.get("serviceDate") or ""))
+            planning_days = sim.get("planningDays")
+            if planning_days is None:
+                service_dates = list(sim.get("serviceDates") or [])
+                planning_days = len(service_dates) if service_dates else 1
+            self.planning_days_var.set(str(planning_days or 1))
             self.solver_mode_var.set(str(solver.get("solverMode") or "hybrid"))
             self.objective_mode_var.set(
                 normalize_objective_mode(solver.get("objectiveMode") or "total_cost")
@@ -3567,6 +4088,9 @@ class App:
             self.disable_vehicle_acquisition_cost_var.set(
                 bool(sim.get("disableVehicleAcquisitionCost", False))
             )
+            self.enable_vehicle_cost_var.set(bool(sim.get("enableVehicleCost", True)))
+            self.enable_driver_cost_var.set(bool(sim.get("enableDriverCost", True)))
+            self.enable_other_cost_var.set(bool(sim.get("enableOtherCost", True)))
             self.initial_soc_percent_var.set(str(sim.get("initialSocPercent") or 0.8))
             self.final_soc_floor_percent_var.set(str(sim.get("finalSocFloorPercent") or 0.2))
             self.final_soc_target_percent_var.set(
@@ -3581,7 +4105,7 @@ class App:
             self.max_ice_fuel_percent_var.set(str(sim.get("maxIceFuelPercent") or 90.0))
             self.deadhead_speed_kmh_var.set(str(sim.get("deadheadSpeedKmh") or 18.0))
             self.pv_profile_id_var.set(str(sim.get("pvProfileId") or ""))
-            weather_mode = str(sim.get("weatherMode") or _SOLCAST_AVG_PROFILE_ID)
+            weather_mode = str(sim.get("weatherMode") or _ACTUAL_DATE_PV_PROFILE_ID)
             if weather_mode and weather_mode not in self.weather_mode_options:
                 self.weather_mode_options = [*self.weather_mode_options, weather_mode]
                 if self._widget_exists(getattr(self, "weather_mode_combo", None)):
@@ -3658,6 +4182,8 @@ class App:
             return
 
         synced_assets = self._sync_pv_assets_for_selected_depots(announce=False)
+        if synced_assets is None:
+            return
         fixed_route_band_mode = self.fixed_route_band_mode_var.get()
         allow_intra_depot_swap = (
             False if fixed_route_band_mode else self.allow_intra_var.get()
@@ -3667,12 +4193,21 @@ class App:
             slack_penalty=self._parse_float(self.contract_penalty_coeff_var.get(), 1000000.0),
             degradation_weight=self._parse_float(self.degradation_weight_var.get(), 0.0),
         )
+        service_dates = self._selected_service_dates(announce=True)
+        if service_dates is None:
+            return
+        if not service_dates:
+            messagebox.showwarning("入力不足", "Quick Setup 保存前に運行日を入力してください")
+            return
+        planning_days = self._planning_days_value()
 
         payload = {
             "selectedDepotIds": self._selected_depot_ids(),
             "selectedRouteIds": self._selected_route_ids(),
             "dayType": self.day_type_var.get().strip(),
             "serviceDate": self.service_date_var.get().strip() or None,
+            "planningDays": planning_days,
+            "serviceDates": service_dates,
             "includeShortTurn": self.include_short_turn_var.get(),
             "includeDepotMoves": self.include_depot_moves_var.get(),
             "includeDeadhead": self.include_deadhead_var.get(),
@@ -3696,6 +4231,9 @@ class App:
             "socMin": self._parse_float(self.soc_min_var.get(), 0.2),
             "socMax": self._parse_float(self.soc_max_var.get(), 0.9),
             "disableVehicleAcquisitionCost": self.disable_vehicle_acquisition_cost_var.get(),
+            "enableVehicleCost": self.enable_vehicle_cost_var.get(),
+            "enableDriverCost": self.enable_driver_cost_var.get(),
+            "enableOtherCost": self.enable_other_cost_var.get(),
             "gridFlatPricePerKwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
             "gridSellPricePerKwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
             "demandChargeCostPerKw": self._parse_float(self.demand_charge_var.get(), 0.0),
@@ -3724,10 +4262,11 @@ class App:
             ),
             "deadheadSpeedKmh": self._parse_float(self.deadhead_speed_kmh_var.get(), 18.0),
             "pvProfileId": self.pv_profile_id_var.get().strip() or None,
-            "weatherMode": self.weather_mode_var.get().strip() or _SOLCAST_AVG_PROFILE_ID,
+            "weatherMode": self.weather_mode_var.get().strip() or _ACTUAL_DATE_PV_PROFILE_ID,
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
             "objectiveWeights": objective_weights,
             "randomSeed": self._parse_int(self.random_seed_var.get(), 42),
+            "planningHorizonHours": 24.0 * float(planning_days) if planning_days > 1 else 20.0,
         }
         payload["depotEnergyAssets"] = synced_assets
         def _on_save_done(_resp: dict[str, Any]) -> None:
@@ -4444,7 +4983,17 @@ class App:
             slack_penalty=self._parse_float(self.contract_penalty_coeff_var.get(), 1000000.0),
             degradation_weight=self._parse_float(self.degradation_weight_var.get(), 0.0),
         )
+        service_dates = self._selected_service_dates(announce=False)
+        if service_dates is None:
+            raise ValueError("invalid_service_date")
+        if not service_dates:
+            messagebox.showwarning("入力不足", "Prepare 前に運行日を入力してください")
+            raise ValueError("missing_service_date")
+        planning_days = self._planning_days_value()
+        minimum_horizon_hours = 24.0 * float(planning_days) if planning_days > 1 else 20.0
         depot_energy_assets = self._sync_pv_assets_for_selected_depots(announce=False)
+        if depot_energy_assets is None:
+            raise ValueError("invalid_depot_energy_assets")
         fixed_route_band_mode = self.fixed_route_band_mode_var.get()
         allow_intra_depot_swap = (
             False if fixed_route_band_mode else self.allow_intra_var.get()
@@ -4455,6 +5004,7 @@ class App:
             "selected_route_ids": self._selected_route_ids(),
             "day_type": self.day_type_var.get().strip(),
             "service_date": self.service_date_var.get().strip() or None,
+            "service_dates": service_dates,
             "include_short_turn": self.include_short_turn_var.get(),
             "include_depot_moves": self.include_depot_moves_var.get(),
             "include_deadhead": self.include_deadhead_var.get(),
@@ -4467,10 +5017,15 @@ class App:
                 "use_selected_depot_vehicle_inventory": True,
                 "use_selected_depot_charger_inventory": True,
                 "disable_vehicle_acquisition_cost": self.disable_vehicle_acquisition_cost_var.get(),
+                "enable_vehicle_cost": self.enable_vehicle_cost_var.get(),
+                "enable_driver_cost": self.enable_driver_cost_var.get(),
+                "enable_other_cost": self.enable_other_cost_var.get(),
                 "deadhead_speed_kmh": self._parse_float(self.deadhead_speed_kmh_var.get(), 18.0),
                 "solver_mode": self.solver_mode_var.get().strip(),
                 "objective_mode": self.objective_mode_var.get().strip(),
                 "objective_preset": self.objective_preset_var.get().strip() or "cost",
+                "planning_days": planning_days,
+                "service_dates": service_dates,
                 "fixed_route_band_mode": fixed_route_band_mode,
                 "enable_vehicle_diagram_output": (
                     self.enable_vehicle_diagram_output_var.get()
@@ -4496,8 +5051,9 @@ class App:
                 "objective_weights": objective_weights,
                 "depot_energy_assets": depot_energy_assets,
                 "pv_profile_id": self.pv_profile_id_var.get().strip() or None,
-                "weather_mode": self.weather_mode_var.get().strip() or _SOLCAST_AVG_PROFILE_ID,
+                "weather_mode": self.weather_mode_var.get().strip() or _ACTUAL_DATE_PV_PROFILE_ID,
                 "weather_factor_scalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
+                "planning_horizon_hours": minimum_horizon_hours,
                 "random_seed": self._parse_int(self.random_seed_var.get(), 42),
             },
         }
@@ -4750,7 +5306,10 @@ class App:
             scenario_id = self._ensure_prepared_before_execution("Preparedシミュレーション")
             if not scenario_id:
                 return
-            prepare_payload = self._prepare_payload()
+            try:
+                prepare_payload = self._prepare_payload()
+            except ValueError:
+                return
             payload = {
                 "prepared_input_id": self.prepared_input_id,
                 "source": "duties",
@@ -4779,7 +5338,10 @@ class App:
             if not scenario_id:
                 return
             depots = self._selected_depot_ids()
-            prepare_payload = self._prepare_payload()
+            try:
+                prepare_payload = self._prepare_payload()
+            except ValueError:
+                return
             payload = {
                 "mode": self.solver_mode_var.get().strip(),
                 "prepared_input_id": self.prepared_input_id,
@@ -4812,7 +5374,10 @@ class App:
             return
         depots = self._selected_depot_ids()
         effective_time_limit = self._effective_optimization_time_limit_seconds()
-        prepare_payload = self._prepare_payload()
+        try:
+            prepare_payload = self._prepare_payload()
+        except ValueError:
+            return
         payload = {
             "mode": self.solver_mode_var.get().strip(),
             "prepared_input_id": self.prepared_input_id,
@@ -4932,6 +5497,7 @@ class App:
         watched_pairs = [
             (self.day_type_var, "運行種別を変更"),
             (self.service_date_var, "運行日を変更"),
+            (self.planning_days_var, "計画日数を変更"),
             (self.include_short_turn_var, "区間便設定を変更"),
             (self.include_depot_moves_var, "入出庫便設定を変更"),
             (self.include_deadhead_var, "回送設定を変更"),
@@ -4945,6 +5511,9 @@ class App:
             (self.initial_soc_var, "SOC初期値を変更"),
             (self.soc_min_var, "SOC下限を変更"),
             (self.soc_max_var, "SOC上限を変更"),
+            (self.enable_vehicle_cost_var, "車両コスト設定を変更"),
+            (self.enable_driver_cost_var, "運転士コスト設定を変更"),
+            (self.enable_other_cost_var, "その他コスト設定を変更"),
             (self.unserved_penalty_var, "未配車ペナルティを変更"),
             (self.grid_flat_price_var, "電気料金を変更"),
             (self.grid_sell_price_var, "売電単価を変更"),

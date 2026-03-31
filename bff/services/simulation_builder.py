@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from bff.services.service_ids import canonical_service_id
@@ -16,6 +17,41 @@ def _first_defined(*values: Any, default: Any = None) -> Any:
         if value is not None:
             return value
     return default
+
+
+def _normalized_service_dates(
+    service_date: Optional[str],
+    *,
+    planning_days: int,
+    explicit_dates: Any = None,
+) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in list(explicit_dates or []):
+        raw = str(item or "").strip()
+        if not raw:
+            continue
+        try:
+            value = datetime.fromisoformat(raw[:10]).date().isoformat()
+        except ValueError:
+            continue
+        if value not in seen:
+            normalized.append(value)
+            seen.add(value)
+    if normalized:
+        return normalized
+    raw_service_date = str(service_date or "").strip()
+    if not raw_service_date:
+        return []
+    try:
+        start_date = datetime.fromisoformat(raw_service_date[:10]).date()
+    except ValueError:
+        return []
+    day_count = max(int(planning_days or 1), 1)
+    return [
+        (start_date + timedelta(days=offset)).isoformat()
+        for offset in range(day_count)
+    ]
 
 
 def select_builder_template(
@@ -525,6 +561,24 @@ def apply_builder_configuration(
         allow_intra_depot_swap = False
 
     primary_depot_id = selected_depot_ids[0]
+    service_date = body.service_date or body.simulation_settings.service_date
+    planning_days = max(int(getattr(body.simulation_settings, "planning_days", 1) or 1), 1)
+    service_dates = _normalized_service_dates(
+        service_date,
+        planning_days=planning_days,
+        explicit_dates=(
+            body.service_dates
+            if hasattr(body, "service_dates")
+            else body.simulation_settings.service_dates
+        )
+        or body.simulation_settings.service_dates,
+    )
+    if service_dates and not service_date:
+        service_date = service_dates[0]
+    planning_horizon_hours = max(
+        float(body.simulation_settings.planning_horizon_hours),
+        24.0 * float(planning_days) if planning_days > 1 else float(body.simulation_settings.planning_horizon_hours),
+    )
     doc["dispatch_scope"] = {
         "scopeId": f"{scenario_meta.get('datasetId') or 'tokyu_core'}:{scenario_meta.get('datasetVersion') or 'unknown'}",
         "operatorId": scenario_meta.get("operatorId") or "tokyu",
@@ -539,7 +593,11 @@ def apply_builder_configuration(
             "includeRouteIds": selected_route_ids,
             "excludeRouteIds": [],
         },
-        "serviceSelection": {"serviceIds": [selected_day_type]},
+        "serviceSelection": {
+            "serviceIds": [selected_day_type],
+            "serviceDates": list(service_dates),
+        },
+        "serviceDates": list(service_dates),
         "tripSelection": {
             "includeShortTurn": include_short_turn,
             "includeDepotMoves": include_depot_moves,
@@ -553,13 +611,15 @@ def apply_builder_configuration(
     }
     doc["scenario_overlay"] = overlay.model_dump()
     doc["simulation_config"] = {
-        "service_date": body.service_date or body.simulation_settings.service_date,
+        "service_date": service_date,
+        "service_dates": list(service_dates),
+        "planning_days": planning_days,
         "day_type": selected_day_type,
         "initial_soc": body.simulation_settings.initial_soc,
         "soc_min": soc_min,
         "soc_max": soc_max,
         "start_time": body.simulation_settings.start_time,
-        "planning_horizon_hours": body.simulation_settings.planning_horizon_hours,
+        "planning_horizon_hours": planning_horizon_hours,
         "time_step_min": 60,
         "timestep_min": 60,
         "vehicle_template_id": primary_template.get("id"),
@@ -578,6 +638,9 @@ def apply_builder_configuration(
         "use_selected_depot_vehicle_inventory": use_selected_vehicle_inventory,
         "use_selected_depot_charger_inventory": use_selected_charger_inventory,
         "disable_vehicle_acquisition_cost": body.simulation_settings.disable_vehicle_acquisition_cost,
+        "enable_vehicle_cost": body.simulation_settings.enable_vehicle_cost,
+        "enable_driver_cost": body.simulation_settings.enable_driver_cost,
+        "enable_other_cost": body.simulation_settings.enable_other_cost,
         "solver_mode": body.simulation_settings.solver_mode,
         "objective_mode": overlay.solver_config.objective_mode,
         "objective_preset": overlay.solver_config.objective_preset,

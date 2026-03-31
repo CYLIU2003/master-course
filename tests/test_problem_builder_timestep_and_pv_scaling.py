@@ -72,3 +72,16 @@ def test_problem_builder_uses_configured_timestep_30() -> None:
 
     assert problem.scenario.timestep_min == 30
     assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (1.0, 2.0)
+
+
+def test_problem_builder_build_from_scenario_forwards_planning_days() -> None:
+    problem = ProblemBuilder().build_from_scenario(
+        _scenario(60),
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+        planning_days=2,
+    )
+
+    assert problem.scenario.planning_days == 2
+    assert len(problem.trips) == 2
+    assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (2.0, 4.0, 2.0, 4.0)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+from pathlib import Path
 from unittest import mock
 
 from bff.store import scenario_store
@@ -381,3 +383,42 @@ def test_timetable_rows_fall_back_to_tokyu_bus_data_when_artifacts_missing(
         {"route_id": "route-a", "service_id": "WEEKDAY", "trip_count": 3},
         {"route_id": "route-a", "service_id": "SAT", "trip_count": 2},
     ]
+
+
+def test_scalar_artifact_falls_back_to_json_when_sqlite_is_locked(tmp_path, monkeypatch) -> None:
+    store_dir = tmp_path / "scenarios"
+    monkeypatch.setattr(scenario_store, "_STORE_DIR", store_dir)
+
+    scenario = scenario_store.create_scenario(
+        name="Scenario 1",
+        description="scalar fallback",
+        mode="thesis_mode",
+    )
+    scenario_id = str(scenario["id"])
+
+    original_save_scalar = scenario_store.trip_store.save_scalar
+
+    def _locked_save_scalar(db_path, name, value):
+        if name == "optimization_result":
+            raise sqlite3.OperationalError("database is locked")
+        return original_save_scalar(db_path, name, value)
+
+    monkeypatch.setattr(scenario_store.trip_store, "save_scalar", _locked_save_scalar)
+
+    scenario_store.set_field(
+        scenario_id,
+        "optimization_result",
+        {"solver_status": "OPTIMAL", "objective_value": 123.0},
+    )
+
+    refs = scenario_store.scenario_meta_store.default_refs(store_dir, scenario_id)
+    optimization_json = scenario_store.trip_store.load_json(
+        Path(refs["optimizationResult"]),
+        None,
+    )
+
+    assert optimization_json == {"solver_status": "OPTIMAL", "objective_value": 123.0}
+    assert scenario_store.get_field(scenario_id, "optimization_result") == {
+        "solver_status": "OPTIMAL",
+        "objective_value": 123.0,
+    }

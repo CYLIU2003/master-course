@@ -46,6 +46,12 @@ flowchart LR
 <details>
 <summary><strong>更新メモ（2026-03-28）</strong></summary>
 
+- 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
+- 2026-03-31: 営業所別エネルギー資産は `depot_energy_assets` で `pv_capacity_kw` と `bess_energy_kwh / bess_power_kw` を編集できる前提に整理し、日別 PV capacity factor から複数日 horizon 用の発電列を再構築できるようにした
+- 2026-03-31: `ProblemBuilder.build_from_scenario()` の `planning_days` 取りこぼし、multi-day price slot 複製時の `co2_factor` フィールド不整合、MILP metadata 用の重複 model build を修正した
+- 2026-03-31: prepared-input optimization は `rebuild_dispatch=false` のとき scope artifact を SQLite に書き戻さず in-memory solve するよう変更し、`optimization_result` / `simulation_result` は SQLite lock 時に JSON sidecar へフォールバック保存できるようにした
+- 2026-03-31: scenario `237d5623-aa94-4f72-9da1-17b9070264be` を `2025-08-04`, `fixedRouteBandMode=true`, `disableVehicleAcquisitionCost=true`, `objectiveMode=total_cost`, 実日 PV で 4 モード比較し、結果を `output/optimization_comparison_api_237d_actual_pv_2025-08-04_final.json` に保存した（MILP は `time_limit`, ALNS/GA/ABC は同一 incumbent で `trip_count_served=638`, `trip_count_unserved=336`）
+
 - scenario `237d5623-aa94-4f72-9da1-17b9070264be` の total_cost 再検証に合わせ、prepared input から materialize した `stops` に catalog 座標を再補完するよう変更し、scoped prepared JSON が stale でも canonical dispatch graph の deadhead 推論が落ちないようにした
 - `BusstopPole` の番線違い (`...00240050.` / `...00240050.4` など) は同一 physical stop alias として 0 分 deadhead を自動補完し、route-band 固定でも terminal bay 差分だけで接続不能にならないようにした
 - canonical MILP の trip-connection arc は feasible graph 全探索から「近い successor 上位のみ」へ pruning し、`mode_milp_only` が 237d scoped case で 다시 `OPTIMAL` まで戻るようにした
@@ -920,6 +926,18 @@ $$arrival(i) + turnaround(dest_i) + deadhead(dest_i, origin_j) \leq departure(j)
 - Tkinter から最適化 Job が完走
 - core 内に `frontend/tests/tmp/cache/log` が存在しない
 - パラメータ保全マニフェストに挙げた項目が保持されている
+
+### 9.7 結果画面の確認ポイント
+
+- `Optimization結果` / `Simulation結果` の Summary タブは、`総コスト`、`担当便数`、`未担当便数`、`使用車両数` と主要な非ゼロ内訳を先頭表示する。
+- `Cost Breakdown` タブは、`総コスト` を先頭に非ゼロ項目を上段へ並べ、構成比 (`share`) も確認できる。
+- 2026-03-31 時点では、シナリオ `237d5623-aa94-4f72-9da1-17b9070264be` の最新 `optimization_result` に非ゼロ内訳が保存済みであり、`energy_cost=202,796.50054309692`, `vehicle_cost=483,447.4885844756`, `driver_cost=2,006,683.333333335`, `penalty_unserved=3,360,000.0`, `total_cost=6,052,927.3224609075` を結果画面から確認できる前提とする。
+
+### 9.8 コスト成分トグル
+
+- `基本パラメータ` には `車両コスト / 運転士コスト / その他コスト` の ON/OFF 表を置き、各行はチェックボックスで切り替える。
+- これらは Quick Setup 保存対象であり、未設定の旧シナリオは互換のため全て `ON` として扱う。
+- `その他コスト` は電力・燃料・需要料金・劣化・CO2・欠便ペナルティなどの残りコスト群をまとめたスイッチとして扱う。
 
 ---
 

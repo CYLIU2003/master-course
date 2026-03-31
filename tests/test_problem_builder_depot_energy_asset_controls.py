@@ -83,3 +83,30 @@ def test_problem_builder_resamples_hourly_depot_pv_series_to_price_slot_count() 
 
     assert len(asset.pv_generation_kwh_by_slot) == len(problem.price_slots)
     assert tuple(asset.pv_generation_kwh_by_slot) == (1.5, 1.5, 3.0, 3.0)
+
+
+def test_problem_builder_prefers_daily_capacity_factor_metadata_for_pv_series() -> None:
+    scenario = _scenario()
+    scenario["simulation_config"]["depot_energy_assets"][0] = {
+        "depot_id": "dep-1",
+        "pv_enabled": True,
+        "pv_capacity_kw": 50.0,
+        "pv_capacity_factor_by_date": [
+            {
+                "date": "2025-08-01",
+                "slot_minutes": 60,
+                "capacity_factor_by_slot": [0.1, 0.2],
+            },
+            {
+                "date": "2025-08-02",
+                "slot_minutes": 60,
+                "capacity_factor_by_slot": [0.3, 0.4],
+            },
+        ],
+    }
+    scenario["energy_price_profiles"] = [{"site_id": "dep-1", "values": [10.0, 20.0, 30.0, 40.0]}]
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    asset = problem.depot_energy_assets["dep-1"]
+
+    assert tuple(asset.pv_generation_kwh_by_slot) == (5.0, 10.0, 15.0, 20.0)

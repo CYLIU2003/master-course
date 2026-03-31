@@ -165,6 +165,8 @@ def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback(
     # Canonical path uses ProblemBuilder, not build_problem_data_from_scenario
     # Verify the canonical problem was built from the prepared scenario
     problem_builder_cls.assert_called()
+    assert "trips" not in stored_fields
+    assert "timetable_rows" not in stored_fields
 
 
 def test_scenario_hash_ignores_optimization_and_build_audits() -> None:

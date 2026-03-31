@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from src.dispatch.dispatcher import DispatchGenerator
 from src.dispatch.graph_builder import ConnectionGraphBuilder
@@ -61,6 +61,7 @@ class ProblemBuilder:
         depot_id: Optional[str],
         service_id: str,
         config: Optional[OptimizationConfig] = None,
+        planning_days: int = 1,
     ) -> CanonicalOptimizationProblem:
         context = self._build_dispatch_context_from_scenario(
             scenario,
@@ -75,6 +76,7 @@ class ProblemBuilder:
         disable_acquisition_cost = bool(
             simulation_cfg.get("disable_vehicle_acquisition_cost", False)
         )
+        cost_component_flags = self._cost_component_flags_from_scenario(scenario)
         solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
         timestep_min = int(
             simulation_cfg.get("timestep_min")
@@ -262,6 +264,7 @@ class ProblemBuilder:
             co2_price_per_kg=co2_price_per_kg,
             ice_co2_kg_per_l=ice_co2_kg_per_l,
             fixed_route_band_mode=fixed_route_band_mode,
+            planning_days=max(int(planning_days or 1), 1),
             max_start_fragments_per_vehicle=max(1, max_start_fragments_per_vehicle),
             max_end_fragments_per_vehicle=max(1, max_end_fragments_per_vehicle),
             allow_partial_service=allow_partial_service,
@@ -289,6 +292,9 @@ class ProblemBuilder:
             timestep_min=timestep_min,
             scenario_vehicles=scenario_vehicles,
             disable_vehicle_acquisition_cost=disable_acquisition_cost,
+            enable_vehicle_cost=bool(cost_component_flags.get("vehicle", True)),
+            enable_driver_cost=bool(cost_component_flags.get("driver", True)),
+            enable_other_cost=bool(cost_component_flags.get("other", True)),
         )
 
     def build_from_dispatch(
@@ -338,6 +344,9 @@ class ProblemBuilder:
         timestep_min: int = 60,
         scenario_vehicles: Optional[Sequence[Dict[str, Any]]] = None,
         disable_vehicle_acquisition_cost: bool = False,
+        enable_vehicle_cost: bool = True,
+        enable_driver_cost: bool = True,
+        enable_other_cost: bool = True,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -458,7 +467,7 @@ class ProblemBuilder:
                             slot_index=day_idx * slots_per_day + base_slot.slot_index,
                             grid_buy_yen_per_kwh=base_slot.grid_buy_yen_per_kwh,
                             grid_sell_yen_per_kwh=base_slot.grid_sell_yen_per_kwh,
-                            co2_kg_per_kwh=base_slot.co2_kg_per_kwh,
+                            co2_factor=base_slot.co2_factor,
                         )
                     )
             time_slots = tuple(all_time_slots)
@@ -506,7 +515,7 @@ class ProblemBuilder:
                 diesel_price_yen_per_l=float(diesel_price_yen_per_l),
                 demand_charge_on_peak_yen_per_kw=float(demand_charge_on_peak_yen_per_kw),
                 demand_charge_off_peak_yen_per_kw=float(demand_charge_off_peak_yen_per_kw),
-                co2_price_per_kg=float(co2_price_per_kg),
+                co2_price_per_kg=float(co2_price_per_kg if enable_other_cost else 0.0),
                 ice_co2_kg_per_l=float(ice_co2_kg_per_l),
             ),
             dispatch_context=context,
@@ -548,9 +557,26 @@ class ProblemBuilder:
                 "home_depot_charge_pre_window_min": float(home_depot_charge_pre_window_min or 0.0),
                 "home_depot_charge_post_window_min": float(home_depot_charge_post_window_min or 0.0),
                 "enable_contract_overage_penalty": bool(enable_contract_overage_penalty),
-                "contract_overage_penalty_yen_per_kwh": contract_overage_penalty_yen_per_kwh,
-                "grid_to_bus_priority_penalty_yen_per_kwh": grid_to_bus_priority_penalty_yen_per_kwh,
-                "grid_to_bess_priority_penalty_yen_per_kwh": grid_to_bess_priority_penalty_yen_per_kwh,
+                "contract_overage_penalty_yen_per_kwh": (
+                    contract_overage_penalty_yen_per_kwh if enable_other_cost else 0.0
+                ),
+                "grid_to_bus_priority_penalty_yen_per_kwh": (
+                    grid_to_bus_priority_penalty_yen_per_kwh if enable_other_cost else 0.0
+                ),
+                "grid_to_bess_priority_penalty_yen_per_kwh": (
+                    grid_to_bess_priority_penalty_yen_per_kwh if enable_other_cost else 0.0
+                ),
+                "charge_session_start_penalty_yen": 2.0 if enable_other_cost else 0.0,
+                "slot_concurrency_penalty_yen": 1.0 if enable_other_cost else 0.0,
+                "early_charge_penalty_yen_per_kwh": 0.5 if enable_other_cost else 0.0,
+                "charge_to_upper_buffer_penalty_yen_per_kwh": 0.2 if enable_other_cost else 0.0,
+                "final_soc_target_penalty_per_kwh": 50.0 if enable_other_cost else 0.0,
+                "driver_fragment_start_cost_yen": 0.0 if not enable_driver_cost else None,
+                "cost_component_flags": {
+                    "vehicle": bool(enable_vehicle_cost),
+                    "driver": bool(enable_driver_cost),
+                    "other": bool(enable_other_cost),
+                },
                 "depot_coordinates_by_id": dict(depot_coordinates_by_id or {}),
             },
         )
@@ -626,7 +652,7 @@ class ProblemBuilder:
             if not raw and len(depots) == 1:
                 raw = by_depot_raw.get("depot_default") or by_depot_raw.get(canonical_depot_id) or {}
             pv_series = self._align_energy_series_to_slot_count(
-                raw.get("pv_generation_kwh_by_slot") or pv_kwh_by_slot,
+                self._pv_generation_series_for_depot_asset(raw, fallback=pv_kwh_by_slot),
                 slot_count,
             )
             asset = DepotEnergyAsset(
@@ -666,6 +692,61 @@ class ProblemBuilder:
             )
             assets[depot.depot_id] = asset
         return assets
+
+    def _pv_generation_series_for_depot_asset(
+        self,
+        raw: Mapping[str, Any],
+        *,
+        fallback: Sequence[Any],
+    ) -> Sequence[Any]:
+        if not raw:
+            return fallback
+        generated_from_factors = self._pv_generation_from_capacity_factor_rows(raw)
+        if generated_from_factors:
+            return generated_from_factors
+        generated_by_date = self._flatten_pv_generation_rows(
+            raw.get("pv_generation_kwh_by_date") or raw.get("pvGenerationKwhByDate") or []
+        )
+        if generated_by_date:
+            return generated_by_date
+        return raw.get("pv_generation_kwh_by_slot") or fallback
+
+    def _flatten_pv_generation_rows(self, rows: Sequence[Any]) -> list[float]:
+        combined: list[float] = []
+        for item in rows:
+            if not isinstance(item, Mapping):
+                continue
+            for value in item.get("pv_generation_kwh_by_slot") or item.get("pvGenerationKwhBySlot") or []:
+                try:
+                    combined.append(float(value or 0.0))
+                except (TypeError, ValueError):
+                    combined.append(0.0)
+        return combined
+
+    def _pv_generation_from_capacity_factor_rows(self, raw: Mapping[str, Any]) -> list[float]:
+        rows = raw.get("pv_capacity_factor_by_date") or raw.get("pvCapacityFactorByDate") or []
+        if not isinstance(rows, Sequence):
+            return []
+        try:
+            capacity_kw = float(raw.get("pv_capacity_kw") or raw.get("pvCapacityKw") or 0.0)
+        except (TypeError, ValueError):
+            capacity_kw = 0.0
+        combined: list[float] = []
+        for item in rows:
+            if not isinstance(item, Mapping):
+                continue
+            try:
+                slot_minutes = max(int(item.get("slot_minutes") or item.get("slotMinutes") or 60), 1)
+            except (TypeError, ValueError):
+                slot_minutes = 60
+            duration_h = max(slot_minutes / 60.0, 1.0e-9)
+            for value in item.get("capacity_factor_by_slot") or item.get("capacityFactorBySlot") or []:
+                try:
+                    factor = max(float(value or 0.0), 0.0)
+                except (TypeError, ValueError):
+                    factor = 0.0
+                combined.append(capacity_kw * factor * duration_h)
+        return combined
 
     def _align_energy_series_to_slot_count(
         self,
@@ -1566,6 +1647,7 @@ class ProblemBuilder:
         self,
         scenario: Dict[str, Any],
     ) -> OptimizationObjectiveWeights:
+        component_flags = self._cost_component_flags_from_scenario(scenario)
         simulation_config = scenario.get("simulation_config") or {}
         overlay_solver = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
         objective_mode = normalize_objective_mode(
@@ -1587,6 +1669,15 @@ class ProblemBuilder:
             ),
             explicit_weights=explicit_weights if isinstance(explicit_weights, dict) else {},
         )
+        if not component_flags["vehicle"]:
+            objective_weights["vehicle_fixed_cost"] = 0.0
+        if not component_flags["other"]:
+            objective_weights["electricity_cost"] = 0.0
+            objective_weights["demand_charge_cost"] = 0.0
+            objective_weights["unserved_penalty"] = 0.0
+            objective_weights["switch_cost"] = 0.0
+            objective_weights["degradation"] = 0.0
+            objective_weights["deviation_cost"] = 0.0
         return OptimizationObjectiveWeights(
             energy=float(objective_weights.get("electricity_cost", 1.0)),
             demand=float(objective_weights.get("demand_charge_cost", 1.0)),
@@ -1597,6 +1688,17 @@ class ProblemBuilder:
             degradation=float(objective_weights.get("degradation", 0.0)),
             utilization=float(objective_weights.get("utilization", 0.0)),
         )
+
+    def _cost_component_flags_from_scenario(
+        self,
+        scenario: Dict[str, Any],
+    ) -> Dict[str, bool]:
+        simulation_config = scenario.get("simulation_config") or {}
+        return {
+            "vehicle": bool(simulation_config.get("enable_vehicle_cost", True)),
+            "driver": bool(simulation_config.get("enable_driver_cost", True)),
+            "other": bool(simulation_config.get("enable_other_cost", True)),
+        }
 
     def _safe_float(self, value: Any) -> Optional[float]:
         try:

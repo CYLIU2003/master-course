@@ -2623,6 +2623,33 @@ master-course/
     - `python -m pytest tests -q` → `53 passed`
     - synthetic smoke: `energy_cost=300.0`, `demand_charge=1000.0`, `grid_kwh=20.0`, `peak_kw=10.0`
 
+- 2026-03-31 (実日 PV / 複数日 planning_days / prepared-input optimization 実行の整備)
+  - 問題として、営業所 PV は 2025/08 月平均へ潰してから `depot_energy_assets` へ同期しており、`serviceDate` を変えても実日に応じた日射差が solver 入力へ入っていなかった。加えて、Tk / Quick Setup / Prepare / canonical optimizer の間で `planning_days` と `service_dates` の受け渡しも分断されていた。
+  - `tools/scenario_backup_tk.py` を更新し、`運行日 + 計画日数` から `service_dates` を生成して `data/derived/pv_profiles/{depot}_{YYYY-MM-DD}_60min.json` を実日読み込みするよう変更した。PV 同期は `pv_generation_kwh_by_date` / `pv_capacity_factor_by_date` / `pv_profile_dates` / `pv_slot_minutes` を保持し、`pv_capacity_kw` を編集した時は capacity factor から日別発電列を再生成する。UI も `天気モード` を手入力からプルダウンへ変更し、営業所エネルギー資産表で `pv_capacity_kw`, `bess_energy_kwh`, `bess_power_kw` を編集できる前提へ整理した。
+  - `bff/routers/scenarios.py`, `bff/routers/simulation.py`, `bff/services/simulation_builder.py`, `bff/services/run_preparation.py`, `src/optimization/common/builder.py` を通して `service_dates`, `planning_days`, `planning_horizon_hours` を保持するようにし、canonical builder は multi-day trip / tariff / PV slot を正しく複製できるよう修正した。途中で自分から上げた不具合として `ProblemBuilder.build_from_scenario()` が `planning_days` を受けておらず、さらに multi-day price slot 複製で存在しない `co2_kg_per_kwh` を参照していたため、両方修正して回帰テストを追加した。
+  - 追加で、MILP engine が solver metadata 用に `MILPModelBuilder.build()` を一度回し、その後 adapter 側で同じ巨大モデルを Gurobi 用に再構築していた。これでは 974 trip case の `mode_milp_only` 比較が極端に重くなるため、metadata は lightweight count 集計へ置き換え、重複 model build を除去した。
+  - 最適化 API 実行ではさらに 2 段階の lock 問題を自分から確認した。1 つ目は `prepared_input` から materialize した scope artifact を `rebuild_dispatch=false` でも SQLite へ書き戻していたことで、background job から `timetable_rows` 保存時に `database is locked` を起こした。2 つ目は solve 完了後の `optimization_result` 保存でも同じ lock が起きたことだった。
+  - 対策として `bff/routers/optimization.py` は `rebuild_dispatch=false` の prepared-input solve では scope artifact を scenario DB へ戻さず、materialized scenario をそのまま canonical optimizer へ渡すよう変更した。さらに `bff/store/scenario_store.py` では scalar artifact (`optimization_result` / `simulation_result` / `dispatch_plan`) の SQLite 保存が lock した場合、既存 refs の JSON sidecar へフォールバック保存し、読取側 `get_field()` も sidecar を見に行くようにした。これで background optimization job が結果保存で落ちず、`GET /api/scenarios/{id}/optimization` から結果取得できる。
+  - 実行確認として `FastAPI TestClient` 経由で scenario `237d5623-aa94-4f72-9da1-17b9070264be` を対象に、`serviceDate=2025-08-04`, `serviceDates=["2025-08-04"]`, `planningDays=1`, `fixedRouteBandMode=true`, `disableVehicleAcquisitionCost=true`, `objectiveMode=total_cost`, `weatherMode=actual_date_profile`, `pvProfileId=tsurumaki_2025-08-04_60min` を Quick Setup へ反映したうえで、既存 BFF API (`/simulation/prepare` → `/run-optimization` → `/jobs/{id}` → `/optimization`) を 4 モードで実行した。
+  - 比較結果は `output/optimization_comparison_api_237d_actual_pv_2025-08-04_final.json` に保存した。要約は以下の通り。
+    - `mode_milp_only`: `solver_status=time_limit`, `objective_value=9740000.0`, `trip_count_served=0`, `trip_count_unserved=974`, `solve_time_seconds=97.6972`
+    - `mode_alns_only`: `solver_status=infeasible_candidate`, `objective_value=6052927.3224609075`, `trip_count_served=638`, `trip_count_unserved=336`, `solve_time_seconds=65.7632`
+    - `mode_ga_only`: `solver_status=infeasible_candidate`, `objective_value=6052927.3224609075`, `trip_count_served=638`, `trip_count_unserved=336`, `solve_time_seconds=62.1353`
+    - `mode_abc_only`: `solver_status=infeasible_candidate`, `objective_value=6052927.3224609075`, `trip_count_served=638`, `trip_count_unserved=336`, `solve_time_seconds=63.2371`
+  - 回帰テスト:
+    - `tests/test_scenario_backup_tk_pv_sync.py`
+    - `tests/test_simulation_builder_prepare_scope.py`
+    - `tests/test_problem_builder_depot_energy_asset_controls.py`
+    - `tests/test_problem_builder_timestep_and_pv_scaling.py`
+    - `tests/test_bff_reoptimization_actual_soc_forwarding.py`
+    - `tests/test_milp_engine_lightweight_stats.py`
+    - `tests/test_prepared_scope_execution.py`
+    - `tests/test_optimization_canonical_metaheuristics.py`
+    - `tests/test_scenario_store_dispatch_scope_overlay.py`
+  - 確認:
+    - `python -m py_compile tools/scenario_backup_tk.py bff/routers/scenarios.py bff/routers/simulation.py bff/services/simulation_builder.py bff/services/run_preparation.py bff/routers/optimization.py bff/store/scenario_store.py src/optimization/common/builder.py src/optimization/milp/engine.py` → pass
+    - `PYTHONPATH=C:\master-course pytest tests/test_scenario_backup_tk_pv_sync.py tests/test_simulation_builder_prepare_scope.py tests/test_problem_builder_depot_energy_asset_controls.py tests/test_problem_builder_timestep_and_pv_scaling.py tests/test_bff_reoptimization_actual_soc_forwarding.py tests/test_milp_engine_lightweight_stats.py tests/test_prepared_scope_execution.py tests/test_optimization_canonical_metaheuristics.py tests/test_scenario_store_dispatch_scope_overlay.py -q` → pass
+
 - 2026-03-23 (Prepared-scope optimization と scenario artifact の整合を修正)
   - 問題は Tk/BFF の既定フローで `rebuild_dispatch=false` のまま最適化を完了すると、`optimization_result` だけは更新される一方で scenario 側の `trips` / `timetable_rows` / `stats` が古いまま残り、フロント・BFF・最適化監査で見える件数が食い違うことだった。
   - さらに `scenario_store.set_field(..., invalidate_dispatch=True)` の direct row-artifact 更新経路は `timetable_rows` / `stop_timetables` 更新時に stale な `trips` / `duties` / `optimization_result` を落としておらず、timetable-first なのに古い dispatch/optimization が残り得た。
@@ -2783,3 +2810,31 @@ master-course/
   - 対応として、Quick Setup API の request/response を拡張し、`solverSettings` と `simulationSettings` の双方で `noImprovementLimit / destroyFraction / initialSoc / socMin / socMax / disableVehicleAcquisitionCost / touPricing` を往復できるようにした。
   - `update_quick_setup()` では `scenario_overlay`（solver/cost）と `simulation_config` へ同キーを保存する処理を追加し、`load_quick_setup()` は TOU 配列を UI テキストへ復元するフォーマッタを追加して再表示できるようにした。
   - これにより、`バス導入費の日割り計算を無効化` を含む基本パラメータの保存漏れが解消され、再Prepare時の設定ドリフトを抑制した。
+
+- 2026-03-31 (結果画面で非ゼロの最適化内訳を前面表示し、API 保存済み結果と UI の見え方を一致させた)
+  - 問題として、BFF の `optimization_result` には `driver_cost / vehicle_cost / penalty_unserved / total_cost` が非ゼロで保存されている一方、`tools/scenario_backup_tk.py` の Summary タブは `energy_cost` など一部しか拾わず、`summary.trip_count_served / trip_count_unserved / vehicle_count_used` も表示していなかった。そのため「結果は出ているのに、フロントでは内訳が見えない」状態になっていた。
+  - 追加で自分から上げた問題として、cost breakdown の表示順が未定義で、payload に存在しない primary key まで空行で出す余地があり、非ゼロ項目を素早く確認しにくかった。
+  - 対応として `tools/scenario_backup_tk.py` に結果表示用ラベル・数値整形・cost breakdown 並び替え helper を追加し、Summary タブで `総コスト / 担当便数 / 未担当便数 / 使用車両数 / 電力コスト / 車両コスト / 乗務員コスト / 未担当ペナルティ` を非ゼロ強調付きで表示するようにした。
+  - さらに `Cost Breakdown` タブを新設し、`total_cost` を先頭に非ゼロ項目を上段へ並べ、`share` 列で構成比も見えるようにした。`Details` タブも `summary` ブロックを含めて表示し、`cost_breakdown` は同じ並び順で確認できるよう揃えた。比較画面も同じメトリクス群に拡張している。
+  - 実データ確認として、`GET /api/scenarios/237d5623-aa94-4f72-9da1-17b9070264be/optimization` の最新結果から `total_cost=6052927.3224609075`, `served_trips=638`, `unserved_trips=336`, `vehicle_count_used=55`, `energy_cost=202796.50054309692`, `vehicle_cost=483447.4885844756`, `driver_cost=2006683.333333335`, `penalty_unserved=3360000.0` を UI helper が正しく抽出できることを確認した。
+  - 回帰テスト:
+    - `tests/test_scenario_backup_tk_dataset_options.py`
+    - `tests/test_scenario_backup_tk_pv_sync.py`
+  - 確認:
+    - `python -m py_compile tools/scenario_backup_tk.py tests/test_scenario_backup_tk_dataset_options.py` → pass
+    - `$env:PYTHONPATH='C:\master-course'; pytest tests\test_scenario_backup_tk_dataset_options.py tests\test_scenario_backup_tk_pv_sync.py -q` → `15 passed`
+
+- 2026-03-31 (車両コスト・運転士コスト・その他コストの個別トグルを UI / Quick Setup 保存 / prepare / builder に通した)
+  - 問題として、コスト内訳は結果で見えるようになっても、どのコスト成分を目的関数に含めるかを front から明示的に切り替える手段がなかった。また既存の `disable_vehicle_acquisition_cost` は車両コストの内訳調整であって、車両・運転士・その他の大分類 ON/OFF とは責務が異なっていた。
+  - 追加で自分から上げた問題として、ここを UI だけで実装すると「チェックは切り替わるが scenario 保存で戻る」「保存されても prepare / solver に届かない」経路が発生するため、Quick Setup payload、`simulation_config` 保存、prepare 時の builder 反映まで同時に揃える必要があった。
+  - `tools/scenario_backup_tk.py` の `基本パラメータ` に `コスト成分ON/OFF` 表を追加し、`車両コスト / 運転士コスト / その他コスト` を各チェックボックスで切り替えられるようにした。Quick Setup の load/save と prepare payload に `enableVehicleCost / enableDriverCost / enableOtherCost` を追加し、未設定シナリオは互換のため `True` 扱いにしている。
+  - `bff/routers/scenarios.py` は Quick Setup API の request/response に上記 3 フィールドを追加し、`simulation_config` へ保存するよう更新した。`bff/routers/simulation.py` と `bff/services/simulation_builder.py` も prepare body から `enable_vehicle_cost / enable_driver_cost / enable_other_cost` を scenario へ保持するよう通している。
+  - `src/optimization/common/builder.py` では cost component flag を canonical problem metadata と objective weights に反映し、`vehicle` OFF 時は vehicle weight を 0、`other` OFF 時は energy/demand/unserved/switch/degradation/deviation を 0 に落とすようにした。`src/optimization/common/evaluator.py` は同 flags を見て cost breakdown の `vehicle_cost / driver_cost / energy_cost / demand_cost / co2_cost / total_cost / total_cost_with_assets` などを 0 化するため、結果画面にもトグル状態がそのまま出る。
+  - 回帰テスト:
+    - `tests/test_quick_setup_advanced_persistence.py`
+    - `tests/test_simulation_builder_prepare_scope.py`
+    - `tests/test_problem_builder_cost_component_toggles.py`
+    - `tests/test_scenario_backup_tk_dataset_options.py`
+  - 確認:
+    - `python -m py_compile tools/scenario_backup_tk.py bff/routers/scenarios.py bff/routers/simulation.py bff/services/simulation_builder.py src/optimization/common/builder.py src/optimization/common/evaluator.py tests/test_quick_setup_advanced_persistence.py tests/test_simulation_builder_prepare_scope.py tests/test_problem_builder_cost_component_toggles.py` → pass
+    - `$env:PYTHONPATH='C:\master-course'; pytest tests\test_quick_setup_advanced_persistence.py tests\test_simulation_builder_prepare_scope.py tests\test_problem_builder_cost_component_toggles.py tests\test_scenario_backup_tk_dataset_options.py -q` → `17 passed`

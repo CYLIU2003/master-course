@@ -391,6 +391,8 @@ class UpdateQuickSetupBody(BaseModel):
     selectedRouteIds: Optional[List[str]] = None
     dayType: Optional[str] = None
     serviceDate: Optional[str] = None
+    serviceDates: Optional[List[str]] = None
+    planningDays: Optional[int] = None
     includeShortTurn: Optional[bool] = None
     includeDepotMoves: Optional[bool] = None
     includeDeadhead: Optional[bool] = None
@@ -430,6 +432,9 @@ class UpdateQuickSetupBody(BaseModel):
     socMin: Optional[float] = None
     socMax: Optional[float] = None
     disableVehicleAcquisitionCost: Optional[bool] = None
+    enableVehicleCost: Optional[bool] = None
+    enableDriverCost: Optional[bool] = None
+    enableOtherCost: Optional[bool] = None
     touPricing: Optional[List[Dict[str, Any]]] = None
     deadheadSpeedKmh: Optional[float] = None
     objectivePreset: Optional[str] = None
@@ -1163,6 +1168,8 @@ def _builder_defaults(
         "selectedRouteIds": selected_route_ids,
         "dayType": str(dispatch_scope.get("serviceId") or "WEEKDAY"),
         "serviceDate": simulation_config.get("service_date"),
+        "serviceDates": list(simulation_config.get("service_dates") or []),
+        "planningDays": int(simulation_config.get("planning_days") or 1),
         "vehicleTemplateId": primary_template.get("id"),
         "vehicleCount": len(existing_vehicles) or int(overlay_fleet.get("n_bev") or 10),
         "initialSoc": simulation_config.get("initial_soc", 0.8),
@@ -1242,6 +1249,9 @@ def _builder_defaults(
         "disableVehicleAcquisitionCost": bool(
             simulation_config.get("disable_vehicle_acquisition_cost", False)
         ),
+        "enableVehicleCost": bool(simulation_config.get("enable_vehicle_cost", True)),
+        "enableDriverCost": bool(simulation_config.get("enable_driver_cost", True)),
+        "enableOtherCost": bool(simulation_config.get("enable_other_cost", True)),
         "initialSocPercent": simulation_config.get("initial_soc_percent"),
         "finalSocFloorPercent": simulation_config.get("final_soc_floor_percent"),
         "finalSocTargetPercent": simulation_config.get(
@@ -1258,7 +1268,7 @@ def _builder_defaults(
         "defaultIceTankCapacityL": simulation_config.get("default_ice_tank_capacity_l", 300.0),
         "deadheadSpeedKmh": simulation_config.get("deadhead_speed_kmh", 18.0),
         "pvProfileId": simulation_config.get("pv_profile_id"),
-        "weatherMode": simulation_config.get("weather_mode") or "sunny",
+        "weatherMode": simulation_config.get("weather_mode") or "actual_date_profile",
         "weatherFactorScalar": simulation_config.get("weather_factor_scalar"),
         "depotEnergyAssets": list(simulation_config.get("depot_energy_assets") or []),
         "objectiveWeights": raw_objective_weights,
@@ -1310,6 +1320,7 @@ def _builder_defaults(
         "planningHorizonHours": float(
             simulation_config.get("planning_horizon_hours") or 20.0
         ),
+        "planningDays": int(simulation_config.get("planning_days") or 1),
     }
 
 
@@ -1666,11 +1677,14 @@ def _build_quick_setup_payload(
             "randomSeed": int(builder_defaults.get("randomSeed") or 42),
             "startTime": builder_defaults.get("startTime") or "05:00",
             "planningHorizonHours": float(builder_defaults.get("planningHorizonHours") or 20.0),
+            "planningDays": int(builder_defaults.get("planningDays") or 1),
             "experimentMethod": builder_defaults.get("experimentMethod"),
             "experimentNotes": builder_defaults.get("experimentNotes"),
         },
         "simulationSettings": {
             "serviceDate": builder_defaults.get("serviceDate"),
+            "serviceDates": list(builder_defaults.get("serviceDates") or []),
+            "planningDays": int(builder_defaults.get("planningDays") or 1),
             "vehicleTemplateId": builder_defaults.get("vehicleTemplateId"),
             "vehicleCount": int(builder_defaults.get("vehicleCount") or 0),
             "chargerCount": int(builder_defaults.get("chargerCount") or 0),
@@ -1692,6 +1706,9 @@ def _build_quick_setup_payload(
             "disableVehicleAcquisitionCost": bool(
                 builder_defaults.get("disableVehicleAcquisitionCost", False)
             ),
+            "enableVehicleCost": bool(builder_defaults.get("enableVehicleCost", True)),
+            "enableDriverCost": bool(builder_defaults.get("enableDriverCost", True)),
+            "enableOtherCost": bool(builder_defaults.get("enableOtherCost", True)),
             "initialSocPercent": builder_defaults.get("initialSocPercent"),
             "finalSocFloorPercent": builder_defaults.get("finalSocFloorPercent"),
             "finalSocTargetPercent": builder_defaults.get("finalSocTargetPercent"),
@@ -1702,7 +1719,7 @@ def _build_quick_setup_payload(
             "defaultIceTankCapacityL": builder_defaults.get("defaultIceTankCapacityL"),
             "deadheadSpeedKmh": builder_defaults.get("deadheadSpeedKmh"),
             "pvProfileId": builder_defaults.get("pvProfileId"),
-            "weatherMode": builder_defaults.get("weatherMode") or "sunny",
+            "weatherMode": builder_defaults.get("weatherMode") or "actual_date_profile",
             "weatherFactorScalar": builder_defaults.get("weatherFactorScalar"),
             "depotEnergyAssets": list(builder_defaults.get("depotEnergyAssets") or []),
             "objectiveWeights": dict(builder_defaults.get("objectiveWeights") or {}),
@@ -2129,6 +2146,23 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
 
         if body.serviceDate is not None:
             simulation_config["service_date"] = body.serviceDate
+        if body.serviceDates is not None:
+            simulation_config["service_dates"] = [
+                str(item)
+                for item in body.serviceDates
+                if str(item or "").strip()
+            ]
+            if simulation_config["service_dates"] and not simulation_config.get("service_date"):
+                simulation_config["service_date"] = simulation_config["service_dates"][0]
+        if body.planningDays is not None:
+            planning_days = max(int(body.planningDays), 1)
+            simulation_config["planning_days"] = planning_days
+            if planning_days > 1:
+                current_horizon = float(simulation_config.get("planning_horizon_hours") or 20.0)
+                simulation_config["planning_horizon_hours"] = max(
+                    current_horizon,
+                    24.0 * float(planning_days),
+                )
         if body.objectiveMode is not None:
             simulation_config["objective_mode"] = normalize_objective_mode(body.objectiveMode)
         if body.timeLimitSeconds is not None:
@@ -2181,6 +2215,12 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["disable_vehicle_acquisition_cost"] = bool(
                 body.disableVehicleAcquisitionCost
             )
+        if body.enableVehicleCost is not None:
+            simulation_config["enable_vehicle_cost"] = bool(body.enableVehicleCost)
+        if body.enableDriverCost is not None:
+            simulation_config["enable_driver_cost"] = bool(body.enableDriverCost)
+        if body.enableOtherCost is not None:
+            simulation_config["enable_other_cost"] = bool(body.enableOtherCost)
         if body.deadheadSpeedKmh is not None:
             simulation_config["deadhead_speed_kmh"] = float(body.deadheadSpeedKmh)
         if body.objectivePreset is not None:

@@ -594,6 +594,8 @@ def _build_canonical_input(
         _scenario_value(scenario, "dispatch_scope", "dispatchScope", default={}) or {}
     )
     simulation_config = dict(_scenario_value(scenario, "simulation_config", "simulationConfig", default={}) or {})
+    service_dates = list(simulation_config.get("service_dates") or [])
+    planning_days = max(int(simulation_config.get("planning_days") or 1), 1)
     dataset_id = _dataset_id(scenario)
     random_seed = _random_seed(scenario)
     vehicles = [dict(item) for item in list(scenario.get("vehicles") or [])]
@@ -656,6 +658,8 @@ def _build_canonical_input(
         "route_ids": list(scope.route_ids),
         "service_ids": list(scope.service_ids),
         "service_date": scope.service_date,
+        "service_dates": service_dates,
+        "planning_days": planning_days,
         "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
         "trip_count": len(trip_records),
         "timetable_row_count": len(stop_time_records),
@@ -664,6 +668,8 @@ def _build_canonical_input(
             "route_ids": list(scope.route_ids),
             "service_ids": list(scope.service_ids),
             "service_date": scope.service_date,
+            "service_dates": service_dates,
+            "planning_days": planning_days,
             "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
         },
         "counts": {
@@ -835,6 +841,11 @@ def _build_run_preparation(
         warnings.extend(_route_catalog_audit_warnings(route_catalog_audit))
 
         prepared_input_id = _prepared_input_id(scenario_hash)
+        simulation_config = dict(
+            _scenario_value(scenario, "simulation_config", "simulationConfig", default={}) or {}
+        )
+        service_dates = list(simulation_config.get("service_dates") or [])
+        planning_days = max(int(simulation_config.get("planning_days") or 1), 1)
         solver_input = normalize_for_python(_build_canonical_input(
             scenario=scenario,
             prepared_input_id=prepared_input_id,
@@ -865,6 +876,8 @@ def _build_run_preparation(
                 "route_ids": scope.route_ids,
                 "service_ids": scope.service_ids,
                 "service_date": scope.service_date,
+                "service_dates": service_dates,
+                "planning_days": planning_days,
                 "prepared_input_id": prepared_input_id,
                 "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
                 "trip_count": len(trips_df),

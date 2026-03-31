@@ -59,6 +59,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import sqlite3
 import time
 import uuid
 from datetime import datetime, timezone
@@ -2223,7 +2224,16 @@ def get_field(scenario_id: str, field: str) -> Any:
         return _artifact_default(field)
 
     if field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
-        return trip_store.load_scalar(artifact_db_path, field, _artifact_default(field))
+        try:
+            value = trip_store.load_scalar(artifact_db_path, field, _artifact_default(field))
+        except sqlite3.OperationalError:
+            value = _artifact_default(field)
+        if value is not None:
+            return value
+        artifact_path = Path(refs[_ARTIFACT_REF_KEYS[field]])
+        if artifact_path.exists():
+            return trip_store.load_json(artifact_path, _artifact_default(field))
+        return _artifact_default(field)
 
     # For non-artifact fields, fall back to shallow load (master data only)
     return _load_shallow(scenario_id).get(field)
@@ -2541,7 +2551,11 @@ def set_field(
 
     # Directly update SQLite for scalar artifacts to avoid _save() wiping out row artifacts
     if field in _SQLITE_SCALAR_ARTIFACT_FIELDS:
-        trip_store.save_scalar(db_path, field, value)
+        try:
+            trip_store.save_scalar(db_path, field, value)
+        except sqlite3.OperationalError:
+            artifact_path = Path(refs[_ARTIFACT_REF_KEYS[field]])
+            trip_store.save_json(artifact_path, value)
         return
         
     if field in _SQLITE_ROW_ARTIFACT_FIELDS:

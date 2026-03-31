@@ -4,12 +4,20 @@ import json
 from pathlib import Path
 
 from tools.scenario_backup_tk import (
-    _average_monthly_pv_profile_for_depot,
+    _load_selected_date_pv_profile_for_depot,
     _merge_selected_depot_pv_assets,
+    _rebuild_pv_generation_for_row,
 )
 
 
-def _write_profile(path: Path, *, depot_id: str, day: str, slots: list[float], capacity_kw: float) -> None:
+def _write_profile(
+    path: Path,
+    *,
+    depot_id: str,
+    day: str,
+    slots: list[float],
+    capacity_kw: float,
+) -> None:
     path.write_text(
         json.dumps(
             {
@@ -25,37 +33,44 @@ def _write_profile(path: Path, *, depot_id: str, day: str, slots: list[float], c
     )
 
 
-def test_average_monthly_pv_profile_for_depot_averages_daily_jsons(tmp_path: Path) -> None:
+def test_load_selected_date_pv_profile_for_depot_uses_requested_daily_jsons(tmp_path: Path) -> None:
     _write_profile(
         tmp_path / "meguro_2025-08-01_60min.json",
         depot_id="meguro",
         day="2025-08-01",
         slots=[10.0, 20.0],
-        capacity_kw=480.8,
+        capacity_kw=200.0,
     )
     _write_profile(
         tmp_path / "meguro_2025-08-02_60min.json",
         depot_id="meguro",
         day="2025-08-02",
         slots=[14.0, 18.0],
-        capacity_kw=480.8,
+        capacity_kw=200.0,
     )
 
-    profile = _average_monthly_pv_profile_for_depot("meguro", profile_root=tmp_path)
+    profile, missing_dates = _load_selected_date_pv_profile_for_depot(
+        "meguro",
+        ["2025-08-01", "2025-08-02"],
+        profile_root=tmp_path,
+    )
 
+    assert missing_dates == []
     assert profile is not None
-    assert profile["dayCount"] == 2
-    assert profile["capacityKw"] == 480.8
-    assert profile["pvGenerationKwhBySlot"] == [12.0, 19.0]
+    assert profile["serviceDates"] == ["2025-08-01", "2025-08-02"]
+    assert profile["capacityKw"] == 200.0
+    assert profile["pvGenerationKwhBySlot"] == [10.0, 20.0, 14.0, 18.0]
 
 
-def test_merge_selected_depot_pv_assets_preserves_existing_bess_settings(tmp_path: Path) -> None:
+def test_merge_selected_depot_pv_assets_preserves_bess_settings_and_scales_by_existing_capacity(
+    tmp_path: Path,
+) -> None:
     _write_profile(
         tmp_path / "meguro_2025-08-01_60min.json",
         depot_id="meguro",
         day="2025-08-01",
         slots=[4.0, 8.0],
-        capacity_kw=480.8,
+        capacity_kw=200.0,
     )
 
     merged_rows, synced_ids, missing_ids = _merge_selected_depot_pv_assets(
@@ -63,11 +78,12 @@ def test_merge_selected_depot_pv_assets_preserves_existing_bess_settings(tmp_pat
         [
             {
                 "depot_id": "meguro",
-                "pv_capacity_kw": 123.0,
+                "pv_capacity_kw": 100.0,
                 "bess_enabled": True,
                 "bess_energy_kwh": 500.0,
             }
         ],
+        ["2025-08-01"],
         profile_root=tmp_path,
     )
 
@@ -75,7 +91,43 @@ def test_merge_selected_depot_pv_assets_preserves_existing_bess_settings(tmp_pat
     assert missing_ids == []
     assert merged_rows[0]["depot_id"] == "meguro"
     assert merged_rows[0]["pv_enabled"] is True
-    assert merged_rows[0]["pv_capacity_kw"] == 123.0
-    assert merged_rows[0]["pv_generation_kwh_by_slot"] == [4.0, 8.0]
+    assert merged_rows[0]["pv_capacity_kw"] == 100.0
+    assert merged_rows[0]["pv_generation_kwh_by_slot"] == [2.0, 4.0]
+    assert merged_rows[0]["pv_profile_dates"] == ["2025-08-01"]
     assert merged_rows[0]["bess_enabled"] is True
     assert merged_rows[0]["bess_energy_kwh"] == 500.0
+
+
+def test_rebuild_pv_generation_for_row_recalculates_from_capacity_factor_metadata() -> None:
+    row = {
+        "pv_capacity_kw": 50.0,
+        "pv_capacity_factor_by_date": [
+            {
+                "date": "2025-08-01",
+                "slot_minutes": 60,
+                "capacity_factor_by_slot": [0.1, 0.3],
+            },
+            {
+                "date": "2025-08-02",
+                "slot_minutes": 60,
+                "capacity_factor_by_slot": [0.2],
+            },
+        ],
+    }
+
+    rebuilt = _rebuild_pv_generation_for_row(dict(row))
+
+    assert rebuilt["pv_profile_dates"] == ["2025-08-01", "2025-08-02"]
+    assert rebuilt["pv_generation_kwh_by_slot"] == [5.0, 15.0, 10.0]
+    assert rebuilt["pv_generation_kwh_by_date"] == [
+        {
+            "date": "2025-08-01",
+            "slot_minutes": 60,
+            "pv_generation_kwh_by_slot": [5.0, 15.0],
+        },
+        {
+            "date": "2025-08-02",
+            "slot_minutes": 60,
+            "pv_generation_kwh_by_slot": [10.0],
+        },
+    ]

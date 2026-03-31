@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any, Dict
 
 from .model_builder import MILPModelBuilder
 from .solver_adapter import GurobiMILPAdapter
@@ -26,7 +27,7 @@ class MILPOptimizer:
         problem: CanonicalOptimizationProblem,
         config: OptimizationConfig,
     ) -> OptimizationEngineResult:
-        model = self._builder.build(problem)
+        model_stats = self._lightweight_model_stats(problem)
         outcome, plan = self._adapter.solve(problem, config)
         report = self._feasibility.evaluate(problem, plan)
         breakdown = self._evaluator.evaluate(problem, plan)
@@ -61,13 +62,7 @@ class MILPOptimizer:
                     "time_limit_sec": int(config.time_limit_sec),
                     "mip_gap": float(config.mip_gap),
                 },
-                "model_stats": {
-                    "variables": model.variable_counts,
-                    "constraints": model.constraint_counts,
-                    "objective_terms": model.objective_terms,
-                    "variable_samples": [variable.name for variable in model.variables[:10]],
-                    "constraint_samples": [constraint.name for constraint in model.constraints[:10]],
-                },
+                "model_stats": model_stats,
                 "time_limit_sec": config.time_limit_sec,
                 "mip_gap": config.mip_gap,
                 "warm_start_enabled": config.warm_start,
@@ -90,3 +85,41 @@ class MILPOptimizer:
         if status == "suboptimal":
             return "stopped_with_feasible"
         return "unknown"
+
+    def _lightweight_model_stats(
+        self,
+        problem: CanonicalOptimizationProblem,
+    ) -> Dict[str, Any]:
+        trip_by_id = problem.trip_by_id()
+        assignment_pairs = self._builder.enumerate_assignment_pairs(problem)
+        arc_pairs = self._builder.enumerate_arc_pairs(problem, trip_by_id)
+        price_slot_count = len(problem.price_slots)
+        bev_vehicle_count = sum(
+            1
+            for vehicle in problem.vehicles
+            if str(vehicle.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}
+        )
+        return {
+            "variables": {
+                "assignment": len(assignment_pairs),
+                "connection": len(arc_pairs),
+                "start_arc": len(assignment_pairs),
+                "end_arc": len(assignment_pairs),
+                "unserved": len(problem.trips),
+                "used_vehicle": len(problem.vehicles),
+                "charge_kw": bev_vehicle_count * price_slot_count,
+                "discharge_kw": bev_vehicle_count * price_slot_count,
+                "soc_kwh": bev_vehicle_count * price_slot_count,
+                "grid_import_kw": price_slot_count,
+                "grid_export_kw": price_slot_count,
+                "pv_use_kw": price_slot_count,
+            },
+            "constraints": {
+                "trip_cover": len(problem.trips),
+                "vehicle_use_link": len(assignment_pairs),
+                "connection_link": len(arc_pairs) * 2,
+            },
+            "objective_terms": (),
+            "variable_samples": [],
+            "constraint_samples": [],
+        }

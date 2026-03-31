@@ -1,6 +1,7 @@
 from tools.scenario_backup_tk import (
     App,
     _choose_dataset_options,
+    _ordered_cost_breakdown_items,
     _expand_selected_routes_to_family_members,
     _scope_filter_routes,
     _group_scope_routes_by_family,
@@ -182,3 +183,67 @@ def test_scope_summarize_routes_counts_family_and_variant_mix() -> None:
     assert summary["depotRouteCount"] == 1
     assert summary["depotTripCount"] == 6
     assert _scope_variant_mix_text(summary, metric="trips") == "本線32便 / 入出庫6便"
+
+
+def test_extract_result_summary_includes_non_zero_cost_breakdown_and_served_counts() -> None:
+    app = App.__new__(App)
+
+    summary = App._extract_result_summary(
+        app,
+        {
+            "mode": "mode_abc_only",
+            "objective_value": 6052927.3224609075,
+            "solve_time_seconds": 63.23714519990608,
+            "summary": {
+                "vehicle_count_used": 55,
+                "trip_count_served": 638,
+                "trip_count_unserved": 336,
+            },
+            "solver_result": {
+                "status": "infeasible_candidate",
+                "objective_value": 6052927.3224609075,
+                "solve_time_seconds": 63.23714519990608,
+            },
+            "cost_breakdown": {
+                "energy_cost": 202796.50054309692,
+                "electricity_cost_final": 202796.50054309692,
+                "vehicle_cost": 483447.4885844756,
+                "driver_cost": 2006683.333333335,
+                "penalty_unserved": 3360000.0,
+                "total_cost": 6052927.3224609075,
+            },
+        },
+    )
+
+    assert summary["status"] == "infeasible_candidate"
+    assert summary["mode"] == "mode_abc_only"
+    assert summary["total_cost"] == 6052927.3224609075
+    assert summary["served_trips"] == 638.0
+    assert summary["unserved_trips"] == 336.0
+    assert summary["vehicle_count_used"] == 55.0
+    assert summary["vehicle_cost"] == 483447.4885844756
+    assert summary["driver_cost"] == 2006683.333333335
+    assert summary["penalty_unserved"] == 3360000.0
+
+
+def test_ordered_cost_breakdown_items_prioritizes_total_and_non_zero_costs() -> None:
+    rows = _ordered_cost_breakdown_items(
+        {
+            "fuel_cost": 0.0,
+            "driver_cost": 2006683.333333335,
+            "vehicle_cost": 483447.4885844756,
+            "energy_cost": 202796.50054309692,
+            "penalty_unserved": 3360000.0,
+            "total_cost": 6052927.3224609075,
+        }
+    )
+
+    assert [row["key"] for row in rows[:5]] == [
+        "total_cost",
+        "energy_cost",
+        "vehicle_cost",
+        "driver_cost",
+        "penalty_unserved",
+    ]
+    assert rows[-1]["key"] == "fuel_cost"
+    assert rows[-1]["non_zero"] is False

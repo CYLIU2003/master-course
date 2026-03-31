@@ -98,6 +98,9 @@ class PrepareSimulationSettingsBody(BaseModel):
     use_selected_depot_vehicle_inventory: bool = True
     use_selected_depot_charger_inventory: bool = True
     disable_vehicle_acquisition_cost: bool = False
+    enable_vehicle_cost: bool = True
+    enable_driver_cost: bool = True
+    enable_other_cost: bool = True
     restrict_vehicle_types: list[str] = Field(default_factory=list)
     solver_mode: str = "mode_milp_only"
     objective_mode: str = "total_cost"
@@ -120,6 +123,8 @@ class PrepareSimulationSettingsBody(BaseModel):
     depot_power_limit_kw: Optional[float] = None
     tou_pricing: list[PrepareTimeOfUseBandBody] = Field(default_factory=list)
     service_date: Optional[str] = None
+    service_dates: list[str] = Field(default_factory=list)
+    planning_days: int = 1
     start_time: str = "05:00"
     planning_horizon_hours: float = 20.0
     depot_energy_assets: Optional[list[Dict[str, Any]]] = None
@@ -137,6 +142,7 @@ class PrepareSimulationBody(BaseModel):
     selected_route_ids: list[str] = Field(default_factory=list)
     day_type: Optional[str] = None
     service_date: Optional[str] = None
+    service_dates: list[str] = Field(default_factory=list)
     simulation_settings: PrepareSimulationSettingsBody = Field(
         default_factory=PrepareSimulationSettingsBody
     )
@@ -856,6 +862,8 @@ def prepare_simulation(
         "primaryDepotId": prep.scope_summary.get("primary_depot_id"),
         "serviceIds": prep.scope_summary.get("service_ids") or [],
         "serviceDate": prep.scope_summary.get("service_date"),
+        "serviceDates": prep.scope_summary.get("service_dates") or [],
+        "planningDays": prep.scope_summary.get("planning_days") or 1,
         "solverModeRequested": body.simulation_settings.solver_mode,
         "solverModeEffective": prepare_profile.get("solver_mode_effective"),
         "objectiveMode": body.simulation_settings.objective_mode,

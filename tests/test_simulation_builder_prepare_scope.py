@@ -39,8 +39,13 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             use_selected_depot_vehicle_inventory=True,
             use_selected_depot_charger_inventory=True,
             disable_vehicle_acquisition_cost=True,
+            enable_vehicle_cost=False,
+            enable_driver_cost=True,
+            enable_other_cost=False,
             deadhead_speed_kmh=18.0,
             objective_preset="cost",
+            planning_days=2,
+            service_dates=["2025-08-01", "2025-08-02"],
             fixed_route_band_mode=True,
             enable_vehicle_diagram_output=False,
             pv_profile_id="meguro_solcast_avg_2025_08_60min",
@@ -88,10 +93,16 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["dispatch_scope"]["fixedRouteBandMode"] is True
     assert updated["dispatch_scope"]["allowIntraDepotRouteSwap"] is False
     assert updated["simulation_config"]["disable_vehicle_acquisition_cost"] is True
+    assert updated["simulation_config"]["enable_vehicle_cost"] is False
+    assert updated["simulation_config"]["enable_driver_cost"] is True
+    assert updated["simulation_config"]["enable_other_cost"] is False
     assert updated["simulation_config"]["deadhead_speed_kmh"] == 18.0
     assert updated["simulation_config"]["objective_preset"] == "cost"
     assert updated["simulation_config"]["fixed_route_band_mode"] is True
     assert updated["simulation_config"]["enable_vehicle_diagram_output"] is True
+    assert updated["simulation_config"]["planning_days"] == 2
+    assert updated["simulation_config"]["service_dates"] == ["2025-08-01", "2025-08-02"]
+    assert updated["simulation_config"]["planning_horizon_hours"] == 48.0
     assert updated["simulation_config"]["weather_mode"] == "solcast_avg_2025_08_60min"
     assert updated["simulation_config"]["pv_profile_id"] == "meguro_solcast_avg_2025_08_60min"
     assert updated["simulation_config"]["depot_energy_assets"] == [

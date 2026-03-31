@@ -126,6 +126,10 @@ class CostEvaluator:
         overtime_factor = _DRIVER_OVERTIME_FACTOR
 
         weights = problem.objective_weights
+        component_flags = dict(problem.metadata.get("cost_component_flags") or {})
+        vehicle_cost_enabled = bool(component_flags.get("vehicle", True))
+        driver_cost_enabled = bool(component_flags.get("driver", True))
+        other_cost_enabled = bool(component_flags.get("other", True))
         vehicle_cost = 0.0
         driver_cost = 0.0
         energy_cost = 0.0
@@ -156,6 +160,8 @@ class CostEvaluator:
             )
             v_type = vehicle_type_by_id.get(str(vehicle_type or ""))
             vehicle_cost += weights.vehicle * float(v_type.fixed_use_cost_jpy if v_type else 0.0)
+        if not vehicle_cost_enabled:
+            vehicle_cost = 0.0
 
         for duty in plan.duties:
             
@@ -171,6 +177,8 @@ class CostEvaluator:
                     regular_hours * wage_regular_jpy_per_h
                     + overtime_hours * wage_regular_jpy_per_h * overtime_factor
                 )
+        if not driver_cost_enabled:
+            driver_cost = 0.0
 
         operating_slot_totals = self._operating_electric_energy_kwh_by_slot(problem, plan)
 
@@ -250,6 +258,53 @@ class CostEvaluator:
         used_vehicle_count = len(used_vehicle_ids)
         utilization_score = float(used_vehicle_count) / float(total_vehicle_count)
 
+        electricity_cost_final = float(energy_cost_components.get("electricity_cost_final", 0.0))
+        electricity_cost_provisional_leftover = float(
+            energy_cost_components.get("electricity_cost_provisional_leftover", 0.0)
+        )
+        provisional_ev_drive_cost = float(energy_cost_components.get("ev_provisional_drive_cost", 0.0))
+        realized_ev_charge_cost = float(energy_cost_components.get("ev_realized_charge_cost", 0.0))
+        leftover_ev_provisional_cost = float(energy_cost_components.get("ev_leftover_provisional_cost", 0.0))
+        provisional_ice_drive_cost = float(fuel_cost_components.get("fuel_cost_provisional", 0.0))
+        realized_ice_refuel_cost = float(fuel_cost_components.get("realized_refuel_cost", 0.0))
+        leftover_ice_provisional_cost = float(fuel_cost_components.get("fuel_cost_provisional_leftover", 0.0))
+        operating_cost_provisional_total = provisional_ev_drive_cost + provisional_ice_drive_cost
+        operating_cost_realized_total = realized_ev_charge_cost + realized_ice_refuel_cost
+        operating_cost_leftover_total = leftover_ev_provisional_cost + leftover_ice_provisional_cost
+        grid_purchase_cost = float(energy_cost_components.get("grid_purchase_cost", 0.0))
+        bess_discharge_cost = float(energy_cost_components.get("bess_discharge_cost", 0.0))
+        contract_overage_cost = float(energy_cost_components.get("contract_overage_cost", 0.0))
+        stationary_battery_degradation_cost = float(
+            energy_cost_components.get("stationary_battery_degradation_cost", 0.0)
+        )
+        pv_asset_cost = float(energy_cost_components.get("pv_asset_cost", 0.0))
+        bess_asset_cost = float(energy_cost_components.get("bess_asset_cost", 0.0))
+        if not other_cost_enabled:
+            energy_cost = 0.0
+            demand_cost = 0.0
+            unserved_penalty = 0.0
+            switch_cost = 0.0
+            degradation_cost = 0.0
+            deviation_cost = 0.0
+            co2_cost = 0.0
+            electricity_cost_final = 0.0
+            electricity_cost_provisional_leftover = 0.0
+            provisional_ev_drive_cost = 0.0
+            realized_ev_charge_cost = 0.0
+            leftover_ev_provisional_cost = 0.0
+            provisional_ice_drive_cost = 0.0
+            realized_ice_refuel_cost = 0.0
+            leftover_ice_provisional_cost = 0.0
+            operating_cost_provisional_total = 0.0
+            operating_cost_realized_total = 0.0
+            operating_cost_leftover_total = 0.0
+            grid_purchase_cost = 0.0
+            bess_discharge_cost = 0.0
+            contract_overage_cost = 0.0
+            stationary_battery_degradation_cost = 0.0
+            pv_asset_cost = 0.0
+            bess_asset_cost = 0.0
+
         objective_weights = {
             "electricity_cost": float(weights.energy),
             "demand_charge_cost": float(weights.demand),
@@ -272,9 +327,7 @@ class CostEvaluator:
             + deviation_cost
             + co2_cost
         )
-        total_cost_with_assets = total_cost + float(energy_cost_components.get("pv_asset_cost", 0.0)) + float(
-            energy_cost_components.get("bess_asset_cost", 0.0)
-        )
+        total_cost_with_assets = total_cost + pv_asset_cost + bess_asset_cost
         objective_value = objective_value_for_mode(
             objective_mode=problem.scenario.objective_mode,
             total_cost=total_cost,
@@ -309,30 +362,23 @@ class CostEvaluator:
             pv_to_bess_kwh=float(energy_cost_components.get("pv_to_bess_kwh", 0.0)),
             grid_to_bess_kwh=float(energy_cost_components.get("grid_to_bess_kwh", 0.0)),
             contract_over_limit_kwh=float(energy_cost_components.get("contract_over_limit_kwh", 0.0)),
-            electricity_cost_final=float(energy_cost_components.get("electricity_cost_final", 0.0)),
-            electricity_cost_provisional_leftover=float(
-                energy_cost_components.get("electricity_cost_provisional_leftover", 0.0)
-            ),
-            provisional_ev_drive_cost=float(energy_cost_components.get("ev_provisional_drive_cost", 0.0)),
-            realized_ev_charge_cost=float(energy_cost_components.get("ev_realized_charge_cost", 0.0)),
-            leftover_ev_provisional_cost=float(energy_cost_components.get("ev_leftover_provisional_cost", 0.0)),
-            provisional_ice_drive_cost=float(fuel_cost_components.get("fuel_cost_provisional", 0.0)),
-            realized_ice_refuel_cost=float(fuel_cost_components.get("realized_refuel_cost", 0.0)),
-            leftover_ice_provisional_cost=float(fuel_cost_components.get("fuel_cost_provisional_leftover", 0.0)),
-            operating_cost_provisional_total=float(energy_cost_components.get("ev_provisional_drive_cost", 0.0))
-            + float(fuel_cost_components.get("fuel_cost_provisional", 0.0)),
-            operating_cost_realized_total=float(energy_cost_components.get("ev_realized_charge_cost", 0.0))
-            + float(fuel_cost_components.get("realized_refuel_cost", 0.0)),
-            operating_cost_leftover_total=float(energy_cost_components.get("ev_leftover_provisional_cost", 0.0))
-            + float(fuel_cost_components.get("fuel_cost_provisional_leftover", 0.0)),
-            grid_purchase_cost=float(energy_cost_components.get("grid_purchase_cost", 0.0)),
-            bess_discharge_cost=float(energy_cost_components.get("bess_discharge_cost", 0.0)),
-            contract_overage_cost=float(energy_cost_components.get("contract_overage_cost", 0.0)),
-            stationary_battery_degradation_cost=float(
-                energy_cost_components.get("stationary_battery_degradation_cost", 0.0)
-            ),
-            pv_asset_cost=float(energy_cost_components.get("pv_asset_cost", 0.0)),
-            bess_asset_cost=float(energy_cost_components.get("bess_asset_cost", 0.0)),
+            electricity_cost_final=electricity_cost_final,
+            electricity_cost_provisional_leftover=electricity_cost_provisional_leftover,
+            provisional_ev_drive_cost=provisional_ev_drive_cost,
+            realized_ev_charge_cost=realized_ev_charge_cost,
+            leftover_ev_provisional_cost=leftover_ev_provisional_cost,
+            provisional_ice_drive_cost=provisional_ice_drive_cost,
+            realized_ice_refuel_cost=realized_ice_refuel_cost,
+            leftover_ice_provisional_cost=leftover_ice_provisional_cost,
+            operating_cost_provisional_total=operating_cost_provisional_total,
+            operating_cost_realized_total=operating_cost_realized_total,
+            operating_cost_leftover_total=operating_cost_leftover_total,
+            grid_purchase_cost=grid_purchase_cost,
+            bess_discharge_cost=bess_discharge_cost,
+            contract_overage_cost=contract_overage_cost,
+            stationary_battery_degradation_cost=stationary_battery_degradation_cost,
+            pv_asset_cost=pv_asset_cost,
+            bess_asset_cost=bess_asset_cost,
             total_cost_with_assets=total_cost_with_assets,
             total_cost=total_cost,
             objective_value=objective_value,

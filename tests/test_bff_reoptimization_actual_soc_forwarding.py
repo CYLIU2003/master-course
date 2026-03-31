@@ -33,7 +33,7 @@ def test_run_reoptimization_forwards_actual_soc_to_reoptimizer(monkeypatch) -> N
     captured: dict[str, object] = {}
 
     class _FakeBuilder:
-        def build_from_scenario(self, scenario, depot_id, service_id, config):
+        def build_from_scenario(self, scenario, depot_id, service_id, config, planning_days=1):
             return _minimal_problem()
 
     class _FakeRollingReoptimizer:

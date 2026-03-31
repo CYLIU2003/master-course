@@ -826,20 +826,43 @@ def _run_optimization(
             prepared_payload,
         )
 
-        _persist_prepared_scope_artifacts(
-            scenario_id,
-            scenario,
-            clear_stale_dispatch=not rebuild_dispatch and not use_existing_duties,
-        )
         if rebuild_dispatch:
+            _persist_prepared_scope_artifacts(
+                scenario_id,
+                scenario,
+                clear_stale_dispatch=False,
+            )
             _rebuild_dispatch_artifacts(scenario_id, service_id, depot_id)
-        scenario["duties"] = store.get_field(scenario_id, "duties") or []
-        scenario["blocks"] = store.get_field(scenario_id, "blocks") or []
-        graph_meta = store.get_field(scenario_id, "graph")
-        if isinstance(graph_meta, dict):
-            scenario["graph"] = {k: v for k, v in graph_meta.items() if k != "arcs"}
-            scenario["graph"]["arcs"] = []
+            scenario["duties"] = store.get_field(scenario_id, "duties") or []
+            scenario["blocks"] = store.get_field(scenario_id, "blocks") or []
+            graph_meta = store.get_field(scenario_id, "graph")
+            if isinstance(graph_meta, dict):
+                scenario["graph"] = {k: v for k, v in graph_meta.items() if k != "arcs"}
+                scenario["graph"]["arcs"] = []
+            else:
+                scenario["graph"] = {
+                    "source": "prepared_scope",
+                    "total_arcs": 0,
+                    "feasible_arcs": 0,
+                    "infeasible_arcs": 0,
+                }
+        elif use_existing_duties:
+            scenario["duties"] = store.get_field(scenario_id, "duties") or []
+            scenario["blocks"] = store.get_field(scenario_id, "blocks") or []
+            graph_meta = store.get_field(scenario_id, "graph")
+            if isinstance(graph_meta, dict):
+                scenario["graph"] = {k: v for k, v in graph_meta.items() if k != "arcs"}
+                scenario["graph"]["arcs"] = []
+            else:
+                scenario["graph"] = {
+                    "source": "prepared_scope",
+                    "total_arcs": 0,
+                    "feasible_arcs": 0,
+                    "infeasible_arcs": 0,
+                }
         else:
+            scenario["duties"] = []
+            scenario["blocks"] = []
             scenario["graph"] = {
                 "source": "prepared_scope",
                 "total_arcs": 0,
@@ -894,6 +917,10 @@ def _run_optimization(
                 depot_id=depot_id,
                 service_id=service_id,
                 config=opt_config,
+                planning_days=max(
+                    int(((scenario.get("simulation_config") or {}).get("planning_days") or 1)),
+                    1,
+                ),
             )
             feasible_arc_count = sum(
                 len(v) for v in (problem.feasible_connections or {}).values()
@@ -1403,6 +1430,10 @@ def _run_reoptimization(
             depot_id=depot_id,
             service_id=service_id,
             config=config,
+            planning_days=max(
+                int(((scenario.get("simulation_config") or {}).get("planning_days") or 1)),
+                1,
+            ),
         )
         job_store.update_job(
             job_id,

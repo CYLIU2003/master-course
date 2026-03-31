@@ -114,6 +114,8 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     rebuild_dispatch.assert_not_called()
     build_problem_data.assert_not_called()
     solve_problem_data.assert_not_called()
+    assert "trips" not in stored_fields
+    assert "timetable_rows" not in stored_fields
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_ga_only"
     assert stored_fields["optimization_result"]["summary"]["trip_count_served"] == 1
     assert stored_fields["optimization_result"]["solver_result"]["assignment"] == {"veh-1": ["trip-1"]}
@@ -241,6 +243,8 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
     build_problem_data.assert_not_called()
     solve_problem_data.assert_not_called()
     persist_graph_exports.assert_called_once()
+    assert "trips" not in stored_fields
+    assert "timetable_rows" not in stored_fields
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_milp_only"
     assert stored_fields["optimization_result"]["graph_artifacts"] == {
         "enabled": True,

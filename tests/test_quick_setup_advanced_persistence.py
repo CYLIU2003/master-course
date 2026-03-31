@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest import mock
+
 from bff.routers import scenarios
 from tools.scenario_backup_tk import (
     _compose_saved_objective_weights,
@@ -47,7 +49,10 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
                 "switch_cost": 2.5,
                 "slack_penalty": 123456.0,
                 "degradation": 0.25,
-            }
+            },
+            "enable_vehicle_cost": False,
+            "enable_driver_cost": True,
+            "enable_other_cost": False,
         },
     }
     scenario = {
@@ -83,3 +88,68 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
         "degradation": 0.25,
     }
     assert payload["simulationSettings"]["degradationWeight"] == 0.25
+    assert payload["simulationSettings"]["enableVehicleCost"] is False
+    assert payload["simulationSettings"]["enableDriverCost"] is True
+    assert payload["simulationSettings"]["enableOtherCost"] is False
+
+
+def test_update_quick_setup_persists_cost_component_toggles() -> None:
+    current_scope = {
+        "serviceId": "WEEKDAY",
+        "depotSelection": {"depotIds": ["dep1"], "primaryDepotId": "dep1"},
+        "routeSelection": {"mode": "refine", "includeRouteIds": ["route-a"], "excludeRouteIds": []},
+        "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+        "tripSelection": {"includeDeadhead": True},
+    }
+    doc = {
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [{"id": "route-a", "depotId": "dep1", "routeCode": "黒01"}],
+        "route_depot_assignments": [],
+        "vehicles": [],
+        "chargers": [],
+        "vehicle_templates": [],
+    }
+    scenario = {
+        "id": "scenario-1",
+        "name": "Scenario 1",
+        "operatorId": "tokyu",
+        "datasetVersion": "v1",
+        "datasetId": "tokyu_full",
+        "status": "draft",
+        "feedContext": {},
+        "stats": {},
+    }
+    captured: dict[str, object] = {}
+
+    def _capture_set_field(_scenario_id: str, field: str, value) -> None:
+        captured[field] = value
+
+    body = scenarios.UpdateQuickSetupBody(
+        selectedDepotIds=["dep1"],
+        selectedRouteIds=["route-a"],
+        dayType="WEEKDAY",
+        enableVehicleCost=False,
+        enableDriverCost=False,
+        enableOtherCost=True,
+    )
+
+    with (
+        mock.patch.object(scenarios, "_ensure_runtime_master_data"),
+        mock.patch.object(scenarios, "_quick_setup_route_selection_patch", return_value=current_scope["routeSelection"]),
+        mock.patch.object(scenarios.store, "get_dispatch_scope", return_value=current_scope),
+        mock.patch.object(scenarios.store, "get_scenario_document_shallow", return_value=doc),
+        mock.patch.object(scenarios.store, "set_dispatch_scope", return_value=current_scope),
+        mock.patch.object(scenarios.store, "get_scenario_overlay", return_value={}),
+        mock.patch.object(scenarios.store, "get_field", return_value={}),
+        mock.patch.object(scenarios.store, "set_scenario_overlay"),
+        mock.patch.object(scenarios.store, "set_field", side_effect=_capture_set_field),
+        mock.patch.object(scenarios.store, "get_scenario", return_value=scenario),
+        mock.patch.object(scenarios, "_build_quick_setup_payload", return_value={"ok": True}),
+    ):
+        scenarios.update_quick_setup("scenario-1", body)
+
+    simulation_config = captured["simulation_config"]
+    assert isinstance(simulation_config, dict)
+    assert simulation_config["enable_vehicle_cost"] is False
+    assert simulation_config["enable_driver_cost"] is False
+    assert simulation_config["enable_other_cost"] is True
