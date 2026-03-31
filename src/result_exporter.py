@@ -174,11 +174,35 @@ def export_graph_exports_phase1(
         base_date,
         planning_start_time=planning_start_time,
     )
-    route_band_diagrams = _build_route_band_diagram_assets(
-        vehicle_timeline_rows,
-        scenario_id,
-        graph_context=graph_export_context,
-    )
+    
+    # ===== Multi-day route band diagram support =====
+    planning_days = getattr(data, "planning_days", 1) or 1
+    if planning_days > 1:
+        # Generate per-day route band diagrams
+        all_route_band_diagrams: Dict[str, Any] = {"entries": [], "svgs": {}}
+        for day_idx in range(planning_days):
+            day_rows = _filter_timeline_rows_for_day(
+                vehicle_timeline_rows, day_idx, data.timestep_min
+            )
+            day_diagrams = _build_route_band_diagram_assets(
+                day_rows,
+                f"{scenario_id}_d{day_idx}",
+                graph_context=graph_export_context,
+            )
+            # Merge with day prefix
+            for entry in day_diagrams.get("entries", []):
+                entry["day_index"] = day_idx
+                entry["diagram_file"] = f"day_{day_idx}/{entry.get('diagram_file', '')}"
+                all_route_band_diagrams["entries"].append(entry)
+            for svg_key, svg_content in day_diagrams.get("svgs", {}).items():
+                all_route_band_diagrams["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
+        route_band_diagrams = all_route_band_diagrams
+    else:
+        route_band_diagrams = _build_route_band_diagram_assets(
+            vehicle_timeline_rows,
+            scenario_id,
+            graph_context=graph_export_context,
+        )
 
     _write_csv(graph_dir / "vehicle_timeline.csv", vehicle_timeline_rows)
     _write_csv(graph_dir / "soc_events.csv", soc_event_rows)
@@ -189,7 +213,7 @@ def export_graph_exports_phase1(
         json.dump(cost_breakdown, f, ensure_ascii=False, indent=2)
     with open(graph_dir / "kpi_summary.json", "w", encoding="utf-8") as f:
         json.dump(kpi_summary, f, ensure_ascii=False, indent=2)
-    _write_route_band_diagram_assets(graph_dir, route_band_diagrams)
+    _write_route_band_diagram_assets(graph_dir, route_band_diagrams, planning_days=planning_days)
 
     files = [
         "vehicle_timeline.csv",
@@ -2271,24 +2295,87 @@ def _build_route_band_diagram_assets(
     return {"entries": entries, "svg_payloads": svg_payloads}
 
 
-def _write_route_band_diagram_assets(target_root: Path, assets: Dict[str, Any]) -> None:
+def _write_route_band_diagram_assets(
+    target_root: Path,
+    assets: Dict[str, Any],
+    *,
+    planning_days: int = 1,
+) -> None:
     entries = list(assets.get("entries") or [])
-    svg_payloads = dict(assets.get("svg_payloads") or {})
+    svg_payloads = dict(assets.get("svg_payloads") or assets.get("svgs") or {})
     if not entries:
         return
     output_dir = target_root / "route_band_diagrams"
     output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create day subdirectories for multi-day scenarios
+    if planning_days > 1:
+        for day_idx in range(planning_days):
+            (output_dir / f"day_{day_idx}").mkdir(parents=True, exist_ok=True)
+    
     manifest = {
         "schema_version": "1.0.0",
         "generated_at": _tokyo_now().isoformat(),
         "grouping_key": "band_id",
         "diagram_format": "svg",
+        "planning_days": planning_days,
         "entries": entries,
     }
     with open(output_dir / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
+    
     for filename, svg_text in svg_payloads.items():
-        (output_dir / filename).write_text(svg_text, encoding="utf-8")
+        svg_path = output_dir / filename
+        svg_path.parent.mkdir(parents=True, exist_ok=True)
+        svg_path.write_text(svg_text, encoding="utf-8")
+
+
+def _filter_timeline_rows_for_day(
+    rows: List[Dict[str, Any]],
+    day_idx: int,
+    timestep_min: int = 30,
+) -> List[Dict[str, Any]]:
+    """Filter timeline rows for a specific day index."""
+    day_start_min = day_idx * 24 * 60
+    day_end_min = (day_idx + 1) * 24 * 60
+    
+    filtered = []
+    for row in rows:
+        # Extract start/end times
+        start_str = str(row.get("start_time") or row.get("start_minute") or "")
+        end_str = str(row.get("end_time") or row.get("end_minute") or "")
+        
+        # Try parsing HH:MM format
+        start_min = None
+        end_min = None
+        try:
+            if ":" in start_str:
+                h, m = map(int, start_str.split(":")[:2])
+                start_min = h * 60 + m
+            elif start_str.isdigit():
+                start_min = int(start_str)
+            if ":" in end_str:
+                h, m = map(int, end_str.split(":")[:2])
+                end_min = h * 60 + m
+            elif end_str.isdigit():
+                end_min = int(end_str)
+        except (ValueError, TypeError):
+            pass
+        
+        # Check if row falls within this day
+        if start_min is not None:
+            # Adjust for multi-day: timeline minutes may exceed 24h
+            row_day = start_min // (24 * 60)
+            if row_day == day_idx:
+                # Adjust times to be day-relative
+                adjusted_row = dict(row)
+                if start_min is not None:
+                    adjusted_row["start_minute"] = start_min - day_start_min
+                if end_min is not None:
+                    adjusted_row["end_minute"] = end_min - day_start_min
+                filtered.append(adjusted_row)
+    
+    return filtered
 
 
 def _build_cost_breakdown_json(data: ProblemData, sim: SimulationResult, scenario_id: str) -> Dict[str, Any]:

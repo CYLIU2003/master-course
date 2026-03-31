@@ -312,6 +312,7 @@ class ProblemBuilder:
         co2_price_per_kg: float = 0.0,
         ice_co2_kg_per_l: float = 2.64,
         fixed_route_band_mode: bool = False,
+        planning_days: int = 1,
         max_start_fragments_per_vehicle: int = 1,
         max_end_fragments_per_vehicle: int = 1,
         allow_partial_service: bool = False,
@@ -378,6 +379,32 @@ class ProblemBuilder:
                     required_soc_departure_percent=required_soc_departure_percent,
                 )
             )
+        
+        # ===== Multi-day trip replication =====
+        # When planning_days > 1, replicate base day trips for each additional day
+        planning_days = max(1, planning_days)
+        if planning_days > 1:
+            base_trip_nodes = list(trip_nodes_list)
+            day_offset_min = 24 * 60  # 1440 minutes per day
+            for day_idx in range(1, planning_days):
+                offset = day_idx * day_offset_min
+                for base_trip in base_trip_nodes:
+                    replicated_trip = ProblemTrip(
+                        trip_id=f"d{day_idx}_{base_trip.trip_id}",
+                        route_id=base_trip.route_id,
+                        origin=base_trip.origin,
+                        destination=base_trip.destination,
+                        departure_min=base_trip.departure_min + offset,
+                        arrival_min=base_trip.arrival_min + offset,
+                        distance_km=base_trip.distance_km,
+                        allowed_vehicle_types=base_trip.allowed_vehicle_types,
+                        energy_kwh=base_trip.energy_kwh,
+                        fuel_l=base_trip.fuel_l,
+                        service_id=f"{base_trip.service_id}_d{day_idx}" if base_trip.service_id else f"d{day_idx}",
+                        required_soc_departure_percent=base_trip.required_soc_departure_percent,
+                    )
+                    trip_nodes_list.append(replicated_trip)
+        
         trip_nodes = tuple(trip_nodes_list)
         route_nodes = self._build_routes(trip_nodes)
         vehicle_types = self._build_vehicle_types(context.vehicle_profiles)
@@ -417,8 +444,28 @@ class ProblemBuilder:
                 longitude=self._safe_float((selected_depot_record or {}).get("lon")),
             ),
         )
-        time_slots = tuple(self._build_time_slot_prices(context, price_slots, timestep_min=timestep_min))
-        pv_series = tuple(self._build_pv_slots(time_slots, pv_slots))
+        base_time_slots = list(self._build_time_slot_prices(context, price_slots, timestep_min=timestep_min))
+        
+        # ===== Multi-day price slot tiling =====
+        # When planning_days > 1, tile price slots for each additional day
+        if planning_days > 1:
+            slots_per_day = len(base_time_slots)
+            all_time_slots: List[EnergyPriceSlot] = list(base_time_slots)
+            for day_idx in range(1, planning_days):
+                for base_slot in base_time_slots:
+                    all_time_slots.append(
+                        EnergyPriceSlot(
+                            slot_index=day_idx * slots_per_day + base_slot.slot_index,
+                            grid_buy_yen_per_kwh=base_slot.grid_buy_yen_per_kwh,
+                            grid_sell_yen_per_kwh=base_slot.grid_sell_yen_per_kwh,
+                            co2_kg_per_kwh=base_slot.co2_kg_per_kwh,
+                        )
+                    )
+            time_slots = tuple(all_time_slots)
+        else:
+            time_slots = tuple(base_time_slots)
+        
+        pv_series = tuple(self._build_pv_slots(time_slots, pv_slots, planning_days=planning_days))
         depot_energy_assets = self._build_depot_energy_assets_from_scenario(
             scenario_id=scenario_id,
             time_slots=time_slots,
@@ -454,6 +501,7 @@ class ProblemBuilder:
                 horizon_start=self._min_hhmm(context),
                 horizon_end=self._max_hhmm(context),
                 timestep_min=timestep_min,
+                planning_days=planning_days,
                 objective_mode=normalize_objective_mode(objective_mode),
                 diesel_price_yen_per_l=float(diesel_price_yen_per_l),
                 demand_charge_on_peak_yen_per_kw=float(demand_charge_on_peak_yen_per_kw),
@@ -482,6 +530,7 @@ class ProblemBuilder:
                 "charger_count": len(chargers),
                 "baseline_plan_source": (baseline.metadata or {}).get("source", "dispatch_greedy_baseline"),
                 "fixed_route_band_mode": bool(fixed_route_band_mode),
+                "planning_days": planning_days,
                 "max_start_fragments_per_vehicle": int(max(1, max_start_fragments_per_vehicle)),
                 "max_end_fragments_per_vehicle": int(max(1, max_end_fragments_per_vehicle)),
                 "allow_partial_service": bool(allow_partial_service),
@@ -1577,13 +1626,28 @@ class ProblemBuilder:
         self,
         time_slots: Sequence[EnergyPriceSlot],
         pv_slots: Sequence[PVSlot],
+        planning_days: int = 1,
     ) -> Iterable[PVSlot]:
         if pv_slots:
+            # Tile provided pv_slots for multi-day scenarios
+            if planning_days > 1:
+                base_slots = list(pv_slots)
+                slots_per_day = len(base_slots)
+                all_pv_slots: List[PVSlot] = list(base_slots)
+                for day_idx in range(1, planning_days):
+                    for base_slot in base_slots:
+                        all_pv_slots.append(
+                            PVSlot(
+                                slot_index=day_idx * slots_per_day + base_slot.slot_index,
+                                pv_available_kw=base_slot.pv_available_kw,
+                            )
+                        )
+                return all_pv_slots
             return pv_slots
         return [
             PVSlot(
                 slot_index=slot.slot_index,
-                pv_available_kw=40.0 if 10 <= slot.slot_index <= 18 else 0.0,
+                pv_available_kw=40.0 if 10 <= (slot.slot_index % 48) <= 18 else 0.0,  # Modulo for multi-day
             )
             for slot in time_slots
         ]

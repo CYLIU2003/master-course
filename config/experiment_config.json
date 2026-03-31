@@ -128,8 +128,8 @@
   "milp_flag_overrides": null,
 
   "soc_threshold": {
-    "_comment": "SOC 閾値自動充電 (§10.5 拡張)",
-    "enabled": false,
+    "_comment": "SOC 閾値自動充電 (§10.5 拡張) - デフォルト有効で同時充電を防止",
+    "enabled": true,
     "trigger_ratio": 0.20,
     "resume_ratio": 0.40
   },

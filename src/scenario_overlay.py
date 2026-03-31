@@ -93,7 +93,12 @@ class SolverConfig(BaseModel):
 
     @model_validator(mode="after")
     def _normalize_vehicle_diagram_flags(self) -> "SolverConfig":
-        enabled = bool(self.enable_vehicle_diagram_output or self.output_vehicle_diagram)
+        # fixed_route_band_mode=True の場合もダイアグラム出力を自動有効化
+        enabled = bool(
+            self.enable_vehicle_diagram_output
+            or self.output_vehicle_diagram
+            or self.fixed_route_band_mode
+        )
         self.enable_vehicle_diagram_output = enabled
         self.output_vehicle_diagram = enabled
         return self

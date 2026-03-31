@@ -644,30 +644,86 @@ class CostEvaluator:
         breakdown: CostBreakdown,
     ) -> tuple[Tuple[VehicleCostLedgerEntry, ...], Tuple[DailyCostLedgerEntry, ...]]:
         day_count = max(int(problem.scenario.planning_days or 1), 1)
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        slots_per_day = (24 * 60) // timestep_min
+        
+        # Compute day-based cost splits using slot-based event data
+        daily_ev_prov: Dict[int, float] = {d: 0.0 for d in range(day_count)}
+        daily_ev_real: Dict[int, float] = {d: 0.0 for d in range(day_count)}
+        daily_ev_left: Dict[int, float] = {d: 0.0 for d in range(day_count)}
+        daily_ice_prov: Dict[int, float] = {d: 0.0 for d in range(day_count)}
+        daily_ice_real: Dict[int, float] = {d: 0.0 for d in range(day_count)}
+        daily_ice_left: Dict[int, float] = {d: 0.0 for d in range(day_count)}
+        daily_demand: Dict[int, float] = {d: 0.0 for d in range(day_count)}
+        
+        # For single-day scenario, use aggregate breakdown values
+        if day_count == 1:
+            daily_ev_prov[0] = float(breakdown.provisional_ev_drive_cost or 0.0)
+            daily_ev_real[0] = float(breakdown.realized_ev_charge_cost or 0.0)
+            daily_ev_left[0] = float(breakdown.leftover_ev_provisional_cost or 0.0)
+            daily_ice_prov[0] = float(breakdown.provisional_ice_drive_cost or 0.0)
+            daily_ice_real[0] = float(breakdown.realized_ice_refuel_cost or 0.0)
+            daily_ice_left[0] = float(breakdown.leftover_ice_provisional_cost or 0.0)
+            daily_demand[0] = float(breakdown.demand_cost or 0.0)
+        else:
+            # Multi-day: distribute costs proportionally by slot-day
+            # EV drive events by slot
+            for drive_event in self._collect_ev_drive_events(problem, plan):
+                _, _, slot_min, energy_kwh = drive_event
+                day_idx = min(slot_min // (24 * 60), day_count - 1)
+                # Use average provisional price
+                prov_price = self._provisional_electricity_price_at_slot(problem, slot_min // timestep_min)
+                daily_ev_prov[day_idx] += energy_kwh * prov_price
+            
+            # EV charge events by slot  
+            for slot in plan.charging_slots:
+                if max(float(slot.charge_kw or 0.0), 0.0) <= 0.0:
+                    continue
+                day_idx = min(slot.slot_index // slots_per_day, day_count - 1)
+                real_price = self._realized_electricity_price_at_slot(problem, slot.slot_index)
+                charge_kwh = max(float(slot.charge_kw or 0.0), 0.0) * (timestep_min / 60.0)
+                daily_ev_real[day_idx] += charge_kwh * real_price
+            
+            # ICE fuel events
+            for fuel_event in self._collect_fuel_drive_events(problem, plan):
+                _, _, slot_min, fuel_l = fuel_event
+                day_idx = min(slot_min // (24 * 60), day_count - 1)
+                fuel_price = max(float(problem.scenario.diesel_price_yen_per_l or 0.0), 0.0)
+                daily_ice_prov[day_idx] += fuel_l * fuel_price
+            
+            for slot in plan.refuel_slots:
+                if max(float(slot.refuel_liters or 0.0), 0.0) <= 0.0:
+                    continue
+                day_idx = min(slot.slot_index // slots_per_day, day_count - 1)
+                fuel_price = max(float(problem.scenario.diesel_price_yen_per_l or 0.0), 0.0)
+                daily_ice_real[day_idx] += slot.refuel_liters * fuel_price
+            
+            # Daily peak demand charge (split equally for simplicity, since peak is horizon-wide)
+            demand_per_day = float(breakdown.demand_cost or 0.0) / day_count
+            for day_idx in range(day_count):
+                daily_demand[day_idx] = demand_per_day
+        
         daily: List[DailyCostLedgerEntry] = []
         for idx in range(day_count):
-            if idx == 0:
-                daily.append(
-                    DailyCostLedgerEntry(
-                        day_index=idx,
-                        service_date=problem.scenario.scenario_id,
-                        ev_provisional_drive_cost_jpy=float(breakdown.provisional_ev_drive_cost or 0.0),
-                        ev_realized_charge_cost_jpy=float(breakdown.realized_ev_charge_cost or 0.0),
-                        ev_leftover_provisional_cost_jpy=float(breakdown.leftover_ev_provisional_cost or 0.0),
-                        ice_provisional_drive_cost_jpy=float(breakdown.provisional_ice_drive_cost or 0.0),
-                        ice_realized_refuel_cost_jpy=float(breakdown.realized_ice_refuel_cost or 0.0),
-                        ice_leftover_provisional_cost_jpy=float(breakdown.leftover_ice_provisional_cost or 0.0),
-                        demand_charge_jpy=float(breakdown.demand_cost or 0.0),
-                        total_cost_jpy=float(breakdown.total_cost or 0.0),
-                    )
+            daily_total = (
+                daily_ev_prov[idx] - daily_ev_left.get(idx, 0.0) + daily_ev_real[idx]
+                + daily_ice_prov[idx] - daily_ice_left.get(idx, 0.0) + daily_ice_real[idx]
+                + daily_demand[idx]
+            )
+            daily.append(
+                DailyCostLedgerEntry(
+                    day_index=idx,
+                    service_date=f"{problem.scenario.scenario_id}_d{idx}" if day_count > 1 else problem.scenario.scenario_id,
+                    ev_provisional_drive_cost_jpy=daily_ev_prov[idx],
+                    ev_realized_charge_cost_jpy=daily_ev_real[idx],
+                    ev_leftover_provisional_cost_jpy=daily_ev_left.get(idx, 0.0),
+                    ice_provisional_drive_cost_jpy=daily_ice_prov[idx],
+                    ice_realized_refuel_cost_jpy=daily_ice_real[idx],
+                    ice_leftover_provisional_cost_jpy=daily_ice_left.get(idx, 0.0),
+                    demand_charge_jpy=daily_demand[idx],
+                    total_cost_jpy=daily_total,
                 )
-            else:
-                daily.append(
-                    DailyCostLedgerEntry(
-                        day_index=idx,
-                        service_date=problem.scenario.scenario_id,
-                    )
-                )
+            )
 
         ev_comp = self._evaluate_electricity_with_overwrite(
             problem,
@@ -684,46 +740,112 @@ class CostEvaluator:
 
         vehicles = {str(v.vehicle_id): v for v in problem.vehicles}
         entries: List[VehicleCostLedgerEntry] = []
+        
         for vehicle_id, vehicle in vehicles.items():
+            # Day 0 values
             start_soc = self._vehicle_initial_soc_kwh(vehicle)
-            end_soc = self._estimate_vehicle_end_soc_kwh(problem, plan, vehicle_id, start_soc)
             start_fuel = self._vehicle_initial_fuel_l(vehicle)
-            end_fuel = self._estimate_vehicle_end_fuel_l(problem, plan, vehicle_id, start_fuel)
-            entries.append(
-                VehicleCostLedgerEntry(
-                    vehicle_id=vehicle_id,
-                    day_index=0,
-                    provisional_drive_cost_jpy=float(ev_prov_by_vehicle.get(vehicle_id, 0.0))
-                    + float(fuel_prov_by_vehicle.get(vehicle_id, 0.0)),
-                    provisional_leftover_cost_jpy=float(ev_left_by_vehicle.get(vehicle_id, 0.0))
-                    + float(fuel_left_by_vehicle.get(vehicle_id, 0.0)),
-                    realized_charge_cost_jpy=float(ev_real_by_vehicle.get(vehicle_id, 0.0)),
-                    realized_refuel_cost_jpy=float(fuel_real_by_vehicle.get(vehicle_id, 0.0)),
-                    start_soc_kwh=start_soc,
-                    end_soc_kwh=end_soc,
-                    start_fuel_l=start_fuel,
-                    end_fuel_l=end_fuel,
-                )
+            
+            # For multi-day, we need to compute day-by-day vehicle state
+            day_vehicle_costs = self._compute_vehicle_daily_costs(
+                problem, plan, vehicle_id, vehicle, day_count, slots_per_day
             )
-            prev_end_soc = end_soc
-            prev_end_fuel = end_fuel
-            for idx in range(1, day_count):
+            
+            prev_end_soc = start_soc
+            prev_end_fuel = start_fuel
+            
+            for idx in range(day_count):
+                day_costs = day_vehicle_costs.get(idx, {})
+                
+                if idx == 0:
+                    end_soc = self._estimate_vehicle_end_soc_kwh(problem, plan, vehicle_id, start_soc)
+                    end_fuel = self._estimate_vehicle_end_fuel_l(problem, plan, vehicle_id, start_fuel)
+                    prov_cost = float(ev_prov_by_vehicle.get(vehicle_id, 0.0)) + float(fuel_prov_by_vehicle.get(vehicle_id, 0.0))
+                    left_cost = float(ev_left_by_vehicle.get(vehicle_id, 0.0)) + float(fuel_left_by_vehicle.get(vehicle_id, 0.0))
+                    real_charge = float(ev_real_by_vehicle.get(vehicle_id, 0.0))
+                    real_refuel = float(fuel_real_by_vehicle.get(vehicle_id, 0.0))
+                else:
+                    # For day 1+, use day-based cost splits
+                    end_soc = day_costs.get("end_soc", prev_end_soc)
+                    end_fuel = day_costs.get("end_fuel", prev_end_fuel)
+                    prov_cost = day_costs.get("provisional_cost", 0.0)
+                    left_cost = day_costs.get("leftover_cost", 0.0)
+                    real_charge = day_costs.get("realized_charge", 0.0)
+                    real_refuel = day_costs.get("realized_refuel", 0.0)
+                
                 entries.append(
                     VehicleCostLedgerEntry(
                         vehicle_id=vehicle_id,
                         day_index=idx,
-                        provisional_drive_cost_jpy=0.0,
-                        provisional_leftover_cost_jpy=0.0,
-                        realized_charge_cost_jpy=0.0,
-                        realized_refuel_cost_jpy=0.0,
-                        start_soc_kwh=prev_end_soc,
-                        end_soc_kwh=prev_end_soc,
-                        start_fuel_l=prev_end_fuel,
-                        end_fuel_l=prev_end_fuel,
+                        provisional_drive_cost_jpy=prov_cost if idx == 0 else day_costs.get("provisional_cost", 0.0),
+                        provisional_leftover_cost_jpy=left_cost if idx == 0 else day_costs.get("leftover_cost", 0.0),
+                        realized_charge_cost_jpy=real_charge,
+                        realized_refuel_cost_jpy=real_refuel,
+                        start_soc_kwh=prev_end_soc if idx > 0 else start_soc,
+                        end_soc_kwh=end_soc,
+                        start_fuel_l=prev_end_fuel if idx > 0 else start_fuel,
+                        end_fuel_l=end_fuel,
                     )
                 )
+                prev_end_soc = end_soc
+                prev_end_fuel = end_fuel
+                
         entries.sort(key=lambda item: (item.vehicle_id, item.day_index))
         return tuple(entries), tuple(daily)
+    
+    def _compute_vehicle_daily_costs(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        vehicle_id: str,
+        vehicle: ProblemVehicle,
+        day_count: int,
+        slots_per_day: int,
+    ) -> Dict[int, Dict[str, float]]:
+        """Compute per-day cost breakdown for a vehicle in multi-day scenarios."""
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        result: Dict[int, Dict[str, float]] = {}
+        
+        # Use initial_soc and initial_fuel_l (ProblemVehicle field names)
+        init_soc = getattr(vehicle, 'initial_soc', None) or getattr(vehicle, 'soc_init_kwh', None) or 0.0
+        init_fuel = getattr(vehicle, 'initial_fuel_l', None) or getattr(vehicle, 'fuel_init_l', None) or 0.0
+        
+        for day_idx in range(day_count):
+            result[day_idx] = {
+                "provisional_cost": 0.0,
+                "leftover_cost": 0.0,
+                "realized_charge": 0.0,
+                "realized_refuel": 0.0,
+                "end_soc": float(init_soc),
+                "end_fuel": float(init_fuel),
+            }
+        
+        # Single-day scenario doesn't need splitting
+        if day_count == 1:
+            return result
+        
+        # Compute charging cost by day for this vehicle
+        for slot in plan.charging_slots:
+            if str(slot.vehicle_id) != vehicle_id:
+                continue
+            if max(float(slot.charge_kw or 0.0), 0.0) <= 0.0:
+                continue
+            day_idx = min(slot.slot_index // slots_per_day, day_count - 1)
+            real_price = self._realized_electricity_price_at_slot(problem, slot.slot_index)
+            charge_kwh = max(float(slot.charge_kw or 0.0), 0.0) * (timestep_min / 60.0)
+            result[day_idx]["realized_charge"] += charge_kwh * real_price
+        
+        # Compute refuel cost by day for this vehicle
+        for slot in plan.refuel_slots:
+            if str(slot.vehicle_id) != vehicle_id:
+                continue
+            if max(float(slot.refuel_liters or 0.0), 0.0) <= 0.0:
+                continue
+            day_idx = min(slot.slot_index // slots_per_day, day_count - 1)
+            fuel_price = max(float(problem.scenario.diesel_price_yen_per_l or 0.0), 0.0)
+            result[day_idx]["realized_refuel"] += slot.refuel_liters * fuel_price
+        
+        return result
 
     def _collect_fuel_drive_events(
         self,
@@ -1278,3 +1400,55 @@ class CostEvaluator:
                 total_co2_kg += co2_factor * max(energy_kwh, 0.0)
 
         return total_co2_kg
+
+    def _collect_ev_drive_events(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> List[Tuple[str, str, int, float]]:
+        """Collect EV drive events as (vehicle_id, depot_id, departure_min, energy_kwh)."""
+        events: List[Tuple[str, str, int, float]] = []
+        vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
+        vehicle_depot = self._vehicle_to_depot(problem)
+        duty_vehicle_map = plan.duty_vehicle_map()
+        
+        for duty in plan.duties:
+            vt = vehicle_type_by_id.get(duty.vehicle_type)
+            powertrain = str(getattr(vt, "powertrain_type", "") or duty.vehicle_type).upper()
+            if powertrain not in {"BEV", "PHEV", "FCEV"}:
+                continue
+            
+            vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
+            depot_id = vehicle_depot.get(vehicle_id, "depot_default")
+            
+            for leg in duty.legs:
+                trip = problem.trip_by_id().get(leg.trip.trip_id)
+                if trip is None:
+                    continue
+                energy_kwh = max(float(trip.energy_kwh or 0.0), 0.0)
+                if energy_kwh > 0.0:
+                    events.append((vehicle_id, depot_id, int(trip.departure_min), energy_kwh))
+                # Deadhead energy
+                if leg.deadhead_from_prev_min > 0:
+                    dh_energy = self._estimated_deadhead_energy_kwh(problem, leg, trip)
+                    if dh_energy > 0.0:
+                        events.append((vehicle_id, depot_id, int(trip.departure_min), dh_energy))
+        
+        events.sort(key=lambda item: item[2])
+        return events
+    
+    def _provisional_electricity_price_at_slot(
+        self,
+        problem: CanonicalOptimizationProblem,
+        slot_index: int,
+    ) -> float:
+        """Get provisional (buy) electricity price at given slot."""
+        return self._slot_buy_price(problem, slot_index)
+    
+    def _realized_electricity_price_at_slot(
+        self,
+        problem: CanonicalOptimizationProblem,
+        slot_index: int,
+    ) -> float:
+        """Get realized electricity price at given slot (uses buy price for grid charging)."""
+        return self._slot_buy_price(problem, slot_index)

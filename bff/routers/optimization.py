@@ -613,6 +613,7 @@ def _persist_canonical_graph_exports(
         _build_route_band_diagram_assets,
         _write_csv,
         _write_route_band_diagram_assets,
+        _filter_timeline_rows_for_day,
     )
 
     if not bool(((scenario.get("simulation_config") or {}).get("enable_vehicle_diagram_output", True))):
@@ -634,12 +635,35 @@ def _persist_canonical_graph_exports(
     graph_dir = Path(output_dir) / "graph"
     graph_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(graph_dir / "vehicle_timeline.csv", timeline_rows)
-    assets = _build_route_band_diagram_assets(
-        timeline_rows,
-        scenario_id,
-        graph_context=graph_context,
-    )
-    _write_route_band_diagram_assets(graph_dir, assets)
+    
+    # Multi-day diagram support
+    planning_days = int(problem.scenario.planning_days or 1)
+    if planning_days > 1:
+        # Generate per-day route band diagrams
+        all_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
+        timestep_min = int(problem.scenario.timestep_min or 30)
+        for day_idx in range(planning_days):
+            day_rows = _filter_timeline_rows_for_day(timeline_rows, day_idx, timestep_min)
+            day_assets = _build_route_band_diagram_assets(
+                day_rows,
+                f"{scenario_id}_d{day_idx}",
+                graph_context=graph_context,
+            )
+            for entry in day_assets.get("entries", []):
+                entry["day_index"] = day_idx
+                entry["diagram_file"] = f"day_{day_idx}/{entry.get('diagram_file', '')}"
+                all_assets["entries"].append(entry)
+            for svg_key, svg_content in (day_assets.get("svg_payloads") or day_assets.get("svgs") or {}).items():
+                all_assets["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
+        assets = all_assets
+    else:
+        assets = _build_route_band_diagram_assets(
+            timeline_rows,
+            scenario_id,
+            graph_context=graph_context,
+        )
+    
+    _write_route_band_diagram_assets(graph_dir, assets, planning_days=planning_days)
     manifest_relpath = None
     if assets.get("entries"):
         manifest_relpath = "graph/route_band_diagrams/manifest.json"
@@ -648,6 +672,7 @@ def _persist_canonical_graph_exports(
         "diagram_count": len(list(assets.get("entries") or [])),
         "manifest_path": manifest_relpath,
         "vehicle_timeline_path": "graph/vehicle_timeline.csv",
+        "planning_days": planning_days,
     }
 
 

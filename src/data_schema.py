@@ -210,6 +210,7 @@ class ProblemData:
     enable_v2g: bool = False
     enable_battery_degradation: bool = True
     enable_demand_charge: bool = True
+    enable_soc_threshold: bool = True  # Default enabled to prevent simultaneous charging
     use_soft_soc_constraint: bool = False
     objective_mode: str = "total_cost"
 

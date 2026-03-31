@@ -338,6 +338,7 @@ def build_milp_model(
             "v2g": data.enable_v2g,
             "demand_charge": data.enable_demand_charge,
             "duty_assignment": data.duty_assignment_enabled,
+            "soc_threshold": getattr(data, "enable_soc_threshold", True),  # Default enabled to prevent simultaneous charging
         }
 
     model = gp.Model("ebus_milp")
@@ -496,6 +497,19 @@ def build_milp_model(
             model, data, ms, dp, vars,
             trigger_ratio=trigger_ratio,
             resume_ratio=resume_ratio,
+        )
+
+    # ===== 夜間充電禁止制約 =====
+    # allow_overnight_depot_moves="forbid" の場合、23:00-05:00の充電を禁止
+    allow_overnight = getattr(data, "allow_overnight_depot_moves", "forbid")
+    if str(allow_overnight).lower() == "forbid" and "z_charge" in vars:
+        from .constraints.overnight_charging import add_overnight_charging_constraints
+        overnight_start = getattr(data, "overnight_window_start", "23:00")
+        overnight_end = getattr(data, "overnight_window_end", "05:00")
+        add_overnight_charging_constraints(
+            model, data, ms, dp, vars,
+            overnight_start=overnight_start,
+            overnight_end=overnight_end,
         )
 
     # ===== 目的関数設定 =====
