@@ -1115,8 +1115,14 @@ class ProblemBuilder:
         *,
         disable_acquisition_cost: bool,
     ) -> float:
+        # CRITICAL FIX: When acquisition cost is disabled, use a fixed daily cost
+        # instead of 0.0 to ensure vehicle_cost is included in optimization
         if disable_acquisition_cost:
-            return 0.0
+            # Use a reasonable fixed cost per vehicle per day
+            # This represents operational readiness cost (e.g., maintenance, insurance)
+            # Default: 5000 JPY/vehicle/day
+            return 5000.0
+        
         purchase_cost = self._safe_float(vehicle.get("acquisitionCost")) or 0.0
         residual_value = self._safe_float(
             vehicle.get("residualValueYen")

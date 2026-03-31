@@ -63,6 +63,7 @@ from bff.routers import (
     jobs,
     master_data,
     optimization,
+    pv_management,
     scenarios,
     simulation,
     timetable,
@@ -136,6 +137,7 @@ app.include_router(master_data.router, prefix=PREFIX)
 app.include_router(graph.router, prefix=PREFIX)
 app.include_router(simulation.router, prefix=PREFIX)
 app.include_router(optimization.router, prefix=PREFIX)
+app.include_router(pv_management.router, prefix=PREFIX)
 app.include_router(jobs.router, prefix=PREFIX)
 if CATALOG_BACKEND == "local_sqlite":
     app.include_router(catalog_local.router, prefix=PREFIX)
