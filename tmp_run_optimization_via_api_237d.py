@@ -146,25 +146,34 @@ def extract_key_metrics(result: Dict[str, Any]) -> Dict[str, Any]:
     """Extract key metrics from optimization result."""
     if not result:
         return {}
-    
-    cost_breakdown = result.get("costBreakdown", {})
-    
+
+    cost_breakdown = result.get("cost_breakdown", {})
+    solver_status = str(result.get("solver_status") or "").lower()
+    summary = result.get("summary") or {}
+    total_trips = int(result.get("trip_count") or 0)
+    served = int(result.get("served_trip_count") or summary.get("trip_count_served") or 0)
+    unserved = int(result.get("unserved_trip_count") or summary.get("trip_count_unserved") or 0)
+    if total_trips <= 0 and (served > 0 or unserved > 0):
+        total_trips = served + unserved
+
     return {
-        "objective_value": result.get("objectiveValue", 0),
-        "feasible": result.get("feasible", False),
-        "solve_time_sec": result.get("solveTimeSeconds", 0),
+        "objective_value": result.get("objective_value", 0),
+        "solver_status": solver_status,
+        "solve_time_sec": result.get("solve_time_seconds", 0),
         "vehicle_cost": cost_breakdown.get("vehicle_cost", 0),
         "energy_cost": cost_breakdown.get("energy_cost", 0),
-        "demand_cost": cost_breakdown.get("demand_cost", 0),
+        "fuel_cost": cost_breakdown.get("fuel_cost", 0),
+        "demand_charge": cost_breakdown.get("demand_charge", 0),
         "driver_cost": cost_breakdown.get("driver_cost", 0),
-        "unserved_penalty": cost_breakdown.get("unserved_penalty", 0),
+        "penalty_unserved": cost_breakdown.get("penalty_unserved", 0),
         "pv_generated_kwh": cost_breakdown.get("pv_generated_kwh", 0),
         "pv_to_bus_kwh": cost_breakdown.get("pv_to_bus_kwh", 0),
         "pv_curtailed_kwh": cost_breakdown.get("pv_curtailed_kwh", 0),
         "grid_import_kwh": cost_breakdown.get("grid_import_kwh", 0),
-        "served_trips": len(result.get("servedTripIds", [])),
-        "unserved_trips": len(result.get("unservedTripIds", [])),
-        "duties": len(result.get("duties", [])),
+        "trip_count": total_trips,
+        "served_trips": served,
+        "unserved_trips": unserved,
+        "used_vehicles": result.get("used_vehicle_count", 0),
     }
 
 
@@ -214,8 +223,10 @@ def compare_optimization_modes():
             print(f"  Objective: {metrics['objective_value']:,.0f} JPY")
             print(f"  Vehicle cost: {metrics['vehicle_cost']:,.0f} JPY")
             print(f"  Energy cost: {metrics['energy_cost']:,.0f} JPY")
+            print(f"  Unserved penalty: {metrics['penalty_unserved']:,.0f} JPY")
+            print(f"  Solver status: {metrics['solver_status']}")
             print(f"  PV to bus: {metrics['pv_to_bus_kwh']:.1f} kWh")
-            print(f"  Served trips: {metrics['served_trips']}/{metrics['served_trips'] + metrics['unserved_trips']}")
+            print(f"  Served trips: {metrics['served_trips']}/{metrics['trip_count']}")
         else:
             results[mode] = None
             print(f"\n[FAILED] {mode} did not complete")
@@ -228,7 +239,7 @@ def compare_optimization_modes():
     print("RESULTS COMPARISON")
     print(f"{'='*100}")
     
-    header = f"{'Mode':<20} {'Objective':>15} {'Vehicle':>12} {'Energy':>12} {'PV Used':>10} {'Trips':>10} {'Status':>10}"
+    header = f"{'Mode':<20} {'Objective':>15} {'Vehicle':>12} {'Energy':>12} {'Penalty':>12} {'Trips':>10} {'Status':>16}"
     print(header)
     print("-" * 100)
     
@@ -237,13 +248,13 @@ def compare_optimization_modes():
             obj = metrics['objective_value']
             veh = metrics['vehicle_cost']
             eng = metrics['energy_cost']
-            pv = metrics['pv_to_bus_kwh']
-            trips = f"{metrics['served_trips']}/{metrics['served_trips'] + metrics['unserved_trips']}"
-            status = "[OK]" if metrics['feasible'] else "[INFEAS]"
+            pen = metrics['penalty_unserved']
+            trips = f"{metrics['served_trips']}/{metrics['trip_count']}"
+            status = metrics['solver_status']
             
-            print(f"{mode:<20} {obj:>15,.0f} {veh:>12,.0f} {eng:>12,.0f} {pv:>10.1f} {trips:>10} {status:>10}")
+            print(f"{mode:<20} {obj:>15,.0f} {veh:>12,.0f} {eng:>12,.0f} {pen:>12,.0f} {trips:>10} {status:>16}")
         else:
-            print(f"{mode:<20} {'ERROR':>15} {'-':>12} {'-':>12} {'-':>10} {'-':>10} {'[ERROR]':>10}")
+            print(f"{mode:<20} {'ERROR':>15} {'-':>12} {'-':>12} {'-':>12} {'-':>10} {'error':>16}")
     
     print("=" * 100)
     

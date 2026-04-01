@@ -1296,6 +1296,9 @@ class App:
         self._busy_count: int = 0
         self._busy_var = tk.StringVar(value="")
         self._scope_filter_debounce_id: str | None = None
+        self.run_transport_var = tk.StringVar(value="直結" if self.client.direct_mode else "HTTP互換")
+        self.base_url_entry: ttk.Entry | None = None
+        self.base_url_label: ttk.Label | None = None
 
         self._build_ui()
         self._refresh_service_dates_preview()
@@ -1314,18 +1317,36 @@ class App:
         self.root.geometry(f"{w}x{h}+{x}+{y}")
         self.root.minsize(900, 600)
 
-        # ── 上部バー：BFF URL ──
+        # ── 上部バー：実行モード / 接続 ──
         top = ttk.Frame(self.root, padding=(8, 4))
         top.pack(fill=tk.X)
-        ttk.Label(top, text="BFF URL").pack(side=tk.LEFT)
+        ttk.Label(top, text="実行モード").pack(side=tk.LEFT)
+        transport_combo = ttk.Combobox(
+            top,
+            state="readonly",
+            textvariable=self.run_transport_var,
+            values=["直結", "HTTP互換"],
+            width=10,
+        )
+        transport_combo.pack(side=tk.LEFT, padx=(4, 8))
+        transport_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_transport_mode_changed())
+
+        self.base_url_label = ttk.Label(top, text="BFF URL")
+        self.base_url_label.pack(side=tk.LEFT)
         self.base_url_var = tk.StringVar(value="http://127.0.0.1:8000")
-        ttk.Entry(top, textvariable=self.base_url_var, width=36).pack(side=tk.LEFT, padx=6)
+        self.base_url_entry = ttk.Entry(top, textvariable=self.base_url_var, width=30)
+        self.base_url_entry.pack(side=tk.LEFT, padx=6)
         ttk.Button(top, text="接続確認", command=self.on_connect).pack(side=tk.LEFT, padx=4)
-        ttk.Button(top, text="車両・テンプレート管理", command=self.open_fleet_window).pack(side=tk.LEFT, padx=(20, 2))
-        ttk.Button(top, text="営業所別充電器管理", command=self.open_vehicle_depot_manager).pack(side=tk.LEFT, padx=2)
-        ttk.Button(top, text="使い方ヘルプ", command=self.open_help_window).pack(side=tk.LEFT, padx=(12, 2))
-        ttk.Button(top, text="App Context", command=self.show_app_context).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top, text="使い方ヘルプ", command=self.open_help_window).pack(side=tk.LEFT, padx=(8, 2))
+        tool_menu_btn = ttk.Menubutton(top, text="ツール")
+        tool_menu_btn.pack(side=tk.LEFT, padx=(8, 2))
+        tool_menu = tk.Menu(tool_menu_btn, tearoff=False)
+        tool_menu.add_command(label="車両・テンプレート管理", command=self.open_fleet_window)
+        tool_menu.add_command(label="営業所別充電器管理", command=self.open_vehicle_depot_manager)
+        tool_menu.add_command(label="機能情報", command=self.show_capabilities)
+        tool_menu_btn.configure(menu=tool_menu)
         ttk.Label(top, textvariable=self._busy_var, foreground="#c0392b", font=("TkDefaultFont", 9, "bold")).pack(side=tk.RIGHT, padx=8)
+        self._on_transport_mode_changed()
 
         # ── シナリオバー ──
         scenario_frame = ttk.LabelFrame(self.root, text="シナリオ", padding=(8, 4))
@@ -1338,7 +1359,6 @@ class App:
         self.scenario_combo.pack(side=tk.LEFT, padx=4)
         self.scenario_combo.bind("<<ComboboxSelected>>", self.on_scenario_changed)
         ttk.Button(sc_row1, text="新規作成", command=self.create_scenario).pack(side=tk.LEFT, padx=4)
-        ttk.Button(sc_row1, text="設定保存", command=self.save_quick_setup).pack(side=tk.LEFT, padx=2)
         ttk.Button(sc_row1, text="複製", command=self.duplicate_scenario).pack(side=tk.LEFT, padx=2)
         ttk.Button(sc_row1, text="有効化", command=self.activate_scenario).pack(side=tk.LEFT, padx=2)
         ttk.Button(sc_row1, text="削除", command=self.delete_scenario).pack(side=tk.LEFT, padx=2)
@@ -1357,10 +1377,10 @@ class App:
         ttk.Entry(sc_row2, textvariable=self.random_seed_var, width=8).pack(side=tk.LEFT)
         ttk.Separator(sc_row2, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=12)
         ttk.Label(sc_row2, text="比較A").pack(side=tk.LEFT)
-        self.compare_a_combo = ttk.Combobox(sc_row2, state="readonly", textvariable=self.compare_scenario_a_var, width=22)
+        self.compare_a_combo = ttk.Combobox(sc_row2, state="readonly", textvariable=self.compare_scenario_a_var, width=18)
         self.compare_a_combo.pack(side=tk.LEFT, padx=4)
         ttk.Label(sc_row2, text="B").pack(side=tk.LEFT)
-        self.compare_b_combo = ttk.Combobox(sc_row2, state="readonly", textvariable=self.compare_scenario_b_var, width=22)
+        self.compare_b_combo = ttk.Combobox(sc_row2, state="readonly", textvariable=self.compare_scenario_b_var, width=18)
         self.compare_b_combo.pack(side=tk.LEFT, padx=4)
         ttk.Button(sc_row2, text="比較実行", command=self.open_compare_window).pack(side=tk.LEFT, padx=4)
 
@@ -1581,7 +1601,6 @@ class App:
         ttk.Button(result_row, text="Optimization結果", command=self.show_optimization_result).pack(side=tk.LEFT, padx=(0, 4))
         ttk.Button(result_row, text="Simulation結果", command=self.show_simulation_result).pack(side=tk.LEFT, padx=4)
         ttk.Button(result_row, text="ダイヤグラム表示", command=self.show_vehicle_diagram).pack(side=tk.LEFT, padx=4)
-        ttk.Button(result_row, text="機能情報", command=self.show_capabilities).pack(side=tk.LEFT, padx=4)
 
         ttk.Separator(ops, orient="horizontal").pack(fill=tk.X, pady=4)
 
@@ -1839,6 +1858,7 @@ class App:
         # ── ジョブ監視 ──
         job_row = ttk.Frame(ops)
         job_row.pack(fill=tk.X, pady=4)
+        ttk.Label(job_row, text="詳細操作", foreground="#555").pack(side=tk.LEFT, padx=(0, 8))
         ttk.Label(job_row, text="手動 job_id", width=20).pack(side=tk.LEFT)
         self.manual_job_id_var = tk.StringVar(value="")
         ttk.Entry(job_row, textvariable=self.manual_job_id_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -3611,6 +3631,7 @@ class App:
                 self.dup_target_depot_var.set("")
 
     def on_connect(self) -> None:
+        self.client.set_direct_mode(self.run_transport_var.get().strip() != "HTTP互換")
         self.client.set_base_url(self.base_url_var.get().strip())
 
         def action() -> dict[str, Any]:
@@ -3627,6 +3648,20 @@ class App:
             self.refresh_scenarios()
 
         self.run_bg(action, done)
+
+    def _on_transport_mode_changed(self) -> None:
+        use_http = self.run_transport_var.get().strip() == "HTTP互換"
+        self.client.set_direct_mode(not use_http)
+        if self._widget_exists(self.base_url_label):
+            if use_http:
+                self.base_url_label.pack(side=tk.LEFT)
+            else:
+                self.base_url_label.pack_forget()
+        if self._widget_exists(self.base_url_entry):
+            if use_http:
+                self.base_url_entry.pack(side=tk.LEFT, padx=6)
+            else:
+                self.base_url_entry.pack_forget()
 
     def _apply_dataset_options(self, datasets_resp: dict[str, Any]) -> None:
         selected = _choose_dataset_options(datasets_resp)

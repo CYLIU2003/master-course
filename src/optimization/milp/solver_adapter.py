@@ -139,9 +139,10 @@ class GurobiMILPAdapter:
             model.addConstr(gp.quicksum(assign_terms) + unserved[trip.trip_id] == 1)
 
         allow_partial_service = bool(problem.metadata.get("allow_partial_service", False))
+        hard_no_unserved_constraints: List[Any] = []
         if not allow_partial_service:
             for trip in problem.trips:
-                model.addConstr(unserved[trip.trip_id] == 0)
+                hard_no_unserved_constraints.append(model.addConstr(unserved[trip.trip_id] == 0))
 
         # Vehicle-use linkage.
         for (vehicle_id, trip_id), var in y.items():
@@ -1149,6 +1150,25 @@ class GurobiMILPAdapter:
         model.setObjective(objective, GRB.MINIMIZE)
         model.optimize()
 
+        if model.Status == GRB.INF_OR_UNBD:
+            # Distinguish infeasible from unbounded before deciding fallback behavior.
+            model.Params.DualReductions = 0
+            model.optimize()
+
+        relaxed_partial_service = False
+        if (
+            model.SolCount <= 0
+            and model.Status in {GRB.INFEASIBLE, GRB.INF_OR_UNBD, GRB.UNBOUNDED}
+            and hard_no_unserved_constraints
+        ):
+            # If strict full-coverage is infeasible, relax to penalty-based unserved mode
+            # to keep the run operationally usable and comparable with heuristic modes.
+            for constr in hard_no_unserved_constraints:
+                model.remove(constr)
+            model.update()
+            model.optimize()
+            relaxed_partial_service = model.SolCount > 0
+
         status_map = {
             GRB.OPTIMAL: "optimal",
             GRB.TIME_LIMIT: "time_limit",
@@ -1159,13 +1179,62 @@ class GurobiMILPAdapter:
         }
         solver_status = status_map.get(model.Status, f"status_{model.Status}")
 
+        if (
+            model.SolCount > 0
+            and relaxed_partial_service
+            and unserved_penalty_weight > 0.0
+            and problem.baseline_plan is not None
+            and len(problem.baseline_plan.served_trip_ids) > 0
+        ):
+            full_unserved_obj = unserved_penalty_weight * float(len(problem.trips))
+            incumbent_obj = float(model.ObjVal)
+            if incumbent_obj >= full_unserved_obj - 1.0e-6:
+                baseline_meta = dict(problem.baseline_plan.metadata or {})
+                baseline_meta.update(
+                    {
+                        "source": "dispatch_baseline_after_relax",
+                        "milp_status": solver_status,
+                        "auto_relaxed_allow_partial_service": True,
+                    }
+                )
+                baseline_plan = AssignmentPlan(
+                    duties=problem.baseline_plan.duties,
+                    charging_slots=problem.baseline_plan.charging_slots,
+                    refuel_slots=problem.baseline_plan.refuel_slots,
+                    grid_to_bus_kwh_by_depot_slot=problem.baseline_plan.grid_to_bus_kwh_by_depot_slot,
+                    pv_to_bus_kwh_by_depot_slot=problem.baseline_plan.pv_to_bus_kwh_by_depot_slot,
+                    bess_to_bus_kwh_by_depot_slot=problem.baseline_plan.bess_to_bus_kwh_by_depot_slot,
+                    pv_to_bess_kwh_by_depot_slot=problem.baseline_plan.pv_to_bess_kwh_by_depot_slot,
+                    grid_to_bess_kwh_by_depot_slot=problem.baseline_plan.grid_to_bess_kwh_by_depot_slot,
+                    pv_curtail_kwh_by_depot_slot=problem.baseline_plan.pv_curtail_kwh_by_depot_slot,
+                    bess_soc_kwh_by_depot_slot=problem.baseline_plan.bess_soc_kwh_by_depot_slot,
+                    contract_over_limit_kwh_by_depot_slot=problem.baseline_plan.contract_over_limit_kwh_by_depot_slot,
+                    vehicle_cost_ledger=problem.baseline_plan.vehicle_cost_ledger,
+                    daily_cost_ledger=problem.baseline_plan.daily_cost_ledger,
+                    served_trip_ids=problem.baseline_plan.served_trip_ids,
+                    unserved_trip_ids=problem.baseline_plan.unserved_trip_ids,
+                    metadata=baseline_meta,
+                )
+                return (
+                    MILPSolverOutcome(
+                        solver_status="auto_relaxed_baseline",
+                        used_backend=self.backend_name,
+                        supports_exact_milp=True,
+                    ),
+                    baseline_plan,
+                )
+
         if model.SolCount <= 0:
             empty = AssignmentPlan(
                 duties=(),
                 charging_slots=(),
                 served_trip_ids=(),
                 unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
-                metadata={"source": "milp_gurobi", "status": solver_status},
+                metadata={
+                    "source": "milp_gurobi",
+                    "status": solver_status,
+                    "auto_relaxed_allow_partial_service": bool(relaxed_partial_service),
+                },
             )
             return (
                 MILPSolverOutcome(
