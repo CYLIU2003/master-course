@@ -46,6 +46,7 @@ flowchart LR
 <details>
 <summary><strong>更新メモ（2026-03-28）</strong></summary>
 
+- 2026-04-01: Tk クライアントに直結実行の初期実装を追加し、`MC_DIRECT_CALL=1` 時は `Prepare / Prepared simulation / Run optimization / Reoptimize / Job取得` を HTTP ではなく `bff.services.direct_runtime` 経由で同一プロセス実行できるようにした（未対応エンドポイントは従来どおり HTTP）
 - 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
 - 2026-03-31: 営業所別エネルギー資産は `depot_energy_assets` で `pv_capacity_kw` と `bess_energy_kwh / bess_power_kw` を編集できる前提に整理し、日別 PV capacity factor から複数日 horizon 用の発電列を再構築できるようにした
 - 2026-03-31: `ProblemBuilder.build_from_scenario()` の `planning_days` 取りこぼし、multi-day price slot 複製時の `co2_factor` フィールド不整合、MILP metadata 用の重複 model build を修正した

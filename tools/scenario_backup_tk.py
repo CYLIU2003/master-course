@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 import csv
 import json
+import os
 import re
 import threading
 import tkinter as tk
@@ -940,9 +941,34 @@ class BFFClient:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_prefix = ""
+        self.direct_mode = str(os.getenv("MC_DIRECT_CALL", "")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
     def set_base_url(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
+
+    def set_direct_mode(self, enabled: bool) -> None:
+        self.direct_mode = bool(enabled)
+
+    def _try_request_direct(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        if not self.direct_mode:
+            return None
+        try:
+            from bff.services.direct_runtime import call_direct, is_direct_supported
+        except Exception:
+            return None
+        if not is_direct_supported(method, path):
+            return None
+        return call_direct(method=method, path=path, body=body)
 
     def _full_url(
         self,
@@ -1002,6 +1028,9 @@ class BFFClient:
         allow_prefix_fallback: bool = True,
         timeout_seconds: float = 45.0,
     ) -> dict[str, Any]:
+        direct_result = self._try_request_direct(method, path, body=body)
+        if direct_result is not None:
+            return direct_result
         try:
             return self._request_once(method, path, body=body, query=query, timeout_seconds=timeout_seconds)
         except RuntimeError as exc:
