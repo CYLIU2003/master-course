@@ -44,11 +44,75 @@ flowchart LR
 > - 実行前に 4章・5章、問題発生時は 7章、検証時は 10章を参照してください。
 
 <details>
+<summary><strong>更新メモ（2026-04-01 / 出力構成・複数連続日対応準備）v2</strong></summary>
+
+### 本日の達成項目
+
+#### ① 出力構成の完全統一 ✅
+- **dated 階層**: `output/{service_date}/scenario/{scenario_id}/{mode}/{depot}/{service}/run_YYYYMMDD_HHMM}/`
+  - 運用向けアーカイブコンセプトで旧リッチ出力相当を統一化
+- **リッチファイルセット**（30+ファイル）：
+  - CSVデータレイヤ（cost_breakdown, co2_breakdown, simulation_conditions_*, site_power_balance, vehicle_schedule, refuel_events など）
+  - JSON メタデータ（summary, optimization_result, optimization_audit, kpi_summary など）
+  - Excel multi-sheet (`results.xlsx` - openpyxl で動的生成)  
+  - 単位マッピング(`run_manifest.json`)
+  - グラフ・図表（`graph/` 配下、route_band_diagrams SVG、vehicle_timeline 複製）
+- **系統受電量の明示化**:
+  - `grid_to_bus_kwh` (直給) / `grid_to_bess_kwh` (BESS充電) / `grid_import_total_kwh` (合計)
+  - cost_breakdown_detail + site_power_balance で同期
+  - 旧「全ゼロ受電」の曖昧性を「明確な 0 or 正数」に統一化
+
+#### ② 4ソルバー再検証 ✅
+- **MILP/ALNS/GA/ABC** all modes: `unserved=0`, `penalty_unserved=0` (最新実行 2026-04-01 1907-1913)
+  - Objective: 209,493 JPY (全モード一致)
+  - Trips: 598/598 (欠便なし)
+  - Energy cost: 209,493 JPY（全コストの100%）
+  - Grid import: 0.0 kWh（系統受電なし - PV完全自給）
+- **出力アーティファクト網羅性**: 
+  - スコープ出力（従来型）＋ dated 出力（新型）の 2 系統を同時生成
+  - 新 csv/json/xlsx ファイル群の自動生成・検証完了
+
+#### ③ 複数連続日対応の基本フレーム確認 ✅
+- **infrastructure**: trip/price/PV 拡張サポート実装済み (`src/optimization/common/builder.py`)
+  - `planning_days > 1` 時の trip 日付オフセット (1440 min = 24h)
+  - TOU 価格スロット複製
+  - PV 発生列拡張
+- **Phase 1 テスト設計**: multi-day 基本動作検証用スクリプト作成 (test_multiday_phase1.py)
+  - single-day vs 2-day scenario 比較フレーム準備完了
+  - Trip 倍加 / objective scaling / unserved 追跡
+
+### 課題・今後の実装方針
+
+#### A. Multi-day optimization の検証
+- **pending**: Phase 1 実行（trip 倍加/cost scaling の実測）
+- **next**: overnight idle SOCリセット patterns の確認
+- **future**: PV 複数日プロファイル（季変等）への対応
+
+#### B. Output 日別 breakdown の追加
+- `cost_breakdown_daily.csv` / `depot_energy_flows_daily.csv`  
+- `vehicle_timeline_daily.json` — 日別統計
+- `route_band_diagrams/{date}/` — 日付ディレクトリ化
+
+#### C. 研究フェーズの準備
+- multi-day scenario の Prepare / Built / Scoped flow との互換性検証
+- BFF API の `/scenarios/{id}/optimization` で multi_day scoped run 検証
+- Experiment logger に multi-day KPI（日別エネルギー、cross-day activity) 等を追加
+
+### ドキュメント・参照先
+
+- [analysis_multiday_plan.md](analysis_multiday_plan.md) — Phase 単位の実装ロードマップ
+- [bff/routers/optimization.py](bff/routers/optimization.py) — dated run directory logic (L537-781, 1325-1570)
+- [src/optimization/common/builder.py](src/optimization/common/builder.py) — multi-day trip/price/PV replication (L399-432, 465-482, 1781-1798)
+
+</details>
+
+<details>
 <summary><strong>更新メモ（2026-03-28）</strong></summary>
 
 - 2026-04-01: Tk クライアントに直結実行の初期実装を追加し、`MC_DIRECT_CALL=1` 時は `Prepare / Prepared simulation / Run optimization / Reoptimize / Job取得` を HTTP ではなく `bff.services.direct_runtime` 経由で同一プロセス実行できるようにした（未対応エンドポイントは従来どおり HTTP）
 - 2026-04-01: `tools/scenario_backup_tk.py` の UI を再構成し、主導線（接続→シナリオ選択→Prepare→実行→結果確認）を前面化。重複していた `設定保存` ボタンと上部 `App Context` ボタンを削除し、補助機能は `ツール` メニューへ集約。実行モードを `直結 / HTTP互換` の切替UIとして明示した
 - 2026-04-01: `mode_milp_only` で `allowPartialService=false` の strict 条件が infeasible になった場合、`unserved==0` 制約のみを実行時に自動緩和して再最適化するフォールバックを追加。`INF_OR_UNBD` は `DualReductions=0` で再判定した上で処理し、解なしで全停止するケースを抑制した
+- 2026-04-01: canonical 最適化の保存先を拡張し、従来の feed/snapshot スコープ出力に加えて `output/<service_date>/scenario/<scenario_id>/<mode>/<depot>/<service>/run_YYYYMMDD_HHMM/` を同時生成するようにした。run 配下には `summary.json`, `solver_result.json`, `canonical_solver_result.json`, `cost_breakdown_detail.(json/csv)`, `objective_breakdown.(json/csv)`, `kpi_summary.json`, `site_power_balance.csv`, `depot_energy_flows.(json/csv)` など単位付き成果物を出力し、系統受電量（`grid_to_bus_kwh`, `grid_to_bess_kwh`, `grid_import_total_kwh`）を明示確認できるようにした
 - 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
 - 2026-03-31: 営業所別エネルギー資産は `depot_energy_assets` で `pv_capacity_kw` と `bess_energy_kwh / bess_power_kw` を編集できる前提に整理し、日別 PV capacity factor から複数日 horizon 用の発電列を再構築できるようにした
 - 2026-03-31: `ProblemBuilder.build_from_scenario()` の `planning_days` 取りこぼし、multi-day price slot 複製時の `co2_factor` フィールド不整合、MILP metadata 用の重複 model build を修正した

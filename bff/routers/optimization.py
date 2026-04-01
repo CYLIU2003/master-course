@@ -11,6 +11,8 @@ from __future__ import annotations
 import subprocess
 import traceback
 import json
+import csv
+import shutil
 import threading
 import multiprocessing
 import os
@@ -506,6 +508,413 @@ def _persist_json_outputs(output_dir: str, payloads: Dict[str, Dict[str, Any]]) 
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+
+
+def _run_stamp() -> str:
+    return datetime.now().strftime("run_%Y%m%d_%H%M")
+
+
+def _service_date_for_output(scenario: Dict[str, Any]) -> str:
+    sim = dict(scenario.get("simulation_config") or {})
+    primary = str(sim.get("service_date") or "").strip()
+    if primary:
+        return primary[:10]
+    dates = [str(v).strip() for v in list(sim.get("service_dates") or []) if str(v).strip()]
+    if dates:
+        return dates[0][:10]
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _dated_scenario_run_dir(
+    *,
+    scenario: Dict[str, Any],
+    scenario_id: str,
+    mode: str,
+    service_id: str,
+    depot_id: Optional[str],
+) -> Path:
+    root = output_paths.outputs_root()
+    service_date = _service_date_for_output(scenario)
+    depot_scope = str(depot_id or "all_depots")
+    run_dir = root / service_date / "scenario" / scenario_id / str(mode) / depot_scope / service_id / _run_stamp()
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def _write_csv_rows(path: Path, rows: List[Dict[str, Any]], fieldnames: List[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: row.get(k, "") for k in fieldnames})
+
+
+def _persist_rich_run_outputs(
+    *,
+    run_dir: Path,
+    scenario: Dict[str, Any],
+    optimization_result: Dict[str, Any],
+    optimization_audit: Dict[str, Any],
+    result_payload: Dict[str, Any],
+    sim_payload: Optional[Dict[str, Any]],
+    canonical_solver_result: Optional[Dict[str, Any]],
+    graph_source_dir: Optional[Path] = None,
+) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    unit_map = {
+        "objective_value": "JPY",
+        "solve_time_seconds": "s",
+        "energy_cost": "JPY",
+        "demand_charge": "JPY",
+        "vehicle_cost": "JPY",
+        "driver_cost": "JPY",
+        "fuel_cost": "JPY",
+        "penalty_unserved": "JPY",
+        "total_cost": "JPY",
+        "co2_cost": "JPY",
+        "total_co2_kg": "kg-CO2",
+        "grid_to_bus_kwh": "kWh",
+        "grid_to_bess_kwh": "kWh",
+        "bess_to_bus_kwh": "kWh",
+        "pv_to_bess_kwh": "kWh",
+    }
+
+    (run_dir / "optimization_result.json").write_text(
+        json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (run_dir / "optimization_audit.json").write_text(
+        json.dumps(optimization_audit, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (run_dir / "solver_result.json").write_text(
+        json.dumps(result_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    if canonical_solver_result is not None:
+        (run_dir / "canonical_solver_result.json").write_text(
+            json.dumps(canonical_solver_result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    summary = {
+        "scenario_id": optimization_result.get("scenario_id"),
+        "mode": optimization_result.get("mode"),
+        "solver_status": optimization_result.get("solver_status"),
+        "objective_mode": optimization_result.get("objective_mode"),
+        "objective_value": optimization_result.get("objective_value"),
+        "objective_value_unit": "JPY",
+        "solve_time_seconds": optimization_result.get("solve_time_seconds"),
+        "solve_time_unit": "s",
+        "trip_count_served": (optimization_result.get("summary") or {}).get("trip_count_served"),
+        "trip_count_unserved": (optimization_result.get("summary") or {}).get("trip_count_unserved"),
+        "vehicle_count_used": (optimization_result.get("summary") or {}).get("vehicle_count_used"),
+    }
+    (run_dir / "summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    cost_breakdown = dict(optimization_result.get("cost_breakdown") or {})
+    cost_rows = [
+        {
+            "key": key,
+            "value": value,
+            "unit": unit_map.get(key, ""),
+        }
+        for key, value in cost_breakdown.items()
+    ]
+    (run_dir / "cost_breakdown_detail.json").write_text(
+        json.dumps({"rows": cost_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _write_csv_rows(
+        run_dir / "cost_breakdown_detail.csv",
+        cost_rows,
+        ["key", "value", "unit"],
+    )
+
+    objective_rows = [
+        {"key": key, "value": value, "unit": unit_map.get(key, "")}
+        for key, value in dict(result_payload.get("obj_breakdown") or {}).items()
+    ]
+    (run_dir / "objective_breakdown.json").write_text(
+        json.dumps({"rows": objective_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _write_csv_rows(
+        run_dir / "objective_breakdown.csv",
+        objective_rows,
+        ["key", "value", "unit"],
+    )
+
+    assignment = dict(result_payload.get("assignment") or {})
+    vehicle_schedule_rows: List[Dict[str, Any]] = []
+    for vehicle_id, trip_ids in assignment.items():
+        for order, trip_id in enumerate(list(trip_ids or []), start=1):
+            vehicle_schedule_rows.append(
+                {
+                    "vehicle_id": vehicle_id,
+                    "sequence": order,
+                    "trip_id": trip_id,
+                }
+            )
+    _write_csv_rows(
+        run_dir / "vehicle_schedule.csv",
+        vehicle_schedule_rows,
+        ["vehicle_id", "sequence", "trip_id"],
+    )
+
+    summary_payload = dict(optimization_result.get("summary") or {})
+    trip_type_rows = [
+        {
+            "vehicle_type": vehicle_type,
+            "trip_count": trip_count,
+            "unit": "trips",
+        }
+        for vehicle_type, trip_count in dict(summary_payload.get("trip_count_by_type") or {}).items()
+    ]
+    (run_dir / "trip_type_counts.json").write_text(
+        json.dumps({"rows": trip_type_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _write_csv_rows(
+        run_dir / "trip_type_counts.csv",
+        trip_type_rows,
+        ["vehicle_type", "trip_count", "unit"],
+    )
+
+    targeted_rows = [
+        {"trip_id": trip_id, "status": "unserved"}
+        for trip_id in list(result_payload.get("unserved_tasks") or [])
+    ]
+    (run_dir / "targeted_trips.json").write_text(
+        json.dumps({"rows": targeted_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _write_csv_rows(
+        run_dir / "targeted_trips.csv",
+        targeted_rows,
+        ["trip_id", "status"],
+    )
+
+    sim_cfg = dict(scenario.get("simulation_config") or {})
+    (run_dir / "simulation_conditions.json").write_text(
+        json.dumps(sim_cfg, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    # Legacy-compatible simulation condition tables.
+    vehicles = list(scenario.get("vehicles") or [])
+    vehicle_cost_rows: List[Dict[str, Any]] = []
+    for vehicle in vehicles:
+        if not isinstance(vehicle, dict):
+            continue
+        vehicle_cost_rows.append(
+            {
+                "vehicle_id": vehicle.get("vehicle_id") or vehicle.get("id") or vehicle.get("name") or "",
+                "vehicle_type": vehicle.get("vehicle_type") or vehicle.get("type") or "",
+                "fixed_use_cost_yen": vehicle.get("fixed_use_cost_yen") or vehicle.get("fixed_cost_yen") or 0.0,
+                "fuel_cost_coeff_yen_per_liter": vehicle.get("fuel_cost_coeff_yen_per_liter") or vehicle.get("fuel_price_yen_per_liter") or 0.0,
+                "battery_degradation_cost_coeff_yen_per_kwh": vehicle.get("battery_degradation_cost_coeff_yen_per_kwh") or 0.0,
+                "co2_emission_coeff_kg_per_liter": vehicle.get("co2_emission_coeff_kg_per_liter") or 0.0,
+            }
+        )
+    _write_csv_rows(
+        run_dir / "simulation_conditions_vehicle_costs.csv",
+        vehicle_cost_rows,
+        [
+            "vehicle_id",
+            "vehicle_type",
+            "fixed_use_cost_yen",
+            "fuel_cost_coeff_yen_per_liter",
+            "battery_degradation_cost_coeff_yen_per_kwh",
+            "co2_emission_coeff_kg_per_liter",
+        ],
+    )
+
+    slot_count = int(sim_cfg.get("planning_horizon_hours") or 24)
+    timestep = int(sim_cfg.get("time_step_min") or sim_cfg.get("timestep_min") or 60)
+    if timestep > 0:
+        slot_count = max(slot_count * 60 // timestep, 1)
+    tou_price_series = list(sim_cfg.get("tou_prices_yen_per_kwh") or [])
+    default_price = float(sim_cfg.get("grid_energy_price_yen_per_kwh") or 0.0)
+    grid_co2_series = list(sim_cfg.get("grid_co2_factor_kg_per_kwh") or [])
+    base_load_series = list(sim_cfg.get("base_load_kw") or [])
+    site_id = str(sim_cfg.get("depot_id") or "depot_A")
+    tou_rows: List[Dict[str, Any]] = []
+    for time_idx in range(slot_count):
+        tou_rows.append(
+            {
+                "site_id": site_id,
+                "time_idx": time_idx,
+                "grid_energy_price_yen_per_kwh": (
+                    tou_price_series[time_idx] if time_idx < len(tou_price_series) else default_price
+                ),
+                "sell_back_price_yen_per_kwh": 0.0,
+                "base_load_kw": base_load_series[time_idx] if time_idx < len(base_load_series) else 0.0,
+                "grid_co2_factor_kg_per_kwh": grid_co2_series[time_idx] if time_idx < len(grid_co2_series) else 0.0,
+            }
+        )
+    _write_csv_rows(
+        run_dir / "simulation_conditions_tou_prices.csv",
+        tou_rows,
+        [
+            "site_id",
+            "time_idx",
+            "grid_energy_price_yen_per_kwh",
+            "sell_back_price_yen_per_kwh",
+            "base_load_kw",
+            "grid_co2_factor_kg_per_kwh",
+        ],
+    )
+
+    contract_rows = [
+        {
+            "site_id": site_id,
+            "site_type": "depot",
+            "contract_demand_limit_kw": float(sim_cfg.get("contract_demand_limit_kw") or 0.0),
+            "grid_import_limit_kw": float(sim_cfg.get("grid_import_limit_kw") or 0.0),
+            "site_transformer_limit_kw": float(sim_cfg.get("site_transformer_limit_kw") or 0.0),
+        }
+    ]
+    _write_csv_rows(
+        run_dir / "simulation_conditions_contract_limits.csv",
+        contract_rows,
+        [
+            "site_id",
+            "site_type",
+            "contract_demand_limit_kw",
+            "grid_import_limit_kw",
+            "site_transformer_limit_kw",
+        ],
+    )
+
+    co2_rows = [
+        {"component": "engine_bus_co2_kg", "value": float(cost_breakdown.get("engine_bus_co2_kg", 0.0) or 0.0)},
+        {"component": "power_generation_co2_kg", "value": float(cost_breakdown.get("power_generation_co2_kg", 0.0) or 0.0)},
+        {"component": "total_co2_kg", "value": float(cost_breakdown.get("total_co2_kg", 0.0) or 0.0)},
+    ]
+    (run_dir / "co2_breakdown.json").write_text(
+        json.dumps({"rows": co2_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _write_csv_rows(
+        run_dir / "co2_breakdown.csv",
+        co2_rows,
+        ["component", "value"],
+    )
+
+    graph_artifacts = dict(optimization_result.get("graph_artifacts") or {})
+    timeline_candidates: List[Path] = []
+    if graph_artifacts.get("vehicle_timeline_path"):
+        rel = Path(str(graph_artifacts.get("vehicle_timeline_path")))
+        timeline_candidates.append(run_dir / rel)
+        if graph_source_dir is not None:
+            timeline_candidates.append(graph_source_dir / rel.name)
+            timeline_candidates.append(graph_source_dir / rel)
+    timeline_candidates.append(run_dir / "graph" / "vehicle_timeline.csv")
+    if graph_source_dir is not None:
+        timeline_candidates.append(graph_source_dir / "vehicle_timeline.csv")
+    for src in timeline_candidates:
+        if src.exists():
+            shutil.copy2(src, run_dir / "vehicle_timeline_gantt.csv")
+            shutil.copy2(src, run_dir / "vehicle_timelines.csv")
+            break
+
+    refuel_rows = []
+    if canonical_solver_result is not None:
+        for item in list((canonical_solver_result.get("refueling_schedule") or [])):
+            if not isinstance(item, dict):
+                continue
+            refuel_rows.append(
+                {
+                    "vehicle_id": item.get("vehicle_id"),
+                    "slot_index": item.get("slot_index"),
+                    "time_hhmm": item.get("time_hhmm"),
+                    "refuel_liters": item.get("refuel_liters"),
+                    "unit": "L",
+                }
+            )
+    _write_csv_rows(
+        run_dir / "refuel_events.csv",
+        refuel_rows,
+        ["vehicle_id", "slot_index", "time_hhmm", "refuel_liters", "unit"],
+    )
+
+    grid_to_bus_kwh = float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0)
+    grid_to_bess_kwh = float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0)
+    grid_import_total_kwh = grid_to_bus_kwh + grid_to_bess_kwh
+    site_rows = [
+        {
+            "metric": "grid_to_bus_kwh",
+            "value": grid_to_bus_kwh,
+            "unit": "kWh",
+        },
+        {
+            "metric": "grid_to_bess_kwh",
+            "value": grid_to_bess_kwh,
+            "unit": "kWh",
+        },
+        {
+            "metric": "grid_import_total_kwh",
+            "value": grid_import_total_kwh,
+            "unit": "kWh",
+        },
+    ]
+    _write_csv_rows(
+        run_dir / "site_power_balance.csv",
+        site_rows,
+        ["metric", "value", "unit"],
+    )
+    (run_dir / "depot_energy_flows.json").write_text(
+        json.dumps({"rows": site_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _write_csv_rows(
+        run_dir / "depot_energy_flows.csv",
+        site_rows,
+        ["metric", "value", "unit"],
+    )
+
+    kpi_summary = {
+        "total_cost_jpy": float(cost_breakdown.get("total_cost", 0.0) or 0.0),
+        "electricity_cost_jpy": float(cost_breakdown.get("energy_cost", 0.0) or 0.0),
+        "grid_import_total_kwh": grid_import_total_kwh,
+        "served_trip_count": int(summary_payload.get("trip_count_served") or 0),
+        "unserved_trip_count": int(summary_payload.get("trip_count_unserved") or 0),
+        "solver_runtime_sec": float(optimization_result.get("solve_time_seconds") or 0.0),
+    }
+    (run_dir / "kpi_summary.json").write_text(
+        json.dumps(kpi_summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    exp_report = dict(optimization_result.get("experiment_report") or {})
+    md_path = exp_report.get("md_path")
+    if isinstance(md_path, str) and md_path.strip():
+        src_md = Path(md_path)
+        if src_md.exists():
+            shutil.copy2(src_md, run_dir / "experiment_report.md")
+
+    try:
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws_summary = wb.active
+        ws_summary.title = "summary"
+        ws_summary.append(["key", "value", "unit"])
+        ws_summary.append(["objective_value", summary.get("objective_value"), "JPY"])
+        ws_summary.append(["solve_time_seconds", summary.get("solve_time_seconds"), "s"])
+        ws_summary.append(["trip_count_served", summary.get("trip_count_served"), "trips"])
+        ws_summary.append(["trip_count_unserved", summary.get("trip_count_unserved"), "trips"])
+
+        ws_cost = wb.create_sheet("cost_breakdown")
+        ws_cost.append(["key", "value", "unit"])
+        for row in cost_rows:
+            ws_cost.append([row.get("key"), row.get("value"), row.get("unit")])
+
+        wb.save(run_dir / "results.xlsx")
+    except Exception:
+        pass
+
+    run_manifest = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "files": sorted([p.name for p in run_dir.iterdir() if p.is_file()]),
+        "units": unit_map,
+    }
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps(run_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def _canonical_vehicle_timeline_rows(
@@ -1251,6 +1660,37 @@ def _run_optimization(
                 "optimization_audit.json": optimization_audit,
             },
         )
+        _persist_rich_run_outputs(
+            run_dir=Path(output_dir),
+            scenario=scenario,
+            optimization_result=optimization_result,
+            optimization_audit=optimization_audit,
+            result_payload=result_payload,
+            sim_payload=sim_payload,
+            canonical_solver_result=_full_new_result,
+            graph_source_dir=Path(output_dir) / "graph",
+        )
+        dated_run_dir = _dated_scenario_run_dir(
+            scenario=scenario,
+            scenario_id=scenario_id,
+            mode=mode,
+            service_id=service_id,
+            depot_id=depot_id,
+        )
+        src_graph_dir = Path(output_dir) / "graph"
+        dst_graph_dir = dated_run_dir / "graph"
+        if src_graph_dir.exists():
+            shutil.copytree(src_graph_dir, dst_graph_dir, dirs_exist_ok=True)
+        _persist_rich_run_outputs(
+            run_dir=dated_run_dir,
+            scenario=scenario,
+            optimization_result=optimization_result,
+            optimization_audit=optimization_audit,
+            result_payload=result_payload,
+            sim_payload=sim_payload,
+            canonical_solver_result=_full_new_result,
+            graph_source_dir=dst_graph_dir,
+        )
         store.update_scenario(scenario_id, status="optimized")
         job_store.update_job(
             job_id,
@@ -1268,6 +1708,7 @@ def _run_optimization(
                     "objective_value": optimization_result.get("objective_value"),
                     "solver_status": optimization_result.get("solver_status"),
                     "feed_context": feed_context,
+                    "dated_run_dir": str(dated_run_dir),
                 },
             ),
         )
