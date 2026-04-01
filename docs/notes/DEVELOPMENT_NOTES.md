@@ -2824,17 +2824,21 @@ master-course/
     - `python -m py_compile tools/scenario_backup_tk.py tests/test_scenario_backup_tk_dataset_options.py` → pass
     - `$env:PYTHONPATH='C:\master-course'; pytest tests\test_scenario_backup_tk_dataset_options.py tests\test_scenario_backup_tk_pv_sync.py -q` → `15 passed`
 
-- 2026-03-31 (車両コスト・運転士コスト・その他コストの個別トグルを UI / Quick Setup 保存 / prepare / builder に通した)
-  - 問題として、コスト内訳は結果で見えるようになっても、どのコスト成分を目的関数に含めるかを front から明示的に切り替える手段がなかった。また既存の `disable_vehicle_acquisition_cost` は車両コストの内訳調整であって、車両・運転士・その他の大分類 ON/OFF とは責務が異なっていた。
-  - 追加で自分から上げた問題として、ここを UI だけで実装すると「チェックは切り替わるが scenario 保存で戻る」「保存されても prepare / solver に届かない」経路が発生するため、Quick Setup payload、`simulation_config` 保存、prepare 時の builder 反映まで同時に揃える必要があった。
-  - `tools/scenario_backup_tk.py` の `基本パラメータ` に `コスト成分ON/OFF` 表を追加し、`車両コスト / 運転士コスト / その他コスト` を各チェックボックスで切り替えられるようにした。Quick Setup の load/save と prepare payload に `enableVehicleCost / enableDriverCost / enableOtherCost` を追加し、未設定シナリオは互換のため `True` 扱いにしている。
-  - `bff/routers/scenarios.py` は Quick Setup API の request/response に上記 3 フィールドを追加し、`simulation_config` へ保存するよう更新した。`bff/routers/simulation.py` と `bff/services/simulation_builder.py` も prepare body から `enable_vehicle_cost / enable_driver_cost / enable_other_cost` を scenario へ保持するよう通している。
-  - `src/optimization/common/builder.py` では cost component flag を canonical problem metadata と objective weights に反映し、`vehicle` OFF 時は vehicle weight を 0、`other` OFF 時は energy/demand/unserved/switch/degradation/deviation を 0 に落とすようにした。`src/optimization/common/evaluator.py` は同 flags を見て cost breakdown の `vehicle_cost / driver_cost / energy_cost / demand_cost / co2_cost / total_cost / total_cost_with_assets` などを 0 化するため、結果画面にもトグル状態がそのまま出る。
+- 2026-03-31 (フロントのコスト UI 重複整理、粒度の細かい cost flags、day type 切替時の route 母集団固定)
+  - 問題として、`tools/scenario_backup_tk.py` には `disable_vehicle_acquisition_cost` 単独チェックと `車両コスト / 運転士コスト / その他コスト` の表が同居しており、同じ責務が二重化していた。さらに `その他コスト` は中身が曖昧で、UI 上 OFF にしても solver 側で何が止まるのか説明できなかった。
+  - 追加で自分から上げた問題として、MILP 側の `unserved_penalty_weight = max(..., 10000)` により、未配車ペナルティを OFF にしても MILP では効き続ける実装ズレがあった。また左パネルは day type 切替時に route 一覧そのものを絞っており、以前の要件「変わってよいのは便数だけ」に反していた。
+  - `src/optimization/common/cost_components.py` を新設し、front / BFF / common builder / evaluator / MILP adapter が共有する `cost_component_flags` 定義を追加した。公開するチェック項目は `vehicle_fixed_cost`, `driver_cost`, `electricity_cost`, `fuel_cost`, `demand_charge_cost`, `co2_cost`, `unserved_penalty`, `switch_cost`, `battery_degradation_cost`, `deviation_cost`, `contract_overage_penalty` と、MILP 専用の `charge_session_start_penalty`, `slot_concurrency_penalty`, `early_charge_penalty`, `soc_upper_buffer_penalty`, `final_soc_target_penalty`, `grid_to_bus_priority_penalty`, `grid_to_bess_priority_penalty` である。
+  - `tools/scenario_backup_tk.py` は重複していた単独 acquisition checkbox と 3 分類トグルを削除し、単一の `目的関数に含めるコスト項目` 表へ置き換えた。Quick Setup load/save/prepare は `costComponentFlags` で round-trip し、旧シナリオの `disableVehicleAcquisitionCost / enableVehicleCost / enableDriverCost / enableOtherCost` は互換変換して読み込む。あわせて route 検索文字列を cache 化し、day type 切替では route 一覧を再フィルタせず便数表示だけ更新するよう変更した。
+  - `bff/routers/scenarios.py`, `bff/routers/simulation.py`, `bff/services/simulation_builder.py` は `costComponentFlags` / `cost_component_flags` を保存・prepare payload へ通すよう更新した。旧 booleans も読み書き互換は残しているが、正本は `simulation_config.cost_component_flags` とした。
+  - `src/optimization/common/builder.py` は granular flags を canonical problem metadata に載せ、objective weights と MILP metadata penalty を項目単位で 0 化するように変更した。legacy `disable_vehicle_acquisition_cost` の挙動も見直し、表示どおり acquisition cost を本当に 0 にするよう修正した。`src/optimization/common/evaluator.py` は `electricity_cost` と `fuel_cost`、`contract_overage_penalty` などを個別に 0 化する。`src/optimization/milp/solver_adapter.py` も同 flags を見て各 objective term を条件付けし、`unserved_penalty=OFF` で未配車項目が残らないよう修正した。
   - 回帰テスト:
     - `tests/test_quick_setup_advanced_persistence.py`
     - `tests/test_simulation_builder_prepare_scope.py`
     - `tests/test_problem_builder_cost_component_toggles.py`
+    - `tests/test_problem_builder_disable_acquisition_cost.py`
+    - `tests/test_quick_setup_route_selection.py`
     - `tests/test_scenario_backup_tk_dataset_options.py`
   - 確認:
-    - `python -m py_compile tools/scenario_backup_tk.py bff/routers/scenarios.py bff/routers/simulation.py bff/services/simulation_builder.py src/optimization/common/builder.py src/optimization/common/evaluator.py tests/test_quick_setup_advanced_persistence.py tests/test_simulation_builder_prepare_scope.py tests/test_problem_builder_cost_component_toggles.py` → pass
-    - `$env:PYTHONPATH='C:\master-course'; pytest tests\test_quick_setup_advanced_persistence.py tests\test_simulation_builder_prepare_scope.py tests\test_problem_builder_cost_component_toggles.py tests\test_scenario_backup_tk_dataset_options.py -q` → `17 passed`
+    - `python -m py_compile tools/scenario_backup_tk.py bff/routers/scenarios.py bff/routers/simulation.py bff/services/simulation_builder.py src/optimization/common/cost_components.py src/optimization/common/builder.py src/optimization/common/evaluator.py src/optimization/milp/solver_adapter.py tests/test_quick_setup_advanced_persistence.py tests/test_simulation_builder_prepare_scope.py tests/test_problem_builder_cost_component_toggles.py tests/test_scenario_backup_tk_dataset_options.py` → pass
+    - `$env:PYTHONPATH='C:\master-course'; pytest tests\test_quick_setup_advanced_persistence.py tests\test_simulation_builder_prepare_scope.py tests\test_problem_builder_cost_component_toggles.py tests\test_scenario_backup_tk_dataset_options.py -q` → `18 passed`
+    - `$env:PYTHONPATH='C:\master-course'; pytest tests\test_problem_builder_disable_acquisition_cost.py tests\test_quick_setup_route_selection.py -q` → `12 passed`

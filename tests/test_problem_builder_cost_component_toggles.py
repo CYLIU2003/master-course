@@ -6,18 +6,14 @@ from src.optimization.common.evaluator import CostEvaluator
 
 def _scenario(
     *,
-    enable_vehicle_cost: bool = True,
-    enable_driver_cost: bool = True,
-    enable_other_cost: bool = True,
+    cost_component_flags: dict | None = None,
 ) -> dict:
     return {
         "meta": {"updatedAt": "2026-03-31T00:00:00Z"},
         "simulation_config": {
             "default_turnaround_min": 10,
             "objective_mode": "total_cost",
-            "enable_vehicle_cost": enable_vehicle_cost,
-            "enable_driver_cost": enable_driver_cost,
-            "enable_other_cost": enable_other_cost,
+            "cost_component_flags": dict(cost_component_flags or {}),
         },
         "scenario_overlay": {
             "solver_config": {},
@@ -77,9 +73,24 @@ def test_cost_component_toggles_flow_into_problem_and_cost_breakdown() -> None:
 
     toggled_problem = builder.build_from_scenario(
         _scenario(
-            enable_vehicle_cost=False,
-            enable_driver_cost=False,
-            enable_other_cost=False,
+            cost_component_flags={
+                "vehicle_fixed_cost": False,
+                "driver_cost": False,
+                "electricity_cost": False,
+                "fuel_cost": False,
+                "demand_charge_cost": False,
+                "unserved_penalty": False,
+                "battery_degradation_cost": False,
+                "co2_cost": False,
+                "contract_overage_penalty": False,
+                "charge_session_start_penalty": False,
+                "slot_concurrency_penalty": False,
+                "early_charge_penalty": False,
+                "soc_upper_buffer_penalty": False,
+                "final_soc_target_penalty": False,
+                "grid_to_bus_priority_penalty": False,
+                "grid_to_bess_priority_penalty": False,
+            },
         ),
         depot_id="dep-1",
         service_id="WEEKDAY",
@@ -87,11 +98,10 @@ def test_cost_component_toggles_flow_into_problem_and_cost_breakdown() -> None:
     assert toggled_problem.baseline_plan is not None
     toggled_breakdown = evaluator.evaluate(toggled_problem, toggled_problem.baseline_plan)
 
-    assert toggled_problem.metadata["cost_component_flags"] == {
-        "vehicle": False,
-        "driver": False,
-        "other": False,
-    }
+    assert toggled_problem.metadata["cost_component_flags"]["vehicle_fixed_cost"] is False
+    assert toggled_problem.metadata["cost_component_flags"]["driver_cost"] is False
+    assert toggled_problem.metadata["cost_component_flags"]["electricity_cost"] is False
+    assert toggled_problem.metadata["cost_component_flags"]["fuel_cost"] is False
     assert toggled_problem.objective_weights.vehicle == 0.0
     assert toggled_problem.objective_weights.energy == 0.0
     assert toggled_problem.objective_weights.demand == 0.0
@@ -102,5 +112,4 @@ def test_cost_component_toggles_flow_into_problem_and_cost_breakdown() -> None:
     assert toggled_breakdown.demand_cost == 0.0
     assert toggled_breakdown.co2_cost == 0.0
     assert toggled_breakdown.total_cost == 0.0
-    assert toggled_breakdown.total_cost_with_assets == 0.0
     assert toggled_breakdown.total_co2_kg >= 0.0

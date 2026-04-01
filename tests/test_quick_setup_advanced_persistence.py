@@ -50,9 +50,12 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
                 "slack_penalty": 123456.0,
                 "degradation": 0.25,
             },
-            "enable_vehicle_cost": False,
-            "enable_driver_cost": True,
-            "enable_other_cost": False,
+            "cost_component_flags": {
+                "vehicle_fixed_cost": False,
+                "driver_cost": True,
+                "electricity_cost": False,
+                "fuel_cost": True,
+            },
         },
     }
     scenario = {
@@ -88,9 +91,10 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
         "degradation": 0.25,
     }
     assert payload["simulationSettings"]["degradationWeight"] == 0.25
-    assert payload["simulationSettings"]["enableVehicleCost"] is False
-    assert payload["simulationSettings"]["enableDriverCost"] is True
-    assert payload["simulationSettings"]["enableOtherCost"] is False
+    assert payload["simulationSettings"]["costComponentFlags"]["vehicle_fixed_cost"] is False
+    assert payload["simulationSettings"]["costComponentFlags"]["driver_cost"] is True
+    assert payload["simulationSettings"]["costComponentFlags"]["electricity_cost"] is False
+    assert payload["simulationSettings"]["costComponentFlags"]["fuel_cost"] is True
 
 
 def test_update_quick_setup_persists_cost_component_toggles() -> None:
@@ -128,9 +132,12 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
         selectedDepotIds=["dep1"],
         selectedRouteIds=["route-a"],
         dayType="WEEKDAY",
-        enableVehicleCost=False,
-        enableDriverCost=False,
-        enableOtherCost=True,
+        costComponentFlags={
+            "vehicle_fixed_cost": False,
+            "driver_cost": False,
+            "electricity_cost": True,
+            "fuel_cost": False,
+        },
     )
 
     with (
@@ -150,6 +157,7 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
 
     simulation_config = captured["simulation_config"]
     assert isinstance(simulation_config, dict)
-    assert simulation_config["enable_vehicle_cost"] is False
-    assert simulation_config["enable_driver_cost"] is False
-    assert simulation_config["enable_other_cost"] is True
+    assert simulation_config["cost_component_flags"]["vehicle_fixed_cost"] is False
+    assert simulation_config["cost_component_flags"]["driver_cost"] is False
+    assert simulation_config["cost_component_flags"]["electricity_cost"] is True
+    assert simulation_config["cost_component_flags"]["fuel_cost"] is False

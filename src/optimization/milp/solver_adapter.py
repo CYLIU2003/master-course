@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Protocol, Set, Tuple
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
+from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.route_code_utils import extract_route_series_from_candidates
 
@@ -899,7 +900,10 @@ class GurobiMILPAdapter:
                     model.addConstr(w_on_var >= w_on_depot_var[depot_id])
                     model.addConstr(w_off_var >= w_off_depot_var[depot_id])
 
-        unserved_penalty_weight = max(problem.objective_weights.unserved, 10000.0)
+        component_flags = normalize_cost_component_flags(
+            problem.metadata.get("cost_component_flags")
+        )
+        unserved_penalty_weight = max(problem.objective_weights.unserved, 0.0)
         objective_mode = normalize_objective_mode(problem.scenario.objective_mode)
         energy_weight = max(problem.objective_weights.energy, 0.0)
         demand_weight = max(problem.objective_weights.demand, 0.0)
@@ -941,72 +945,90 @@ class GurobiMILPAdapter:
             default=0.0,
         )
         if g2bus_var or g2bess_var or bess2bus_var:
-            for (depot_id, slot_idx), var in g2bus_var.items():
-                price = max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
-                objective += energy_weight * price * var
-                asset = effective_depot_energy_assets.get(depot_id)
-                if asset is not None and asset.bess_enabled and grid_to_bus_priority_penalty > 0.0:
-                    objective += energy_weight * grid_to_bus_priority_penalty * var
-            for (depot_id, slot_idx), var in g2bess_var.items():
-                price = max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
-                objective += energy_weight * price * var
-                asset = effective_depot_energy_assets.get(depot_id)
-                if asset is not None and asset.bess_enabled and grid_to_bess_priority_penalty > 0.0:
-                    objective += energy_weight * grid_to_bess_priority_penalty * var
-            for (depot_id, slot_idx), var in bess2bus_var.items():
-                asset = effective_depot_energy_assets.get(depot_id) or (problem.depot_energy_assets or {}).get(depot_id)
-                bess_marginal = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
-                objective += energy_weight * bess_marginal * var
-            if curtail_penalty > 0.0:
+            if component_flags.get("electricity_cost", True):
+                for (depot_id, slot_idx), var in g2bus_var.items():
+                    price = max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+                    objective += energy_weight * price * var
+                    asset = effective_depot_energy_assets.get(depot_id)
+                    if (
+                        asset is not None
+                        and asset.bess_enabled
+                        and grid_to_bus_priority_penalty > 0.0
+                        and component_flags.get("grid_to_bus_priority_penalty", True)
+                    ):
+                        objective += energy_weight * grid_to_bus_priority_penalty * var
+                for (depot_id, slot_idx), var in g2bess_var.items():
+                    price = max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+                    objective += energy_weight * price * var
+                    asset = effective_depot_energy_assets.get(depot_id)
+                    if (
+                        asset is not None
+                        and asset.bess_enabled
+                        and grid_to_bess_priority_penalty > 0.0
+                        and component_flags.get("grid_to_bess_priority_penalty", True)
+                    ):
+                        objective += energy_weight * grid_to_bess_priority_penalty * var
+                for (depot_id, slot_idx), var in bess2bus_var.items():
+                    asset = effective_depot_energy_assets.get(depot_id) or (problem.depot_energy_assets or {}).get(depot_id)
+                    bess_marginal = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
+                    objective += energy_weight * bess_marginal * var
+            if curtail_penalty > 0.0 and component_flags.get("electricity_cost", True):
                 for var in pv_curt_var.values():
                     objective += energy_weight * curtail_penalty * var
-            if contract_overage_penalty > 0.0:
+            if contract_overage_penalty > 0.0 and component_flags.get("contract_overage_penalty", True):
                 for var in contract_over_limit_var.values():
                     objective += contract_overage_penalty * var
         else:
             # Backward-compatible fallback for plans without charging-source variables.
-            for slot_idx in slot_indices:
-                price = price_by_slot.get(slot_idx, 0.0)
-                if price <= 0.0:
-                    continue
-                for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, []):
-                    objective += energy_weight * price * coeff * y[key]
-                for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
-                    objective += energy_weight * price * coeff * x[key]
+            if component_flags.get("electricity_cost", True):
+                for slot_idx in slot_indices:
+                    price = price_by_slot.get(slot_idx, 0.0)
+                    if price <= 0.0:
+                        continue
+                    for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, []):
+                        objective += energy_weight * price * coeff * y[key]
+                    for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
+                        objective += energy_weight * price * coeff * x[key]
 
         # O1: ICE fuel cost (revenue + deadhead).
         diesel_price = max(problem.scenario.diesel_price_yen_per_l, 0.0)
-        for (vehicle_id, trip_id), var in y.items():
-            vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
-            if vehicle is None or vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
-                continue
-            trip = trip_by_id.get(trip_id)
-            if trip is None:
-                continue
-            fuel_l = self._trip_fuel_l(problem, vehicle, trip_id)
-            objective += energy_weight * diesel_price * fuel_l * var
+        if component_flags.get("fuel_cost", True):
+            for (vehicle_id, trip_id), var in y.items():
+                vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
+                if vehicle is None or vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
+                    continue
+                trip = trip_by_id.get(trip_id)
+                if trip is None:
+                    continue
+                fuel_l = self._trip_fuel_l(problem, vehicle, trip_id)
+                objective += energy_weight * diesel_price * fuel_l * var
 
-        for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
-            vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
-            if vehicle is None or vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
-                continue
-            fuel_rate = vehicle.fuel_consumption_l_per_km or 0.0
-            if fuel_rate <= 0:
-                continue
-            deadhead_min = problem.dispatch_context.get_deadhead_min(
-                trip_by_id[from_trip_id].destination,
-                trip_by_id[to_trip_id].origin,
-            )
-            deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
-            objective += energy_weight * diesel_price * deadhead_km * fuel_rate * var
+            for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
+                vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
+                if vehicle is None or vehicle.vehicle_type.upper() in {"BEV", "PHEV", "FCEV"}:
+                    continue
+                fuel_rate = vehicle.fuel_consumption_l_per_km or 0.0
+                if fuel_rate <= 0:
+                    continue
+                deadhead_min = problem.dispatch_context.get_deadhead_min(
+                    trip_by_id[from_trip_id].destination,
+                    trip_by_id[to_trip_id].origin,
+                )
+                deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
+                objective += energy_weight * diesel_price * deadhead_km * fuel_rate * var
 
         # O3: demand charge cost.
-        if w_on_var is not None and w_off_var is not None:
+        if (
+            component_flags.get("demand_charge_cost", True)
+            and w_on_var is not None
+            and w_off_var is not None
+        ):
             objective += demand_weight * max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on_var
             objective += demand_weight * max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off_var
 
-        for vehicle in problem.vehicles:
-            objective += vehicle_weight * vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
+        if component_flags.get("vehicle_fixed_cost", True):
+            for vehicle in problem.vehicles:
+                objective += vehicle_weight * vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
 
         driver_fragment_start_cost = self._safe_nonnegative_float(
             problem.metadata.get("driver_fragment_start_cost_yen"),
@@ -1089,30 +1111,40 @@ class GurobiMILPAdapter:
                 problem.metadata.get("final_soc_target_penalty_per_kwh"),
                 default=50.0,
             )
-            for dev in end_soc_excess_dev_var.values():
-                objective += target_penalty_per_kwh * dev
+            if component_flags.get("final_soc_target_penalty", True):
+                for dev in end_soc_excess_dev_var.values():
+                    objective += target_penalty_per_kwh * dev
 
-        if charge_session_start_penalty > 0.0:
+        if charge_session_start_penalty > 0.0 and component_flags.get("charge_session_start_penalty", True):
             for var in charge_session_start_var.values():
                 objective += charge_session_start_penalty * var
 
-        if slot_concurrency_penalty > 0.0:
+        if slot_concurrency_penalty > 0.0 and component_flags.get("slot_concurrency_penalty", True):
             for var in slot_concurrency_excess_var.values():
                 objective += slot_concurrency_penalty * var
 
-        if early_charge_penalty_per_kwh > 0.0 and c_var:
+        if (
+            early_charge_penalty_per_kwh > 0.0
+            and c_var
+            and component_flags.get("early_charge_penalty", True)
+        ):
             for (vehicle_id, slot_idx), var in c_var.items():
                 early_weight = self._early_charge_weight(slot_idx, slot_indices)
                 if early_weight <= 0.0:
                     continue
                 objective += early_charge_penalty_per_kwh * early_weight * timestep_h * var
 
-        if charge_upper_buffer_penalty_per_kwh > 0.0 and soc_upper_excess_var:
+        if (
+            charge_upper_buffer_penalty_per_kwh > 0.0
+            and soc_upper_excess_var
+            and component_flags.get("soc_upper_buffer_penalty", True)
+        ):
             for var in soc_upper_excess_var.values():
                 objective += charge_upper_buffer_penalty_per_kwh * var
 
-        for trip in problem.trips:
-            objective += unserved_penalty_weight * unserved[trip.trip_id]
+        if component_flags.get("unserved_penalty", True) and unserved_penalty_weight > 0.0:
+            for trip in problem.trips:
+                objective += unserved_penalty_weight * unserved[trip.trip_id]
 
         model.setObjective(objective, GRB.MINIMIZE)
         model.optimize()

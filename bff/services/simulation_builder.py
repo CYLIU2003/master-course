@@ -9,6 +9,10 @@ from src.objective_modes import (
     legacy_objective_weights_for_mode,
     normalize_objective_mode,
 )
+from src.optimization.common.cost_components import (
+    legacy_cost_component_flags,
+    normalize_cost_component_flags,
+)
 from src.scenario_overlay import TimeOfUseBand, default_scenario_overlay
 
 
@@ -579,6 +583,14 @@ def apply_builder_configuration(
         float(body.simulation_settings.planning_horizon_hours),
         24.0 * float(planning_days) if planning_days > 1 else float(body.simulation_settings.planning_horizon_hours),
     )
+    cost_component_flags = normalize_cost_component_flags(
+        body.simulation_settings.cost_component_flags,
+        legacy_disable_vehicle_acquisition_cost=body.simulation_settings.disable_vehicle_acquisition_cost,
+        legacy_enable_vehicle_cost=body.simulation_settings.enable_vehicle_cost,
+        legacy_enable_driver_cost=body.simulation_settings.enable_driver_cost,
+        legacy_enable_other_cost=body.simulation_settings.enable_other_cost,
+    )
+    legacy_cost_flags = legacy_cost_component_flags(cost_component_flags)
     doc["dispatch_scope"] = {
         "scopeId": f"{scenario_meta.get('datasetId') or 'tokyu_core'}:{scenario_meta.get('datasetVersion') or 'unknown'}",
         "operatorId": scenario_meta.get("operatorId") or "tokyu",
@@ -637,10 +649,13 @@ def apply_builder_configuration(
         "charger_power_kw": overlay.charging_constraints.charger_power_limit_kw,
         "use_selected_depot_vehicle_inventory": use_selected_vehicle_inventory,
         "use_selected_depot_charger_inventory": use_selected_charger_inventory,
-        "disable_vehicle_acquisition_cost": body.simulation_settings.disable_vehicle_acquisition_cost,
-        "enable_vehicle_cost": body.simulation_settings.enable_vehicle_cost,
-        "enable_driver_cost": body.simulation_settings.enable_driver_cost,
-        "enable_other_cost": body.simulation_settings.enable_other_cost,
+        "disable_vehicle_acquisition_cost": bool(
+            legacy_cost_flags["disable_vehicle_acquisition_cost"]
+        ),
+        "enable_vehicle_cost": bool(legacy_cost_flags["enable_vehicle_cost"]),
+        "enable_driver_cost": bool(legacy_cost_flags["enable_driver_cost"]),
+        "enable_other_cost": bool(legacy_cost_flags["enable_other_cost"]),
+        "cost_component_flags": dict(cost_component_flags),
         "solver_mode": body.simulation_settings.solver_mode,
         "objective_mode": overlay.solver_config.objective_mode,
         "objective_preset": overlay.solver_config.objective_preset,

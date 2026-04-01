@@ -26,6 +26,11 @@ from typing import Any
 from urllib import error, parse, request
 
 from src.objective_modes import normalize_objective_mode
+from src.optimization.common.cost_components import (
+    COST_COMPONENT_DEFINITIONS,
+    default_cost_component_flags,
+    normalize_cost_component_flags,
+)
 from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
@@ -97,6 +102,15 @@ _RESULT_COMPARE_KEYS = (
     "battery_degradation_cost",
     "co2_cost",
 )
+
+
+def _group_cost_components_for_ui() -> list[tuple[str, list[Any]]]:
+    grouped: list[tuple[str, list[Any]]] = []
+    for definition in COST_COMPONENT_DEFINITIONS:
+        if not grouped or grouped[-1][0] != definition.section:
+            grouped.append((definition.section, []))
+        grouped[-1][1].append(definition)
+    return grouped
 
 
 def _result_metric_label(key: str) -> str:
@@ -552,7 +566,9 @@ def _scope_filter_routes(
         return list(routes)
     filtered: list[dict[str, Any]] = []
     for route in routes:
-        haystack = _scope_route_search_text(route)
+        haystack = str(route.get("_scopeSearchText") or "")
+        if not haystack:
+            haystack = _scope_route_search_text(route)
         if all(token in haystack for token in tokens):
             filtered.append(route)
     return filtered
@@ -562,14 +578,8 @@ def _scope_visible_routes_for_day(
     routes: list[dict[str, Any]],
     day_type: str,
 ) -> list[dict[str, Any]]:
-    visible: list[dict[str, Any]] = []
-    for route in routes:
-        counts = route.get("tripCountsByDayType") or {}
-        if isinstance(counts, dict) and counts:
-            if _scope_route_trip_count(route, day_type) <= 0:
-                continue
-        visible.append(route)
-    return visible
+    _ = day_type
+    return list(routes)
 
 
 def _choose_dataset_options(datasets_resp: dict[str, Any]) -> dict[str, Any]:
@@ -1405,7 +1415,7 @@ class App:
         day_table.pack(fill=tk.X, pady=(2, 4))
         ttk.Label(
             day_table,
-            text="この表を選ぶと、下の営業所・路線一覧はその運行種別に存在する trip だけへ絞り込みます。",
+            text="この表は便数内訳を切り替えるためのものです。下の営業所・路線一覧の表示母集団は変えません。",
             foreground="#444",
         ).pack(anchor="w")
         day_tree_wrap = ttk.Frame(day_table)
@@ -1565,10 +1575,10 @@ class App:
         self.initial_soc_var = tk.StringVar(value="0.8")
         self.soc_min_var = tk.StringVar(value="0.2")
         self.soc_max_var = tk.StringVar(value="0.9")
-        self.disable_vehicle_acquisition_cost_var = tk.BooleanVar(value=False)
-        self.enable_vehicle_cost_var = tk.BooleanVar(value=True)
-        self.enable_driver_cost_var = tk.BooleanVar(value=True)
-        self.enable_other_cost_var = tk.BooleanVar(value=True)
+        self.cost_component_vars = {
+            key: tk.BooleanVar(value=value)
+            for key, value in default_cost_component_flags().items()
+        }
         # ── よく使うパラメータ（最上部）──
         basic = ttk.LabelFrame(ops, text="基本パラメータ", padding=6)
         basic.pack(fill=tk.X, pady=(0, 4))
@@ -1631,39 +1641,41 @@ class App:
                 "便連結の接続可否判定（arrival + turnaround + deadhead_time ≤ departure）に使用。例: 18"
             ),
         )
-        ttk.Checkbutton(
-            basic,
-            text="バス導入費の日割り計算を無効化 (disable_vehicle_acquisition_cost)",
-            variable=self.disable_vehicle_acquisition_cost_var,
-        ).pack(anchor="w", pady=(2, 0))
-        cost_toggle_frame = ttk.LabelFrame(basic, text="コスト成分ON/OFF", padding=6)
+        cost_toggle_frame = ttk.LabelFrame(basic, text="目的関数に含めるコスト項目", padding=6)
         cost_toggle_frame.pack(fill=tk.X, pady=(6, 0))
         ttk.Label(cost_toggle_frame, text="項目").grid(row=0, column=0, sticky="w", padx=(0, 8))
         ttk.Label(cost_toggle_frame, text="目的関数に含める").grid(row=0, column=1, sticky="w", padx=(0, 8))
         ttk.Label(cost_toggle_frame, text="内容").grid(row=0, column=2, sticky="w")
-        for row_idx, (label, variable, description) in enumerate(
-            [
-                (
-                    "車両コスト",
-                    self.enable_vehicle_cost_var,
-                    "車両固定費・導入関連の日割りコストを目的関数へ加えます。",
-                ),
-                (
-                    "運転士コスト",
-                    self.enable_driver_cost_var,
-                    "拘束時間ベースの運転士コストを目的関数へ加えます。",
-                ),
-                (
-                    "その他コスト",
-                    self.enable_other_cost_var,
-                    "電力・燃料・需要料金・劣化・CO2・欠便ペナルティなどをまとめて加えます。",
-                ),
-            ],
-            start=1,
-        ):
-            ttk.Label(cost_toggle_frame, text=label).grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=2)
-            ttk.Checkbutton(cost_toggle_frame, variable=variable).grid(row=row_idx, column=1, sticky="w", padx=(0, 8), pady=2)
-            ttk.Label(cost_toggle_frame, text=description, foreground="#555").grid(row=row_idx, column=2, sticky="w", pady=2)
+        row_idx = 1
+        for section, definitions in _group_cost_components_for_ui():
+            ttk.Label(
+                cost_toggle_frame,
+                text=section,
+                foreground="#1a5276",
+                font=("TkDefaultFont", 9, "bold"),
+            ).grid(row=row_idx, column=0, sticky="w", pady=(6 if row_idx > 1 else 4, 2))
+            row_idx += 1
+            for definition in definitions:
+                ttk.Label(cost_toggle_frame, text=definition.label).grid(
+                    row=row_idx,
+                    column=0,
+                    sticky="w",
+                    padx=(0, 8),
+                    pady=2,
+                )
+                ttk.Checkbutton(
+                    cost_toggle_frame,
+                    variable=self.cost_component_vars[definition.key],
+                ).grid(row=row_idx, column=1, sticky="w", padx=(0, 8), pady=2)
+                description = definition.description
+                if definition.solver_scope == "milp_only":
+                    description = "MILPのみ: " + description
+                ttk.Label(
+                    cost_toggle_frame,
+                    text=description,
+                    foreground="#555",
+                ).grid(row=row_idx, column=2, sticky="w", pady=2)
+                row_idx += 1
         cost_toggle_frame.columnconfigure(2, weight=1)
 
         # ── 詳細・ペナルティ・CO₂パラメータ（スクロール下部）──
@@ -2198,6 +2210,25 @@ class App:
     def _fleet_window_ready(self) -> bool:
         return self._fleet_built and self._widget_exists(self._fleet_window)
 
+    def _set_cost_component_flags_from_payload(self, simulation_settings: dict[str, Any]) -> None:
+        flags = normalize_cost_component_flags(
+            simulation_settings.get("costComponentFlags"),
+            legacy_disable_vehicle_acquisition_cost=simulation_settings.get(
+                "disableVehicleAcquisitionCost"
+            ),
+            legacy_enable_vehicle_cost=simulation_settings.get("enableVehicleCost"),
+            legacy_enable_driver_cost=simulation_settings.get("enableDriverCost"),
+            legacy_enable_other_cost=simulation_settings.get("enableOtherCost"),
+        )
+        for key, variable in self.cost_component_vars.items():
+            variable.set(bool(flags.get(key, True)))
+
+    def _cost_component_flags_payload(self) -> dict[str, bool]:
+        return {
+            key: bool(variable.get())
+            for key, variable in self.cost_component_vars.items()
+        }
+
     def _vehicle_panel_ready(self) -> bool:
         return (
             self._fleet_window_ready()
@@ -2387,7 +2418,7 @@ class App:
         self._refresh_scope_overview(filtered_routes=filtered_routes, day_type=day_type)
 
         if not filtered_routes:
-            hint = "検索条件に一致する路線がありません。" if self.scope_filter_var.get().strip() else "この運行種別に該当する路線がありません。"
+            hint = "検索条件に一致する路線がありません。" if self.scope_filter_var.get().strip() else "表示可能な路線がありません。"
             ttk.Label(
                 self.scope_inner,
                 text=hint,
@@ -2523,6 +2554,7 @@ class App:
         self.scope_selected_depot_ids = {
             did for did in selected_depots if did in self.scope_depot_by_id
         }
+        self._refresh_scope_route_cache(self.scope_all_routes)
         self._apply_day_type_scope_filter()
 
     def _selected_depot_ids(self) -> list[str]:
@@ -3462,7 +3494,13 @@ class App:
             self.day_type_var.set(service_id)
 
     def _refresh_scope_route_cache(self, routes: list[dict[str, Any]]) -> None:
-        self.scope_routes = list(routes)
+        self.scope_routes = []
+        for item in routes:
+            if not isinstance(item, dict):
+                continue
+            route = dict(item)
+            route["_scopeSearchText"] = _scope_route_search_text(route)
+            self.scope_routes.append(route)
         self.scope_route_by_id = {
             str(item.get("id") or "").strip(): item
             for item in self.scope_routes
@@ -3497,9 +3535,6 @@ class App:
         ) = _group_scope_routes_by_family(self.scope_routes)
 
     def _apply_day_type_scope_filter(self) -> None:
-        day_type = self.day_type_var.get().strip() or "WEEKDAY"
-        visible_routes = _scope_visible_routes_for_day(self.scope_all_routes, day_type)
-        self._refresh_scope_route_cache(visible_routes)
         self.scope_selected_route_ids = {
             rid for rid in self.scope_selected_route_ids if rid in self.scope_route_by_id
         }
@@ -4085,12 +4120,7 @@ class App:
             self.initial_soc_var.set(str(sim.get("initialSoc") or 0.8))
             self.soc_min_var.set(str(sim.get("socMin") or 0.2))
             self.soc_max_var.set(str(sim.get("socMax") or 0.9))
-            self.disable_vehicle_acquisition_cost_var.set(
-                bool(sim.get("disableVehicleAcquisitionCost", False))
-            )
-            self.enable_vehicle_cost_var.set(bool(sim.get("enableVehicleCost", True)))
-            self.enable_driver_cost_var.set(bool(sim.get("enableDriverCost", True)))
-            self.enable_other_cost_var.set(bool(sim.get("enableOtherCost", True)))
+            self._set_cost_component_flags_from_payload(sim)
             self.initial_soc_percent_var.set(str(sim.get("initialSocPercent") or 0.8))
             self.final_soc_floor_percent_var.set(str(sim.get("finalSocFloorPercent") or 0.2))
             self.final_soc_target_percent_var.set(
@@ -4165,7 +4195,7 @@ class App:
                 )
             if routes:
                 self.log_line(
-                    "路線一覧は選択中の運行種別に存在する trip だけを表示しています。"
+                    "路線一覧の表示母集団は固定し、選択中の運行種別に応じて便数表示だけを切り替えています。"
                 )
             if (depots and not selected_depots) or (routes and not selected_routes):
                 self.log_line(
@@ -4230,10 +4260,7 @@ class App:
             "initialSoc": self._parse_float(self.initial_soc_var.get(), 0.8),
             "socMin": self._parse_float(self.soc_min_var.get(), 0.2),
             "socMax": self._parse_float(self.soc_max_var.get(), 0.9),
-            "disableVehicleAcquisitionCost": self.disable_vehicle_acquisition_cost_var.get(),
-            "enableVehicleCost": self.enable_vehicle_cost_var.get(),
-            "enableDriverCost": self.enable_driver_cost_var.get(),
-            "enableOtherCost": self.enable_other_cost_var.get(),
+            "costComponentFlags": self._cost_component_flags_payload(),
             "gridFlatPricePerKwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
             "gridSellPricePerKwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
             "demandChargeCostPerKw": self._parse_float(self.demand_charge_var.get(), 0.0),
@@ -5016,10 +5043,7 @@ class App:
                 "soc_max": self._parse_float(self.soc_max_var.get(), 0.9),
                 "use_selected_depot_vehicle_inventory": True,
                 "use_selected_depot_charger_inventory": True,
-                "disable_vehicle_acquisition_cost": self.disable_vehicle_acquisition_cost_var.get(),
-                "enable_vehicle_cost": self.enable_vehicle_cost_var.get(),
-                "enable_driver_cost": self.enable_driver_cost_var.get(),
-                "enable_other_cost": self.enable_other_cost_var.get(),
+                "cost_component_flags": self._cost_component_flags_payload(),
                 "deadhead_speed_kmh": self._parse_float(self.deadhead_speed_kmh_var.get(), 18.0),
                 "solver_mode": self.solver_mode_var.get().strip(),
                 "objective_mode": self.objective_mode_var.get().strip(),
@@ -5511,9 +5535,6 @@ class App:
             (self.initial_soc_var, "SOC初期値を変更"),
             (self.soc_min_var, "SOC下限を変更"),
             (self.soc_max_var, "SOC上限を変更"),
-            (self.enable_vehicle_cost_var, "車両コスト設定を変更"),
-            (self.enable_driver_cost_var, "運転士コスト設定を変更"),
-            (self.enable_other_cost_var, "その他コスト設定を変更"),
             (self.unserved_penalty_var, "未配車ペナルティを変更"),
             (self.grid_flat_price_var, "電気料金を変更"),
             (self.grid_sell_price_var, "売電単価を変更"),
@@ -5543,6 +5564,13 @@ class App:
             (self.co2_reference_date_var, "CO2参照日を変更"),
             (self.enable_vehicle_diagram_output_var, "ダイヤグラム出力設定を変更"),
         ]
+        watched_pairs.extend(
+            (
+                self.cost_component_vars[definition.key],
+                f"{definition.label}設定を変更",
+            )
+            for definition in COST_COMPONENT_DEFINITIONS
+        )
         for variable, reason in watched_pairs:
             variable.trace_add("write", lambda *_args, r=reason: self._mark_prepared_stale(r))
 

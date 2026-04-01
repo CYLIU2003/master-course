@@ -48,6 +48,10 @@ from src.objective_modes import (
     legacy_objective_weights_for_mode,
     normalize_objective_mode,
 )
+from src.optimization.common.cost_components import (
+    legacy_cost_component_flags,
+    normalize_cost_component_flags,
+)
 from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
@@ -435,6 +439,7 @@ class UpdateQuickSetupBody(BaseModel):
     enableVehicleCost: Optional[bool] = None
     enableDriverCost: Optional[bool] = None
     enableOtherCost: Optional[bool] = None
+    costComponentFlags: Optional[Dict[str, bool]] = None
     touPricing: Optional[List[Dict[str, Any]]] = None
     deadheadSpeedKmh: Optional[float] = None
     objectivePreset: Optional[str] = None
@@ -1145,6 +1150,16 @@ def _builder_defaults(
         or overlay_solver.get("objective_weights")
         or {}
     )
+    cost_component_flags = normalize_cost_component_flags(
+        simulation_config.get("cost_component_flags"),
+        legacy_disable_vehicle_acquisition_cost=simulation_config.get(
+            "disable_vehicle_acquisition_cost"
+        ),
+        legacy_enable_vehicle_cost=simulation_config.get("enable_vehicle_cost"),
+        legacy_enable_driver_cost=simulation_config.get("enable_driver_cost"),
+        legacy_enable_other_cost=simulation_config.get("enable_other_cost"),
+    )
+    legacy_cost_flags = legacy_cost_component_flags(cost_component_flags)
     grouped_fleet_templates: Dict[str, Dict[str, Any]] = {}
     for vehicle in existing_vehicles:
         template_id = str(vehicle.get("vehicleTemplateId") or "")
@@ -1247,11 +1262,12 @@ def _builder_defaults(
         "socMin": simulation_config.get("soc_min", 0.2),
         "socMax": simulation_config.get("soc_max", 0.9),
         "disableVehicleAcquisitionCost": bool(
-            simulation_config.get("disable_vehicle_acquisition_cost", False)
+            legacy_cost_flags["disable_vehicle_acquisition_cost"]
         ),
-        "enableVehicleCost": bool(simulation_config.get("enable_vehicle_cost", True)),
-        "enableDriverCost": bool(simulation_config.get("enable_driver_cost", True)),
-        "enableOtherCost": bool(simulation_config.get("enable_other_cost", True)),
+        "enableVehicleCost": bool(legacy_cost_flags["enable_vehicle_cost"]),
+        "enableDriverCost": bool(legacy_cost_flags["enable_driver_cost"]),
+        "enableOtherCost": bool(legacy_cost_flags["enable_other_cost"]),
+        "costComponentFlags": dict(cost_component_flags),
         "initialSocPercent": simulation_config.get("initial_soc_percent"),
         "finalSocFloorPercent": simulation_config.get("final_soc_floor_percent"),
         "finalSocTargetPercent": simulation_config.get(
@@ -1709,6 +1725,7 @@ def _build_quick_setup_payload(
             "enableVehicleCost": bool(builder_defaults.get("enableVehicleCost", True)),
             "enableDriverCost": bool(builder_defaults.get("enableDriverCost", True)),
             "enableOtherCost": bool(builder_defaults.get("enableOtherCost", True)),
+            "costComponentFlags": dict(builder_defaults.get("costComponentFlags") or {}),
             "initialSocPercent": builder_defaults.get("initialSocPercent"),
             "finalSocFloorPercent": builder_defaults.get("finalSocFloorPercent"),
             "finalSocTargetPercent": builder_defaults.get("finalSocTargetPercent"),
@@ -2211,16 +2228,34 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["soc_min"] = float(body.socMin)
         if body.socMax is not None:
             simulation_config["soc_max"] = float(body.socMax)
-        if body.disableVehicleAcquisitionCost is not None:
-            simulation_config["disable_vehicle_acquisition_cost"] = bool(
-                body.disableVehicleAcquisitionCost
+        if (
+            body.costComponentFlags is not None
+            or body.disableVehicleAcquisitionCost is not None
+            or body.enableVehicleCost is not None
+            or body.enableDriverCost is not None
+            or body.enableOtherCost is not None
+        ):
+            cost_component_flags = normalize_cost_component_flags(
+                body.costComponentFlags,
+                legacy_disable_vehicle_acquisition_cost=body.disableVehicleAcquisitionCost,
+                legacy_enable_vehicle_cost=body.enableVehicleCost,
+                legacy_enable_driver_cost=body.enableDriverCost,
+                legacy_enable_other_cost=body.enableOtherCost,
             )
-        if body.enableVehicleCost is not None:
-            simulation_config["enable_vehicle_cost"] = bool(body.enableVehicleCost)
-        if body.enableDriverCost is not None:
-            simulation_config["enable_driver_cost"] = bool(body.enableDriverCost)
-        if body.enableOtherCost is not None:
-            simulation_config["enable_other_cost"] = bool(body.enableOtherCost)
+            legacy_cost_flags = legacy_cost_component_flags(cost_component_flags)
+            simulation_config["cost_component_flags"] = dict(cost_component_flags)
+            simulation_config["disable_vehicle_acquisition_cost"] = bool(
+                legacy_cost_flags["disable_vehicle_acquisition_cost"]
+            )
+            simulation_config["enable_vehicle_cost"] = bool(
+                legacy_cost_flags["enable_vehicle_cost"]
+            )
+            simulation_config["enable_driver_cost"] = bool(
+                legacy_cost_flags["enable_driver_cost"]
+            )
+            simulation_config["enable_other_cost"] = bool(
+                legacy_cost_flags["enable_other_cost"]
+            )
         if body.deadheadSpeedKmh is not None:
             simulation_config["deadhead_speed_kmh"] = float(body.deadheadSpeedKmh)
         if body.objectivePreset is not None:

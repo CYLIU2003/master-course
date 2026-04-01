@@ -101,6 +101,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     enable_vehicle_cost: bool = True
     enable_driver_cost: bool = True
     enable_other_cost: bool = True
+    cost_component_flags: Dict[str, bool] = Field(default_factory=dict)
     restrict_vehicle_types: list[str] = Field(default_factory=list)
     solver_mode: str = "mode_milp_only"
     objective_mode: str = "total_cost"

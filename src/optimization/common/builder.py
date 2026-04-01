@@ -17,6 +17,7 @@ from src.dispatch.models import (
     VehicleProfile,
     hhmm_to_min,
 )
+from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.route_family_runtime import (
     merge_deadhead_metrics,
     normalize_direction,
@@ -292,9 +293,7 @@ class ProblemBuilder:
             timestep_min=timestep_min,
             scenario_vehicles=scenario_vehicles,
             disable_vehicle_acquisition_cost=disable_acquisition_cost,
-            enable_vehicle_cost=bool(cost_component_flags.get("vehicle", True)),
-            enable_driver_cost=bool(cost_component_flags.get("driver", True)),
-            enable_other_cost=bool(cost_component_flags.get("other", True)),
+            cost_component_flags=cost_component_flags,
         )
 
     def build_from_dispatch(
@@ -347,10 +346,18 @@ class ProblemBuilder:
         enable_vehicle_cost: bool = True,
         enable_driver_cost: bool = True,
         enable_other_cost: bool = True,
+        cost_component_flags: Optional[Mapping[str, Any]] = None,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
         timestep_min = max(int(timestep_min or 60), 1)
+        normalized_cost_component_flags = normalize_cost_component_flags(
+            cost_component_flags,
+            legacy_disable_vehicle_acquisition_cost=disable_vehicle_acquisition_cost,
+            legacy_enable_vehicle_cost=enable_vehicle_cost,
+            legacy_enable_driver_cost=enable_driver_cost,
+            legacy_enable_other_cost=enable_other_cost,
+        )
         if home_depot_charge_pre_window_min is None:
             home_depot_charge_pre_window_min = float(timestep_min)
         if home_depot_charge_post_window_min is None:
@@ -515,7 +522,11 @@ class ProblemBuilder:
                 diesel_price_yen_per_l=float(diesel_price_yen_per_l),
                 demand_charge_on_peak_yen_per_kw=float(demand_charge_on_peak_yen_per_kw),
                 demand_charge_off_peak_yen_per_kw=float(demand_charge_off_peak_yen_per_kw),
-                co2_price_per_kg=float(co2_price_per_kg if enable_other_cost else 0.0),
+                co2_price_per_kg=float(
+                    co2_price_per_kg
+                    if normalized_cost_component_flags.get("co2_cost", True)
+                    else 0.0
+                ),
                 ice_co2_kg_per_l=float(ice_co2_kg_per_l),
             ),
             dispatch_context=context,
@@ -556,27 +567,42 @@ class ProblemBuilder:
                 "charging_window_mode": str(charging_window_mode or "timetable_layover").strip().lower(),
                 "home_depot_charge_pre_window_min": float(home_depot_charge_pre_window_min or 0.0),
                 "home_depot_charge_post_window_min": float(home_depot_charge_post_window_min or 0.0),
-                "enable_contract_overage_penalty": bool(enable_contract_overage_penalty),
+                "enable_contract_overage_penalty": bool(enable_contract_overage_penalty)
+                and bool(normalized_cost_component_flags.get("contract_overage_penalty", True)),
                 "contract_overage_penalty_yen_per_kwh": (
-                    contract_overage_penalty_yen_per_kwh if enable_other_cost else 0.0
+                    contract_overage_penalty_yen_per_kwh
+                    if normalized_cost_component_flags.get("contract_overage_penalty", True)
+                    else 0.0
                 ),
                 "grid_to_bus_priority_penalty_yen_per_kwh": (
-                    grid_to_bus_priority_penalty_yen_per_kwh if enable_other_cost else 0.0
+                    grid_to_bus_priority_penalty_yen_per_kwh
+                    if normalized_cost_component_flags.get("grid_to_bus_priority_penalty", True)
+                    else 0.0
                 ),
                 "grid_to_bess_priority_penalty_yen_per_kwh": (
-                    grid_to_bess_priority_penalty_yen_per_kwh if enable_other_cost else 0.0
+                    grid_to_bess_priority_penalty_yen_per_kwh
+                    if normalized_cost_component_flags.get("grid_to_bess_priority_penalty", True)
+                    else 0.0
                 ),
-                "charge_session_start_penalty_yen": 2.0 if enable_other_cost else 0.0,
-                "slot_concurrency_penalty_yen": 1.0 if enable_other_cost else 0.0,
-                "early_charge_penalty_yen_per_kwh": 0.5 if enable_other_cost else 0.0,
-                "charge_to_upper_buffer_penalty_yen_per_kwh": 0.2 if enable_other_cost else 0.0,
-                "final_soc_target_penalty_per_kwh": 50.0 if enable_other_cost else 0.0,
-                "driver_fragment_start_cost_yen": 0.0 if not enable_driver_cost else None,
-                "cost_component_flags": {
-                    "vehicle": bool(enable_vehicle_cost),
-                    "driver": bool(enable_driver_cost),
-                    "other": bool(enable_other_cost),
-                },
+                "charge_session_start_penalty_yen": (
+                    2.0 if normalized_cost_component_flags.get("charge_session_start_penalty", True) else 0.0
+                ),
+                "slot_concurrency_penalty_yen": (
+                    1.0 if normalized_cost_component_flags.get("slot_concurrency_penalty", True) else 0.0
+                ),
+                "early_charge_penalty_yen_per_kwh": (
+                    0.5 if normalized_cost_component_flags.get("early_charge_penalty", True) else 0.0
+                ),
+                "charge_to_upper_buffer_penalty_yen_per_kwh": (
+                    0.2 if normalized_cost_component_flags.get("soc_upper_buffer_penalty", True) else 0.0
+                ),
+                "final_soc_target_penalty_per_kwh": (
+                    50.0 if normalized_cost_component_flags.get("final_soc_target_penalty", True) else 0.0
+                ),
+                "driver_fragment_start_cost_yen": (
+                    0.0 if not normalized_cost_component_flags.get("driver_cost", True) else None
+                ),
+                "cost_component_flags": dict(normalized_cost_component_flags),
                 "depot_coordinates_by_id": dict(depot_coordinates_by_id or {}),
             },
         )
@@ -1196,14 +1222,9 @@ class ProblemBuilder:
         *,
         disable_acquisition_cost: bool,
     ) -> float:
-        # CRITICAL FIX: When acquisition cost is disabled, use a fixed daily cost
-        # instead of 0.0 to ensure vehicle_cost is included in optimization
         if disable_acquisition_cost:
-            # Use a reasonable fixed cost per vehicle per day
-            # This represents operational readiness cost (e.g., maintenance, insurance)
-            # Default: 5000 JPY/vehicle/day
-            return 5000.0
-        
+            return 0.0
+
         purchase_cost = self._safe_float(vehicle.get("acquisitionCost")) or 0.0
         residual_value = self._safe_float(
             vehicle.get("residualValueYen")
@@ -1669,14 +1690,33 @@ class ProblemBuilder:
             ),
             explicit_weights=explicit_weights if isinstance(explicit_weights, dict) else {},
         )
-        if not component_flags["vehicle"]:
+        energy_terms_enabled = any(
+            bool(component_flags.get(key, True))
+            for key in (
+                "electricity_cost",
+                "fuel_cost",
+                "contract_overage_penalty",
+                "charge_session_start_penalty",
+                "slot_concurrency_penalty",
+                "early_charge_penalty",
+                "soc_upper_buffer_penalty",
+                "grid_to_bus_priority_penalty",
+                "grid_to_bess_priority_penalty",
+            )
+        )
+        if not component_flags["vehicle_fixed_cost"]:
             objective_weights["vehicle_fixed_cost"] = 0.0
-        if not component_flags["other"]:
+        if not energy_terms_enabled:
             objective_weights["electricity_cost"] = 0.0
+        if not component_flags["demand_charge_cost"]:
             objective_weights["demand_charge_cost"] = 0.0
+        if not component_flags["unserved_penalty"]:
             objective_weights["unserved_penalty"] = 0.0
+        if not component_flags["switch_cost"]:
             objective_weights["switch_cost"] = 0.0
+        if not component_flags["battery_degradation_cost"]:
             objective_weights["degradation"] = 0.0
+        if not component_flags["deviation_cost"]:
             objective_weights["deviation_cost"] = 0.0
         return OptimizationObjectiveWeights(
             energy=float(objective_weights.get("electricity_cost", 1.0)),
@@ -1694,11 +1734,15 @@ class ProblemBuilder:
         scenario: Dict[str, Any],
     ) -> Dict[str, bool]:
         simulation_config = scenario.get("simulation_config") or {}
-        return {
-            "vehicle": bool(simulation_config.get("enable_vehicle_cost", True)),
-            "driver": bool(simulation_config.get("enable_driver_cost", True)),
-            "other": bool(simulation_config.get("enable_other_cost", True)),
-        }
+        return normalize_cost_component_flags(
+            simulation_config.get("cost_component_flags"),
+            legacy_disable_vehicle_acquisition_cost=simulation_config.get(
+                "disable_vehicle_acquisition_cost"
+            ),
+            legacy_enable_vehicle_cost=simulation_config.get("enable_vehicle_cost"),
+            legacy_enable_driver_cost=simulation_config.get("enable_driver_cost"),
+            legacy_enable_other_cost=simulation_config.get("enable_other_cost"),
+        )
 
     def _safe_float(self, value: Any) -> Optional[float]:
         try:

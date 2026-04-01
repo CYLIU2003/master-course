@@ -185,6 +185,51 @@ def test_scope_summarize_routes_counts_family_and_variant_mix() -> None:
     assert _scope_variant_mix_text(summary, metric="trips") == "本線32便 / 入出庫6便"
 
 
+def test_apply_day_type_scope_filter_keeps_all_routes_visible_and_only_updates_counts() -> None:
+    class DummyVar:
+        def __init__(self, value: str) -> None:
+            self._value = value
+
+        def get(self) -> str:
+            return self._value
+
+    app = App.__new__(App)
+    app.day_type_var = DummyVar("SAT")
+    app.scope_all_routes = [
+        {
+            "id": "route-a",
+            "depotId": "dep1",
+            "routeFamilyCode": "東98",
+            "tripCountsByDayType": {"WEEKDAY": 10, "SAT": 0},
+        },
+        {
+            "id": "route-b",
+            "depotId": "dep1",
+            "routeFamilyCode": "東98",
+            "tripCountsByDayType": {"WEEKDAY": 3, "SAT": 2},
+        },
+    ]
+    app.scope_depots = [{"id": "dep1", "name": "Depot 1"}]
+    app.scope_depot_by_id = {"dep1": {"id": "dep1", "name": "Depot 1"}}
+    app.scope_selected_route_ids = {"route-a", "route-b"}
+    app.scope_selected_depot_ids = {"dep1"}
+    app.scope_routes = []
+    app.scope_route_by_id = {}
+    app.scope_routes_by_depot = {}
+    app.scope_family_keys_by_depot = {}
+    app.scope_family_route_ids = {}
+    app.scope_family_label_by_key = {}
+    app._sync_depot_selection_from_routes = lambda: None
+    app._render_scope_checklist = lambda: None
+
+    App._refresh_scope_route_cache(app, app.scope_all_routes)
+    App._apply_day_type_scope_filter(app)
+
+    assert sorted(app.scope_route_by_id.keys()) == ["route-a", "route-b"]
+    assert app.scope_route_by_id["route-a"]["tripCountsByDayType"]["SAT"] == 0
+    assert app.scope_route_by_id["route-b"]["tripCountsByDayType"]["SAT"] == 2
+
+
 def test_extract_result_summary_includes_non_zero_cost_breakdown_and_served_counts() -> None:
     app = App.__new__(App)
 

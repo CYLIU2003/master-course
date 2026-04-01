@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Set, Tuple
 
 from src.objective_modes import objective_value_for_mode
+from src.optimization.common.cost_components import normalize_cost_component_flags
 
 from .problem import (
     AssignmentPlan,
@@ -126,14 +127,11 @@ class CostEvaluator:
         overtime_factor = _DRIVER_OVERTIME_FACTOR
 
         weights = problem.objective_weights
-        component_flags = dict(problem.metadata.get("cost_component_flags") or {})
-        vehicle_cost_enabled = bool(component_flags.get("vehicle", True))
-        driver_cost_enabled = bool(component_flags.get("driver", True))
-        other_cost_enabled = bool(component_flags.get("other", True))
+        component_flags = normalize_cost_component_flags(
+            problem.metadata.get("cost_component_flags")
+        )
         vehicle_cost = 0.0
         driver_cost = 0.0
-        energy_cost = 0.0
-        demand_cost = 0.0
 
         # Create a lookup for vehicle profiles to get their fixed costs
         vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
@@ -160,11 +158,10 @@ class CostEvaluator:
             )
             v_type = vehicle_type_by_id.get(str(vehicle_type or ""))
             vehicle_cost += weights.vehicle * float(v_type.fixed_use_cost_jpy if v_type else 0.0)
-        if not vehicle_cost_enabled:
+        if not component_flags.get("vehicle_fixed_cost", True):
             vehicle_cost = 0.0
 
         for duty in plan.duties:
-            
             # Driver cost heuristic: 2000 JPY/hr + 1hr padding
             if duty.legs:
                 first_trip = duty.legs[0].trip
@@ -177,15 +174,13 @@ class CostEvaluator:
                     regular_hours * wage_regular_jpy_per_h
                     + overtime_hours * wage_regular_jpy_per_h * overtime_factor
                 )
-        if not driver_cost_enabled:
+        if not component_flags.get("driver_cost", True):
             driver_cost = 0.0
 
         operating_slot_totals = self._operating_electric_energy_kwh_by_slot(problem, plan)
 
         energy_cost_components = self._evaluate_electricity_with_overwrite(problem, plan, operating_slot_totals)
         fuel_cost_components = self._evaluate_liquid_fuel_with_overwrite(problem, plan)
-        energy_cost += energy_cost_components["electricity_cost_final"]
-        energy_cost += fuel_cost_components["fuel_cost_final"]
         grid_import_by_slot = self._grid_import_kwh_by_slot_from_plan(plan)
         if not grid_import_by_slot:
             grid_import_by_slot = self._grid_import_kwh_by_slot_from_charging_slots(problem, plan)
@@ -279,31 +274,59 @@ class CostEvaluator:
         )
         pv_asset_cost = float(energy_cost_components.get("pv_asset_cost", 0.0))
         bess_asset_cost = float(energy_cost_components.get("bess_asset_cost", 0.0))
-        if not other_cost_enabled:
-            energy_cost = 0.0
-            demand_cost = 0.0
-            unserved_penalty = 0.0
-            switch_cost = 0.0
-            degradation_cost = 0.0
-            deviation_cost = 0.0
-            co2_cost = 0.0
+        fuel_cost_final = float(fuel_cost_components.get("fuel_cost_final", 0.0))
+
+        if not component_flags.get("contract_overage_penalty", True):
+            electricity_cost_final = max(electricity_cost_final - contract_overage_cost, 0.0)
+            contract_overage_cost = 0.0
+
+        if not component_flags.get("electricity_cost", True):
             electricity_cost_final = 0.0
             electricity_cost_provisional_leftover = 0.0
             provisional_ev_drive_cost = 0.0
             realized_ev_charge_cost = 0.0
             leftover_ev_provisional_cost = 0.0
-            provisional_ice_drive_cost = 0.0
-            realized_ice_refuel_cost = 0.0
-            leftover_ice_provisional_cost = 0.0
-            operating_cost_provisional_total = 0.0
-            operating_cost_realized_total = 0.0
-            operating_cost_leftover_total = 0.0
             grid_purchase_cost = 0.0
             bess_discharge_cost = 0.0
             contract_overage_cost = 0.0
             stationary_battery_degradation_cost = 0.0
-            pv_asset_cost = 0.0
-            bess_asset_cost = 0.0
+            pv_generated_kwh = 0.0
+            pv_used_direct_kwh = 0.0
+            pv_curtailed_kwh = 0.0
+            grid_import_kwh = 0.0
+            peak_grid_kw = 0.0
+            grid_import_by_slot = {}
+
+        if not component_flags.get("fuel_cost", True):
+            fuel_cost_final = 0.0
+            provisional_ice_drive_cost = 0.0
+            realized_ice_refuel_cost = 0.0
+            leftover_ice_provisional_cost = 0.0
+
+        energy_cost = electricity_cost_final + fuel_cost_final
+        demand_cost = 0.0
+        if component_flags.get("demand_charge_cost", True):
+            if grid_import_by_slot:
+                demand_cost = self._operating_demand_charge_cost(problem, grid_import_by_slot)
+            elif has_realized_energy_flow:
+                demand_cost = 0.0
+        if not component_flags.get("unserved_penalty", True):
+            unserved_penalty = 0.0
+        if not component_flags.get("switch_cost", True):
+            switch_cost = 0.0
+        if not component_flags.get("battery_degradation_cost", True):
+            degradation_cost = 0.0
+        if not component_flags.get("deviation_cost", True):
+            deviation_cost = 0.0
+        if not component_flags.get("co2_cost", True):
+            co2_cost = 0.0
+
+        operating_cost_provisional_total = provisional_ev_drive_cost + provisional_ice_drive_cost
+        operating_cost_realized_total = realized_ev_charge_cost + realized_ice_refuel_cost
+        operating_cost_leftover_total = leftover_ev_provisional_cost + leftover_ice_provisional_cost
+
+        if not component_flags.get("electricity_cost", True) and not component_flags.get("fuel_cost", True):
+            demand_cost = 0.0
 
         objective_weights = {
             "electricity_cost": float(weights.energy),

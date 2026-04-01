@@ -39,9 +39,12 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             use_selected_depot_vehicle_inventory=True,
             use_selected_depot_charger_inventory=True,
             disable_vehicle_acquisition_cost=True,
-            enable_vehicle_cost=False,
-            enable_driver_cost=True,
-            enable_other_cost=False,
+            cost_component_flags={
+                "vehicle_fixed_cost": False,
+                "driver_cost": True,
+                "electricity_cost": False,
+                "fuel_cost": True,
+            },
             deadhead_speed_kmh=18.0,
             objective_preset="cost",
             planning_days=2,
@@ -93,9 +96,10 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["dispatch_scope"]["fixedRouteBandMode"] is True
     assert updated["dispatch_scope"]["allowIntraDepotRouteSwap"] is False
     assert updated["simulation_config"]["disable_vehicle_acquisition_cost"] is True
-    assert updated["simulation_config"]["enable_vehicle_cost"] is False
-    assert updated["simulation_config"]["enable_driver_cost"] is True
-    assert updated["simulation_config"]["enable_other_cost"] is False
+    assert updated["simulation_config"]["cost_component_flags"]["vehicle_fixed_cost"] is False
+    assert updated["simulation_config"]["cost_component_flags"]["driver_cost"] is True
+    assert updated["simulation_config"]["cost_component_flags"]["electricity_cost"] is False
+    assert updated["simulation_config"]["cost_component_flags"]["fuel_cost"] is True
     assert updated["simulation_config"]["deadhead_speed_kmh"] == 18.0
     assert updated["simulation_config"]["objective_preset"] == "cost"
     assert updated["simulation_config"]["fixed_route_band_mode"] is True
