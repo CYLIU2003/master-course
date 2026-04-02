@@ -127,6 +127,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     service_dates: list[str] = Field(default_factory=list)
     planning_days: int = 1
     start_time: str = "05:00"
+    end_time: str = "23:00"
     planning_horizon_hours: float = 20.0
     depot_energy_assets: Optional[list[Dict[str, Any]]] = None
     pv_profile_id: Optional[str] = None

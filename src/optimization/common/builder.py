@@ -88,12 +88,26 @@ class ProblemBuilder:
         )
         if timestep_min <= 0:
             timestep_min = 60
+        operation_start_time = str(
+            simulation_cfg.get("start_time")
+            or solver_cfg.get("start_time")
+            or "05:00"
+        )
+        operation_end_time = str(
+            simulation_cfg.get("end_time")
+            or solver_cfg.get("end_time")
+            or "23:00"
+        )
         chargers = self._build_chargers_from_scenario(scenario, depot_id)
         price_slots = self._build_price_slots_from_scenario(
             scenario,
             context,
             depot_id,
             timestep_min=timestep_min,
+            start_time=operation_start_time,
+            slots_per_day=(24 * 60) // max(timestep_min, 1)
+            if max(int(planning_days or 1), 1) > 1
+            else None,
         )
         pv_slots = self._build_pv_slots_from_scenario(scenario)
         vehicle_counts = self._vehicle_counts_from_scenario(scenario, depot_id)
@@ -114,20 +128,31 @@ class ProblemBuilder:
                 solver_cfg.get("fixed_route_band_mode", False),
             )
         )
+        planning_days_effective = max(int(planning_days or 1), 1)
+        default_fragment_limit = max(planning_days_effective, 1)
         max_start_fragments_per_vehicle = int(
             simulation_cfg.get(
                 "max_start_fragments_per_vehicle",
-                solver_cfg.get("max_start_fragments_per_vehicle", 1),
+                solver_cfg.get("max_start_fragments_per_vehicle", default_fragment_limit),
             )
-            or 1
+            or default_fragment_limit
         )
         max_end_fragments_per_vehicle = int(
             simulation_cfg.get(
                 "max_end_fragments_per_vehicle",
-                solver_cfg.get("max_end_fragments_per_vehicle", 1),
+                solver_cfg.get("max_end_fragments_per_vehicle", default_fragment_limit),
             )
-            or 1
+            or default_fragment_limit
         )
+        if planning_days_effective > 1:
+            max_start_fragments_per_vehicle = max(
+                max_start_fragments_per_vehicle,
+                planning_days_effective,
+            )
+            max_end_fragments_per_vehicle = max(
+                max_end_fragments_per_vehicle,
+                planning_days_effective,
+            )
         allow_partial_service = bool(
             simulation_cfg.get(
                 "allow_partial_service",
@@ -265,7 +290,7 @@ class ProblemBuilder:
             co2_price_per_kg=co2_price_per_kg,
             ice_co2_kg_per_l=ice_co2_kg_per_l,
             fixed_route_band_mode=fixed_route_band_mode,
-            planning_days=max(int(planning_days or 1), 1),
+            planning_days=planning_days_effective,
             max_start_fragments_per_vehicle=max(1, max_start_fragments_per_vehicle),
             max_end_fragments_per_vehicle=max(1, max_end_fragments_per_vehicle),
             allow_partial_service=allow_partial_service,
@@ -291,6 +316,8 @@ class ProblemBuilder:
             depot_coordinates_by_id=depot_coordinates_by_id,
             canonical_depot_id=str(depot_id or "depot_default"),
             timestep_min=timestep_min,
+            operation_start_time=operation_start_time,
+            operation_end_time=operation_end_time,
             scenario_vehicles=scenario_vehicles,
             disable_vehicle_acquisition_cost=disable_acquisition_cost,
             cost_component_flags=cost_component_flags,
@@ -341,6 +368,8 @@ class ProblemBuilder:
         depot_coordinates_by_id: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
         canonical_depot_id: str = "depot_default",
         timestep_min: int = 60,
+        operation_start_time: Optional[str] = None,
+        operation_end_time: Optional[str] = None,
         scenario_vehicles: Optional[Sequence[Dict[str, Any]]] = None,
         disable_vehicle_acquisition_cost: bool = False,
         enable_vehicle_cost: bool = True,
@@ -362,6 +391,8 @@ class ProblemBuilder:
             home_depot_charge_pre_window_min = float(timestep_min)
         if home_depot_charge_post_window_min is None:
             home_depot_charge_post_window_min = float(timestep_min)
+        normalized_start_time = self._normalize_hhmm(operation_start_time) or self._min_hhmm(context) or "05:00"
+        normalized_end_time = self._normalize_hhmm(operation_end_time) or self._max_hhmm(context) or "23:00"
         canonical_depot_id = str(canonical_depot_id or "depot_default")
         bev_reference_capacity_kwh = self._reference_bev_capacity_kwh(context)
         final_soc_floor_ratio = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
@@ -460,7 +491,22 @@ class ProblemBuilder:
                 longitude=self._safe_float((selected_depot_record or {}).get("lon")),
             ),
         )
-        base_time_slots = list(self._build_time_slot_prices(context, price_slots, timestep_min=timestep_min))
+        slots_per_day: Optional[int] = None
+        if planning_days > 1:
+            slots_per_day = max(1, (24 * 60) // max(timestep_min, 1))
+        elif operation_start_time and operation_end_time:
+            duration_min = self._daily_window_duration_min(normalized_start_time, normalized_end_time)
+            slots_per_day = max(1, int(math.ceil(duration_min / float(max(timestep_min, 1)))))
+
+        base_time_slots = list(
+            self._build_time_slot_prices(
+                context,
+                price_slots,
+                timestep_min=timestep_min,
+                start_time=normalized_start_time,
+                slots_per_day=slots_per_day,
+            )
+        )
         
         # ===== Multi-day price slot tiling =====
         # When planning_days > 1, tile price slots for each additional day
@@ -498,6 +544,14 @@ class ProblemBuilder:
                 merged = set(feasible_connections.get(trip_id, ()))
                 merged.update(successors)
                 feasible_connections[trip_id] = tuple(sorted(merged))
+        if planning_days > 1:
+            base_feasible_connections = dict(feasible_connections)
+            for day_idx in range(1, planning_days):
+                prefix = f"d{day_idx}_"
+                for trip_id, successors in base_feasible_connections.items():
+                    feasible_connections[f"{prefix}{trip_id}"] = tuple(
+                        f"{prefix}{succ_trip_id}" for succ_trip_id in successors
+                    )
 
         baseline_source = baseline_plan or self._build_baseline_plan(context)
         max_fragments = max(
@@ -514,8 +568,8 @@ class ProblemBuilder:
         return CanonicalOptimizationProblem(
             scenario=OptimizationScenario(
                 scenario_id=scenario_id,
-                horizon_start=self._min_hhmm(context),
-                horizon_end=self._max_hhmm(context),
+                horizon_start=normalized_start_time,
+                horizon_end=normalized_end_time,
                 timestep_min=timestep_min,
                 planning_days=planning_days,
                 objective_mode=normalize_objective_mode(objective_mode),
@@ -551,6 +605,8 @@ class ProblemBuilder:
                 "baseline_plan_source": (baseline.metadata or {}).get("source", "dispatch_greedy_baseline"),
                 "fixed_route_band_mode": bool(fixed_route_band_mode),
                 "planning_days": planning_days,
+                "operation_start_time": normalized_start_time,
+                "operation_end_time": normalized_end_time,
                 "max_start_fragments_per_vehicle": int(max(1, max_start_fragments_per_vehicle)),
                 "max_end_fragments_per_vehicle": int(max(1, max_end_fragments_per_vehicle)),
                 "allow_partial_service": bool(allow_partial_service),
@@ -1477,6 +1533,8 @@ class ProblemBuilder:
         context: DispatchContext,
         depot_id: Optional[str],
         timestep_min: int,
+        start_time: Optional[str] = None,
+        slots_per_day: Optional[int] = None,
     ) -> Tuple[EnergyPriceSlot, ...]:
         profile_rows = scenario.get("energy_price_profiles") or []
         if profile_rows:
@@ -1521,9 +1579,20 @@ class ProblemBuilder:
             default_sell = float(overlay_costs.get("grid_sell_price_per_kwh") or 0.0)
             default_co2 = float(overlay_costs.get("grid_co2_kg_per_kwh") or 0.0)
             demand_weight = float(overlay_costs.get("demand_charge_cost_per_kw") or 0.0)
-            generated_slots = list(self._build_time_slot_prices(context, (), timestep_min=timestep_min))
+            generated_slots = list(
+                self._build_time_slot_prices(
+                    context,
+                    (),
+                    timestep_min=timestep_min,
+                    start_time=start_time,
+                    slots_per_day=slots_per_day,
+                )
+            )
             if tou_bands or default_buy > 0.0 or default_sell > 0.0 or default_co2 > 0.0 or demand_weight > 0.0:
-                start_min = min((trip.departure_min for trip in context.trips), default=0)
+                start_min = self._hhmm_to_min(start_time) if start_time else min(
+                    (trip.departure_min for trip in context.trips),
+                    default=0,
+                )
                 expanded: List[EnergyPriceSlot] = []
                 for slot in generated_slots:
                     minute_of_day = (start_min + slot.slot_index * timestep_min) % (24 * 60)
@@ -1557,13 +1626,26 @@ class ProblemBuilder:
         csv_path = tariff_cfg.get("csv_path")
         if csv_path:
             rows = load_tariff_csv(Path(csv_path))
-            start_time = self._min_hhmm(context) or "05:00"
+            tariff_start_time = start_time or self._min_hhmm(context) or "05:00"
             prices = build_electricity_prices_from_tariff(
                 rows,
                 site_ids=[depot_id or "depot_default"],
-                num_periods=max(1, len(list(self._build_time_slot_prices(context, (), timestep_min=timestep_min)))),
+                num_periods=max(
+                    1,
+                    len(
+                        list(
+                            self._build_time_slot_prices(
+                                context,
+                                (),
+                                timestep_min=timestep_min,
+                                start_time=start_time,
+                                slots_per_day=slots_per_day,
+                            )
+                        )
+                    ),
+                ),
                 delta_t_min=float(timestep_min),
-                start_time=start_time,
+                start_time=tariff_start_time,
             )
             if prices:
                 grouped: Dict[int, EnergyPriceSlot] = {}
@@ -1576,7 +1658,15 @@ class ProblemBuilder:
                         co2_factor=0.0,
                     )
                 return tuple(grouped[idx] for idx in sorted(grouped))
-        return tuple(self._build_time_slot_prices(context, (), timestep_min=timestep_min))
+        return tuple(
+            self._build_time_slot_prices(
+                context,
+                (),
+                timestep_min=timestep_min,
+                start_time=start_time,
+                slots_per_day=slots_per_day,
+            )
+        )
 
     def _build_pv_slots_from_scenario(
         self,
@@ -1756,9 +1846,27 @@ class ProblemBuilder:
         price_slots: Sequence[EnergyPriceSlot],
         *,
         timestep_min: int,
+        start_time: Optional[str] = None,
+        slots_per_day: Optional[int] = None,
     ) -> Iterable[EnergyPriceSlot]:
         if price_slots:
             return price_slots
+        if slots_per_day is not None and slots_per_day > 0:
+            start_min = self._hhmm_to_min(start_time) if start_time else min(
+                (trip.departure_min for trip in context.trips),
+                default=0,
+            )
+            generated: List[EnergyPriceSlot] = []
+            for slot_index in range(int(slots_per_day)):
+                minute = (start_min + slot_index * timestep_min) % (24 * 60)
+                generated.append(
+                    EnergyPriceSlot(
+                        slot_index=slot_index,
+                        grid_buy_yen_per_kwh=20.0 if minute < 16 * 60 else 28.0,
+                        grid_sell_yen_per_kwh=8.0,
+                    )
+                )
+            return generated
         start = min(trip.departure_min for trip in context.trips) if context.trips else 0
         end = max(trip.arrival_min for trip in context.trips) if context.trips else 0
         slot_index = 0
@@ -1813,3 +1921,32 @@ class ProblemBuilder:
         if not context.trips:
             return None
         return max(trip.arrival_time for trip in context.trips)
+
+    def _normalize_hhmm(self, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            minutes = hhmm_to_min(text) % (24 * 60)
+        except ValueError:
+            return None
+        hh = minutes // 60
+        mm = minutes % 60
+        return f"{hh:02d}:{mm:02d}"
+
+    def _hhmm_to_min(self, value: Any) -> int:
+        normalized = self._normalize_hhmm(value)
+        if normalized is None:
+            return 0
+        hh, mm = normalized.split(":")
+        return int(hh) * 60 + int(mm)
+
+    def _daily_window_duration_min(self, start_hhmm: str, end_hhmm: str) -> int:
+        start_min = self._hhmm_to_min(start_hhmm)
+        end_min = self._hhmm_to_min(end_hhmm)
+        duration = end_min - start_min
+        if duration <= 0:
+            duration += 24 * 60
+        return duration

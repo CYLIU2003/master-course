@@ -452,6 +452,7 @@ class UpdateQuickSetupBody(BaseModel):
     enableVehicleDiagramOutput: Optional[bool] = None
     randomSeed: Optional[int] = None
     startTime: Optional[str] = None
+    endTime: Optional[str] = None
     planningHorizonHours: Optional[float] = None
     experimentMethod: Optional[str] = None
     experimentNotes: Optional[str] = None
@@ -1333,6 +1334,7 @@ def _builder_defaults(
             (dispatch_scope.get("tripSelection") or {}).get("includeDeadhead", True)
         ),
         "startTime": simulation_config.get("start_time") or "05:00",
+        "endTime": simulation_config.get("end_time") or "23:00",
         "planningHorizonHours": float(
             simulation_config.get("planning_horizon_hours") or 20.0
         ),
@@ -1692,6 +1694,7 @@ def _build_quick_setup_payload(
             ),
             "randomSeed": int(builder_defaults.get("randomSeed") or 42),
             "startTime": builder_defaults.get("startTime") or "05:00",
+            "endTime": builder_defaults.get("endTime") or "23:00",
             "planningHorizonHours": float(builder_defaults.get("planningHorizonHours") or 20.0),
             "planningDays": int(builder_defaults.get("planningDays") or 1),
             "experimentMethod": builder_defaults.get("experimentMethod"),
@@ -1744,6 +1747,9 @@ def _build_quick_setup_payload(
             "degradationWeight": builder_defaults.get("degradationWeight"),
             "allowPartialService": bool(builder_defaults.get("allowPartialService", False)),
             "unservedPenalty": float(builder_defaults.get("unservedPenalty") or 10000.0),
+            "startTime": builder_defaults.get("startTime") or "05:00",
+            "endTime": builder_defaults.get("endTime") or "23:00",
+            "planningHorizonHours": float(builder_defaults.get("planningHorizonHours") or 20.0),
         },
     }
 
@@ -2286,6 +2292,8 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["random_seed"] = int(body.randomSeed)
         if body.startTime is not None:
             simulation_config["start_time"] = str(body.startTime)
+        if body.endTime is not None:
+            simulation_config["end_time"] = str(body.endTime)
         if body.planningHorizonHours is not None:
             simulation_config["planning_horizon_hours"] = float(body.planningHorizonHours)
         if body.experimentMethod is not None:

@@ -1441,6 +1441,8 @@ class App:
         self.day_type_var = tk.StringVar(value="WEEKDAY")
         self.service_date_var = tk.StringVar(value="")
         self.planning_days_var = tk.StringVar(value="1")
+        self.operation_start_time_var = tk.StringVar(value="05:00")
+        self.operation_end_time_var = tk.StringVar(value="23:00")
         self.service_dates_preview_var = tk.StringVar(value="対象日: 未設定")
         self.route_limit_var = tk.StringVar(value="600")
 
@@ -1455,6 +1457,10 @@ class App:
         ttk.Entry(day_row, textvariable=self.service_date_var, width=12).pack(side=tk.LEFT)
         ttk.Label(day_row, text="計画日数", width=10).pack(side=tk.LEFT, padx=(8, 2))
         ttk.Entry(day_row, textvariable=self.planning_days_var, width=4).pack(side=tk.LEFT)
+        ttk.Label(day_row, text="配車開始", width=8).pack(side=tk.LEFT, padx=(8, 2))
+        ttk.Entry(day_row, textvariable=self.operation_start_time_var, width=6).pack(side=tk.LEFT)
+        ttk.Label(day_row, text="配車終了", width=8).pack(side=tk.LEFT, padx=(8, 2))
+        ttk.Entry(day_row, textvariable=self.operation_end_time_var, width=6).pack(side=tk.LEFT)
         ttk.Label(day_row, textvariable=self.service_dates_preview_var, foreground="#444").pack(
             side=tk.LEFT,
             padx=(8, 0),
@@ -2986,6 +2992,32 @@ class App:
     def _planning_days_value(self) -> int:
         return max(self._parse_int(self.planning_days_var.get(), 1), 1)
 
+    def _normalize_hhmm_text(self, value: str, *, default: str) -> str:
+        text = str(value or "").strip()
+        match = re.fullmatch(r"(\d{1,2}):(\d{2})", text)
+        if not match:
+            return default
+        hh = int(match.group(1))
+        mm = int(match.group(2))
+        if mm < 0 or mm >= 60:
+            return default
+        hh = hh % 24
+        return f"{hh:02d}:{mm:02d}"
+
+    def _planning_horizon_hours_value(self, planning_days: int) -> float:
+        start_hhmm = self._normalize_hhmm_text(self.operation_start_time_var.get(), default="05:00")
+        end_hhmm = self._normalize_hhmm_text(self.operation_end_time_var.get(), default="23:00")
+        start_h, start_m = [int(part) for part in start_hhmm.split(":")]
+        end_h, end_m = [int(part) for part in end_hhmm.split(":")]
+        start_min = start_h * 60 + start_m
+        end_min = end_h * 60 + end_m
+        day_minutes = end_min - start_min
+        if day_minutes <= 0:
+            day_minutes += 24 * 60
+        if planning_days > 1:
+            return 24.0 * float(planning_days)
+        return max(day_minutes / 60.0, 1.0)
+
     def _selected_service_dates(self, *, announce: bool) -> list[str] | None:
         raw_service_date = self.service_date_var.get().strip()
         service_dates = _build_service_dates(
@@ -4154,6 +4186,8 @@ class App:
                 service_dates = list(sim.get("serviceDates") or [])
                 planning_days = len(service_dates) if service_dates else 1
             self.planning_days_var.set(str(planning_days or 1))
+            self.operation_start_time_var.set(str(sim.get("startTime") or "05:00"))
+            self.operation_end_time_var.set(str(sim.get("endTime") or "23:00"))
             self.solver_mode_var.set(str(solver.get("solverMode") or "hybrid"))
             self.objective_mode_var.set(
                 normalize_objective_mode(solver.get("objectiveMode") or "total_cost")
@@ -4357,7 +4391,9 @@ class App:
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
             "objectiveWeights": objective_weights,
             "randomSeed": self._parse_int(self.random_seed_var.get(), 42),
-            "planningHorizonHours": 24.0 * float(planning_days) if planning_days > 1 else 20.0,
+            "startTime": self._normalize_hhmm_text(self.operation_start_time_var.get(), default="05:00"),
+            "endTime": self._normalize_hhmm_text(self.operation_end_time_var.get(), default="23:00"),
+            "planningHorizonHours": self._planning_horizon_hours_value(planning_days),
         }
         payload["depotEnergyAssets"] = synced_assets
         def _on_save_done(_resp: dict[str, Any]) -> None:

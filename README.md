@@ -48,6 +48,18 @@ flowchart LR
 
 ### 本日の達成項目
 
+#### 0) 連続日オペレーション制御の追加（2026-04-01 追記）
+- `startTime` / `endTime` を Quick Setup で保持し、BFF・最適化ビルダ・Tk で往復可能にした
+- 連続日では日次の route-band 拘束に変更（同一車両は「日ごとに」1 band。翌日はその日の最初の担当路線で再バンド）
+- 夜間（`endTime` 以降〜翌日 `startTime` まで）の車庫滞在中は、充電器上限の範囲で順次充電を許可
+- 充電バッファは既存のフロント設定（`finalSocFloorPercent` / `finalSocTargetPercent` / 許容帯）をそのまま利用
+- 連続日の既定 fragment 上限は `planningDays` を下限に自動調整（未指定時）
+
+#### 0-b) 5日連続（平日）再実行の現状
+- 5日×4モードの実行導線（Quick Setup→Prepare→Optimization）は動作し、`planningDays=5` / 日付列 / 実日 PV 紐付けは確認済み
+- ただし現時点の大規模5日ケースでは `unserved` が高止まりし、目標の「欠便ゼロ」には未到達
+- 切り分け上は multi-day での可行性/計算時間の追加調整が必要（単日では既に欠便ゼロ実績あり）
+
 #### ① 出力構成の完全統一 ✅
 - **dated 階層**: `output/{service_date}/scenario/{scenario_id}/{mode}/{depot}/{service}/run_YYYYMMDD_HHMM}/`
   - 運用向けアーカイブコンセプトで旧リッチ出力相当を統一化

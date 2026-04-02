@@ -104,6 +104,10 @@ class GurobiMILPAdapter:
             )
             for trip in problem.trips
         }
+        trip_day_index_by_trip_id = {
+            trip.trip_id: self._trip_day_index(problem, trip.departure_min)
+            for trip in problem.trips
+        }
 
         y: Dict[Tuple[str, str], Any] = {}
         for vehicle_id, trip_id in assignment_pairs:
@@ -132,6 +136,12 @@ class GurobiMILPAdapter:
             vehicle.vehicle_id: model.addVar(vtype=GRB.BINARY)
             for vehicle in problem.vehicles
         }
+        day_indices = sorted(set(trip_day_index_by_trip_id.values()))
+        used_vehicle_day: Dict[Tuple[str, int], Any] = {
+            (vehicle.vehicle_id, day_idx): model.addVar(vtype=GRB.BINARY)
+            for vehicle in problem.vehicles
+            for day_idx in day_indices
+        }
 
         # Each trip must be assigned exactly once or marked as unserved.
         for trip in problem.trips:
@@ -147,6 +157,25 @@ class GurobiMILPAdapter:
         # Vehicle-use linkage.
         for (vehicle_id, trip_id), var in y.items():
             model.addConstr(var <= used_vehicle[vehicle_id])
+
+        # Per-day vehicle usage linkage for multi-day constraints.
+        for vehicle in problem.vehicles:
+            vehicle_id = vehicle.vehicle_id
+            for day_idx in day_indices:
+                day_var = used_vehicle_day[(vehicle_id, day_idx)]
+                day_trip_vars = [
+                    y[(vehicle_id, trip_id)]
+                    for trip_id in assignment_trip_ids_by_vehicle.get(vehicle_id, [])
+                    if int(trip_day_index_by_trip_id.get(trip_id, 0)) == day_idx
+                    and (vehicle_id, trip_id) in y
+                ]
+                if not day_trip_vars:
+                    model.addConstr(day_var == 0)
+                    continue
+                for trip_var in day_trip_vars:
+                    model.addConstr(trip_var <= day_var)
+                model.addConstr(day_var <= gp.quicksum(day_trip_vars))
+                model.addConstr(day_var <= used_vehicle[vehicle_id])
 
         outgoing_by_node: Dict[Tuple[str, str], List[Any]] = {}
         incoming_by_node: Dict[Tuple[str, str], List[Any]] = {}
@@ -187,28 +216,31 @@ class GurobiMILPAdapter:
         # Fixed route-band mode: one vehicle can serve at most one route family (fallback: route_id).
         if fixed_route_band_mode:
             route_bands = sorted({band for band in route_band_by_trip_id.values() if band})
-            route_band_use: Dict[Tuple[str, str], Any] = {
-                (vehicle.vehicle_id, band): model.addVar(vtype=GRB.BINARY)
+            route_band_use: Dict[Tuple[str, int, str], Any] = {
+                (vehicle.vehicle_id, day_idx, band): model.addVar(vtype=GRB.BINARY)
                 for vehicle in problem.vehicles
+                for day_idx in day_indices
                 for band in route_bands
             }
             for (vehicle_id, trip_id), var in y.items():
                 band = route_band_by_trip_id.get(trip_id)
                 if not band:
                     continue
-                band_var = route_band_use.get((vehicle_id, band))
+                day_idx = int(trip_day_index_by_trip_id.get(trip_id, 0))
+                band_var = route_band_use.get((vehicle_id, day_idx, band))
                 if band_var is not None:
                     model.addConstr(var <= band_var)
             for vehicle in problem.vehicles:
-                vehicle_band_vars = [
-                    route_band_use[(vehicle.vehicle_id, band)]
-                    for band in route_bands
-                    if (vehicle.vehicle_id, band) in route_band_use
-                ]
-                if vehicle_band_vars:
-                    model.addConstr(gp.quicksum(vehicle_band_vars) <= 1)
-                    for band_var in vehicle_band_vars:
-                        model.addConstr(band_var <= used_vehicle[vehicle.vehicle_id])
+                for day_idx in day_indices:
+                    vehicle_band_vars = [
+                        route_band_use[(vehicle.vehicle_id, day_idx, band)]
+                        for band in route_bands
+                        if (vehicle.vehicle_id, day_idx, band) in route_band_use
+                    ]
+                    if vehicle_band_vars:
+                        model.addConstr(gp.quicksum(vehicle_band_vars) <= 1)
+                        for band_var in vehicle_band_vars:
+                            model.addConstr(band_var <= used_vehicle_day[(vehicle.vehicle_id, day_idx)])
 
         # C5: per-slot single-trip occupancy replaces pairwise overlap constraints.
         if problem.price_slots:
@@ -324,6 +356,9 @@ class GurobiMILPAdapter:
             problem.metadata.get("home_depot_charge_post_window_min"),
             default=float(max(problem.scenario.timestep_min, 1)),
         )
+        operation_start_min = self._operation_start_min(problem)
+        operation_end_min = self._operation_end_min(problem)
+        planning_days = max(int(problem.metadata.get("planning_days") or problem.scenario.planning_days or 1), 1)
         if slot_indices:
             first_slot_idx = slot_indices[0]
             last_slot_idx = slot_indices[-1]
@@ -374,6 +409,22 @@ class GurobiMILPAdapter:
                         if slot_idx < first_slot_idx or slot_idx > last_slot_idx:
                             continue
                         home_depot_slot_proxy_terms.setdefault((vehicle_id, slot_idx), []).append(y[key])
+                for day_idx in range(max(planning_days - 1, 0)):
+                    overnight_slots = self._collect_overnight_home_depot_slots(
+                        problem,
+                        day_idx=day_idx,
+                        operation_start_min=operation_start_min,
+                        operation_end_min=operation_end_min,
+                    )
+                    day_use_var = used_vehicle_day.get((vehicle_id, day_idx))
+                    if day_use_var is None:
+                        continue
+                    for slot_idx in overnight_slots:
+                        if slot_idx < first_slot_idx or slot_idx > last_slot_idx:
+                            continue
+                        home_depot_slot_proxy_terms.setdefault((vehicle_id, slot_idx), []).append(
+                            day_use_var
+                        )
 
         if bev_ids and slot_indices:
             initial_soc_ratio_override = self._percent_to_ratio(problem.metadata.get("initial_soc_percent"))
@@ -424,7 +475,7 @@ class GurobiMILPAdapter:
                 first_slot = slot_indices[0]
                 model.addConstr(s_var[(vehicle.vehicle_id, first_slot)] == initial_kwh)
 
-                # C11: terminal SOC lower bound for used vehicles.
+                # C11: terminal SOC lower bound.
                 last_slot = slot_indices[-1]
                 final_soc_floor_kwh = soc_min
                 if final_soc_floor_ratio_override is not None:
@@ -434,27 +485,44 @@ class GurobiMILPAdapter:
                     >= final_soc_floor_kwh * used_vehicle[vehicle.vehicle_id]
                 )
 
-                # End-of-day SOC target: soft objective to approach configured target by horizon end.
-                if final_soc_target_ratio_override is not None:
-                    target_kwh = min(max(final_soc_target_ratio_override * cap, soc_min), cap)
-                    tolerance_ratio = 0.0
-                    if final_soc_target_tolerance_ratio_override is not None:
-                        tolerance_ratio = min(max(final_soc_target_tolerance_ratio_override, 0.0), 1.0)
-                    tolerance_kwh = tolerance_ratio * cap
-                    excess_dev = model.addVar(lb=0.0, ub=cap, vtype=GRB.CONTINUOUS)
-                    end_soc_excess_dev_var[vehicle.vehicle_id] = excess_dev
-                    model.addConstr(
-                        excess_dev
-                        >= s_var[(vehicle.vehicle_id, last_slot)]
-                        - (target_kwh + tolerance_kwh)
-                        - cap * (1 - used_vehicle[vehicle.vehicle_id])
+                # Apply day-end SOC floor/target for each planning day to support multi-day overnight operations.
+                for day_idx in day_indices:
+                    day_slot_idx = self._day_end_slot_index(
+                        problem,
+                        day_idx=day_idx,
+                        operation_start_min=operation_start_min,
+                        operation_end_min=operation_end_min,
                     )
+                    day_soc_key = (vehicle.vehicle_id, day_slot_idx)
+                    if day_soc_key not in s_var:
+                        continue
+                    day_use_var = used_vehicle_day.get((vehicle.vehicle_id, day_idx))
+                    if day_use_var is None:
+                        day_use_var = used_vehicle[vehicle.vehicle_id]
                     model.addConstr(
-                        excess_dev
-                        >= (target_kwh - tolerance_kwh)
-                        - s_var[(vehicle.vehicle_id, last_slot)]
-                        - cap * (1 - used_vehicle[vehicle.vehicle_id])
+                        s_var[day_soc_key] >= final_soc_floor_kwh * day_use_var
                     )
+
+                    if final_soc_target_ratio_override is not None:
+                        target_kwh = min(max(final_soc_target_ratio_override * cap, soc_min), cap)
+                        tolerance_ratio = 0.0
+                        if final_soc_target_tolerance_ratio_override is not None:
+                            tolerance_ratio = min(max(final_soc_target_tolerance_ratio_override, 0.0), 1.0)
+                        tolerance_kwh = tolerance_ratio * cap
+                        excess_dev = model.addVar(lb=0.0, ub=cap, vtype=GRB.CONTINUOUS)
+                        end_soc_excess_dev_var[f"{vehicle.vehicle_id}__d{day_idx}"] = excess_dev
+                        model.addConstr(
+                            excess_dev
+                            >= s_var[day_soc_key]
+                            - (target_kwh + tolerance_kwh)
+                            - cap * (1 - day_use_var)
+                        )
+                        model.addConstr(
+                            excess_dev
+                            >= (target_kwh - tolerance_kwh)
+                            - s_var[day_soc_key]
+                            - cap * (1 - day_use_var)
+                        )
 
                 upper_buffer_ratio = self._percent_to_ratio(
                     problem.metadata.get("charge_upper_buffer_ratio")
@@ -1502,6 +1570,61 @@ class GurobiMILPAdapter:
             slots.update(self._slot_indices_for_interval(problem, start, end))
 
         return tuple(sorted(slots))
+
+    def _collect_overnight_home_depot_slots(
+        self,
+        problem: CanonicalOptimizationProblem,
+        *,
+        day_idx: int,
+        operation_start_min: int,
+        operation_end_min: int,
+    ) -> Tuple[int, ...]:
+        horizon_start_min = self._horizon_start_min(problem)
+        day_start = horizon_start_min + day_idx * 24 * 60
+        end_offset = operation_end_min - operation_start_min
+        if end_offset <= 0:
+            end_offset += 24 * 60
+        overnight_start = day_start + end_offset
+        overnight_end = day_start + 24 * 60
+        if overnight_end <= overnight_start:
+            return ()
+        return self._slot_indices_for_interval(problem, overnight_start, overnight_end)
+
+    def _trip_day_index(self, problem: CanonicalOptimizationProblem, departure_min: int) -> int:
+        horizon_start_min = self._horizon_start_min(problem)
+        adjusted = int(departure_min)
+        if adjusted < horizon_start_min:
+            adjusted += 24 * 60
+        return max((adjusted - horizon_start_min) // (24 * 60), 0)
+
+    def _day_end_slot_index(
+        self,
+        problem: CanonicalOptimizationProblem,
+        *,
+        day_idx: int,
+        operation_start_min: int,
+        operation_end_min: int,
+    ) -> int:
+        horizon_start_min = self._horizon_start_min(problem)
+        day_start = horizon_start_min + day_idx * 24 * 60
+        end_offset = operation_end_min - operation_start_min
+        if end_offset <= 0:
+            end_offset += 24 * 60
+        day_end_abs = day_start + end_offset - 1
+        return self._slot_index(problem, day_end_abs)
+
+    def _operation_start_min(self, problem: CanonicalOptimizationProblem) -> int:
+        return self._horizon_start_min(problem)
+
+    def _operation_end_min(self, problem: CanonicalOptimizationProblem) -> int:
+        value = problem.metadata.get("operation_end_time")
+        if value is None:
+            value = problem.scenario.horizon_end
+        try:
+            hh, mm = str(value).split(":")
+            return int(hh) * 60 + int(mm)
+        except (ValueError, AttributeError):
+            return self._operation_start_min(problem)
 
     def _build_vehicle_duties_from_solution(
         self,
