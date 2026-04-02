@@ -1215,6 +1215,63 @@ class GurobiMILPAdapter:
             for trip in problem.trips:
                 objective += unserved_penalty_weight * unserved[trip.trip_id]
 
+        if getattr(config, "warm_start", True) and problem.baseline_plan is not None:
+            baseline_plan = problem.baseline_plan
+            baseline_duty_vehicle_map = baseline_plan.duty_vehicle_map()
+            baseline_served_trip_ids: Set[str] = set()
+            baseline_used_vehicle_ids: Set[str] = set()
+            baseline_used_vehicle_days: Set[Tuple[str, int]] = set()
+
+            for duty in baseline_plan.duties:
+                vehicle_id = baseline_duty_vehicle_map.get(duty.duty_id, duty.duty_id)
+                if vehicle_id not in used_vehicle:
+                    continue
+                baseline_used_vehicle_ids.add(vehicle_id)
+                previous_trip_id: Optional[str] = None
+                for leg in duty.legs:
+                    trip_id = leg.trip.trip_id
+                    baseline_served_trip_ids.add(trip_id)
+                    trip_var = y.get((vehicle_id, trip_id))
+                    if trip_var is not None:
+                        trip_var.Start = 1.0
+                    unserved_var = unserved.get(trip_id)
+                    if unserved_var is not None:
+                        unserved_var.Start = 0.0
+                    day_idx = int(trip_day_index_by_trip_id.get(trip_id, 0))
+                    baseline_used_vehicle_days.add((vehicle_id, day_idx))
+                    if previous_trip_id is not None:
+                        arc_var = x.get((vehicle_id, previous_trip_id, trip_id))
+                        if arc_var is not None:
+                            arc_var.Start = 1.0
+                    previous_trip_id = trip_id
+
+                if duty.legs:
+                    first_trip_id = duty.legs[0].trip.trip_id
+                    last_trip_id = duty.legs[-1].trip.trip_id
+                    start_var = start_arc.get((vehicle_id, first_trip_id))
+                    if start_var is not None:
+                        start_var.Start = 1.0
+                    end_var = end_arc.get((vehicle_id, last_trip_id))
+                    if end_var is not None:
+                        end_var.Start = 1.0
+
+            for trip in problem.trips:
+                if trip.trip_id in baseline_served_trip_ids:
+                    continue
+                unserved_var = unserved.get(trip.trip_id)
+                if unserved_var is not None:
+                    unserved_var.Start = 1.0
+
+            for vehicle in problem.vehicles:
+                vehicle_id = vehicle.vehicle_id
+                used_vehicle_var = used_vehicle.get(vehicle_id)
+                if used_vehicle_var is not None:
+                    used_vehicle_var.Start = 1.0 if vehicle_id in baseline_used_vehicle_ids else 0.0
+                for day_idx in day_indices:
+                    day_var = used_vehicle_day.get((vehicle_id, day_idx))
+                    if day_var is not None:
+                        day_var.Start = 1.0 if (vehicle_id, day_idx) in baseline_used_vehicle_days else 0.0
+
         model.setObjective(objective, GRB.MINIMIZE)
         model.optimize()
 
