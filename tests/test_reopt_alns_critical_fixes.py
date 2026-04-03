@@ -290,6 +290,110 @@ def test_feasibility_checker_treats_small_builder_required_soc_as_percent() -> N
     assert not any(msg.startswith("[SOC]") for msg in report.errors)
 
 
+def test_feasibility_checker_keeps_unserved_trips_as_warning_only() -> None:
+    trip_1_dispatch = Trip(
+        trip_id="t1",
+        route_id="r1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="09:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    trip_2_dispatch = Trip(
+        trip_id="t2",
+        route_id="r1",
+        origin="B",
+        destination="C",
+        departure_time="10:00",
+        arrival_time="11:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="warn-only",
+            horizon_start="00:00",
+            timestep_min=60,
+            objective_mode="total_cost",
+        ),
+        dispatch_context=DispatchContext(
+            service_date="2026-03-23",
+            trips=[trip_1_dispatch, trip_2_dispatch],
+            turnaround_rules={},
+            deadhead_rules={},
+            vehicle_profiles={
+                "BEV": VehicleProfile(
+                    vehicle_type="BEV",
+                    battery_capacity_kwh=300.0,
+                )
+            },
+            default_turnaround_min=0,
+        ),
+        trips=(
+            ProblemTrip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_min=480,
+                arrival_min=540,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=10.0,
+            ),
+            ProblemTrip(
+                trip_id="t2",
+                route_id="r1",
+                origin="B",
+                destination="C",
+                departure_min=600,
+                arrival_min=660,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=10.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="veh-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                initial_soc=250.0,
+                battery_capacity_kwh=300.0,
+                reserve_soc=30.0,
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=300.0,
+                reserve_soc=30.0,
+            ),
+        ),
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="veh-1",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trip=trip_1_dispatch),),
+            ),
+        ),
+        served_trip_ids=("t1",),
+        unserved_trip_ids=("t2",),
+    )
+
+    report = FeasibilityChecker().evaluate(problem, plan)
+
+    assert report.feasible is True
+    assert report.errors == ()
+    assert report.uncovered_trip_ids == ("t2",)
+    assert any(msg.startswith("Uncovered trips:") for msg in report.warnings)
+
+
 def test_feasibility_checker_allows_sparse_fragments_in_same_vehicle_gap() -> None:
     trip_a1 = Trip(
         trip_id="a1",

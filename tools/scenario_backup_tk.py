@@ -5993,6 +5993,7 @@ class App:
         fleet_frame = ttk.Frame(win, padding=4)
         fleet_frame.pack(fill=tk.BOTH, expand=True)
         self._build_fleet_panel(fleet_frame)
+        self._refresh_depot_dropdowns(self.scope_depots)
         self._fleet_built = True
 
         def on_close() -> None:

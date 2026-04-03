@@ -76,7 +76,10 @@ class FeasibilityChecker:
         soc_errors = self._evaluate_soc(problem, plan)
         errors.extend(soc_errors)
 
-        feasible = not errors and not uncovered
+        # Unserved trips are a penalized soft term in the objective, so they
+        # should remain warnings rather than forcing the candidate to be marked
+        # infeasible.
+        feasible = not errors
         return FeasibilityReport(
             feasible=feasible,
             warnings=tuple(warnings),

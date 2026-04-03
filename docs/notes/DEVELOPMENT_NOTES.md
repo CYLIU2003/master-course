@@ -2657,6 +2657,8 @@ master-course/
     - `abc`: `status=infeasible_candidate`, `objective_value=8928701.710007224`, `solve_time_seconds=106.9087`
   - 追記所見: 修正版の warm start により MILP は time limit 落ちではなく optimal 到達し、同一 prepared scope では MILP が 3 つのヒューリスティックより低い objective を返した。一方で ALNS / GA / ABC は同値の infeasible_candidate 解に収束しており、現行探索設定では MILP が最良基準になっている。
   - 追加の計算ロジック確認: 今回の MILP が文献で言われる「exact は重い」挙動になりにくい主因は、`fixed_route_band_mode=true` に加えて、`milp_max_successors_per_trip` で successor arc を上位候補に剪定している点だった。文献レベルの strict exact 比較をしたい場合は、route band 固定を外しつつこの上限を大きくする必要がある。
+  - 2026-04-03 strict rerun では、`fixedRouteBandMode=false` / `milpMaxSuccessorsPerTrip=1000` に切り替えたうえで同じ 4 モード比較を再実行した。比較結果は `outputs/mode_compare_strict_237d.json` / `outputs/mode_compare_strict_237d.csv` に保存し、`mode_milp_only` は `optimal`, `objective_value=8424185.3198152`, `solve_time_seconds=104.8655`, `trip_count_unserved=803`、`mode_alns_only` は `feasible`, `objective_value=8928701.710007224`, `solve_time_seconds=108.3484`, `trip_count_unserved=850`、`ga` は `feasible`, `objective_value=8928701.710007224`, `solve_time_seconds=126.7963`, `trip_count_unserved=850`、`abc` は `feasible`, `objective_value=8928701.710007224`, `solve_time_seconds=114.3111`, `trip_count_unserved=850` だった。
+  - 追記所見: `FeasibilityChecker` を「未配車は warning 扱い」に修正した後は、ヒューリスティック 3 手法が `infeasible_candidate` ではなく `feasible` を返すようになった。これは hard constraint の違反が無い限り候補解として扱うという、目的関数の罰則設計と整合する。MILP は依然として最良 objective を維持するが、現行比較では heuristic 側も least-surprise な status で返るようになった。
 
 - 2026-03-23 (Prepared-scope optimization と scenario artifact の整合を修正)
   - 問題は Tk/BFF の既定フローで `rebuild_dispatch=false` のまま最適化を完了すると、`optimization_result` だけは更新される一方で scenario 側の `trips` / `timetable_rows` / `stats` が古いまま残り、フロント・BFF・最適化監査で見える件数が食い違うことだった。

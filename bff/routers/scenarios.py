@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bff.services import research_catalog
 from bff.services.runtime_route_family import (
@@ -1217,6 +1217,11 @@ def _builder_defaults(
         "fixedRouteBandMode": bool(
             simulation_config.get("fixed_route_band_mode", overlay_solver.get("fixed_route_band_mode", True))
         ),
+        "milpMaxSuccessorsPerTrip": int(
+            simulation_config.get("milp_max_successors_per_trip")
+            or overlay_solver.get("milp_max_successors_per_trip")
+            or 8
+        ),
         "maxStartFragmentsPerVehicle": int(
             simulation_config.get("max_start_fragments_per_vehicle")
             or overlay_solver.get("max_start_fragments_per_vehicle")
@@ -1684,6 +1689,11 @@ def _build_quick_setup_payload(
             "noImprovementLimit": int(builder_defaults.get("noImprovementLimit") or 100),
             "destroyFraction": float(builder_defaults.get("destroyFraction") or 0.25),
             "fixedRouteBandMode": bool(builder_defaults.get("fixedRouteBandMode", True)),
+            "milpMaxSuccessorsPerTrip": int(
+                builder_defaults.get("milpMaxSuccessorsPerTrip")
+                or builder_defaults.get("milp_max_successors_per_trip")
+                or 8
+            ),
             "maxStartFragmentsPerVehicle": int(
                 builder_defaults.get("maxStartFragmentsPerVehicle") or 100
             ),

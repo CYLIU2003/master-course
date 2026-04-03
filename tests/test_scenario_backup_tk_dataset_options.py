@@ -245,7 +245,7 @@ def test_extract_result_summary_includes_non_zero_cost_breakdown_and_served_coun
                 "trip_count_unserved": 336,
             },
             "solver_result": {
-                "status": "infeasible_candidate",
+                "status": "feasible",
                 "objective_value": 6052927.3224609075,
                 "solve_time_seconds": 63.23714519990608,
             },
@@ -260,7 +260,7 @@ def test_extract_result_summary_includes_non_zero_cost_breakdown_and_served_coun
         },
     )
 
-    assert summary["status"] == "infeasible_candidate"
+    assert summary["status"] == "feasible"
     assert summary["mode"] == "mode_abc_only"
     assert summary["total_cost"] == 6052927.3224609075
     assert summary["served_trips"] == 638.0
