@@ -87,6 +87,7 @@ class SolverConfig(BaseModel):
     fixed_route_band_mode: bool = True
     max_start_fragments_per_vehicle: int = Field(default=100, ge=1)
     max_end_fragments_per_vehicle: int = Field(default=100, ge=1)
+    milp_max_successors_per_trip: Optional[int] = Field(default=None, ge=1)
     enable_vehicle_diagram_output: bool = False
     output_vehicle_diagram: bool = False
     termination_policy: Literal["time_limit_or_gap"] = "time_limit_or_gap"

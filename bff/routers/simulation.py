@@ -110,6 +110,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     enable_vehicle_diagram_output: bool = False
     allow_partial_service: bool = False
     unserved_penalty: float = 10000.0
+    milp_max_successors_per_trip: Optional[int] = Field(default=None, ge=1)
     time_limit_seconds: int = 300
     mip_gap: float = 0.01
     include_deadhead: bool = True

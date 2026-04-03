@@ -424,6 +424,7 @@ class UpdateQuickSetupBody(BaseModel):
     fixedRouteBandMode: Optional[bool] = None
     maxStartFragmentsPerVehicle: Optional[int] = None
     maxEndFragmentsPerVehicle: Optional[int] = None
+    milpMaxSuccessorsPerTrip: Optional[int] = Field(default=None, ge=1)
     initialSocPercent: Optional[float] = None
     finalSocFloorPercent: Optional[float] = None
     finalSocTargetPercent: Optional[float] = None
@@ -2108,6 +2109,8 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["max_start_fragments_per_vehicle"] = int(body.maxStartFragmentsPerVehicle)
         if body.maxEndFragmentsPerVehicle is not None:
             solver_config["max_end_fragments_per_vehicle"] = int(body.maxEndFragmentsPerVehicle)
+        if body.milpMaxSuccessorsPerTrip is not None:
+            solver_config["milp_max_successors_per_trip"] = int(body.milpMaxSuccessorsPerTrip)
         if body.objectivePreset is not None:
             solver_config["objective_preset"] = str(body.objectivePreset)
         current_objective_mode = normalize_objective_mode(

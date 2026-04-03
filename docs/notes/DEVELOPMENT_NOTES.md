@@ -2649,6 +2649,14 @@ master-course/
   - 確認:
     - `python -m py_compile tools/scenario_backup_tk.py bff/routers/scenarios.py bff/routers/simulation.py bff/services/simulation_builder.py bff/services/run_preparation.py bff/routers/optimization.py bff/store/scenario_store.py src/optimization/common/builder.py src/optimization/milp/engine.py` → pass
     - `PYTHONPATH=C:\master-course pytest tests/test_scenario_backup_tk_pv_sync.py tests/test_simulation_builder_prepare_scope.py tests/test_problem_builder_depot_energy_asset_controls.py tests/test_problem_builder_timestep_and_pv_scaling.py tests/test_bff_reoptimization_actual_soc_forwarding.py tests/test_milp_engine_lightweight_stats.py tests/test_prepared_scope_execution.py tests/test_optimization_canonical_metaheuristics.py tests/test_scenario_store_dispatch_scope_overlay.py -q` → pass
+  - 2026-04-02 rerun では、`simulation/prepare` を先に通して `tripCount=974`, `timetableRowCount=24064`, `primaryDepotId=tsurumaki` の prepared scope を再生成したうえで、同一 scenario `237d5623-aa94-4f72-9da1-17b9070264be` に対する 4 モード比較を再実行した。
+  - 比較結果は `outputs/mode_compare_repaired_237d.json` / `outputs/mode_compare_repaired_237d.csv` に保存した。要約は以下の通り。
+    - `mode_milp_only`: `status=optimal`, `objective_value=8601528.00406182`, `solve_time_seconds=11.5635`
+    - `mode_alns_only`: `status=infeasible_candidate`, `objective_value=8928701.710007224`, `solve_time_seconds=95.4759`
+    - `ga`: `status=infeasible_candidate`, `objective_value=8928701.710007224`, `solve_time_seconds=106.3408`
+    - `abc`: `status=infeasible_candidate`, `objective_value=8928701.710007224`, `solve_time_seconds=106.9087`
+  - 追記所見: 修正版の warm start により MILP は time limit 落ちではなく optimal 到達し、同一 prepared scope では MILP が 3 つのヒューリスティックより低い objective を返した。一方で ALNS / GA / ABC は同値の infeasible_candidate 解に収束しており、現行探索設定では MILP が最良基準になっている。
+  - 追加の計算ロジック確認: 今回の MILP が文献で言われる「exact は重い」挙動になりにくい主因は、`fixed_route_band_mode=true` に加えて、`milp_max_successors_per_trip` で successor arc を上位候補に剪定している点だった。文献レベルの strict exact 比較をしたい場合は、route band 固定を外しつつこの上限を大きくする必要がある。
 
 - 2026-03-23 (Prepared-scope optimization と scenario artifact の整合を修正)
   - 問題は Tk/BFF の既定フローで `rebuild_dispatch=false` のまま最適化を完了すると、`optimization_result` だけは更新される一方で scenario 側の `trips` / `timetable_rows` / `stats` が古いまま残り、フロント・BFF・最適化監査で見える件数が食い違うことだった。

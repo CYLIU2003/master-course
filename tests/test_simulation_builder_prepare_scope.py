@@ -50,6 +50,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             planning_days=2,
             service_dates=["2025-08-01", "2025-08-02"],
             fixed_route_band_mode=True,
+            milp_max_successors_per_trip=24,
             enable_vehicle_diagram_output=False,
             pv_profile_id="meguro_solcast_avg_2025_08_60min",
             weather_mode="solcast_avg_2025_08_60min",
@@ -93,6 +94,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["dispatch_scope"]["routeSelection"]["includeRouteIds"] == ["route-a"]
     assert updated["dispatch_scope"]["effectiveRouteIds"] == ["route-a"]
     assert updated["scenario_overlay"]["route_ids"] == ["route-a"]
+    assert updated["scenario_overlay"]["solver_config"]["milp_max_successors_per_trip"] == 24
     assert updated["dispatch_scope"]["fixedRouteBandMode"] is True
     assert updated["dispatch_scope"]["allowIntraDepotRouteSwap"] is False
     assert updated["simulation_config"]["disable_vehicle_acquisition_cost"] is True
@@ -103,6 +105,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["simulation_config"]["deadhead_speed_kmh"] == 18.0
     assert updated["simulation_config"]["objective_preset"] == "cost"
     assert updated["simulation_config"]["fixed_route_band_mode"] is True
+    assert updated["simulation_config"]["milp_max_successors_per_trip"] == 24
     assert updated["simulation_config"]["enable_vehicle_diagram_output"] is True
     assert updated["simulation_config"]["planning_days"] == 2
     assert updated["simulation_config"]["service_dates"] == ["2025-08-01", "2025-08-02"]

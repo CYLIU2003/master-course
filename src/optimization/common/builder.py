@@ -128,6 +128,9 @@ class ProblemBuilder:
                 solver_cfg.get("fixed_route_band_mode", False),
             )
         )
+        milp_max_successors_per_trip = solver_cfg.get("milp_max_successors_per_trip")
+        if milp_max_successors_per_trip is None:
+            milp_max_successors_per_trip = simulation_cfg.get("milp_max_successors_per_trip")
         planning_days_effective = max(int(planning_days or 1), 1)
         default_fragment_limit = max(planning_days_effective, 1)
         max_start_fragments_per_vehicle = int(
@@ -290,6 +293,7 @@ class ProblemBuilder:
             co2_price_per_kg=co2_price_per_kg,
             ice_co2_kg_per_l=ice_co2_kg_per_l,
             fixed_route_band_mode=fixed_route_band_mode,
+            milp_max_successors_per_trip=milp_max_successors_per_trip,
             planning_days=planning_days_effective,
             max_start_fragments_per_vehicle=max(1, max_start_fragments_per_vehicle),
             max_end_fragments_per_vehicle=max(1, max_end_fragments_per_vehicle),
@@ -344,6 +348,7 @@ class ProblemBuilder:
         co2_price_per_kg: float = 0.0,
         ice_co2_kg_per_l: float = 2.64,
         fixed_route_band_mode: bool = False,
+        milp_max_successors_per_trip: Optional[int] = None,
         planning_days: int = 1,
         max_start_fragments_per_vehicle: int = 1,
         max_end_fragments_per_vehicle: int = 1,
@@ -604,6 +609,7 @@ class ProblemBuilder:
                 "charger_count": len(chargers),
                 "baseline_plan_source": (baseline.metadata or {}).get("source", "dispatch_greedy_baseline"),
                 "fixed_route_band_mode": bool(fixed_route_band_mode),
+                "milp_max_successors_per_trip": milp_max_successors_per_trip,
                 "planning_days": planning_days,
                 "operation_start_time": normalized_start_time,
                 "operation_end_time": normalized_end_time,

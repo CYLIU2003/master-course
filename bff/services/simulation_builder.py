@@ -464,6 +464,7 @@ def apply_builder_configuration(
     overlay.solver_config.fixed_route_band_mode = bool(
         body.simulation_settings.fixed_route_band_mode
     )
+    overlay.solver_config.milp_max_successors_per_trip = body.simulation_settings.milp_max_successors_per_trip
     overlay.solver_config.enable_vehicle_diagram_output = bool(
         body.simulation_settings.enable_vehicle_diagram_output
         or body.simulation_settings.fixed_route_band_mode
@@ -660,6 +661,7 @@ def apply_builder_configuration(
         "objective_mode": overlay.solver_config.objective_mode,
         "objective_preset": overlay.solver_config.objective_preset,
         "fixed_route_band_mode": overlay.solver_config.fixed_route_band_mode,
+        "milp_max_successors_per_trip": overlay.solver_config.milp_max_successors_per_trip,
         "enable_vehicle_diagram_output": overlay.solver_config.enable_vehicle_diagram_output,
         "output_vehicle_diagram": overlay.solver_config.output_vehicle_diagram,
         "allow_partial_service": overlay.solver_config.allow_partial_service,
