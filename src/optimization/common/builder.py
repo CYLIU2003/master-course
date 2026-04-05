@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter, deque
 from dataclasses import dataclass
 import math
 from pathlib import Path
@@ -578,6 +579,7 @@ class ProblemBuilder:
                 vehicles=vehicles,
                 max_fragments_per_vehicle=max_fragments,
                 all_trip_ids=all_trip_ids,
+                feasible_connections=feasible_connections,
             )
         return CanonicalOptimizationProblem(
             scenario=OptimizationScenario(
@@ -1398,7 +1400,21 @@ class ProblemBuilder:
         vehicles: Sequence[ProblemVehicle] = (),
         max_fragments_per_vehicle: int = 1,
         all_trip_ids: Optional[set[str]] = None,
+        feasible_connections: Optional[Mapping[str, Tuple[str, ...]]] = None,
     ) -> AssignmentPlan:
+        baseline_all_trip_ids = all_trip_ids or {trip.trip_id for trip in context.trips}
+
+        pooled_plan: Optional[AssignmentPlan] = None
+        if vehicles and self._supports_pooled_shared_baseline(context, vehicles):
+            pooled_plan = self._build_pooled_shared_baseline(
+                context,
+                vehicles=vehicles,
+                all_trip_ids=baseline_all_trip_ids,
+                feasible_connections=feasible_connections,
+            )
+            if len(pooled_plan.unserved_trip_ids) == 0:
+                return pooled_plan
+
         # Build a baseline greedy plan but avoid assigning the same trip to
         # multiple vehicle types. Some trips are allowed for several vehicle
         # types (BEV/ICE); the previous implementation ran the greedy
@@ -1467,8 +1483,7 @@ class ProblemBuilder:
             for duty in selected_duties:
                 assigned_trip_ids.update(duty.trip_ids)
 
-        baseline_all_trip_ids = all_trip_ids or {trip.trip_id for trip in context.trips}
-        return AssignmentPlan(
+        fallback_plan = AssignmentPlan(
             duties=tuple(duties),
             charging_slots=(),
             refuel_slots=(),
@@ -1479,6 +1494,271 @@ class ProblemBuilder:
                 "duty_vehicle_map": merge_duty_vehicle_maps(duty_vehicle_map),
             },
         )
+        if pooled_plan is not None and len(pooled_plan.served_trip_ids) > len(fallback_plan.served_trip_ids):
+            return pooled_plan
+        return fallback_plan
+
+    def _supports_pooled_shared_baseline(
+        self,
+        context: DispatchContext,
+        vehicles: Sequence[ProblemVehicle],
+    ) -> bool:
+        if not context.trips or not vehicles:
+            return False
+        available_types = {str(vehicle.vehicle_type) for vehicle in vehicles if str(vehicle.vehicle_type).strip()}
+        if not available_types:
+            return False
+        for trip in context.trips:
+            if not available_types.issubset({str(vehicle_type) for vehicle_type in trip.allowed_vehicle_types}):
+                return False
+        return True
+
+    def _build_pooled_shared_baseline(
+        self,
+        context: DispatchContext,
+        *,
+        vehicles: Sequence[ProblemVehicle],
+        all_trip_ids: set[str],
+        feasible_connections: Optional[Mapping[str, Tuple[str, ...]]] = None,
+    ) -> AssignmentPlan:
+        trip_map = context.trips_by_id()
+        trip_ids = {trip.trip_id for trip in context.trips}
+        if not trip_ids or not vehicles:
+            return AssignmentPlan(
+                duties=(),
+                charging_slots=(),
+                refuel_slots=(),
+                served_trip_ids=(),
+                unserved_trip_ids=tuple(sorted(all_trip_ids)),
+                metadata={"source": "dispatch_pooled_shared_path_cover_baseline", "duty_vehicle_map": {}},
+            )
+
+        if feasible_connections is not None:
+            graph = {
+                trip_id: tuple(next_id for next_id in feasible_connections.get(trip_id, ()) if next_id in trip_ids)
+                for trip_id in trip_ids
+            }
+        else:
+            representative_vehicle_type = str(vehicles[0].vehicle_type)
+            graph = self._build_graph(context, representative_vehicle_type)
+            graph = {
+                trip_id: tuple(next_id for next_id in graph.get(trip_id, ()) if next_id in trip_ids)
+                for trip_id in trip_ids
+            }
+
+        matched_successor, matched_predecessor = self._maximum_bipartite_matching(graph)
+        predecessor_by_trip = {
+            trip_id: predecessor
+            for trip_id, predecessor in matched_predecessor.items()
+            if predecessor is not None
+        }
+        successor_by_trip = {
+            trip_id: successor
+            for trip_id, successor in matched_successor.items()
+            if successor is not None
+        }
+
+        start_trip_ids = sorted(
+            (trip_id for trip_id in trip_ids if trip_id not in predecessor_by_trip),
+            key=lambda trip_id: (
+                trip_map[trip_id].departure_min,
+                trip_map[trip_id].arrival_min,
+                trip_id,
+            ),
+        )
+        chains: List[List[Trip]] = []
+        visited: set[str] = set()
+        for start_trip_id in start_trip_ids:
+            if start_trip_id in visited:
+                continue
+            chain: List[Trip] = []
+            current_trip_id: Optional[str] = start_trip_id
+            while current_trip_id and current_trip_id not in visited:
+                chain.append(trip_map[current_trip_id])
+                visited.add(current_trip_id)
+                current_trip_id = successor_by_trip.get(current_trip_id)
+            if chain:
+                chains.append(chain)
+        for trip_id in sorted(
+            trip_ids - visited,
+            key=lambda item: (
+                trip_map[item].departure_min,
+                trip_map[item].arrival_min,
+                item,
+            ),
+        ):
+            chains.append([trip_map[trip_id]])
+
+        available_vehicles = list(vehicles)
+        vehicle_type_counts = Counter(str(vehicle.vehicle_type) for vehicle in vehicles)
+        duties: List[VehicleDuty] = []
+        duty_vehicle_map: Dict[str, str] = {}
+        served_trip_ids: set[str] = set()
+        skipped_trip_ids: List[str] = []
+
+        for chain in sorted(
+            chains,
+            key=lambda item: (
+                item[0].departure_min if item else 10**9,
+                item[-1].arrival_min if item else 10**9,
+                item[0].trip_id if item else "",
+            ),
+        ):
+            vehicle = self._select_vehicle_for_shared_chain(
+                chain,
+                vehicles=available_vehicles,
+                context=context,
+                vehicle_type_counts=vehicle_type_counts,
+            )
+            if vehicle is None:
+                skipped_trip_ids.extend(trip.trip_id for trip in chain)
+                continue
+            available_vehicles = [
+                candidate
+                for candidate in available_vehicles
+                if str(candidate.vehicle_id) != str(vehicle.vehicle_id)
+            ]
+            duty = self._build_shared_chain_duty(
+                chain,
+                vehicle=vehicle,
+                context=context,
+            )
+            duties.append(duty)
+            duty_vehicle_map[str(duty.duty_id)] = str(vehicle.vehicle_id)
+            served_trip_ids.update(duty.trip_ids)
+
+        unserved_trip_ids = tuple(
+            sorted((all_trip_ids - set(served_trip_ids)).union(set(skipped_trip_ids)))
+        )
+        return AssignmentPlan(
+            duties=tuple(duties),
+            charging_slots=(),
+            refuel_slots=(),
+            served_trip_ids=tuple(sorted(served_trip_ids)),
+            unserved_trip_ids=unserved_trip_ids,
+            metadata={
+                "source": "dispatch_pooled_shared_path_cover_baseline",
+                "duty_vehicle_map": merge_duty_vehicle_maps(duty_vehicle_map),
+                "path_cover_chain_count": len(chains),
+            },
+        )
+
+    def _select_vehicle_for_shared_chain(
+        self,
+        chain: Sequence[Trip],
+        *,
+        vehicles: Sequence[ProblemVehicle],
+        context: DispatchContext,
+        vehicle_type_counts: Mapping[str, int],
+    ) -> Optional[ProblemVehicle]:
+        if not chain or not vehicles:
+            return None
+        first_trip = chain[0]
+        origin_key = str(first_trip.origin_stop_id or first_trip.origin)
+        best_vehicle: Optional[ProblemVehicle] = None
+        best_score: Optional[Tuple[int, int, float, str]] = None
+        for vehicle in vehicles:
+            if str(vehicle.vehicle_type) not in first_trip.allowed_vehicle_types:
+                continue
+            home_depot_id = str(vehicle.home_depot_id or "").strip()
+            if not home_depot_id:
+                continue
+            deadhead_min = int(context.get_deadhead_min(home_depot_id, origin_key) or 0)
+            if deadhead_min <= 0 and not context.locations_equivalent(home_depot_id, origin_key):
+                continue
+            if deadhead_min > int(first_trip.departure_min):
+                continue
+            score = (
+                int(vehicle_type_counts.get(str(vehicle.vehicle_type), 0) or 0),
+                -deadhead_min,
+                -float(vehicle.fixed_use_cost_jpy or 0.0),
+                str(vehicle.vehicle_id),
+            )
+            if best_score is None or score > best_score:
+                best_score = score
+                best_vehicle = vehicle
+        return best_vehicle
+
+    def _build_shared_chain_duty(
+        self,
+        chain: Sequence[Trip],
+        *,
+        vehicle: ProblemVehicle,
+        context: DispatchContext,
+    ) -> VehicleDuty:
+        legs: List[DutyLeg] = []
+        home_depot_id = str(vehicle.home_depot_id or "").strip()
+        previous_trip: Optional[Trip] = None
+        for trip in chain:
+            if previous_trip is None:
+                origin_key = str(trip.origin_stop_id or trip.origin)
+                deadhead_min = int(context.get_deadhead_min(home_depot_id, origin_key) or 0)
+            else:
+                from_key = str(previous_trip.destination_stop_id or previous_trip.destination)
+                to_key = str(trip.origin_stop_id or trip.origin)
+                deadhead_min = int(context.get_deadhead_min(from_key, to_key) or 0)
+            legs.append(DutyLeg(trip=trip, deadhead_from_prev_min=max(deadhead_min, 0)))
+            previous_trip = trip
+        return VehicleDuty(
+            duty_id=str(vehicle.vehicle_id),
+            vehicle_type=str(vehicle.vehicle_type),
+            legs=tuple(legs),
+        )
+
+    def _maximum_bipartite_matching(
+        self,
+        graph: Mapping[str, Tuple[str, ...]],
+    ) -> Tuple[Dict[str, Optional[str]], Dict[str, Optional[str]]]:
+        left_nodes = list(graph.keys())
+        pair_left: Dict[str, Optional[str]] = {node: None for node in left_nodes}
+        pair_right: Dict[str, Optional[str]] = {}
+        for successors in graph.values():
+            for successor in successors:
+                pair_right.setdefault(successor, None)
+        distance: Dict[str, int] = {}
+        infinity = 10**9
+
+        def bfs() -> bool:
+            queue: deque[str] = deque()
+            best_augment_distance = infinity
+            for node in left_nodes:
+                if pair_left[node] is None:
+                    distance[node] = 0
+                    queue.append(node)
+                else:
+                    distance[node] = infinity
+            while queue:
+                node = queue.popleft()
+                if distance[node] >= best_augment_distance:
+                    continue
+                for successor in graph.get(node, ()):
+                    predecessor = pair_right.get(successor)
+                    if predecessor is None:
+                        best_augment_distance = distance[node] + 1
+                    elif distance.get(predecessor, infinity) == infinity:
+                        distance[predecessor] = distance[node] + 1
+                        queue.append(predecessor)
+            return best_augment_distance != infinity
+
+        def dfs(node: str) -> bool:
+            for successor in graph.get(node, ()):
+                predecessor = pair_right.get(successor)
+                if predecessor is None or (
+                    distance.get(predecessor, infinity) == distance[node] + 1
+                    and dfs(predecessor)
+                ):
+                    pair_left[node] = successor
+                    pair_right[successor] = node
+                    return True
+            distance[node] = infinity
+            return False
+
+        while bfs():
+            for node in left_nodes:
+                if pair_left[node] is None:
+                    dfs(node)
+
+        return pair_left, pair_right
 
     def _ordered_vehicle_types_for_baseline(
         self,

@@ -1,5 +1,8 @@
 # 弦巻 `WEEKDAY` route24 近傍縮小問題の切り分けと 4 ソルバー再実行報告
 
+> Update 2026-04-05 17:26
+> actual BFF fixed-scope rerun の最終結果は `docs/fixed_scope_unserved_fix_report_20260405.md` と `output/reports/20260405_fixed_scope_237d5623_unserved_fix/` を参照。こちらは route24 近傍切り分け時点の報告であり、最終 rerun bundle は別管理にした。
+
 ## 1. 対象と結論
 
 - 対象 scenario: `237d5623-aa94-4f72-9da1-17b9070264be`

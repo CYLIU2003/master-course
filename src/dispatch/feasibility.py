@@ -49,7 +49,7 @@ class FeasibilityEngine:
         to_stop = trip_j.origin_stop_id or trip_j.origin
         deadhead_min = context.get_deadhead_min(from_stop, to_stop)
 
-        if from_stop != to_stop and deadhead_min == 0:
+        if not context.locations_equivalent(from_stop, to_stop) and deadhead_min == 0:
             # No deadhead path exists between these stops.
             return ConnectionResult(
                 feasible=False,

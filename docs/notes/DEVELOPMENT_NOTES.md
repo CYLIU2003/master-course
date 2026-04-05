@@ -2876,3 +2876,25 @@ master-course/
     - `python -m py_compile tools/scenario_backup_tk.py bff/routers/scenarios.py bff/routers/simulation.py bff/services/simulation_builder.py src/optimization/common/cost_components.py src/optimization/common/builder.py src/optimization/common/evaluator.py src/optimization/milp/solver_adapter.py tests/test_quick_setup_advanced_persistence.py tests/test_simulation_builder_prepare_scope.py tests/test_problem_builder_cost_component_toggles.py tests/test_scenario_backup_tk_dataset_options.py` → pass
     - `$env:PYTHONPATH='C:\master-course'; pytest tests\test_quick_setup_advanced_persistence.py tests\test_simulation_builder_prepare_scope.py tests\test_problem_builder_cost_component_toggles.py tests\test_scenario_backup_tk_dataset_options.py -q` → `18 passed`
     - `$env:PYTHONPATH='C:\master-course'; pytest tests\test_problem_builder_disable_acquisition_cost.py tests\test_quick_setup_route_selection.py -q` → `12 passed`
+- 2026-04-05 (fixed scope の code-caused unserved 17 便を修理し、actual BFF path で `974/974 served` を回復)
+  - 問題として、deadhead alias 修理後の actual canonical run では `957 served / 17 unserved` が再現していた。unserved は `黒06`, `渋21`, `反12`, `都立34` に出ていたが、各便は depot から到達可能で前後接続数も十分あり、aggregate feasible graph の最小 duty 数も `87` で scope fleet `95` 台以下だった。したがって fleet infeasibility ではなく baseline duty cover の組み方が原因と判断した。
+  - さらに自分から上げた問題として、`tsurumaki` のような depot id と `odpt.BusstopPole:...Tsurumakieigyousho...` のような depot stop id が alias 同値でも、0 分 deadhead を「同地点」ではなく「missing deadhead」と扱う箇所が残っていた。これが startup reachability と path cover の start 判定を落としていた。
+  - `src/dispatch/models.py` に `DispatchContext.locations_equivalent()` を追加し、alias 展開後の location 集合が交差していれば同地点とみなせるようにした。`src/dispatch/feasibility.py` の location continuity もこの helper を使うよう変更し、alias 同値の 0 分 deadhead を missing 扱いしないよう揃えた。
+  - `src/optimization/common/builder.py` は fully shared scope 判定を追加し、その場合は per-type greedy duty ではなく pooled shared path-cover baseline を使って actual fleet 全体で duty cover を構築するようにした。scope が fully shared でない場合は既存 per-type fallback を残しているため、数学的意味を広く変えずに current bug を潰している。
+  - これにより scoped baseline は `dispatch_pooled_shared_path_cover_baseline`, `served=974`, `unserved=0`, `vehicle_count_used=87` へ改善した。actual BFF rerun でも `mode_milp_only=time_limit_baseline`, `mode_alns_only=feasible`, `mode_ga_only=feasible`, `mode_abc_only=feasible` の全てで `974/974 served` を確認した。objective は `ALNS=3453137.5192`, `GA=3490088.7734`, `ABC=3508589.5957`, `MILP fallback=3536498.7170` だった。
+  - 出力 parity も合わせて確認し、旧 `output/run_20260324_2210` に対する generic artifact missing は 4 モードとも 0 件だった。比較 bundle は `output/reports/20260405_fixed_scope_237d5623_unserved_fix/`、報告書は `docs/fixed_scope_unserved_fix_report_20260405.md` に保存した。
+  - 回帰テスト:
+    - `tests/test_dispatch_context_location_aliases.py`
+    - `tests/test_pooled_shared_baseline.py`
+    - `tests/test_baseline_vehicle_type_priority.py`
+    - `tests/test_vehicle_assignment_startup_deadhead.py`
+    - `tests/test_canonical_graph_export_parity.py`
+    - `tests/test_milp_baseline_fallbacks.py`
+    - `tests/test_route_family_deadhead_inference.py`
+    - `tests/test_problem_builder_timestep_and_pv_scaling.py`
+    - `tests/test_optimization_canonical_metaheuristics.py`
+    - `tests/test_prepared_scope_execution.py`
+    - `tests/test_optimization_result_serializer.py`
+  - 確認:
+    - `python -m pytest tests/test_dispatch_context_location_aliases.py tests/test_pooled_shared_baseline.py tests/test_baseline_vehicle_type_priority.py tests/test_vehicle_assignment_startup_deadhead.py tests/test_canonical_graph_export_parity.py tests/test_milp_baseline_fallbacks.py tests/test_route_family_deadhead_inference.py tests/test_problem_builder_timestep_and_pv_scaling.py -q` → `21 passed`
+    - `python -m pytest tests/test_optimization_canonical_metaheuristics.py tests/test_prepared_scope_execution.py tests/test_optimization_result_serializer.py -q` → `9 passed`

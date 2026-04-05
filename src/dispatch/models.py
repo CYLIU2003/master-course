@@ -301,6 +301,27 @@ class DispatchContext:
                     best = travel_time
         return best if best is not None else 0
 
+    def locations_equivalent(self, left: str, right: str) -> bool:
+        left_candidates = self.resolve_location_ids(left)
+        right_candidates = self.resolve_location_ids(right)
+        if not left_candidates:
+            left_candidates = (str(left or "").strip(),)
+        if not right_candidates:
+            right_candidates = (str(right or "").strip(),)
+        return bool(
+            {
+                candidate
+                for candidate in left_candidates
+                if str(candidate or "").strip()
+            }.intersection(
+                {
+                    candidate
+                    for candidate in right_candidates
+                    if str(candidate or "").strip()
+                }
+            )
+        )
+
     def trips_by_id(self) -> Dict[str, Trip]:
         return {t.trip_id: t for t in self.trips}
 
