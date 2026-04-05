@@ -352,3 +352,25 @@ def test_merge_deadhead_metrics_adds_zero_cost_rules_for_platform_aliases() -> N
     assert backward.travel_time_min == 0
     assert forward.source == "stop_platform_alias"
     assert backward.source == "stop_platform_alias"
+
+
+def test_merge_deadhead_metrics_enforces_speed_cap_for_existing_rules() -> None:
+    metrics = merge_deadhead_metrics(
+        existing_rules=[
+            {
+                "from_stop": "stop-a",
+                "to_stop": "stop-b",
+                "travel_time_min": 2,
+                "distance_km": 3.0,
+            }
+        ],
+        trip_rows=[],
+        routes=[],
+        stops=[],
+        assumed_speed_kmh=30.0,
+    )
+
+    metric = metrics[("stop-a", "stop-b")]
+
+    assert metric.distance_km == 3.0
+    assert metric.travel_time_min == 6

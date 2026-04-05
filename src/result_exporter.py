@@ -175,8 +175,9 @@ def export_graph_exports_phase1(
         planning_start_time=planning_start_time,
     )
     
-    # ===== Multi-day route band diagram support =====
+    # ===== Multi-day route band / vehicle operation diagram support =====
     planning_days = getattr(data, "planning_days", 1) or 1
+    all_vehicle_operation_diagrams: Dict[str, Any] = {"entries": [], "svgs": {}}
     if planning_days > 1:
         # Generate per-day route band diagrams
         all_route_band_diagrams: Dict[str, Any] = {"entries": [], "svgs": {}}
@@ -189,6 +190,10 @@ def export_graph_exports_phase1(
                 f"{scenario_id}_d{day_idx}",
                 graph_context=graph_export_context,
             )
+            day_vehicle_operation = _build_vehicle_operation_diagram_assets(
+                day_rows,
+                f"{scenario_id}_d{day_idx}",
+            )
             # Merge with day prefix
             for entry in day_diagrams.get("entries", []):
                 entry["day_index"] = day_idx
@@ -196,12 +201,22 @@ def export_graph_exports_phase1(
                 all_route_band_diagrams["entries"].append(entry)
             for svg_key, svg_content in day_diagrams.get("svgs", {}).items():
                 all_route_band_diagrams["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
+            for entry in day_vehicle_operation.get("entries", []):
+                entry["day_index"] = day_idx
+                entry["diagram_file"] = f"day_{day_idx}/{entry.get('diagram_file', '')}"
+                all_vehicle_operation_diagrams["entries"].append(entry)
+            for svg_key, svg_content in day_vehicle_operation.get("svg_payloads", {}).items():
+                all_vehicle_operation_diagrams["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
         route_band_diagrams = all_route_band_diagrams
     else:
         route_band_diagrams = _build_route_band_diagram_assets(
             vehicle_timeline_rows,
             scenario_id,
             graph_context=graph_export_context,
+        )
+        all_vehicle_operation_diagrams = _build_vehicle_operation_diagram_assets(
+            vehicle_timeline_rows,
+            scenario_id,
         )
 
     _write_csv(graph_dir / "vehicle_timeline.csv", vehicle_timeline_rows)
@@ -214,6 +229,11 @@ def export_graph_exports_phase1(
     with open(graph_dir / "kpi_summary.json", "w", encoding="utf-8") as f:
         json.dump(kpi_summary, f, ensure_ascii=False, indent=2)
     _write_route_band_diagram_assets(graph_dir, route_band_diagrams, planning_days=planning_days)
+    _write_vehicle_operation_diagram_assets(
+        graph_dir,
+        all_vehicle_operation_diagrams,
+        planning_days=planning_days,
+    )
 
     files = [
         "vehicle_timeline.csv",
@@ -246,7 +266,18 @@ def export_graph_exports_phase1(
                     else ""
                 ),
                 "diagram_count": len(route_band_diagrams["entries"]),
-            }
+            },
+            "vehicle_operation_diagrams": {
+                "enabled": bool(all_vehicle_operation_diagrams["entries"]),
+                "grouping_key": "vehicle_id",
+                "diagram_format": "svg",
+                "manifest_file": (
+                    "vehicle_operation_diagrams/manifest.json"
+                    if all_vehicle_operation_diagrams["entries"]
+                    else ""
+                ),
+                "diagram_count": len(all_vehicle_operation_diagrams["entries"]),
+            },
         },
     }
     with open(graph_dir / "manifest.json", "w", encoding="utf-8") as f:
@@ -2330,6 +2361,333 @@ def _write_route_band_diagram_assets(
         svg_path.write_text(svg_text, encoding="utf-8")
 
 
+def _vehicle_operation_route_color(route_key: str) -> str:
+    palette = [
+        "#1d4ed8",
+        "#0f766e",
+        "#b45309",
+        "#be123c",
+        "#6d28d9",
+        "#0f766e",
+        "#1f6feb",
+        "#c2410c",
+        "#0369a1",
+        "#7c3aed",
+    ]
+    normalized = str(route_key or "").strip() or "service"
+    digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+    return palette[int(digest[:8], 16) % len(palette)]
+
+
+def _timeline_row_minute(row: Dict[str, Any], key: str) -> Optional[int]:
+    minute_value = row.get(key)
+    if minute_value not in {None, ""}:
+        try:
+            return int(float(minute_value))
+        except (TypeError, ValueError):
+            pass
+    time_key = "start_time" if key == "start_minute" else "end_time"
+    return _parse_iso_minute(row.get(time_key))
+
+
+def _vehicle_operation_label(row: Dict[str, Any]) -> str:
+    state = str(row.get("state") or row.get("event_type") or "").strip().lower()
+    if state == "service":
+        for candidate in (
+            row.get("band_label"),
+            row.get("band_id"),
+            row.get("route_family_code"),
+            row.get("route_id"),
+            row.get("trip_id"),
+        ):
+            text = str(candidate or "").strip()
+            if text:
+                return text
+        return "運用"
+    if state == "deadhead":
+        return "回送"
+    if state == "charge":
+        power_kw = row.get("charge_power_kw")
+        try:
+            power_value = float(power_kw)
+        except (TypeError, ValueError):
+            power_value = 0.0
+        if power_value > 0.0:
+            return f"充電 {power_value:.0f}kW"
+        return "充電"
+    if state == "refuel":
+        liters = row.get("refuel_liters")
+        try:
+            liters_value = float(liters)
+        except (TypeError, ValueError):
+            liters_value = 0.0
+        if liters_value > 0.0:
+            return f"給油 {liters_value:.0f}L"
+        return "給油"
+    return str(state or "event")
+
+
+def _vehicle_operation_style(row: Dict[str, Any]) -> Dict[str, str]:
+    state = str(row.get("state") or row.get("event_type") or "").strip().lower()
+    if state == "service":
+        route_key = (
+            str(row.get("band_id") or "").strip()
+            or str(row.get("route_family_code") or "").strip()
+            or str(row.get("route_id") or "").strip()
+            or str(row.get("trip_id") or "").strip()
+        )
+        fill = _vehicle_operation_route_color(route_key)
+        return {"fill": fill, "stroke": "#0f172a", "text": "#ffffff", "dash": ""}
+    if state == "deadhead":
+        return {"fill": "#cbd5e1", "stroke": "#475569", "text": "#0f172a", "dash": ' stroke-dasharray="6 4"'}
+    if state == "charge":
+        return {"fill": "#86efac", "stroke": "#15803d", "text": "#14532d", "dash": ""}
+    if state == "refuel":
+        return {"fill": "#d9f99d", "stroke": "#65a30d", "text": "#365314", "dash": ""}
+    return {"fill": "#e5e7eb", "stroke": "#6b7280", "text": "#111827", "dash": ""}
+
+
+def _vehicle_operation_diagram_svg(
+    *,
+    scenario_id: str,
+    rows: List[Dict[str, Any]],
+    title_label: str = "All Vehicles",
+) -> str:
+    diagram_rows = []
+    for row in rows:
+        state = str(row.get("state") or row.get("event_type") or "").strip().lower()
+        if state not in {"service", "deadhead", "charge", "refuel"}:
+            continue
+        start_minute = _timeline_row_minute(row, "start_minute")
+        end_minute = _timeline_row_minute(row, "end_minute")
+        vehicle_id = str(row.get("vehicle_id") or "").strip()
+        if not vehicle_id or start_minute is None or end_minute is None:
+            continue
+        if end_minute <= start_minute:
+            end_minute = start_minute + 1
+        diagram_rows.append({**row, "start_minute": start_minute, "end_minute": end_minute, "state": state})
+    if not diagram_rows:
+        return ""
+
+    rows_by_vehicle: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    vehicle_type_by_id: Dict[str, str] = {}
+    for row in diagram_rows:
+        vehicle_id = str(row.get("vehicle_id") or "").strip()
+        rows_by_vehicle[vehicle_id].append(row)
+        vehicle_type_by_id.setdefault(vehicle_id, str(row.get("vehicle_type") or "").strip())
+
+    def _vehicle_sort_key(vehicle_id: str) -> tuple[int, str]:
+        vehicle_type = str(vehicle_type_by_id.get(vehicle_id) or "").upper()
+        if vehicle_type == "BEV" or "EV" in vehicle_type:
+            return (0, vehicle_id)
+        if vehicle_type in {"ICE", "ENGINE", "DIESEL"}:
+            return (1, vehicle_id)
+        return (2, vehicle_id)
+
+    vehicle_ids = sorted(rows_by_vehicle.keys(), key=_vehicle_sort_key)
+    min_minute = 0
+    max_minute = 24 * 60 - 1
+    left_margin = max(
+        220,
+        min(
+            520,
+            54
+            + max(
+                len(f"{vehicle_id} [{str(vehicle_type_by_id.get(vehicle_id) or '?')}]")
+                for vehicle_id in vehicle_ids
+            )
+            * 8,
+        ),
+    )
+    right_margin = 48
+    top_margin = 94
+    bottom_margin = 72
+    lane_height = 28
+    plot_width = 3200
+    plot_height = max(220, len(vehicle_ids) * lane_height)
+    width = left_margin + plot_width + right_margin
+    height = top_margin + plot_height + bottom_margin
+
+    def _x(minute: int) -> float:
+        raw_x = float(left_margin) + (float(minute - min_minute) / float(max_minute - min_minute)) * float(plot_width)
+        return min(max(raw_x, float(left_margin)), float(left_margin + plot_width))
+
+    def _lane_y(idx: int) -> float:
+        return float(top_margin + idx * lane_height)
+
+    clip_id = f"clip-{_safe_export_name(f'{scenario_id}-{title_label}-vehicle-operation', fallback='vehicle_operation')}"
+    svg_parts: List[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        "<defs>",
+        f'<clipPath id="{clip_id}"><rect x="{left_margin}" y="{top_margin}" width="{plot_width}" height="{plot_height}"/></clipPath>',
+        "</defs>",
+        '<rect width="100%" height="100%" fill="#fffdf8"/>',
+        f'<text x="{left_margin}" y="34" font-size="24" font-family="Segoe UI, Meiryo, sans-serif" fill="#14213d">Vehicle Operation Diagram: {html.escape(title_label)}</text>',
+        f'<text x="{left_margin}" y="60" font-size="13" font-family="Segoe UI, Meiryo, sans-serif" fill="#5c677d">scenario={html.escape(scenario_id)} / lanes={len(vehicle_ids)} / horizontal bars by vehicle / labels show route on service bars</text>',
+    ]
+
+    hour_marks = list(range(0, 24 * 60, 60))
+    for minute in hour_marks:
+        x = _x(minute)
+        svg_parts.append(
+            f'<line x1="{x:.1f}" y1="{top_margin}" x2="{x:.1f}" y2="{top_margin + plot_height}" stroke="#e5e7eb" stroke-width="1"/>'
+        )
+        svg_parts.append(
+            f'<text x="{x:.1f}" y="{top_margin + plot_height + 28}" text-anchor="middle" font-size="12" font-family="Segoe UI, Meiryo, sans-serif" fill="#394867">{minute // 60:02d}:{minute % 60:02d}</text>'
+        )
+    svg_parts.append(
+        f'<text x="{left_margin + plot_width:.1f}" y="{top_margin + plot_height + 28}" text-anchor="end" font-size="12" font-family="Segoe UI, Meiryo, sans-serif" fill="#394867">23:59</text>'
+    )
+    svg_parts.append(
+        f'<rect x="{left_margin}" y="{top_margin}" width="{plot_width}" height="{plot_height}" fill="none" stroke="#98a2b3" stroke-width="1.2"/>'
+    )
+
+    plot_parts: List[str] = [f'<g clip-path="url(#{clip_id})">']
+    text_parts: List[str] = []
+    for idx, vehicle_id in enumerate(vehicle_ids):
+        lane_y = _lane_y(idx)
+        lane_center = lane_y + lane_height / 2.0
+        vehicle_type = str(vehicle_type_by_id.get(vehicle_id) or "").strip() or "?"
+        svg_parts.append(
+            f'<line x1="{left_margin}" y1="{lane_y + lane_height:.1f}" x2="{left_margin + plot_width}" y2="{lane_y + lane_height:.1f}" stroke="#f1f5f9" stroke-width="1"/>'
+        )
+        svg_parts.append(
+            f'<text x="{left_margin - 12}" y="{lane_center + 4:.1f}" text-anchor="end" font-size="12.5" font-family="Consolas, Meiryo, monospace" fill="#22304a">{html.escape(vehicle_id)} [{html.escape(vehicle_type)}]</text>'
+        )
+        vehicle_rows = sorted(
+            rows_by_vehicle.get(vehicle_id, []),
+            key=lambda item: (int(item.get("start_minute") or 0), int(item.get("end_minute") or 0), str(item.get("state") or "")),
+        )
+        for row in vehicle_rows:
+            start_minute = int(row.get("start_minute") or 0)
+            end_minute = int(row.get("end_minute") or start_minute + 1)
+            x1 = _x(start_minute)
+            x2 = _x(max(end_minute, start_minute + 1))
+            bar_width = max(x2 - x1, 1.5)
+            bar_y = lane_y + 4.0
+            bar_height = lane_height - 8.0
+            style = _vehicle_operation_style(row)
+            label = _vehicle_operation_label(row)
+            title = (
+                f"{vehicle_id} | {label} | "
+                f"{start_minute // 60:02d}:{start_minute % 60:02d}-{end_minute // 60:02d}:{end_minute % 60:02d}"
+            )
+            fill = style["fill"]
+            stroke = style["stroke"]
+            dash = style["dash"]
+            text_fill = style["text"]
+            plot_parts.append(
+                f'<g><title>{html.escape(title)}</title><rect x="{x1:.1f}" y="{bar_y:.1f}" width="{bar_width:.1f}" height="{bar_height:.1f}" rx="4" ry="4" fill="{fill}" stroke="{stroke}" stroke-width="1.0"{dash}/></g>'
+            )
+            if bar_width >= 52.0:
+                display_label = label
+                max_chars = max(int((bar_width - 12.0) // 7.2), 4)
+                if len(display_label) > max_chars:
+                    display_label = display_label[: max_chars - 1] + "…"
+                text_parts.append(
+                    f'<text x="{x1 + 6.0:.1f}" y="{lane_center + 4:.1f}" font-size="11" font-family="Segoe UI, Meiryo, sans-serif" fill="{text_fill}">{html.escape(display_label)}</text>'
+                )
+    plot_parts.append("</g>")
+    svg_parts.extend(plot_parts)
+    svg_parts.extend(text_parts)
+
+    legend_x = left_margin
+    legend_y = 78
+    legend_items = [
+        ("service", "#1d4ed8", "#0f172a", "運用（ラベルに路線系統を表示）"),
+        ("deadhead", "#cbd5e1", "#475569", "回送"),
+        ("charge", "#86efac", "#15803d", "充電"),
+        ("refuel", "#d9f99d", "#65a30d", "給油"),
+    ]
+    for idx, (_state, fill, stroke, label) in enumerate(legend_items):
+        x = legend_x + idx * 210
+        svg_parts.append(
+            f'<rect x="{x:.1f}" y="{legend_y - 10:.1f}" width="22" height="12" rx="3" ry="3" fill="{fill}" stroke="{stroke}" stroke-width="1"/>'
+        )
+        svg_parts.append(
+            f'<text x="{x + 30:.1f}" y="{legend_y:.1f}" font-size="12" font-family="Segoe UI, Meiryo, sans-serif" fill="#22304a">{html.escape(label)}</text>'
+        )
+
+    svg_parts.append("</svg>")
+    return "".join(svg_parts)
+
+
+def _build_vehicle_operation_diagram_assets(
+    vehicle_timeline_rows: List[Dict[str, Any]],
+    scenario_id: str,
+) -> Dict[str, Any]:
+    rows = [
+        dict(row)
+        for row in vehicle_timeline_rows
+        if str(row.get("vehicle_id") or "").strip()
+        and str(row.get("state") or row.get("event_type") or "").strip().lower() in {"service", "deadhead", "charge", "refuel"}
+    ]
+    if not rows:
+        return {"entries": [], "svg_payloads": {}}
+
+    vehicle_ids = sorted({str(row.get("vehicle_id") or "").strip() for row in rows if str(row.get("vehicle_id") or "").strip()})
+    state_counts: Dict[str, int] = defaultdict(int)
+    for row in rows:
+        state_counts[str(row.get("state") or row.get("event_type") or "").strip().lower()] += 1
+
+    filename = "all_vehicles.svg"
+    return {
+        "entries": [
+            {
+                "scenario_id": scenario_id,
+                "diagram_id": "all_vehicles",
+                "diagram_label": "All Vehicles",
+                "vehicle_count": len(vehicle_ids),
+                "vehicle_ids": vehicle_ids,
+                "event_count": len(rows),
+                "state_counts": dict(state_counts),
+                "diagram_file": filename,
+            }
+        ],
+        "svg_payloads": {
+            filename: _vehicle_operation_diagram_svg(
+                scenario_id=scenario_id,
+                rows=rows,
+                title_label="All Vehicles",
+            )
+        },
+    }
+
+
+def _write_vehicle_operation_diagram_assets(
+    target_root: Path,
+    assets: Dict[str, Any],
+    *,
+    planning_days: int = 1,
+) -> None:
+    entries = list(assets.get("entries") or [])
+    svg_payloads = dict(assets.get("svg_payloads") or assets.get("svgs") or {})
+    if not entries:
+        return
+    output_dir = target_root / "vehicle_operation_diagrams"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if planning_days > 1:
+        for day_idx in range(planning_days):
+            (output_dir / f"day_{day_idx}").mkdir(parents=True, exist_ok=True)
+
+    manifest = {
+        "schema_version": "1.0.0",
+        "generated_at": _tokyo_now().isoformat(),
+        "grouping_key": "vehicle_id",
+        "diagram_format": "svg",
+        "planning_days": planning_days,
+        "entries": entries,
+    }
+    with open(output_dir / "manifest.json", "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    for filename, svg_text in svg_payloads.items():
+        svg_path = output_dir / filename
+        svg_path.parent.mkdir(parents=True, exist_ok=True)
+        svg_path.write_text(svg_text, encoding="utf-8")
+
+
 def _filter_timeline_rows_for_day(
     rows: List[Dict[str, Any]],
     day_idx: int,
@@ -2338,43 +2696,55 @@ def _filter_timeline_rows_for_day(
     """Filter timeline rows for a specific day index."""
     day_start_min = day_idx * 24 * 60
     day_end_min = (day_idx + 1) * 24 * 60
-    
+
+    base_date: Optional[date] = None
+    for row in rows:
+        for key in ("start_time", "end_time"):
+            text = str(row.get(key) or "").strip()
+            if not text:
+                continue
+            try:
+                parsed = datetime.fromisoformat(text)
+            except ValueError:
+                continue
+            if base_date is None or parsed.date() < base_date:
+                base_date = parsed.date()
+
+    def _absolute_minute(row: Dict[str, Any], *, minute_key: str, time_key: str) -> Optional[int]:
+        value = row.get(minute_key)
+        if value not in {None, ""}:
+            try:
+                return int(float(value))
+            except (TypeError, ValueError):
+                pass
+        text = str(row.get(time_key) or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return _parse_iso_minute(text)
+        if base_date is None:
+            return parsed.hour * 60 + parsed.minute
+        return (parsed.date() - base_date).days * 24 * 60 + parsed.hour * 60 + parsed.minute
+
     filtered = []
     for row in rows:
-        # Extract start/end times
-        start_str = str(row.get("start_time") or row.get("start_minute") or "")
-        end_str = str(row.get("end_time") or row.get("end_minute") or "")
-        
-        # Try parsing HH:MM format
-        start_min = None
-        end_min = None
-        try:
-            if ":" in start_str:
-                h, m = map(int, start_str.split(":")[:2])
-                start_min = h * 60 + m
-            elif start_str.isdigit():
-                start_min = int(start_str)
-            if ":" in end_str:
-                h, m = map(int, end_str.split(":")[:2])
-                end_min = h * 60 + m
-            elif end_str.isdigit():
-                end_min = int(end_str)
-        except (ValueError, TypeError):
-            pass
-        
+        start_min = _absolute_minute(row, minute_key="start_minute", time_key="start_time")
+        end_min = _absolute_minute(row, minute_key="end_minute", time_key="end_time")
+        if start_min is None:
+            continue
+        if end_min is None:
+            end_min = start_min + max(int(timestep_min or 30), 1)
+
         # Check if row falls within this day
-        if start_min is not None:
-            # Adjust for multi-day: timeline minutes may exceed 24h
-            row_day = start_min // (24 * 60)
-            if row_day == day_idx:
-                # Adjust times to be day-relative
-                adjusted_row = dict(row)
-                if start_min is not None:
-                    adjusted_row["start_minute"] = start_min - day_start_min
-                if end_min is not None:
-                    adjusted_row["end_minute"] = end_min - day_start_min
-                filtered.append(adjusted_row)
-    
+        row_day = start_min // (24 * 60)
+        if row_day == day_idx or (start_min < day_end_min and end_min > day_start_min):
+            adjusted_row = dict(row)
+            adjusted_row["start_minute"] = start_min - day_start_min
+            adjusted_row["end_minute"] = end_min - day_start_min
+            filtered.append(adjusted_row)
+
     return filtered
 
 

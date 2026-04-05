@@ -72,6 +72,7 @@ class FeasibilityChecker:
         )
 
         errors.extend(self._evaluate_vehicle_fragment_integrity(problem, plan))
+        errors.extend(self._evaluate_startup_deadhead(problem, plan))
 
         soc_errors = self._evaluate_soc(problem, plan)
         errors.extend(soc_errors)
@@ -161,6 +162,55 @@ class FeasibilityChecker:
                         f"[SOC] duty={duty.duty_id} trip={trip.trip_id} post-trip SOC {soc:.2f} < 0"
                     )
 
+        return errors
+
+    def _evaluate_startup_deadhead(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> List[str]:
+        errors: List[str] = []
+        if not plan.duties:
+            return errors
+
+        context = problem.dispatch_context
+        get_deadhead_min = getattr(context, "get_deadhead_min", None)
+        locations_equivalent = getattr(context, "locations_equivalent", None)
+        has_location_data = getattr(context, "has_location_data", None)
+        if not callable(get_deadhead_min):
+            return errors
+
+        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+        duty_vehicle_map = plan.duty_vehicle_map()
+        for duty in plan.duties:
+            if not duty.legs:
+                continue
+            vehicle_id = str(duty_vehicle_map.get(duty.duty_id) or duty.duty_id)
+            vehicle = vehicle_by_id.get(vehicle_id)
+            if vehicle is None:
+                continue
+            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
+            first_leg = duty.legs[0]
+            origin_key = str(
+                getattr(first_leg.trip, "origin_stop_id", "")
+                or getattr(first_leg.trip, "origin", "")
+                or ""
+            ).strip()
+            if not home_depot_id or not origin_key:
+                continue
+            equivalent = bool(callable(locations_equivalent) and locations_equivalent(home_depot_id, origin_key))
+            required_deadhead_min = max(int(get_deadhead_min(home_depot_id, origin_key) or 0), 0)
+            if required_deadhead_min <= 0 and not equivalent:
+                if callable(has_location_data) and has_location_data(home_depot_id):
+                    errors.append(
+                        f"[STARTUP] duty={duty.duty_id} vehicle={vehicle_id} has no deadhead path from depot '{home_depot_id}' to first origin '{origin_key}'"
+                    )
+                continue
+            actual_deadhead_min = max(int(first_leg.deadhead_from_prev_min or 0), 0)
+            if actual_deadhead_min + 1.0e-6 < required_deadhead_min:
+                errors.append(
+                    f"[STARTUP] duty={duty.duty_id} vehicle={vehicle_id} startup deadhead {actual_deadhead_min} < required {required_deadhead_min}"
+                )
         return errors
 
     def _evaluate_vehicle_fragment_integrity(

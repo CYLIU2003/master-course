@@ -91,11 +91,21 @@ class GurobiMILPAdapter:
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         assignment_pairs = builder.enumerate_assignment_pairs(problem)
         arc_pairs = builder.enumerate_arc_pairs(problem, trip_by_id)
+        vehicle_by_id = {
+            str(vehicle.vehicle_id): vehicle
+            for vehicle in problem.vehicles
+        }
         assignment_trip_ids_by_vehicle: Dict[str, List[str]] = {}
         assignment_vehicle_ids_by_trip: Dict[str, List[str]] = {}
+        startup_feasible_by_assignment: Dict[Tuple[str, str], bool] = {}
         for vehicle_id, trip_id in assignment_pairs:
             assignment_trip_ids_by_vehicle.setdefault(vehicle_id, []).append(trip_id)
             assignment_vehicle_ids_by_trip.setdefault(trip_id, []).append(vehicle_id)
+            startup_feasible_by_assignment[(vehicle_id, trip_id)] = self._vehicle_can_start_trip(
+                problem,
+                vehicle_by_id.get(str(vehicle_id)),
+                trip_by_id.get(str(trip_id)),
+            )
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
         route_band_by_trip_id = {
             trip.trip_id: self._route_band_key(
@@ -186,6 +196,9 @@ class GurobiMILPAdapter:
                 model.addConstr(var <= y[(vehicle_id, from_trip_id)])
             if (vehicle_id, to_trip_id) in y:
                 model.addConstr(var <= y[(vehicle_id, to_trip_id)])
+        for key, var in start_arc.items():
+            if not startup_feasible_by_assignment.get(key, True):
+                model.addConstr(var == 0)
 
         max_start_fragments_per_vehicle = self._safe_positive_int(
             problem.metadata.get("max_start_fragments_per_vehicle"),
@@ -1858,6 +1871,34 @@ class GurobiMILPAdapter:
             vehicle_type=vehicle_type,
             legs=tuple(legs),
         )
+
+    def _vehicle_can_start_trip(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        trip: ProblemTrip | None,
+    ) -> bool:
+        if vehicle is None or trip is None:
+            return False
+        home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
+        origin_key = str(getattr(trip, "origin", "") or "").strip()
+        if not home_depot_id or not origin_key:
+            return False
+        dispatch_trip = problem.dispatch_context.trips_by_id().get(trip.trip_id)
+        if dispatch_trip is not None:
+            origin_key = str(
+                getattr(dispatch_trip, "origin_stop_id", None)
+                or getattr(dispatch_trip, "origin", None)
+                or origin_key
+            ).strip()
+        if problem.dispatch_context.locations_equivalent(home_depot_id, origin_key):
+            return True
+        if int(problem.dispatch_context.get_deadhead_min(home_depot_id, origin_key) or 0) > 0:
+            return True
+        has_location_data = getattr(problem.dispatch_context, "has_location_data", None)
+        if callable(has_location_data) and has_location_data(home_depot_id):
+            return False
+        return True
 
     def _binary_value(self, var: Any) -> bool:
         try:

@@ -5,7 +5,13 @@ import time
 from dataclasses import replace
 from typing import Callable, Dict
 
-from .acceptance import SimulatedAnnealingAcceptance
+from .acceptance import (
+    AcceptanceCriterion,
+    BeeColonyAcceptance,
+    GeneticLikeAcceptance,
+    HillClimbingAcceptance,
+    SimulatedAnnealingAcceptance,
+)
 from .local_search import identity_local_search
 from .operators_destroy import (
     peak_hour_removal,
@@ -23,7 +29,7 @@ from .operators_repair import (
     regret_k_insertion,
     soc_repair,
 )
-from .selection import AdaptiveRouletteSelector
+from .selection import AdaptiveRouletteSelector, OperatorSelector, UniformRandomSelector
 from .stopping import CompositeStop
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
@@ -50,22 +56,9 @@ class ALNSOptimizer:
         initial_state: SolutionState | None = None,
     ) -> OptimizationEngineResult:
         rng = random.Random(config.random_seed)
-        selector = AdaptiveRouletteSelector(
-            weights={
-                "random_trip_removal": 1.0,
-                "peak_hour_removal": 1.0,
-                "worst_trip_removal": 1.0,
-                "vehicle_path_removal": 1.0,
-                "unlocked_future_only_removal": 1.0,
-                "greedy_trip_insertion": 1.0,
-                "regret_k_insertion": 1.0,
-                "energy_aware_insertion": 1.0,
-                "baseline_dispatch_repair": 1.0,
-                "charger_reassignment_repair": 1.0,
-                "soc_repair": 1.0,
-                "partial_milp_repair": 1.0,
-            }
-        )
+        selector = self._make_selector(config)
+        if isinstance(selector, AdaptiveRouletteSelector):
+            selector.weights = self._default_selector_weights()
         destroy_ops: Dict[str, Callable[..., object]] = {
             "random_trip_removal": lambda plan: random_trip_removal(plan, rng, config.destroy_fraction),
             "peak_hour_removal": lambda plan: peak_hour_removal(
@@ -103,7 +96,7 @@ class ALNSOptimizer:
             "soc_repair": soc_repair,
             "partial_milp_repair": partial_milp_repair,
         }
-        acceptance = SimulatedAnnealingAcceptance()
+        acceptance = self._make_acceptance(config)
         stopper = CompositeStop(
             max_iterations=config.alns_iterations,
             max_runtime_sec=config.time_limit_sec,
@@ -201,7 +194,16 @@ class ALNSOptimizer:
             cost_breakdown=best.cost_breakdown,
             solver_metadata={
                 "iterations": iteration,
-                "best_destroy_operator": max(selector.weights, key=selector.weights.get),
+                "best_destroy_operator": max(
+                    destroy_ops.keys(),
+                    key=lambda name: (
+                        operator_stats[name].accepted,
+                        operator_stats[name].selected,
+                        name,
+                    ),
+                ),
+                "acceptance_strategy": str(config.acceptance or "simulated_annealing"),
+                "operator_selection_strategy": str(config.operator_selection or "adaptive_roulette"),
                 "accepted_neighborhoods": accepted_count,
                 "rejected_neighborhoods": rejected_count,
                 "objective_mode": problem.scenario.objective_mode,
@@ -227,6 +229,38 @@ class ALNSOptimizer:
             operator_stats=operator_stats,
             incumbent_history=tuple(incumbent_history),
         )
+
+    def _default_selector_weights(self) -> Dict[str, float]:
+        return {
+            "random_trip_removal": 1.0,
+            "peak_hour_removal": 1.0,
+            "worst_trip_removal": 1.0,
+            "vehicle_path_removal": 1.0,
+            "unlocked_future_only_removal": 1.0,
+            "greedy_trip_insertion": 1.0,
+            "regret_k_insertion": 1.0,
+            "energy_aware_insertion": 1.0,
+            "baseline_dispatch_repair": 1.0,
+            "charger_reassignment_repair": 1.0,
+            "soc_repair": 1.0,
+            "partial_milp_repair": 1.0,
+        }
+
+    def _make_acceptance(self, config: OptimizationConfig) -> AcceptanceCriterion:
+        strategy = str(config.acceptance or "simulated_annealing").strip().lower()
+        if strategy in {"hill_climbing", "hillclimbing"}:
+            return HillClimbingAcceptance()
+        if strategy in {"genetic_like", "genetic"}:
+            return GeneticLikeAcceptance()
+        if strategy in {"bee_colony_like", "bee", "abc"}:
+            return BeeColonyAcceptance()
+        return SimulatedAnnealingAcceptance()
+
+    def _make_selector(self, config: OptimizationConfig) -> OperatorSelector:
+        strategy = str(config.operator_selection or "adaptive_roulette").strip().lower()
+        if strategy in {"uniform_random", "uniform"}:
+            return UniformRandomSelector()
+        return AdaptiveRouletteSelector()
 
     def _make_state(
         self,

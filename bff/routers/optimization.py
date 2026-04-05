@@ -551,6 +551,394 @@ def _write_csv_rows(path: Path, rows: List[Dict[str, Any]], fieldnames: List[str
             writer.writerow({k: row.get(k, "") for k in fieldnames})
 
 
+def _normalize_depot_slot_mapping(raw: Any) -> Dict[str, Dict[int, float]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[str, Dict[int, float]] = {}
+    for depot_id, slot_map in raw.items():
+        if isinstance(slot_map, dict):
+            out[str(depot_id)] = {
+                int(slot_idx): float(value or 0.0)
+                for slot_idx, value in slot_map.items()
+            }
+        elif isinstance(slot_map, list):
+            out[str(depot_id)] = {
+                int(slot_idx): float(value or 0.0)
+                for slot_idx, value in enumerate(slot_map)
+            }
+    return out
+
+
+def _mapping_has_positive_flow(mapping: Dict[str, Dict[int, float]]) -> bool:
+    return any(
+        max(float(value or 0.0), 0.0) > 0.0
+        for slot_map in mapping.values()
+        for value in slot_map.values()
+    )
+
+
+def _depot_mapping_has_positive_flow(
+    mapping: Dict[str, Dict[int, float]],
+    depot_id: str,
+) -> bool:
+    return any(max(float(value or 0.0), 0.0) > 0.0 for value in (mapping.get(str(depot_id)) or {}).values())
+
+
+def _canonical_vehicle_home_depot_map(problem) -> Dict[str, str]:
+    return {
+        str(getattr(vehicle, "vehicle_id", "") or ""): str(getattr(vehicle, "home_depot_id", "") or "")
+        for vehicle in list(getattr(problem, "vehicles", ()) or ())
+    }
+
+
+def _canonical_charging_source_and_depot(
+    problem,
+    charging_slot,
+) -> tuple[str, str]:
+    vehicle_home_depot = _canonical_vehicle_home_depot_map(problem)
+    fallback_depot = str(
+        getattr(charging_slot, "charging_depot_id", "") or vehicle_home_depot.get(str(getattr(charging_slot, "vehicle_id", "") or ""), "")
+    ).strip()
+    raw = str(getattr(charging_slot, "charger_id", "") or "")
+    if ":" in raw:
+        source, depot_id = raw.split(":", 1)
+        normalized_source = source.strip().lower()
+        if normalized_source in {"grid", "pv", "bess"}:
+            return normalized_source, depot_id.strip() or fallback_depot or "depot_default"
+    return "grid", fallback_depot or "depot_default"
+
+
+def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
+    timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
+    timestep_h = timestep_min / 60.0
+
+    raw_grid_to_bus = _normalize_depot_slot_mapping(getattr(plan, "grid_to_bus_kwh_by_depot_slot", {}))
+    raw_pv_to_bus = _normalize_depot_slot_mapping(getattr(plan, "pv_to_bus_kwh_by_depot_slot", {}))
+    raw_bess_to_bus = _normalize_depot_slot_mapping(getattr(plan, "bess_to_bus_kwh_by_depot_slot", {}))
+    raw_pv_to_bess = _normalize_depot_slot_mapping(getattr(plan, "pv_to_bess_kwh_by_depot_slot", {}))
+    raw_grid_to_bess = _normalize_depot_slot_mapping(getattr(plan, "grid_to_bess_kwh_by_depot_slot", {}))
+    raw_pv_curtail = _normalize_depot_slot_mapping(getattr(plan, "pv_curtail_kwh_by_depot_slot", {}))
+    raw_bess_soc = _normalize_depot_slot_mapping(getattr(plan, "bess_soc_kwh_by_depot_slot", {}))
+    raw_contract_over_limit = _normalize_depot_slot_mapping(getattr(plan, "contract_over_limit_kwh_by_depot_slot", {}))
+
+    derived_grid_to_bus: Dict[str, Dict[int, float]] = {}
+    derived_pv_to_bus: Dict[str, Dict[int, float]] = {}
+    derived_bess_to_bus: Dict[str, Dict[int, float]] = {}
+    derived_depots: set[str] = set()
+    for charging_slot in list(getattr(plan, "charging_slots", ()) or ()):
+        charge_kw = max(float(getattr(charging_slot, "charge_kw", 0.0) or 0.0), 0.0)
+        discharge_kw = max(float(getattr(charging_slot, "discharge_kw", 0.0) or 0.0), 0.0)
+        net_charge_kwh = max(charge_kw - discharge_kw, 0.0) * timestep_h
+        if net_charge_kwh <= 0.0:
+            continue
+        source, depot_id = _canonical_charging_source_and_depot(problem, charging_slot)
+        if source == "pv":
+            target = derived_pv_to_bus
+        elif source == "bess":
+            target = derived_bess_to_bus
+        else:
+            target = derived_grid_to_bus
+        slot_map = target.setdefault(str(depot_id), {})
+        slot_idx = int(getattr(charging_slot, "slot_index", 0) or 0)
+        slot_map[slot_idx] = slot_map.get(slot_idx, 0.0) + net_charge_kwh
+        derived_depots.add(str(depot_id))
+
+    effective_grid_to_bus = dict(raw_grid_to_bus)
+    effective_pv_to_bus = dict(raw_pv_to_bus)
+    effective_bess_to_bus = dict(raw_bess_to_bus)
+    for depot_id, slot_map in derived_grid_to_bus.items():
+        if not _depot_mapping_has_positive_flow(raw_grid_to_bus, depot_id):
+            effective_grid_to_bus[depot_id] = dict(slot_map)
+    for depot_id, slot_map in derived_pv_to_bus.items():
+        if not _depot_mapping_has_positive_flow(raw_pv_to_bus, depot_id):
+            effective_pv_to_bus[depot_id] = dict(slot_map)
+    for depot_id, slot_map in derived_bess_to_bus.items():
+        if not _depot_mapping_has_positive_flow(raw_bess_to_bus, depot_id):
+            effective_bess_to_bus[depot_id] = dict(slot_map)
+
+    depot_limit_kw = {
+        str(getattr(depot, "depot_id", "") or ""): float(getattr(depot, "import_limit_kw", 0.0) or 0.0)
+        for depot in list(getattr(problem, "depots", ()) or ())
+        if str(getattr(depot, "depot_id", "") or "")
+    }
+    depot_ids = set(depot_limit_kw.keys())
+    for mapping in (
+        effective_grid_to_bus,
+        effective_pv_to_bus,
+        effective_bess_to_bus,
+        raw_pv_to_bess,
+        raw_grid_to_bess,
+        raw_pv_curtail,
+        raw_bess_soc,
+        raw_contract_over_limit,
+    ):
+        depot_ids.update(mapping.keys())
+    depot_ids.update(
+        str(getattr(vehicle, "home_depot_id", "") or "")
+        for vehicle in list(getattr(problem, "vehicles", ()) or ())
+        if str(getattr(vehicle, "home_depot_id", "") or "")
+    )
+    depot_ids.update(str(key) for key in dict(getattr(problem, "depot_energy_assets", {}) or {}).keys())
+
+    pv_generation_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+    for depot_id, asset in dict(getattr(problem, "depot_energy_assets", {}) or {}).items():
+        generation = {}
+        for slot_idx, value in enumerate(list(getattr(asset, "pv_generation_kwh_by_slot", ()) or ())):
+            generation[int(slot_idx)] = max(float(value or 0.0), 0.0)
+        pv_generation_kwh_by_depot_slot[str(depot_id)] = generation
+
+    price_by_slot = {
+        int(getattr(slot, "slot_index", 0) or 0): float(getattr(slot, "grid_buy_yen_per_kwh", 0.0) or 0.0)
+        for slot in list(getattr(problem, "price_slots", ()) or ())
+    }
+    demand_flag_by_slot = {
+        int(getattr(slot, "slot_index", 0) or 0): bool(float(getattr(slot, "demand_charge_weight", 0.0) or 0.0) > 0.0)
+        for slot in list(getattr(problem, "price_slots", ()) or ())
+    }
+
+    explicit_source_split = any(
+        _mapping_has_positive_flow(mapping)
+        for mapping in (
+            raw_grid_to_bus,
+            raw_pv_to_bus,
+            raw_bess_to_bus,
+            raw_pv_to_bess,
+            raw_grid_to_bess,
+            raw_pv_curtail,
+        )
+    )
+    derived_from_charging_slots = any(
+        _mapping_has_positive_flow(mapping)
+        for mapping in (derived_grid_to_bus, derived_pv_to_bus, derived_bess_to_bus)
+    ) and not explicit_source_split
+
+    if explicit_source_split:
+        provenance_note = "Explicit per-source depot/slot energy-flow maps are present in the assignment plan."
+    elif derived_from_charging_slots:
+        provenance_note = (
+            "Per-source depot/slot energy-flow maps are not present; grid-origin charging was derived from charging slots. "
+            "PV/BESS source split remains zero unless the plan encodes it explicitly."
+        )
+    else:
+        provenance_note = "No charging energy flow was recorded for this plan."
+
+    return {
+        "timestep_min": timestep_min,
+        "timestep_h": timestep_h,
+        "depot_ids": sorted(item for item in depot_ids if item),
+        "grid_to_bus_kwh_by_depot_slot": effective_grid_to_bus,
+        "pv_to_bus_kwh_by_depot_slot": effective_pv_to_bus,
+        "bess_to_bus_kwh_by_depot_slot": effective_bess_to_bus,
+        "pv_to_bess_kwh_by_depot_slot": raw_pv_to_bess,
+        "grid_to_bess_kwh_by_depot_slot": raw_grid_to_bess,
+        "pv_curtail_kwh_by_depot_slot": raw_pv_curtail,
+        "bess_soc_kwh_by_depot_slot": raw_bess_soc,
+        "contract_over_limit_kwh_by_depot_slot": raw_contract_over_limit,
+        "pv_generation_kwh_by_depot_slot": pv_generation_kwh_by_depot_slot,
+        "depot_limit_kw": depot_limit_kw,
+        "price_by_slot": price_by_slot,
+        "demand_flag_by_slot": demand_flag_by_slot,
+        "source_provenance_exact": not derived_from_charging_slots,
+        "source_provenance_note": provenance_note,
+        "derived_from_charging_slots": derived_from_charging_slots,
+        "derived_depots": sorted(derived_depots),
+    }
+
+
+def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]:
+    plan = engine_result.plan
+    flow_ctx = _canonical_energy_flow_context(problem, plan)
+    timestep_h = float(flow_ctx["timestep_h"] or 1.0)
+    breakdown = dict(engine_result.cost_breakdown or {})
+    penalty_enabled = bool(
+        (dict(getattr(plan, "metadata", {}) or {}).get("enable_contract_overage_penalty"))
+        if getattr(plan, "metadata", None)
+        else dict(engine_result.solver_metadata or {}).get("enable_contract_overage_penalty", True)
+    )
+    raw_penalty_yen_per_kwh = (
+        dict(getattr(plan, "metadata", {}) or {}).get("contract_overage_penalty_yen_per_kwh")
+        if getattr(plan, "metadata", None)
+        else dict(engine_result.solver_metadata or {}).get("contract_overage_penalty_yen_per_kwh", 0.0)
+    )
+    penalty_yen_per_kwh = float(raw_penalty_yen_per_kwh or 0.0)
+
+    rows: List[Dict[str, Any]] = []
+    per_depot: List[Dict[str, Any]] = []
+    all_slot_indices: set[int] = set()
+    overall_peak_grid_kw = 0.0
+    overall_peak_total_charge_kw = 0.0
+
+    for depot_id in list(flow_ctx["depot_ids"]):
+        depot_slots = set()
+        for key in (
+            "grid_to_bus_kwh_by_depot_slot",
+            "pv_to_bus_kwh_by_depot_slot",
+            "bess_to_bus_kwh_by_depot_slot",
+            "pv_to_bess_kwh_by_depot_slot",
+            "grid_to_bess_kwh_by_depot_slot",
+            "pv_curtail_kwh_by_depot_slot",
+            "bess_soc_kwh_by_depot_slot",
+            "contract_over_limit_kwh_by_depot_slot",
+            "pv_generation_kwh_by_depot_slot",
+        ):
+            depot_slots.update(dict(flow_ctx.get(key) or {}).get(depot_id, {}).keys())
+        peak_grid_kw = 0.0
+        peak_total_charge_kw = 0.0
+        peak_contract_over_kw = 0.0
+        grid_to_bus_total = 0.0
+        pv_to_bus_total = 0.0
+        bess_to_bus_total = 0.0
+        pv_to_bess_total = 0.0
+        grid_to_bess_total = 0.0
+        pv_curtail_total = 0.0
+        contract_over_total = 0.0
+        contract_slot_count = 0
+
+        for slot_idx in sorted(int(idx) for idx in depot_slots):
+            all_slot_indices.add(slot_idx)
+            grid_to_bus = float((flow_ctx["grid_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_to_bus = float((flow_ctx["pv_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            bess_to_bus = float((flow_ctx["bess_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_to_bess = float((flow_ctx["pv_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            grid_to_bess = float((flow_ctx["grid_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_curtail = float((flow_ctx["pv_curtail_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            bess_soc = float((flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            contract_over_limit_kwh = float((flow_ctx["contract_over_limit_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_generation_kwh = float((flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            contract_limit_kw = float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0)
+            grid_import_total_kwh = grid_to_bus + grid_to_bess
+            total_bus_charge_kwh = grid_to_bus + pv_to_bus + bess_to_bus
+            total_bess_charge_kwh = pv_to_bess + grid_to_bess
+            grid_import_kw = grid_import_total_kwh / timestep_h if timestep_h > 0.0 else 0.0
+            total_charge_kw = total_bus_charge_kwh / timestep_h if timestep_h > 0.0 else 0.0
+            if contract_over_limit_kwh <= 1.0e-9 and contract_limit_kw > 0.0:
+                contract_limit_kwh = contract_limit_kw * timestep_h
+                contract_over_limit_kwh = max(grid_import_total_kwh - contract_limit_kwh, 0.0)
+            contract_over_limit_kw = contract_over_limit_kwh / timestep_h if timestep_h > 0.0 else 0.0
+            peak_grid_kw = max(peak_grid_kw, grid_import_kw)
+            peak_total_charge_kw = max(peak_total_charge_kw, total_charge_kw)
+            peak_contract_over_kw = max(peak_contract_over_kw, contract_over_limit_kw)
+            overall_peak_grid_kw = max(overall_peak_grid_kw, grid_import_kw)
+            overall_peak_total_charge_kw = max(overall_peak_total_charge_kw, total_charge_kw)
+            grid_to_bus_total += grid_to_bus
+            pv_to_bus_total += pv_to_bus
+            bess_to_bus_total += bess_to_bus
+            pv_to_bess_total += pv_to_bess
+            grid_to_bess_total += grid_to_bess
+            pv_curtail_total += pv_curtail
+            contract_over_total += contract_over_limit_kwh
+            if contract_over_limit_kwh > 1.0e-9:
+                contract_slot_count += 1
+            rows.append(
+                {
+                    "depot_id": depot_id,
+                    "slot_index": slot_idx,
+                    "grid_to_bus_kwh": grid_to_bus,
+                    "pv_to_bus_kwh": pv_to_bus,
+                    "bess_to_bus_kwh": bess_to_bus,
+                    "pv_to_bess_kwh": pv_to_bess,
+                    "grid_to_bess_kwh": grid_to_bess,
+                    "pv_curtail_kwh": pv_curtail,
+                    "pv_generation_kwh": pv_generation_kwh,
+                    "bess_soc_kwh": bess_soc,
+                    "grid_import_total_kwh": grid_import_total_kwh,
+                    "grid_import_kw": grid_import_kw,
+                    "total_bus_charge_kwh": total_bus_charge_kwh,
+                    "total_bess_charge_kwh": total_bess_charge_kwh,
+                    "total_charge_kw": total_charge_kw,
+                    "contract_limit_kw": contract_limit_kw,
+                    "contract_over_limit_kwh": contract_over_limit_kwh,
+                    "contract_over_limit_kw": contract_over_limit_kw,
+                    "contract_limit_exceeded": contract_over_limit_kwh > 1.0e-9,
+                    "energy_price_yen_per_kwh": float((flow_ctx["price_by_slot"].get(slot_idx, 0.0)) or 0.0),
+                    "demand_charge_window_flag": bool(flow_ctx["demand_flag_by_slot"].get(slot_idx, False)),
+                    "source_provenance_exact": bool(flow_ctx["source_provenance_exact"]),
+                }
+            )
+
+        contract_overage_cost = contract_over_total * penalty_yen_per_kwh if penalty_enabled else 0.0
+        per_depot.append(
+            {
+                "depot_id": depot_id,
+                "source_provenance_exact": bool(flow_ctx["source_provenance_exact"]) and depot_id not in set(flow_ctx["derived_depots"]),
+                "grid_to_bus_kwh": grid_to_bus_total,
+                "pv_to_bus_kwh": pv_to_bus_total,
+                "bess_to_bus_kwh": bess_to_bus_total,
+                "pv_to_bess_kwh": pv_to_bess_total,
+                "grid_to_bess_kwh": grid_to_bess_total,
+                "pv_curtail_kwh": pv_curtail_total,
+                "grid_import_total_kwh": grid_to_bus_total + grid_to_bess_total,
+                "total_bus_charge_kwh": grid_to_bus_total + pv_to_bus_total + bess_to_bus_total,
+                "total_bess_charge_kwh": pv_to_bess_total + grid_to_bess_total,
+                "peak_grid_import_kw": peak_grid_kw,
+                "peak_total_charge_kw": peak_total_charge_kw,
+                "contract_limit_kw": float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0),
+                "contract_over_limit_kwh": contract_over_total,
+                "contract_over_limit_kw_peak": peak_contract_over_kw,
+                "contract_over_limit_slot_count": contract_slot_count,
+                "contract_limit_exceeded": contract_over_total > 1.0e-9,
+                "contract_overage_penalty_enabled": penalty_enabled,
+                "contract_overage_penalty_yen_per_kwh": penalty_yen_per_kwh,
+                "contract_overage_cost_jpy": contract_overage_cost,
+            }
+        )
+
+    overall_grid_import_total_kwh = sum(float(row["grid_import_total_kwh"]) for row in per_depot)
+    overall_contract_over_kwh = sum(float(row["contract_over_limit_kwh"]) for row in per_depot)
+    overall_contract_over_cost = (
+        float(breakdown.get("contract_overage_cost", 0.0) or 0.0)
+        if breakdown
+        else overall_contract_over_kwh * penalty_yen_per_kwh
+    )
+    overall_by_slot_grid_peak = 0.0
+    overall_by_slot_charge_peak = 0.0
+    for slot_idx in sorted(all_slot_indices):
+        total_grid_import_kwh = 0.0
+        total_charge_kwh = 0.0
+        for depot_id in list(flow_ctx["depot_ids"]):
+            total_grid_import_kwh += float((flow_ctx["grid_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            total_grid_import_kwh += float((flow_ctx["grid_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            total_charge_kwh += float((flow_ctx["grid_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            total_charge_kwh += float((flow_ctx["pv_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            total_charge_kwh += float((flow_ctx["bess_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+        overall_by_slot_grid_peak = max(overall_by_slot_grid_peak, total_grid_import_kwh / timestep_h if timestep_h > 0.0 else 0.0)
+        overall_by_slot_charge_peak = max(overall_by_slot_charge_peak, total_charge_kwh / timestep_h if timestep_h > 0.0 else 0.0)
+
+    return {
+        "summary": {
+            "timestep_min": int(flow_ctx["timestep_min"]),
+            "source_provenance_exact": bool(flow_ctx["source_provenance_exact"]),
+            "source_provenance_note": str(flow_ctx["source_provenance_note"] or ""),
+            "depots": per_depot,
+            "totals": {
+                "grid_to_bus_kwh": sum(float(row["grid_to_bus_kwh"]) for row in per_depot),
+                "pv_to_bus_kwh": sum(float(row["pv_to_bus_kwh"]) for row in per_depot),
+                "bess_to_bus_kwh": sum(float(row["bess_to_bus_kwh"]) for row in per_depot),
+                "pv_to_bess_kwh": sum(float(row["pv_to_bess_kwh"]) for row in per_depot),
+                "grid_to_bess_kwh": sum(float(row["grid_to_bess_kwh"]) for row in per_depot),
+                "pv_curtail_kwh": sum(float(row["pv_curtail_kwh"]) for row in per_depot),
+                "grid_import_total_kwh": overall_grid_import_total_kwh,
+                "total_bus_charge_kwh": sum(float(row["total_bus_charge_kwh"]) for row in per_depot),
+                "total_bess_charge_kwh": sum(float(row["total_bess_charge_kwh"]) for row in per_depot),
+                "peak_grid_import_kw_any_depot": overall_peak_grid_kw,
+                "peak_grid_import_kw_all_depots": overall_by_slot_grid_peak,
+                "peak_total_charge_kw_any_depot": overall_peak_total_charge_kw,
+                "peak_total_charge_kw_all_depots": overall_by_slot_charge_peak,
+                "contract_over_limit_kwh": overall_contract_over_kwh,
+                "contract_limit_exceeded": overall_contract_over_kwh > 1.0e-9,
+                "contract_overage_penalty_enabled": penalty_enabled,
+                "contract_overage_penalty_yen_per_kwh": penalty_yen_per_kwh,
+                "contract_overage_cost_jpy": overall_contract_over_cost,
+                "demand_charge_cost_jpy": float(breakdown.get("demand_cost", 0.0) or 0.0),
+                "grid_purchase_cost_jpy": float(breakdown.get("grid_purchase_cost", 0.0) or 0.0),
+                "bess_discharge_cost_jpy": float(breakdown.get("bess_discharge_cost", 0.0) or 0.0),
+                "electricity_cost_jpy": float(breakdown.get("energy_cost", 0.0) or 0.0),
+            },
+        },
+        "rows": rows,
+    }
+
+
 def _persist_rich_run_outputs(
     *,
     run_dir: Path,
@@ -561,6 +949,8 @@ def _persist_rich_run_outputs(
     sim_payload: Optional[Dict[str, Any]],
     canonical_solver_result: Optional[Dict[str, Any]],
     graph_source_dir: Optional[Path] = None,
+    charging_summary: Optional[Dict[str, Any]] = None,
+    charging_flow_payload: Optional[Dict[str, Any]] = None,
 ) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -577,9 +967,15 @@ def _persist_rich_run_outputs(
         "co2_cost": "JPY",
         "total_co2_kg": "kg-CO2",
         "grid_to_bus_kwh": "kWh",
+        "pv_to_bus_kwh": "kWh",
         "grid_to_bess_kwh": "kWh",
         "bess_to_bus_kwh": "kWh",
         "pv_to_bess_kwh": "kWh",
+        "pv_curtail_kwh": "kWh",
+        "grid_import_total_kwh": "kWh",
+        "contract_over_limit_kwh": "kWh",
+        "contract_overage_cost": "JPY",
+        "peak_grid_kw": "kW",
     }
 
     (run_dir / "optimization_result.json").write_text(
@@ -878,48 +1274,172 @@ def _persist_rich_run_outputs(
         ["vehicle_id", "slot_index", "time_hhmm", "refuel_liters", "unit"],
     )
 
-    grid_to_bus_kwh = float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0)
-    grid_to_bess_kwh = float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0)
-    grid_import_total_kwh = grid_to_bus_kwh + grid_to_bess_kwh
-    site_rows = [
-        {
-            "metric": "grid_to_bus_kwh",
-            "value": grid_to_bus_kwh,
-            "unit": "kWh",
-        },
-        {
-            "metric": "grid_to_bess_kwh",
-            "value": grid_to_bess_kwh,
-            "unit": "kWh",
-        },
-        {
-            "metric": "grid_import_total_kwh",
-            "value": grid_import_total_kwh,
-            "unit": "kWh",
-        },
-    ]
-    _write_csv_rows(
-        run_dir / "site_power_balance.csv",
-        site_rows,
-        ["metric", "value", "unit"],
-    )
-    (run_dir / "depot_energy_flows.json").write_text(
-        json.dumps({"rows": site_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    _write_csv_rows(
-        run_dir / "depot_energy_flows.csv",
-        site_rows,
-        ["metric", "value", "unit"],
-    )
+    charging_summary_payload = dict(charging_summary or optimization_result.get("charging_summary") or {})
+    charging_flow_rows = list((charging_flow_payload or {}).get("rows") or [])
+    if charging_summary_payload:
+        (run_dir / "charging_summary.json").write_text(
+            json.dumps(charging_summary_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        charging_summary_rows: List[Dict[str, Any]] = []
+        for depot_row in list(charging_summary_payload.get("depots") or []):
+            if isinstance(depot_row, dict):
+                charging_summary_rows.append({"scope": "depot", **dict(depot_row)})
+        totals_row = dict(charging_summary_payload.get("totals") or {})
+        if totals_row:
+            charging_summary_rows.append({"scope": "total", "depot_id": "", **totals_row})
+        _write_csv_rows(
+            run_dir / "charging_summary.csv",
+            charging_summary_rows,
+            [
+                "scope",
+                "depot_id",
+                "source_provenance_exact",
+                "grid_to_bus_kwh",
+                "pv_to_bus_kwh",
+                "bess_to_bus_kwh",
+                "pv_to_bess_kwh",
+                "grid_to_bess_kwh",
+                "pv_curtail_kwh",
+                "grid_import_total_kwh",
+                "total_bus_charge_kwh",
+                "total_bess_charge_kwh",
+                "peak_grid_import_kw",
+                "peak_grid_import_kw_any_depot",
+                "peak_grid_import_kw_all_depots",
+                "peak_total_charge_kw",
+                "peak_total_charge_kw_any_depot",
+                "peak_total_charge_kw_all_depots",
+                "contract_limit_kw",
+                "contract_over_limit_kwh",
+                "contract_over_limit_kw_peak",
+                "contract_over_limit_slot_count",
+                "contract_limit_exceeded",
+                "contract_overage_penalty_enabled",
+                "contract_overage_penalty_yen_per_kwh",
+                "contract_overage_cost_jpy",
+                "demand_charge_cost_jpy",
+                "grid_purchase_cost_jpy",
+                "bess_discharge_cost_jpy",
+                "electricity_cost_jpy",
+            ],
+        )
+
+    if charging_flow_rows:
+        (run_dir / "depot_energy_flows.json").write_text(
+            json.dumps(
+                {
+                    "rows": charging_flow_rows,
+                    "summary": charging_summary_payload,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        _write_csv_rows(
+            run_dir / "depot_energy_flows.csv",
+            charging_flow_rows,
+            [
+                "depot_id",
+                "slot_index",
+                "grid_to_bus_kwh",
+                "pv_to_bus_kwh",
+                "bess_to_bus_kwh",
+                "pv_to_bess_kwh",
+                "grid_to_bess_kwh",
+                "pv_curtail_kwh",
+                "pv_generation_kwh",
+                "bess_soc_kwh",
+                "grid_import_total_kwh",
+                "grid_import_kw",
+                "total_bus_charge_kwh",
+                "total_bess_charge_kwh",
+                "total_charge_kw",
+                "contract_limit_kw",
+                "contract_over_limit_kwh",
+                "contract_over_limit_kw",
+                "contract_limit_exceeded",
+                "energy_price_yen_per_kwh",
+                "demand_charge_window_flag",
+                "source_provenance_exact",
+            ],
+        )
+    else:
+        grid_to_bus_kwh = float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0)
+        grid_to_bess_kwh = float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0)
+        grid_import_total_kwh = grid_to_bus_kwh + grid_to_bess_kwh
+        fallback_rows = [
+            {"metric": "grid_to_bus_kwh", "value": grid_to_bus_kwh, "unit": "kWh"},
+            {"metric": "grid_to_bess_kwh", "value": grid_to_bess_kwh, "unit": "kWh"},
+            {"metric": "grid_import_total_kwh", "value": grid_import_total_kwh, "unit": "kWh"},
+        ]
+        (run_dir / "depot_energy_flows.json").write_text(
+            json.dumps({"rows": fallback_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        _write_csv_rows(
+            run_dir / "depot_energy_flows.csv",
+            fallback_rows,
+            ["metric", "value", "unit"],
+        )
+
+    if charging_summary_payload:
+        totals = dict(charging_summary_payload.get("totals") or {})
+        site_rows = [
+            {"metric": "grid_to_bus_kwh", "value": float(totals.get("grid_to_bus_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "pv_to_bus_kwh", "value": float(totals.get("pv_to_bus_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "bess_to_bus_kwh", "value": float(totals.get("bess_to_bus_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "pv_to_bess_kwh", "value": float(totals.get("pv_to_bess_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "grid_to_bess_kwh", "value": float(totals.get("grid_to_bess_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "pv_curtail_kwh", "value": float(totals.get("pv_curtail_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "grid_import_total_kwh", "value": float(totals.get("grid_import_total_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "peak_grid_import_kw_all_depots", "value": float(totals.get("peak_grid_import_kw_all_depots", 0.0) or 0.0), "unit": "kW"},
+            {"metric": "contract_over_limit_kwh", "value": float(totals.get("contract_over_limit_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "contract_overage_cost_jpy", "value": float(totals.get("contract_overage_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
+            {"metric": "demand_charge_cost_jpy", "value": float(totals.get("demand_charge_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
+            {"metric": "grid_purchase_cost_jpy", "value": float(totals.get("grid_purchase_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
+            {"metric": "bess_discharge_cost_jpy", "value": float(totals.get("bess_discharge_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
+            {"metric": "electricity_cost_jpy", "value": float(totals.get("electricity_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
+            {"metric": "contract_limit_exceeded", "value": bool(totals.get("contract_limit_exceeded", False)), "unit": "flag"},
+        ]
+    else:
+        grid_to_bus_kwh = float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0)
+        grid_to_bess_kwh = float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0)
+        grid_import_total_kwh = grid_to_bus_kwh + grid_to_bess_kwh
+        site_rows = [
+            {"metric": "grid_to_bus_kwh", "value": grid_to_bus_kwh, "unit": "kWh"},
+            {"metric": "grid_to_bess_kwh", "value": grid_to_bess_kwh, "unit": "kWh"},
+            {"metric": "grid_import_total_kwh", "value": grid_import_total_kwh, "unit": "kWh"},
+        ]
+    _write_csv_rows(run_dir / "site_power_balance.csv", site_rows, ["metric", "value", "unit"])
 
     kpi_summary = {
         "total_cost_jpy": float(cost_breakdown.get("total_cost", 0.0) or 0.0),
         "electricity_cost_jpy": float(cost_breakdown.get("energy_cost", 0.0) or 0.0),
-        "grid_import_total_kwh": grid_import_total_kwh,
+        "grid_import_total_kwh": float(
+            dict((charging_summary_payload or {}).get("totals") or {}).get("grid_import_total_kwh", 0.0)
+            or (float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0) + float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0))
+        ),
         "served_trip_count": int(summary_payload.get("trip_count_served") or 0),
         "unserved_trip_count": int(summary_payload.get("trip_count_unserved") or 0),
         "solver_runtime_sec": float(optimization_result.get("solve_time_seconds") or 0.0),
     }
+    if charging_summary_payload:
+        totals = dict(charging_summary_payload.get("totals") or {})
+        kpi_summary.update(
+            {
+                "pv_to_bus_kwh": float(totals.get("pv_to_bus_kwh", 0.0) or 0.0),
+                "bess_to_bus_kwh": float(totals.get("bess_to_bus_kwh", 0.0) or 0.0),
+                "grid_to_bess_kwh": float(totals.get("grid_to_bess_kwh", 0.0) or 0.0),
+                "pv_to_bess_kwh": float(totals.get("pv_to_bess_kwh", 0.0) or 0.0),
+                "contract_over_limit_kwh": float(totals.get("contract_over_limit_kwh", 0.0) or 0.0),
+                "contract_overage_cost_jpy": float(totals.get("contract_overage_cost_jpy", 0.0) or 0.0),
+                "demand_charge_cost_jpy": float(totals.get("demand_charge_cost_jpy", 0.0) or 0.0),
+                "peak_grid_import_kw_all_depots": float(totals.get("peak_grid_import_kw_all_depots", 0.0) or 0.0),
+                "contract_limit_exceeded": bool(totals.get("contract_limit_exceeded", False)),
+                "charging_source_provenance_exact": bool(charging_summary_payload.get("source_provenance_exact", False)),
+            }
+        )
     (run_dir / "kpi_summary.json").write_text(
         json.dumps(kpi_summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -1544,44 +2064,46 @@ def _canonical_depot_power_rows_5min(
     base_date: date,
 ) -> List[Dict[str, Any]]:
     plan = engine_result.plan
+    flow_ctx = _canonical_energy_flow_context(problem, plan)
     slot_count = max(
         len(problem.price_slots),
         max((int(getattr(slot, "slot_index", 0) or 0) + 1 for slot in plan.charging_slots), default=0),
+        max(
+            (
+                int(slot_idx) + 1
+                for key in (
+                    "grid_to_bus_kwh_by_depot_slot",
+                    "pv_to_bus_kwh_by_depot_slot",
+                    "bess_to_bus_kwh_by_depot_slot",
+                    "pv_to_bess_kwh_by_depot_slot",
+                    "grid_to_bess_kwh_by_depot_slot",
+                    "contract_over_limit_kwh_by_depot_slot",
+                )
+                for slot_map in dict(flow_ctx.get(key) or {}).values()
+                for slot_idx in dict(slot_map or {}).keys()
+            ),
+            default=0,
+        ),
     )
     if slot_count <= 0:
         return []
     timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
     timestep_h = timestep_min / 60.0
-    depot_ids = {
-        str(depot.depot_id)
-        for depot in problem.depots
-    }
-    depot_ids.update(str(getattr(vehicle, "home_depot_id", "") or "") for vehicle in problem.vehicles)
-    depot_ids.update(str(key) for key in (plan.grid_to_bus_kwh_by_depot_slot or {}).keys())
-    depot_ids.update(str(key) for key in (plan.pv_to_bus_kwh_by_depot_slot or {}).keys())
-    depot_ids.update(str(key) for key in (plan.bess_to_bus_kwh_by_depot_slot or {}).keys())
-    depot_ids.update(str(key) for key in (plan.pv_to_bess_kwh_by_depot_slot or {}).keys())
-    depot_ids.update(str(key) for key in (plan.grid_to_bess_kwh_by_depot_slot or {}).keys())
-    depot_ids.update(str(key) for key in (problem.depot_energy_assets or {}).keys())
-    price_by_slot = {int(slot.slot_index): float(slot.grid_buy_yen_per_kwh or 0.0) for slot in problem.price_slots}
-    demand_flag_by_slot = {
-        int(slot.slot_index): bool(float(slot.demand_charge_weight or 0.0) > 0.0)
-        for slot in problem.price_slots
-    }
 
     slot_values_by_depot: Dict[str, Dict[int, Dict[str, float]]] = defaultdict(dict)
-    for depot_id in sorted(item for item in depot_ids if item):
-        asset = (problem.depot_energy_assets or {}).get(depot_id)
+    for depot_id in list(flow_ctx["depot_ids"]):
         for slot_idx in range(slot_count):
-            grid_to_bus = float(((plan.grid_to_bus_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
-            pv_to_bus = float(((plan.pv_to_bus_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
-            bess_to_bus = float(((plan.bess_to_bus_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
-            pv_to_bess = float(((plan.pv_to_bess_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
-            grid_to_bess = float(((plan.grid_to_bess_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
-            pv_curtail = float(((plan.pv_curtail_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
-            pv_generation = 0.0
-            if asset is not None and slot_idx < len(getattr(asset, "pv_generation_kwh_by_slot", ())):
-                pv_generation = float(asset.pv_generation_kwh_by_slot[slot_idx] or 0.0)
+            grid_to_bus = float((flow_ctx["grid_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_to_bus = float((flow_ctx["pv_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            bess_to_bus = float((flow_ctx["bess_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_to_bess = float((flow_ctx["pv_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            grid_to_bess = float((flow_ctx["grid_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_curtail = float((flow_ctx["pv_curtail_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_generation = float((flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            contract_over_limit_kwh = float((flow_ctx["contract_over_limit_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            contract_limit_kw = float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0)
+            if contract_over_limit_kwh <= 1.0e-9 and contract_limit_kw > 0.0:
+                contract_over_limit_kwh = max((grid_to_bus + grid_to_bess) - (contract_limit_kw * timestep_h), 0.0)
             slot_values_by_depot[depot_id][slot_idx] = {
                 "grid_import_kw": (grid_to_bus + grid_to_bess) / timestep_h,
                 "pv_generation_kw": pv_generation / timestep_h,
@@ -1593,6 +2115,14 @@ def _canonical_depot_power_rows_5min(
                 "battery_storage_discharge_kw": bess_to_bus / timestep_h,
                 "total_charge_kw": (grid_to_bus + pv_to_bus + bess_to_bus) / timestep_h,
                 "net_load_kw": (grid_to_bus + grid_to_bess) / timestep_h,
+                "grid_to_bus_kwh": grid_to_bus,
+                "pv_to_bus_kwh": pv_to_bus,
+                "bess_to_bus_kwh": bess_to_bus,
+                "pv_to_bess_kwh": pv_to_bess,
+                "grid_to_bess_kwh": grid_to_bess,
+                "contract_limit_kw": contract_limit_kw,
+                "contract_over_limit_kwh": contract_over_limit_kwh,
+                "contract_over_limit_kw": contract_over_limit_kwh / timestep_h if timestep_h > 0.0 else 0.0,
             }
 
     horizon_min = slot_count * timestep_min
@@ -1614,6 +2144,11 @@ def _canonical_depot_power_rows_5min(
                     "depot_id": depot_id,
                     "total_charge_kw": float(values.get("total_charge_kw", 0.0) or 0.0),
                     "grid_import_kw": float(values.get("grid_import_kw", 0.0) or 0.0),
+                    "grid_to_bus_kwh": float(values.get("grid_to_bus_kwh", 0.0) or 0.0),
+                    "pv_to_bus_kwh": float(values.get("pv_to_bus_kwh", 0.0) or 0.0),
+                    "bess_to_bus_kwh": float(values.get("bess_to_bus_kwh", 0.0) or 0.0),
+                    "pv_to_bess_kwh": float(values.get("pv_to_bess_kwh", 0.0) or 0.0),
+                    "grid_to_bess_kwh": float(values.get("grid_to_bess_kwh", 0.0) or 0.0),
                     "pv_generation_kw": float(values.get("pv_generation_kw", 0.0) or 0.0),
                     "pv_used_for_charging_kw": float(values.get("pv_used_for_charging_kw", 0.0) or 0.0),
                     "pv_used_for_building_kw": float(values.get("pv_used_for_building_kw", 0.0) or 0.0),
@@ -1622,9 +2157,14 @@ def _canonical_depot_power_rows_5min(
                     "battery_storage_charge_kw": float(values.get("battery_storage_charge_kw", 0.0) or 0.0),
                     "battery_storage_discharge_kw": float(values.get("battery_storage_discharge_kw", 0.0) or 0.0),
                     "net_load_kw": float(values.get("net_load_kw", 0.0) or 0.0),
+                    "contract_limit_kw": float(values.get("contract_limit_kw", 0.0) or 0.0),
+                    "contract_over_limit_kwh": float(values.get("contract_over_limit_kwh", 0.0) or 0.0),
+                    "contract_over_limit_kw": float(values.get("contract_over_limit_kw", 0.0) or 0.0),
+                    "contract_limit_exceeded": float(values.get("contract_over_limit_kwh", 0.0) or 0.0) > 1.0e-9,
                     "demand_peak_candidate": abs(float(values.get("grid_import_kw", 0.0) or 0.0) - peak_grid) <= 1.0e-9,
-                    "energy_price_yen_per_kwh": float(price_by_slot.get(slot_idx, 0.0) or 0.0),
-                    "demand_charge_window_flag": bool(demand_flag_by_slot.get(slot_idx, False)),
+                    "energy_price_yen_per_kwh": float(flow_ctx["price_by_slot"].get(slot_idx, 0.0) or 0.0),
+                    "demand_charge_window_flag": bool(flow_ctx["demand_flag_by_slot"].get(slot_idx, False)),
+                    "source_provenance_exact": bool(flow_ctx["source_provenance_exact"]),
                 }
             )
     rows.sort(key=lambda row: (str(row.get("depot_id", "")), str(row.get("timestamp", ""))))
@@ -1767,6 +2307,13 @@ def _canonical_kpi_summary_json(
         "electricity_cost_charged_jpy": float(breakdown.get("realized_ev_charge_cost", breakdown.get("energy_cost", 0.0)) or 0.0),
         "grid_energy_provisional_kwh": float(sum(float(value or 0.0) for depot_map in (plan.grid_to_bus_kwh_by_depot_slot or {}).values() for value in (depot_map or {}).values())),
         "grid_energy_charged_kwh": grid_import_total_kwh,
+        "pv_to_bus_kwh": float(breakdown.get("pv_to_bus_kwh", 0.0) or 0.0),
+        "bess_to_bus_kwh": float(breakdown.get("bess_to_bus_kwh", 0.0) or 0.0),
+        "pv_to_bess_kwh": float(breakdown.get("pv_to_bess_kwh", 0.0) or 0.0),
+        "grid_to_bess_kwh": float(breakdown.get("grid_to_bess_kwh", 0.0) or 0.0),
+        "contract_over_limit_kwh": float(breakdown.get("contract_over_limit_kwh", 0.0) or 0.0),
+        "contract_overage_cost_jpy": float(breakdown.get("contract_overage_cost", 0.0) or 0.0),
+        "demand_charge_cost_jpy": float(breakdown.get("demand_cost", 0.0) or 0.0),
         "co2_kg": float(breakdown.get("total_co2_kg", 0.0) or 0.0),
         "solver_runtime_sec": float((engine_result.solver_metadata or {}).get("solve_time_sec", 0.0) or 0.0),
         "solution_status": str(getattr(engine_result, "solver_status", "") or "").lower(),
@@ -1784,8 +2331,10 @@ def _persist_canonical_graph_exports(
     from bff.mappers.scenario_to_problemdata import _build_graph_export_context
     from src.result_exporter import (
         _build_route_band_diagram_assets,
+        _build_vehicle_operation_diagram_assets,
         _write_csv,
         _write_route_band_diagram_assets,
+        _write_vehicle_operation_diagram_assets,
         _filter_timeline_rows_for_day,
     )
 
@@ -1861,34 +2410,66 @@ def _persist_canonical_graph_exports(
 
     # Multi-day diagram support
     planning_days = int(problem.scenario.planning_days or 1)
-    diagrams_enabled = bool(((scenario.get("simulation_config") or {}).get("enable_vehicle_diagram_output", True)))
+    simulation_cfg = scenario.get("simulation_config") or {}
+    solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
+    diagrams_enabled = bool(
+        simulation_cfg.get("enable_vehicle_diagram_output", True)
+        or simulation_cfg.get("fixed_route_band_mode", False)
+        or solver_cfg.get("fixed_route_band_mode", False)
+        or bool((problem.metadata or {}).get("fixed_route_band_mode", False))
+    )
     assets: Dict[str, Any] = {"entries": [], "svgs": {}}
-    if diagrams_enabled and planning_days > 1:
-        # Generate per-day route band diagrams
-        all_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
+    vehicle_operation_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
+    if planning_days > 1:
+        all_vehicle_operation_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
         timestep_min = int(problem.scenario.timestep_min or 30)
         for day_idx in range(planning_days):
             day_rows = _filter_timeline_rows_for_day(timeline_rows, day_idx, timestep_min)
-            day_assets = _build_route_band_diagram_assets(
+            day_vehicle_operation_assets = _build_vehicle_operation_diagram_assets(
                 day_rows,
                 f"{scenario_id}_d{day_idx}",
-                graph_context=graph_context,
             )
-            for entry in day_assets.get("entries", []):
+            for entry in day_vehicle_operation_assets.get("entries", []):
                 entry["day_index"] = day_idx
                 entry["diagram_file"] = f"day_{day_idx}/{entry.get('diagram_file', '')}"
-                all_assets["entries"].append(entry)
-            for svg_key, svg_content in (day_assets.get("svg_payloads") or day_assets.get("svgs") or {}).items():
-                all_assets["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
-        assets = all_assets
-    elif diagrams_enabled:
-        assets = _build_route_band_diagram_assets(
+                all_vehicle_operation_assets["entries"].append(entry)
+            for svg_key, svg_content in (day_vehicle_operation_assets.get("svg_payloads") or day_vehicle_operation_assets.get("svgs") or {}).items():
+                all_vehicle_operation_assets["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
+        vehicle_operation_assets = all_vehicle_operation_assets
+        if diagrams_enabled:
+            all_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
+            for day_idx in range(planning_days):
+                day_rows = _filter_timeline_rows_for_day(timeline_rows, day_idx, timestep_min)
+                day_assets = _build_route_band_diagram_assets(
+                    day_rows,
+                    f"{scenario_id}_d{day_idx}",
+                    graph_context=graph_context,
+                )
+                for entry in day_assets.get("entries", []):
+                    entry["day_index"] = day_idx
+                    entry["diagram_file"] = f"day_{day_idx}/{entry.get('diagram_file', '')}"
+                    all_assets["entries"].append(entry)
+                for svg_key, svg_content in (day_assets.get("svg_payloads") or day_assets.get("svgs") or {}).items():
+                    all_assets["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
+            assets = all_assets
+    else:
+        vehicle_operation_assets = _build_vehicle_operation_diagram_assets(
             timeline_rows,
             scenario_id,
-            graph_context=graph_context,
         )
+        if diagrams_enabled:
+            assets = _build_route_band_diagram_assets(
+                timeline_rows,
+                scenario_id,
+                graph_context=graph_context,
+            )
     if diagrams_enabled:
         _write_route_band_diagram_assets(graph_dir, assets, planning_days=planning_days)
+    _write_vehicle_operation_diagram_assets(
+        graph_dir,
+        vehicle_operation_assets,
+        planning_days=planning_days,
+    )
 
     graph_manifest = {
         "schema_version": "canonical_graph_v1",
@@ -1917,6 +2498,17 @@ def _persist_canonical_graph_exports(
                     else ""
                 ),
                 "diagram_count": len(list(assets.get("entries") or [])),
+            },
+            "vehicle_operation_diagrams": {
+                "enabled": bool(vehicle_operation_assets.get("entries")),
+                "grouping_key": "vehicle_id",
+                "diagram_format": "svg",
+                "manifest_file": (
+                    "vehicle_operation_diagrams/manifest.json"
+                    if vehicle_operation_assets.get("entries")
+                    else ""
+                ),
+                "diagram_count": len(list(vehicle_operation_assets.get("entries") or [])),
             }
         },
     }
@@ -1931,6 +2523,11 @@ def _persist_canonical_graph_exports(
         "enabled": bool(assets.get("entries")),
         "diagram_count": len(list(assets.get("entries") or [])),
         "manifest_path": manifest_relpath,
+        "vehicle_operation_diagram_manifest_path": (
+            "graph/vehicle_operation_diagrams/manifest.json"
+            if vehicle_operation_assets.get("entries")
+            else None
+        ),
         "vehicle_timeline_path": "graph/vehicle_timeline.csv",
         "graph_manifest_path": "graph/manifest.json",
         "trip_assignment_path": "graph/trip_assignment.csv",
@@ -2021,10 +2618,16 @@ def _cost_breakdown(
         ),
         "grid_purchase_cost": float(obj_breakdown.get("grid_purchase_cost", 0.0) or 0.0),
         "bess_discharge_cost": float(obj_breakdown.get("bess_discharge_cost", 0.0) or 0.0),
+        "grid_import_kwh": float(obj_breakdown.get("grid_import_kwh", 0.0) or 0.0),
+        "peak_grid_kw": float(obj_breakdown.get("peak_grid_kw", 0.0) or 0.0),
         "grid_to_bus_kwh": float(obj_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0),
+        "pv_to_bus_kwh": float(obj_breakdown.get("pv_to_bus_kwh", 0.0) or 0.0),
         "bess_to_bus_kwh": float(obj_breakdown.get("bess_to_bus_kwh", 0.0) or 0.0),
         "pv_to_bess_kwh": float(obj_breakdown.get("pv_to_bess_kwh", 0.0) or 0.0),
         "grid_to_bess_kwh": float(obj_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0),
+        "pv_curtail_kwh": float(obj_breakdown.get("pv_curtailed_kwh", 0.0) or obj_breakdown.get("pv_curtail_kwh", 0.0) or 0.0),
+        "contract_over_limit_kwh": float(obj_breakdown.get("contract_over_limit_kwh", 0.0) or 0.0),
+        "contract_overage_cost": float(obj_breakdown.get("contract_overage_cost", 0.0) or 0.0),
         "stationary_battery_degradation_cost": float(
             obj_breakdown.get("stationary_battery_degradation_cost", 0.0) or 0.0
         ),
@@ -2146,6 +2749,10 @@ def _run_optimization(
             depot_id=depot_id,
         )
 
+        charging_summary_payload: Optional[Dict[str, Any]] = None
+        charging_flow_payload: Optional[Dict[str, Any]] = None
+        charging_payload_warning: Optional[str] = None
+
         if solver_mode in {"mode_milp_only", "mode_alns_only", "mode_ga_only", "mode_abc_only", "mode_hybrid"}:
             # CANONICAL PATH: Uses src/optimization/ engine stack
             opt_mode = _parse_optimization_mode(solver_mode)
@@ -2177,7 +2784,7 @@ def _run_optimization(
                 alns_iterations=alns_iterations,
                 no_improvement_limit=no_improvement_limit,
                 destroy_fraction=destroy_fraction,
-                warm_start=opt_mode != OptimizationMode.MILP,
+                warm_start=True,
             )
             problem = ProblemBuilder().build_from_scenario(
                 scenario,
@@ -2242,8 +2849,22 @@ def _run_optimization(
                 scenario_id=scenario_id,
                 output_dir=output_dir,
             )
+            try:
+                charging_flow_payload = _canonical_charging_output_payload(problem, engine_result)
+                charging_summary_payload = dict(charging_flow_payload.get("summary") or {})
+            except Exception as exc:
+                charging_flow_payload = None
+                charging_summary_payload = None
+                charging_payload_warning = (
+                    "Charging breakdown export was skipped because the canonical energy-flow payload "
+                    f"could not be constructed: {exc}"
+                )
             smeta = dict(engine_result.solver_metadata or {})
             smeta.setdefault("solve_time_sec", float(solve_elapsed))
+            if charging_payload_warning:
+                warnings_list = list(smeta.get("warnings") or [])
+                warnings_list.append(charging_payload_warning)
+                smeta["warnings"] = warnings_list
             _cb = dict(engine_result.cost_breakdown or {})
             # Alias keys so _cost_breakdown() can read both naming conventions
             _cb.setdefault("electricity_cost", _cb.get("energy_cost", 0.0))
@@ -2269,6 +2890,8 @@ def _run_optimization(
             }
             # Expose full new-system result for solver_result field
             _full_new_result = ResultSerializer.serialize_result(engine_result)
+            if charging_summary_payload is not None:
+                _full_new_result["charging_summary"] = charging_summary_payload
         else:
             # ── LEGACY PATH: Should not reach here due to _normalize_solver_mode gating ──
             # This branch is kept temporarily for backward compatibility during migration.
@@ -2452,6 +3075,10 @@ def _run_optimization(
             },
             "graph_artifacts": graph_artifacts,
         }
+        if charging_summary_payload is not None:
+            optimization_result["charging_summary"] = charging_summary_payload
+        if charging_payload_warning:
+            optimization_result["charging_summary_warning"] = charging_payload_warning
         if sim_payload is not None:
             optimization_result["simulation_summary"] = sim_payload
 
@@ -2527,6 +3154,8 @@ def _run_optimization(
             sim_payload=sim_payload,
             canonical_solver_result=_full_new_result,
             graph_source_dir=Path(output_dir) / "graph",
+            charging_summary=charging_summary_payload,
+            charging_flow_payload=charging_flow_payload,
         )
         dated_run_dir = _dated_scenario_run_dir(
             scenario=scenario,
@@ -2548,6 +3177,8 @@ def _run_optimization(
             sim_payload=sim_payload,
             canonical_solver_result=_full_new_result,
             graph_source_dir=dst_graph_dir,
+            charging_summary=charging_summary_payload,
+            charging_flow_payload=charging_flow_payload,
         )
         store.update_scenario(scenario_id, status="optimized")
         job_store.update_job(

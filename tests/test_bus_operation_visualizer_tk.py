@@ -12,9 +12,10 @@ def test_load_bundle_supports_current_gantt_schema_with_state_and_iso_times(tmp_
     (run_dir / "vehicle_timeline_gantt.csv").write_text(
         "\n".join(
             [
-                "vehicle_id,state,start_time,end_time,duration_min",
+                "vehicle_id,state,start_time,end_time,duration_min,band_label,charge_power_kw",
                 "veh-1,service,2026-04-05T05:57:00,2026-04-05T06:22:00,25.0",
                 "veh-1,deadhead,2026-04-05T06:22:00,2026-04-05T06:35:00,13.0",
+                "veh-1,charge,2026-04-05T06:35:00,2026-04-05T07:05:00,30.0,,60.0",
             ]
         ),
         encoding="utf-8",
@@ -39,8 +40,8 @@ def test_load_bundle_supports_current_gantt_schema_with_state_and_iso_times(tmp_
 
     bundle = _load_bundle(run_dir)
 
-    assert len(bundle.events) == 2
+    assert len(bundle.events) == 3
     assert bundle.vehicle_types == {"veh-1": "BEV"}
-    assert bundle.events["event_type"].tolist() == ["service", "deadhead"]
-    assert bundle.events["start_minute"].tolist() == [357, 382]
-    assert bundle.events["end_minute"].tolist() == [382, 395]
+    assert bundle.events["event_type"].tolist() == ["service", "deadhead", "charge"]
+    assert bundle.events["start_minute"].tolist() == [357, 382, 395]
+    assert bundle.events["end_minute"].tolist() == [382, 395, 425]

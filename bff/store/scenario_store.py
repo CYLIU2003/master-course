@@ -175,7 +175,7 @@ def _default_dispatch_scope() -> Dict[str, Any]:
         # routes (intra-depot) or across depots (inter-depot).
         "allowIntraDepotRouteSwap": False,
         "allowInterDepotSwap": False,
-        "fixedRouteBandMode": False,
+        "fixedRouteBandMode": True,
         "depotId": None,
         "serviceId": "WEEKDAY",
     }

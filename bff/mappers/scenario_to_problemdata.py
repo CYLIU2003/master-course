@@ -1573,11 +1573,18 @@ def _build_deadhead_metrics(
     scenario: Dict[str, Any],
     trips: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[tuple[str, str], DeadheadMetric]:
+    simulation_cfg = scenario.get("simulation_config") or {}
+    solver_cfg = _scenario_overlay_solver(scenario)
+    deadhead_speed_kmh = _safe_float(
+        simulation_cfg.get("deadhead_speed_kmh", solver_cfg.get("deadhead_speed_kmh")),
+        18.0,
+    )
     return merge_deadhead_metrics(
         existing_rules=_as_list(scenario.get("deadhead_rules")),
         trip_rows=trips or [],
         routes=_as_list(scenario.get("routes")),
         stops=_as_list(scenario.get("stops")),
+        assumed_speed_kmh=deadhead_speed_kmh,
     )
 
 

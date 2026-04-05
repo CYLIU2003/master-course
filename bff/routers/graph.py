@@ -371,6 +371,17 @@ def _build_dispatch_context(
     merged into a single DispatchContext so the optimizer can assign vehicles
     from any depot to any route in the combined scope.
     """
+    scenario_doc = store.get_scenario_document_shallow(scenario_id)
+    simulation_cfg = dict(scenario_doc.get("simulation_config") or {})
+    overlay_solver_cfg = dict(((scenario_doc.get("scenario_overlay") or {}).get("solver_config") or {}))
+    try:
+        deadhead_speed_kmh = float(
+            simulation_cfg.get("deadhead_speed_kmh", overlay_solver_cfg.get("deadhead_speed_kmh"))
+            or 18.0
+        )
+    except (TypeError, ValueError):
+        deadhead_speed_kmh = 18.0
+
     scope = _resolve_dispatch_scope(
         scenario_id,
         service_id=service_id,
@@ -406,7 +417,6 @@ def _build_dispatch_context(
         str(route.get("id")): route for route in store.list_routes(scenario_id)
     }
     if not raw_trips or not timetable_rows:
-        scenario_doc = store.get_scenario_document_shallow(scenario_id)
         feed_context = dict(scenario_doc.get("feed_context") or {})
         overlay = dict(scenario_doc.get("scenario_overlay") or {})
         dataset_id = str(
@@ -670,6 +680,7 @@ def _build_dispatch_context(
         trip_rows=merged_trip_rows or timetable_rows or raw_trips,
         routes=list(route_lookup.values()),
         stops=store.get_field(scenario_id, "stops") or [],
+        assumed_speed_kmh=deadhead_speed_kmh,
     )
     deadhead_rules = {
         key: DeadheadRule(

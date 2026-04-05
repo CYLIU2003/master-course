@@ -7,6 +7,20 @@ from .problem import AssignmentPlan, OptimizationEngineResult
 
 class ResultSerializer:
     @staticmethod
+    def _serialize_depot_slot_mapping(raw_mapping: Any) -> Dict[str, Dict[int, float]]:
+        if not isinstance(raw_mapping, dict):
+            return {}
+        serialized: Dict[str, Dict[int, float]] = {}
+        for depot_id, slot_map in raw_mapping.items():
+            if not isinstance(slot_map, dict):
+                continue
+            serialized[str(depot_id)] = {
+                int(slot_idx): float(value or 0.0)
+                for slot_idx, value in slot_map.items()
+            }
+        return serialized
+
+    @staticmethod
     def serialize_plan(plan: AssignmentPlan) -> Dict[str, Any]:
         metadata = dict(plan.metadata)
 
@@ -68,10 +82,30 @@ class ResultSerializer:
             ],
             "served_trip_ids": list(plan.served_trip_ids),
             "unserved_trip_ids": list(plan.unserved_trip_ids),
-            "contract_over_limit_kwh_by_depot_slot": {
-                str(depot_id): {int(slot_idx): float(value or 0.0) for slot_idx, value in (slot_map or {}).items()}
-                for depot_id, slot_map in (plan.contract_over_limit_kwh_by_depot_slot or {}).items()
-            },
+            "grid_to_bus_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
+                plan.grid_to_bus_kwh_by_depot_slot
+            ),
+            "pv_to_bus_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
+                plan.pv_to_bus_kwh_by_depot_slot
+            ),
+            "bess_to_bus_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
+                plan.bess_to_bus_kwh_by_depot_slot
+            ),
+            "pv_to_bess_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
+                plan.pv_to_bess_kwh_by_depot_slot
+            ),
+            "grid_to_bess_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
+                plan.grid_to_bess_kwh_by_depot_slot
+            ),
+            "pv_curtail_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
+                plan.pv_curtail_kwh_by_depot_slot
+            ),
+            "bess_soc_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
+                plan.bess_soc_kwh_by_depot_slot
+            ),
+            "contract_over_limit_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
+                plan.contract_over_limit_kwh_by_depot_slot
+            ),
             "vehicle_cost_ledger": [
                 {
                     "vehicle_id": row.vehicle_id,

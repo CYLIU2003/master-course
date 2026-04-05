@@ -10,6 +10,7 @@ python tools/bus_operation_visualizer_tk.py
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -291,6 +292,7 @@ def _load_bundle(run_dir: Path) -> TimelineBundle:
             "vehicle_id",
             "event_type",
             "state",
+            "vehicle_type",
             "start_time_idx",
             "end_time_idx",
             "start_minute",
@@ -299,6 +301,14 @@ def _load_bundle(run_dir: Path) -> TimelineBundle:
             "end_time",
             "duration_slots",
             "duration_min",
+            "band_id",
+            "band_label",
+            "route_id",
+            "route_family_code",
+            "trip_id",
+            "charger_id",
+            "charge_power_kw",
+            "refuel_liters",
         ],
     )
 
@@ -308,7 +318,7 @@ def _load_bundle(run_dir: Path) -> TimelineBundle:
     if "event_type" not in gantt.columns or gantt["event_type"].isna().all():
         gantt["event_type"] = gantt.get("state", pd.Series(dtype=str))
     gantt["event_type"] = gantt["event_type"].astype(str).str.lower().str.strip()
-    gantt = gantt[gantt["event_type"].astype(str).str.lower().isin(["service", "deadhead"])].copy()
+    gantt = gantt[gantt["event_type"].astype(str).str.lower().isin(["service", "deadhead", "charge", "refuel"])].copy()
     gantt["start_time_idx"] = pd.to_numeric(gantt["start_time_idx"], errors="coerce")
     gantt["end_time_idx"] = pd.to_numeric(gantt["end_time_idx"], errors="coerce")
 
@@ -512,15 +522,75 @@ def _format_hhmm(minute: int) -> str:
     return f"{h:02d}:{m:02d}"
 
 
+def _route_color(route_key: str) -> str:
+    palette = [
+        "#1d4ed8",
+        "#0f766e",
+        "#b45309",
+        "#be123c",
+        "#6d28d9",
+        "#0369a1",
+        "#c2410c",
+        "#7c3aed",
+    ]
+    normalized = str(route_key or "").strip() or "service"
+    digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+    return palette[int(digest[:8], 16) % len(palette)]
+
+
+def _event_bar_style(row: pd.Series) -> tuple[str, str, str]:
+    event_type = str(row.get("event_type") or row.get("state") or "").strip().lower()
+    if event_type == "service":
+        route_key = (
+            str(row.get("band_id") or "").strip()
+            or str(row.get("route_family_code") or "").strip()
+            or str(row.get("route_id") or "").strip()
+            or str(row.get("trip_id") or "").strip()
+        )
+        return _route_color(route_key), "#0f172a", "#ffffff"
+    if event_type == "deadhead":
+        return "#cbd5e1", "#475569", "#0f172a"
+    if event_type == "charge":
+        return "#86efac", "#15803d", "#14532d"
+    if event_type == "refuel":
+        return "#d9f99d", "#65a30d", "#365314"
+    return "#e5e7eb", "#6b7280", "#111827"
+
+
+def _event_bar_label(row: pd.Series) -> str:
+    event_type = str(row.get("event_type") or row.get("state") or "").strip().lower()
+    if event_type == "service":
+        for candidate in (
+            row.get("band_label"),
+            row.get("band_id"),
+            row.get("route_family_code"),
+            row.get("route_id"),
+            row.get("trip_id"),
+        ):
+            text = str(candidate or "").strip()
+            if text:
+                return text
+        return "運用"
+    if event_type == "deadhead":
+        return "回送"
+    if event_type == "charge":
+        try:
+            power_kw = float(row.get("charge_power_kw") or 0.0)
+        except (TypeError, ValueError):
+            power_kw = 0.0
+        return f"充電 {power_kw:.0f}kW" if power_kw > 0.0 else "充電"
+    if event_type == "refuel":
+        try:
+            liters = float(row.get("refuel_liters") or 0.0)
+        except (TypeError, ValueError):
+            liters = 0.0
+        return f"給油 {liters:.0f}L" if liters > 0.0 else "給油"
+    return event_type or "event"
+
+
 def _plot_style_1(bundle: TimelineBundle, vehicle_ids: List[str], only_assigned: bool):
     fig_h = max(4.0, len(vehicle_ids) * 0.34 + 1.6)
     fig, ax = plt.subplots(figsize=(12.0, fig_h), dpi=160)
-
-    type_palette = {
-        "BEV": "#4063a8",
-        "ICE": "#b2493f",
-        "UNKNOWN": "#666666",
-    }
 
     ytick_labels = []
     ytick_pos = []
@@ -536,42 +606,56 @@ def _plot_style_1(bundle: TimelineBundle, vehicle_ids: List[str], only_assigned:
                 vtype = "UNKNOWN"
 
         lane_events = bundle.events[bundle.events["vehicle_id"].astype(str) == vid].copy()
-        service_segments = [
-            (float(r["start_minute"]), float(r["end_minute"]))
-            for _, r in lane_events.iterrows()
-        ]
+        lane_events = lane_events.sort_values(["start_minute", "end_minute", "event_type"])
 
-        # Station base segments (white with edge)
-        for s0, s1 in _compute_station_segments(service_segments, bundle.horizon_minute, bundle.horizon_max_minute):
+        ax.barh(
+            i,
+            bundle.horizon_max_minute - bundle.horizon_minute,
+            left=bundle.horizon_minute,
+            height=0.72,
+            color="#ffffff",
+            edgecolor="#d4d4d8",
+            linewidth=0.5,
+            zorder=0,
+        )
+
+        for _, row in lane_events.iterrows():
+            start_minute = float(row["start_minute"])
+            end_minute = float(row["end_minute"])
+            width = max(0.5, end_minute - start_minute)
+            fill, edge, text_color = _event_bar_style(row)
+            event_type = str(row.get("event_type") or row.get("state") or "").strip().lower()
+            linestyle = "--" if event_type == "deadhead" else "solid"
             ax.barh(
                 i,
-                s1 - s0,
-                left=s0,
+                width,
+                left=start_minute,
                 height=0.72,
-                color="#ffffff",
-                edgecolor="#3b3b3b",
-                linewidth=0.4,
-                zorder=1,
-            )
-
-        # Trip segments (hatched)
-        trip_color = type_palette.get(vtype, type_palette["UNKNOWN"])
-        hatch = "////" if vtype == "BEV" else "\\\\"
-        for s0, s1 in service_segments:
-            ax.barh(
-                i,
-                s1 - s0,
-                left=s0,
-                height=0.72,
-                color="#e9e9e9",
-                edgecolor=trip_color,
-                linewidth=0.6,
-                hatch=hatch,
+                color=fill,
+                edgecolor=edge,
+                linewidth=0.8,
+                linestyle=linestyle,
                 zorder=2,
             )
+            label = _event_bar_label(row)
+            if width >= 36:
+                max_chars = max(int((width - 8) // 8), 3)
+                if len(label) > max_chars:
+                    label = label[: max_chars - 1] + "…"
+                ax.text(
+                    start_minute + 2,
+                    i,
+                    label,
+                    va="center",
+                    ha="left",
+                    fontsize=7.5,
+                    color=text_color,
+                    zorder=3,
+                    clip_on=True,
+                )
 
         ytick_pos.append(i)
-        ytick_labels.append(_vehicle_label(vid, vtype, i + 1))
+        ytick_labels.append(f"{_vehicle_label(vid, vtype, i + 1)}  {vid}")
 
     ticks = _make_ticks(bundle.horizon_minute, bundle.horizon_max_minute)
     ax.set_xlim(bundle.horizon_minute, bundle.horizon_max_minute)
@@ -584,12 +668,13 @@ def _plot_style_1(bundle: TimelineBundle, vehicle_ids: List[str], only_assigned:
     ax.set_ylabel("車両番号 [台]", fontsize=12)
     ax.grid(axis="x", color="#d0d0d0", linewidth=0.5)
     title_suffix = "（割当車両のみ）" if only_assigned else "（全車両）"
-    ax.set_title(f"バス運行タイムライン {title_suffix}", fontsize=13)
+    ax.set_title(f"車両別 運用・回送・充電タイムライン {title_suffix}", fontsize=13)
 
     legend_items = [
-        Patch(facecolor="#e9e9e9", edgecolor=type_palette["BEV"], hatch="////", label="運行中（EV）"),
-        Patch(facecolor="#e9e9e9", edgecolor=type_palette["ICE"], hatch="\\\\", label="運行中（エンジン）"),
-        Patch(facecolor="#ffffff", edgecolor="#3b3b3b", label="待機・停車"),
+        Patch(facecolor="#1d4ed8", edgecolor="#0f172a", label="運用中（バー内ラベルが路線）"),
+        Patch(facecolor="#cbd5e1", edgecolor="#475569", label="回送"),
+        Patch(facecolor="#86efac", edgecolor="#15803d", label="充電"),
+        Patch(facecolor="#d9f99d", edgecolor="#65a30d", label="給油"),
     ]
     ax.legend(handles=legend_items, loc="upper right", frameon=True, fontsize=10)
 

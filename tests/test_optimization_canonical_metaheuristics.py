@@ -114,6 +114,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     rebuild_dispatch.assert_not_called()
     build_problem_data.assert_not_called()
     solve_problem_data.assert_not_called()
+    assert problem_builder_cls.return_value.build_from_scenario.call_args.kwargs["config"].warm_start is True
     assert "trips" not in stored_fields
     assert "timetable_rows" not in stored_fields
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_ga_only"
@@ -243,6 +244,7 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
     build_problem_data.assert_not_called()
     solve_problem_data.assert_not_called()
     persist_graph_exports.assert_called_once()
+    assert problem_builder_cls.return_value.build_from_scenario.call_args.kwargs["config"].warm_start is True
     assert "trips" not in stored_fields
     assert "timetable_rows" not in stored_fields
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_milp_only"

@@ -2911,3 +2911,68 @@ master-course/
   - 確認:
     - `python -m pytest tests/test_visualizer_report_utils.py -q` → `5 passed`
     - `python -m py_compile tools/_visualizer_report_utils.py tools/multi_run_visualizer_tk.py` → pass
+
+- 2026-04-06 (fixed scope 237d の startup deadhead / speed-cap / route-band 標準出力 / metaheuristic mode 反映をまとめて補修)
+  - 問題として、actual canonical path にはまだ 4 つの未修整点が残っていた。`bff/routers/optimization.py` が `warm_start=opt_mode != MILP` だったため MILP warm start が実 run では無効、startup deadhead は baseline/assignment では注入しても MILP `start_arc` には depot 到達不能を止める制約が無く、deadhead merge は configured `deadhead_speed_kmh` を全 call path で受け取っておらず、`fixedRouteBandMode=true` でも canonical export は `enable_vehicle_diagram_output` が false だと route-band 図を落としていた。
+  - 追加で自分から上げた問題として、GA/ABC wrapper が distinct mode config を設定しても ALNS engine 側が simulated annealing + adaptive roulette を固定で使っており、wrapper の `genetic_like` / `bee_colony_like` が実際には solver metadata へ反映されていなかった。
+  - `src/route_family_runtime.py` の `merge_deadhead_metrics()` は `deadhead_speed_kmh` を上限に既存・推論 metric を再拘束するよう更新し、`bff/mappers/scenario_to_problemdata.py`、`bff/routers/graph.py`、`src/optimization/common/builder.py` から同 speed を必ず渡すよう揃えた。これにより deadhead speed parameter を strict upper bound として使う current call path が成立した。
+  - `src/optimization/common/builder.py` の pooled shared baseline から「初便への startup deadhead が departure より長いと候補から除外する」条件を外し、simulation horizon 前からの回送開始を許容した。これは feasibility の本体 `arrival + turnaround + deadhead <= next departure` は変えず、初便前の horizon 外 deadhead を禁止しないだけなので dispatch 数学条件自体は維持している。
+  - `src/dispatch/models.py`, `src/optimization/common/vehicle_assignment.py`, `src/optimization/common/feasibility.py`, `src/optimization/milp/solver_adapter.py` を通して、depot alias 等価を使った startup path existence 判定を追加した。既知 missing path の vehicle/start trip 組は baseline assignment でも MILP `start_arc` でも禁止し、逆に path が存在する限りは「05:00 より前からの回送」「23:00 後の帰庫」を horizon 外として許容する。
+  - `bff/routers/optimization.py` は canonical export 条件を見直し、`fixedRouteBandMode=true` なら route-band SVG を標準出力するようにした。同時に canonical run path の MILP `warm_start=True` も回復させた。`src/optimization/alns/acceptance.py`, `src/optimization/alns/selection.py`, `src/optimization/alns/engine.py`, `src/optimization/ga/engine.py`, `src/optimization/abc/engine.py` では acceptance / operator-selection factory を追加し、GA=`genetic_like`, ABC=`bee_colony_like` が実 metadata に出るよう修正した。
+  - fixed scope rerun は actual canonical BFF path で再実行し、run directory は `output/2025-08-04/scenario/237d5623-aa94-4f72-9da1-17b9070264be/mode_milp_only/tsurumaki/WEEKDAY/run_20260406_0110/`, `.../mode_alns_only/.../run_20260406_0114/`, `.../mode_ga_only/.../run_20260406_0119/`, `.../mode_abc_only/.../run_20260406_0125/` に保存した。comparison bundle は `output/reports/20260406_fixed_scope_237d5623_model_fix/`、教授向けレポートは `docs/fixed_scope_model_fix_report_20260406.md` に保存している。
+  - rerun 結果は `MILP=time_limit_baseline, objective=3548573.795919167, served=974, unserved=0, vehicles=87`, `ALNS=feasible, objective=3534994.692990817, served=974, unserved=0, vehicles=88`, `GA=feasible, objective=3542971.744454992, served=974, unserved=0, vehicles=88`, `ABC=feasible, objective=3542971.744454992, served=974, unserved=0, vehicles=88` だった。4 solver とも欠便は 0 だが、MILP は `supports_exact_milp=false`, `termination_reason=time_limit`, `incumbent_history_count=0` の fallback であり、exact MILP とは言えない。
+  - 出力 parity は `output/reports/20260406_fixed_scope_237d5623_model_fix/artifact_parity_vs_run_20260324_2210.json` で確認し、旧 `output/run_20260324_2210` に対する generic artifact missing は 0 件だった。新 run は `canonical_solver_result.json`, `optimization_result.json`, `optimization_audit.json`, `solver_result.json`, `run_manifest.json`, `kpi_summary.json` を追加で持つ。
+  - 回帰テスト:
+    - `tests/test_route_family_deadhead_inference.py`
+    - `tests/test_vehicle_assignment_startup_deadhead.py`
+    - `tests/test_milp_route_band_settings.py`
+    - `tests/test_canonical_graph_export_parity.py`
+    - `tests/test_optimization_canonical_metaheuristics.py`
+    - `tests/test_metaheuristic_mode_configs.py`
+    - `tests/test_milp_baseline_fallbacks.py`
+    - `tests/test_baseline_vehicle_type_priority.py`
+    - `tests/test_pooled_shared_baseline.py`
+    - `tests/test_problem_builder_timestep_and_pv_scaling.py`
+    - `tests/test_visualizer_report_utils.py`
+  - 確認:
+    - `python -m pytest tests/test_route_family_deadhead_inference.py tests/test_vehicle_assignment_startup_deadhead.py tests/test_milp_route_band_settings.py tests/test_canonical_graph_export_parity.py tests/test_optimization_canonical_metaheuristics.py tests/test_metaheuristic_mode_configs.py -q` → `34 passed`
+    - `python -m pytest tests/test_milp_baseline_fallbacks.py tests/test_baseline_vehicle_type_priority.py tests/test_pooled_shared_baseline.py tests/test_problem_builder_timestep_and_pv_scaling.py tests/test_visualizer_report_utils.py tests/test_route_family_deadhead_inference.py tests/test_vehicle_assignment_startup_deadhead.py tests/test_milp_route_band_settings.py tests/test_canonical_graph_export_parity.py tests/test_optimization_canonical_metaheuristics.py tests/test_metaheuristic_mode_configs.py -q` → `49 passed`
+    - `python -m py_compile bff/mappers/scenario_to_problemdata.py bff/routers/graph.py bff/routers/optimization.py src/dispatch/models.py src/optimization/abc/engine.py src/optimization/alns/acceptance.py src/optimization/alns/engine.py src/optimization/alns/selection.py src/optimization/common/builder.py src/optimization/common/feasibility.py src/optimization/common/vehicle_assignment.py src/optimization/ga/engine.py src/optimization/milp/solver_adapter.py src/route_family_runtime.py` → pass
+
+- 2026-04-06 (charging breakdown 出力の標準化と補助出力 failure の隔離)
+  - 問題として、canonical optimizer は plan/evaluator の内部には `grid_to_bus`, `pv_to_bus`, `bess_to_bus`, `pv_to_bess`, `grid_to_bess`, `contract_over_limit_kwh` を持っていても、run 出力では `site_power_balance.csv` が集約不足、`canonical_solver_result.json` は depot-slot ごとの flow map を保持せず、heuristic plan では `graph/depot_power_timeseries_5min.csv` も source split が空になり得た。これでは「いくら系統から買って、PV/BESS から何をもらい、契約上限超過で罰金を食ったか」を run artifact だけで説明できなかった。
+  - 追加で自分から上げた問題として、`_run_optimization()` が charging summary の補助 payload を組み立てる途中で例外を起こすと、最適化自体は終わっていても `optimization_result` 保存全体が止まっていた。補助出力の失敗が solver result の保存を巻き込むのは current call path 上の設計不備だった。
+  - `src/optimization/common/result.py` は assignment plan の `grid_to_bus_kwh_by_depot_slot`, `pv_to_bus_kwh_by_depot_slot`, `bess_to_bus_kwh_by_depot_slot`, `pv_to_bess_kwh_by_depot_slot`, `grid_to_bess_kwh_by_depot_slot`, `pv_curtail_kwh_by_depot_slot`, `bess_soc_kwh_by_depot_slot`, `contract_over_limit_kwh_by_depot_slot` を `canonical_solver_result.json` へ直列化するよう修正した。
+  - `bff/routers/optimization.py` には canonical charging flow 正規化 helper を追加し、explicit per-source flow が plan にある場合はそれを使い、無い場合だけ `charging_slots` から grid-origin bus charging を診断的に再構成するようにした。この場合は `source_provenance_exact=false` と note を残すため、PV/BESS split を捏造しない。
+  - rich run 出力は `charging_summary.(json/csv)`, `depot_energy_flows.(json/csv)`, 拡張 `site_power_balance.csv`, 拡張 `graph/depot_power_timeseries_5min.csv` を標準で書くようにした。出力には `grid_to_bus_kwh`, `pv_to_bus_kwh`, `bess_to_bus_kwh`, `pv_to_bess_kwh`, `grid_to_bess_kwh`, `pv_curtail_kwh`, `grid_import_total_kwh`, `peak_grid_import_kw`, `contract_limit_kw`, `contract_over_limit_kwh`, `contract_limit_exceeded`, `contract_overage_cost_jpy`, `demand_charge_cost_jpy`, `grid_purchase_cost_jpy`, `electricity_cost_jpy` を含める。
+  - `contract_over_limit_kwh_by_depot_slot` が plan に無い場合でも、`grid_import_kw > contract_limit_kw` なら slot 幅から over-limit energy を診断的に再導出するようにした。これにより「契約上限超過は起きているのに CSV 上 0」の矛盾を防いでいる。
+  - `_run_optimization()` は charging payload 生成を defensive に包み、補助出力だけが失敗した場合は `charging_summary_warning` と `solver_metadata.warnings[]` を残して optimization result 本体は保存するようにした。これは補助 export 経路の堅牢化であり、最適化モデルの数学的意味は変えていない。
+  - 回帰テスト:
+    - `tests/test_optimization_result_serializer.py`
+    - `tests/test_canonical_graph_export_parity.py`
+    - `tests/test_canonical_result_to_simulation_bridge.py`
+    - `tests/test_optimization_canonical_metaheuristics.py`
+    - `tests/test_prepared_scope_execution.py`
+    - `tests/test_visualizer_report_utils.py`
+  - 確認:
+    - `python -m pytest tests/test_prepared_scope_execution.py tests/test_optimization_canonical_metaheuristics.py tests/test_visualizer_report_utils.py tests/test_optimization_result_serializer.py tests/test_canonical_graph_export_parity.py tests/test_canonical_result_to_simulation_bridge.py -q` → `44 passed`
+    - `python -m py_compile bff/routers/optimization.py src/optimization/common/result.py` → pass
+
+- 2026-04-06 (車両別の運用・回送・充電を横棒で出す標準 SVG を追加)
+  - 問題として、`graph/route_band_diagrams/*.svg` は route family 単位の time-space 図なので、「各バスがいつ運用・回送・充電しているか」を車両単位に横棒で一望したい用途には向いていなかった。`vehicle_timeline.csv` は持っていても、先生向け確認にそのまま出せる標準 SVG が無かった。
+  - 追加で自分から上げた問題として、multi-day 用の `_filter_timeline_rows_for_day()` が ISO datetime を day offset 付きで処理できず、日跨ぎ run で day ごとの図を切ると誤選別する可能性があった。
+  - `src/result_exporter.py` に `vehicle_operation_diagrams/manifest.json` と `all_vehicles.svg` を生成する asset builder / writer を追加した。縦軸は車両、横軸は時刻で、`service` は路線ラベル付きバー、`deadhead` は回送、`charge` は充電、`refuel` は給油として色分けしている。legacy graph export と canonical BFF graph export の両方から同 helper を呼ぶようにしたため、今後の標準出力で同じ図が揃う。
+  - `bff/routers/optimization.py` は `enableVehicleDiagramOutput=false` でも `vehicle_operation_diagrams` は常時 graph export へ含めるようにした。route-band は従来どおり flag 依存だが、車両別横棒図は `vehicle_timeline.csv` から直接出せるため標準 artifact とした。
+  - `tools/bus_operation_visualizer_tk.py` も更新し、`図A` を「車両別 運用・回送・充電タイムライン」に差し替えた。loader は `charge/refuel` 行も取り込み、運用バー内に route label を載せる。
+  - `_filter_timeline_rows_for_day()` は base date を ISO timestamp から推定し、absolute minute で day 切り分けるよう修正した。これは graph export の day 別 SVG 切り出しの正しさを改善するもので、dispatch feasibility や最適化モデルの数学的意味は変えていない。
+  - 回帰テスト:
+    - `tests/test_graph_export_vehicle_operation_diagrams.py`
+    - `tests/test_graph_export_route_band_diagrams.py`
+    - `tests/test_canonical_graph_export_parity.py`
+    - `tests/test_bus_operation_visualizer_tk.py`
+    - `tests/test_optimization_canonical_metaheuristics.py`
+    - `tests/test_prepared_scope_execution.py`
+    - `tests/test_visualizer_report_utils.py`
+  - 確認:
+    - `python -m pytest tests/test_prepared_scope_execution.py tests/test_optimization_canonical_metaheuristics.py tests/test_visualizer_report_utils.py tests/test_canonical_graph_export_parity.py tests/test_graph_export_route_band_diagrams.py tests/test_graph_export_vehicle_operation_diagrams.py tests/test_bus_operation_visualizer_tk.py -q` → `21 passed`
+    - `python -m py_compile src/result_exporter.py bff/routers/optimization.py tools/bus_operation_visualizer_tk.py` → pass

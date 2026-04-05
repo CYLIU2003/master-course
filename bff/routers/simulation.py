@@ -106,8 +106,8 @@ class PrepareSimulationSettingsBody(BaseModel):
     solver_mode: str = "mode_milp_only"
     objective_mode: str = "total_cost"
     objective_preset: Optional[str] = None
-    fixed_route_band_mode: bool = False
-    enable_vehicle_diagram_output: bool = False
+    fixed_route_band_mode: bool = True
+    enable_vehicle_diagram_output: bool = True
     allow_partial_service: bool = False
     unserved_penalty: float = 10000.0
     milp_max_successors_per_trip: Optional[int] = Field(default=None, ge=1)

@@ -477,6 +477,9 @@ class TestCostBreakdownKeyMapping:
                 "demand_cost": 500.0,
                 "degradation_cost": 200.0,
                 "co2_cost": 100.0,
+                "pv_to_bus_kwh": 50.0,
+                "contract_over_limit_kwh": 2.0,
+                "contract_overage_cost": 1000.0,
             }
         }
         
@@ -490,6 +493,9 @@ class TestCostBreakdownKeyMapping:
         assert "degradation_cost" in cb
         assert "total_degradation_cost" in cb
         assert "co2_cost" in cb
+        assert "pv_to_bus_kwh" in cb
+        assert "contract_over_limit_kwh" in cb
+        assert "contract_overage_cost" in cb
         
         # Values should be correct
         assert cb["energy_cost"] == 1000.0
@@ -499,6 +505,9 @@ class TestCostBreakdownKeyMapping:
         assert cb["degradation_cost"] == 200.0
         assert cb["total_degradation_cost"] == 200.0
         assert cb["co2_cost"] == 100.0
+        assert cb["pv_to_bus_kwh"] == 50.0
+        assert cb["contract_over_limit_kwh"] == 2.0
+        assert cb["contract_overage_cost"] == 1000.0
     
     def test_cost_breakdown_aliases_electricity_to_energy(self):
         """_cost_breakdown() should accept electricity_cost as energy_cost alias."""

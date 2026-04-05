@@ -182,3 +182,36 @@ def test_result_serializer_includes_cost_ledgers_and_operating_splits() -> None:
     assert payload["ice_leftover_provisional_cost_jpy"] == 50.0
     assert payload["vehicle_cost_ledger"][0]["vehicle_id"] == "veh-1"
     assert payload["daily_cost_ledger"][0]["service_date"] == "2026-03-27"
+
+
+def test_result_serializer_includes_depot_energy_flow_maps() -> None:
+    plan = AssignmentPlan(
+        grid_to_bus_kwh_by_depot_slot={"dep-1": {0: 10.0}},
+        pv_to_bus_kwh_by_depot_slot={"dep-1": {0: 3.0}},
+        bess_to_bus_kwh_by_depot_slot={"dep-1": {0: 2.0}},
+        pv_to_bess_kwh_by_depot_slot={"dep-1": {1: 1.5}},
+        grid_to_bess_kwh_by_depot_slot={"dep-1": {1: 4.0}},
+        pv_curtail_kwh_by_depot_slot={"dep-1": {1: 0.5}},
+        bess_soc_kwh_by_depot_slot={"dep-1": {0: 20.0, 1: 18.0}},
+        contract_over_limit_kwh_by_depot_slot={"dep-1": {1: 0.75}},
+    )
+    result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="feasible",
+        objective_value=100.0,
+        plan=plan,
+        feasible=True,
+        cost_breakdown={},
+        solver_metadata={},
+    )
+
+    payload = ResultSerializer.serialize_result(result)
+
+    assert payload["grid_to_bus_kwh_by_depot_slot"]["dep-1"][0] == 10.0
+    assert payload["pv_to_bus_kwh_by_depot_slot"]["dep-1"][0] == 3.0
+    assert payload["bess_to_bus_kwh_by_depot_slot"]["dep-1"][0] == 2.0
+    assert payload["pv_to_bess_kwh_by_depot_slot"]["dep-1"][1] == 1.5
+    assert payload["grid_to_bess_kwh_by_depot_slot"]["dep-1"][1] == 4.0
+    assert payload["pv_curtail_kwh_by_depot_slot"]["dep-1"][1] == 0.5
+    assert payload["bess_soc_kwh_by_depot_slot"]["dep-1"][1] == 18.0
+    assert payload["contract_over_limit_kwh_by_depot_slot"]["dep-1"][1] == 0.75

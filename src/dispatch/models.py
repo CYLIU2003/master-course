@@ -322,6 +322,22 @@ class DispatchContext:
             )
         )
 
+    def has_location_data(self, raw: str) -> bool:
+        candidates = self.resolve_location_ids(raw)
+        if not candidates:
+            candidates = (str(raw or "").strip(),)
+        normalized = {
+            str(candidate or "").strip()
+            for candidate in candidates
+            if str(candidate or "").strip()
+        }
+        if len(normalized) > 1:
+            return True
+        for from_stop, to_stop in self.deadhead_rules:
+            if str(from_stop or "").strip() in normalized or str(to_stop or "").strip() in normalized:
+                return True
+        return False
+
     def trips_by_id(self) -> Dict[str, Trip]:
         return {t.trip_id: t for t in self.trips}
 

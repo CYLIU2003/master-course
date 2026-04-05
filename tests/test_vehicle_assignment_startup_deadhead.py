@@ -53,3 +53,47 @@ def test_assign_duty_fragments_adds_startup_deadhead_from_home_depot() -> None:
     assert skipped == ()
     assert duty_vehicle_map == {"veh-1": "veh-1"}
     assert duties[0].legs[0].deadhead_from_prev_min == 12
+
+
+def test_assign_duty_fragments_skips_vehicle_without_startup_deadhead_path() -> None:
+    trip = Trip(
+        trip_id="t1",
+        route_id="r1",
+        origin="Route Stop",
+        destination="Terminal",
+        departure_time="05:00",
+        arrival_time="05:30",
+        distance_km=5.0,
+        allowed_vehicle_types=("BEV",),
+        origin_stop_id="stop-route",
+        destination_stop_id="stop-terminal",
+    )
+    context = DispatchContext(
+        service_date="2026-04-05",
+        trips=[trip],
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={"BEV": VehicleProfile(vehicle_type="BEV")},
+        location_aliases={"dep1": ("stop-depot",)},
+    )
+    duty = VehicleDuty(
+        duty_id="duty-1",
+        vehicle_type="BEV",
+        legs=(DutyLeg(trip=trip, deadhead_from_prev_min=0),),
+    )
+    vehicle = ProblemVehicle(
+        vehicle_id="veh-1",
+        vehicle_type="BEV",
+        home_depot_id="dep1",
+    )
+
+    duties, duty_vehicle_map, skipped = assign_duty_fragments_to_vehicles(
+        (duty,),
+        vehicles=(vehicle,),
+        max_fragments_per_vehicle=1,
+        dispatch_context=context,
+    )
+
+    assert duties == ()
+    assert duty_vehicle_map == {}
+    assert skipped == ("t1",)

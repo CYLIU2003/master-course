@@ -1,4 +1,4 @@
-from src.dispatch.models import DispatchContext, Trip, VehicleProfile
+from src.dispatch.models import DeadheadRule, DispatchContext, Trip, VehicleProfile
 from src.optimization.common.builder import ProblemBuilder
 from src.optimization.common.problem import CanonicalOptimizationProblem, OptimizationScenario
 from src.optimization.milp.model_builder import MILPModelBuilder
@@ -537,3 +537,48 @@ def test_solver_adapter_deadhead_distance_uses_metadata_speed() -> None:
     )
     adapter = GurobiMILPAdapter()
     assert abs(adapter._deadhead_distance_km(problem, 60) - 18.0) < 1.0e-9
+
+
+def test_solver_adapter_vehicle_can_start_trip_when_deadhead_exists_before_horizon() -> None:
+    context = DispatchContext(
+        service_date="2026-03-23",
+        trips=[
+            Trip(
+                trip_id="t_start",
+                route_id="r_start",
+                origin="Route Stop",
+                destination="Terminal",
+                departure_time="05:00",
+                arrival_time="05:30",
+                distance_km=5.0,
+                allowed_vehicle_types=("BEV",),
+                origin_stop_id="stop-route",
+                destination_stop_id="stop-terminal",
+            )
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("stop-depot", "stop-route"): DeadheadRule(
+                from_stop="stop-depot",
+                to_stop="stop-route",
+                travel_time_min=360,
+            )
+        },
+        vehicle_profiles={
+            "BEV": VehicleProfile(
+                vehicle_type="BEV",
+                battery_capacity_kwh=300.0,
+                energy_consumption_kwh_per_km=1.2,
+            )
+        },
+        location_aliases={"dep1": ("stop-depot",)},
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="s_startup_deadhead",
+        vehicle_counts={"BEV": 1},
+        canonical_depot_id="dep1",
+    )
+    adapter = GurobiMILPAdapter()
+
+    assert adapter._vehicle_can_start_trip(problem, problem.vehicles[0], problem.trips[0]) is True

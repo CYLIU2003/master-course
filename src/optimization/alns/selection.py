@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Protocol
+
+
+class OperatorSelector(Protocol):
+    def choose(self, candidates: Iterable[str], rng: random.Random) -> str:
+        ...
+
+    def update(self, operator_name: str, reward: float) -> None:
+        ...
 
 
 @dataclass
@@ -27,3 +35,15 @@ class AdaptiveRouletteSelector:
     def update(self, operator_name: str, reward: float) -> None:
         current = self.weights.get(operator_name, 1.0)
         self.weights[operator_name] = (1.0 - self.reaction) * current + self.reaction * reward
+
+
+@dataclass
+class UniformRandomSelector:
+    def choose(self, candidates: Iterable[str], rng: random.Random) -> str:
+        items: List[str] = list(candidates)
+        if not items:
+            raise ValueError("No operator candidates available")
+        return rng.choice(items)
+
+    def update(self, operator_name: str, reward: float) -> None:
+        del operator_name, reward

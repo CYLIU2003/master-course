@@ -126,7 +126,7 @@ class ProblemBuilder:
         fixed_route_band_mode = bool(
             simulation_cfg.get(
                 "fixed_route_band_mode",
-                solver_cfg.get("fixed_route_band_mode", False),
+                solver_cfg.get("fixed_route_band_mode", True),
             )
         )
         milp_max_successors_per_trip = solver_cfg.get("milp_max_successors_per_trip")
@@ -1058,6 +1058,17 @@ class ProblemBuilder:
             trip_rows=source_rows,
             routes=scenario.get("routes") or [],
             stops=scenario.get("stops") or [],
+            assumed_speed_kmh=float(
+                self._safe_float(
+                    (scenario.get("simulation_config") or {}).get(
+                        "deadhead_speed_kmh",
+                        ((scenario.get("scenario_overlay") or {}).get("solver_config") or {}).get(
+                            "deadhead_speed_kmh"
+                        ),
+                    )
+                )
+                or 18.0
+            ),
         )
         deadhead_rules = {
             key: DeadheadRule(
@@ -1665,8 +1676,6 @@ class ProblemBuilder:
                 continue
             deadhead_min = int(context.get_deadhead_min(home_depot_id, origin_key) or 0)
             if deadhead_min <= 0 and not context.locations_equivalent(home_depot_id, origin_key):
-                continue
-            if deadhead_min > int(first_trip.departure_min):
                 continue
             score = (
                 int(vehicle_type_counts.get(str(vehicle.vehicle_type), 0) or 0),

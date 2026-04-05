@@ -213,6 +213,76 @@ def _coerce_existing_metric(
     )
 
 
+def _minimum_travel_time_min(
+    distance_km: float,
+    *,
+    assumed_speed_kmh: float,
+) -> int:
+    if distance_km <= 0.0:
+        return 0
+    speed_kmh = assumed_speed_kmh if assumed_speed_kmh > 0.0 else 18.0
+    return int(math.ceil((distance_km / speed_kmh) * 60.0))
+
+
+def _metric_distance_with_fallback(
+    metric: DeadheadMetric,
+    *,
+    stop_coords: Mapping[str, Tuple[float, float]],
+    detour_factor: float,
+) -> float:
+    if float(metric.distance_km or 0.0) > 0.0:
+        return float(metric.distance_km)
+    from_coords = stop_coords.get(metric.from_stop)
+    to_coords = stop_coords.get(metric.to_stop)
+    if not from_coords or not to_coords:
+        return 0.0
+    straight_km = _haversine_km(
+        from_coords[0],
+        from_coords[1],
+        to_coords[0],
+        to_coords[1],
+    )
+    return round(straight_km * max(detour_factor, 1.0), 4)
+
+
+def _enforce_metric_speed_cap(
+    metric: DeadheadMetric,
+    *,
+    stop_coords: Mapping[str, Tuple[float, float]],
+    detour_factor: float,
+    assumed_speed_kmh: float,
+) -> DeadheadMetric:
+    if metric.from_stop == metric.to_stop:
+        return metric
+    if str(metric.source or "").strip() == "stop_platform_alias":
+        return metric
+    effective_distance_km = _metric_distance_with_fallback(
+        metric,
+        stop_coords=stop_coords,
+        detour_factor=detour_factor,
+    )
+    if effective_distance_km <= 0.0:
+        return metric
+    minimum_travel_time = _minimum_travel_time_min(
+        effective_distance_km,
+        assumed_speed_kmh=assumed_speed_kmh,
+    )
+    adjusted_travel_time = max(int(metric.travel_time_min or 0), minimum_travel_time)
+    if (
+        adjusted_travel_time == int(metric.travel_time_min or 0)
+        and abs(effective_distance_km - float(metric.distance_km or 0.0)) <= 1.0e-9
+    ):
+        return metric
+    return DeadheadMetric(
+        from_stop=metric.from_stop,
+        to_stop=metric.to_stop,
+        travel_time_min=adjusted_travel_time,
+        distance_km=effective_distance_km,
+        source=metric.source,
+        route_family_code=metric.route_family_code,
+    )
+
+
 def merge_deadhead_metrics(
     *,
     existing_rules: Iterable[Mapping[str, Any]] | Mapping[Tuple[str, str], Any] | None,
@@ -277,6 +347,15 @@ def merge_deadhead_metrics(
                     source="stop_platform_alias",
                     route_family_code=None,
                 )
+    metrics = {
+        key: _enforce_metric_speed_cap(
+            metric,
+            stop_coords=stop_coords,
+            detour_factor=detour_factor,
+            assumed_speed_kmh=assumed_speed_kmh,
+        )
+        for key, metric in metrics.items()
+    }
     if not stop_coords:
         return metrics
 

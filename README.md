@@ -68,11 +68,15 @@ flowchart LR
   - JSON メタデータ（summary, optimization_result, optimization_audit, kpi_summary など）
   - Excel multi-sheet (`results.xlsx` - openpyxl で動的生成)  
   - 単位マッピング(`run_manifest.json`)
-  - グラフ・図表（`graph/` 配下、route_band_diagrams SVG、vehicle_timeline 複製）
+  - グラフ・図表（`graph/` 配下、route_band_diagrams SVG、vehicle_operation_diagrams SVG、vehicle_timeline 複製）
 - **系統受電量の明示化**:
   - `grid_to_bus_kwh` (直給) / `grid_to_bess_kwh` (BESS充電) / `grid_import_total_kwh` (合計)
   - cost_breakdown_detail + site_power_balance で同期
   - 旧「全ゼロ受電」の曖昧性を「明確な 0 or 正数」に統一化
+- **充電源内訳と契約超過の明示化**:
+  - `charging_summary.(json/csv)` で depot 別 / 全体の `grid_to_bus_kwh`, `pv_to_bus_kwh`, `bess_to_bus_kwh`, `pv_to_bess_kwh`, `grid_to_bess_kwh`, `pv_curtail_kwh` を確認可能
+  - `depot_energy_flows.(json/csv)` と `graph/depot_power_timeseries_5min.csv` で slot 単位の `grid_import_kw`, `contract_limit_kw`, `contract_over_limit_kwh`, `contract_limit_exceeded` を確認可能
+  - per-source flow が plan に明示されない run では、`source_provenance_exact=false` と note を残した上で `charging_slots` から grid-origin 充電のみを診断的に再構成する
 
 #### ② 4ソルバー再検証 ✅
 - **MILP/ALNS/GA/ABC** all modes: `unserved=0`, `penalty_unserved=0` (最新実行 2026-04-01 1907-1913)
@@ -131,6 +135,11 @@ flowchart LR
 - 2026-04-05: deadhead alias 修理後に残っていた code-caused unserved を潰すため、fully shared scope では `ProblemBuilder` が pooled shared path-cover baseline を使って actual fleet 全体で duty cover を組むようにした。`DispatchContext.locations_equivalent()` も追加し、`tsurumaki` と `odpt.BusstopPole:...Tsurumakieigyousho...` のような depot alias を 0 分 deadhead の同地点として扱うよう揃えた。actual BFF fixed-scope rerun では `974/974 served` を回復し、bundle は `output/reports/20260405_fixed_scope_237d5623_unserved_fix/`、報告書は `docs/fixed_scope_unserved_fix_report_20260405.md` に保存している
 - 2026-04-05: `tools/bus_operation_visualizer_tk.py` / `tools/multi_run_visualizer_tk.py` を新しい dated run + report bundle 構成へ対応させた。`output/<date>/scenario/.../run_*` と `output/reports/.../comparison.json` の両方を走査でき、最適化 run 直下に `simulation_result.json` が無い場合でも `output/<feed>/<snapshot>/simulation/<scenario>/<depot>/<service>/simulation_result.json` を自動解決する
 - 2026-04-05: `tools/multi_run_visualizer_tk.py` の export は、比較表と教授向けレポートだけでなく `solver_comparison_table.csv/.md`、best run の `graph/route_band_diagrams/`、各 solver の `solver_route_band_diagrams/<mode>_<run_id>/` も出力するようにした。固定 scope rerun bundle では `output/reports/20260405_fixed_scope_237d5623_unserved_fix/graph/route_band_diagrams/` と `output/reports/20260405_fixed_scope_237d5623_unserved_fix/solver_comparison_table.csv` を確認できる
+- 2026-04-06: fixed scope `237d5623-aa94-4f72-9da1-17b9070264be` / `prepared-11efb997690030ef` に対して、startup deadhead の既知 missing path を assignment / MILP start arc の両方で禁止しつつ、初便への回送は simulation horizon 外から開始できるよう修正した。deadhead metric merge では `deadhead_speed_kmh` を上限として既存・推論 metric を再拘束し、BFF canonical path では MILP warm start も有効化した
+- 2026-04-06: `fixedRouteBandMode=true` なら `enableVehicleDiagramOutput` の設定値に依存せず `graph/route_band_diagrams/*.svg` を標準出力するよう canonical export 条件を修正した。実 run は `output/2025-08-04/scenario/237d5623-aa94-4f72-9da1-17b9070264be/mode_{milp,alns,ga,abc}_only/tsurumaki/WEEKDAY/run_20260406_*`、bundle は `output/reports/20260406_fixed_scope_237d5623_model_fix/`、教授向け要約は `docs/fixed_scope_model_fix_report_20260406.md` に保存している
+- 2026-04-06: canonical rich output に充電源内訳を追加し、`charging_summary.(json/csv)`、`depot_energy_flows.(json/csv)`、拡張 `site_power_balance.csv`、拡張 `graph/depot_power_timeseries_5min.csv` から「系統からいくら買ったか」「PV/BESS からどれだけバスへ供給したか」「契約上限を超えて overage penalty が発生したか」を確認できるようにした。solver plan に per-source flow が無い場合は `source_provenance_exact=false` と `charging_summary_warning` を残し、補助出力の欠落が optimization result 保存全体を止めないようにした
+- 2026-04-06: 各バスの「運用・回送・充電・給油」を縦軸=車両、横軸=時刻の横棒で出す `graph/vehicle_operation_diagrams/*.svg` を標準出力へ追加した。service bar には `band_label / route_family / route_id` のいずれかをラベル表示し、`tools/bus_operation_visualizer_tk.py` の図Aも同じく車両別横棒表示へ更新した
+- 2026-04-06: metaheuristic engine が wrapper 側の mode 設定を実際に使うよう見直し、GA は `genetic_like`、ABC は `bee_colony_like` の acceptance を metadata に出すよう修正した。fixed scope rerun では 4 solver すべて `974/974 served` を回復したが、MILP は `solver_status=time_limit_baseline`, `supports_exact_milp=false` のため exact ではなく fallback のままである
 - 2026-04-05: `bff/routers/simulation.py` の canonical bridge は旧 `plan.vehicle_paths` 前提で current canonical output の top-level `vehicle_paths` を落としていたため修正し、`src/simulator.py` は `feasible` / `time_limit_baseline` を valid status として扱うよう更新した。slot 境界の back-to-back trip を overlap 扱いする fallback も修正し、ALNS best run の prepared simulation は `served=974`, `vehicle_count_used=88`, `simulation_total_cost=3245610.92`, `simulation_total_co2_kg=3845.7289`, residual `time_connection=21` まで改善した
 - 2026-04-01: canonical 最適化の保存先を拡張し、従来の feed/snapshot スコープ出力に加えて `output/<service_date>/scenario/<scenario_id>/<mode>/<depot>/<service>/run_YYYYMMDD_HHMM/` を同時生成するようにした。run 配下には `summary.json`, `solver_result.json`, `canonical_solver_result.json`, `cost_breakdown_detail.(json/csv)`, `objective_breakdown.(json/csv)`, `kpi_summary.json`, `site_power_balance.csv`, `depot_energy_flows.(json/csv)` など単位付き成果物を出力し、系統受電量（`grid_to_bus_kwh`, `grid_to_bess_kwh`, `grid_import_total_kwh`）を明示確認できるようにした
 - 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
@@ -725,6 +734,8 @@ python tools/multi_run_visualizer_tk.py
 追加出力（route-band 可視化）：
 - `route_band_diagrams/manifest.json`
 - `route_band_diagrams/*.svg`
+- `vehicle_operation_diagrams/manifest.json`
+- `vehicle_operation_diagrams/*.svg`
 
 route-band 可視化の仕様：
 - 出力先は各 optimization run 配下の `graph/` です。例: `outputs/tokyu/2026-03-22/optimization/<scenario_id>/<depot>/<service>/run_YYYYMMDD_HHMM/graph/`
@@ -737,6 +748,7 @@ route-band 可視化の仕様：
 - 時間軸は常に `00:00` から `23:59` の 1 日固定です。`simulation_config.start_time` 起点の slot index を実時刻へ補正してから `vehicle_timeline.csv` / `trip_assignment.csv` / SVG に反映するため、夕方以降の便が軸外へ飛ぶことはありません。
 - SVG では vehicle ごとの日内最初の便に対する `depot_out`、最後の便の後の `depot_in`、および同一 band 内の長い空き時間や charge row を挟む区間の temporary depot stay を推定描画します。depot が当該路線の stopSequence に含まれない場合は side lane にのみ出します。
 - `fixed_route_band_mode=true` の run では、そのまま路線専属ダイヤ図として使えます。通常 run でも出力しますが、`route_band_diagrams/manifest.json` の `mixed_event_route_band_detected=true` は「その route graph に出てくる車両が同日に他 band の trip も担当した」ことを意味します。
+- `vehicle_operation_diagrams/all_vehicles.svg` は、縦軸を車両、横軸を時刻とした全車両横棒図です。`service` は運用、`deadhead` は回送、`charge` は充電、`refuel` は給油を表し、運用バー内ラベルで路線系統を確認できます。
 
 補足：
 - タイムゾーンは `Asia/Tokyo`、時刻は ISO 8601 形式です。
@@ -748,13 +760,19 @@ route-band 可視化の仕様：
 
 注記:
 - current canonical / report 出力の正本 root は `output/` です。
-- 旧資料に残る `outputs/...` は historical path で、今回の fixed-scope rerun bundle は `output/reports/20260405_fixed_scope_237d5623_unserved_fix/` にあります。
+- 旧資料に残る `outputs/...` は historical path です。2026-04-06 時点の fixed-scope rerun の正本 bundle は `output/reports/20260406_fixed_scope_237d5623_model_fix/`、harness 比較は `outputs/mode_compare_route24_fix_rerun_20260405_model_fix_v2.{json,csv}` です。
+- 今回の canonical rich run は `output/2025-08-04/scenario/237d5623-aa94-4f72-9da1-17b9070264be/mode_milp_only/tsurumaki/WEEKDAY/run_20260406_0110/`、`.../mode_alns_only/.../run_20260406_0114/`、`.../mode_ga_only/.../run_20260406_0119/`、`.../mode_abc_only/.../run_20260406_0125/` にあります。
+- `fixedRouteBandMode=true` の run では `graph/route_band_diagrams/` を標準出力し、report bundle 側にも best-run mirror と per-solver copy を必ず残します。
 
 | 種別 | 保存先 / 出力先 | 補足 |
 |---|---|---|
 | 実行 run 出力 | `output/<service_date>/scenario/<scenario_id>/<mode>/<depot>/<service>/run_YYYYMMDD_HHMM/` | current canonical optimization run の単位出力 |
 | Graph Exports | `.../run_YYYYMMDD_HHMM/graph/` | `manifest.json`、`vehicle_timeline.csv`、`soc_events.csv` など |
 | route-band 図 | `.../run_YYYYMMDD_HHMM/graph/route_band_diagrams/` | `manifest.json` と `*.svg` |
+| 車両別横棒図 | `.../run_YYYYMMDD_HHMM/graph/vehicle_operation_diagrams/` | `all_vehicles.svg` と `manifest.json` |
+| 充電内訳サマリ | `.../run_YYYYMMDD_HHMM/charging_summary.json` | depot 別 / 全体の grid・PV・BESS 内訳、契約超過、電力コスト |
+| 充電内訳時系列 | `.../run_YYYYMMDD_HHMM/depot_energy_flows.csv` | depot-slot ごとの grid/PV/BESS/curtail/SOC/contract over を一覧化 |
+| 充電契約監視 | `.../run_YYYYMMDD_HHMM/graph/depot_power_timeseries_5min.csv` | `grid_import_kw`, `contract_limit_kw`, `contract_over_limit_kwh`, `contract_limit_exceeded` を 5 分粒度で確認 |
 | report bundle | `output/reports/<bundle_name>/` | `comparison.json/csv`、`professor_report.md`、比較図、simulation 要約 |
 | report bundle route-band 図 | `output/reports/<bundle_name>/graph/route_band_diagrams/` | best run を旧 run 互換で複製した図 |
 | report bundle per-solver route-band 図 | `output/reports/<bundle_name>/solver_route_band_diagrams/<mode>_<run_id>/` | solver ごとの route-band 図一式 |

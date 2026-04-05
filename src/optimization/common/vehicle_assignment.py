@@ -45,6 +45,8 @@ def assign_duty_fragments_to_vehicles(
             grouped,
             vehicle_ids_by_type.get(str(duty.vehicle_type), []),
             fragment_cap,
+            vehicle_by_id=vehicle_by_id,
+            dispatch_context=dispatch_context,
         )
         if not vehicle_id:
             skipped_trip_ids.extend(duty.trip_ids)
@@ -84,6 +86,9 @@ def _select_vehicle_id_for_duty(
     grouped: Mapping[str, Sequence[VehicleDuty]],
     candidate_vehicle_ids: Iterable[str],
     fragment_cap: int,
+    *,
+    vehicle_by_id: Mapping[str, ProblemVehicle],
+    dispatch_context: Any | None,
 ) -> str:
     duty_start, duty_end = _duty_time_bounds(duty)
     best_score: tuple[int, int, int, str] | None = None
@@ -94,6 +99,13 @@ def _select_vehicle_id_for_duty(
             continue
         fit_score = _fragment_fit_score(fragments, duty_start, duty_end)
         if fit_score is None:
+            continue
+        if not _startup_path_exists_for_assignment(
+            duty,
+            vehicle=vehicle_by_id.get(str(vehicle_id)),
+            fragments=fragments,
+            dispatch_context=dispatch_context,
+        ):
             continue
         score = (fit_score[0], fit_score[1], len(fragments), str(vehicle_id))
         if best_score is None or score < best_score:
@@ -181,3 +193,44 @@ def _startup_deadhead_min(
         return max(int(get_deadhead_min(from_location, origin_key) or 0), 0)
     except Exception:
         return 0
+
+
+def _startup_path_exists_for_assignment(
+    duty: VehicleDuty,
+    *,
+    vehicle: ProblemVehicle | None,
+    fragments: Sequence[VehicleDuty],
+    dispatch_context: Any | None,
+) -> bool:
+    if vehicle is None or dispatch_context is None or not duty.legs:
+        return True
+    duty_start, duty_end = _duty_time_bounds(duty)
+    if fragments:
+        ordered = sorted(fragments, key=_duty_sort_key)
+        first_start, _first_end = _duty_time_bounds(ordered[0])
+        if duty_start >= first_start or duty_end > first_start:
+            return True
+    home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
+    first_trip = duty.legs[0].trip
+    origin_key = str(
+        getattr(first_trip, "origin_stop_id", "")
+        or getattr(first_trip, "origin", "")
+        or ""
+    ).strip()
+    if not home_depot_id or not origin_key:
+        return True
+    locations_equivalent = getattr(dispatch_context, "locations_equivalent", None)
+    if callable(locations_equivalent) and locations_equivalent(home_depot_id, origin_key):
+        return True
+    has_location_data = getattr(dispatch_context, "has_location_data", None)
+    get_deadhead_min = getattr(dispatch_context, "get_deadhead_min", None)
+    if not callable(get_deadhead_min):
+        return True
+    try:
+        if int(get_deadhead_min(home_depot_id, origin_key) or 0) > 0:
+            return True
+        if callable(has_location_data) and has_location_data(home_depot_id):
+            return False
+        return True
+    except Exception:
+        return True
