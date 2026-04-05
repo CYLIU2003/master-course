@@ -2660,6 +2660,30 @@ master-course/
   - 2026-04-03 strict rerun では、`fixedRouteBandMode=false` / `milpMaxSuccessorsPerTrip=1000` に切り替えたうえで同じ 4 モード比較を再実行した。比較結果は `outputs/mode_compare_strict_237d.json` / `outputs/mode_compare_strict_237d.csv` に保存し、`mode_milp_only` は `optimal`, `objective_value=8424185.3198152`, `solve_time_seconds=104.8655`, `trip_count_unserved=803`、`mode_alns_only` は `feasible`, `objective_value=8928701.710007224`, `solve_time_seconds=108.3484`, `trip_count_unserved=850`、`ga` は `feasible`, `objective_value=8928701.710007224`, `solve_time_seconds=126.7963`, `trip_count_unserved=850`、`abc` は `feasible`, `objective_value=8928701.710007224`, `solve_time_seconds=114.3111`, `trip_count_unserved=850` だった。
   - 追記所見: `FeasibilityChecker` を「未配車は warning 扱い」に修正した後は、ヒューリスティック 3 手法が `infeasible_candidate` ではなく `feasible` を返すようになった。これは hard constraint の違反が無い限り候補解として扱うという、目的関数の罰則設計と整合する。MILP は依然として最良 objective を維持するが、現行比較では heuristic 側も least-surprise な status で返るようになった。
 
+- 2026-04-05 (route24 近傍の欠便集中を切り分け、baseline/repair と MILP fallback を補修)
+  - 問題として、scenario `237d5623-aa94-4f72-9da1-17b9070264be` / `prepared-11efb997690030ef` の弦巻 `WEEKDAY` 単日 scope では、旧 run `output/2025-08-04/scenario/237d5623-aa94-4f72-9da1-17b9070264be/mode_milp_only/tsurumaki/WEEKDAY/run_20260404_1611/optimization_result.json` に `trip_count_unserved=56` が残り、その内訳が `渋24=49`, `渋23=7` に集中していた。まず IIS よりも route24 / route23 近傍の朝ピーク縮小問題として切り分けた。
+  - 追加で自分から上げた問題として、canonical baseline と repair が shared trip を `allowed_vehicle_types[0]` 優先で消費しており、`('BEV','ICE')` 許可 trip が BEV duty に偏る一方、後段で actual fleet materialize した時に duty が崩れていた。さらに MILP は `TIME_LIMIT` かつ `SolCount==0` のとき空の全欠便 plan を返しており、baseline fallback でも `supports_exact_milp=True` になっていた。
+  - `src/optimization/common/builder.py` では baseline 構築を actual fleet 台数順に変更し、vehicle type ごとの greedy duty を即時に `assign_duty_fragments_to_vehicles()` で実車両へ materialize しながら trip を確定するよう修正した。これにより baseline 自体が `served=974`, `unserved=0`, `vehicle_count_used=91` になった。
+  - `src/optimization/alns/operators_repair.py` でも `greedy_trip_insertion()` を actual fleet 台数順へ変更し、shared trip を BEV-first で抱え込まないようにした。回帰用に `tests/test_baseline_vehicle_type_priority.py` を追加し、baseline / repair の両方が overflow 先 vehicle type を使えることを固定した。
+  - `src/optimization/milp/solver_adapter.py` には baseline fallback helper を追加し、`auto_relaxed_baseline` と `time_limit_baseline` のどちらでも `supports_exact_milp=False` になるよう修正した。`TIME_LIMIT && SolCount==0` の no-incumbent 経路では `dispatch_baseline_after_time_limit_no_incumbent` を返すようにし、`src/optimization/milp/engine.py` で termination reason も `time_limit` / `baseline_after_relax` として読めるよう揃えた。
+  - ついでに `scripts/benchmark_solver_modes.py` も補修し、比較時は `job.metadata.dated_run_dir` から `optimization_result.json` を優先読取するようにした。これで API 比較時に `unmet_trips=null` のまま集計される問題を避けられる。
+  - 固定 scope の再実行を人手差分なしで再現するため、`scripts/benchmark_fixed_prepared_scope.py` を追加した。`scenario/prepared_input/depot/service/objective/planning_days` を固定し、prepared input から materialize した `timetable_rows` をそのまま使って 4 ソルバーを sequential 実行し、comparison JSON / CSV と per-solver JSON、verdict、consistency check をまとめて出す。
+  - 4 ソルバー再実行は current call path と同じ builder / engine を prepared input 固定で直接呼ぶ形で行い、結果を `outputs/mode_compare_route24_fix_rerun_20260405.json` / `outputs/mode_compare_route24_fix_rerun_20260405.csv` に保存した。結果は以下の通り。
+    - `milp`: `solver_status=time_limit_baseline`, `objective_value=2979501.013850968`, `trip_count_served=974`, `trip_count_unserved=0`, `vehicle_count_used=91`, `supports_exact_milp=false`
+    - `alns`: `solver_status=feasible`, `objective_value=2955072.402034295`, `trip_count_served=974`, `trip_count_unserved=0`, `vehicle_count_used=93`
+    - `ga`: `solver_status=feasible`, `objective_value=2979501.013850968`, `trip_count_served=974`, `trip_count_unserved=0`, `vehicle_count_used=91`
+    - `abc`: `solver_status=feasible`, `objective_value=2976786.2860787963`, `trip_count_served=974`, `trip_count_unserved=0`, `vehicle_count_used=91`
+  - comparison row には `supports_exact_milp`, `termination_reason`, `warnings`, `incumbent_history_count`, `plan_source`, `plan_status`, `milp_status`, `route24/23` の未担当件数、shared trip の BEV/ICE 割当内訳を持たせた。`consistency_check.json` では comparison と per-solver JSON の `solver_status/objective/served/unserved/vehicle_count_used` が 4 モードすべて一致することを確認した。
+  - 追記所見: 欠便抑止の観点では 4 モードとも route24 / route23 の未担当を 0 まで戻せた。一方で MILP は exact incumbent を 300 秒以内に得ておらず、現時点の改善は「全欠便へ落ちない安全化」である。先生向けの説明資料は `docs/route24_solver_report_20260405.md` にまとめた。
+  - 回帰テスト:
+    - `tests/test_milp_baseline_fallbacks.py`
+    - `tests/test_baseline_vehicle_type_priority.py`
+    - `tests/test_route_family_deadhead_inference.py`
+    - `tests/test_problem_builder_timestep_and_pv_scaling.py`
+  - 確認:
+    - `python -m py_compile src/optimization/milp/solver_adapter.py src/optimization/milp/engine.py tests/test_milp_baseline_fallbacks.py` → pass
+    - `PYTHONPATH=C:\master-course pytest tests/test_milp_baseline_fallbacks.py tests/test_baseline_vehicle_type_priority.py tests/test_route_family_deadhead_inference.py tests/test_problem_builder_timestep_and_pv_scaling.py -q` → `14 passed`
+
 - 2026-03-23 (Prepared-scope optimization と scenario artifact の整合を修正)
   - 問題は Tk/BFF の既定フローで `rebuild_dispatch=false` のまま最適化を完了すると、`optimization_result` だけは更新される一方で scenario 側の `trips` / `timetable_rows` / `stats` が古いまま残り、フロント・BFF・最適化監査で見える件数が食い違うことだった。
   - さらに `scenario_store.set_field(..., invalidate_dispatch=True)` の direct row-artifact 更新経路は `timetable_rows` / `stop_timetables` 更新時に stale な `trips` / `duties` / `optimization_result` を落としておらず、timetable-first なのに古い dispatch/optimization が残り得た。

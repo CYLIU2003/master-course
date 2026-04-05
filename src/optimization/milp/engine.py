@@ -78,12 +78,14 @@ class MILPOptimizer:
         status = str(solver_status or "").strip().lower()
         if status == "optimal":
             return "optimal"
-        if status == "time_limit":
+        if status in {"time_limit", "time_limit_baseline"}:
             return "time_limit"
         if status in {"infeasible", "inf_or_unbd", "unbounded"}:
             return "infeasible_or_unbounded"
         if status == "suboptimal":
             return "stopped_with_feasible"
+        if status == "auto_relaxed_baseline":
+            return "baseline_after_relax"
         return "unknown"
 
     def _lightweight_model_stats(

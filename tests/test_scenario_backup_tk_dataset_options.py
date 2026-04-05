@@ -59,6 +59,70 @@ def test_refresh_methods_are_noop_before_fleet_window_build() -> None:
     App.refresh_templates(app)
 
 
+def test_open_fleet_window_syncs_existing_scope_depots(monkeypatch) -> None:
+    class DummyWidget:
+        def __init__(self, *args, **kwargs) -> None:
+            return None
+
+        def pack(self, *args, **kwargs):
+            return self
+
+    class DummyRoot:
+        def winfo_screenwidth(self) -> int:
+            return 1200
+
+        def winfo_screenheight(self) -> int:
+            return 900
+
+    class DummyWindow:
+        def winfo_exists(self) -> bool:
+            return True
+
+        def lift(self) -> None:
+            return None
+
+        def focus_force(self) -> None:
+            return None
+
+        def title(self, _title: str) -> None:
+            return None
+
+        def geometry(self, _geometry: str) -> None:
+            return None
+
+        def minsize(self, _width: int, _height: int) -> None:
+            return None
+
+        def protocol(self, _name: str, _callback) -> None:
+            return None
+
+        def destroy(self) -> None:
+            return None
+
+    app = App.__new__(App)
+    app.root = DummyRoot()
+    app._fleet_window = None
+    app._fleet_built = False
+    app.scope_depots = [{"id": "tsurumaki"}, {"id": "seta"}]
+    app.fleet_depot_var = None
+    app.vehicle_tree = None
+    app.template_tree = None
+    app.fleet_depot_combo = None
+    app.dup_target_depot_combo = None
+    app._build_fleet_panel = lambda _parent: None
+
+    captured: list[list[dict[str, object]]] = []
+    app._refresh_depot_dropdowns = lambda depots: captured.append(list(depots))
+
+    monkeypatch.setattr("tools.scenario_backup_tk.ttk.Frame", DummyWidget)
+    monkeypatch.setattr("tools.scenario_backup_tk.ttk.Label", DummyWidget)
+    monkeypatch.setattr("tools.scenario_backup_tk.tk.Toplevel", lambda _root: DummyWindow())
+
+    App.open_fleet_window(app)
+
+    assert captured == [[{"id": "tsurumaki"}, {"id": "seta"}]]
+
+
 def test_on_scenario_changed_skips_fleet_refresh_when_window_not_built() -> None:
     app = App.__new__(App)
     app._fleet_built = False

@@ -125,6 +125,9 @@ flowchart LR
 - 2026-04-01: `tools/scenario_backup_tk.py` の UI を再構成し、主導線（接続→シナリオ選択→Prepare→実行→結果確認）を前面化。重複していた `設定保存` ボタンと上部 `App Context` ボタンを削除し、補助機能は `ツール` メニューへ集約。実行モードを `直結 / HTTP互換` の切替UIとして明示した
 - 2026-04-01: `mode_milp_only` で `allowPartialService=false` の strict 条件が infeasible になった場合、`unserved==0` 制約のみを実行時に自動緩和して再最適化するフォールバックを追加。`INF_OR_UNBD` は `DualReductions=0` で再判定した上で処理し、解なしで全停止するケースを抑制した
 - 2026-04-02: MILP の time_limit 時にゼロ担当解へ落ちやすい問題を抑えるため、`problem.baseline_plan` を使った warm start を追加し、`y/unserved/used_vehicle/start_arc/end_arc` の初期値を与えるようにした
+- 2026-04-05: scenario `237d5623-aa94-4f72-9da1-17b9070264be` / `prepared-11efb997690030ef` の route24 近傍切り分けで、旧 run `run_20260404_1611` の未担当 56 便が `渋24=49`, `渋23=7` に集中していることを確認した。builder の baseline 構築と ALNS repair が shared trip を `allowed_vehicle_types[0]` から順に消費しており、実 fleet materialize 前に BEV 側へ寄り切るのが主因だったため、現在は actual fleet 台数順で割当順序を決め、baseline も実車両へ materialize しながら構築するよう修正した
+- 2026-04-05: MILP が `TIME_LIMIT` かつ incumbent なし (`SolCount==0`) の場合、空の全欠便計画ではなく dispatch baseline を返す `solver_status=time_limit_baseline` を追加した。この経路と `auto_relaxed_baseline` はどちらも `solver_metadata.supports_exact_milp=false` とし、exact MILP 解と誤認しないようにした。4 ソルバー再実行結果は `outputs/mode_compare_route24_fix_rerun_20260405.json` / `outputs/mode_compare_route24_fix_rerun_20260405.csv`、先生向け要約は `docs/route24_solver_report_20260405.md` に保存している
+- 2026-04-05: 固定 scope 再実行用に `scripts/benchmark_fixed_prepared_scope.py` を追加した。prepared input から materialize した `timetable_rows` を再生成せずに `MILP/ALNS/GA/ABC` を sequential 実行し、comparison JSON / CSV、per-solver JSON、`verdict.md`、`consistency_check.json` を同じ stem 配下へ保存する
 - 2026-04-01: canonical 最適化の保存先を拡張し、従来の feed/snapshot スコープ出力に加えて `output/<service_date>/scenario/<scenario_id>/<mode>/<depot>/<service>/run_YYYYMMDD_HHMM/` を同時生成するようにした。run 配下には `summary.json`, `solver_result.json`, `canonical_solver_result.json`, `cost_breakdown_detail.(json/csv)`, `objective_breakdown.(json/csv)`, `kpi_summary.json`, `site_power_balance.csv`, `depot_energy_flows.(json/csv)` など単位付き成果物を出力し、系統受電量（`grid_to_bus_kwh`, `grid_to_bess_kwh`, `grid_import_total_kwh`）を明示確認できるようにした
 - 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
 - 2026-03-31: 営業所別エネルギー資産は `depot_energy_assets` で `pv_capacity_kw` と `bess_energy_kwh / bess_power_kw` を編集できる前提に整理し、日別 PV capacity factor から複数日 horizon 用の発電列を再構築できるようにした
@@ -212,6 +215,7 @@ flowchart LR
 > - **C20/C21 ピーク判定**：tariff テーブルが設定されている場合はそれを優先しますが、未設定時は時間帯別価格の中央値で on/off を近似的に分類しています。
 > - **目的関数モード**：`objectiveMode=total_cost` は従来のコスト最小、`objectiveMode=co2` は CO₂排出量最小、`objectiveMode=balanced` はコストと排出の加重和、`objectiveMode=utilization` は運行達成を維持しつつ車両稼働の効率化を重視します。`co2` モードでは `co2_price_per_kg=0` でも排出量そのものを最小化します。
 > - **CO₂費・劣化費**：`total_cost` モードでは、パラメータ（`co2_price_per_kg`・`degradation` 重み）に正の値を設定すると目的関数へ加算されます。
+> - **MILP fallback の読み方**：`solver_status=time_limit_baseline` または `auto_relaxed_baseline` は、Gurobi で exact incumbent を採れなかったため dispatch baseline を返したことを意味します。この場合 `solver_metadata.supports_exact_milp=false` であり、exact MILP 最適解や proven optimum を主張してはいけません。
 
 実装本体：[`src/optimization/milp/solver_adapter.py`](src/optimization/milp/solver_adapter.py)
 研究仕様（目標定式化）：[`docs/constant/formulation.md`](docs/constant/formulation.md)

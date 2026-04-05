@@ -92,6 +92,17 @@ def pick_number(*values: Any) -> float | None:
     return None
 
 
+def pick_int(*values: Any) -> int | None:
+    for value in values:
+        if value is None:
+            continue
+        try:
+            return int(float(value))
+        except Exception:
+            continue
+    return None
+
+
 def pick_text(*values: Any) -> str:
     for value in values:
         text = str(value or "").strip()
@@ -104,6 +115,8 @@ def extract_result_metrics(result: dict[str, Any]) -> dict[str, Any]:
     solver_result = dict(result.get("solver_result") or {})
     kpi = dict(result.get("kpi") or {})
     costs = dict(result.get("cost_breakdown") or {})
+    summary = dict(result.get("summary") or {})
+    unserved_tasks = solver_result.get("unserved_tasks") or []
     return {
         "status": pick_text(result.get("status"), solver_result.get("status"), "unknown"),
         "objective_value": pick_number(result.get("objective_value"), solver_result.get("objective_value")),
@@ -115,14 +128,52 @@ def extract_result_metrics(result: dict[str, Any]) -> dict[str, Any]:
         "total_energy_cost": pick_number(costs.get("total_energy_cost"), costs.get("energy_cost")),
         "total_fuel_cost": pick_number(costs.get("total_fuel_cost"), costs.get("fuel_cost")),
         "total_demand_charge": pick_number(costs.get("total_demand_charge"), costs.get("demand_charge")),
-        "unmet_trips": pick_number(kpi.get("unmet_trips"), result.get("unmet_trips")),
+        "unmet_trips": pick_int(
+            summary.get("trip_count_unserved"),
+            len(unserved_tasks),
+            kpi.get("unmet_trips"),
+            result.get("unmet_trips"),
+        ),
     }
 
 
+def load_run_result_from_job(job: dict[str, Any]) -> dict[str, Any] | None:
+    metadata = dict(job.get("metadata") or {})
+    run_dir = pick_text(metadata.get("dated_run_dir"), metadata.get("output_dir"))
+    if not run_dir:
+        return None
+    result_path = Path(run_dir) / "optimization_result.json"
+    if not result_path.exists():
+        return None
+    try:
+        return json.loads(result_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 def wait_for_job(client: BFFClient, job_id: str, poll_seconds: float, timeout_seconds: int) -> dict[str, Any]:
+    job_path = Path(__file__).resolve().parents[1] / "output" / "jobs" / f"{job_id}.json"
+
+    def _load_job_from_disk() -> dict[str, Any] | None:
+        if not job_path.exists():
+            return None
+        try:
+            return json.loads(job_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
     started = time.time()
     while True:
-        job = client.request("GET", f"/jobs/{job_id}")
+        job: dict[str, Any] | None = None
+        try:
+            job = client.request("GET", f"/jobs/{job_id}")
+        except Exception:
+            job = _load_job_from_disk()
+        if job is None:
+            if time.time() - started > timeout_seconds:
+                raise TimeoutError(f"Job timeout: {job_id}")
+            time.sleep(poll_seconds)
+            continue
         status = str(job.get("status") or "")
         if status in {"completed", "failed", "cancelled"}:
             return job
@@ -137,6 +188,7 @@ def run_mode(
     mode: str,
     service_id: str,
     depot_id: str | None,
+    prepared_input_id: str | None,
     time_limit_seconds: int,
     mip_gap: float,
     alns_iterations: int,
@@ -147,6 +199,7 @@ def run_mode(
         "mode": mode,
         "service_id": service_id,
         "depot_id": depot_id,
+        "prepared_input_id": prepared_input_id,
         "time_limit_seconds": time_limit_seconds,
         "mip_gap": mip_gap,
         "alns_iterations": alns_iterations,
@@ -160,7 +213,7 @@ def run_mode(
 
     job = wait_for_job(client, job_id, poll_seconds=poll_seconds, timeout_seconds=timeout_seconds)
     completed_at = datetime.now(timezone.utc).isoformat()
-    result = client.request("GET", f"/scenarios/{scenario_id}/optimization")
+    result = load_run_result_from_job(job) or client.request("GET", f"/scenarios/{scenario_id}/optimization")
     metrics = extract_result_metrics(result)
 
     return {
@@ -171,6 +224,8 @@ def run_mode(
         "job_progress": job.get("progress"),
         "submitted_at": submitted_at,
         "completed_at": completed_at,
+        "dated_run_dir": pick_text(dict(job.get("metadata") or {}).get("dated_run_dir")),
+        "prepared_input_id": pick_text(dict(job.get("metadata") or {}).get("prepared_input_id"), prepared_input_id),
         "metrics": metrics,
         "solver_result_keys": sorted(list((result.get("solver_result") or {}).keys())),
     }
@@ -180,6 +235,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark optimization modes via BFF API (sequential runs only).")
     parser.add_argument("--base-url", default="http://127.0.0.1:8771", help="BFF base URL")
     parser.add_argument("--scenario-id", required=True, help="Scenario ID")
+    parser.add_argument("--prepared-input-id", default="", help="Optional prepared input ID to pin the comparison to a fixed prepared scope")
     parser.add_argument(
         "--modes",
         default="mode_milp_only,mode_alns_only,ga,abc",
@@ -220,6 +276,7 @@ def main() -> None:
             mode=mode,
             service_id=args.service_id,
             depot_id=args.depot_id or None,
+            prepared_input_id=args.prepared_input_id or None,
             time_limit_seconds=args.time_limit_seconds,
             mip_gap=args.mip_gap,
             alns_iterations=args.alns_iterations,
@@ -261,6 +318,8 @@ def main() -> None:
                 "unmet_trips",
                 "submitted_at",
                 "completed_at",
+                "dated_run_dir",
+                "prepared_input_id",
             ]
         )
         for row in rows:
@@ -279,6 +338,8 @@ def main() -> None:
                     metrics.get("unmet_trips"),
                     row.get("submitted_at"),
                     row.get("completed_at"),
+                    row.get("dated_run_dir"),
+                    row.get("prepared_input_id"),
                 ]
             )
 

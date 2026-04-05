@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 from typing import Dict, List, Tuple
 
@@ -18,16 +19,15 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
         return plan
 
     trip_map = problem.dispatch_context.trips_by_id()
-    remaining = [trip_map[trip_id] for trip_id in plan.unserved_trip_ids if trip_id in trip_map]
-    by_type: Dict[str, List] = {}
-    for trip in remaining:
-        preferred_type = trip.allowed_vehicle_types[0] if trip.allowed_vehicle_types else None
-        if preferred_type is None:
+    working_plan = plan
+    for vehicle_type in _ordered_vehicle_types_for_repair(problem):
+        trips = [
+            trip_map[trip_id]
+            for trip_id in working_plan.unserved_trip_ids
+            if trip_id in trip_map and vehicle_type in trip_map[trip_id].allowed_vehicle_types
+        ]
+        if not trips:
             continue
-        by_type.setdefault(preferred_type, []).append(trip)
-
-    candidate_duties: List[VehicleDuty] = []
-    for vehicle_type, trips in by_type.items():
         ctx = DispatchContext(
             service_date=problem.dispatch_context.service_date,
             trips=trips,
@@ -37,7 +37,7 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
             default_turnaround_min=problem.dispatch_context.default_turnaround_min,
         )
         new_duties = DispatchGenerator().generate_greedy_duties(ctx, vehicle_type)
-        candidate_duties.extend(
+        candidate_duties = [
             VehicleDuty(
                 duty_id=str(duty.duty_id),
                 vehicle_type=duty.vehicle_type,
@@ -47,17 +47,19 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
                 ),
             )
             for duty in new_duties
-        )
-
-    return _with_recomputed_charging(
-        problem,
-        _append_generated_duties(
+        ]
+        updated_plan = _append_generated_duties(
             problem,
-            plan,
+            working_plan,
             candidate_duties,
             operator_name="greedy_trip_insertion",
-        ),
-    )
+        )
+        if len(updated_plan.served_trip_ids) > len(working_plan.served_trip_ids):
+            working_plan = updated_plan
+        if not working_plan.unserved_trip_ids:
+            break
+
+    return _with_recomputed_charging(problem, working_plan)
 
 
 def baseline_dispatch_repair(
@@ -673,4 +675,19 @@ def _append_generated_duties(
             "repair_operator": operator_name,
             "duty_vehicle_map": merge_duty_vehicle_maps(existing_map, duty_vehicle_map),
         },
+    )
+
+
+def _ordered_vehicle_types_for_repair(
+    problem: CanonicalOptimizationProblem,
+) -> Tuple[str, ...]:
+    vehicle_counts = Counter(str(vehicle.vehicle_type) for vehicle in problem.vehicles)
+    return tuple(
+        sorted(
+            problem.dispatch_context.vehicle_profiles.keys(),
+            key=lambda vehicle_type: (
+                -max(int(vehicle_counts.get(str(vehicle_type), 0) or 0), 0),
+                str(vehicle_type),
+            ),
+        )
     )

@@ -558,18 +558,26 @@ class ProblemBuilder:
                         f"{prefix}{succ_trip_id}" for succ_trip_id in successors
                     )
 
-        baseline_source = baseline_plan or self._build_baseline_plan(context)
         max_fragments = max(
             int(max_start_fragments_per_vehicle or 1),
             int(max_end_fragments_per_vehicle or 1),
             1,
         )
-        baseline = self._materialize_baseline_plan(
-            baseline_source,
-            vehicles,
-            max_fragments_per_vehicle=max_fragments,
-            all_trip_ids={trip.trip_id for trip in trip_nodes},
-        )
+        all_trip_ids = {trip.trip_id for trip in trip_nodes}
+        if baseline_plan is not None:
+            baseline = self._materialize_baseline_plan(
+                baseline_plan,
+                vehicles,
+                max_fragments_per_vehicle=max_fragments,
+                all_trip_ids=all_trip_ids,
+            )
+        else:
+            baseline = self._build_baseline_plan(
+                context,
+                vehicles=vehicles,
+                max_fragments_per_vehicle=max_fragments,
+                all_trip_ids=all_trip_ids,
+            )
         return CanonicalOptimizationProblem(
             scenario=OptimizationScenario(
                 scenario_id=scenario_id,
@@ -1058,7 +1066,8 @@ class ProblemBuilder:
         }
 
         service_date = str((scenario.get("meta") or {}).get("updatedAt") or "2026-01-01")[:10]
-        default_turnaround_min = int((simulation_cfg.get("default_turnaround_min")) or 10)
+        turnaround_value = simulation_cfg.get("default_turnaround_min", 10)
+        default_turnaround_min = 10 if turnaround_value is None else max(0, int(turnaround_value))
         return DispatchContext(
             service_date=service_date,
             trips=trips,
@@ -1319,7 +1328,14 @@ class ProblemBuilder:
             scoped.append(dict(vehicle))
         return scoped
 
-    def _build_baseline_plan(self, context: DispatchContext) -> AssignmentPlan:
+    def _build_baseline_plan(
+        self,
+        context: DispatchContext,
+        *,
+        vehicles: Sequence[ProblemVehicle] = (),
+        max_fragments_per_vehicle: int = 1,
+        all_trip_ids: Optional[set[str]] = None,
+    ) -> AssignmentPlan:
         # Build a baseline greedy plan but avoid assigning the same trip to
         # multiple vehicle types. Some trips are allowed for several vehicle
         # types (BEV/ICE); the previous implementation ran the greedy
@@ -1328,11 +1344,28 @@ class ProblemBuilder:
         # duplicate-assignment infeasibility warnings downstream.
         duties: List[VehicleDuty] = []
         assigned_trip_ids: set[str] = set()
+        duty_vehicle_map: Dict[str, str] = {}
         dispatcher = DispatchGenerator()
+        vehicles_by_type: Dict[str, Tuple[ProblemVehicle, ...]] = {}
+        for vehicle in vehicles:
+            vehicles_by_type.setdefault(str(vehicle.vehicle_type), tuple())
+            vehicles_by_type[str(vehicle.vehicle_type)] = (
+                *vehicles_by_type[str(vehicle.vehicle_type)],
+                vehicle,
+            )
 
         # Iterate vehicle types in deterministic order and assign only
         # currently-unassigned trips that are eligible for that type.
-        for vehicle_type in list(context.vehicle_profiles.keys()):
+        # Materialize after each type so scarce fleets (for example a handful
+        # of BEVs versus many ICE buses) do not absorb every shared trip
+        # before the abundant type gets a chance to cover the overflow.
+        for vehicle_type in self._ordered_vehicle_types_for_baseline(
+            context,
+            available_vehicle_counts={
+                vehicle_type: len(type_vehicles)
+                for vehicle_type, type_vehicles in vehicles_by_type.items()
+            },
+        ):
             # filter context.trips to those eligible for this vehicle type and
             # not yet assigned
             eligible_trips = [
@@ -1351,17 +1384,52 @@ class ProblemBuilder:
                 default_turnaround_min=context.default_turnaround_min,
             )
             vt_duties = dispatcher.generate_greedy_duties(temp_ctx, vehicle_type)
-            duties.extend(vt_duties)
-            for duty in vt_duties:
+            if vehicles:
+                materialized_duties, materialized_map, _skipped_trip_ids = assign_duty_fragments_to_vehicles(
+                    vt_duties,
+                    vehicles=vehicles_by_type.get(vehicle_type, ()),
+                    max_fragments_per_vehicle=max_fragments_per_vehicle,
+                )
+                duties.extend(materialized_duties)
+                duty_vehicle_map = merge_duty_vehicle_maps(
+                    duty_vehicle_map,
+                    materialized_map,
+                )
+                selected_duties = materialized_duties
+            else:
+                duties.extend(vt_duties)
+                selected_duties = vt_duties
+            for duty in selected_duties:
                 assigned_trip_ids.update(duty.trip_ids)
 
-        all_trip_ids = {trip.trip_id for trip in context.trips}
+        baseline_all_trip_ids = all_trip_ids or {trip.trip_id for trip in context.trips}
         return AssignmentPlan(
             duties=tuple(duties),
             charging_slots=(),
+            refuel_slots=(),
             served_trip_ids=tuple(sorted(assigned_trip_ids)),
-            unserved_trip_ids=tuple(sorted(all_trip_ids - assigned_trip_ids)),
-            metadata={"source": "dispatch_greedy_baseline"},
+            unserved_trip_ids=tuple(sorted(baseline_all_trip_ids - assigned_trip_ids)),
+            metadata={
+                "source": "dispatch_greedy_baseline",
+                "duty_vehicle_map": merge_duty_vehicle_maps(duty_vehicle_map),
+            },
+        )
+
+    def _ordered_vehicle_types_for_baseline(
+        self,
+        context: DispatchContext,
+        *,
+        available_vehicle_counts: Optional[Mapping[str, int]] = None,
+    ) -> List[str]:
+        vehicle_types = list(context.vehicle_profiles.keys())
+        if not available_vehicle_counts:
+            return vehicle_types
+        return sorted(
+            vehicle_types,
+            key=lambda vehicle_type: (
+                -max(int(available_vehicle_counts.get(vehicle_type, 0) or 0), 0),
+                vehicle_type,
+            ),
         )
 
     def _materialize_baseline_plan(

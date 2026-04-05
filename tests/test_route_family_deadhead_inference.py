@@ -124,6 +124,86 @@ def _family_scenario() -> dict:
     }
 
 
+def _cross_family_scenario() -> dict:
+    scenario = _family_scenario()
+    scenario["routes"] = [
+        {
+            "id": "route-a",
+            "routeCode": "黒01",
+            "routeFamilyCode": "黒01",
+            "routeVariantType": "main_outbound",
+            "canonicalDirection": "outbound",
+            "depotId": "dep1",
+        },
+        {
+            "id": "route-b",
+            "routeCode": "黒02",
+            "routeFamilyCode": "黒02",
+            "routeVariantType": "main_inbound",
+            "canonicalDirection": "inbound",
+            "depotId": "dep1",
+        },
+    ]
+    scenario["dispatch_scope"]["effectiveRouteIds"] = ["route-a", "route-b"]
+    scenario["dispatch_scope"]["routeSelection"]["includeRouteIds"] = ["route-a", "route-b"]
+    scenario["timetable_rows"] = [
+        {
+            "trip_id": "trip-a",
+            "route_id": "route-a",
+            "service_id": "WEEKDAY",
+            "direction": "outbound",
+            "routeVariantType": "main_outbound",
+            "routeFamilyCode": "黒01",
+            "origin": "Depot Bay A",
+            "destination": "Shared Terminal A",
+            "origin_stop_id": "stop-a",
+            "destination_stop_id": "stop-b",
+            "departure": "08:00",
+            "arrival": "08:30",
+            "distance_km": 6.0,
+            "allowed_vehicle_types": ["BEV"],
+        },
+        {
+            "trip_id": "trip-b",
+            "route_id": "route-b",
+            "service_id": "WEEKDAY",
+            "direction": "inbound",
+            "routeVariantType": "main_inbound",
+            "routeFamilyCode": "黒02",
+            "origin": "Shared Terminal B",
+            "destination": "Depot Bay B",
+            "origin_stop_id": "stop-c",
+            "destination_stop_id": "stop-d",
+            "departure": "08:45",
+            "arrival": "09:15",
+            "distance_km": 6.0,
+            "allowed_vehicle_types": ["BEV"],
+        },
+    ]
+    scenario["stops"] = [
+        {"id": "stop-a", "name": "Depot Bay A", "lat": 35.0000, "lon": 139.0000},
+        {"id": "stop-b", "name": "Shared Terminal A", "lat": 35.0010, "lon": 139.0010},
+        {"id": "stop-c", "name": "Shared Terminal B", "lat": 35.0012, "lon": 139.0011},
+        {"id": "stop-d", "name": "Depot Bay B", "lat": 35.0100, "lon": 139.0100},
+    ]
+    scenario["turnaround_rules"] = [
+        {"stop_id": "stop-a", "min_turnaround_min": 5},
+        {"stop_id": "stop-b", "min_turnaround_min": 5},
+        {"stop_id": "stop-c", "min_turnaround_min": 5},
+        {"stop_id": "stop-d", "min_turnaround_min": 5},
+    ]
+    scenario["deadhead_rules"] = []
+    scenario["route_depot_assignments"] = [
+        {"routeId": "route-a", "depotId": "dep1"},
+        {"routeId": "route-b", "depotId": "dep1"},
+    ]
+    scenario["depot_route_permissions"] = [
+        {"depotId": "dep1", "routeId": "route-a", "allowed": True},
+        {"depotId": "dep1", "routeId": "route-b", "allowed": True},
+    ]
+    return scenario
+
+
 def test_variant_normalization_preserves_directional_family_variants() -> None:
     assert normalize_variant_type("main", direction="outbound") == "main_outbound"
     assert normalize_variant_type("main", direction="inbound") == "main_inbound"
@@ -152,6 +232,28 @@ def test_problem_data_build_infers_same_family_deadhead_from_terminal_coords() -
     assert task_by_id["trip-2"].route_variant_type == "main_inbound"
     assert task_by_id["trip-1"].destination_stop_id == "stop-b-out"
     assert task_by_id["trip-2"].origin_stop_id == "stop-b-in"
+    assert connection.can_follow is True
+    assert connection.deadhead_time_slot > 0
+    assert connection.deadhead_distance_km > 0.0
+    assert report.graph_edge_count > 0
+
+
+def test_problem_data_build_infers_cross_family_deadhead_from_terminal_coords() -> None:
+    scenario = _cross_family_scenario()
+
+    data, report = build_problem_data_from_scenario(
+        scenario,
+        depot_id="dep1",
+        service_id="WEEKDAY",
+        mode="mode_milp_only",
+    )
+
+    connection = next(
+        item
+        for item in data.travel_connections
+        if item.from_task_id == "trip-a" and item.to_task_id == "trip-b"
+    )
+
     assert connection.can_follow is True
     assert connection.deadhead_time_slot > 0
     assert connection.deadhead_distance_km > 0.0

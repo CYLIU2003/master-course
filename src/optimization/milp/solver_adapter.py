@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, Protocol, Set, Tuple
+from dataclasses import dataclass, replace
+from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
 
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
@@ -1314,42 +1314,27 @@ class GurobiMILPAdapter:
             full_unserved_obj = unserved_penalty_weight * float(len(problem.trips))
             incumbent_obj = float(model.ObjVal)
             if incumbent_obj >= full_unserved_obj - 1.0e-6:
-                baseline_meta = dict(problem.baseline_plan.metadata or {})
-                baseline_meta.update(
-                    {
-                        "source": "dispatch_baseline_after_relax",
-                        "milp_status": solver_status,
-                        "auto_relaxed_allow_partial_service": True,
-                    }
+                baseline_fallback = self._baseline_fallback(
+                    problem,
+                    fallback_status="auto_relaxed_baseline",
+                    source="dispatch_baseline_after_relax",
+                    solver_status=solver_status,
+                    relaxed_partial_service=True,
                 )
-                baseline_plan = AssignmentPlan(
-                    duties=problem.baseline_plan.duties,
-                    charging_slots=problem.baseline_plan.charging_slots,
-                    refuel_slots=problem.baseline_plan.refuel_slots,
-                    grid_to_bus_kwh_by_depot_slot=problem.baseline_plan.grid_to_bus_kwh_by_depot_slot,
-                    pv_to_bus_kwh_by_depot_slot=problem.baseline_plan.pv_to_bus_kwh_by_depot_slot,
-                    bess_to_bus_kwh_by_depot_slot=problem.baseline_plan.bess_to_bus_kwh_by_depot_slot,
-                    pv_to_bess_kwh_by_depot_slot=problem.baseline_plan.pv_to_bess_kwh_by_depot_slot,
-                    grid_to_bess_kwh_by_depot_slot=problem.baseline_plan.grid_to_bess_kwh_by_depot_slot,
-                    pv_curtail_kwh_by_depot_slot=problem.baseline_plan.pv_curtail_kwh_by_depot_slot,
-                    bess_soc_kwh_by_depot_slot=problem.baseline_plan.bess_soc_kwh_by_depot_slot,
-                    contract_over_limit_kwh_by_depot_slot=problem.baseline_plan.contract_over_limit_kwh_by_depot_slot,
-                    vehicle_cost_ledger=problem.baseline_plan.vehicle_cost_ledger,
-                    daily_cost_ledger=problem.baseline_plan.daily_cost_ledger,
-                    served_trip_ids=problem.baseline_plan.served_trip_ids,
-                    unserved_trip_ids=problem.baseline_plan.unserved_trip_ids,
-                    metadata=baseline_meta,
-                )
-                return (
-                    MILPSolverOutcome(
-                        solver_status="auto_relaxed_baseline",
-                        used_backend=self.backend_name,
-                        supports_exact_milp=True,
-                    ),
-                    baseline_plan,
-                )
+                if baseline_fallback is not None:
+                    return baseline_fallback
 
         if model.SolCount <= 0:
+            if model.Status == GRB.TIME_LIMIT:
+                baseline_fallback = self._baseline_fallback(
+                    problem,
+                    fallback_status="time_limit_baseline",
+                    source="dispatch_baseline_after_time_limit_no_incumbent",
+                    solver_status=solver_status,
+                    relaxed_partial_service=bool(relaxed_partial_service),
+                )
+                if baseline_fallback is not None:
+                    return baseline_fallback
             empty = AssignmentPlan(
                 duties=(),
                 charging_slots=(),
@@ -1566,6 +1551,40 @@ class GurobiMILPAdapter:
                 supports_exact_milp=True,
             ),
             plan,
+        )
+
+    def _baseline_fallback(
+        self,
+        problem: CanonicalOptimizationProblem,
+        *,
+        fallback_status: str,
+        source: str,
+        solver_status: str,
+        relaxed_partial_service: bool,
+    ) -> Optional[Tuple[MILPSolverOutcome, AssignmentPlan]]:
+        baseline_plan = problem.baseline_plan
+        if baseline_plan is None or len(baseline_plan.served_trip_ids) <= 0:
+            return None
+        baseline_meta = dict(baseline_plan.metadata or {})
+        baseline_meta.update(
+            {
+                "source": source,
+                "status": fallback_status,
+                "milp_status": solver_status,
+                "milp_backend": self.backend_name,
+                "auto_relaxed_allow_partial_service": bool(relaxed_partial_service),
+            }
+        )
+        return (
+            MILPSolverOutcome(
+                solver_status=fallback_status,
+                used_backend=self.backend_name,
+                supports_exact_milp=False,
+            ),
+            replace(
+                baseline_plan,
+                metadata=baseline_meta,
+            ),
         )
 
     def _slot_index(self, problem: CanonicalOptimizationProblem, departure_min: int) -> int:

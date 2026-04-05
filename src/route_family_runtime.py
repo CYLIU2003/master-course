@@ -353,4 +353,54 @@ def merge_deadhead_metrics(
                     source="route_family_terminal_inference",
                     route_family_code=family_code,
                 )
+
+    all_origin_ids = sorted(
+        {
+            stop_id
+            for family_stop_ids in origins_by_family.values()
+            for stop_id in family_stop_ids
+        }
+    )
+    all_destination_ids = sorted(
+        {
+            stop_id
+            for family_stop_ids in destinations_by_family.values()
+            for stop_id in family_stop_ids
+        }
+    )
+
+    for from_stop in all_destination_ids:
+        from_coords = stop_coords.get(from_stop)
+        if not from_coords:
+            continue
+        for to_stop in all_origin_ids:
+            if from_stop == to_stop:
+                continue
+            key = (from_stop, to_stop)
+            if key in metrics:
+                continue
+            to_coords = stop_coords.get(to_stop)
+            if not to_coords:
+                continue
+            straight_km = _haversine_km(
+                from_coords[0],
+                from_coords[1],
+                to_coords[0],
+                to_coords[1],
+            )
+            distance_km = round(straight_km * max(detour_factor, 1.0), 4)
+            if distance_km <= 0.0 or distance_km > max_deadhead_km:
+                continue
+            travel_time_min = max(
+                int(min_deadhead_min),
+                int(math.ceil((distance_km / assumed_speed_kmh) * 60.0)),
+            )
+            metrics[key] = DeadheadMetric(
+                from_stop=from_stop,
+                to_stop=to_stop,
+                travel_time_min=travel_time_min,
+                distance_km=distance_km,
+                source="cross_family_terminal_inference",
+                route_family_code=None,
+            )
     return metrics
