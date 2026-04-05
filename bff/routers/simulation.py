@@ -511,14 +511,28 @@ def _deserialize_canonical_result(canonical_dict: Dict[str, Any]) -> MILPResult:
     metadata = canonical_dict.get("solver_metadata") or {}
     ledger_entries = canonical_dict.get("vehicle_cost_ledger") or []
     
-    # Extract vehicle assignments from plan
-    assignment = plan.get("vehicle_paths") or {}
+    # Current canonical output keeps plan fields at top level.
+    # Preserve backward compatibility with older nested "plan" payloads.
+    assignment = (
+        plan.get("vehicle_paths")
+        or canonical_dict.get("vehicle_paths")
+        or {}
+    )
     
     # Extract SOC series
-    soc_series = plan.get("soc_kwh_by_vehicle_slot") or {}
+    soc_series = (
+        plan.get("soc_kwh_by_vehicle_slot")
+        or canonical_dict.get("soc_kwh_by_vehicle_slot")
+        or {}
+    )
     
     # Extract charging info
-    charging_slots = plan.get("charging_slots") or []
+    charging_slots = (
+        plan.get("charging_slots")
+        or canonical_dict.get("charging_slots")
+        or canonical_dict.get("charging_schedule")
+        or []
+    )
     charge_schedule: Dict[str, Dict[str, List[int]]] = {}
     charge_power_kw: Dict[str, Dict[str, List[float]]] = {}
     
@@ -549,7 +563,12 @@ def _deserialize_canonical_result(canonical_dict: Dict[str, Any]) -> MILPResult:
             charge_power_kw[vehicle_id][charger_id] = power
     
     # Extract refuel info (if any)
-    refuel_slots = plan.get("refuel_slots") or []
+    refuel_slots = (
+        plan.get("refuel_slots")
+        or canonical_dict.get("refuel_slots")
+        or canonical_dict.get("refueling_schedule")
+        or []
+    )
     refuel_schedule_l: Dict[str, List[float]] = defaultdict(list)
     for slot_dict in refuel_slots:
         vehicle_id = slot_dict.get("vehicle_id")
@@ -573,8 +592,16 @@ def _deserialize_canonical_result(canonical_dict: Dict[str, Any]) -> MILPResult:
     obj_breakdown = canonical_dict.get("cost_breakdown") or {}
     
     return MILPResult(
-        status=metadata.get("solver_status", "OPTIMAL"),
-        objective_value=canonical_dict.get("total_cost"),
+        status=(
+            metadata.get("solver_status")
+            or canonical_dict.get("solver_status")
+            or "OPTIMAL"
+        ),
+        objective_value=(
+            canonical_dict.get("objective_value")
+            if canonical_dict.get("objective_value") is not None
+            else canonical_dict.get("total_cost")
+        ),
         solve_time_sec=metadata.get("solve_time_sec", 0.0),
         mip_gap=metadata.get("mip_gap"),
         assignment=assignment,
@@ -588,7 +615,11 @@ def _deserialize_canonical_result(canonical_dict: Dict[str, Any]) -> MILPResult:
         pv_to_bus_kwh={},
         peak_demand_kw=peak_demand_kw,
         obj_breakdown=obj_breakdown,
-        unserved_tasks=list(plan.get("unserved_trip_ids") or []),
+        unserved_tasks=list(
+            plan.get("unserved_trip_ids")
+            or canonical_dict.get("unserved_trip_ids")
+            or []
+        ),
         infeasibility_info="",
     )
 

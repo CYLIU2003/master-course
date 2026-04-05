@@ -76,6 +76,53 @@ def test_simulator_counts_bev_operating_energy_without_charge_costing() -> None:
     assert sim.charged_energy_cost == 0.0
 
 
+def test_simulator_accepts_feasible_status_from_metaheuristics() -> None:
+    data = ProblemData(
+        vehicles=[
+            Vehicle(
+                vehicle_id="bev-1",
+                vehicle_type="BEV",
+                home_depot="dep-1",
+                battery_capacity=200.0,
+                soc_init=100.0,
+                soc_min=20.0,
+            )
+        ],
+        tasks=[
+            Task(
+                task_id="trip-1",
+                start_time_idx=0,
+                end_time_idx=1,
+                origin="A",
+                destination="B",
+                energy_required_kwh_bev=20.0,
+                required_vehicle_type="BEV",
+            )
+        ],
+        sites=[Site(site_id="dep-1", site_type="depot", grid_import_limit_kw=9999.0)],
+        electricity_prices=[
+            ElectricityPrice(site_id="dep-1", time_idx=0, grid_energy_price=10.0, co2_factor=0.5),
+            ElectricityPrice(site_id="dep-1", time_idx=1, grid_energy_price=20.0, co2_factor=0.5),
+        ],
+        num_periods=2,
+        delta_t_hour=1.0,
+        enable_demand_charge=False,
+    )
+    ms = build_model_sets(data)
+    dp = build_derived_params(data, ms)
+    result = MILPResult(
+        status="feasible",
+        assignment={"bev-1": ["trip-1"]},
+        soc_series={"bev-1": [100.0, 90.0, 80.0]},
+    )
+
+    sim = simulate(data, ms, dp, result)
+
+    assert sim.total_energy_cost == 300.0
+    assert sim.total_grid_kwh == 20.0
+    assert sim.total_co2_kg == 10.0
+
+
 def test_simulator_overrides_with_charged_energy_cost_when_charge_exists() -> None:
     data = ProblemData(
         vehicles=[

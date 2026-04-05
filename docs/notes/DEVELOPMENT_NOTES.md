@@ -2898,3 +2898,16 @@ master-course/
   - 確認:
     - `python -m pytest tests/test_dispatch_context_location_aliases.py tests/test_pooled_shared_baseline.py tests/test_baseline_vehicle_type_priority.py tests/test_vehicle_assignment_startup_deadhead.py tests/test_canonical_graph_export_parity.py tests/test_milp_baseline_fallbacks.py tests/test_route_family_deadhead_inference.py tests/test_problem_builder_timestep_and_pv_scaling.py -q` → `21 passed`
     - `python -m pytest tests/test_optimization_canonical_metaheuristics.py tests/test_prepared_scope_execution.py tests/test_optimization_result_serializer.py -q` → `9 passed`
+
+- 2026-04-05 (report bundle に route-band 図と solver 比較表を明示出力)
+  - 問題として、fixed-scope rerun の source run には `graph/route_band_diagrams/*.svg` が生成されているのに、`output/reports/20260405_fixed_scope_237d5623_unserved_fix/` 側には `solver_comparison.svg` と bus operation 図しかなく、旧 `output/run_20260324_2210/graph/route_band_diagrams/` に相当する路線バンド図の参照先が bundle 内に無かった。
+  - 追加で自分から上げた問題として、比較 bundle には `comparison.csv` があっても、「solver ごとの計算時間・objective・served/unserved を 1 枚の表で見る」用途に対して列名と保存先が明示されておらず、教授向け確認で辿りにくかった。
+  - `tools/_visualizer_report_utils.py` に solver 比較表 writer と route-band asset exporter を追加し、`solver_comparison_table.csv/.md` を出力できるようにした。route-band は best objective run を `graph/route_band_diagrams/` へ旧 run 互換で複製し、各 solver run の原本も `solver_route_band_diagrams/<mode>_<run_id>/` へ束ねる。どの run から複製したかは `solver_route_band_diagrams_manifest.json` に残す。
+  - `tools/multi_run_visualizer_tk.py` の `Export Selected` も同 helper を呼ぶよう更新し、比較表・教授向けレポート・比較図に加えて route-band 図一式を export するようにした。`professor_report.md` には best run の source `route_band_diagrams` 位置も追記している。
+  - actual bundle も再生成し、`output/reports/20260405_fixed_scope_237d5623_unserved_fix/graph/route_band_diagrams/` に ALNS best run の band 図、`output/reports/20260405_fixed_scope_237d5623_unserved_fix/solver_comparison_table.csv` と `.md` に 4 solver の計算時間・objective・served/unserved 表、`output/reports/20260405_fixed_scope_237d5623_unserved_fix/solver_route_band_diagrams/` に per-solver 図一式を置いた。
+  - README も更新し、current report 出力 root が `output/` であることと、fixed-scope rerun bundle / route-band 図 / solver 比較表の保存先を明記した。
+  - 回帰テスト:
+    - `tests/test_visualizer_report_utils.py`
+  - 確認:
+    - `python -m pytest tests/test_visualizer_report_utils.py -q` → `5 passed`
+    - `python -m py_compile tools/_visualizer_report_utils.py tools/multi_run_visualizer_tk.py` → pass

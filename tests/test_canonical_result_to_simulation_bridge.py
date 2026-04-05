@@ -361,6 +361,36 @@ class TestCanonicalResultDeserializerExists:
         assert result.objective_value == 10000.0
         assert result.assignment == {"v1": ["t1", "t2"]}
 
+    def test_deserializes_current_top_level_canonical_format(self):
+        """Current canonical output keeps vehicle_paths at top level, not under plan."""
+        from bff.routers.simulation import _deserialize_canonical_result
+
+        canonical_data = {
+            "objective_value": 345.6,
+            "solver_status": "feasible",
+            "solver_metadata": {
+                "solver_status": "feasible",
+                "solve_time_sec": 12.0,
+                "mip_gap": 0.0,
+            },
+            "vehicle_paths": {"veh-1": ["trip-1", "trip-2"]},
+            "unserved_trip_ids": [],
+            "depot_cost_ledger": [
+                {"depot_id": "depot-1", "peak_demand_kw": 88.0},
+            ],
+            "cost_breakdown": {
+                "total_cost": 345.6,
+            },
+        }
+
+        result = _deserialize_canonical_result(canonical_data)
+
+        assert result.status == "feasible"
+        assert result.objective_value == 345.6
+        assert result.assignment == {"veh-1": ["trip-1", "trip-2"]}
+        assert result.unserved_tasks == []
+        assert result.peak_demand_kw == {"depot-1": 88.0}
+
 
 class TestSimulationBridgeDoesNotZeroFields:
     """

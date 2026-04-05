@@ -129,6 +129,9 @@ flowchart LR
 - 2026-04-05: MILP が `TIME_LIMIT` かつ incumbent なし (`SolCount==0`) の場合、空の全欠便計画ではなく dispatch baseline を返す `solver_status=time_limit_baseline` を追加した。この経路と `auto_relaxed_baseline` はどちらも `solver_metadata.supports_exact_milp=false` とし、exact MILP 解と誤認しないようにした。4 ソルバー再実行結果は `outputs/mode_compare_route24_fix_rerun_20260405.json` / `outputs/mode_compare_route24_fix_rerun_20260405.csv`、先生向け要約は `docs/route24_solver_report_20260405.md` に保存している
 - 2026-04-05: 固定 scope 再実行用に `scripts/benchmark_fixed_prepared_scope.py` を追加した。prepared input から materialize した `timetable_rows` を再生成せずに `MILP/ALNS/GA/ABC` を sequential 実行し、comparison JSON / CSV、per-solver JSON、`verdict.md`、`consistency_check.json` を同じ stem 配下へ保存する
 - 2026-04-05: deadhead alias 修理後に残っていた code-caused unserved を潰すため、fully shared scope では `ProblemBuilder` が pooled shared path-cover baseline を使って actual fleet 全体で duty cover を組むようにした。`DispatchContext.locations_equivalent()` も追加し、`tsurumaki` と `odpt.BusstopPole:...Tsurumakieigyousho...` のような depot alias を 0 分 deadhead の同地点として扱うよう揃えた。actual BFF fixed-scope rerun では `974/974 served` を回復し、bundle は `output/reports/20260405_fixed_scope_237d5623_unserved_fix/`、報告書は `docs/fixed_scope_unserved_fix_report_20260405.md` に保存している
+- 2026-04-05: `tools/bus_operation_visualizer_tk.py` / `tools/multi_run_visualizer_tk.py` を新しい dated run + report bundle 構成へ対応させた。`output/<date>/scenario/.../run_*` と `output/reports/.../comparison.json` の両方を走査でき、最適化 run 直下に `simulation_result.json` が無い場合でも `output/<feed>/<snapshot>/simulation/<scenario>/<depot>/<service>/simulation_result.json` を自動解決する
+- 2026-04-05: `tools/multi_run_visualizer_tk.py` の export は、比較表と教授向けレポートだけでなく `solver_comparison_table.csv/.md`、best run の `graph/route_band_diagrams/`、各 solver の `solver_route_band_diagrams/<mode>_<run_id>/` も出力するようにした。固定 scope rerun bundle では `output/reports/20260405_fixed_scope_237d5623_unserved_fix/graph/route_band_diagrams/` と `output/reports/20260405_fixed_scope_237d5623_unserved_fix/solver_comparison_table.csv` を確認できる
+- 2026-04-05: `bff/routers/simulation.py` の canonical bridge は旧 `plan.vehicle_paths` 前提で current canonical output の top-level `vehicle_paths` を落としていたため修正し、`src/simulator.py` は `feasible` / `time_limit_baseline` を valid status として扱うよう更新した。slot 境界の back-to-back trip を overlap 扱いする fallback も修正し、ALNS best run の prepared simulation は `served=974`, `vehicle_count_used=88`, `simulation_total_cost=3245610.92`, `simulation_total_co2_kg=3845.7289`, residual `time_connection=21` まで改善した
 - 2026-04-01: canonical 最適化の保存先を拡張し、従来の feed/snapshot スコープ出力に加えて `output/<service_date>/scenario/<scenario_id>/<mode>/<depot>/<service>/run_YYYYMMDD_HHMM/` を同時生成するようにした。run 配下には `summary.json`, `solver_result.json`, `canonical_solver_result.json`, `cost_breakdown_detail.(json/csv)`, `objective_breakdown.(json/csv)`, `kpi_summary.json`, `site_power_balance.csv`, `depot_energy_flows.(json/csv)` など単位付き成果物を出力し、系統受電量（`grid_to_bus_kwh`, `grid_to_bess_kwh`, `grid_import_total_kwh`）を明示確認できるようにした
 - 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
 - 2026-03-31: 営業所別エネルギー資産は `depot_energy_assets` で `pv_capacity_kw` と `bess_energy_kwh / bess_power_kw` を編集できる前提に整理し、日別 PV capacity factor から複数日 horizon 用の発電列を再構築できるようにした
@@ -639,7 +642,7 @@ python tools/route_variant_labeler_tk.py
 
 ### 4.5 論文用バス運行状態可視化（EV/エンジン識別対応）
 
-最適化 run フォルダから、論文掲載向けの運行状態図を生成する専用アプリです。
+最適化 run フォルダまたは comparison bundle から、論文掲載向けの運行状態図を生成する専用アプリです。
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -647,10 +650,10 @@ python tools/bus_operation_visualizer_tk.py
 ```
 
 操作手順：
-1. `Browse` で run フォルダ（例: `outputs/tokyu/.../run_YYYYMMDD_HHMM`）を選択
+1. `Browse` で run フォルダ（例: `output/2025-08-04/scenario/.../run_YYYYMMDD_HHMM`）または `output/reports/...` の comparison bundle を選択
 2. `Load` を押してデータを読込
 3. `Only assigned buses` / `Max buses` を調整
-4. `Summary` タブで `status/objective/solve_time_seconds/total_cost/total_co2_kg` を確認
+4. `Summary` タブで `status / exact-fallback / objective / solve_time_seconds / total_cost / total_co2_kg / simulation_result_path` を確認
 5. `Details` タブで詳細 key-value を確認、`Raw JSON` タブで元JSONを確認
 6. `Render` で2種類の図を生成
 7. `Save PNG` / `Save SVG` / `Save PDF` で高解像度保存
@@ -661,12 +664,14 @@ python tools/bus_operation_visualizer_tk.py
 - ガント図では EV/エンジンでハッチ方向を変えて識別
 - 充電図では緑の濃淡で充電出力比を表示
 - アプリ内の文字ベース表示（Summary/Details/Raw JSON）で総コスト・総CO2を即時確認可能
+- current `vehicle_timeline_gantt.csv` の `state/start_time/end_time` schema と旧 `event_type/start_time_idx/end_time_idx` schema の両方を読める
+- report bundle 入力時は comparison の best objective run を自動選択し、外部 simulation artifact も表示対象へ解決する
 
 ---
 
 ### 4.6 複数 run 比較可視化（multi-run）
 
-`outputs/tokyu` 配下の複数日・複数シナリオ・複数 run を横断して、比較表と比較図を生成するアプリです。
+`output` 配下の複数日・複数シナリオ・複数 run と `output/reports/.../comparison.json` bundle を横断して、比較表と比較図を生成するアプリです。
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -674,18 +679,23 @@ python tools/multi_run_visualizer_tk.py
 ```
 
 操作手順：
-1. `Base folder` に `outputs/tokyu`（またはその下位）を指定
-2. `Scan` で `run_*` フォルダを収集
+1. `Base folder` に `output`（またはその下位）を指定
+2. `Scan` で `run_*` フォルダと comparison bundle を収集
 3. `Date / Scenario / Depot / Service` フィルタを設定して `Apply Filter`
 4. 比較対象 run を複数選択
-5. `Preview Text Summary` で `status / total_cost / total_co2_kg / objective / solve_time_sec` を確認
+5. `Preview Text Summary` で `mode / exact-fallback / status / total_cost / total_co2_kg / objective / solve_time_sec / served / unserved / vehicles` を確認
 6. `Preview Comparison Charts` で `Total Cost` と `Total CO2` の棒グラフを確認
 7. 必要に応じて `Only assigned` / `Max buses` / `Export SVG` を調整
-8. `Export Selected` で比較表と図を一括出力
+8. `先生向けレポート` で scenario 詳細 + simulation 指標を含む Markdown を単独出力できる
+9. `Export Selected` で比較表・教授向けレポート・図を一括出力
 
 出力内容（`<base>/analysis_export/<timestamp>/`）：
 - `summary_table.csv`（比較テーブル）
 - `summary_report.md`（比較レポート）
+- `professor_report.md`（scenario 詳細、4 solver 比較、simulation 指標）
+- `solver_comparison_table.csv` / `solver_comparison_table.md`（solver ごとの計算時間・objective・served/unserved を明示）
+- `graph/route_band_diagrams/`（best objective run を旧 `run_*/graph/route_band_diagrams` 互換で複製）
+- `solver_route_band_diagrams/<mode>_<run_id>/`（各 solver run の route-band 図一式）
 - `total_cost_comparison.png` / `total_co2_comparison.png`
 - `Export SVG` 有効時: 比較図の `.svg`
 - 各 run サブフォルダに `bus_operation_figure_a/b`（PNG、必要に応じてSVG）
@@ -736,15 +746,20 @@ route-band 可視化の仕様：
 
 この節は、README に散らばりやすい保存先と出力先をひとまとめにした参照用メモです。
 
+注記:
+- current canonical / report 出力の正本 root は `output/` です。
+- 旧資料に残る `outputs/...` は historical path で、今回の fixed-scope rerun bundle は `output/reports/20260405_fixed_scope_237d5623_unserved_fix/` にあります。
+
 | 種別 | 保存先 / 出力先 | 補足 |
 |---|---|---|
-| シナリオ保存 | `outputs/scenarios/{scenario_id}/` | シナリオ本体、Quick Setup、派生成果物の集約先 |
-| 実行 run 出力 | `outputs/tokyu/.../run_YYYYMMDD_HHMM/` | 最適化・simulation の run 単位出力 |
+| 実行 run 出力 | `output/<service_date>/scenario/<scenario_id>/<mode>/<depot>/<service>/run_YYYYMMDD_HHMM/` | current canonical optimization run の単位出力 |
 | Graph Exports | `.../run_YYYYMMDD_HHMM/graph/` | `manifest.json`、`vehicle_timeline.csv`、`soc_events.csv` など |
 | route-band 図 | `.../run_YYYYMMDD_HHMM/graph/route_band_diagrams/` | `manifest.json` と `*.svg` |
-| Prepare 入力 | `outputs/prepared_inputs/{scenario_id}/` | `Solver対応 Prepare` の生成物 |
-| 監査出力 | `outputs/audit/{scenario_id}/` | `*.json` / `*.csv` / `*.md` |
-| 複数 run 比較 | `outputs/tokyu/.../analysis_export/{timestamp}/` | 比較テーブル・比較レポート・比較図 |
+| report bundle | `output/reports/<bundle_name>/` | `comparison.json/csv`、`professor_report.md`、比較図、simulation 要約 |
+| report bundle route-band 図 | `output/reports/<bundle_name>/graph/route_band_diagrams/` | best run を旧 run 互換で複製した図 |
+| report bundle per-solver route-band 図 | `output/reports/<bundle_name>/solver_route_band_diagrams/<mode>_<run_id>/` | solver ごとの route-band 図一式 |
+| report bundle solver 表 | `output/reports/<bundle_name>/solver_comparison_table.csv` | 計算時間・objective・served/unserved の明示表 |
+| 複数 run 比較 | `output/.../analysis_export/{timestamp}/` | visualizer export の比較テーブル・比較レポート・比較図 |
 | Built dataset | `data/built/{dataset_id}/` | runtime 実行可能な dataset の保存先 |
 | Catalog 正規化データ | `data/catalog-fast/normalized/` | 路線一覧や Quick Setup で優先参照 |
 | GTFS 出力 | `GTFS/TokyuBus-GTFS/` | 標準 GTFS feed と sidecar |

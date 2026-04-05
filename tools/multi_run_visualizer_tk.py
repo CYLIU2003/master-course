@@ -1,7 +1,8 @@
 """
 複数 run 比較可視化ツール（Tkinter）
 
-outputs/tokyu 配下の複数 run を収集し、比較表と比較図を生成する。
+`output/<date>/scenario/.../run_*` と `output/reports/.../comparison.json`
+の両方を収集し、比較表・比較図・教授向けレポートを生成する。
 
 実行:
 python tools/multi_run_visualizer_tk.py
@@ -9,14 +10,12 @@ python tools/multi_run_visualizer_tk.py
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
-import json
 from pathlib import Path
 from tkinter import filedialog, messagebox
 import tkinter as tk
 from tkinter import ttk
-from typing import Dict, Iterable, List, Optional
+from typing import Iterable, List
 
 import pandas as pd
 
@@ -31,159 +30,21 @@ from tools.bus_operation_visualizer_tk import (
     _plot_style_1,
     _plot_style_2,
 )
+from tools._visualizer_report_utils import (
+    RunMeta,
+    build_professor_report_markdown,
+    collect_run_metas,
+    export_route_band_diagram_assets,
+    fmt_num,
+    safe_float,
+    write_solver_comparison_exports,
+)
 
 
 matplotlib.rcParams["font.family"] = ["Times New Roman", "Meiryo"]
 matplotlib.rcParams["axes.unicode_minus"] = False
 
 ALL_FILTER = "すべて"
-
-
-@dataclass
-class RunMeta:
-    date: str
-    scenario_id: str
-    depot: str
-    service: str
-    run_id: str
-    run_dir: Path
-    status: str
-    objective_value: Optional[float]
-    solve_time_sec: Optional[float]
-    total_cost: Optional[float]
-    total_co2_kg: Optional[float]
-
-
-def _safe_float(value) -> Optional[float]:
-    try:
-        if value is None:
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _read_json(path: Path) -> Optional[dict]:
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-
-def _parse_run_path(run_dir: Path) -> Dict[str, str]:
-    parts = [p for p in run_dir.as_posix().split("/") if p]
-    if "optimization" in parts:
-        idx = parts.index("optimization")
-        # Expected: .../tokyu/<date>/optimization/<scenario>/<depot>/<service>/<run_id>
-        if idx >= 1 and len(parts) > idx + 4:
-            return {
-                "date": parts[idx - 1],
-                "scenario_id": parts[idx + 1],
-                "depot": parts[idx + 2],
-                "service": parts[idx + 3],
-                "run_id": parts[idx + 4],
-            }
-    return {
-        "date": "unknown",
-        "scenario_id": "unknown",
-        "depot": "unknown",
-        "service": "unknown",
-        "run_id": run_dir.name,
-    }
-
-
-def _extract_total_cost(summary: Optional[dict], cost_detail: Optional[dict]) -> Optional[float]:
-    if isinstance(summary, dict):
-        cb = summary.get("cost_breakdown")
-        if isinstance(cb, dict):
-            value = _safe_float(cb.get("total_operating_cost"))
-            if value is not None:
-                return value
-
-    if isinstance(cost_detail, dict):
-        # pattern A: {"total_operating_cost": ...}
-        v = _safe_float(cost_detail.get("total_operating_cost"))
-        if v is not None:
-            return v
-
-        # pattern B: {"cost_breakdown": [{"component": ..., "yen": ...}, ...]}
-        items = cost_detail.get("cost_breakdown")
-        if isinstance(items, list):
-            vals = [
-                _safe_float(item.get("yen"))
-                for item in items
-                if isinstance(item, dict)
-            ]
-            nums = [x for x in vals if x is not None]
-            if nums:
-                return float(sum(nums))
-
-    return None
-
-
-def _extract_total_co2(summary: Optional[dict], co2_detail: Optional[dict]) -> Optional[float]:
-    if isinstance(co2_detail, dict):
-        v = _safe_float(co2_detail.get("total_co2_kg"))
-        if v is not None:
-            return v
-
-    if isinstance(summary, dict):
-        kpi = summary.get("kpi")
-        if isinstance(kpi, dict):
-            v = _safe_float(kpi.get("total_co2_kg"))
-            if v is not None:
-                return v
-    return None
-
-
-def _discover_run_dirs(base_dir: Path) -> List[Path]:
-    run_dirs: List[Path] = []
-    if not base_dir.exists():
-        return run_dirs
-
-    for p in base_dir.rglob("run_*"):
-        if not p.is_dir():
-            continue
-        # Require at least summary or gantt to be considered a run folder.
-        has_summary = (p / "summary.json").exists()
-        has_gantt = (p / "vehicle_timeline_gantt.csv").exists()
-        if has_summary or has_gantt:
-            run_dirs.append(p)
-
-    run_dirs.sort(key=lambda x: x.as_posix())
-    return run_dirs
-
-
-def _collect_run_meta(run_dir: Path) -> RunMeta:
-    parsed = _parse_run_path(run_dir)
-    summary = _read_json(run_dir / "summary.json")
-    cost_detail = _read_json(run_dir / "cost_breakdown_detail.json")
-    co2_detail = _read_json(run_dir / "co2_breakdown.json")
-
-    status = "UNKNOWN"
-    objective = None
-    solve_time = None
-
-    if isinstance(summary, dict):
-        status = str(summary.get("status") or "UNKNOWN")
-        objective = _safe_float(summary.get("objective_value"))
-        solve_time = _safe_float(summary.get("solve_time_sec"))
-
-    return RunMeta(
-        date=parsed["date"],
-        scenario_id=parsed["scenario_id"],
-        depot=parsed["depot"],
-        service=parsed["service"],
-        run_id=parsed["run_id"],
-        run_dir=run_dir,
-        status=status,
-        objective_value=objective,
-        solve_time_sec=solve_time,
-        total_cost=_extract_total_cost(summary, cost_detail),
-        total_co2_kg=_extract_total_co2(summary, co2_detail),
-    )
 
 
 def _to_dataframe(items: Iterable[RunMeta]) -> pd.DataFrame:
@@ -201,24 +62,44 @@ def _to_dataframe(items: Iterable[RunMeta]) -> pd.DataFrame:
                 "solve_time_sec": m.solve_time_sec,
                 "total_cost": m.total_cost,
                 "total_co2_kg": m.total_co2_kg,
+                "trip_count_served": m.trip_count_served,
+                "trip_count_unserved": m.trip_count_unserved,
+                "vehicle_count_used": m.vehicle_count_used,
+                "mode": m.mode,
+                "exactness": m.exactness_label,
+                "termination_reason": m.termination_reason,
+                "plan_source": m.plan_source,
+                "prepared_input_id": m.prepared_input_id,
+                "objective_mode": m.objective_mode,
+                "report_bundle_name": m.report_bundle_name,
+                "service_date": m.service_date,
+                "planning_days": m.planning_days,
+                "route_count": m.route_count,
+                "vehicle_count_available": m.vehicle_count_available,
+                "charger_count_available": m.charger_count_available,
+                "simulation_feasible": m.simulation_feasible,
+                "simulation_total_distance_km": m.simulation_total_distance_km,
+                "simulation_total_energy_kwh": m.simulation_total_energy_kwh,
+                "simulation_total_cost": m.simulation_total_cost,
+                "simulation_total_co2_kg": m.simulation_total_co2_kg,
+                "simulation_result_path": str(m.simulation_result_path) if m.simulation_result_path is not None else "",
                 "run_dir": str(m.run_dir),
             }
         )
     return pd.DataFrame(rows)
 
 
-def _fmt_num(value: Optional[float], nd: int = 2) -> str:
-    if value is None:
-        return "NA"
-    return f"{value:,.{nd}f}"
-
-
 def _build_markdown_report(df: pd.DataFrame, title: str) -> str:
-    lines = [f"# {title}", "", "| Run | ステータス | 総コスト [円] | 総CO2 [kg-CO2] | 目的関数値 [モデル単位] | 求解時間 [秒] |", "|---|---:|---:|---:|---:|---:|"]
+    lines = [
+        f"# {title}",
+        "",
+        "| Run | Mode | ステータス | exact/fallback | 総コスト [円] | 総CO2 [kg-CO2] | 目的関数値 [モデル単位] | 求解時間 [秒] | served | unserved | 使用車両 |",
+        "|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
     for _, r in df.iterrows():
         lines.append(
             "| "
-            + f"{r['run_id']} | {r['status']} | {_fmt_num(r.get('total_cost'))} | {_fmt_num(r.get('total_co2_kg'), 3)} | {_fmt_num(r.get('objective_value'))} | {_fmt_num(r.get('solve_time_sec'))} |"
+            + f"{r['run_id']} | {r.get('mode') or '-'} | {r['status']} | {r.get('exactness') or '-'} | {fmt_num(safe_float(r.get('total_cost')))} | {fmt_num(safe_float(r.get('total_co2_kg')), 3)} | {fmt_num(safe_float(r.get('objective_value')))} | {fmt_num(safe_float(r.get('solve_time_sec')))} | {r.get('trip_count_served', 'NA')} | {r.get('trip_count_unserved', 'NA')} | {r.get('vehicle_count_used', 'NA')} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -240,7 +121,7 @@ def _plot_metric_bar(df: pd.DataFrame, metric: str, y_label: str, title: str):
     bars = ax.bar(x, y, color="#4f81bd", edgecolor="#2f4f6f")
 
     for b, val in zip(bars, y):
-        ax.text(b.get_x() + b.get_width() / 2, b.get_height(), _fmt_num(float(val), 2), ha="center", va="bottom", fontsize=8)
+        ax.text(b.get_x() + b.get_width() / 2, b.get_height(), fmt_num(float(val), 2), ha="center", va="bottom", fontsize=8)
 
     ax.set_title(title)
     ax.set_xlabel("Run ID")
@@ -273,7 +154,7 @@ class MultiRunVisualizerApp:
         top = ttk.Frame(self.root, padding=8)
         top.pack(fill="x")
 
-        self.base_dir_var = tk.StringVar(value="outputs/tokyu")
+        self.base_dir_var = tk.StringVar(value="output")
         ttk.Label(top, text="基準フォルダ:").pack(side="left", padx=(0, 6))
         ttk.Entry(top, textvariable=self.base_dir_var, width=90).pack(side="left", fill="x", expand=True, padx=(0, 6))
         ttk.Button(top, text="参照", command=self._on_browse).pack(side="left", padx=4)
@@ -313,6 +194,7 @@ class MultiRunVisualizerApp:
 
         ttk.Button(right_top, text="比較表プレビュー", command=self._preview_text_summary).pack(side="left", padx=4)
         ttk.Button(right_top, text="比較図プレビュー", command=self._preview_charts).pack(side="left", padx=4)
+        ttk.Button(right_top, text="先生向けレポート", command=self._export_professor_report_only).pack(side="left", padx=4)
 
         self.max_buses_var = tk.IntVar(value=45)
         self.only_assigned_var = tk.BooleanVar(value=True)
@@ -337,21 +219,43 @@ class MultiRunVisualizerApp:
 
         self.summary_tree = ttk.Treeview(
             self.tab_text,
-            columns=("run_id", "status", "total_cost", "total_co2", "objective", "solve_time"),
+            columns=(
+                "run_id",
+                "mode",
+                "status",
+                "exactness",
+                "total_cost",
+                "total_co2",
+                "objective",
+                "solve_time",
+                "served",
+                "unserved",
+                "vehicles",
+            ),
             show="headings",
         )
         self.summary_tree.heading("run_id", text="Run ID")
+        self.summary_tree.heading("mode", text="Mode")
         self.summary_tree.heading("status", text="ステータス")
+        self.summary_tree.heading("exactness", text="exact/fallback")
         self.summary_tree.heading("total_cost", text="総コスト [円]")
         self.summary_tree.heading("total_co2", text="総CO2 [kg-CO2]")
         self.summary_tree.heading("objective", text="目的関数値 [モデル単位]")
         self.summary_tree.heading("solve_time", text="求解時間 [秒]")
+        self.summary_tree.heading("served", text="served")
+        self.summary_tree.heading("unserved", text="unserved")
+        self.summary_tree.heading("vehicles", text="使用車両")
         self.summary_tree.column("run_id", width=180, anchor="w")
+        self.summary_tree.column("mode", width=90, anchor="center")
         self.summary_tree.column("status", width=110, anchor="center")
+        self.summary_tree.column("exactness", width=120, anchor="center")
         self.summary_tree.column("total_cost", width=180, anchor="e")
         self.summary_tree.column("total_co2", width=150, anchor="e")
         self.summary_tree.column("objective", width=140, anchor="e")
         self.summary_tree.column("solve_time", width=130, anchor="e")
+        self.summary_tree.column("served", width=90, anchor="e")
+        self.summary_tree.column("unserved", width=90, anchor="e")
+        self.summary_tree.column("vehicles", width=90, anchor="e")
         self.summary_tree.pack(fill="both", expand=True)
 
         self.status_var = tk.StringVar(value="準備完了")
@@ -364,7 +268,7 @@ class MultiRunVisualizerApp:
         return combo
 
     def _on_browse(self) -> None:
-        selected = filedialog.askdirectory(title="outputs/tokyu または optimization 配下を選択")
+        selected = filedialog.askdirectory(title="output 配下の run folder または reports bundle を選択")
         if selected:
             self.base_dir_var.set(selected)
 
@@ -374,12 +278,11 @@ class MultiRunVisualizerApp:
             messagebox.showerror("不正なフォルダ", "指定フォルダが存在しません。")
             return
 
-        run_dirs = _discover_run_dirs(base)
-        if not run_dirs:
-            messagebox.showwarning("runなし", "run_* フォルダが見つかりませんでした。")
+        self.all_metas = collect_run_metas(base)
+        if not self.all_metas:
+            messagebox.showwarning("runなし", "run_* フォルダまたは comparison bundle が見つかりませんでした。")
             return
 
-        self.all_metas = [_collect_run_meta(p) for p in run_dirs]
         self._refresh_filter_options()
         self._apply_filter()
         self.status_var.set(f"走査完了: {len(self.all_metas):,} run / {base}")
@@ -416,11 +319,13 @@ class MultiRunVisualizerApp:
         self.run_listbox.delete(0, tk.END)
 
         for m in self.filtered_metas:
-            total_cost = _fmt_num(m.total_cost)
-            total_co2 = _fmt_num(m.total_co2_kg, 3)
+            total_cost = fmt_num(m.total_cost)
+            total_co2 = fmt_num(m.total_co2_kg, 3)
             txt = (
-                f"{m.run_id} | {m.status} | 総コスト[円]={total_cost} | 総CO2[kg-CO2]={total_co2} | "
-                f"{m.date}/{m.scenario_id}/{m.depot}/{m.service}"
+                f"{m.run_id} | {m.mode or '-'} | {m.status} | {m.exactness_label} | "
+                f"served={m.trip_count_served if m.trip_count_served is not None else 'NA'} | "
+                f"unserved={m.trip_count_unserved if m.trip_count_unserved is not None else 'NA'} | "
+                f"総コスト[円]={total_cost} | {m.date}/{m.scenario_id}/{m.depot}/{m.service}"
             )
             self.run_listbox.insert(tk.END, txt)
 
@@ -444,11 +349,21 @@ class MultiRunVisualizerApp:
         df = _to_dataframe(selected)
         cols = [
             "run_id",
+            "mode",
             "status",
+            "exactness",
             "total_cost",
             "total_co2_kg",
             "objective_value",
             "solve_time_sec",
+            "trip_count_served",
+            "trip_count_unserved",
+            "vehicle_count_used",
+            "termination_reason",
+            "plan_source",
+            "prepared_input_id",
+            "objective_mode",
+            "report_bundle_name",
             "run_dir",
         ]
         return df[cols].copy()
@@ -470,11 +385,16 @@ class MultiRunVisualizerApp:
                 tk.END,
                 values=(
                     str(r["run_id"]),
+                    str(r.get("mode") or "-"),
                     str(r["status"]),
-                    _fmt_num(_safe_float(r.get("total_cost"))),
-                    _fmt_num(_safe_float(r.get("total_co2_kg")), 3),
-                    _fmt_num(_safe_float(r.get("objective_value"))),
-                    _fmt_num(_safe_float(r.get("solve_time_sec"))),
+                    str(r.get("exactness") or "-"),
+                    fmt_num(safe_float(r.get("total_cost"))),
+                    fmt_num(safe_float(r.get("total_co2_kg")), 3),
+                    fmt_num(safe_float(r.get("objective_value"))),
+                    fmt_num(safe_float(r.get("solve_time_sec"))),
+                    str(r.get("trip_count_served", "NA")),
+                    str(r.get("trip_count_unserved", "NA")),
+                    str(r.get("vehicle_count_used", "NA")),
                 ),
             )
 
@@ -545,15 +465,43 @@ class MultiRunVisualizerApp:
             "depot",
             "service",
             "run_id",
+            "mode",
             "status",
+            "exactness",
             "total_cost",
             "total_co2_kg",
             "objective_value",
             "solve_time_sec",
+            "trip_count_served",
+            "trip_count_unserved",
+            "vehicle_count_used",
+            "termination_reason",
+            "plan_source",
+            "prepared_input_id",
+            "objective_mode",
+            "report_bundle_name",
+            "service_date",
+            "planning_days",
+            "route_count",
+            "vehicle_count_available",
+            "charger_count_available",
+            "simulation_feasible",
+            "simulation_total_distance_km",
+            "simulation_total_energy_kwh",
+            "simulation_total_cost",
+            "simulation_total_co2_kg",
+            "simulation_result_path",
             "run_dir",
         ]].copy()
         df_out.to_csv(csv_path, index=False, encoding="utf-8-sig")
         md_path.write_text(_build_markdown_report(df_out, "run比較サマリー（総コスト・総CO2）"), encoding="utf-8")
+        professor_report_path = out_root / "professor_report.md"
+        professor_report_path.write_text(
+            build_professor_report_markdown(selected, title="教授向けシナリオ報告"),
+            encoding="utf-8",
+        )
+        solver_table_paths = write_solver_comparison_exports(selected, out_root)
+        route_band_export = export_route_band_diagram_assets(selected, out_root)
 
         # Comparison figures
         if self.cost_fig is not None:
@@ -592,8 +540,33 @@ class MultiRunVisualizerApp:
                 # Skip problematic runs and continue export.
                 continue
 
-        self.status_var.set(f"出力完了: 対象run={len(selected):,}件, 個別図={per_run_count}件, 出力先={out_root}")
+        best_route_band_dir = route_band_export.get("best_bundle_route_band_dir")
+        route_band_note = (
+            f", route-band={best_route_band_dir}"
+            if best_route_band_dir is not None
+            else ""
+        )
+        self.status_var.set(
+            f"出力完了: 対象run={len(selected):,}件, 個別図={per_run_count}件, solver表={solver_table_paths['csv_path'].name}{route_band_note}, 出力先={out_root}"
+        )
         messagebox.showinfo("出力完了", f"出力先:\n{out_root}")
+
+    def _export_professor_report_only(self) -> None:
+        selected = self._selected_metas()
+        if not selected:
+            messagebox.showwarning("未選択", "run を1つ以上選択してください。")
+            return
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base = Path(self.base_dir_var.get().strip())
+        out_root = base / "analysis_export" / timestamp
+        out_root.mkdir(parents=True, exist_ok=True)
+        report_path = out_root / "professor_report.md"
+        report_path.write_text(
+            build_professor_report_markdown(selected, title="教授向けシナリオ報告"),
+            encoding="utf-8",
+        )
+        self.status_var.set(f"先生向けレポートを出力しました: {report_path}")
+        messagebox.showinfo("出力完了", f"先生向けレポート:\n{report_path}")
 
 
 def main() -> None:

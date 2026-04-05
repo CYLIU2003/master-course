@@ -141,7 +141,7 @@ def check_schedule_feasibility(
                 ))
             elif can is None:
                 # can_follow 情報なし: 時間重複チェック
-                if t1.end_time_idx >= t2.start_time_idx:
+                if t1.end_time_idx > t2.start_time_idx:
                     report.feasible = False
                     report.time_connection_ok = False
                     report.issues.append(FeasibilityIssue(
@@ -383,7 +383,16 @@ def simulate(
     T   = ms.T
     delta_h = data.delta_t_hour
 
-    if milp_result.status not in ("OPTIMAL", "TIME_LIMIT", "SUBOPTIMAL"):
+    normalized_status = str(milp_result.status or "").strip().upper()
+    accepted_statuses = {
+        "OPTIMAL",
+        "TIME_LIMIT",
+        "SUBOPTIMAL",
+        "FEASIBLE",
+        "TIME_LIMIT_BASELINE",
+        "AUTO_RELAXED_BASELINE",
+    }
+    if normalized_status not in accepted_statuses:
         return sim
 
     # ===== SOC 検証 =====

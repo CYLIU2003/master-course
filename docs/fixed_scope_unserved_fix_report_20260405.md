@@ -1,5 +1,7 @@
 # 固定 scope 未担当便修理と 4 ソルバー再実行報告
 
+> 先生向けの図表版は [output/reports/20260405_fixed_scope_237d5623_unserved_fix/report.md](../output/reports/20260405_fixed_scope_237d5623_unserved_fix/report.md) を参照。
+
 ## 1. Verified Call Chain
 
 この報告は current call path から確認している。

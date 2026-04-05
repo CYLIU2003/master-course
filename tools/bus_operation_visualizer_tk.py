@@ -16,7 +16,7 @@ from tkinter import filedialog, messagebox
 import tkinter as tk
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 
@@ -26,6 +26,12 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.patches import Patch, Rectangle
+from tools._visualizer_report_utils import (
+    RunMeta,
+    collect_run_meta,
+    load_run_payloads,
+    resolve_run_dir_input,
+)
 
 
 # 英語は Times New Roman、日本語は Meiryo を優先
@@ -46,6 +52,13 @@ class TimelineBundle:
     summary_json: dict
     cost_detail_json: dict
     co2_detail_json: dict
+    optimization_result_json: dict
+    canonical_solver_result_json: dict
+    kpi_summary_json: dict
+    run_manifest_json: dict
+    simulation_result_json: dict
+    input_metadata: dict
+    run_meta: RunMeta
 
 
 def _safe_float(value, default: float = 0.0) -> float:
@@ -68,18 +81,21 @@ def _read_json_or_empty(path: Path) -> dict:
 
 
 def _build_summary_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
-    summary = bundle.summary_json or {}
-    cost_breakdown = summary.get("cost_breakdown") if isinstance(summary.get("cost_breakdown"), dict) else {}
-    kpi = summary.get("kpi") if isinstance(summary.get("kpi"), dict) else {}
+    optimization = bundle.optimization_result_json or {}
+    canonical = bundle.canonical_solver_result_json or {}
+    summary = optimization.get("summary") if isinstance(optimization.get("summary"), dict) else {}
+    cost_breakdown = optimization.get("cost_breakdown") if isinstance(optimization.get("cost_breakdown"), dict) else {}
+    simulation_summary = (
+        bundle.simulation_result_json.get("simulation_summary")
+        if isinstance(bundle.simulation_result_json.get("simulation_summary"), dict)
+        else {}
+    )
+    run_meta = bundle.run_meta
 
-    status = str(summary.get("status") or "UNKNOWN")
-    objective = _safe_float(summary.get("objective_value"), 0.0)
-    solve_time_sec = _safe_float(summary.get("solve_time_sec"), 0.0)
-    unmet = kpi.get("unserved_tasks")
-    if isinstance(unmet, list):
-        unmet_trips = len(unmet)
-    else:
-        unmet_trips = 0
+    status = str(run_meta.status or "UNKNOWN")
+    objective = _safe_float(run_meta.objective_value, 0.0)
+    solve_time_sec = _safe_float(run_meta.solve_time_sec, 0.0)
+    unmet_trips = int(summary.get("trip_count_unserved") or 0)
     refuel_count = 0
     refuel_total_l = 0.0
     if not bundle.refuel_events.empty:
@@ -87,24 +103,41 @@ def _build_summary_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
         refuel_total_l = float(pd.to_numeric(bundle.refuel_events["refuel_liters"], errors="coerce").fillna(0.0).sum())
 
     rows = [
+        ("入力種別", str(bundle.input_metadata.get("input_kind") or "run_dir")),
+        ("読込フォルダ", str(bundle.run_dir)),
+        ("比較bundle", str(bundle.input_metadata.get("report_bundle_dir") or "")),
+        ("自動選択run", str(bundle.input_metadata.get("selected_run_id") or bundle.run_dir.name)),
+        ("mode", str(run_meta.mode or optimization.get("mode") or "")),
         ("ステータス", status),
+        ("exact / fallback", run_meta.exactness_label),
+        ("termination reason", str(run_meta.termination_reason or canonical.get("termination_reason") or "")),
+        ("plan source", str(run_meta.plan_source or ((canonical.get("metadata") or {}).get("source")) or "")),
+        ("scenario_id", str(run_meta.scenario_id or optimization.get("scenario_id") or "")),
+        ("prepared_input_id", str(run_meta.prepared_input_id or optimization.get("prepared_input_id") or "")),
+        ("objective_mode", str(run_meta.objective_mode or optimization.get("objective_mode") or "")),
+        ("営業所", str(run_meta.depot or ((optimization.get("scope") or {}).get("depotId")) or "")),
+        ("運行種別", str(run_meta.service or ((optimization.get("scope") or {}).get("serviceId")) or "")),
+        ("service_date", str(((optimization.get("prepared_scope_summary") or {}).get("service_date")) or "")),
         ("目的関数値 [モデル単位]", f"{objective:.6f}"),
         ("求解時間 [秒]", f"{solve_time_sec:.6f}"),
         ("未割当便数 [便]", str(unmet_trips)),
+        ("担当便数 [便]", str(int(summary.get("trip_count_served") or 0))),
+        ("使用車両数 [台]", str(int(summary.get("vehicle_count_used") or 0))),
         ("補給イベント数 [件]", str(refuel_count)),
         ("補給総量 [L]", f"{refuel_total_l:.6f}"),
-        ("電力コスト [円]", f"{_safe_float(cost_breakdown.get('electricity_cost'), 0.0):.6f}"),
-        ("電力コスト基準", str(cost_breakdown.get("electricity_cost_basis") or "provisional_drive")),
+        ("総コスト [円]", f"{_safe_float(cost_breakdown.get('total_cost'), 0.0):.6f}"),
+        ("電力コスト [円]", f"{_safe_float(cost_breakdown.get('energy_cost'), 0.0):.6f}"),
+        ("電力コスト基準", str(optimization.get("electricity_cost_basis") or "provisional_drive")),
         ("電力コスト(仮) [円]", f"{_safe_float(cost_breakdown.get('electricity_cost_provisional'), 0.0):.6f}"),
         ("電力コスト(充電実績) [円]", f"{_safe_float(cost_breakdown.get('electricity_cost_charged'), 0.0):.6f}"),
         ("燃料コスト [円]", f"{_safe_float(cost_breakdown.get('fuel_cost'), 0.0):.6f}"),
         ("デマンド料金 [円]", f"{_safe_float(cost_breakdown.get('demand_charge'), 0.0):.6f}"),
         ("電池劣化コスト [円]", f"{_safe_float(cost_breakdown.get('degradation_cost'), 0.0):.6f}"),
-        ("総コスト [円]", f"{_safe_float(cost_breakdown.get('total_operating_cost'), 0.0):.6f}"),
-        ("系統受電量 [kWh]", f"{_safe_float(kpi.get('total_grid_kwh'), 0.0):.6f}"),
-        ("系統売電量 [kWh]", f"{_safe_float(kpi.get('total_grid_export_kwh'), 0.0):.6f}"),
-        ("総CO2排出量 [kg-CO2]", f"{_safe_float(kpi.get('total_co2_kg'), 0.0):.6f}"),
-        ("CO2コスト [円]", "NA"),
+        ("総CO2排出量 [kg-CO2]", f"{_safe_float(cost_breakdown.get('total_co2_kg'), 0.0):.6f}"),
+        ("CO2コスト [円]", f"{_safe_float(cost_breakdown.get('co2_cost'), 0.0):.6f}"),
+        ("simulation_result 有無", "あり" if bundle.simulation_result_json else "なし"),
+        ("simulation_result_path", str(run_meta.simulation_result_path or "")),
+        ("simulation feasibility", str(simulation_summary.get("feasible") if simulation_summary else "未実行")),
     ]
     return rows
 
@@ -123,7 +156,30 @@ def _flatten_dict_for_details(prefix: str, value, out: List[Tuple[str, str]]) ->
 
 def _build_details_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
     rows: List[Tuple[str, str]] = []
+    _flatten_dict_for_details("入力メタデータ", bundle.input_metadata or {}, rows)
+    _flatten_dict_for_details("run_overview", {
+        "date": bundle.run_meta.date,
+        "scenario_id": bundle.run_meta.scenario_id,
+        "depot": bundle.run_meta.depot,
+        "service": bundle.run_meta.service,
+        "run_id": bundle.run_meta.run_id,
+        "mode": bundle.run_meta.mode,
+        "status": bundle.run_meta.status,
+        "exactness": bundle.run_meta.exactness_label,
+        "objective_value": bundle.run_meta.objective_value,
+        "solve_time_sec": bundle.run_meta.solve_time_sec,
+        "trip_count_served": bundle.run_meta.trip_count_served,
+        "trip_count_unserved": bundle.run_meta.trip_count_unserved,
+        "vehicle_count_used": bundle.run_meta.vehicle_count_used,
+        "termination_reason": bundle.run_meta.termination_reason,
+        "plan_source": bundle.run_meta.plan_source,
+    }, rows)
     _flatten_dict_for_details("サマリー", bundle.summary_json or {}, rows)
+    _flatten_dict_for_details("optimization_result", bundle.optimization_result_json or {}, rows)
+    _flatten_dict_for_details("canonical_solver_result", bundle.canonical_solver_result_json or {}, rows)
+    _flatten_dict_for_details("run_manifest", bundle.run_manifest_json or {}, rows)
+    _flatten_dict_for_details("kpi_summary", bundle.kpi_summary_json or {}, rows)
+    _flatten_dict_for_details("simulation_result", bundle.simulation_result_json or {}, rows)
     _flatten_dict_for_details("コスト内訳詳細", bundle.cost_detail_json or {}, rows)
     _flatten_dict_for_details("CO2内訳", bundle.co2_detail_json or {}, rows)
     if not bundle.refuel_events.empty:
@@ -156,7 +212,30 @@ def _build_details_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
 
 def _build_raw_json_text(bundle: TimelineBundle) -> str:
     payload = {
+        "input_metadata": bundle.input_metadata or {},
+        "run_overview": {
+            "date": bundle.run_meta.date,
+            "scenario_id": bundle.run_meta.scenario_id,
+            "depot": bundle.run_meta.depot,
+            "service": bundle.run_meta.service,
+            "run_id": bundle.run_meta.run_id,
+            "mode": bundle.run_meta.mode,
+            "status": bundle.run_meta.status,
+            "exactness": bundle.run_meta.exactness_label,
+            "objective_value": bundle.run_meta.objective_value,
+            "solve_time_sec": bundle.run_meta.solve_time_sec,
+            "trip_count_served": bundle.run_meta.trip_count_served,
+            "trip_count_unserved": bundle.run_meta.trip_count_unserved,
+            "vehicle_count_used": bundle.run_meta.vehicle_count_used,
+            "termination_reason": bundle.run_meta.termination_reason,
+            "plan_source": bundle.run_meta.plan_source,
+        },
         "summary": bundle.summary_json or {},
+        "optimization_result": bundle.optimization_result_json or {},
+        "canonical_solver_result": bundle.canonical_solver_result_json or {},
+        "run_manifest": bundle.run_manifest_json or {},
+        "kpi_summary": bundle.kpi_summary_json or {},
+        "simulation_result": bundle.simulation_result_json or {},
         "cost_breakdown_detail": bundle.cost_detail_json or {},
         "co2_breakdown": bundle.co2_detail_json or {},
     }
@@ -193,23 +272,31 @@ def _detect_delta_t_min(run_dir: Path, events: pd.DataFrame) -> int:
         except Exception:
             pass
 
-    valid = events[(events["duration_slots"].fillna(0) > 0) & (events["duration_min"].fillna(0) > 0)].copy()
+    duration_slots = pd.to_numeric(events["duration_slots"], errors="coerce")
+    duration_min = pd.to_numeric(events["duration_min"], errors="coerce")
+    valid = events[(duration_slots.fillna(0) > 0) & (duration_min.fillna(0) > 0)].copy()
     if valid.empty:
         return 15
-    ratio = (valid["duration_min"].astype(float) / valid["duration_slots"].astype(float)).median()
+    valid_slots = pd.to_numeric(valid["duration_slots"], errors="coerce")
+    valid_minutes = pd.to_numeric(valid["duration_min"], errors="coerce")
+    ratio = (valid_minutes / valid_slots).median()
     return max(1, _safe_int(ratio, 15))
 
 
 def _load_bundle(run_dir: Path) -> TimelineBundle:
+    payloads = load_run_payloads(run_dir)
     gantt = _read_csv_or_empty(
         run_dir / "vehicle_timeline_gantt.csv",
         [
             "vehicle_id",
             "event_type",
+            "state",
             "start_time_idx",
             "end_time_idx",
             "start_minute",
             "end_minute",
+            "start_time",
+            "end_time",
             "duration_slots",
             "duration_min",
         ],
@@ -218,14 +305,35 @@ def _load_bundle(run_dir: Path) -> TimelineBundle:
     if gantt.empty:
         raise ValueError("vehicle_timeline_gantt.csv が空か、存在しません。")
 
+    if "event_type" not in gantt.columns or gantt["event_type"].isna().all():
+        gantt["event_type"] = gantt.get("state", pd.Series(dtype=str))
+    gantt["event_type"] = gantt["event_type"].astype(str).str.lower().str.strip()
     gantt = gantt[gantt["event_type"].astype(str).str.lower().isin(["service", "deadhead"])].copy()
-    gantt["start_time_idx"] = pd.to_numeric(gantt["start_time_idx"], errors="coerce").fillna(0).astype(int)
-    gantt["end_time_idx"] = pd.to_numeric(gantt["end_time_idx"], errors="coerce").fillna(0).astype(int)
+    gantt["start_time_idx"] = pd.to_numeric(gantt["start_time_idx"], errors="coerce")
+    gantt["end_time_idx"] = pd.to_numeric(gantt["end_time_idx"], errors="coerce")
+
+    if ("start_minute" not in gantt.columns or gantt["start_minute"].isna().all()) and "start_time" in gantt.columns:
+        start_ts = pd.to_datetime(gantt["start_time"], errors="coerce")
+        gantt["start_minute"] = start_ts.dt.hour.fillna(0).astype(int) * 60 + start_ts.dt.minute.fillna(0).astype(int)
+    if ("end_minute" not in gantt.columns or gantt["end_minute"].isna().all()) and "end_time" in gantt.columns:
+        end_ts = pd.to_datetime(gantt["end_time"], errors="coerce")
+        gantt["end_minute"] = end_ts.dt.hour.fillna(0).astype(int) * 60 + end_ts.dt.minute.fillna(0).astype(int)
 
     if "start_minute" not in gantt.columns or gantt["start_minute"].isna().all():
-        gantt["start_minute"] = gantt["start_time_idx"] * 15
+        gantt["start_minute"] = gantt["start_time_idx"].fillna(0) * 15
     if "end_minute" not in gantt.columns or gantt["end_minute"].isna().all():
-        gantt["end_minute"] = (gantt["end_time_idx"] + 1) * 15
+        gantt["end_minute"] = (gantt["end_time_idx"].fillna(0) + 1) * 15
+
+    gantt["start_minute"] = pd.to_numeric(gantt["start_minute"], errors="coerce").fillna(0).astype(int)
+    gantt["end_minute"] = pd.to_numeric(gantt["end_minute"], errors="coerce").fillna(gantt["start_minute"]).astype(int)
+    if gantt["start_time_idx"].isna().all():
+        gantt["start_time_idx"] = (gantt["start_minute"] // 15).astype(int)
+    else:
+        gantt["start_time_idx"] = gantt["start_time_idx"].fillna(gantt["start_minute"] // 15).astype(int)
+    if gantt["end_time_idx"].isna().all():
+        gantt["end_time_idx"] = ((gantt["end_minute"] - 1).clip(lower=0) // 15).astype(int)
+    else:
+        gantt["end_time_idx"] = gantt["end_time_idx"].fillna(((gantt["end_minute"] - 1).clip(lower=0) // 15)).astype(int)
 
     schedule = _read_csv_or_empty(
         run_dir / "vehicle_schedule.csv",
@@ -327,9 +435,16 @@ def _load_bundle(run_dir: Path) -> TimelineBundle:
         delta_t_min=delta_t_min,
         horizon_minute=horizon_min,
         horizon_max_minute=horizon_max,
-        summary_json=_read_json_or_empty(run_dir / "summary.json"),
-        cost_detail_json=_read_json_or_empty(run_dir / "cost_breakdown_detail.json"),
-        co2_detail_json=_read_json_or_empty(run_dir / "co2_breakdown.json"),
+        summary_json=payloads["summary"],
+        cost_detail_json=payloads["cost_breakdown_detail"],
+        co2_detail_json=payloads["co2_breakdown"],
+        optimization_result_json=payloads["optimization_result"],
+        canonical_solver_result_json=payloads["canonical_solver_result"],
+        kpi_summary_json=payloads["kpi_summary"],
+        run_manifest_json=payloads["run_manifest"],
+        simulation_result_json=payloads["simulation_result"],
+        input_metadata={"input_kind": "run_dir"},
+        run_meta=collect_run_meta(run_dir),
     )
 
 
@@ -622,7 +737,7 @@ class BusOperationVisualizerApp:
         top.pack(fill="x")
 
         self.run_dir_var = tk.StringVar(value="")
-        ttk.Label(top, text="実行結果フォルダ:").pack(side="left", padx=(0, 6))
+        ttk.Label(top, text="実行結果 / comparison bundle:").pack(side="left", padx=(0, 6))
         ttk.Entry(top, textvariable=self.run_dir_var, width=95).pack(side="left", padx=(0, 6), fill="x", expand=True)
         ttk.Button(top, text="参照", command=self._on_browse).pack(side="left", padx=4)
         ttk.Button(top, text="読込", command=self._on_load).pack(side="left", padx=4)
@@ -700,7 +815,7 @@ class BusOperationVisualizerApp:
             self.raw_text.insert("1.0", _build_raw_json_text(self.bundle))
 
     def _on_browse(self) -> None:
-        selected = filedialog.askdirectory(title="最適化 run フォルダを選択")
+        selected = filedialog.askdirectory(title="最適化 run フォルダまたは comparison bundle を選択")
         if selected:
             self.run_dir_var.set(selected)
 
@@ -709,20 +824,24 @@ class BusOperationVisualizerApp:
         if not path_text:
             messagebox.showwarning("入力不足", "実行結果フォルダを指定してください。")
             return
-        run_dir = Path(path_text)
-        if not run_dir.exists() or not run_dir.is_dir():
+        input_dir = Path(path_text)
+        if not input_dir.exists() or not input_dir.is_dir():
             messagebox.showerror("不正なフォルダ", "指定フォルダが存在しません。")
             return
 
         try:
+            run_dir, input_metadata = resolve_run_dir_input(input_dir)
             self.bundle = _load_bundle(run_dir)
+            self.bundle.input_metadata.update(input_metadata)
+            self.bundle.run_meta = collect_run_meta(run_dir)
         except Exception as exc:
             messagebox.showerror("読込失敗", str(exc))
             return
 
         messagebox.showinfo(
             "読込完了",
-            f"読込フォルダ:\n{run_dir}\n\n"
+            f"入力フォルダ:\n{input_dir}\n\n"
+            f"読込run:\n{run_dir}\n\n"
             f"イベント数 [件]: {len(self.bundle.events):,}\n"
             f"車種情報付き車両数 [台]: {len(self.bundle.vehicle_types):,}\n"
             f"充電レコード数 [行]: {len(self.bundle.charging):,}",
