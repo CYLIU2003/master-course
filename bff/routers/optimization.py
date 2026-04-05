@@ -13,6 +13,7 @@ import traceback
 import json
 import csv
 import shutil
+from collections import Counter, defaultdict
 import threading
 import multiprocessing
 import os
@@ -807,14 +808,44 @@ def _persist_rich_run_outputs(
     timeline_candidates.append(run_dir / "graph" / "vehicle_timeline.csv")
     if graph_source_dir is not None:
         timeline_candidates.append(graph_source_dir / "vehicle_timeline.csv")
+    copied_timeline_src: Optional[Path] = None
     for src in timeline_candidates:
         if src.exists():
             shutil.copy2(src, run_dir / "vehicle_timeline_gantt.csv")
             shutil.copy2(src, run_dir / "vehicle_timelines.csv")
+            copied_timeline_src = src
             break
+    if copied_timeline_src is not None:
+        try:
+            with copied_timeline_src.open("r", encoding="utf-8", newline="") as handle:
+                timeline_rows = list(csv.DictReader(handle))
+            (run_dir / "vehicle_timelines.json").write_text(
+                json.dumps(_canonical_vehicle_timelines_payload(timeline_rows), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
 
     refuel_rows = []
+    charging_rows = []
     if canonical_solver_result is not None:
+        for item in list((canonical_solver_result.get("charging_schedule") or [])):
+            if not isinstance(item, dict):
+                continue
+            charge_kw = float(item.get("charge_kw") or 0.0)
+            discharge_kw = float(item.get("discharge_kw") or 0.0)
+            charging_rows.append(
+                {
+                    "vehicle_id": item.get("vehicle_id"),
+                    "charger_id": item.get("charger_id"),
+                    "time_idx": item.get("slot_index"),
+                    "z_charge": 1 if charge_kw > 1.0e-9 else 0,
+                    "p_charge_kw": charge_kw,
+                    "p_discharge_kw": discharge_kw,
+                    "soc_kwh": "",
+                    "charging_depot_id": item.get("charging_depot_id"),
+                }
+            )
         for item in list((canonical_solver_result.get("refueling_schedule") or [])):
             if not isinstance(item, dict):
                 continue
@@ -827,6 +858,20 @@ def _persist_rich_run_outputs(
                     "unit": "L",
                 }
             )
+    _write_csv_rows(
+        run_dir / "charging_schedule.csv",
+        charging_rows,
+        [
+            "vehicle_id",
+            "charger_id",
+            "time_idx",
+            "z_charge",
+            "p_charge_kw",
+            "p_discharge_kw",
+            "soc_kwh",
+            "charging_depot_id",
+        ],
+    )
     _write_csv_rows(
         run_dir / "refuel_events.csv",
         refuel_rows,
@@ -931,64 +976,254 @@ def _canonical_vehicle_timeline_rows(
     vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
     band_labels_by_band_id = dict((graph_context or {}).get("band_labels_by_band_id") or {})
     base_date = _canonical_output_base_date(problem, graph_context)
+    depot_name_by_id = {
+        str(depot.depot_id): str(getattr(depot, "name", "") or getattr(depot, "depot_id", "") or "")
+        for depot in problem.depots
+    }
+    duties_by_vehicle = engine_result.plan.duties_by_vehicle()
+    charge_slots_by_vehicle: Dict[str, List[Any]] = defaultdict(list)
+    for slot in engine_result.plan.charging_slots:
+        charge_slots_by_vehicle[str(slot.vehicle_id)].append(slot)
+    refuel_slots_by_vehicle: Dict[str, List[Any]] = defaultdict(list)
+    for slot in engine_result.plan.refuel_slots:
+        refuel_slots_by_vehicle[str(slot.vehicle_id)].append(slot)
 
-    for duty in engine_result.plan.duties:
-        vehicle_id = str(engine_result.plan.vehicle_id_for_duty(duty.duty_id))
-        vehicle = vehicle_by_id.get(vehicle_id)
+    for vehicle_id, duties in duties_by_vehicle.items():
+        vehicle = vehicle_by_id.get(str(vehicle_id))
         depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
-        vehicle_type = str(getattr(vehicle, "vehicle_type", duty.vehicle_type) or duty.vehicle_type)
-        for leg in duty.legs:
-            dispatch_trip = leg.trip
-            trip_id = str(dispatch_trip.trip_id or "")
-            problem_trip = problem_trip_by_id.get(trip_id)
-            if problem_trip is None:
-                continue
-            route_family_code = str(getattr(dispatch_trip, "route_family_code", "") or "")
-            route_id = str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id)
-            band_id = _route_band_key(route_family_code, route_id)
-            band_label = str(band_labels_by_band_id.get(band_id) or band_id)
-            start_dt = _canonical_datetime_from_min(base_date, int(dispatch_trip.departure_min))
-            end_min = int(dispatch_trip.arrival_min)
-            if end_min <= int(dispatch_trip.departure_min):
-                end_min += 24 * 60
-            end_dt = _canonical_datetime_from_min(base_date, end_min)
-            variant = str(getattr(dispatch_trip, "route_variant_type", "") or "")
+        depot_label = depot_name_by_id.get(depot_id) or depot_id
+        vehicle_type = str(getattr(vehicle, "vehicle_type", "") or (duties[0].vehicle_type if duties else ""))
+        band_counter: Counter[str] = Counter()
+        for duty in duties:
+            for leg in duty.legs:
+                trip_id = str(getattr(leg.trip, "trip_id", "") or "")
+                problem_trip = problem_trip_by_id.get(trip_id)
+                if problem_trip is None:
+                    continue
+                route_family_code = str(getattr(leg.trip, "route_family_code", "") or "")
+                route_id = str(getattr(leg.trip, "route_id", problem_trip.route_id) or problem_trip.route_id)
+                band_id = _route_band_key(route_family_code, route_id)
+                if band_id:
+                    band_counter[band_id] += 1
+        primary_band_id = ""
+        primary_band_label = ""
+        if band_counter:
+            primary_band_id = sorted(
+                band_counter.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[0][0]
+            primary_band_label = str(band_labels_by_band_id.get(primary_band_id) or primary_band_id)
+
+        for duty in duties:
+            prev_trip = None
+            prev_band_id = ""
+            for leg in duty.legs:
+                dispatch_trip = leg.trip
+                trip_id = str(dispatch_trip.trip_id or "")
+                problem_trip = problem_trip_by_id.get(trip_id)
+                if problem_trip is None:
+                    continue
+                route_family_code = str(getattr(dispatch_trip, "route_family_code", "") or "")
+                route_id = str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id)
+                band_id = _route_band_key(route_family_code, route_id)
+                band_label = str(band_labels_by_band_id.get(band_id) or band_id)
+                start_dt = _canonical_datetime_from_min(base_date, int(dispatch_trip.departure_min))
+                end_min = int(dispatch_trip.arrival_min)
+                if end_min <= int(dispatch_trip.departure_min):
+                    end_min += 24 * 60
+                end_dt = _canonical_datetime_from_min(base_date, end_min)
+                variant = str(getattr(dispatch_trip, "route_variant_type", "") or "")
+                deadhead_min = max(int(getattr(leg, "deadhead_from_prev_min", 0) or 0), 0)
+                if deadhead_min > 0:
+                    deadhead_start = _canonical_datetime_from_min(
+                        base_date,
+                        int(dispatch_trip.departure_min) - deadhead_min,
+                    )
+                    deadhead_band_id = band_id if prev_trip is None or prev_band_id == band_id else ""
+                    rows.append(
+                        {
+                            "scenario_id": scenario_id,
+                            "depot_id": depot_id,
+                            "vehicle_id": str(vehicle_id),
+                            "vehicle_type": vehicle_type,
+                            "band_id": deadhead_band_id,
+                            "band_label": str(band_labels_by_band_id.get(deadhead_band_id) or deadhead_band_id),
+                            "vehicle_primary_band_id": primary_band_id,
+                            "vehicle_primary_band_label": primary_band_label,
+                            "start_time": deadhead_start.isoformat(),
+                            "end_time": start_dt.isoformat(),
+                            "state": "deadhead",
+                            "route_id": "",
+                            "route_family_code": route_family_code,
+                            "route_series_code": deadhead_band_id,
+                            "event_route_band_id": deadhead_band_id,
+                            "trip_id": "",
+                            "from_location_id": (
+                                depot_label
+                                if prev_trip is None
+                                else str(getattr(prev_trip, "destination", "") or "")
+                            ),
+                            "to_location_id": str(dispatch_trip.origin or ""),
+                            "from_location_type": "depot" if prev_trip is None else "terminal",
+                            "to_location_type": "terminal",
+                            "direction": "",
+                            "route_variant_type": "",
+                            "energy_delta_kwh": -_canonical_estimated_deadhead_energy_kwh(
+                                problem,
+                                deadhead_min=deadhead_min,
+                                trip_energy_kwh=float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0),
+                                trip_distance_km=float(getattr(problem_trip, "distance_km", 0.0) or 0.0),
+                            ),
+                            "distance_km": _canonical_deadhead_distance_km(problem, deadhead_min),
+                            "duration_min": float(deadhead_min),
+                            "is_deadhead": True,
+                            "is_charge": False,
+                            "is_service": False,
+                            "is_idle": False,
+                            "is_depot_move": prev_trip is None,
+                            "is_short_turn": False,
+                            "charger_id": "",
+                            "charge_power_kw": "",
+                            "refuel_liters": "",
+                        }
+                    )
+
+                rows.append(
+                    {
+                        "scenario_id": scenario_id,
+                        "depot_id": depot_id,
+                        "vehicle_id": str(vehicle_id),
+                        "vehicle_type": vehicle_type,
+                        "band_id": band_id,
+                        "band_label": band_label,
+                        "vehicle_primary_band_id": primary_band_id,
+                        "vehicle_primary_band_label": primary_band_label,
+                        "start_time": start_dt.isoformat(),
+                        "end_time": end_dt.isoformat(),
+                        "state": "service",
+                        "route_id": route_id,
+                        "route_family_code": route_family_code,
+                        "route_series_code": band_id,
+                        "event_route_band_id": band_id,
+                        "trip_id": trip_id,
+                        "from_location_id": str(dispatch_trip.origin or ""),
+                        "to_location_id": str(dispatch_trip.destination or ""),
+                        "from_location_type": "terminal",
+                        "to_location_type": "terminal",
+                        "direction": str(getattr(dispatch_trip, "direction", "") or ""),
+                        "route_variant_type": variant,
+                        "energy_delta_kwh": -max(float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0), 0.0),
+                        "distance_km": max(float(getattr(problem_trip, "distance_km", 0.0) or 0.0), 0.0),
+                        "duration_min": max((end_dt - start_dt).total_seconds() / 60.0, 0.0),
+                        "is_deadhead": False,
+                        "is_charge": False,
+                        "is_service": True,
+                        "is_idle": False,
+                        "is_depot_move": variant in {"depot_move", "depot_in", "depot_out"},
+                        "is_short_turn": variant == "short_turn",
+                        "charger_id": "",
+                        "charge_power_kw": "",
+                        "refuel_liters": "",
+                    }
+                )
+                prev_trip = dispatch_trip
+                prev_band_id = band_id
+
+        for start_slot, end_slot, charger_id, avg_charge_kw, avg_discharge_kw, location_id in _canonical_charge_segments(
+            problem,
+            charge_slots_by_vehicle.get(str(vehicle_id), []),
+            fallback_location_id=depot_id,
+        ):
+            charge_start = _canonical_slot_datetime(problem, base_date, start_slot)
+            charge_end = _canonical_slot_datetime(problem, base_date, end_slot)
+            duration_min = max((charge_end - charge_start).total_seconds() / 60.0, 0.0)
+            net_power_kw = avg_charge_kw - avg_discharge_kw
             rows.append(
                 {
                     "scenario_id": scenario_id,
                     "depot_id": depot_id,
-                    "vehicle_id": vehicle_id,
+                    "vehicle_id": str(vehicle_id),
                     "vehicle_type": vehicle_type,
-                    "band_id": band_id,
-                    "band_label": band_label,
-                    "vehicle_primary_band_id": band_id,
-                    "vehicle_primary_band_label": band_label,
-                    "start_time": start_dt.isoformat(),
-                    "end_time": end_dt.isoformat(),
-                    "state": "service",
-                    "route_id": route_id,
-                    "route_family_code": route_family_code,
-                    "route_series_code": band_id,
-                    "event_route_band_id": band_id,
-                    "trip_id": trip_id,
-                    "from_location_id": str(dispatch_trip.origin or ""),
-                    "to_location_id": str(dispatch_trip.destination or ""),
-                    "from_location_type": "terminal",
-                    "to_location_type": "terminal",
-                    "direction": str(getattr(dispatch_trip, "direction", "") or ""),
-                    "route_variant_type": variant,
-                    "energy_delta_kwh": -max(float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0), 0.0),
-                    "distance_km": max(float(getattr(problem_trip, "distance_km", 0.0) or 0.0), 0.0),
-                    "duration_min": max((end_dt - start_dt).total_seconds() / 60.0, 0.0),
+                    "band_id": "",
+                    "band_label": "",
+                    "vehicle_primary_band_id": primary_band_id,
+                    "vehicle_primary_band_label": primary_band_label,
+                    "start_time": charge_start.isoformat(),
+                    "end_time": charge_end.isoformat(),
+                    "state": "charge",
+                    "route_id": "",
+                    "route_family_code": "",
+                    "route_series_code": "",
+                    "event_route_band_id": "",
+                    "trip_id": "",
+                    "from_location_id": location_id,
+                    "to_location_id": location_id,
+                    "from_location_type": "charger",
+                    "to_location_type": "charger",
+                    "direction": "",
+                    "route_variant_type": "",
+                    "energy_delta_kwh": net_power_kw * duration_min / 60.0,
+                    "distance_km": 0.0,
+                    "duration_min": duration_min,
+                    "is_deadhead": False,
+                    "is_charge": True,
+                    "is_service": False,
+                    "is_idle": False,
+                    "is_depot_move": False,
+                    "is_short_turn": False,
+                    "charger_id": charger_id,
+                    "charge_power_kw": net_power_kw,
+                    "refuel_liters": "",
+                }
+            )
+
+        for refuel_slot in sorted(
+            refuel_slots_by_vehicle.get(str(vehicle_id), []),
+            key=lambda slot: (int(getattr(slot, "slot_index", 0) or 0), str(getattr(slot, "vehicle_id", "") or "")),
+        ):
+            liters = max(float(getattr(refuel_slot, "refuel_liters", 0.0) or 0.0), 0.0)
+            if liters <= 0.0:
+                continue
+            slot_index = int(getattr(refuel_slot, "slot_index", 0) or 0)
+            refuel_start = _canonical_slot_datetime(problem, base_date, slot_index)
+            refuel_end = _canonical_slot_datetime(problem, base_date, slot_index + 1)
+            location_id = str(getattr(refuel_slot, "location_id", "") or depot_id or depot_label)
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "depot_id": depot_id,
+                    "vehicle_id": str(vehicle_id),
+                    "vehicle_type": vehicle_type,
+                    "band_id": "",
+                    "band_label": "",
+                    "vehicle_primary_band_id": primary_band_id,
+                    "vehicle_primary_band_label": primary_band_label,
+                    "start_time": refuel_start.isoformat(),
+                    "end_time": refuel_end.isoformat(),
+                    "state": "refuel",
+                    "route_id": "",
+                    "route_family_code": "",
+                    "route_series_code": "",
+                    "event_route_band_id": "",
+                    "trip_id": "",
+                    "from_location_id": location_id,
+                    "to_location_id": location_id,
+                    "from_location_type": "depot",
+                    "to_location_type": "depot",
+                    "direction": "",
+                    "route_variant_type": "depot_refuel",
+                    "energy_delta_kwh": "",
+                    "distance_km": 0.0,
+                    "duration_min": max((refuel_end - refuel_start).total_seconds() / 60.0, 0.0),
                     "is_deadhead": False,
                     "is_charge": False,
-                    "is_service": True,
+                    "is_service": False,
                     "is_idle": False,
-                    "is_depot_move": variant in {"depot_move", "depot_in", "depot_out"},
-                    "is_short_turn": variant == "short_turn",
+                    "is_depot_move": True,
+                    "is_short_turn": False,
                     "charger_id": "",
                     "charge_power_kw": "",
-                    "refuel_liters": "",
+                    "refuel_liters": round(liters, 4),
                 }
             )
     rows.sort(key=lambda row: (str(row.get("vehicle_id") or ""), str(row.get("start_time") or ""), str(row.get("trip_id") or "")))
@@ -1009,6 +1244,535 @@ def _canonical_datetime_from_min(base_date, minute_from_midnight: int) -> dateti
     return datetime.combine(base_date, datetime.min.time()) + timedelta(minutes=int(minute_from_midnight))
 
 
+def _canonical_horizon_start_min(problem) -> int:
+    try:
+        hh_text, mm_text = str(getattr(problem.scenario, "horizon_start", None) or "00:00").split(":", 1)
+        return int(hh_text) * 60 + int(mm_text)
+    except ValueError:
+        return 0
+
+
+def _canonical_slot_datetime(problem, base_date: date, slot_index: int) -> datetime:
+    timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
+    absolute_min = _canonical_horizon_start_min(problem) + int(slot_index) * timestep_min
+    return _canonical_datetime_from_min(base_date, absolute_min)
+
+
+def _canonical_deadhead_distance_km(problem, deadhead_min: int) -> float:
+    try:
+        speed_kmh = float((problem.metadata or {}).get("deadhead_speed_kmh") or 18.0)
+    except (TypeError, ValueError):
+        speed_kmh = 18.0
+    return max(float(deadhead_min or 0), 0.0) * max(speed_kmh, 0.0) / 60.0
+
+
+def _canonical_estimated_deadhead_energy_kwh(
+    problem,
+    *,
+    deadhead_min: int,
+    trip_energy_kwh: float,
+    trip_distance_km: float,
+) -> float:
+    if deadhead_min <= 0:
+        return 0.0
+    safe_distance = max(float(trip_distance_km or 0.0), 1.0e-6)
+    energy_per_km = max(float(trip_energy_kwh or 0.0), 0.0) / safe_distance
+    return _canonical_deadhead_distance_km(problem, deadhead_min) * energy_per_km
+
+
+def _canonical_vehicle_initial_soc_kwh(vehicle: Any) -> float:
+    capacity = max(float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0), 0.0)
+    value = getattr(vehicle, "initial_soc", None)
+    if value is None:
+        return capacity
+    parsed = float(value)
+    if parsed <= 1.0 and capacity > 0.0:
+        return parsed * capacity
+    return parsed
+
+
+def _canonical_charge_segments(
+    problem,
+    charging_slots: List[Any],
+    *,
+    fallback_location_id: str,
+) -> List[tuple[int, int, str, float, float, str]]:
+    del problem
+    grouped: Dict[tuple[str, str], Dict[int, tuple[float, float, str]]] = defaultdict(dict)
+    for slot in charging_slots:
+        slot_index = int(getattr(slot, "slot_index", 0) or 0)
+        charger_id = str(getattr(slot, "charger_id", "") or "")
+        location_id = str(getattr(slot, "charging_depot_id", "") or fallback_location_id)
+        grouped[(charger_id, location_id)][slot_index] = (
+            max(float(getattr(slot, "charge_kw", 0.0) or 0.0), 0.0),
+            max(float(getattr(slot, "discharge_kw", 0.0) or 0.0), 0.0),
+            location_id,
+        )
+
+    segments: List[tuple[int, int, str, float, float, str]] = []
+    for (charger_id, location_id), slot_map in grouped.items():
+        ordered_slots = sorted(slot_map)
+        if not ordered_slots:
+            continue
+        seg_start = ordered_slots[0]
+        seg_end = seg_start + 1
+        charge_values = [slot_map[seg_start][0]]
+        discharge_values = [slot_map[seg_start][1]]
+        for slot_index in ordered_slots[1:]:
+            if slot_index == seg_end:
+                seg_end += 1
+                charge_values.append(slot_map[slot_index][0])
+                discharge_values.append(slot_map[slot_index][1])
+                continue
+            segments.append(
+                (
+                    seg_start,
+                    seg_end,
+                    charger_id,
+                    sum(charge_values) / len(charge_values),
+                    sum(discharge_values) / len(discharge_values),
+                    location_id,
+                )
+            )
+            seg_start = slot_index
+            seg_end = slot_index + 1
+            charge_values = [slot_map[slot_index][0]]
+            discharge_values = [slot_map[slot_index][1]]
+        segments.append(
+            (
+                seg_start,
+                seg_end,
+                charger_id,
+                sum(charge_values) / len(charge_values),
+                sum(discharge_values) / len(discharge_values),
+                location_id,
+            )
+        )
+    return sorted(segments, key=lambda item: (item[0], item[2], item[5]))
+
+
+def _canonical_trip_assignment_rows(
+    *,
+    problem,
+    engine_result,
+    scenario_id: str,
+    base_date: date,
+    timeline_rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    primary_band_by_vehicle = {
+        str(row.get("vehicle_id") or ""): {
+            "band_id": str(row.get("vehicle_primary_band_id") or ""),
+            "band_label": str(row.get("vehicle_primary_band_label") or ""),
+        }
+        for row in timeline_rows
+        if str(row.get("vehicle_id") or "").strip() and str(row.get("vehicle_primary_band_id") or "").strip()
+    }
+    problem_trip_by_id = problem.trip_by_id()
+    vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+    rows: List[Dict[str, Any]] = []
+    for duty in engine_result.plan.duties:
+        vehicle_id = str(engine_result.plan.vehicle_id_for_duty(duty.duty_id))
+        vehicle = vehicle_by_id.get(vehicle_id)
+        duty_legs = list(duty.legs)
+        for index, leg in enumerate(duty_legs):
+            dispatch_trip = leg.trip
+            trip_id = str(dispatch_trip.trip_id or "")
+            problem_trip = problem_trip_by_id.get(trip_id)
+            if problem_trip is None:
+                continue
+            next_deadhead_min = 0
+            if index + 1 < len(duty_legs):
+                next_deadhead_min = max(int(getattr(duty_legs[index + 1], "deadhead_from_prev_min", 0) or 0), 0)
+            route_family_code = str(getattr(dispatch_trip, "route_family_code", "") or "")
+            departure_dt = _canonical_datetime_from_min(base_date, int(getattr(dispatch_trip, "departure_min", 0) or 0))
+            arrival_dt = _canonical_datetime_from_min(base_date, int(getattr(dispatch_trip, "arrival_min", 0) or 0))
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "trip_id": trip_id,
+                    "route_id": str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
+                    "route_family_code": route_family_code,
+                    "route_series_code": route_family_code or str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
+                    "band_id": route_family_code or str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
+                    "direction": str(getattr(dispatch_trip, "direction", "") or ""),
+                    "route_variant_type": str(getattr(dispatch_trip, "route_variant_type", "unknown") or "unknown"),
+                    "scheduled_departure": departure_dt.isoformat(),
+                    "scheduled_arrival": arrival_dt.isoformat(),
+                    "actual_departure": departure_dt.isoformat(),
+                    "actual_arrival": arrival_dt.isoformat(),
+                    "assigned_vehicle_id": vehicle_id,
+                    "assigned_vehicle_type": str(getattr(vehicle, "vehicle_type", "") or ""),
+                    "assigned_depot_id": str(getattr(vehicle, "home_depot_id", "") or ""),
+                    "assigned_vehicle_band_id": str((primary_band_by_vehicle.get(vehicle_id) or {}).get("band_id") or ""),
+                    "served_flag": True,
+                    "unserved_reason": "",
+                    "energy_used_kwh": float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0),
+                    "distance_km": float(getattr(problem_trip, "distance_km", 0.0) or 0.0),
+                    "delay_departure_min": 0.0,
+                    "delay_arrival_min": 0.0,
+                    "deadhead_before_km": _canonical_deadhead_distance_km(problem, int(getattr(leg, "deadhead_from_prev_min", 0) or 0)),
+                    "deadhead_after_km": _canonical_deadhead_distance_km(problem, next_deadhead_min),
+                    "swap_type": "none",
+                }
+            )
+    rows.sort(key=lambda row: str(row.get("trip_id", "")))
+    return rows
+
+
+def _canonical_soc_event_rows(
+    *,
+    problem,
+    engine_result,
+    scenario_id: str,
+    base_date: date,
+) -> List[Dict[str, Any]]:
+    problem_trip_by_id = problem.trip_by_id()
+    vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+    charge_slots_by_vehicle: Dict[str, List[Any]] = defaultdict(list)
+    for slot in engine_result.plan.charging_slots:
+        charge_slots_by_vehicle[str(slot.vehicle_id)].append(slot)
+
+    rows: List[Dict[str, Any]] = []
+    duties_by_vehicle = engine_result.plan.duties_by_vehicle()
+    for vehicle_id, duties in duties_by_vehicle.items():
+        vehicle = vehicle_by_id.get(vehicle_id)
+        if vehicle is None or str(getattr(vehicle, "vehicle_type", "") or "").upper() not in {"BEV", "PHEV", "FCEV"}:
+            continue
+        battery_kwh = max(float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0), 0.0)
+        min_soc = max(float(getattr(vehicle, "reserve_soc", 0.0) or 0.0), 0.0)
+        max_soc = battery_kwh if battery_kwh > 0.0 else 0.0
+        current_soc = _canonical_vehicle_initial_soc_kwh(vehicle)
+        events: List[tuple[int, int, Dict[str, Any]]] = []
+        for duty in duties:
+            prev_trip = None
+            for leg in duty.legs:
+                dispatch_trip = leg.trip
+                trip_id = str(dispatch_trip.trip_id or "")
+                problem_trip = problem_trip_by_id.get(trip_id)
+                if problem_trip is None:
+                    continue
+                deadhead_min = max(int(getattr(leg, "deadhead_from_prev_min", 0) or 0), 0)
+                if deadhead_min > 0:
+                    events.append(
+                        (
+                            int(dispatch_trip.departure_min) - deadhead_min,
+                            0,
+                            {
+                                "event_type": "deadhead",
+                                "trip_id": "",
+                                "route_id": "",
+                                "location_id": str(getattr(prev_trip, "destination", "") or getattr(vehicle, "home_depot_id", "") or ""),
+                                "delta_kwh": -_canonical_estimated_deadhead_energy_kwh(
+                                    problem,
+                                    deadhead_min=deadhead_min,
+                                    trip_energy_kwh=float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0),
+                                    trip_distance_km=float(getattr(problem_trip, "distance_km", 0.0) or 0.0),
+                                ),
+                            },
+                        )
+                    )
+                events.append(
+                    (
+                        int(dispatch_trip.departure_min),
+                        1,
+                        {
+                            "event_type": "service_trip",
+                            "trip_id": trip_id,
+                            "route_id": str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
+                            "location_id": str(getattr(dispatch_trip, "origin_stop_id", "") or dispatch_trip.origin or ""),
+                            "delta_kwh": -max(float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0), 0.0),
+                        },
+                    )
+                )
+                prev_trip = dispatch_trip
+        for start_slot, end_slot, _charger_id, avg_charge_kw, avg_discharge_kw, location_id in _canonical_charge_segments(
+            problem,
+            charge_slots_by_vehicle.get(vehicle_id, []),
+            fallback_location_id=str(getattr(vehicle, "home_depot_id", "") or ""),
+        ):
+            duration_h = max(end_slot - start_slot, 0) * max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1) / 60.0
+            events.append(
+                (
+                    _canonical_horizon_start_min(problem) + start_slot * max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1),
+                    2,
+                    {
+                        "event_type": "charge_segment",
+                        "trip_id": "",
+                        "route_id": "",
+                        "location_id": location_id,
+                        "delta_kwh": (avg_charge_kw - avg_discharge_kw) * duration_h,
+                    },
+                )
+            )
+        events.sort(key=lambda item: (item[0], item[1]))
+        for minute_from_midnight, _order, payload in events:
+            before = current_soc
+            delta_kwh = float(payload.get("delta_kwh", 0.0) or 0.0)
+            after = current_soc + delta_kwh
+            current_soc = after
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "vehicle_id": vehicle_id,
+                    "event_time": _canonical_datetime_from_min(base_date, minute_from_midnight).isoformat(),
+                    "event_type": str(payload.get("event_type") or ""),
+                    "trip_id": str(payload.get("trip_id") or ""),
+                    "route_id": str(payload.get("route_id") or ""),
+                    "location_id": str(payload.get("location_id") or ""),
+                    "soc_kwh_before": before,
+                    "soc_kwh_after": after,
+                    "soc_pct_before": (before / battery_kwh * 100.0) if battery_kwh > 0.0 else 0.0,
+                    "soc_pct_after": (after / battery_kwh * 100.0) if battery_kwh > 0.0 else 0.0,
+                    "delta_kwh": delta_kwh,
+                    "battery_capacity_kwh": battery_kwh,
+                    "energy_consumed_kwh": max(-delta_kwh, 0.0),
+                    "energy_charged_kwh": max(delta_kwh, 0.0),
+                    "reserve_margin_kwh": after - min_soc,
+                    "min_soc_constraint_kwh": min_soc,
+                    "max_soc_constraint_kwh": max_soc,
+                }
+            )
+    rows.sort(key=lambda row: (str(row.get("vehicle_id", "")), str(row.get("event_time", ""))))
+    return rows
+
+
+def _canonical_depot_power_rows_5min(
+    *,
+    problem,
+    engine_result,
+    scenario_id: str,
+    base_date: date,
+) -> List[Dict[str, Any]]:
+    plan = engine_result.plan
+    slot_count = max(
+        len(problem.price_slots),
+        max((int(getattr(slot, "slot_index", 0) or 0) + 1 for slot in plan.charging_slots), default=0),
+    )
+    if slot_count <= 0:
+        return []
+    timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
+    timestep_h = timestep_min / 60.0
+    depot_ids = {
+        str(depot.depot_id)
+        for depot in problem.depots
+    }
+    depot_ids.update(str(getattr(vehicle, "home_depot_id", "") or "") for vehicle in problem.vehicles)
+    depot_ids.update(str(key) for key in (plan.grid_to_bus_kwh_by_depot_slot or {}).keys())
+    depot_ids.update(str(key) for key in (plan.pv_to_bus_kwh_by_depot_slot or {}).keys())
+    depot_ids.update(str(key) for key in (plan.bess_to_bus_kwh_by_depot_slot or {}).keys())
+    depot_ids.update(str(key) for key in (plan.pv_to_bess_kwh_by_depot_slot or {}).keys())
+    depot_ids.update(str(key) for key in (plan.grid_to_bess_kwh_by_depot_slot or {}).keys())
+    depot_ids.update(str(key) for key in (problem.depot_energy_assets or {}).keys())
+    price_by_slot = {int(slot.slot_index): float(slot.grid_buy_yen_per_kwh or 0.0) for slot in problem.price_slots}
+    demand_flag_by_slot = {
+        int(slot.slot_index): bool(float(slot.demand_charge_weight or 0.0) > 0.0)
+        for slot in problem.price_slots
+    }
+
+    slot_values_by_depot: Dict[str, Dict[int, Dict[str, float]]] = defaultdict(dict)
+    for depot_id in sorted(item for item in depot_ids if item):
+        asset = (problem.depot_energy_assets or {}).get(depot_id)
+        for slot_idx in range(slot_count):
+            grid_to_bus = float(((plan.grid_to_bus_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_to_bus = float(((plan.pv_to_bus_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
+            bess_to_bus = float(((plan.bess_to_bus_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_to_bess = float(((plan.pv_to_bess_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
+            grid_to_bess = float(((plan.grid_to_bess_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_curtail = float(((plan.pv_curtail_kwh_by_depot_slot or {}).get(depot_id) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_generation = 0.0
+            if asset is not None and slot_idx < len(getattr(asset, "pv_generation_kwh_by_slot", ())):
+                pv_generation = float(asset.pv_generation_kwh_by_slot[slot_idx] or 0.0)
+            slot_values_by_depot[depot_id][slot_idx] = {
+                "grid_import_kw": (grid_to_bus + grid_to_bess) / timestep_h,
+                "pv_generation_kw": pv_generation / timestep_h,
+                "pv_used_for_charging_kw": pv_to_bus / timestep_h,
+                "pv_used_for_building_kw": 0.0,
+                "pv_curtailed_kw": pv_curtail / timestep_h,
+                "building_load_kw": 0.0,
+                "battery_storage_charge_kw": (pv_to_bess + grid_to_bess) / timestep_h,
+                "battery_storage_discharge_kw": bess_to_bus / timestep_h,
+                "total_charge_kw": (grid_to_bus + pv_to_bus + bess_to_bus) / timestep_h,
+                "net_load_kw": (grid_to_bus + grid_to_bess) / timestep_h,
+            }
+
+    horizon_min = slot_count * timestep_min
+    five_min_points = list(range(0, max(horizon_min, 1), 5))
+    rows: List[Dict[str, Any]] = []
+    for depot_id, slot_map in slot_values_by_depot.items():
+        peak_grid = max((values.get("grid_import_kw", 0.0) for values in slot_map.values()), default=0.0)
+        for minute in five_min_points:
+            slot_idx = min(int(minute // timestep_min), max(slot_count - 1, 0))
+            values = slot_map.get(slot_idx, {})
+            timestamp = (
+                datetime.combine(base_date, datetime.min.time(), timezone(timedelta(hours=9)))
+                + timedelta(minutes=_canonical_horizon_start_min(problem) + minute)
+            ).isoformat()
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "timestamp": timestamp,
+                    "depot_id": depot_id,
+                    "total_charge_kw": float(values.get("total_charge_kw", 0.0) or 0.0),
+                    "grid_import_kw": float(values.get("grid_import_kw", 0.0) or 0.0),
+                    "pv_generation_kw": float(values.get("pv_generation_kw", 0.0) or 0.0),
+                    "pv_used_for_charging_kw": float(values.get("pv_used_for_charging_kw", 0.0) or 0.0),
+                    "pv_used_for_building_kw": float(values.get("pv_used_for_building_kw", 0.0) or 0.0),
+                    "pv_curtailed_kw": float(values.get("pv_curtailed_kw", 0.0) or 0.0),
+                    "building_load_kw": float(values.get("building_load_kw", 0.0) or 0.0),
+                    "battery_storage_charge_kw": float(values.get("battery_storage_charge_kw", 0.0) or 0.0),
+                    "battery_storage_discharge_kw": float(values.get("battery_storage_discharge_kw", 0.0) or 0.0),
+                    "net_load_kw": float(values.get("net_load_kw", 0.0) or 0.0),
+                    "demand_peak_candidate": abs(float(values.get("grid_import_kw", 0.0) or 0.0) - peak_grid) <= 1.0e-9,
+                    "energy_price_yen_per_kwh": float(price_by_slot.get(slot_idx, 0.0) or 0.0),
+                    "demand_charge_window_flag": bool(demand_flag_by_slot.get(slot_idx, False)),
+                }
+            )
+    rows.sort(key=lambda row: (str(row.get("depot_id", "")), str(row.get("timestamp", ""))))
+    return rows
+
+
+def _canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -> Dict[str, Any]:
+    breakdown = dict(engine_result.cost_breakdown or {})
+    return {
+        "scenario_id": scenario_id,
+        "currency": "JPY",
+        "total_cost": float(breakdown.get("total_cost", engine_result.objective_value) or engine_result.objective_value or 0.0),
+        "components": {
+            "electricity_energy_cost": float(breakdown.get("energy_cost", 0.0) or 0.0),
+            "demand_charge_cost": float(breakdown.get("demand_cost", 0.0) or 0.0),
+            "diesel_cost": float(breakdown.get("fuel_cost", 0.0) or 0.0),
+            "co2_cost": float(breakdown.get("co2_cost", 0.0) or 0.0),
+            "battery_degradation_cost": float(breakdown.get("degradation_cost", 0.0) or 0.0),
+            "charger_operation_cost": 0.0,
+            "pv_capex_daily_equivalent": float(breakdown.get("pv_asset_cost", 0.0) or 0.0),
+            "ess_cost": float(breakdown.get("bess_asset_cost", 0.0) or 0.0),
+            "unserved_trip_penalty": float(breakdown.get("unserved_penalty", 0.0) or 0.0),
+        },
+        "meta": {
+            "objective_mode": str((engine_result.solver_metadata or {}).get("objective_mode") or problem.scenario.objective_mode or "total_cost"),
+            "solver_mode": str(getattr(getattr(engine_result, "mode", None), "value", "") or ""),
+            "includes_pv": bool(problem.depot_energy_assets),
+        },
+    }
+
+
+def _canonical_vehicle_timelines_payload(timeline_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for row in timeline_rows:
+        grouped[str(row.get("vehicle_id") or "")].append(row)
+    for vehicle_id in list(grouped):
+        grouped[vehicle_id] = sorted(
+            grouped[vehicle_id],
+            key=lambda item: (str(item.get("start_time") or ""), str(item.get("state") or "")),
+        )
+    return {
+        "timeline_schema_version": "canonical_v1",
+        "vehicle_timelines": dict(grouped),
+        "vehicle_gantt_rows": list(timeline_rows),
+    }
+
+
+def _canonical_kpi_summary_json(
+    *,
+    problem,
+    engine_result,
+    scenario_id: str,
+    soc_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    plan = engine_result.plan
+    served_trip_count = len(plan.served_trip_ids)
+    total_trip_count = len(problem.trips)
+    served_distance = 0.0
+    served_energy = 0.0
+    deadhead_distance = 0.0
+    for duty in plan.duties:
+        for leg in duty.legs:
+            trip_info = problem.trip_by_id().get(str(leg.trip.trip_id))
+            if trip_info is None:
+                continue
+            served_distance += float(getattr(trip_info, "distance_km", 0.0) or 0.0)
+            served_energy += float(getattr(trip_info, "energy_kwh", 0.0) or 0.0)
+            deadhead_distance += _canonical_deadhead_distance_km(problem, int(getattr(leg, "deadhead_from_prev_min", 0) or 0))
+    total_charge_energy = sum(
+        max(float(getattr(slot, "charge_kw", 0.0) or 0.0) - float(getattr(slot, "discharge_kw", 0.0) or 0.0), 0.0)
+        * max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
+        / 60.0
+        for slot in plan.charging_slots
+    )
+    grid_import_total_kwh = sum(
+        float(value or 0.0)
+        for depot_map in (plan.grid_to_bus_kwh_by_depot_slot or {}).values()
+        for value in (depot_map or {}).values()
+    ) + sum(
+        float(value or 0.0)
+        for depot_map in (plan.grid_to_bess_kwh_by_depot_slot or {}).values()
+        for value in (depot_map or {}).values()
+    )
+    timestep_h = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1) / 60.0
+    peak_grid_import_kw = 0.0
+    for depot_id, depot_map in (plan.grid_to_bus_kwh_by_depot_slot or {}).items():
+        bess_map = (plan.grid_to_bess_kwh_by_depot_slot or {}).get(depot_id, {})
+        for slot_idx, value in (depot_map or {}).items():
+            peak_grid_import_kw = max(
+                peak_grid_import_kw,
+                (float(value or 0.0) + float((bess_map or {}).get(slot_idx, 0.0) or 0.0)) / timestep_h,
+            )
+    soc_pct_values = [float(row.get("soc_pct_after", 0.0) or 0.0) for row in soc_rows]
+    charger_usage: Dict[str, set[int]] = defaultdict(set)
+    for slot in plan.charging_slots:
+        charger_id = str(getattr(slot, "charger_id", "") or "")
+        if charger_id:
+            charger_usage[charger_id].add(int(getattr(slot, "slot_index", 0) or 0))
+    slot_count = max(len(problem.price_slots), 1)
+    utilization_values = [len(slot_indices) / slot_count for slot_indices in charger_usage.values()]
+    pv_generated_total_kwh = sum(
+        float(value or 0.0)
+        for asset in (problem.depot_energy_assets or {}).values()
+        for value in getattr(asset, "pv_generation_kwh_by_slot", ())
+    )
+    pv_self_consumption_kwh = sum(
+        float(value or 0.0)
+        for depot_map in (plan.pv_to_bus_kwh_by_depot_slot or {}).values()
+        for value in (depot_map or {}).values()
+    ) + sum(
+        float(value or 0.0)
+        for depot_map in (plan.pv_to_bess_kwh_by_depot_slot or {}).values()
+        for value in (depot_map or {}).values()
+    )
+    breakdown = dict(engine_result.cost_breakdown or {})
+    return {
+        "scenario_id": scenario_id,
+        "fleet_size": len(problem.vehicles),
+        "served_trip_count": served_trip_count,
+        "unserved_trip_count": len(plan.unserved_trip_ids),
+        "served_trip_rate": float(served_trip_count / total_trip_count) if total_trip_count > 0 else 0.0,
+        "total_distance_km": served_distance,
+        "total_deadhead_km": deadhead_distance,
+        "deadhead_ratio": float(deadhead_distance / served_distance) if served_distance > 0 else 0.0,
+        "total_energy_consumption_kwh": served_energy,
+        "total_charging_energy_kwh": total_charge_energy,
+        "peak_grid_import_kw": peak_grid_import_kw,
+        "peak_charge_kw": max((float(getattr(slot, "charge_kw", 0.0) or 0.0) for slot in plan.charging_slots), default=0.0),
+        "pv_generation_total_kwh": pv_generated_total_kwh,
+        "pv_self_consumption_kwh": pv_self_consumption_kwh,
+        "pv_utilization_ratio": float(pv_self_consumption_kwh / pv_generated_total_kwh) if pv_generated_total_kwh > 0 else 0.0,
+        "min_soc_pct": min(soc_pct_values) if soc_pct_values else 0.0,
+        "average_soc_pct": (sum(soc_pct_values) / len(soc_pct_values)) if soc_pct_values else 0.0,
+        "charger_utilization_avg": (sum(utilization_values) / len(utilization_values)) if utilization_values else 0.0,
+        "charger_utilization_max": max(utilization_values) if utilization_values else 0.0,
+        "total_cost_jpy": float(breakdown.get("total_cost", engine_result.objective_value) or engine_result.objective_value or 0.0),
+        "electricity_cost_jpy": float(breakdown.get("energy_cost", 0.0) or 0.0),
+        "electricity_cost_basis": "canonical_plan",
+        "electricity_cost_provisional_jpy": float(breakdown.get("operating_cost_provisional_total", 0.0) or 0.0),
+        "electricity_cost_charged_jpy": float(breakdown.get("realized_ev_charge_cost", breakdown.get("energy_cost", 0.0)) or 0.0),
+        "grid_energy_provisional_kwh": float(sum(float(value or 0.0) for depot_map in (plan.grid_to_bus_kwh_by_depot_slot or {}).values() for value in (depot_map or {}).values())),
+        "grid_energy_charged_kwh": grid_import_total_kwh,
+        "co2_kg": float(breakdown.get("total_co2_kg", 0.0) or 0.0),
+        "solver_runtime_sec": float((engine_result.solver_metadata or {}).get("solve_time_sec", 0.0) or 0.0),
+        "solution_status": str(getattr(engine_result, "solver_status", "") or "").lower(),
+    }
+
+
 def _persist_canonical_graph_exports(
     *,
     scenario: Dict[str, Any],
@@ -1025,9 +1789,6 @@ def _persist_canonical_graph_exports(
         _filter_timeline_rows_for_day,
     )
 
-    if not bool(((scenario.get("simulation_config") or {}).get("enable_vehicle_diagram_output", True))):
-        return {"enabled": False, "diagram_count": 0}
-
     trips = [
         dict(item)
         for item in list(scenario.get("trips") or scenario.get("timetable_rows") or [])
@@ -1035,19 +1796,74 @@ def _persist_canonical_graph_exports(
     ]
     tasks = [SimpleNamespace(task_id=str(trip.get("trip_id") or "")) for trip in trips]
     graph_context = _build_graph_export_context(scenario, trips, tasks)
+    base_date = _canonical_output_base_date(problem, graph_context)
     timeline_rows = _canonical_vehicle_timeline_rows(
         problem=problem,
         engine_result=engine_result,
         scenario_id=scenario_id,
         graph_context=graph_context,
     )
+    trip_assignment_rows = _canonical_trip_assignment_rows(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id=scenario_id,
+        base_date=base_date,
+        timeline_rows=timeline_rows,
+    )
+    soc_rows = _canonical_soc_event_rows(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id=scenario_id,
+        base_date=base_date,
+    )
+    depot_power_rows = _canonical_depot_power_rows_5min(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id=scenario_id,
+        base_date=base_date,
+    )
+    cost_breakdown = _canonical_cost_breakdown_json(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id=scenario_id,
+    )
+    kpi_summary = _canonical_kpi_summary_json(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id=scenario_id,
+        soc_rows=soc_rows,
+    )
+    refuel_rows = [
+        {
+            "vehicle_id": str(getattr(slot, "vehicle_id", "") or ""),
+            "slot_index": int(getattr(slot, "slot_index", 0) or 0),
+            "time_hhmm": _canonical_slot_datetime(problem, base_date, int(getattr(slot, "slot_index", 0) or 0)).strftime("%H:%M"),
+            "refuel_liters": float(getattr(slot, "refuel_liters", 0.0) or 0.0),
+            "location_id": str(getattr(slot, "location_id", "") or ""),
+        }
+        for slot in engine_result.plan.refuel_slots
+    ]
     graph_dir = Path(output_dir) / "graph"
     graph_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(graph_dir / "vehicle_timeline.csv", timeline_rows)
-    
+    _write_csv(graph_dir / "soc_events.csv", soc_rows)
+    _write_csv(graph_dir / "depot_power_timeseries_5min.csv", depot_power_rows)
+    _write_csv(graph_dir / "trip_assignment.csv", trip_assignment_rows)
+    _write_csv(graph_dir / "refuel_events.csv", refuel_rows)
+    (graph_dir / "cost_breakdown.json").write_text(
+        json.dumps(cost_breakdown, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (graph_dir / "kpi_summary.json").write_text(
+        json.dumps(kpi_summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
     # Multi-day diagram support
     planning_days = int(problem.scenario.planning_days or 1)
-    if planning_days > 1:
+    diagrams_enabled = bool(((scenario.get("simulation_config") or {}).get("enable_vehicle_diagram_output", True)))
+    assets: Dict[str, Any] = {"entries": [], "svgs": {}}
+    if diagrams_enabled and planning_days > 1:
         # Generate per-day route band diagrams
         all_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
         timestep_min = int(problem.scenario.timestep_min or 30)
@@ -1065,14 +1881,49 @@ def _persist_canonical_graph_exports(
             for svg_key, svg_content in (day_assets.get("svg_payloads") or day_assets.get("svgs") or {}).items():
                 all_assets["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
         assets = all_assets
-    else:
+    elif diagrams_enabled:
         assets = _build_route_band_diagram_assets(
             timeline_rows,
             scenario_id,
             graph_context=graph_context,
         )
-    
-    _write_route_band_diagram_assets(graph_dir, assets, planning_days=planning_days)
+    if diagrams_enabled:
+        _write_route_band_diagram_assets(graph_dir, assets, planning_days=planning_days)
+
+    graph_manifest = {
+        "schema_version": "canonical_graph_v1",
+        "scenario_id": scenario_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "time_resolution_minutes": 5,
+        "timezone": "Asia/Tokyo",
+        "source": "canonical_assignment_plan",
+        "files": [
+            "vehicle_timeline.csv",
+            "soc_events.csv",
+            "depot_power_timeseries_5min.csv",
+            "trip_assignment.csv",
+            "refuel_events.csv",
+            "cost_breakdown.json",
+            "kpi_summary.json",
+        ],
+        "optional_exports": {
+            "route_band_diagrams": {
+                "enabled": bool(assets.get("entries")),
+                "grouping_key": "band_id",
+                "diagram_format": "svg",
+                "manifest_file": (
+                    "route_band_diagrams/manifest.json"
+                    if assets.get("entries")
+                    else ""
+                ),
+                "diagram_count": len(list(assets.get("entries") or [])),
+            }
+        },
+    }
+    (graph_dir / "manifest.json").write_text(
+        json.dumps(graph_manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     manifest_relpath = None
     if assets.get("entries"):
         manifest_relpath = "graph/route_band_diagrams/manifest.json"
@@ -1081,6 +1932,13 @@ def _persist_canonical_graph_exports(
         "diagram_count": len(list(assets.get("entries") or [])),
         "manifest_path": manifest_relpath,
         "vehicle_timeline_path": "graph/vehicle_timeline.csv",
+        "graph_manifest_path": "graph/manifest.json",
+        "trip_assignment_path": "graph/trip_assignment.csv",
+        "soc_events_path": "graph/soc_events.csv",
+        "depot_power_timeseries_path": "graph/depot_power_timeseries_5min.csv",
+        "cost_breakdown_path": "graph/cost_breakdown.json",
+        "kpi_summary_path": "graph/kpi_summary.json",
+        "refuel_events_path": "graph/refuel_events.csv",
         "planning_days": planning_days,
     }
 

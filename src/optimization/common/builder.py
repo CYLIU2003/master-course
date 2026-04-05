@@ -570,6 +570,7 @@ class ProblemBuilder:
                 vehicles,
                 max_fragments_per_vehicle=max_fragments,
                 all_trip_ids=all_trip_ids,
+                dispatch_context=context,
             )
         else:
             baseline = self._build_baseline_plan(
@@ -1075,7 +1076,69 @@ class ProblemBuilder:
             deadhead_rules=deadhead_rules,
             vehicle_profiles=vehicle_profiles or {"BEV": VehicleProfile(vehicle_type="BEV")},
             default_turnaround_min=default_turnaround_min,
+            location_aliases=self._build_dispatch_location_aliases(
+                scenario=scenario,
+                trips=trips,
+            ),
         )
+
+    def _build_dispatch_location_aliases(
+        self,
+        *,
+        scenario: Dict[str, Any],
+        trips: Sequence[Trip],
+    ) -> Dict[str, Tuple[str, ...]]:
+        alias_sets: Dict[str, set[str]] = {}
+
+        def _register(alias: Any, target: Any) -> None:
+            alias_text = str(alias or "").strip()
+            target_text = str(target or "").strip()
+            if not alias_text or not target_text:
+                return
+            alias_sets.setdefault(alias_text, set()).add(target_text)
+
+        stop_ids_by_name: Dict[str, set[str]] = {}
+        for stop in scenario.get("stops") or []:
+            if not isinstance(stop, dict):
+                continue
+            stop_id = str(stop.get("id") or stop.get("stop_id") or "").strip()
+            stop_name = str(stop.get("name") or stop.get("stop_name") or "").strip()
+            if not stop_id:
+                continue
+            _register(stop_id, stop_id)
+            if stop_name:
+                _register(stop_name, stop_id)
+                stop_ids_by_name.setdefault(stop_name, set()).add(stop_id)
+
+        for trip in trips:
+            _register(trip.origin, trip.origin_stop_id or trip.origin)
+            _register(trip.destination, trip.destination_stop_id or trip.destination)
+            if trip.origin_stop_id:
+                _register(trip.origin_stop_id, trip.origin_stop_id)
+            if trip.destination_stop_id:
+                _register(trip.destination_stop_id, trip.destination_stop_id)
+
+        for depot in scenario.get("depots") or []:
+            if not isinstance(depot, dict):
+                continue
+            depot_id = str(depot.get("id") or depot.get("depotId") or "").strip()
+            depot_name = str(depot.get("name") or "").strip()
+            if depot_id:
+                _register(depot_id, depot_id)
+                if depot_name:
+                    _register(depot_id, depot_name)
+                    for stop_id in stop_ids_by_name.get(depot_name, set()):
+                        _register(depot_id, stop_id)
+            if depot_name:
+                _register(depot_name, depot_name)
+                for stop_id in stop_ids_by_name.get(depot_name, set()):
+                    _register(depot_name, stop_id)
+
+        return {
+            alias: tuple(sorted(targets))
+            for alias, targets in alias_sets.items()
+            if targets
+        }
 
     def _build_vehicles(
         self,
@@ -1382,6 +1445,7 @@ class ProblemBuilder:
                 deadhead_rules=context.deadhead_rules,
                 vehicle_profiles=context.vehicle_profiles,
                 default_turnaround_min=context.default_turnaround_min,
+                location_aliases=dict(getattr(context, "location_aliases", {}) or {}),
             )
             vt_duties = dispatcher.generate_greedy_duties(temp_ctx, vehicle_type)
             if vehicles:
@@ -1389,6 +1453,7 @@ class ProblemBuilder:
                     vt_duties,
                     vehicles=vehicles_by_type.get(vehicle_type, ()),
                     max_fragments_per_vehicle=max_fragments_per_vehicle,
+                    dispatch_context=context,
                 )
                 duties.extend(materialized_duties)
                 duty_vehicle_map = merge_duty_vehicle_maps(
@@ -1439,6 +1504,7 @@ class ProblemBuilder:
         *,
         max_fragments_per_vehicle: int,
         all_trip_ids: set[str],
+        dispatch_context: Optional[DispatchContext] = None,
     ) -> AssignmentPlan:
         if plan is None:
             return AssignmentPlan(
@@ -1453,6 +1519,7 @@ class ProblemBuilder:
             plan.duties,
             vehicles=vehicles,
             max_fragments_per_vehicle=max_fragments_per_vehicle,
+            dispatch_context=dispatch_context,
         )
         served_trip_ids = tuple(
             sorted({trip_id for duty in assigned_duties for trip_id in duty.trip_ids})

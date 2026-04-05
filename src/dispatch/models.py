@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
+import unicodedata
 
 
 def hhmm_to_min(hhmm: str) -> int:
@@ -215,16 +216,94 @@ class DispatchContext:
     # Swap permissions: whether vehicles may serve trips from other routes/depots
     allow_intra_depot_swap: bool = False   # permit vehicle swap across routes in same depot
     allow_inter_depot_swap: bool = False   # permit vehicle swap across different depots
+    location_aliases: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        alias_sets: Dict[str, set[str]] = {}
+
+        def _register(alias: str, canonical: str) -> None:
+            alias_norm = _normalize_location_key(alias)
+            canonical_text = str(canonical or "").strip()
+            if not alias_norm or not canonical_text:
+                return
+            alias_sets.setdefault(alias_norm, set()).add(canonical_text)
+
+        for trip in self.trips:
+            _register(trip.origin, trip.origin)
+            _register(trip.origin, trip.origin_stop_id or trip.origin)
+            _register(trip.origin_stop_id, trip.origin_stop_id)
+            _register(trip.destination, trip.destination)
+            _register(trip.destination, trip.destination_stop_id or trip.destination)
+            _register(trip.destination_stop_id, trip.destination_stop_id)
+
+        for stop_id in self.turnaround_rules:
+            _register(stop_id, stop_id)
+        for from_stop, to_stop in self.deadhead_rules:
+            _register(from_stop, from_stop)
+            _register(to_stop, to_stop)
+
+        for alias, targets in dict(self.location_aliases or {}).items():
+            for target in tuple(targets or ()):
+                _register(str(alias or ""), str(target or ""))
+
+        self.location_aliases = {
+            alias: tuple(sorted(targets))
+            for alias, targets in alias_sets.items()
+            if targets
+        }
+
+    def resolve_location_ids(self, raw: str) -> Tuple[str, ...]:
+        text = str(raw or "").strip()
+        if not text:
+            return ()
+        ordered: List[str] = []
+        seen: set[str] = set()
+        queue: List[str] = [text]
+        while queue:
+            current = queue.pop(0)
+            current_text = str(current or "").strip()
+            if not current_text or current_text in seen:
+                continue
+            seen.add(current_text)
+            ordered.append(current_text)
+            alias_targets = self.location_aliases.get(_normalize_location_key(current_text), ())
+            for target in alias_targets:
+                target_text = str(target or "").strip()
+                if target_text and target_text not in seen:
+                    queue.append(target_text)
+        return tuple(ordered)
 
     def get_turnaround_min(self, stop_id: str) -> int:
-        rule = self.turnaround_rules.get(stop_id)
-        return rule.min_turnaround_min if rule else self.default_turnaround_min
+        for candidate in self.resolve_location_ids(stop_id):
+            rule = self.turnaround_rules.get(candidate)
+            if rule is not None:
+                return rule.min_turnaround_min
+        return self.default_turnaround_min
 
     def get_deadhead_min(self, from_stop: str, to_stop: str) -> int:
-        if from_stop == to_stop:
-            return 0
-        rule = self.deadhead_rules.get((from_stop, to_stop))
-        return rule.travel_time_min if rule else 0
+        from_candidates = self.resolve_location_ids(from_stop)
+        to_candidates = self.resolve_location_ids(to_stop)
+        if not from_candidates:
+            from_candidates = (str(from_stop or "").strip(),)
+        if not to_candidates:
+            to_candidates = (str(to_stop or "").strip(),)
+
+        best: Optional[int] = None
+        for from_candidate in from_candidates:
+            for to_candidate in to_candidates:
+                if from_candidate == to_candidate and from_candidate:
+                    return 0
+                rule = self.deadhead_rules.get((from_candidate, to_candidate))
+                if rule is None:
+                    continue
+                travel_time = max(int(rule.travel_time_min or 0), 0)
+                if best is None or travel_time < best:
+                    best = travel_time
+        return best if best is not None else 0
 
     def trips_by_id(self) -> Dict[str, Trip]:
         return {t.trip_id: t for t in self.trips}
+
+
+def _normalize_location_key(raw: str) -> str:
+    return unicodedata.normalize("NFKC", str(raw or "")).strip().lower()

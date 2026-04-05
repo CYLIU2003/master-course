@@ -10,6 +10,43 @@
 2026-04-05 時点の現行コードで 4 ソルバーを再実行した結果、全モードで `trip_count_unserved=0` を確認した。  
 ただし MILP は `solver_status=time_limit_baseline` であり、**300 秒以内に exact incumbent を得られなかったため dispatch baseline を返した fallback** である。これは exact MILP 最適解ではない。
 
+> 要約
+> - 4 モードすべてで `974/974` を担当し、`trip_count_unserved=0` だった。
+> - best objective は ALNS の `2,955,072.4020 JPY`。
+> - MILP は `time_limit_baseline` の fallback であり、exact MILP と扱ってはいけない。
+
+## 実行条件
+
+| 項目 | 値 |
+|---|---|
+| scenario_id | `237d5623-aa94-4f72-9da1-17b9070264be` |
+| prepared_input_id | `prepared-11efb997690030ef` |
+| scope / depot / service | `tokyu_full:2026-03-23` / `tsurumaki` / `WEEKDAY` |
+| service_date / planning_days | `2025-08-04` / `1` |
+| counts | `vehicle_count=95`, `charger_count=15`, `route_count=56`, `trip_count=974`, `timetable_row_count=24064` |
+| solver_mode / objective | `mode_milp_only` / `total_cost` |
+| solver limits | `time_limit_seconds=300`, `mip_gap=0.01`, `alns_iterations=500`, `no_improvement_limit=120`, `destroy_fraction=0.25` |
+| service controls | `allow_partial_service=false`, `unserved_penalty=10000.0` |
+| simulation controls | `start_time=05:00`, `planning_horizon_hours=20.0`, `time_step_min=60`, `initial_soc=0.8`, `deadhead_speed_kmh=18.0`, `random_seed=42` |
+| inventory settings | `use_selected_depot_vehicle_inventory=true`, `use_selected_depot_charger_inventory=true`, `disable_vehicle_acquisition_cost=true` |
+| charging assets | `charger_count=15`, `charger_power_kw=90.0`, `depot_power_limit_kw=200.0` |
+| TOU / cost preset | 0-9: `25.0`, 9-16: `40.0`, 16-48: `25.0` JPY/kWh; `demand_charge_cost_per_kw_month=1650.0` |
+| visualization flags | `fixed_route_band_mode=false`, `enable_vehicle_diagram_output=false`, `output_vehicle_diagram=false` |
+| PV / weather | `pv_profile_id=tsurumaki_2025-08-04_60min`, `weather_mode=actual_date_profile`, `weather_factor_scalar=1.0` |
+| reproducibility | `timetable_rows_regenerated=false`, `seed=42` |
+
+Objective weights used in the run:
+
+- `vehicle_fixed_cost=1.0`
+- `electricity_cost=1.0`
+- `demand_charge_cost=1.0`
+- `fuel_cost=1.0`
+- `deadhead_cost=0.0`
+- `battery_degradation_cost=0.0`
+- `emission_cost=0.0`
+- `unserved_penalty=10000.0`
+- `slack_penalty=1000000.0`
+
 ## 2. Verified Call Chain
 
 この報告は current call path から確認している。
@@ -115,18 +152,44 @@ python scripts/benchmark_fixed_prepared_scope.py `
   --output-stem outputs/mode_compare_route24_fix_rerun_20260405
 ```
 
-| solver | solver_status | objective_value | served | unserved | vehicles | exact MILP? | 備考 |
-|---|---:|---:|---:|---:|---:|---|---|
-| MILP | `time_limit_baseline` | `2,979,501.0139` | `974` | `0` | `91` | No | `dispatch_baseline_after_time_limit_no_incumbent` を返した fallback |
-| ALNS | `feasible` | `2,955,072.4020` | `974` | `0` | `93` | No | 現行 rerun では最良 objective |
-| GA | `feasible` | `2,979,501.0139` | `974` | `0` | `91` | No | baseline と同値 |
-| ABC | `feasible` | `2,976,786.2861` | `974` | `0` | `91` | No | GA よりわずかに良い |
+| solver | solve time [s] | objective [JPY] | gap vs best [JPY] | served / total | unserved | route24 unserved | route23 unserved | used vehicles | status |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| MILP | `1130.5` | `2,979,501.0139` | `+24,428.6118` | `974 / 974` | `0` | `0` | `0` | `91` | `time_limit_baseline` |
+| ALNS | `296.0` | `2,955,072.4020` | `0.0000` | `974 / 974` | `0` | `0` | `0` | `93` | `feasible` |
+| GA | `187.8` | `2,979,501.0139` | `+24,428.6118` | `974 / 974` | `0` | `0` | `0` | `91` | `feasible` |
+| ABC | `276.2` | `2,976,786.2861` | `+21,713.8840` | `974 / 974` | `0` | `0` | `0` | `91` | `feasible` |
 
 補足:
 
 - 旧 direct rerun (`outputs/mode_compare_route24_fix_20260405_005825.json`) では、MILP が `time_limit` のまま空 plan を返し `trip_count_unserved=974` だった
 - 同じ prepared input に対する現 rerun では、route24 / route23 の未担当は 0 まで解消した
 - comparison JSON / CSV と per-solver JSON の一致確認は `outputs/mode_compare_route24_fix_rerun_20260405/consistency_check.json` に保存し、4 モードすべて `all_passed=true` を確認した
+- 先生向けのローカル版は `output/reports/route24_teacher_report_20260405/report.md` にも保存した
+
+## 路線帯担当図
+
+以下は MILP 代表解の便数分布を、路線帯ごとに見やすく並べた図である。棒の上に便数を表示してある。対応する local 画像は `output/reports/route24_teacher_report_20260405/assets/route_band_trip_counts.svg` に保存した。
+
+![route band chart](../output/reports/route24_teacher_report_20260405/assets/route_band_trip_counts.svg)
+
+BEV が入った帯だけを抜き出すと、混在は次の 5 帯に集中していた。
+
+| 路線帯 | BEV 便数 | 備考 |
+|---|---:|---|
+| 渋24 | 4 | 代表解では 224 便中 4 便だけ BEV |
+| 黒07 | 2 | 少数の BEV を吸収 |
+| 反11 | 2 | 夕方帯を中心に BEV 混在 |
+| 渋21 | 2 | 端数的に BEV を配置 |
+| 渋22 | 1 | 単発の BEV 便 |
+| 合計 | 11 | `served_trip_count_by_vehicle_type` の BEV 合計 |
+
+## PV 出力図
+
+run summary では `pv_generated_kwh=360.0`、`pv_used_direct_kwh=0.0`、`pv_curtailed_kwh=360.0` であり、PV はこの比較では直接は使われていない。ここでは capacity factor ではなく出力値を縦軸にした。凡例には弦巻営業所 PV の定格 `675.9 kW` を入れてある。local 画像は `output/reports/route24_teacher_report_20260405/assets/pv_output_profile.svg` に保存した。
+
+![pv output profile](../output/reports/route24_teacher_report_20260405/assets/pv_output_profile.svg)
+
+表示単位は `kWh/slot`（60分スロット）で、日中に立ち上がり、12 時前後でピークを迎える。
 
 ## 6. 先生向けの説明ポイント
 

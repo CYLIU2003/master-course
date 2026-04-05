@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from src.dispatch.models import VehicleDuty
 
@@ -15,10 +15,13 @@ def assign_duty_fragments_to_vehicles(
     max_fragments_per_vehicle: int,
     existing_duties: Sequence[VehicleDuty] = (),
     existing_duty_vehicle_map: Mapping[str, str] | None = None,
+    dispatch_context: Any | None = None,
 ) -> tuple[Tuple[VehicleDuty, ...], Dict[str, str], Tuple[str, ...]]:
     vehicle_ids_by_type: Dict[str, List[str]] = {}
+    vehicle_by_id: Dict[str, ProblemVehicle] = {}
     for vehicle in vehicles:
         vehicle_ids_by_type.setdefault(str(vehicle.vehicle_type), []).append(str(vehicle.vehicle_id))
+        vehicle_by_id[str(vehicle.vehicle_id)] = vehicle
     for vehicle_ids in vehicle_ids_by_type.values():
         vehicle_ids.sort()
 
@@ -48,7 +51,12 @@ def assign_duty_fragments_to_vehicles(
             continue
         fragment_index = len(grouped.setdefault(vehicle_id, [])) + 1
         duty_id = vehicle_id if fragment_index == 1 else f"{vehicle_id}__frag{fragment_index}"
-        materialized = replace(duty, duty_id=duty_id)
+        materialized = _materialize_duty_for_vehicle(
+            duty,
+            duty_id=duty_id,
+            vehicle=vehicle_by_id.get(vehicle_id),
+            dispatch_context=dispatch_context,
+        )
         grouped[vehicle_id].append(materialized)
         duty_vehicle_map[duty_id] = vehicle_id
         assigned_duties.append(materialized)
@@ -125,3 +133,51 @@ def _duty_time_bounds(duty: VehicleDuty) -> tuple[int, int]:
     if not duty.legs:
         return (10**9, 10**9)
     return (int(duty.legs[0].trip.departure_min), int(duty.legs[-1].trip.arrival_min))
+
+
+def _materialize_duty_for_vehicle(
+    duty: VehicleDuty,
+    *,
+    duty_id: str,
+    vehicle: ProblemVehicle | None,
+    dispatch_context: Any | None,
+) -> VehicleDuty:
+    if not duty.legs:
+        return replace(duty, duty_id=duty_id)
+
+    first_leg = duty.legs[0]
+    existing_deadhead = max(int(first_leg.deadhead_from_prev_min or 0), 0)
+    startup_deadhead = _startup_deadhead_min(duty, vehicle=vehicle, dispatch_context=dispatch_context)
+    effective_deadhead = existing_deadhead if existing_deadhead > 0 else startup_deadhead
+    if effective_deadhead <= 0:
+        return replace(duty, duty_id=duty_id)
+
+    legs = (
+        replace(first_leg, deadhead_from_prev_min=effective_deadhead),
+        *duty.legs[1:],
+    )
+    return replace(duty, duty_id=duty_id, legs=tuple(legs))
+
+
+def _startup_deadhead_min(
+    duty: VehicleDuty,
+    *,
+    vehicle: ProblemVehicle | None,
+    dispatch_context: Any | None,
+) -> int:
+    if vehicle is None or dispatch_context is None or not duty.legs:
+        return 0
+    first_trip = duty.legs[0].trip
+    origin_key = str(getattr(first_trip, "origin_stop_id", "") or getattr(first_trip, "origin", "") or "").strip()
+    if not origin_key:
+        return 0
+    from_location = str(getattr(vehicle, "home_depot_id", "") or "").strip()
+    if not from_location:
+        return 0
+    get_deadhead_min = getattr(dispatch_context, "get_deadhead_min", None)
+    if not callable(get_deadhead_min):
+        return 0
+    try:
+        return max(int(get_deadhead_min(from_location, origin_key) or 0), 0)
+    except Exception:
+        return 0

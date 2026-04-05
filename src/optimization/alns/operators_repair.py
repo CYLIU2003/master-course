@@ -35,6 +35,7 @@ def greedy_trip_insertion(problem: CanonicalOptimizationProblem, plan: Assignmen
             deadhead_rules=problem.dispatch_context.deadhead_rules,
             vehicle_profiles={vehicle_type: problem.dispatch_context.vehicle_profiles[vehicle_type]},
             default_turnaround_min=problem.dispatch_context.default_turnaround_min,
+            location_aliases=dict(getattr(problem.dispatch_context, "location_aliases", {}) or {}),
         )
         new_duties = DispatchGenerator().generate_greedy_duties(ctx, vehicle_type)
         candidate_duties = [
@@ -132,6 +133,7 @@ def partial_milp_repair(problem: CanonicalOptimizationProblem, plan: AssignmentP
         deadhead_rules=problem.dispatch_context.deadhead_rules,
         vehicle_profiles=problem.dispatch_context.vehicle_profiles,
         default_turnaround_min=problem.dispatch_context.default_turnaround_min,
+        location_aliases=dict(getattr(problem.dispatch_context, "location_aliases", {}) or {}),
     )
     sub_feasible = {
         trip_id: tuple(next_id for next_id in next_ids if next_id in target_ids)
@@ -657,6 +659,7 @@ def _append_generated_duties(
         ),
         existing_duties=plan.duties,
         existing_duty_vehicle_map=existing_map,
+        dispatch_context=problem.dispatch_context,
     )
     served = tuple(sorted({trip_id for duty in all_duties for trip_id in duty.trip_ids}))
     unserved = tuple(

@@ -1787,6 +1787,7 @@ class GurobiMILPAdapter:
                 duty_id = f"milp_{vehicle_id}" if fragment_index == 1 else f"milp_{vehicle_id}__frag{fragment_index}"
                 duty = self._vehicle_duty_from_trip_chain(
                     duty_id=duty_id,
+                    vehicle_id=vehicle_id,
                     vehicle_type=str(vehicle.vehicle_type),
                     trip_chain=trip_chain,
                     dispatch_trip_by_id=dispatch_trip_by_id,
@@ -1821,6 +1822,7 @@ class GurobiMILPAdapter:
         self,
         *,
         duty_id: str,
+        vehicle_id: str,
         vehicle_type: str,
         trip_chain: List[str],
         dispatch_trip_by_id: Dict[str, Any],
@@ -1828,6 +1830,10 @@ class GurobiMILPAdapter:
     ) -> VehicleDuty | None:
         legs: List[DutyLeg] = []
         prev_trip = None
+        vehicle = next(
+            (item for item in problem.vehicles if str(item.vehicle_id) == str(vehicle_id)),
+            None,
+        )
         for trip_id in trip_chain:
             dispatch_trip = dispatch_trip_by_id.get(trip_id)
             if dispatch_trip is None:
@@ -1835,8 +1841,13 @@ class GurobiMILPAdapter:
             deadhead = 0
             if prev_trip is not None:
                 deadhead = problem.dispatch_context.get_deadhead_min(
-                    prev_trip.destination,
-                    dispatch_trip.origin,
+                    getattr(prev_trip, "destination_stop_id", None) or prev_trip.destination,
+                    getattr(dispatch_trip, "origin_stop_id", None) or dispatch_trip.origin,
+                )
+            elif vehicle is not None:
+                deadhead = problem.dispatch_context.get_deadhead_min(
+                    str(getattr(vehicle, "home_depot_id", "") or ""),
+                    getattr(dispatch_trip, "origin_stop_id", None) or dispatch_trip.origin,
                 )
             legs.append(DutyLeg(trip=dispatch_trip, deadhead_from_prev_min=deadhead))
             prev_trip = dispatch_trip
