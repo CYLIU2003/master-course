@@ -30,7 +30,9 @@ def normalize_objective_mode(mode: Any) -> str:
     alias_map = {
         "cost": "total_cost",
         "cost_min": "total_cost",
+        "cost_minimize": "total_cost",
         "min_cost": "total_cost",
+        "minimize_cost": "total_cost",
         "total_cost": "total_cost",
         "co2": "co2",
         "co2_min": "co2",

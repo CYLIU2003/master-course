@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
 from bff.routers.optimization import _prepared_inputs_root
 from bff.services.run_preparation import load_prepared_input, materialize_scenario_from_prepared_input
 from bff.store import scenario_store as store
+from src.objective_modes import normalize_objective_mode
 from src.optimization import (
     OptimizationConfig,
     OptimizationEngine,
@@ -94,10 +95,13 @@ def _validate_fixed_scope(
     planning_days = int(scope.get("planning_days") or 0)
     depots = tuple(scope.get("depot_ids") or ())
     services = tuple(scope.get("service_ids") or ())
-    scenario_objective = _pick_text(
-        (scenario.get("simulation_config") or {}).get("objective_mode"),
-        (scenario.get("scenario_overlay") or {}).get("objective_mode"),
+    scenario_objective = normalize_objective_mode(
+        _pick_text(
+            (scenario.get("simulation_config") or {}).get("objective_mode"),
+            (scenario.get("scenario_overlay") or {}).get("objective_mode"),
+        )
     )
+    requested_objective = normalize_objective_mode(objective_mode)
 
     if tuple(depots) != (depot_id,):
         raise ValueError(f"Prepared scope depot_ids={depots} does not match fixed depot_id={depot_id}")
@@ -107,7 +111,7 @@ def _validate_fixed_scope(
         raise ValueError(f"Prepared scope planning_days={planning_days} is not fixed to 1")
     if len(service_dates) != 1:
         raise ValueError(f"Prepared scope service_dates={service_dates} is not fixed to a single day")
-    if scenario_objective and scenario_objective != objective_mode:
+    if scenario_objective and scenario_objective != requested_objective:
         raise ValueError(
             f"Scenario objective_mode={scenario_objective} does not match fixed objective_mode={objective_mode}"
         )
@@ -292,6 +296,7 @@ def _write_csv(rows: Iterable[dict[str, Any]], csv_path: Path) -> None:
         "mode",
         "solver_status",
         "result_category",
+        "counts_for_comparison",
         "milp_exactness_class",
         "supports_exact_milp",
         "true_solver_family",
@@ -396,6 +401,7 @@ def _build_row(
             if bool((trip_meta_by_id.get(trip_id) or {}).get("is_shared_trip"))
         ),
     }
+    row["counts_for_comparison"] = row["result_category"] != "BASELINE_FALLBACK"
     row["milp_exactness_class"] = _milp_exactness_class(row)
     return row
 
@@ -510,6 +516,9 @@ def main() -> None:
             )
         )
 
+    competitive_rows = [row for row in rows if bool(row.get("counts_for_comparison"))]
+    excluded_rows = [row for row in rows if not bool(row.get("counts_for_comparison"))]
+
     comparison = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scenario_id": args.scenario_id,
@@ -523,6 +532,14 @@ def main() -> None:
         "mip_gap": args.mip_gap,
         "timetable_rows_regenerated": False,
         "rows": rows,
+        "competitive_rows": competitive_rows,
+        "excluded_rows": excluded_rows,
+        "comparison_summary": {
+            "total_solver_rows": len(rows),
+            "competitive_solver_rows": len(competitive_rows),
+            "excluded_solver_rows": len(excluded_rows),
+            "excluded_modes": [row["mode"] for row in excluded_rows],
+        },
     }
     comparison_json_path = output_stem.with_suffix(".json")
     comparison_csv_path = output_stem.with_suffix(".csv")
@@ -541,7 +558,10 @@ def main() -> None:
     ]
     all_zero_unserved = all(int(row["trip_count_unserved"]) == 0 for row in rows)
     milp_row = next(row for row in rows if row["mode"] == "milp")
+    competitive_modes = ", ".join(row["mode"] for row in competitive_rows) or "none"
     verdict_lines.append(f"- all_974_served: `{all_zero_unserved}`")
+    verdict_lines.append(f"- competitive_modes: `{competitive_modes}`")
+    verdict_lines.append(f"- excluded_from_comparison: `{', '.join(row['mode'] for row in excluded_rows) or 'none'}`")
     verdict_lines.append(
         f"- milp_exactness: `{milp_row['milp_exactness_class']}` "
         f"(status=`{milp_row['solver_status']}`, supports_exact_milp=`{milp_row['supports_exact_milp']}`)"
