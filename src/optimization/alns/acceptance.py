@@ -60,8 +60,14 @@ class GeneticLikeAcceptance(AcceptanceCriterion):
         best: SolutionState,
         rng: random.Random,
     ) -> bool:
+        # Feasibility-aware acceptance:
+        # Always accept if candidate achieves feasibility when incumbent was infeasible
+        if candidate.is_feasible() and not incumbent.is_feasible():
+            return True
+        # Always accept improvements
         if candidate.objective() <= incumbent.objective():
             return True
+        # Random acceptance with mutation probability (increased for exploration)
         return rng.random() < self._mutation_survival_prob
 
 
@@ -77,10 +83,17 @@ class BeeColonyAcceptance(AcceptanceCriterion):
         best: SolutionState,
         rng: random.Random,
     ) -> bool:
+        # Feasibility-aware acceptance:
+        # Always accept if candidate achieves feasibility when incumbent was infeasible
+        if candidate.is_feasible() and not incumbent.is_feasible():
+            return True
+        # Always accept improvements
         if candidate.objective() <= incumbent.objective():
             return True
+        # Elite zone: accept solutions close to best
         best_objective = max(best.objective(), 1.0e-9)
         relative_gap = (candidate.objective() - best.objective()) / best_objective
         if relative_gap <= self._elite_tolerance_ratio:
             return True
+        # Scout exploration
         return rng.random() < self._scout_prob

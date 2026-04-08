@@ -141,9 +141,26 @@ class ALNSOptimizer:
                 incumbent = candidate
                 accepted_count += 1
                 reward = 2.0
-                if candidate.is_feasible() and candidate.objective() < best.objective():
-                    best = candidate
+                # Feasibility-first comparison:
+                # 1. If best is infeasible and candidate is feasible, always prefer candidate
+                # 2. If both feasible, prefer lower objective
+                # 3. If both infeasible, prefer lower objective (less penalty)
+                is_new_best = False
+                if not best.is_feasible() and candidate.is_feasible():
+                    # Major improvement: found a feasible solution!
+                    is_new_best = True
+                    reward = 10.0  # Higher reward for achieving feasibility
+                elif candidate.is_feasible() and best.is_feasible() and candidate.objective() < best.objective():
+                    # Both feasible, candidate has better objective
+                    is_new_best = True
                     reward = 5.0
+                elif not candidate.is_feasible() and not best.is_feasible() and candidate.objective() < best.objective():
+                    # Both infeasible but candidate has less penalty
+                    is_new_best = True
+                    reward = 3.0
+                
+                if is_new_best:
+                    best = candidate
                     no_improve = 0
                     incumbent_history.append(
                         IncumbentSnapshot(
