@@ -35,6 +35,10 @@ class MILPSolverOutcome:
     solver_status: str
     used_backend: str
     supports_exact_milp: bool
+    has_feasible_incumbent: bool = False
+    incumbent_count: int = 0
+    warm_start_applied: bool = False
+    warm_start_source: str = ""
 
 
 class SolverAdapter(Protocol):
@@ -59,9 +63,13 @@ class DispatchBaselineMILPAdapter:
         plan = problem.baseline_plan or AssignmentPlan()
         return (
             MILPSolverOutcome(
-                solver_status="baseline_feasible",
+                solver_status="BASELINE_FALLBACK",
                 used_backend=self.backend_name,
                 supports_exact_milp=False,
+                has_feasible_incumbent=False,
+                incumbent_count=0,
+                warm_start_applied=False,
+                warm_start_source="none",
             ),
             plan,
         )
@@ -79,9 +87,13 @@ class GurobiMILPAdapter:
             baseline = problem.baseline_plan or AssignmentPlan()
             return (
                 MILPSolverOutcome(
-                    solver_status="gurobi_unavailable_baseline",
+                    solver_status="BASELINE_FALLBACK",
                     used_backend="dispatch_baseline",
                     supports_exact_milp=False,
+                    has_feasible_incumbent=False,
+                    incumbent_count=0,
+                    warm_start_applied=False,
+                    warm_start_source="gurobi_unavailable",
                 ),
                 baseline,
             )
@@ -1386,6 +1398,36 @@ class GurobiMILPAdapter:
             GRB.UNBOUNDED: "unbounded",
         }
         
+        # =====================================================
+        # MIP Start (Warm Start) from baseline plan
+        # =====================================================
+        warm_start_applied = False
+        warm_start_source = "none"
+        
+        baseline_plan = self._repaired_baseline_plan_for_warm_start(problem)
+        if baseline_plan is not None and len(baseline_plan.served_trip_ids) > 0:
+            try:
+                warm_start_applied = self._apply_mip_start(
+                    model=model,
+                    baseline_plan=baseline_plan,
+                    problem=problem,
+                    y=y,
+                    x=x,
+                    start_arc=start_arc,
+                    end_arc=end_arc,
+                    unserved=unserved,
+                    used_vehicle=used_vehicle,
+                )
+                if warm_start_applied:
+                    warm_start_source = "repaired_baseline"
+                    if enable_milp_diagnostics:
+                        print(f"[MILP Diagnostics] MIP Start applied from baseline plan with {len(baseline_plan.served_trip_ids)} served trips")
+            except Exception as e:
+                if enable_milp_diagnostics:
+                    print(f"[MILP Diagnostics] MIP Start failed: {e}")
+                warm_start_applied = False
+                warm_start_source = "failed"
+        
         # Pre-optimization diagnostics
         if enable_milp_diagnostics:
             import json
@@ -1401,6 +1443,8 @@ class GurobiMILPAdapter:
                 "num_vehicles": len(problem.vehicles),
                 "time_limit_sec": config.time_limit_sec,
                 "mip_gap": config.mip_gap,
+                "warm_start_applied": warm_start_applied,
+                "warm_start_source": warm_start_source,
             }
             print(f"[MILP Diagnostics] Pre-optimization stats:")
             for key, val in pre_stats.items():
@@ -1506,15 +1550,20 @@ class GurobiMILPAdapter:
                 unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
                 metadata={
                     "source": "milp_gurobi",
-                    "status": solver_status,
+                    "status": "NO_INCUMBENT",
+                    "original_solver_status": solver_status,
                     "auto_relaxed_allow_partial_service": bool(relaxed_partial_service),
                 },
             )
             return (
                 MILPSolverOutcome(
-                    solver_status=solver_status,
+                    solver_status="NO_INCUMBENT",
                     used_backend=self.backend_name,
                     supports_exact_milp=True,
+                    has_feasible_incumbent=False,
+                    incumbent_count=0,
+                    warm_start_applied=warm_start_applied,
+                    warm_start_source=warm_start_source,
                 ),
                 empty,
             )
@@ -1708,11 +1757,19 @@ class GurobiMILPAdapter:
                 "charge_to_upper_buffer_penalty_yen_per_kwh": charge_upper_buffer_penalty_per_kwh,
             },
         )
+        # Determine result category based on solver status
+        has_incumbent = model.SolCount > 0
+        result_category = "SOLVED_FEASIBLE" if has_incumbent else "NO_INCUMBENT"
+        
         return (
             MILPSolverOutcome(
-                solver_status=solver_status,
+                solver_status=result_category,
                 used_backend=self.backend_name,
                 supports_exact_milp=True,
+                has_feasible_incumbent=has_incumbent,
+                incumbent_count=model.SolCount,
+                warm_start_applied=warm_start_applied,
+                warm_start_source=warm_start_source,
             ),
             plan,
         )
@@ -1741,9 +1798,13 @@ class GurobiMILPAdapter:
         )
         return (
             MILPSolverOutcome(
-                solver_status=fallback_status,
+                solver_status="BASELINE_FALLBACK",
                 used_backend=self.backend_name,
                 supports_exact_milp=False,
+                has_feasible_incumbent=False,
+                incumbent_count=0,
+                warm_start_applied=False,
+                warm_start_source=f"fallback_{fallback_status}",
             ),
             replace(
                 baseline_plan,
@@ -1866,6 +1927,90 @@ class GurobiMILPAdapter:
             end_offset += 24 * 60
         day_end_abs = day_start + end_offset - 1
         return self._slot_index(problem, day_end_abs)
+
+    def _apply_mip_start(
+        self,
+        model: Any,
+        baseline_plan: AssignmentPlan,
+        problem: CanonicalOptimizationProblem,
+        y: Dict[Tuple[str, str], Any],
+        x: Dict[Tuple[str, str, str], Any],
+        start_arc: Dict[Tuple[str, str], Any],
+        end_arc: Dict[Tuple[str, str], Any],
+        unserved: Dict[str, Any],
+        used_vehicle: Dict[str, Any],
+    ) -> bool:
+        """Apply MIP start from baseline plan to provide a warm start for Gurobi.
+        
+        Sets Start attribute on binary variables (y, x, start_arc, end_arc, unserved, used_vehicle).
+        Does NOT set Start on continuous variables (SOC, charging) - Gurobi will compute these.
+        
+        Returns True if MIP start was successfully applied.
+        """
+        if not baseline_plan.duties:
+            return False
+        
+        # Build duty_vehicle_map from metadata
+        duty_vehicle_map = dict(baseline_plan.metadata.get("duty_vehicle_map", {}))
+        
+        # Track which trips are served and by which vehicle
+        trip_vehicle_assignment: Dict[str, str] = {}  # trip_id -> vehicle_id
+        vehicle_trips: Dict[str, List[str]] = {}  # vehicle_id -> ordered list of trip_ids
+        
+        for duty in baseline_plan.duties:
+            vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
+            if vehicle_id not in vehicle_trips:
+                vehicle_trips[vehicle_id] = []
+            
+            for leg in duty.legs:
+                if leg.trip:
+                    trip_id = leg.trip.trip_id
+                    trip_vehicle_assignment[trip_id] = vehicle_id
+                    vehicle_trips[vehicle_id].append(trip_id)
+        
+        # Set y variables (trip-vehicle assignment)
+        for (vehicle_id, trip_id), var in y.items():
+            if trip_vehicle_assignment.get(trip_id) == vehicle_id:
+                var.Start = 1.0
+            else:
+                var.Start = 0.0
+        
+        # Set x variables (trip sequence arcs)
+        for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
+            trips = vehicle_trips.get(vehicle_id, [])
+            arc_exists = False
+            for i in range(len(trips) - 1):
+                if trips[i] == from_trip_id and trips[i + 1] == to_trip_id:
+                    arc_exists = True
+                    break
+            var.Start = 1.0 if arc_exists else 0.0
+        
+        # Set start_arc variables (first trip in duty)
+        for (vehicle_id, trip_id), var in start_arc.items():
+            trips = vehicle_trips.get(vehicle_id, [])
+            if trips and trips[0] == trip_id:
+                var.Start = 1.0
+            else:
+                var.Start = 0.0
+        
+        # Set end_arc variables (last trip in duty)
+        for (vehicle_id, trip_id), var in end_arc.items():
+            trips = vehicle_trips.get(vehicle_id, [])
+            if trips and trips[-1] == trip_id:
+                var.Start = 1.0
+            else:
+                var.Start = 0.0
+        
+        # Set unserved variables
+        served_set = set(baseline_plan.served_trip_ids)
+        for trip_id, var in unserved.items():
+            var.Start = 0.0 if trip_id in served_set else 1.0
+        
+        # Set used_vehicle variables
+        for vehicle_id, var in used_vehicle.items():
+            var.Start = 1.0 if vehicle_id in vehicle_trips else 0.0
+        
+        return True
 
     def _operation_start_min(self, problem: CanonicalOptimizationProblem) -> int:
         return self._horizon_start_min(problem)

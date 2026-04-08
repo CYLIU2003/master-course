@@ -524,8 +524,10 @@ $$
 |--------|-------------|------|
 | `mode_milp_only` | Gurobi MILP（厳密解） | 小〜中規模の厳密最適解 |
 | `mode_alns_only` | ALNS（適応型大規模近傍探索） | 大規模の近似解・高速探索 |
-| `mode_ga` | GA（遺伝的アルゴリズム） | 大規模の近似解 |
-| `mode_abc` | ABC（人工蜂コロニー） | 大規模の近似解 |
+| `mode_ga` | **ALNS-variant (GA-like)** | ALNSカーネルを`genetic_like` acceptance で実行 |
+| `mode_abc` | **ALNS-variant (ABC-like)** | ALNSカーネルを`bee_colony_like` acceptance で実行 |
+
+> ⚠️ **実装上の注意**: 現在の `mode_ga` と `mode_abc` は独立したGA/ABC実装ではなく、ALNSエンジンに異なる acceptance strategy を設定した wrapper です。`solver_metadata.true_solver_family="alns"`, `solver_metadata.independent_implementation=false` で判別できます。比較実験では「独立ソルバー」ではなく「ALNS-variant」として扱ってください。
 
 ALNS・GA・ABC は共通評価器 `src/optimization/common/evaluator.py` で O1〜O4 および CO₂費・劣化費を評価します。
 

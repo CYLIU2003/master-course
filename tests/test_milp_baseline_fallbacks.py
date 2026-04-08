@@ -62,7 +62,11 @@ def test_baseline_fallback_marks_non_exact_time_limit_baseline() -> None:
 
     assert fallback is not None
     outcome, plan = fallback
-    assert outcome.solver_status == "time_limit_baseline"
+    # Now uses standardized 4-category result: BASELINE_FALLBACK
+    assert outcome.solver_status == "BASELINE_FALLBACK"
+    assert outcome.has_feasible_incumbent is False
+    assert outcome.incumbent_count == 0
+    assert outcome.warm_start_source == "fallback_time_limit_baseline"
     assert outcome.used_backend == "gurobi"
     assert outcome.supports_exact_milp is False
     assert plan.served_trip_ids == ("t1",)

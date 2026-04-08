@@ -36,9 +36,20 @@ class ABCOptimizer:
             no_improvement_limit=max(config.no_improvement_limit, 350),  # Increased patience
         )
         result = self._delegate.solve(problem, abc_config)
+        
+        # Map solver status to 4-category result classification
+        if result.feasible and len(result.incumbent_history or []) > 0:
+            result_category = "SOLVED_FEASIBLE"
+        elif not result.feasible and len(result.incumbent_history or []) > 0:
+            result_category = "SOLVED_INFEASIBLE"
+        elif len(result.incumbent_history or []) == 0:
+            result_category = "NO_INCUMBENT"
+        else:
+            result_category = result.solver_status
+        
         return OptimizationEngineResult(
             mode=OptimizationMode.ABC,
-            solver_status=result.solver_status,
+            solver_status=result_category,
             objective_value=result.objective_value,
             plan=result.plan,
             feasible=result.feasible,
@@ -49,6 +60,11 @@ class ABCOptimizer:
                 **dict(result.solver_metadata),
                 "metaheuristic": "abc",
                 "delegate": "alns_kernel",
+                "true_solver_family": "alns",  # ABC delegates to ALNS kernel
+                "independent_implementation": False,  # Not a true independent solver
+                "original_alns_status": result.solver_status,
+                "has_feasible_incumbent": result.feasible,
+                "incumbent_count": len(result.incumbent_history or []),
                 "effective_limits": {
                     "time_limit_sec": int(abc_config.time_limit_sec),
                     "alns_iterations": int(abc_config.alns_iterations),

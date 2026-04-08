@@ -27,10 +27,18 @@ from src.optimization import (
 
 
 FALLBACK_MILP_STATUSES = {
+    "BASELINE_FALLBACK",
     "time_limit_baseline",
     "auto_relaxed_baseline",
     "gurobi_unavailable_baseline",
     "baseline_feasible",
+}
+# Standard 4-category result classification
+RESULT_CATEGORIES = {
+    "SOLVED_FEASIBLE",
+    "SOLVED_INFEASIBLE",
+    "NO_INCUMBENT",
+    "BASELINE_FALLBACK",
 }
 MODE_MAP = {
     "milp": OptimizationMode.MILP,
@@ -283,8 +291,15 @@ def _write_csv(rows: Iterable[dict[str, Any]], csv_path: Path) -> None:
     fieldnames = [
         "mode",
         "solver_status",
+        "result_category",
         "milp_exactness_class",
         "supports_exact_milp",
+        "true_solver_family",
+        "independent_implementation",
+        "has_feasible_incumbent",
+        "incumbent_count",
+        "warm_start_applied",
+        "warm_start_source",
         "termination_reason",
         "objective_value",
         "solve_time_seconds",
@@ -336,6 +351,14 @@ def _build_row(
         "plan_source": _pick_text((result_payload.get("metadata") or {}).get("source")),
         "plan_status": _pick_text((result_payload.get("metadata") or {}).get("status")),
         "milp_status": _pick_text((result_payload.get("metadata") or {}).get("milp_status")),
+        # New 4-category result classification metadata
+        "true_solver_family": _pick_text(solver_metadata.get("true_solver_family")),
+        "independent_implementation": bool(solver_metadata.get("independent_implementation", True)),
+        "has_feasible_incumbent": bool(solver_metadata.get("has_feasible_incumbent")),
+        "incumbent_count": int(solver_metadata.get("incumbent_count", 0)),
+        "warm_start_applied": bool(solver_metadata.get("warm_start_applied")),
+        "warm_start_source": _pick_text(solver_metadata.get("warm_start_source")),
+        "result_category": _pick_text(result_payload.get("solver_status")) if _pick_text(result_payload.get("solver_status")) in RESULT_CATEGORIES else "UNKNOWN",
         "effective_limits": dict(result_payload.get("effective_limits") or {}),
         "warnings": warnings,
         "warnings_count": len(warnings),

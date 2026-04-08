@@ -46,6 +46,16 @@ class MILPOptimizer:
             solver_metadata={
                 "backend": outcome.used_backend,
                 "supports_exact_milp": outcome.supports_exact_milp,
+                "true_solver_family": "milp",
+                "independent_implementation": True,
+                "has_feasible_incumbent": outcome.has_feasible_incumbent,
+                "incumbent_count": outcome.incumbent_count,
+                "warm_start_applied": outcome.warm_start_applied,
+                "warm_start_source": outcome.warm_start_source or (
+                    (problem.baseline_plan.metadata or {}).get("source")
+                    if problem.baseline_plan
+                    else None
+                ),
                 "objective_mode": problem.scenario.objective_mode,
                 "objective_weights": {
                     "electricity_cost": float(problem.objective_weights.energy),
@@ -66,11 +76,6 @@ class MILPOptimizer:
                 "time_limit_sec": config.time_limit_sec,
                 "mip_gap": config.mip_gap,
                 "warm_start_enabled": config.warm_start,
-                "warm_start_source": (
-                    (problem.baseline_plan.metadata or {}).get("source")
-                    if problem.baseline_plan
-                    else None
-                ),
             },
         )
 
