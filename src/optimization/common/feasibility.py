@@ -10,7 +10,14 @@ from src.dispatch.validator import DutyValidator
 from .problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
-    normalize_required_soc_departure_ratio,
+)
+from .soc_helpers import (
+    deadhead_energy_kwh,
+    required_departure_soc_kwh,
+    trip_active_in_slot,
+    trip_active_slot_indices,
+    trip_energy_kwh,
+    trip_slot_energy_fraction,
 )
 
 
@@ -115,54 +122,94 @@ class FeasibilityChecker:
             by_slot[int(slot.slot_index)] = by_slot.get(int(slot.slot_index), 0.0) + max(float(slot.charge_kw or 0.0), 0.0)
 
         for duty in plan.duties:
-            vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
+            vehicle_id = str(duty_vehicle_map.get(duty.duty_id, duty.duty_id))
             vehicle = vehicle_by_id.get(vehicle_id)
             vtype = type_by_id.get(duty.vehicle_type)
             powertrain = str((vtype.powertrain_type if vtype else duty.vehicle_type) or "").upper()
             if powertrain not in {"BEV", "PHEV", "FCEV"}:
                 continue
 
-            capacity = float((vehicle.battery_capacity_kwh if vehicle else None) or (vtype.battery_capacity_kwh if vtype else 0.0) or 0.0)
+            capacity = float(
+                (vehicle.battery_capacity_kwh if vehicle else None)
+                or (vtype.battery_capacity_kwh if vtype else 0.0)
+                or 0.0
+            )
             if capacity <= 0.0:
                 continue
-            reserve = float((vehicle.reserve_soc if vehicle else None) or (vtype.reserve_soc if vtype else None) or (0.15 * capacity))
+
+            reserve = float(
+                (vehicle.reserve_soc if vehicle else None)
+                or (vtype.reserve_soc if vtype else None)
+                or (0.15 * capacity)
+            )
             soc = float((vehicle.initial_soc if vehicle else None) or (0.8 * capacity))
             if soc <= 1.0:
                 soc = soc * capacity
             soc = min(max(soc, 0.0), capacity)
 
-            last_slot = -1
+            active_legs: List[tuple[VehicleDuty, object, tuple[int, ...]]] = []
             for leg in duty.legs:
                 trip = trip_by_id.get(leg.trip.trip_id)
                 if trip is None:
                     continue
+                slots = trip_active_slot_indices(problem, trip.departure_min, trip.arrival_min)
+                if not slots:
+                    continue
+                active_legs.append((leg, trip, slots))
 
-                dep_slot = self._slot_index(problem, leg.trip.departure_min)
-                for slot_idx in sorted(k for k in charge_by_vehicle.get(vehicle_id, {}) if last_slot < k <= dep_slot):
-                    soc = min(capacity, soc + charge_by_vehicle[vehicle_id][slot_idx] * dt_h * 0.95)
-                last_slot = dep_slot
+            if not active_legs:
+                continue
 
-                req_dep_ratio = normalize_required_soc_departure_ratio(
-                    trip.required_soc_departure_percent,
-                    treat_values_le_one_as_percent=(
-                        str((problem.metadata or {}).get("required_soc_departure_unit") or "").strip().lower()
-                        == "percent_0_100"
-                    ),
-                )
-                req_dep_kwh = float(req_dep_ratio or 0.0) * capacity
-                min_departure = max(reserve, req_dep_kwh)
-                if soc + 1.0e-6 < min_departure:
+            first_slot = min(slots[0] for _leg, _trip, slots in active_legs)
+            last_slot = max(slots[-1] for _leg, _trip, slots in active_legs)
+            vehicle_charges = charge_by_vehicle.get(vehicle_id, {})
+            if vehicle_charges:
+                first_slot = min(first_slot, min(vehicle_charges.keys()))
+                last_slot = max(last_slot, max(vehicle_charges.keys()))
+
+            for slot_idx in range(first_slot, last_slot + 1):
+                charge_kwh = max(float(vehicle_charges.get(slot_idx, 0.0) or 0.0), 0.0) * dt_h * 0.95
+                if charge_kwh > 0.0 and any(trip_active_in_slot(problem, leg.trip.departure_min, leg.trip.arrival_min, slot_idx) for leg, _trip, _slots in active_legs):
                     errors.append(
-                        f"[SOC] duty={duty.duty_id} trip={trip.trip_id} departure SOC {soc:.2f} < required {min_departure:.2f}"
+                        f"[SOC] duty={duty.duty_id} vehicle={vehicle_id} charging occurs during active trip slot {slot_idx}"
                     )
+                soc = min(capacity, soc + charge_kwh)
 
-                trip_energy = max(float(trip.energy_kwh or 0.0), 0.0)
-                deadhead_energy = self._deadhead_energy_kwh(problem, leg.deadhead_from_prev_min, trip)
-                soc -= (trip_energy + deadhead_energy)
-                if soc < -1.0e-6:
-                    errors.append(
-                        f"[SOC] duty={duty.duty_id} trip={trip.trip_id} post-trip SOC {soc:.2f} < 0"
+                for leg_index, (leg, trip, slots) in enumerate(active_legs):
+                    if slot_idx not in slots:
+                        continue
+                    if slot_idx == slots[0]:
+                        required = required_departure_soc_kwh(
+                            problem,
+                            vehicle,
+                            trip,
+                            cap_kwh=capacity,
+                            final_soc_floor_kwh=reserve,
+                        )
+                        if soc + 1.0e-6 < required:
+                            errors.append(
+                                f"[SOC] duty={duty.duty_id} trip={trip.trip_id} departure SOC {soc:.2f} < required {required:.2f}"
+                            )
+                        if leg_index > 0:
+                            prev_trip = active_legs[leg_index - 1][1]
+                            soc -= deadhead_energy_kwh(problem, vehicle, prev_trip, trip)
+                            if soc < -1.0e-6:
+                                errors.append(
+                                    f"[SOC] duty={duty.duty_id} trip={trip.trip_id} deadhead-adjusted SOC {soc:.2f} < 0"
+                                )
+
+                    trip_energy = trip_energy_kwh(problem, vehicle, trip)
+                    fraction = trip_slot_energy_fraction(
+                        problem,
+                        trip.departure_min,
+                        trip.arrival_min,
+                        slot_idx,
                     )
+                    soc -= trip_energy * fraction
+                    if soc < -1.0e-6:
+                        errors.append(
+                            f"[SOC] duty={duty.duty_id} trip={trip.trip_id} post-slot SOC {soc:.2f} < 0"
+                        )
 
         return errors
 

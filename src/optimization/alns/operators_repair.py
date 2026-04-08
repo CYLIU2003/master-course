@@ -112,12 +112,25 @@ def baseline_dispatch_repair(
     )
 
 
-def partial_milp_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> AssignmentPlan:
+def partial_milp_repair(
+    problem: CanonicalOptimizationProblem,
+    plan: AssignmentPlan,
+    config: OptimizationConfig | None = None,
+) -> AssignmentPlan:
     if not plan.unserved_trip_ids:
         return plan
 
-    limit = max(1, min(40, len(plan.unserved_trip_ids)))
-    target_ids = set(plan.unserved_trip_ids[:limit])
+    repair_config = config or OptimizationConfig()
+    trip_limit = max(1, min(int(repair_config.partial_milp_trip_limit or 1), len(plan.unserved_trip_ids)))
+    target_trip_ids = tuple(plan.unserved_trip_ids[:trip_limit])
+    target_ids = set(target_trip_ids)
+    repair_settings = {
+        "trip_limit": trip_limit,
+        "time_limit_sec": max(int(repair_config.time_limit_sec), 1),
+        "mip_gap": max(float(repair_config.mip_gap), 0.0),
+        "random_seed": int(repair_config.random_seed),
+    }
+
     sub_trips = tuple(trip for trip in problem.trips if trip.trip_id in target_ids)
     if not sub_trips:
         return plan
@@ -149,15 +162,23 @@ def partial_milp_repair(problem: CanonicalOptimizationProblem, plan: AssignmentP
         trips=sub_trips,
         feasible_connections=sub_feasible,
         baseline_plan=None,
+        metadata={
+            **dict(problem.metadata),
+            "partial_milp_repair_settings": repair_settings,
+            "partial_milp_repair_target_trip_ids": target_trip_ids,
+        },
+    )
+    sub_config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        time_limit_sec=repair_settings["time_limit_sec"],
+        mip_gap=repair_settings["mip_gap"],
+        random_seed=repair_settings["random_seed"],
+        warm_start=repair_config.warm_start,
+        partial_milp_trip_limit=trip_limit,
     )
     sub_result = MILPOptimizer().solve(
         sub_problem,
-        OptimizationConfig(
-            mode=OptimizationMode.MILP,
-            time_limit_sec=30,
-            mip_gap=0.05,
-            random_seed=42,
-        ),
+        sub_config,
     )
 
     existing_served = set(plan.served_trip_ids)
@@ -177,15 +198,23 @@ def partial_milp_repair(problem: CanonicalOptimizationProblem, plan: AssignmentP
             )
         )
 
-    return _with_recomputed_charging(
+    repaired_plan = _append_generated_duties(
         problem,
-        _append_generated_duties(
-            problem,
-            plan,
-            candidate_duties,
-            operator_name="partial_milp_repair",
-        ),
+        plan,
+        candidate_duties,
+        operator_name="partial_milp_repair",
     )
+    repaired_plan = replace(
+        repaired_plan,
+        metadata={
+            **dict(repaired_plan.metadata),
+            "partial_milp_repair_settings": repair_settings,
+            "partial_milp_repair_target_trip_ids": target_trip_ids,
+            "partial_milp_repair_solver_status": sub_result.solver_status,
+            "partial_milp_repair_has_feasible_incumbent": bool(sub_result.feasible),
+        },
+    )
+    return _with_recomputed_charging(problem, repaired_plan)
 
 
 def regret_k_insertion(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> AssignmentPlan:

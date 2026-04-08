@@ -266,7 +266,7 @@ def test_feasibility_checker_treats_small_builder_required_soc_as_percent() -> N
         served_trip_ids=("t1",),
         unserved_trip_ids=(),
     )
-    base = _minimal_problem(initial_soc=50.0)
+    base = _minimal_problem(initial_soc=80.0)
     problem = CanonicalOptimizationProblem(
         scenario=base.scenario,
         dispatch_context=base.dispatch_context,
@@ -420,8 +420,8 @@ def test_feasibility_checker_allows_sparse_fragments_in_same_vehicle_gap() -> No
         route_id="r1",
         origin="X",
         destination="Y",
-        departure_time="10:00",
-        arrival_time="10:30",
+        departure_time="13:00",
+        arrival_time="13:30",
         distance_km=5.0,
         allowed_vehicle_types=("BEV",),
     )
@@ -442,7 +442,7 @@ def test_feasibility_checker_allows_sparse_fragments_in_same_vehicle_gap() -> No
         trips=(
             ProblemTrip("a1", "r1", "A", "B", 480, 510, 5.0, ("BEV",), energy_kwh=5.0),
             ProblemTrip("a2", "r1", "B", "C", 720, 750, 5.0, ("BEV",), energy_kwh=5.0),
-            ProblemTrip("b1", "r1", "X", "Y", 600, 630, 5.0, ("BEV",), energy_kwh=5.0),
+        ProblemTrip("b1", "r1", "X", "Y", 780, 810, 5.0, ("BEV",), energy_kwh=5.0),
         ),
         vehicles=(
             ProblemVehicle(

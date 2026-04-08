@@ -94,7 +94,7 @@ class ALNSOptimizer:
             "baseline_dispatch_repair": baseline_dispatch_repair,
             "charger_reassignment_repair": charger_reassignment_repair,
             "soc_repair": soc_repair,
-            "partial_milp_repair": partial_milp_repair,
+            "partial_milp_repair": lambda problem, plan: partial_milp_repair(problem, plan, config=config),
         }
         acceptance = self._make_acceptance(config)
         stopper = CompositeStop(
@@ -221,6 +221,12 @@ class ALNSOptimizer:
             infeasibility_reasons=best.infeasibility_reasons,
             cost_breakdown=best.cost_breakdown,
             solver_metadata={
+                "final_plan_metadata": dict(best.plan.metadata or {}),
+                "last_repair_operator": str((best.plan.metadata or {}).get("repair_operator") or ""),
+                "partial_milp_repair_settings": (best.plan.metadata or {}).get("partial_milp_repair_settings"),
+                "partial_milp_repair_target_trip_ids": (best.plan.metadata or {}).get(
+                    "partial_milp_repair_target_trip_ids"
+                ),
                 "iterations": iteration,
                 "true_solver_family": "alns",  # This is the true ALNS implementation
                 "independent_implementation": True,  # True independent solver

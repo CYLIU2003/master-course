@@ -8,6 +8,17 @@ from src.dispatch.models import DutyLeg, VehicleDuty
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
+from src.optimization.common.soc_helpers import (
+    deadhead_distance_km as shared_deadhead_distance_km,
+    deadhead_energy_kwh as shared_deadhead_energy_kwh,
+    required_departure_soc_kwh as shared_required_departure_soc_kwh,
+    slot_absolute_min as shared_slot_absolute_min,
+    slot_index as shared_slot_index,
+    trip_active_in_slot as shared_trip_active_in_slot,
+    trip_active_slot_count as shared_trip_active_slot_count,
+    trip_energy_kwh as shared_trip_energy_kwh,
+    trip_slot_energy_fraction as shared_trip_slot_energy_fraction,
+)
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.route_code_utils import extract_route_series_from_candidates
 
@@ -20,7 +31,6 @@ from src.optimization.common.problem import (
     ProblemTrip,
     RefuelSlot,
     classify_peak_slots,
-    normalize_required_soc_departure_ratio,
 )
 
 
@@ -1827,18 +1837,7 @@ class GurobiMILPAdapter:
         return repaired_plan
 
     def _slot_index(self, problem: CanonicalOptimizationProblem, departure_min: int) -> int:
-        timestep_min = max(problem.scenario.timestep_min, 1)
-        if not problem.scenario.horizon_start:
-            return departure_min // timestep_min
-        try:
-            hh, mm = problem.scenario.horizon_start.split(":")
-            start_min = int(hh) * 60 + int(mm)
-        except ValueError:
-            return departure_min // timestep_min
-        adjusted = departure_min
-        if adjusted < start_min:
-            adjusted += 24 * 60
-        return (adjusted - start_min) // timestep_min
+        return shared_slot_index(problem, departure_min)
 
     def _slot_indices_for_interval(
         self,
@@ -2232,7 +2231,7 @@ class GurobiMILPAdapter:
         arrival_min: int,
     ) -> int:
         adjusted_arrival = max(arrival_min - 1, departure_min)
-        return self._slot_index(problem, adjusted_arrival)
+        return shared_slot_index(problem, adjusted_arrival)
 
     def _charge_power_max_kw(self, problem: CanonicalOptimizationProblem, vehicle_type: str) -> float:
         vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type), None)
@@ -2255,17 +2254,7 @@ class GurobiMILPAdapter:
         arrival_min: int,
         slot_idx: int,
     ) -> bool:
-        timestep_min = max(problem.scenario.timestep_min, 1)
-        slot_start = self._slot_absolute_min(problem, slot_idx)
-        slot_end = slot_start + timestep_min
-        dep = departure_min
-        arr = arrival_min
-        if arr < dep:
-            arr += 24 * 60
-        if dep < slot_start - 24 * 60:
-            dep += 24 * 60
-            arr += 24 * 60
-        return dep < slot_end and arr > slot_start
+        return shared_trip_active_in_slot(problem, departure_min, arrival_min, slot_idx)
 
     def _trip_slot_energy_fraction(
         self,
@@ -2274,38 +2263,7 @@ class GurobiMILPAdapter:
         arrival_min: int,
         slot_idx: int,
     ) -> float:
-        """
-        Compute the fraction of trip energy to attribute to the given slot.
-        
-        For mid-trip SOC safety, we spread trip energy proportionally across
-        the slots where the trip is active, rather than concentrating it at
-        the trip-end slot.
-        
-        This prevents hidden mid-trip SOC violations where a vehicle appears
-        safe at trip-end but actually goes below minimum SOC mid-trip.
-        """
-        timestep_min = max(problem.scenario.timestep_min, 1)
-        slot_start = self._slot_absolute_min(problem, slot_idx)
-        slot_end = slot_start + timestep_min
-        
-        dep = departure_min
-        arr = arrival_min
-        if arr < dep:
-            arr += 24 * 60
-        if dep < slot_start - 24 * 60:
-            dep += 24 * 60
-            arr += 24 * 60
-        
-        # No overlap with this slot
-        if dep >= slot_end or arr <= slot_start:
-            return 0.0
-        
-        trip_duration = max(arr - dep, 1)
-        overlap_start = max(dep, slot_start)
-        overlap_end = min(arr, slot_end)
-        overlap_duration = max(overlap_end - overlap_start, 0)
-        
-        return overlap_duration / trip_duration
+        return shared_trip_slot_energy_fraction(problem, departure_min, arrival_min, slot_idx)
 
     def _build_trip_overlap_cliques(
         self,
@@ -2367,23 +2325,10 @@ class GurobiMILPAdapter:
         arrival_min: int,
         slot_indices: List[int],
     ) -> int:
-        """Count how many slots a trip is active in."""
-        count = 0
-        for slot_idx in slot_indices:
-            if self._trip_active_in_slot(problem, departure_min, arrival_min, slot_idx):
-                count += 1
-        return max(count, 1)
+        return shared_trip_active_slot_count(problem, departure_min, arrival_min, slot_indices)
 
     def _slot_absolute_min(self, problem: CanonicalOptimizationProblem, slot_idx: int) -> int:
-        timestep_min = max(problem.scenario.timestep_min, 1)
-        if not problem.scenario.horizon_start:
-            return slot_idx * timestep_min
-        try:
-            hh, mm = problem.scenario.horizon_start.split(":")
-            start_min = int(hh) * 60 + int(mm)
-        except ValueError:
-            start_min = 0
-        return start_min + slot_idx * timestep_min
+        return shared_slot_absolute_min(problem, slot_idx)
 
     def _deadhead_energy_kwh(
         self,
@@ -2396,16 +2341,7 @@ class GurobiMILPAdapter:
         to_trip = problem.trip_by_id().get(to_trip_id)
         if from_trip is None or to_trip is None:
             return 0.0
-        deadhead_min = problem.dispatch_context.get_deadhead_min(
-            from_trip.destination,
-            to_trip.origin,
-        )
-        deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
-        vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle.vehicle_type), None)
-        if vt and vt.powertrain_type.upper() in {"BEV", "PHEV", "FCEV"}:
-            drive_rate = self._vehicle_energy_rate_kwh_per_km(problem, vehicle, from_trip)
-            return deadhead_km * drive_rate
-        return 0.0
+        return shared_deadhead_energy_kwh(problem, vehicle, from_trip, to_trip)
 
     def _trip_energy_kwh(
         self,
@@ -2416,10 +2352,7 @@ class GurobiMILPAdapter:
         trip = problem.trip_by_id().get(trip_id)
         if trip is None:
             return 0.0
-        drive_rate = self._vehicle_energy_rate_kwh_per_km(problem, vehicle, trip)
-        if drive_rate > 0.0:
-            return max(float(trip.distance_km or 0.0), 0.0) * drive_rate
-        return max(float(trip.energy_kwh or 0.0), 0.0)
+        return shared_trip_energy_kwh(problem, vehicle, trip)
 
     def _vehicle_energy_rate_kwh_per_km(
         self,
@@ -2473,11 +2406,7 @@ class GurobiMILPAdapter:
         return max(deadhead_km, 0.0) * fuel_rate
 
     def _deadhead_distance_km(self, problem: CanonicalOptimizationProblem, deadhead_min: int) -> float:
-        speed_kmh = self._safe_nonnegative_float(
-            problem.metadata.get("deadhead_speed_kmh"),
-            default=18.0,
-        )
-        return max(float(deadhead_min or 0), 0.0) * speed_kmh / 60.0
+        return shared_deadhead_distance_km(problem, deadhead_min)
 
     def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
         return classify_peak_slots(problem.price_slots)
@@ -2561,19 +2490,12 @@ class GurobiMILPAdapter:
         *,
         cap_kwh: float,
         final_soc_floor_kwh: float,
-    ) -> float:
-        # Vehicle-specific readiness uses trip energy + terminal floor reserve.
-        # Keep required_soc_departure_percent as a backward-compatible lower bound.
-        trip_energy_kwh = self._trip_energy_kwh(problem, vehicle, trip.trip_id)
-        required_kwh = trip_energy_kwh + max(float(final_soc_floor_kwh or 0.0), 0.0)
-        required_ratio = normalize_required_soc_departure_ratio(
-            trip.required_soc_departure_percent,
-            treat_values_le_one_as_percent=(
-                str((problem.metadata or {}).get("required_soc_departure_unit") or "").strip().lower()
-                == "percent_0_100"
-            ),
+        ) -> float:
+        return shared_required_departure_soc_kwh(
+            problem,
+            vehicle,
+            trip,
+            cap_kwh=cap_kwh,
+            final_soc_floor_kwh=final_soc_floor_kwh,
         )
-        if required_ratio is not None and required_ratio > 0.0 and cap_kwh > 0.0:
-            required_kwh = max(required_kwh, required_ratio * cap_kwh)
-        return max(required_kwh, 0.0)
 
