@@ -7,6 +7,13 @@ from bff.routers.simulation import PrepareSimulationBody, PrepareSimulationSetti
 from bff.services import simulation_builder
 
 
+def test_prepare_simulation_settings_defaults_enable_route_band_and_diagrams() -> None:
+    settings = PrepareSimulationSettingsBody()
+
+    assert settings.fixed_route_band_mode is True
+    assert settings.enable_vehicle_diagram_output is True
+
+
 def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -> None:
     scenario_doc = {
         "meta": {},

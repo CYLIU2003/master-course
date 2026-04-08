@@ -7,6 +7,12 @@ from unittest import mock
 from bff.store import scenario_store
 
 
+def test_default_dispatch_scope_enables_fixed_route_band_mode() -> None:
+    scope = scenario_store._default_dispatch_scope()
+
+    assert scope["fixedRouteBandMode"] is True
+
+
 def test_set_dispatch_scope_syncs_overlay_route_and_depot_ids(monkeypatch) -> None:
     doc = {
         "meta": {"id": "scenario-1", "updatedAt": "2026-03-21T00:00:00Z", "status": "draft"},

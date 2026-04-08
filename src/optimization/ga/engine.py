@@ -34,7 +34,8 @@ class GAOptimizer:
             acceptance="genetic_like",
             operator_selection="adaptive_roulette",
             destroy_fraction=max(config.destroy_fraction, 0.35),
-            alns_iterations=max(config.alns_iterations, 600),
+            alns_iterations=max(config.alns_iterations, 1500),  # Increased from 600
+            no_improvement_limit=max(config.no_improvement_limit, 300),  # Increased patience
         )
         result = self._delegate.solve(problem, ga_config)
         return OptimizationEngineResult(

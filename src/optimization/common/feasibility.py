@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List
 
 from src.dispatch.models import ValidationResult, VehicleDuty
+from src.dispatch.route_band import duty_route_band_ids, fragment_transition_allows_depot_reset, fragment_transition_is_feasible
 from src.dispatch.validator import DutyValidator
 
 from .problem import (
@@ -72,6 +73,7 @@ class FeasibilityChecker:
         )
 
         errors.extend(self._evaluate_vehicle_fragment_integrity(problem, plan))
+        errors.extend(self._evaluate_route_band_integrity(problem, plan))
         errors.extend(self._evaluate_startup_deadhead(problem, plan))
 
         soc_errors = self._evaluate_soc(problem, plan)
@@ -221,6 +223,7 @@ class FeasibilityChecker:
         errors: List[str] = []
         max_start_fragments = int(problem.metadata.get("max_start_fragments_per_vehicle") or 1)
         max_end_fragments = int(problem.metadata.get("max_end_fragments_per_vehicle") or 1)
+        fixed_route_band_mode = bool((problem.metadata or {}).get("fixed_route_band_mode", False))
         duties_by_vehicle = plan.duties_by_vehicle()
         for vehicle_id, duties in duties_by_vehicle.items():
             fragment_count = len(duties)
@@ -240,13 +243,78 @@ class FeasibilityChecker:
                     duty.duty_id,
                 ),
             )
+            vehicle = next(
+                (
+                    candidate
+                    for candidate in problem.vehicles
+                    if str(candidate.vehicle_id) == str(vehicle_id)
+                ),
+                None,
+            )
+            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
             for index, prev_duty in enumerate(ordered):
                 for next_duty in ordered[index + 1 :]:
                     if not self._duties_overlap_in_time(prev_duty, next_duty):
-                        continue
+                        break
                     errors.append(
                         f"[FRAGMENT] vehicle={vehicle_id} has overlapping fragments {prev_duty.duty_id} and {next_duty.duty_id}"
                     )
+            for prev_duty, next_duty in zip(ordered, ordered[1:]):
+                if fragment_transition_is_feasible(
+                    prev_duty,
+                    next_duty,
+                    home_depot_id=home_depot_id,
+                    dispatch_context=problem.dispatch_context,
+                    fixed_route_band_mode=fixed_route_band_mode,
+                ):
+                    continue
+                errors.append(
+                    f"[FRAGMENT] vehicle={vehicle_id} lacks direct-or-depot transition feasibility between {prev_duty.duty_id} and {next_duty.duty_id}"
+                )
+        return errors
+
+    def _evaluate_route_band_integrity(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> List[str]:
+        if not bool((problem.metadata or {}).get("fixed_route_band_mode", False)):
+            return []
+        errors: List[str] = []
+        duties_by_vehicle = plan.duties_by_vehicle()
+        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+        for duty in plan.duties:
+            duty_bands = duty_route_band_ids(duty)
+            if len(duty_bands) > 1:
+                errors.append(
+                    f"[ROUTE_BAND] duty={duty.duty_id} spans multiple route bands {list(duty_bands)}"
+                )
+        for vehicle_id, duties in duties_by_vehicle.items():
+            vehicle = vehicle_by_id.get(str(vehicle_id))
+            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
+            ordered = sorted(
+                duties,
+                key=lambda duty: (
+                    duty.legs[0].trip.departure_min if duty.legs else 10**9,
+                    duty.legs[-1].trip.arrival_min if duty.legs else 10**9,
+                    duty.duty_id,
+                ),
+            )
+            for prev_duty, next_duty in zip(ordered, ordered[1:]):
+                prev_band = duty_route_band_ids(prev_duty)
+                next_band = duty_route_band_ids(next_duty)
+                if not prev_band or not next_band or prev_band == next_band:
+                    continue
+                if fragment_transition_allows_depot_reset(
+                    prev_duty,
+                    next_duty,
+                    home_depot_id=home_depot_id,
+                    dispatch_context=problem.dispatch_context,
+                ):
+                    continue
+                errors.append(
+                    f"[ROUTE_BAND] vehicle={vehicle_id} changes route band from {list(prev_band)} to {list(next_band)} without depot-reset feasibility"
+                )
         return errors
 
     def _duties_overlap_in_time(

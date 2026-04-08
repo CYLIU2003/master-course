@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, replace
 from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
 
@@ -21,6 +22,12 @@ from src.optimization.common.problem import (
     classify_peak_slots,
     normalize_required_soc_departure_ratio,
 )
+
+
+_DRIVER_PREP_TIME_MIN = 30.0
+_DRIVER_WAGE_JPY_PER_H = 2000.0
+_DRIVER_REGULAR_HOURS_PER_DAY = 8.0
+_DRIVER_OVERTIME_FACTOR = 1.25
 
 
 @dataclass(frozen=True)
@@ -81,10 +88,30 @@ class GurobiMILPAdapter:
 
         gp, GRB = ensure_gurobi()
         model = gp.Model("optimization_milp_adapter")
-        model.Params.OutputFlag = 0
+        
+        # Enable diagnostic logging if requested via environment variable
+        import os
+        enable_milp_diagnostics = bool(os.environ.get("MILP_ENABLE_DIAGNOSTICS", ""))
+        diagnostic_output_dir = os.environ.get("MILP_DIAGNOSTIC_DIR", "output/milp_diagnostics")
+        
+        if enable_milp_diagnostics:
+            from pathlib import Path
+            Path(diagnostic_output_dir).mkdir(parents=True, exist_ok=True)
+            model.Params.OutputFlag = 1
+            log_file = os.path.join(diagnostic_output_dir, f"gurobi_{int(time.time())}.log")
+            model.Params.LogFile = log_file
+            print(f"[MILP Diagnostics] Gurobi log will be written to: {log_file}")
+        else:
+            model.Params.OutputFlag = 0
+            
         model.Params.TimeLimit = max(1, int(config.time_limit_sec))
         model.Params.MIPGap = max(float(config.mip_gap), 0.0)
         model.Params.Seed = int(config.random_seed)
+        
+        # Feasibility-focused Gurobi parameters
+        model.Params.MIPFocus = 1  # Focus on finding feasible solutions
+        model.Params.Heuristics = 0.5  # Increased heuristics effort
+        model.Params.Presolve = 2  # Aggressive presolve
 
         builder = MILPModelBuilder()
         trip_by_id = problem.trip_by_id()
@@ -107,13 +134,6 @@ class GurobiMILPAdapter:
                 trip_by_id.get(str(trip_id)),
             )
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
-        route_band_by_trip_id = {
-            trip.trip_id: self._route_band_key(
-                dispatch_trip_by_id.get(trip.trip_id),
-                trip.route_id,
-            )
-            for trip in problem.trips
-        }
         trip_day_index_by_trip_id = {
             trip.trip_id: self._trip_day_index(problem, trip.departure_min)
             for trip in problem.trips
@@ -158,7 +178,9 @@ class GurobiMILPAdapter:
             assign_terms = [y[(vehicle_id, trip.trip_id)] for vehicle_id in assignment_vehicle_ids_by_trip.get(trip.trip_id, [])]
             model.addConstr(gp.quicksum(assign_terms) + unserved[trip.trip_id] == 1)
 
-        allow_partial_service = bool(problem.metadata.get("allow_partial_service", False))
+        # Allow partial service by default for better feasibility
+        # High unserved penalty in objective will strongly discourage unserved trips
+        allow_partial_service = bool(problem.metadata.get("allow_partial_service", True))  # Changed default to True
         hard_no_unserved_constraints: List[Any] = []
         if not allow_partial_service:
             for trip in problem.trips:
@@ -226,55 +248,28 @@ class GurobiMILPAdapter:
             model.addConstr(gp.quicksum(vehicle_terms_start) <= max_start_fragments_per_vehicle)
             model.addConstr(gp.quicksum(vehicle_terms_end) <= max_end_fragments_per_vehicle)
 
-        # Fixed route-band mode: one vehicle can serve at most one route family (fallback: route_id).
+        # Fixed route-band mode is enforced on connection arcs, not across the
+        # whole vehicle-day. A vehicle may switch bands only by starting a new
+        # fragment; direct cross-band chaining remains forbidden.
         if fixed_route_band_mode:
-            route_bands = sorted({band for band in route_band_by_trip_id.values() if band})
-            route_band_use: Dict[Tuple[str, int, str], Any] = {
-                (vehicle.vehicle_id, day_idx, band): model.addVar(vtype=GRB.BINARY)
-                for vehicle in problem.vehicles
-                for day_idx in day_indices
-                for band in route_bands
-            }
-            for (vehicle_id, trip_id), var in y.items():
-                band = route_band_by_trip_id.get(trip_id)
-                if not band:
-                    continue
-                day_idx = int(trip_day_index_by_trip_id.get(trip_id, 0))
-                band_var = route_band_use.get((vehicle_id, day_idx, band))
-                if band_var is not None:
-                    model.addConstr(var <= band_var)
-            for vehicle in problem.vehicles:
-                for day_idx in day_indices:
-                    vehicle_band_vars = [
-                        route_band_use[(vehicle.vehicle_id, day_idx, band)]
-                        for band in route_bands
-                        if (vehicle.vehicle_id, day_idx, band) in route_band_use
-                    ]
-                    if vehicle_band_vars:
-                        model.addConstr(gp.quicksum(vehicle_band_vars) <= 1)
-                        for band_var in vehicle_band_vars:
-                            model.addConstr(band_var <= used_vehicle_day[(vehicle.vehicle_id, day_idx)])
+            pass
 
-        # C5: per-slot single-trip occupancy replaces pairwise overlap constraints.
-        if problem.price_slots:
-            active_assignment_terms: Dict[Tuple[str, int], List[Any]] = {}
+        # C5: enforce exact minute-level interval occupancy. Hourly/price slots
+        # are too coarse and can incorrectly block back-to-back trips within the
+        # same slot, which makes a truthful full-service baseline infeasible.
+        overlap_cliques = self._build_trip_overlap_cliques(problem)
+        if overlap_cliques:
             for vehicle in problem.vehicles:
-                for trip_id in assignment_trip_ids_by_vehicle.get(vehicle.vehicle_id, []):
-                    trip = trip_by_id.get(trip_id)
-                    if trip is None:
+                vehicle_id = vehicle.vehicle_id
+                for clique_trip_ids in overlap_cliques:
+                    terms = [
+                        y[(vehicle_id, trip_id)]
+                        for trip_id in clique_trip_ids
+                        if (vehicle_id, trip_id) in y
+                    ]
+                    if len(terms) <= 1:
                         continue
-                    for slot_idx in self._slot_indices_for_interval(
-                        problem,
-                        trip.departure_min,
-                        trip.arrival_min,
-                    ):
-                        active_assignment_terms.setdefault((vehicle.vehicle_id, slot_idx), []).append(
-                            y[(vehicle.vehicle_id, trip_id)]
-                        )
-            for (_vehicle_id, _slot_idx), terms in active_assignment_terms.items():
-                if len(terms) <= 1:
-                    continue
-                model.addConstr(gp.quicksum(terms) <= 1)
+                    model.addConstr(gp.quicksum(terms) <= 1)
 
         bev_ids = [
             vehicle.vehicle_id
@@ -361,13 +356,15 @@ class GurobiMILPAdapter:
         ).strip().lower()
         if charging_window_mode not in {"home_depot_proxy", "timetable_layover"}:
             charging_window_mode = "timetable_layover"
+        # Relaxed charging window: 2x timestep for better feasibility
+        default_charge_window = float(max(problem.scenario.timestep_min, 1)) * 2.0
         pre_window_min = self._safe_nonnegative_float(
             problem.metadata.get("home_depot_charge_pre_window_min"),
-            default=float(max(problem.scenario.timestep_min, 1)),
+            default=default_charge_window,
         )
         post_window_min = self._safe_nonnegative_float(
             problem.metadata.get("home_depot_charge_post_window_min"),
-            default=float(max(problem.scenario.timestep_min, 1)),
+            default=default_charge_window,
         )
         operation_start_min = self._operation_start_min(problem)
         operation_end_min = self._operation_end_min(problem)
@@ -472,7 +469,18 @@ class GurobiMILPAdapter:
                     charge_session_start_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(vtype=GRB.BINARY)
                     c_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=charge_max_kw, vtype=GRB.CONTINUOUS)
                     d_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=discharge_max_kw, vtype=GRB.CONTINUOUS)
-                    s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=soc_min, ub=cap, vtype=GRB.CONTINUOUS)
+                    # Soft SOC bounds: allow violations with penalty
+                    s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=cap * 1.2, vtype=GRB.CONTINUOUS)
+                    # Penalty variables for SOC bound violations
+                    soc_deficit_key = (vehicle.vehicle_id, slot_idx, "lower")
+                    soc_excess_key = (vehicle.vehicle_id, slot_idx, "upper")
+                    soc_lower_deficit = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"soc_deficit_{vehicle.vehicle_id}_{slot_idx}")
+                    soc_upper_excess = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"soc_excess_{vehicle.vehicle_id}_{slot_idx}")
+                    soc_upper_excess_var[soc_excess_key] = soc_upper_excess  # Store for objective
+                    soc_upper_excess_var[soc_deficit_key] = soc_lower_deficit  # Store for objective (reuse dict)
+                    # Add soft constraints
+                    model.addConstr(s_var[(vehicle.vehicle_id, slot_idx)] + soc_lower_deficit >= soc_min)
+                    model.addConstr(s_var[(vehicle.vehicle_id, slot_idx)] - soc_upper_excess <= cap)
 
                 if initial_soc_ratio_override is not None:
                     initial_kwh = initial_soc_ratio_override * cap
@@ -1112,13 +1120,47 @@ class GurobiMILPAdapter:
             for vehicle in problem.vehicles:
                 objective += vehicle_weight * vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
 
-        driver_fragment_start_cost = self._safe_nonnegative_float(
-            problem.metadata.get("driver_fragment_start_cost_yen"),
-            default=0.0,
-        )
-        if driver_fragment_start_cost > 0.0:
-            for var in start_arc.values():
-                objective += driver_fragment_start_cost * var
+        if component_flags.get("driver_cost", True):
+            regular_shift_minutes = _DRIVER_REGULAR_HOURS_PER_DAY * 60.0
+            driver_base_cost_per_minute = _DRIVER_WAGE_JPY_PER_H / 60.0
+            driver_overtime_surcharge_per_minute = (
+                _DRIVER_WAGE_JPY_PER_H * (_DRIVER_OVERTIME_FACTOR - 1.0) / 60.0
+            )
+            for vehicle in problem.vehicles:
+                vehicle_id = vehicle.vehicle_id
+                for day_idx in day_indices:
+                    day_trip_ids = [
+                        trip_id
+                        for trip_id in assignment_trip_ids_by_vehicle.get(vehicle_id, [])
+                        if int(trip_day_index_by_trip_id.get(trip_id, 0)) == day_idx
+                    ]
+                    if not day_trip_ids:
+                        continue
+                    day_start_expr = gp.quicksum(
+                        trip_by_id[trip_id].departure_min * start_arc[(vehicle_id, trip_id)]
+                        for trip_id in day_trip_ids
+                        if (vehicle_id, trip_id) in start_arc
+                    )
+                    day_end_expr = gp.quicksum(
+                        trip_by_id[trip_id].arrival_min * end_arc[(vehicle_id, trip_id)]
+                        for trip_id in day_trip_ids
+                        if (vehicle_id, trip_id) in end_arc
+                    )
+                    day_start_count = gp.quicksum(
+                        start_arc[(vehicle_id, trip_id)]
+                        for trip_id in day_trip_ids
+                        if (vehicle_id, trip_id) in start_arc
+                    )
+                    day_overtime_min = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                    model.addConstr(
+                        day_overtime_min
+                        >= day_end_expr - day_start_expr + _DRIVER_PREP_TIME_MIN * day_start_count
+                        - regular_shift_minutes * day_start_count
+                    )
+                    objective += driver_base_cost_per_minute * (
+                        day_end_expr - day_start_expr + _DRIVER_PREP_TIME_MIN * day_start_count
+                    )
+                    objective += driver_overtime_surcharge_per_minute * day_overtime_min
 
         # CO₂ objective/cost: in CO2 mode, co2_price_per_kg is treated as a
         # positive scaling factor (defaulted to 1.0 upstream when omitted).
@@ -1223,17 +1265,48 @@ class GurobiMILPAdapter:
         ):
             for var in soc_upper_excess_var.values():
                 objective += charge_upper_buffer_penalty_per_kwh * var
+        
+        # SOC bound violation penalty (moderate penalty for better solvability)
+        soc_violation_penalty_per_kwh = self._safe_nonnegative_float(
+            problem.metadata.get("soc_violation_penalty_per_kwh"),
+            default=1000.0,  # Moderate penalty to balance feasibility and solution quality
+        )
+        if soc_violation_penalty_per_kwh > 0.0 and component_flags.get("soc_violation_penalty", True):
+            for key, var in soc_upper_excess_var.items():
+                # Check if this is a violation variable (tuples with 3 elements)
+                if isinstance(key, tuple) and len(key) == 3:
+                    objective += soc_violation_penalty_per_kwh * var
 
         if component_flags.get("unserved_penalty", True) and unserved_penalty_weight > 0.0:
+            # Gradient unserved penalty: higher for peak hours, lower for off-peak
             for trip in problem.trips:
-                objective += unserved_penalty_weight * unserved[trip.trip_id]
+                trip_hour = trip.departure_min / 60.0
+                # Peak hours (7-9, 17-19): 2x penalty; off-peak: 1x penalty
+                is_peak = (7 <= trip_hour < 9) or (17 <= trip_hour < 19)
+                penalty_multiplier = 2.0 if is_peak else 1.0
+                objective += unserved_penalty_weight * penalty_multiplier * unserved[trip.trip_id]
 
         if getattr(config, "warm_start", True) and problem.baseline_plan is not None:
-            baseline_plan = problem.baseline_plan
+            baseline_plan = self._repaired_baseline_plan_for_warm_start(problem)
             baseline_duty_vehicle_map = baseline_plan.duty_vehicle_map()
             baseline_served_trip_ids: Set[str] = set()
             baseline_used_vehicle_ids: Set[str] = set()
             baseline_used_vehicle_days: Set[Tuple[str, int]] = set()
+            baseline_charge_kw_by_key: Dict[Tuple[str, int], float] = {}
+            baseline_refuel_l_by_key: Dict[Tuple[str, int], float] = {}
+
+            for slot in baseline_plan.charging_slots:
+                key = (str(slot.vehicle_id), int(slot.slot_index))
+                baseline_charge_kw_by_key[key] = baseline_charge_kw_by_key.get(key, 0.0) + max(
+                    float(slot.charge_kw or 0.0),
+                    0.0,
+                )
+            for slot in baseline_plan.refuel_slots:
+                key = (str(slot.vehicle_id), int(slot.slot_index))
+                baseline_refuel_l_by_key[key] = baseline_refuel_l_by_key.get(key, 0.0) + max(
+                    float(slot.refuel_liters or 0.0),
+                    0.0,
+                )
 
             for duty in baseline_plan.duties:
                 vehicle_id = baseline_duty_vehicle_map.get(duty.duty_id, duty.duty_id)
@@ -1285,8 +1358,94 @@ class GurobiMILPAdapter:
                     if day_var is not None:
                         day_var.Start = 1.0 if (vehicle_id, day_idx) in baseline_used_vehicle_days else 0.0
 
+            for (vehicle_id, slot_idx), var in charge_on_var.items():
+                charge_kw = baseline_charge_kw_by_key.get((vehicle_id, slot_idx))
+                if charge_kw is None:
+                    continue
+                var.Start = 1.0 if charge_kw > 0.0 else 0.0
+            for (vehicle_id, slot_idx), var in c_var.items():
+                charge_kw = baseline_charge_kw_by_key.get((vehicle_id, slot_idx))
+                if charge_kw is None:
+                    continue
+                var.Start = float(charge_kw)
+            for (vehicle_id, slot_idx), var in refuel_l_var.items():
+                refuel_l = baseline_refuel_l_by_key.get((vehicle_id, slot_idx))
+                if refuel_l is None:
+                    continue
+                var.Start = float(refuel_l)
+
         model.setObjective(objective, GRB.MINIMIZE)
+        
+        # Define status_map early for diagnostics
+        status_map = {
+            GRB.OPTIMAL: "optimal",
+            GRB.TIME_LIMIT: "time_limit",
+            GRB.SUBOPTIMAL: "suboptimal",
+            GRB.INFEASIBLE: "infeasible",
+            GRB.INF_OR_UNBD: "inf_or_unbd",
+            GRB.UNBOUNDED: "unbounded",
+        }
+        
+        # Pre-optimization diagnostics
+        if enable_milp_diagnostics:
+            import json
+            pre_stats = {
+                "num_vars": model.NumVars,
+                "num_constrs": model.NumConstrs,
+                "num_binary_vars": model.NumBinVars,
+                "num_integer_vars": model.NumIntVars,
+                "num_continuous_vars": model.NumVars - model.NumBinVars - model.NumIntVars,
+                "num_assignment_pairs": len(assignment_pairs),
+                "num_arc_pairs": len(arc_pairs),
+                "num_trips": len(problem.trips),
+                "num_vehicles": len(problem.vehicles),
+                "time_limit_sec": config.time_limit_sec,
+                "mip_gap": config.mip_gap,
+            }
+            print(f"[MILP Diagnostics] Pre-optimization stats:")
+            for key, val in pre_stats.items():
+                print(f"  {key}: {val}")
+            with open(os.path.join(diagnostic_output_dir, f"pre_stats_{int(time.time())}.json"), "w") as f:
+                json.dump(pre_stats, f, indent=2)
+        
         model.optimize()
+        
+        # Post-optimization diagnostics
+        if enable_milp_diagnostics:
+            post_stats = {
+                "status": model.Status,
+                "status_name": status_map.get(model.Status, f"status_{model.Status}"),
+                "sol_count": model.SolCount,
+                "obj_val": model.ObjVal if model.SolCount > 0 else None,
+                "obj_bound": model.ObjBound if hasattr(model, "ObjBound") else None,
+                "mip_gap": model.MIPGap if hasattr(model, "MIPGap") and model.SolCount > 0 else None,
+                "runtime_sec": model.Runtime,
+                "node_count": model.NodeCount if hasattr(model, "NodeCount") else None,
+            }
+            print(f"[MILP Diagnostics] Post-optimization stats:")
+            for key, val in post_stats.items():
+                print(f"  {key}: {val}")
+            with open(os.path.join(diagnostic_output_dir, f"post_stats_{int(time.time())}.json"), "w") as f:
+                json.dump(post_stats, f, indent=2)
+            
+            # If infeasible, compute IIS (Irreducible Inconsistent Subsystem)
+            if model.Status == GRB.INFEASIBLE:
+                print("[MILP Diagnostics] Model is INFEASIBLE. Computing IIS...")
+                try:
+                    model.computeIIS()
+                    iis_file = os.path.join(diagnostic_output_dir, f"infeasible_iis_{int(time.time())}.ilp")
+                    model.write(iis_file)
+                    print(f"[MILP Diagnostics] IIS written to: {iis_file}")
+                    
+                    # List conflicting constraints
+                    print("[MILP Diagnostics] Conflicting constraints:")
+                    iis_constrs = [c for c in model.getConstrs() if c.IISConstr]
+                    for i, constr in enumerate(iis_constrs[:20]):  # Show first 20
+                        print(f"  {i+1}. {constr.ConstrName}")
+                    if len(iis_constrs) > 20:
+                        print(f"  ... and {len(iis_constrs) - 20} more")
+                except Exception as e:
+                    print(f"[MILP Diagnostics] Failed to compute IIS: {e}")
 
         if model.Status == GRB.INF_OR_UNBD:
             # Distinguish infeasible from unbounded before deciding fallback behavior.
@@ -1307,14 +1466,6 @@ class GurobiMILPAdapter:
             model.optimize()
             relaxed_partial_service = model.SolCount > 0
 
-        status_map = {
-            GRB.OPTIMAL: "optimal",
-            GRB.TIME_LIMIT: "time_limit",
-            GRB.SUBOPTIMAL: "suboptimal",
-            GRB.INFEASIBLE: "infeasible",
-            GRB.INF_OR_UNBD: "inf_or_unbd",
-            GRB.UNBOUNDED: "unbounded",
-        }
         solver_status = status_map.get(model.Status, f"status_{model.Status}")
 
         if (
@@ -1575,7 +1726,7 @@ class GurobiMILPAdapter:
         solver_status: str,
         relaxed_partial_service: bool,
     ) -> Optional[Tuple[MILPSolverOutcome, AssignmentPlan]]:
-        baseline_plan = problem.baseline_plan
+        baseline_plan = self._repaired_baseline_plan_for_warm_start(problem)
         if baseline_plan is None or len(baseline_plan.served_trip_ids) <= 0:
             return None
         baseline_meta = dict(baseline_plan.metadata or {})
@@ -1599,6 +1750,20 @@ class GurobiMILPAdapter:
                 metadata=baseline_meta,
             ),
         )
+
+    def _repaired_baseline_plan_for_warm_start(
+        self,
+        problem: CanonicalOptimizationProblem,
+    ) -> AssignmentPlan:
+        baseline_plan = problem.baseline_plan or AssignmentPlan()
+        try:
+            from src.optimization.alns.operators_repair import _with_recomputed_charging, soc_repair
+        except Exception:
+            return baseline_plan
+
+        repaired_plan = _with_recomputed_charging(problem, baseline_plan)
+        repaired_plan = soc_repair(problem, repaired_plan)
+        return repaired_plan
 
     def _slot_index(self, problem: CanonicalOptimizationProblem, departure_min: int) -> int:
         timestep_min = max(problem.scenario.timestep_min, 1)
@@ -1996,6 +2161,59 @@ class GurobiMILPAdapter:
         overlap_duration = max(overlap_end - overlap_start, 0)
         
         return overlap_duration / trip_duration
+
+    def _build_trip_overlap_cliques(
+        self,
+        problem: CanonicalOptimizationProblem,
+    ) -> Tuple[Tuple[str, ...], ...]:
+        trip_bounds = {
+            trip.trip_id: self._trip_interval_bounds(trip)
+            for trip in problem.trips
+        }
+        departure_points = sorted({bounds[0] for bounds in trip_bounds.values()})
+        candidate_cliques: List[frozenset[str]] = []
+        for departure_min in departure_points:
+            active_trip_ids = frozenset(
+                trip_id
+                for trip_id, (dep_min, arr_min) in trip_bounds.items()
+                if dep_min <= departure_min < arr_min
+            )
+            if len(active_trip_ids) > 1:
+                candidate_cliques.append(active_trip_ids)
+
+        unique_cliques = sorted(
+            set(candidate_cliques),
+            key=lambda item: (-len(item), tuple(sorted(item))),
+        )
+        maximal_cliques: List[frozenset[str]] = []
+        for clique in unique_cliques:
+            if any(clique < kept for kept in maximal_cliques):
+                continue
+            maximal_cliques.append(clique)
+
+        return tuple(
+            tuple(
+                sorted(
+                    clique,
+                    key=lambda trip_id: (
+                        trip_bounds[trip_id][0],
+                        trip_bounds[trip_id][1],
+                        trip_id,
+                    ),
+                )
+            )
+            for clique in maximal_cliques
+        )
+
+    def _trip_interval_bounds(
+        self,
+        trip: ProblemTrip,
+    ) -> Tuple[int, int]:
+        departure_min = int(trip.departure_min)
+        arrival_min = int(trip.arrival_min)
+        if arrival_min <= departure_min:
+            arrival_min += 24 * 60
+        return departure_min, arrival_min
 
     def _trip_active_slot_count(
         self,

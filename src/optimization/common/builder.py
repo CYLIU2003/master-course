@@ -18,6 +18,7 @@ from src.dispatch.models import (
     VehicleProfile,
     hhmm_to_min,
 )
+from src.dispatch.route_band import trip_route_band_key
 from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.route_family_runtime import (
     merge_deadhead_metrics,
@@ -129,6 +130,7 @@ class ProblemBuilder:
                 solver_cfg.get("fixed_route_band_mode", True),
             )
         )
+        context.fixed_route_band_mode = fixed_route_band_mode
         milp_max_successors_per_trip = solver_cfg.get("milp_max_successors_per_trip")
         if milp_max_successors_per_trip is None:
             milp_max_successors_per_trip = simulation_cfg.get("milp_max_successors_per_trip")
@@ -386,6 +388,7 @@ class ProblemBuilder:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
         timestep_min = max(int(timestep_min or 60), 1)
+        context.fixed_route_band_mode = bool(fixed_route_band_mode)
         normalized_cost_component_flags = normalize_cost_component_flags(
             cost_component_flags,
             legacy_disable_vehicle_acquisition_cost=disable_vehicle_acquisition_cost,
@@ -572,6 +575,7 @@ class ProblemBuilder:
                 max_fragments_per_vehicle=max_fragments,
                 all_trip_ids=all_trip_ids,
                 dispatch_context=context,
+                fixed_route_band_mode=bool(fixed_route_band_mode),
             )
         else:
             baseline = self._build_baseline_plan(
@@ -580,6 +584,7 @@ class ProblemBuilder:
                 max_fragments_per_vehicle=max_fragments,
                 all_trip_ids=all_trip_ids,
                 feasible_connections=feasible_connections,
+                fixed_route_band_mode=bool(fixed_route_band_mode),
             )
         return CanonicalOptimizationProblem(
             scenario=OptimizationScenario(
@@ -1412,6 +1417,7 @@ class ProblemBuilder:
         max_fragments_per_vehicle: int = 1,
         all_trip_ids: Optional[set[str]] = None,
         feasible_connections: Optional[Mapping[str, Tuple[str, ...]]] = None,
+        fixed_route_band_mode: bool = False,
     ) -> AssignmentPlan:
         baseline_all_trip_ids = all_trip_ids or {trip.trip_id for trip in context.trips}
 
@@ -1422,6 +1428,7 @@ class ProblemBuilder:
                 vehicles=vehicles,
                 all_trip_ids=baseline_all_trip_ids,
                 feasible_connections=feasible_connections,
+                fixed_route_band_mode=fixed_route_band_mode,
             )
             if len(pooled_plan.unserved_trip_ids) == 0:
                 return pooled_plan
@@ -1472,6 +1479,7 @@ class ProblemBuilder:
                 deadhead_rules=context.deadhead_rules,
                 vehicle_profiles=context.vehicle_profiles,
                 default_turnaround_min=context.default_turnaround_min,
+                fixed_route_band_mode=bool(fixed_route_band_mode),
                 location_aliases=dict(getattr(context, "location_aliases", {}) or {}),
             )
             vt_duties = dispatcher.generate_greedy_duties(temp_ctx, vehicle_type)
@@ -1481,6 +1489,7 @@ class ProblemBuilder:
                     vehicles=vehicles_by_type.get(vehicle_type, ()),
                     max_fragments_per_vehicle=max_fragments_per_vehicle,
                     dispatch_context=context,
+                    fixed_route_band_mode=bool(fixed_route_band_mode),
                 )
                 duties.extend(materialized_duties)
                 duty_vehicle_map = merge_duty_vehicle_maps(
@@ -1531,6 +1540,7 @@ class ProblemBuilder:
         vehicles: Sequence[ProblemVehicle],
         all_trip_ids: set[str],
         feasible_connections: Optional[Mapping[str, Tuple[str, ...]]] = None,
+        fixed_route_band_mode: bool = False,
     ) -> AssignmentPlan:
         trip_map = context.trips_by_id()
         trip_ids = {trip.trip_id for trip in context.trips}
@@ -1555,6 +1565,17 @@ class ProblemBuilder:
             graph = {
                 trip_id: tuple(next_id for next_id in graph.get(trip_id, ()) if next_id in trip_ids)
                 for trip_id in trip_ids
+            }
+
+        if fixed_route_band_mode:
+            graph = {
+                trip_id: tuple(
+                    next_id
+                    for next_id in next_ids
+                    if trip_route_band_key(trip_map.get(next_id))
+                    == trip_route_band_key(trip_map.get(trip_id))
+                )
+                for trip_id, next_ids in graph.items()
             }
 
         matched_successor, matched_predecessor = self._maximum_bipartite_matching(graph)
@@ -1794,6 +1815,7 @@ class ProblemBuilder:
         max_fragments_per_vehicle: int,
         all_trip_ids: set[str],
         dispatch_context: Optional[DispatchContext] = None,
+        fixed_route_band_mode: bool = False,
     ) -> AssignmentPlan:
         if plan is None:
             return AssignmentPlan(
@@ -1809,6 +1831,7 @@ class ProblemBuilder:
             vehicles=vehicles,
             max_fragments_per_vehicle=max_fragments_per_vehicle,
             dispatch_context=dispatch_context,
+            fixed_route_band_mode=bool(fixed_route_band_mode),
         )
         served_trip_ids = tuple(
             sorted({trip_id for duty in assigned_duties for trip_id in duty.trip_ids})

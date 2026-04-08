@@ -205,8 +205,8 @@ class OptimizationConfig:
     time_limit_sec: int = 300
     mip_gap: float = 0.02
     random_seed: int = 42
-    alns_iterations: int = 500
-    no_improvement_limit: int = 100
+    alns_iterations: int = 800  # Increased from 500
+    no_improvement_limit: int = 150  # Increased from 100
     destroy_fraction: float = 0.25
     partial_milp_trip_limit: int = 40
     rolling_current_min: Optional[int] = None

@@ -2463,6 +2463,9 @@ def _persist_canonical_graph_exports(
                 scenario_id,
                 graph_context=graph_context,
             )
+    route_band_dir = graph_dir / "route_band_diagrams"
+    if not assets.get("entries") and route_band_dir.exists():
+        shutil.rmtree(route_band_dir)
     if diagrams_enabled:
         _write_route_band_diagram_assets(graph_dir, assets, planning_days=planning_days)
     _write_vehicle_operation_diagram_assets(

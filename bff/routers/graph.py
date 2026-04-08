@@ -720,6 +720,7 @@ def _build_dispatch_context(
         vehicle_profiles=vehicle_profiles,
         allow_intra_depot_swap=bool(scope.get("allowIntraDepotRouteSwap", False)),
         allow_inter_depot_swap=bool(scope.get("allowInterDepotSwap", False)),
+        fixed_route_band_mode=bool(scope.get("fixedRouteBandMode", True)),
     )
 
 

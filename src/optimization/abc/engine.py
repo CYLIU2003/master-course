@@ -32,7 +32,8 @@ class ABCOptimizer:
             acceptance="bee_colony_like",
             operator_selection="adaptive_roulette",
             destroy_fraction=max(config.destroy_fraction, 0.4),
-            alns_iterations=max(config.alns_iterations, 700),
+            alns_iterations=max(config.alns_iterations, 1800),  # Increased from 700
+            no_improvement_limit=max(config.no_improvement_limit, 350),  # Increased patience
         )
         result = self._delegate.solve(problem, abc_config)
         return OptimizationEngineResult(

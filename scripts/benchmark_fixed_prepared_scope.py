@@ -3,11 +3,16 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 import time
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Tuple
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from bff.routers.optimization import _prepared_inputs_root
 from bff.services.run_preparation import load_prepared_input, materialize_scenario_from_prepared_input
@@ -382,9 +387,9 @@ def main() -> None:
     parser.add_argument("--service-id", default="WEEKDAY")
     parser.add_argument("--objective-mode", default="total_cost")
     parser.add_argument("--time-limit-seconds", type=int, default=300)
-    parser.add_argument("--mip-gap", type=float, default=0.01)
-    parser.add_argument("--alns-iterations", type=int, default=500)
-    parser.add_argument("--no-improvement-limit", type=int, default=120)
+    parser.add_argument("--mip-gap", type=float, default=0.05)  # Relaxed from 0.01 to 0.05 for faster solutions
+    parser.add_argument("--alns-iterations", type=int, default=800)  # Increased from 500
+    parser.add_argument("--no-improvement-limit", type=int, default=150)  # Increased from 120
     parser.add_argument("--destroy-fraction", type=float, default=0.25)
     parser.add_argument(
         "--output-stem",

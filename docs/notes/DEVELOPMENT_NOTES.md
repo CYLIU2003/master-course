@@ -2976,3 +2976,50 @@ master-course/
   - 確認:
     - `python -m pytest tests/test_prepared_scope_execution.py tests/test_optimization_canonical_metaheuristics.py tests/test_visualizer_report_utils.py tests/test_canonical_graph_export_parity.py tests/test_graph_export_route_band_diagrams.py tests/test_graph_export_vehicle_operation_diagrams.py tests/test_bus_operation_visualizer_tk.py -q` → `21 passed`
     - `python -m py_compile src/result_exporter.py bff/routers/optimization.py tools/bus_operation_visualizer_tk.py` → pass
+
+- 2026-04-06 (route-band truthfulness fix: prepared scope flag propagation, fragment transition repair, latest 4-solver rerun)
+  - 問題として、fixed prepared scope の actual BFF run では `fixedRouteBandMode=true` を UI/Scenario 側で保存していても、`materialize_scenario_from_prepared_input()` が stale prepared payload の `fixedRouteBandMode=false` を runtime 側へ再注入していた。そのため `run_20260406_0110` 系の結果は route-band が事実上 OFF のまま 974/974 を出し、同一車両が同日中に多数の route family を行き来していた。
+  - 追加で自分から上げた問題として、route-band を ON に戻したあとも、同一車両に複数 fragment を積む際に「前 fragment の終点から次 fragment の始点へ物理的に行けるか」を十分に見ていなかった。same-band でも fragment ごとに depot から再出発したように扱われ、見かけ上は 974/974 でも `vehicle_timeline.csv` 上は同一車両が重複して depot から出ている truthfulness bug があった。これは previous KPI claims を無効化し得る種類の欠陥である。
+  - `bff/store/scenario_store.py`, `bff/routers/simulation.py`, `src/optimization/common/builder.py`, `bff/services/run_preparation.py`, `bff/routers/graph.py` を修正し、route-band flag と diagram flag を current scenario runtime 設定から必ず引き継ぐようにした。prepared trip/vehicle/stops は固定するが、solver/simulation runtime flags は stale prepared payload で上書きしない。
+  - `src/dispatch/route_band.py` を拡張し、fragment 間の直接接続 feasibility (`direct`) と depot-reset feasibility を分離した。same-band fragment は `arrival + turnaround + deadhead <= next departure` を満たす direct connection なら duty 結合を許可し、cross-band change は depot-reset feasible な場合だけ許可する。
+  - `src/optimization/common/vehicle_assignment.py` は fragment insertion 時に direct/depot transition feasibility を見るようにし、`src/optimization/common/feasibility.py` は車両別 fragment 連続性を same-band direct/depot・cross-band depot-reset のルールで再検証するよう更新した。`src/optimization/engine.py` には common post-solve truthfulness repair を追加し、solver 出力 duty を一度 vehicle fragment reassignment に掛け直し、same-band で直接つなげられる fragment は 1 duty に結合したうえで charging/SOC を再計算してから export する。
+  - この修理は数学的意味を厳しくする。以前の 974/974 served は current route-band semantics に対して過大だった可能性が高く、今後の比較はこの fix 後の run を正本とする。
+  - fixed scope `237d5623-aa94-4f72-9da1-17b9070264be` / `prepared-11efb997690030ef` を actual canonical BFF path で再実行し、run directory は `output/2025-08-04/scenario/237d5623-aa94-4f72-9da1-17b9070264be/mode_milp_only/tsurumaki/WEEKDAY/run_20260406_1117/`, `.../mode_alns_only/.../run_20260406_1122/`, `.../mode_ga_only/.../run_20260406_1128/`, `.../mode_abc_only/.../run_20260406_1133/` に保存した。comparison/report bundle は `output/reports/20260406_route_band_standard_rerun/` にまとめ、`comparison.json/csv`, `solver_comparison_table.md/csv`, `verdict.md`, `professor_report.md`, per-solver `route_band_diagrams` / `vehicle_operation_diagrams` を配置した。
+  - rerun 結果は `MILP=optimal, served=880, unserved=94, objective=3541278.159964823`, `ALNS=feasible, served=889, unserved=85, objective=4246492.788347095`, `GA=infeasible_candidate(backend) -> exported feasible, served=887, unserved=87, objective=4259515.117011707`, `ABC=infeasible_candidate(backend) -> exported feasible, served=887, unserved=87, objective=4259515.117011707` だった。4 solver とも exported plan の infeasibility count は 0、all 95 vehicles were used、route-band SVG は `15-16` ファイル生成された。MILP backend status は `optimal` だが、exported objective は post-solve repaired plan の値であることを `solver_metadata.backend_objective_value_raw` と `postsolve_*` flags に残している。
+  - 回帰テスト:
+    - `tests/test_vehicle_assignment_startup_deadhead.py`
+    - `tests/test_optimization_engine_postsolve.py`
+    - `tests/test_milp_route_band_settings.py`
+    - `tests/test_prepared_scope_execution.py`
+    - `tests/test_scenario_store_dispatch_scope_overlay.py`
+    - `tests/test_simulation_builder_prepare_scope.py`
+    - `tests/test_optimization_canonical_metaheuristics.py`
+    - `tests/test_canonical_graph_export_parity.py`
+  - 確認:
+    - `python -m pytest tests/test_vehicle_assignment_startup_deadhead.py tests/test_optimization_engine_postsolve.py tests/test_milp_route_band_settings.py -q` → `26 passed`
+    - `python -m pytest tests/test_prepared_scope_execution.py tests/test_scenario_store_dispatch_scope_overlay.py tests/test_simulation_builder_prepare_scope.py tests/test_vehicle_assignment_startup_deadhead.py tests/test_milp_route_band_settings.py tests/test_optimization_canonical_metaheuristics.py tests/test_canonical_graph_export_parity.py tests/test_optimization_engine_postsolve.py -q` → `48 passed`
+    - `python -m py_compile src/dispatch/route_band.py src/optimization/common/vehicle_assignment.py src/optimization/common/feasibility.py src/optimization/engine.py` → pass
+
+- 2026-04-06 (BYD K8 2.0 を 20 台追加した fixed-scope variant の 4-solver rerun)
+  - 追加確認として、truthful route-band fix 後の fixed scope `237d5623-aa94-4f72-9da1-17b9070264be` に対し、prepared input `prepared-11efb997690030ef` を複製した variant `prepared-11efb997690030ef-byd20` を作成し、`BYD K8 2.0 x 20` を vehicle list へ追加した。trip/stops/timetable_rows は変えず、fleet のみ 95 台→115 台へ増やした。
+  - actual canonical BFF path で rerun し、run directory は `output/2025-08-04/scenario/237d5623-aa94-4f72-9da1-17b9070264be/mode_milp_only/tsurumaki/WEEKDAY/run_20260406_1316/`, `.../mode_alns_only/.../run_20260406_1322/`, `.../mode_ga_only/.../run_20260406_1327/`, `.../mode_abc_only/.../run_20260406_1332/` に保存した。comparison/report bundle は `output/reports/20260406_route_band_standard_rerun_byd20/` にまとめた。
+  - 結果は `MILP=879/974 served, objective=3808291.7437037476, backend optimal`, `ALNS=974/974 served, objective=3735779.2658425607`, `GA=974/974 served, objective=3759781.965055769`, `ABC=974/974 served, objective=3759781.965055769` だった。4 solver とも exported plan の infeasibility count は 0 で、route-band 図と vehicle-operation 図を標準出力している。
+  - 95 台 truthful baseline との比較では `ALNS +85 served`, `GA +87 served`, `ABC +87 served` と改善し、metaheuristics は full service を回復した。一方で MILP は backend `optimal` でも exported plan は `879/974` に留まり、exact backend model が fragment-transition truthfulness をまだ完全には内包していないことが再確認された。
+  - 実験 artifact:
+    - `output/reports/20260406_route_band_standard_rerun_byd20/comparison.json`
+    - `output/reports/20260406_route_band_standard_rerun_byd20/solver_comparison_table.md`
+    - `output/reports/20260406_route_band_standard_rerun_byd20/verdict.md`
+    - `output/reports/20260406_route_band_standard_rerun_byd20/professor_report.md`
+
+- 2026-04-07 (BYD+20 direct prepared-scope MILP rebuild / quantitative re-evaluation)
+  - 自分で追加確認した問題として、MILP だけが service occupancy を `price_slots` 単位で `sum(y)<=1` にしており、1 時間 timestep では同じ hour slot 内の back-to-back trip まで重複扱いしていた。これは dispatch hard rule ではなく MILP 側だけの粗い近似で、truthful baseline warm start 自体を model-infeasible にしていた。
+  - `src/optimization/milp/solver_adapter.py` でこの coarse occupancy を廃止し、exact minute interval から maximal overlap clique を作って vehicle ごとに `sum(y)<=1` を掛ける方式へ置き換えた。これで hard feasibility `arrival + turnaround + deadhead <= next departure` は維持したまま、同一 slot 内の sequential trip を不当に落とさない。
+  - 併せて `src/optimization/engine.py` に `truthful_baseline_guardrail` を追加した。MILP candidate を postsolve truthfulness repair 後に評価し、repaired baseline より served が少ない、または served 同数で objective が悪い場合は baseline 側を final export とし、`supports_exact_milp=false` / `termination_reason=truthful_baseline_guardrail` を明示する。これにより「本来担当可能なのに weaker MILP candidate を採用する」退行を止めた。
+  - direct rerun は Flask/BFF endpoint を通さず `scripts/benchmark_fixed_prepared_scope.py` と同じ prepared-scope materialize + `OptimizationEngine` 直実行経路で確認した。単独 MILP check は `output/reports/20260407_byd20_direct_milp_rebuild_check/`、4 solver comparison bundle は `output/reports/20260407_byd20_direct_solver_comparison/` に保存した。
+  - direct 4 solver 結果は `MILP=974/974 served, objective=3759781.965055769, solver_status=truthful_baseline_guardrail, supports_exact_milp=false, solve_time=751.411s`, `ALNS=974/974 served, objective=3740426.089000456, solve_time=300.118s`, `GA=974/974 served, objective=3759781.965055769, solve_time=306.311s`, `ABC=974/974 served, objective=3759781.965055769, solve_time=302.657s` だった。旧 direct rerun `output/reports/20260407_route_band_standard_rerun_byd20_milp_fix_warmstart/summary.json` の `MILP=200/974 served, objective=8646880.138339324` から大幅に改善した。
+  - MILP metadata では backend candidate 自体はまだ弱く、`milp_candidate_solver_status=time_limit`, `milp_candidate_trip_count_served=210`, `milp_candidate_postsolve_objective_value=8572253.873564899` が残っている。したがって 이번の成果は「truthful export が no-regression で full service に戻った」ことであり、「MILP backend exact incumbent が強くなった」とはまだ主張しない。
+  - regression:
+    - `python -m pytest tests/test_milp_route_band_settings.py tests/test_optimization_engine_postsolve.py -q` → `23 passed`
+    - `python -m pytest tests/test_milp_baseline_fallbacks.py tests/test_prepared_scope_execution.py tests/test_optimization_canonical_metaheuristics.py tests/test_optimization_engine_postsolve.py tests/test_milp_route_band_settings.py -q` → `33 passed`
+    - `python -m py_compile src/optimization/milp/solver_adapter.py src/optimization/engine.py scripts/benchmark_fixed_prepared_scope.py` → pass
+  - ついでに再現性上の問題として、`scripts/benchmark_fixed_prepared_scope.py` を repo root から直接実行すると `bff` import に失敗していたため、script 自身が repo root を `sys.path` に足す self-bootstrap を入れた。現在は `python scripts/benchmark_fixed_prepared_scope.py ...` をそのまま実行できる。

@@ -216,6 +216,7 @@ class DispatchContext:
     # Swap permissions: whether vehicles may serve trips from other routes/depots
     allow_intra_depot_swap: bool = False   # permit vehicle swap across routes in same depot
     allow_inter_depot_swap: bool = False   # permit vehicle swap across different depots
+    fixed_route_band_mode: bool = False
     location_aliases: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

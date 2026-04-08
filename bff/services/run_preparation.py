@@ -717,6 +717,62 @@ def materialize_scenario_from_prepared_input(
         if isinstance(value, dict):
             hydrated[key] = dict(value)
 
+    current_scope = dict(scenario.get("dispatch_scope") or {})
+    hydrated_scope = dict(hydrated.get("dispatch_scope") or {})
+    for key in (
+        "fixedRouteBandMode",
+        "allowIntraDepotRouteSwap",
+        "allowInterDepotSwap",
+    ):
+        if key in current_scope:
+            hydrated_scope[key] = current_scope.get(key)
+    hydrated["dispatch_scope"] = hydrated_scope
+
+    current_simulation_cfg = dict(scenario.get("simulation_config") or {})
+    hydrated_simulation_cfg = dict(hydrated.get("simulation_config") or {})
+    for key in (
+        "fixed_route_band_mode",
+        "enable_vehicle_diagram_output",
+        "output_vehicle_diagram",
+        "objective_mode",
+        "objective_preset",
+        "deadhead_speed_kmh",
+        "allow_partial_service",
+        "unserved_penalty",
+        "cost_component_flags",
+        "disable_vehicle_acquisition_cost",
+        "enable_vehicle_cost",
+        "enable_driver_cost",
+        "enable_other_cost",
+    ):
+        if key in current_simulation_cfg:
+            hydrated_simulation_cfg[key] = current_simulation_cfg.get(key)
+    hydrated["simulation_config"] = hydrated_simulation_cfg
+
+    current_overlay = dict(scenario.get("scenario_overlay") or {})
+    hydrated_overlay = dict(hydrated.get("scenario_overlay") or {})
+    current_solver_cfg = dict(current_overlay.get("solver_config") or {})
+    hydrated_solver_cfg = dict(hydrated_overlay.get("solver_config") or {})
+    for key in (
+        "fixed_route_band_mode",
+        "enable_vehicle_diagram_output",
+        "output_vehicle_diagram",
+        "objective_mode",
+        "objective_preset",
+        "allow_partial_service",
+        "unserved_penalty",
+        "milp_max_successors_per_trip",
+    ):
+        if key in current_solver_cfg:
+            hydrated_solver_cfg[key] = current_solver_cfg.get(key)
+    if hydrated_solver_cfg:
+        hydrated_overlay["solver_config"] = hydrated_solver_cfg
+    for key in ("charging_constraints", "cost_coefficients"):
+        value = current_overlay.get(key)
+        if isinstance(value, dict):
+            hydrated_overlay[key] = dict(value)
+    hydrated["scenario_overlay"] = hydrated_overlay
+
     for key in ("depots", "routes", "vehicles", "chargers", "stops", "trips"):
         value = prepared_input.get(key)
         if isinstance(value, list):

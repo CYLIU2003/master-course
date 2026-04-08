@@ -4,6 +4,11 @@ from dataclasses import replace
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from src.dispatch.models import VehicleDuty
+from src.dispatch.route_band import (
+    duty_route_band_ids,
+    duties_route_band_ids,
+    fragment_transition_is_feasible,
+)
 
 from .problem import ProblemVehicle
 
@@ -16,6 +21,7 @@ def assign_duty_fragments_to_vehicles(
     existing_duties: Sequence[VehicleDuty] = (),
     existing_duty_vehicle_map: Mapping[str, str] | None = None,
     dispatch_context: Any | None = None,
+    fixed_route_band_mode: bool = False,
 ) -> tuple[Tuple[VehicleDuty, ...], Dict[str, str], Tuple[str, ...]]:
     vehicle_ids_by_type: Dict[str, List[str]] = {}
     vehicle_by_id: Dict[str, ProblemVehicle] = {}
@@ -40,6 +46,9 @@ def assign_duty_fragments_to_vehicles(
     skipped_trip_ids: List[str] = []
     fragment_cap = max(int(max_fragments_per_vehicle or 1), 1)
     for duty in sorted(duties, key=_duty_sort_key):
+        if fixed_route_band_mode and len(duty_route_band_ids(duty)) > 1:
+            skipped_trip_ids.extend(duty.trip_ids)
+            continue
         vehicle_id = _select_vehicle_id_for_duty(
             duty,
             grouped,
@@ -47,6 +56,7 @@ def assign_duty_fragments_to_vehicles(
             fragment_cap,
             vehicle_by_id=vehicle_by_id,
             dispatch_context=dispatch_context,
+            fixed_route_band_mode=fixed_route_band_mode,
         )
         if not vehicle_id:
             skipped_trip_ids.extend(duty.trip_ids)
@@ -89,14 +99,30 @@ def _select_vehicle_id_for_duty(
     *,
     vehicle_by_id: Mapping[str, ProblemVehicle],
     dispatch_context: Any | None,
+    fixed_route_band_mode: bool,
 ) -> str:
     duty_start, duty_end = _duty_time_bounds(duty)
-    best_score: tuple[int, int, int, str] | None = None
+    duty_bands = duty_route_band_ids(duty)
+    duty_band = duty_bands[0] if len(duty_bands) == 1 else ""
+    best_score: tuple[int, int, int, int, str] | None = None
     best_vehicle_id = ""
     for vehicle_id in candidate_vehicle_ids:
         fragments = sorted(grouped.get(vehicle_id, ()), key=_duty_sort_key)
         if len(fragments) >= fragment_cap:
             continue
+        if fragments and not _fragment_insert_is_feasible_via_depot_reset(
+            fragments,
+            duty,
+            vehicle=vehicle_by_id.get(str(vehicle_id)),
+            dispatch_context=dispatch_context,
+            fixed_route_band_mode=fixed_route_band_mode,
+        ):
+            continue
+        band_change_rank = 0
+        if fixed_route_band_mode and duty_band:
+            fragment_bands = duties_route_band_ids(fragments)
+            if fragment_bands and duty_band not in fragment_bands:
+                band_change_rank = 1
         fit_score = _fragment_fit_score(fragments, duty_start, duty_end)
         if fit_score is None:
             continue
@@ -107,7 +133,7 @@ def _select_vehicle_id_for_duty(
             dispatch_context=dispatch_context,
         ):
             continue
-        score = (fit_score[0], fit_score[1], len(fragments), str(vehicle_id))
+        score = (band_change_rank, fit_score[0], fit_score[1], len(fragments), str(vehicle_id))
         if best_score is None or score < best_score:
             best_score = score
             best_vehicle_id = str(vehicle_id)
@@ -234,3 +260,54 @@ def _startup_path_exists_for_assignment(
         return True
     except Exception:
         return True
+
+
+def _fragment_insert_is_feasible_via_depot_reset(
+    fragments: Sequence[VehicleDuty],
+    duty: VehicleDuty,
+    *,
+    vehicle: ProblemVehicle | None,
+    dispatch_context: Any | None,
+    fixed_route_band_mode: bool,
+) -> bool:
+    if vehicle is None or dispatch_context is None:
+        return True
+    ordered: List[Tuple[int, VehicleDuty]] = [
+        (idx, fragment)
+        for idx, fragment in enumerate(fragments)
+    ]
+    ordered.append((len(ordered), duty))
+    ordered.sort(
+        key=lambda item: (
+            _duty_sort_key(item[1])[0],
+            _duty_sort_key(item[1])[1],
+            item[0],
+        )
+    )
+    insert_pos = next(
+        idx
+        for idx, (_ordinal, candidate) in enumerate(ordered)
+        if candidate is duty
+    )
+    prev_duty = ordered[insert_pos - 1][1] if insert_pos > 0 else None
+    next_duty = ordered[insert_pos + 1][1] if insert_pos + 1 < len(ordered) else None
+    home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
+    if prev_duty is not None:
+        if not fragment_transition_is_feasible(
+            prev_duty,
+            duty,
+            home_depot_id=home_depot_id,
+            dispatch_context=dispatch_context,
+            fixed_route_band_mode=fixed_route_band_mode,
+        ):
+            return False
+    if next_duty is not None:
+        if not fragment_transition_is_feasible(
+            duty,
+            next_duty,
+            home_depot_id=home_depot_id,
+            dispatch_context=dispatch_context,
+            fixed_route_band_mode=fixed_route_band_mode,
+        ):
+            return False
+    return True

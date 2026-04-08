@@ -60,6 +60,71 @@ def test_materialize_scenario_from_prepared_input_overlays_scope_artifacts() -> 
     assert hydrated["deadhead_rules"][0]["travel_time_min"] == 5
 
 
+def test_materialize_scenario_from_prepared_input_preserves_current_runtime_flags() -> None:
+    scenario = {
+        "meta": {"id": "scenario-1"},
+        "scenario_overlay": {
+            "dataset_id": "tokyu_full",
+            "charging_constraints": {"depot_power_limit_kw": 200.0},
+            "cost_coefficients": {"grid_flat_price_per_kwh": 25.0},
+            "solver_config": {
+                "fixed_route_band_mode": True,
+                "enable_vehicle_diagram_output": True,
+                "output_vehicle_diagram": True,
+                "objective_mode": "total_cost",
+            },
+        },
+        "dispatch_scope": {
+            "serviceId": "WEEKDAY",
+            "fixedRouteBandMode": True,
+            "allowIntraDepotRouteSwap": False,
+        },
+        "simulation_config": {
+            "solver_mode": "mode_milp_only",
+            "fixed_route_band_mode": True,
+            "enable_vehicle_diagram_output": True,
+            "output_vehicle_diagram": True,
+            "objective_mode": "total_cost",
+        },
+    }
+    prepared_input = {
+        "prepared_input_id": "prepared-1",
+        "scenario_overlay": {
+            "dataset_id": "tokyu_full",
+            "solver_config": {
+                "fixed_route_band_mode": False,
+                "enable_vehicle_diagram_output": False,
+                "output_vehicle_diagram": False,
+                "objective_mode": "co2",
+            },
+        },
+        "dispatch_scope": {
+            "effectiveRouteIds": ["route-a"],
+            "fixedRouteBandMode": False,
+            "allowIntraDepotRouteSwap": True,
+        },
+        "simulation_config": {
+            "solver_mode": "hybrid",
+            "fixed_route_band_mode": False,
+            "enable_vehicle_diagram_output": False,
+            "output_vehicle_diagram": False,
+            "objective_mode": "co2",
+        },
+        "trips": [],
+    }
+
+    hydrated = materialize_scenario_from_prepared_input(scenario, prepared_input)
+
+    assert hydrated["dispatch_scope"]["fixedRouteBandMode"] is True
+    assert hydrated["dispatch_scope"]["allowIntraDepotRouteSwap"] is False
+    assert hydrated["simulation_config"]["fixed_route_band_mode"] is True
+    assert hydrated["simulation_config"]["enable_vehicle_diagram_output"] is True
+    assert hydrated["simulation_config"]["objective_mode"] == "total_cost"
+    assert hydrated["scenario_overlay"]["solver_config"]["fixed_route_band_mode"] is True
+    assert hydrated["scenario_overlay"]["solver_config"]["enable_vehicle_diagram_output"] is True
+    assert hydrated["scenario_overlay"]["cost_coefficients"]["grid_flat_price_per_kwh"] == 25.0
+
+
 def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback() -> None:
     scenario_doc = {
         "meta": {"id": "scenario-1"},

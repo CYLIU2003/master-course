@@ -11,6 +11,7 @@ after trip_i, applying the hard constraint:
 from __future__ import annotations
 
 from .models import ConnectionResult, DispatchContext, Trip
+from .route_band import trip_route_band_key
 
 
 class FeasibilityEngine:
@@ -43,6 +44,19 @@ class FeasibilityEngine:
                     f"'{trip_j.trip_id}' (allowed: {trip_j.allowed_vehicle_types})"
                 ),
             )
+
+        if bool(getattr(context, "fixed_route_band_mode", False)):
+            from_band = trip_route_band_key(trip_i)
+            to_band = trip_route_band_key(trip_j)
+            if from_band and to_band and from_band != to_band:
+                return ConnectionResult(
+                    feasible=False,
+                    reason_code="route_band_mismatch",
+                    reason=(
+                        f"Fixed route-band mode forbids connecting trip '{trip_i.trip_id}' "
+                        f"({from_band}) to trip '{trip_j.trip_id}' ({to_band})"
+                    ),
+                )
 
         # --- 2. Location continuity ---
         from_stop = trip_i.destination_stop_id or trip_i.destination

@@ -1,6 +1,8 @@
-from src.dispatch.models import DeadheadRule, DispatchContext, Trip, VehicleProfile
+from src.dispatch.graph_builder import ConnectionGraphBuilder
+from src.dispatch.models import DeadheadRule, DispatchContext, DutyLeg, Trip, VehicleDuty, VehicleProfile
 from src.optimization.common.builder import ProblemBuilder
-from src.optimization.common.problem import CanonicalOptimizationProblem, OptimizationScenario
+from src.optimization.common.feasibility import FeasibilityChecker
+from src.optimization.common.problem import AssignmentPlan, CanonicalOptimizationProblem, OptimizationScenario
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.milp.solver_adapter import GurobiMILPAdapter
 
@@ -448,6 +450,66 @@ def test_milp_model_builder_limits_successor_arcs_per_trip() -> None:
     ]
 
 
+def test_solver_adapter_overlap_cliques_use_exact_trip_intervals() -> None:
+    context = DispatchContext(
+        service_date="2026-03-23",
+        trips=[
+            Trip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_time="08:00",
+                arrival_time="08:20",
+                distance_km=3.0,
+                allowed_vehicle_types=("BEV",),
+            ),
+            Trip(
+                trip_id="t2",
+                route_id="r1",
+                origin="B",
+                destination="C",
+                departure_time="08:25",
+                arrival_time="08:45",
+                distance_km=3.0,
+                allowed_vehicle_types=("BEV",),
+            ),
+            Trip(
+                trip_id="t3",
+                route_id="r1",
+                origin="X",
+                destination="Y",
+                departure_time="08:10",
+                arrival_time="08:30",
+                distance_km=3.0,
+                allowed_vehicle_types=("BEV",),
+            ),
+        ],
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={
+            "BEV": VehicleProfile(
+                vehicle_type="BEV",
+                battery_capacity_kwh=300.0,
+                energy_consumption_kwh_per_km=1.2,
+            )
+        },
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="s_exact_overlap_cliques",
+        vehicle_counts={"BEV": 1},
+        timestep_min=60,
+    )
+    adapter = GurobiMILPAdapter()
+
+    cliques = {frozenset(clique) for clique in adapter._build_trip_overlap_cliques(problem)}
+
+    assert frozenset({"t1", "t3"}) in cliques
+    assert frozenset({"t2", "t3"}) in cliques
+    assert frozenset({"t1", "t2"}) not in cliques
+
+
 def test_solver_adapter_trip_fuel_prefers_vehicle_rate_over_trip_constant() -> None:
     context = _minimal_dispatch_context()
     context.trips = [
@@ -582,3 +644,110 @@ def test_solver_adapter_vehicle_can_start_trip_when_deadhead_exists_before_horiz
     adapter = GurobiMILPAdapter()
 
     assert adapter._vehicle_can_start_trip(problem, problem.vehicles[0], problem.trips[0]) is True
+
+
+def test_dispatch_graph_blocks_cross_band_connections_when_fixed_route_band_mode_is_on() -> None:
+    context = DispatchContext(
+        service_date="2026-03-23",
+        trips=[
+            Trip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_time="08:00",
+                arrival_time="08:30",
+                distance_km=1.0,
+                allowed_vehicle_types=("BEV",),
+                route_family_code="黒07(入出庫便)",
+            ),
+            Trip(
+                trip_id="t2",
+                route_id="r2",
+                origin="B",
+                destination="C",
+                departure_time="08:45",
+                arrival_time="09:15",
+                distance_km=1.0,
+                allowed_vehicle_types=("BEV",),
+                route_family_code="渋24",
+            ),
+        ],
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={"BEV": VehicleProfile(vehicle_type="BEV")},
+        fixed_route_band_mode=True,
+    )
+
+    graph = ConnectionGraphBuilder().build(context, "BEV")
+
+    assert graph["t1"] == []
+
+
+def test_feasibility_checker_flags_multi_band_duty_when_fixed_route_band_mode_is_on() -> None:
+    context = DispatchContext(
+        service_date="2026-03-23",
+        trips=[
+            Trip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_time="08:00",
+                arrival_time="08:30",
+                distance_km=1.0,
+                allowed_vehicle_types=("BEV",),
+                route_family_code="黒07(入出庫便)",
+            ),
+            Trip(
+                trip_id="t2",
+                route_id="r2",
+                origin="C",
+                destination="D",
+                departure_time="10:00",
+                arrival_time="10:30",
+                distance_km=1.0,
+                allowed_vehicle_types=("BEV",),
+                route_family_code="渋24",
+            ),
+        ],
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={
+            "BEV": VehicleProfile(
+                vehicle_type="BEV",
+                battery_capacity_kwh=300.0,
+                energy_consumption_kwh_per_km=1.2,
+            )
+        },
+        fixed_route_band_mode=True,
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="s_route_band_feasibility",
+        vehicle_counts={"BEV": 1},
+        fixed_route_band_mode=True,
+        canonical_depot_id="dep1",
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="veh-1",
+                vehicle_type="BEV",
+                legs=(
+                    DutyLeg(trip=context.trips[0], deadhead_from_prev_min=0),
+                    DutyLeg(trip=context.trips[1], deadhead_from_prev_min=0),
+                ),
+            ),
+        ),
+        charging_slots=(),
+        refuel_slots=(),
+        served_trip_ids=("t1", "t2"),
+        unserved_trip_ids=(),
+        metadata={"duty_vehicle_map": {"veh-1": "veh-1"}},
+    )
+
+    report = FeasibilityChecker().evaluate(problem, plan)
+
+    assert report.feasible is False
+    assert any("[ROUTE_BAND]" in message for message in report.errors)
