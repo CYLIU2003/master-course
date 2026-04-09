@@ -197,6 +197,9 @@ CSV_FIELDNAMES = [
     "vehicle_fragment_counts",
     "vehicles_with_multiple_fragments",
     "max_fragments_observed",
+    "service_coverage_mode",
+    "fixed_route_band_mode",
+    "daily_fragment_limit",
     "submitted_at",
     "completed_at",
     "dated_run_dir",
@@ -429,6 +432,24 @@ def _build_row(
                 summary.get("max_fragments_observed", 0),
             )
             or 0
+        ),
+        "service_coverage_mode": pick_text(
+            solver_metadata.get("service_coverage_mode"),
+            summary.get("service_coverage_mode"),
+            "strict",
+        ),
+        "fixed_route_band_mode": bool(
+            solver_metadata.get(
+                "fixed_route_band_mode",
+                summary.get("fixed_route_band_mode", False),
+            )
+        ),
+        "daily_fragment_limit": int(
+            solver_metadata.get(
+                "daily_fragment_limit",
+                summary.get("daily_fragment_limit", 1),
+            )
+            or 1
         ),
         "submitted_at": submitted_at,
         "completed_at": completed_at,

@@ -41,6 +41,9 @@ class MILPModelBuilder:
     ) -> List[Tuple[str, str]]:
         pairs: List[Tuple[str, str]] = []
         for vehicle in problem.vehicles:
+            # Skip unavailable vehicles
+            if not getattr(vehicle, "available", True):
+                continue
             for trip in problem.trips:
                 if vehicle.vehicle_type in trip.allowed_vehicle_types:
                     pairs.append((vehicle.vehicle_id, trip.trip_id))
@@ -55,7 +58,7 @@ class MILPModelBuilder:
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
         max_successors_per_trip = self._safe_positive_int(
             problem.metadata.get("milp_max_successors_per_trip"),
-            default=8,
+            default=10000,  # Benchmark default: unlimited (changed from 8)
         )
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         route_band_by_trip_id = {

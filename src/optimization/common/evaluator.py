@@ -239,11 +239,48 @@ class CostEvaluator:
             degradation_cycles += charged_kwh / capacity_kwh
         degradation_cost = weights.degradation * degradation_cycles * 50.0
 
-        unserved_penalty = weights.unserved * len(plan.unserved_trip_ids)
+        # In strict mode, unserved penalty is not applicable (handled as inf above)
+        # In penalized mode, apply penalty for each unserved trip
+        service_coverage_mode_pre = str(
+            problem.scenario.service_coverage_mode
+            or problem.metadata.get("service_coverage_mode", "strict")
+        ).strip().lower()
+        if service_coverage_mode_pre == "strict":
+            unserved_penalty = 0.0  # Not used in strict mode
+        else:
+            unserved_penalty = weights.unserved * len(plan.unserved_trip_ids)
 
         baseline_ids = set(problem.baseline_plan.served_trip_ids) if problem.baseline_plan else set()
         deviation_count = len(set(plan.served_trip_ids).symmetric_difference(baseline_ids))
         deviation_cost = weights.deviation * deviation_count
+
+        # Check strict coverage mode: if strict and unserved trips exist, return inf
+        service_coverage_mode = str(
+            problem.scenario.service_coverage_mode
+            or problem.metadata.get("service_coverage_mode", "strict")
+        ).strip().lower()
+        if service_coverage_mode == "strict" and plan.unserved_trip_ids:
+            # Return infinity to mark as infeasible
+            objective_value = float('inf')
+            return CostBreakdown(
+                energy_cost=energy_cost,
+                demand_cost=demand_cost,
+                vehicle_cost=vehicle_cost,
+                driver_cost=driver_cost,
+                unserved_penalty=unserved_penalty,
+                switch_cost=switch_cost,
+                degradation_cost=degradation_cost,
+                deviation_cost=deviation_cost,
+                co2_cost=co2_cost,
+                total_co2_kg=total_co2_kg,
+                utilization_score=utilization_score,
+                pv_generated_kwh=pv_generated_kwh,
+                pv_used_direct_kwh=pv_used_direct_kwh,
+                pv_curtailed_kwh=pv_curtailed_kwh,
+                grid_import_kwh=grid_import_kwh,
+                peak_grid_kw=peak_grid_kw,
+                objective_value=objective_value,
+            )
 
         # CO₂ metrics: calculate from ICE fuel and grid electricity.
         total_co2_kg = self._total_co2_kg(problem, plan, operating_slot_totals)
