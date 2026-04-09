@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
 
 from src.dispatch.models import DutyLeg, VehicleDuty
@@ -49,6 +49,15 @@ class MILPSolverOutcome:
     incumbent_count: int = 0
     warm_start_applied: bool = False
     warm_start_source: str = ""
+    best_bound: float | None = None
+    final_gap: float | None = None
+    nodes_explored: int = 0
+    runtime_sec: float = 0.0
+    first_feasible_sec: float | None = None
+    presolve_reduction_summary: Dict[str, Any] = field(default_factory=dict)
+    iis_generated: bool = False
+    fallback_reason: str = ""
+    termination_reason: str = ""
 
 
 class SolverAdapter(Protocol):
@@ -80,6 +89,8 @@ class DispatchBaselineMILPAdapter:
                 incumbent_count=0,
                 warm_start_applied=False,
                 warm_start_source="none",
+                fallback_reason="dispatch_baseline_only",
+                termination_reason="dispatch_baseline_only",
             ),
             plan,
         )
@@ -87,6 +98,20 @@ class DispatchBaselineMILPAdapter:
 
 class GurobiMILPAdapter:
     backend_name = "gurobi"
+
+    def _termination_reason(self, solver_status: str) -> str:
+        status = str(solver_status or "").strip().lower()
+        if status == "optimal":
+            return "optimal"
+        if status in {"time_limit", "time_limit_baseline"}:
+            return "time_limit"
+        if status in {"infeasible", "inf_or_unbd", "unbounded"}:
+            return "infeasible_or_unbounded"
+        if status == "suboptimal":
+            return "stopped_with_feasible"
+        if status == "auto_relaxed_baseline":
+            return "baseline_after_relax"
+        return "unknown"
 
     def solve(
         self,
@@ -104,6 +129,8 @@ class GurobiMILPAdapter:
                     incumbent_count=0,
                     warm_start_applied=False,
                     warm_start_source="gurobi_unavailable",
+                    fallback_reason="gurobi_unavailable",
+                    termination_reason="gurobi_unavailable",
                 ),
                 baseline,
             )
@@ -1461,10 +1488,66 @@ class GurobiMILPAdapter:
                 print(f"  {key}: {val}")
             with open(os.path.join(diagnostic_output_dir, f"pre_stats_{int(time.time())}.json"), "w") as f:
                 json.dump(pre_stats, f, indent=2)
-        
-        model.optimize()
+
+        solve_started_at = time.perf_counter()
+        first_feasible_sec: float | None = None
+        incumbent_count = 0
+        presolve_reduction_summary: Dict[str, Any] = {
+            "initial_num_vars": int(model.NumVars),
+            "initial_num_constrs": int(model.NumConstrs),
+            "initial_num_bin_vars": int(model.NumBinVars),
+            "initial_num_int_vars": int(model.NumIntVars),
+            "col_deleted": 0,
+            "row_deleted": 0,
+            "bound_changed": 0,
+            "coeff_changed": 0,
+            "sense_changed": 0,
+        }
+
+        def _callback(cb_model, where):  # type: ignore[no-untyped-def]
+            nonlocal first_feasible_sec, incumbent_count
+            try:
+                if where == GRB.Callback.PRESOLVE:
+                    try:
+                        presolve_reduction_summary["col_deleted"] = max(
+                            presolve_reduction_summary["col_deleted"],
+                            int(cb_model.cbGet(GRB.Callback.PRE_COLDEL)),
+                        )
+                        presolve_reduction_summary["row_deleted"] = max(
+                            presolve_reduction_summary["row_deleted"],
+                            int(cb_model.cbGet(GRB.Callback.PRE_ROWDEL)),
+                        )
+                        presolve_reduction_summary["bound_changed"] = max(
+                            presolve_reduction_summary["bound_changed"],
+                            int(cb_model.cbGet(GRB.Callback.PRE_BNDCHG)),
+                        )
+                        presolve_reduction_summary["coeff_changed"] = max(
+                            presolve_reduction_summary["coeff_changed"],
+                            int(cb_model.cbGet(GRB.Callback.PRE_COECHG)),
+                        )
+                        presolve_reduction_summary["sense_changed"] = max(
+                            presolve_reduction_summary["sense_changed"],
+                            int(cb_model.cbGet(GRB.Callback.PRE_SENCHG)),
+                        )
+                    except Exception:
+                        pass
+                elif where == GRB.Callback.MIPSOL:
+                    incumbent_count += 1
+                    if first_feasible_sec is None:
+                        try:
+                            first_feasible_sec = float(cb_model.cbGet(GRB.Callback.RUNTIME))
+                        except Exception:
+                            first_feasible_sec = time.perf_counter() - solve_started_at
+            except Exception:
+                pass
+
+        def _optimize() -> None:
+            model.optimize(_callback)
+
+        _optimize()
         
         # Post-optimization diagnostics
+        iis_generated = False
         if enable_milp_diagnostics:
             post_stats = {
                 "status": model.Status,
@@ -1487,6 +1570,7 @@ class GurobiMILPAdapter:
                 print("[MILP Diagnostics] Model is INFEASIBLE. Computing IIS...")
                 try:
                     model.computeIIS()
+                    iis_generated = True
                     iis_file = os.path.join(diagnostic_output_dir, f"infeasible_iis_{int(time.time())}.ilp")
                     model.write(iis_file)
                     print(f"[MILP Diagnostics] IIS written to: {iis_file}")
@@ -1504,7 +1588,7 @@ class GurobiMILPAdapter:
         if model.Status == GRB.INF_OR_UNBD:
             # Distinguish infeasible from unbounded before deciding fallback behavior.
             model.Params.DualReductions = 0
-            model.optimize()
+            _optimize()
 
         relaxed_partial_service = False
         if (
@@ -1517,10 +1601,26 @@ class GurobiMILPAdapter:
             for constr in hard_no_unserved_constraints:
                 model.remove(constr)
             model.update()
-            model.optimize()
+            _optimize()
             relaxed_partial_service = model.SolCount > 0
 
         solver_status = status_map.get(model.Status, f"status_{model.Status}")
+        runtime_sec = time.perf_counter() - solve_started_at
+        best_bound: float | None = None
+        final_gap: float | None = None
+        try:
+            best_bound = float(model.ObjBound)
+        except Exception:
+            best_bound = None
+        if model.SolCount > 0:
+            try:
+                final_gap = float(model.MIPGap)
+            except Exception:
+                final_gap = None
+        nodes_explored = int(getattr(model, "NodeCount", 0) or 0)
+        termination_reason = self._termination_reason(solver_status)
+        if model.SolCount <= 0 and termination_reason == "time_limit":
+            termination_reason = "time_limit_no_incumbent"
 
         if (
             model.SolCount > 0
@@ -1538,6 +1638,13 @@ class GurobiMILPAdapter:
                     source="dispatch_baseline_after_relax",
                     solver_status=solver_status,
                     relaxed_partial_service=True,
+                    runtime_sec=runtime_sec,
+                    best_bound=best_bound,
+                    final_gap=final_gap,
+                    nodes_explored=nodes_explored,
+                    first_feasible_sec=first_feasible_sec,
+                    presolve_reduction_summary=presolve_reduction_summary,
+                    iis_generated=iis_generated,
                 )
                 if baseline_fallback is not None:
                     return baseline_fallback
@@ -1550,6 +1657,13 @@ class GurobiMILPAdapter:
                     source="dispatch_baseline_after_time_limit_no_incumbent",
                     solver_status=solver_status,
                     relaxed_partial_service=bool(relaxed_partial_service),
+                    runtime_sec=runtime_sec,
+                    best_bound=best_bound,
+                    final_gap=final_gap,
+                    nodes_explored=nodes_explored,
+                    first_feasible_sec=first_feasible_sec,
+                    presolve_reduction_summary=presolve_reduction_summary,
+                    iis_generated=iis_generated,
                 )
                 if baseline_fallback is not None:
                     return baseline_fallback
@@ -1574,6 +1688,15 @@ class GurobiMILPAdapter:
                     incumbent_count=0,
                     warm_start_applied=warm_start_applied,
                     warm_start_source=warm_start_source,
+                    best_bound=best_bound,
+                    final_gap=final_gap,
+                    nodes_explored=nodes_explored,
+                    runtime_sec=runtime_sec,
+                    first_feasible_sec=first_feasible_sec,
+                    presolve_reduction_summary=dict(presolve_reduction_summary),
+                    iis_generated=iis_generated,
+                    fallback_reason="",
+                    termination_reason=termination_reason,
                 ),
                 empty,
             )
@@ -1768,7 +1891,7 @@ class GurobiMILPAdapter:
             },
         )
         # Determine result category based on solver status
-        has_incumbent = model.SolCount > 0
+        has_incumbent = incumbent_count > 0
         result_category = "SOLVED_FEASIBLE" if has_incumbent else "NO_INCUMBENT"
         
         return (
@@ -1777,9 +1900,18 @@ class GurobiMILPAdapter:
                 used_backend=self.backend_name,
                 supports_exact_milp=True,
                 has_feasible_incumbent=has_incumbent,
-                incumbent_count=model.SolCount,
+                incumbent_count=incumbent_count,
                 warm_start_applied=warm_start_applied,
                 warm_start_source=warm_start_source,
+                best_bound=best_bound,
+                final_gap=final_gap,
+                nodes_explored=nodes_explored,
+                runtime_sec=runtime_sec,
+                first_feasible_sec=first_feasible_sec,
+                presolve_reduction_summary=dict(presolve_reduction_summary),
+                iis_generated=iis_generated,
+                fallback_reason="",
+                termination_reason=termination_reason,
             ),
             plan,
         )
@@ -1792,6 +1924,13 @@ class GurobiMILPAdapter:
         source: str,
         solver_status: str,
         relaxed_partial_service: bool,
+        runtime_sec: float = 0.0,
+        best_bound: float | None = None,
+        final_gap: float | None = None,
+        nodes_explored: int = 0,
+        first_feasible_sec: float | None = None,
+        presolve_reduction_summary: Dict[str, Any] | None = None,
+        iis_generated: bool = False,
     ) -> Optional[Tuple[MILPSolverOutcome, AssignmentPlan]]:
         baseline_plan = self._repaired_baseline_plan_for_warm_start(problem)
         if baseline_plan is None or len(baseline_plan.served_trip_ids) <= 0:
@@ -1815,6 +1954,15 @@ class GurobiMILPAdapter:
                 incumbent_count=0,
                 warm_start_applied=False,
                 warm_start_source=f"fallback_{fallback_status}",
+                runtime_sec=float(runtime_sec),
+                best_bound=best_bound,
+                final_gap=final_gap,
+                nodes_explored=int(nodes_explored or 0),
+                first_feasible_sec=first_feasible_sec,
+                presolve_reduction_summary=dict(presolve_reduction_summary or {}),
+                iis_generated=bool(iis_generated),
+                fallback_reason=fallback_status,
+                termination_reason=fallback_status,
             ),
             replace(
                 baseline_plan,

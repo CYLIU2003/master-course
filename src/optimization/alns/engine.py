@@ -42,6 +42,7 @@ from src.optimization.common.problem import (
     OperatorStats,
     SolutionState,
 )
+from src.optimization.common.search_profile import SearchProfile
 
 
 class ALNSOptimizer:
@@ -107,6 +108,7 @@ class ALNSOptimizer:
         iteration = 0
         no_improve = 0
         started_at = time.perf_counter()
+        profile = SearchProfile(started_at=started_at)
         operator_stats = {
             name: OperatorStats()
             for name in [*destroy_ops.keys(), *repair_ops.keys()]
@@ -116,14 +118,31 @@ class ALNSOptimizer:
                 iteration=0,
                 objective_value=best.objective(),
                 feasible=best.is_feasible(),
+                wall_clock_sec=0.0,
             )
         ]
         accepted_count = 0
         rejected_count = 0
 
+        # Seed the profiling with the initial state so benchmark output can
+        # report time-to-first-feasible even when the baseline plan is used.
+        profile.record_evaluation(
+            0.0,
+            feasible=best.is_feasible(),
+            elapsed_sec=0.0,
+        )
+
         while not stopper.should_stop(iteration, no_improve, started_at):
             destroy_name = selector.choose(destroy_ops.keys(), rng)
-            repair_name = selector.choose(repair_ops.keys(), rng)
+            available_repairs = list(repair_ops.keys())
+            exact_repair_time_budget_sec = max(10.0, min(float(config.time_limit_sec) * 0.2, 120.0))
+            exact_repair_call_limit = max(1, min(5, int(config.alns_iterations // 250) + 1))
+            if (
+                profile.exact_repair_calls >= exact_repair_call_limit
+                or profile.exact_repair_time_sec >= exact_repair_time_budget_sec
+            ):
+                available_repairs = [name for name in available_repairs if name != "partial_milp_repair"]
+            repair_name = selector.choose(available_repairs, rng)
             operator_stats[destroy_name] = replace(
                 operator_stats[destroy_name],
                 selected=operator_stats[destroy_name].selected + 1,
@@ -133,9 +152,15 @@ class ALNSOptimizer:
                 selected=operator_stats[repair_name].selected + 1,
             )
             destroyed_plan = destroy_ops[destroy_name](incumbent.plan)
+            repair_started = time.perf_counter()
             repaired_plan = repair_ops[repair_name](problem, destroyed_plan)
+            repair_elapsed = time.perf_counter() - repair_started
+            profile.record_repair(
+                repair_elapsed,
+                exact=(repair_name == "partial_milp_repair"),
+            )
             candidate_plan = identity_local_search(repaired_plan)
-            candidate = self._make_state(problem, candidate_plan)
+            candidate = self._make_state(problem, candidate_plan, profile=profile, started_at=started_at)
 
             if acceptance.accept(candidate, incumbent, best, rng):
                 incumbent = candidate
@@ -162,11 +187,16 @@ class ALNSOptimizer:
                 if is_new_best:
                     best = candidate
                     no_improve = 0
+                    profile.record_incumbent(
+                        feasible=best.is_feasible(),
+                        elapsed_sec=time.perf_counter() - started_at,
+                    )
                     incumbent_history.append(
                         IncumbentSnapshot(
                             iteration=iteration + 1,
                             objective_value=best.objective(),
                             feasible=best.is_feasible(),
+                            wall_clock_sec=round(time.perf_counter() - started_at, 6),
                         )
                     )
                 else:
@@ -230,8 +260,23 @@ class ALNSOptimizer:
                 "iterations": iteration,
                 "true_solver_family": "alns",  # This is the true ALNS implementation
                 "independent_implementation": True,  # True independent solver
+                "delegates_to": "none",
+                "solver_display_name": "ALNS",
+                "solver_maturity": "core",
+                "candidate_generation_mode": "destroy_repair_local_search",
+                "evaluation_mode": problem.scenario.objective_mode,
+                "warm_start_applied": bool(problem.baseline_plan is not None or initial_state is not None),
+                "warm_start_source": (
+                    "initial_state"
+                    if initial_state is not None
+                    else ("baseline_plan" if problem.baseline_plan is not None else "generated_seed")
+                ),
                 "has_feasible_incumbent": best.is_feasible(),
                 "incumbent_count": len(incumbent_history),
+                "repair_count": profile.repair_calls,
+                "exact_repair_count": profile.exact_repair_calls,
+                "uses_exact_repair": bool(profile.exact_repair_calls > 0),
+                "search_profile": profile.snapshot(total_wall_clock_sec=time.perf_counter() - started_at),
                 "best_destroy_operator": max(
                     destroy_ops.keys(),
                     key=lambda name: (
@@ -256,12 +301,26 @@ class ALNSOptimizer:
                     "utilization": float(problem.objective_weights.utilization),
                 },
                 "termination_reason": (
-                    "iteration_limit" if iteration >= int(config.alns_iterations) else "time_limit_or_early_stop"
+                    "iteration_limit"
+                    if iteration >= int(config.alns_iterations)
+                    else (
+                        "no_improvement_limit"
+                        if no_improve >= int(config.no_improvement_limit)
+                        else (
+                            "time_limit"
+                            if (time.perf_counter() - started_at) >= float(config.time_limit_sec)
+                            else "early_stop"
+                        )
+                    )
                 ),
+                "fallback_applied": False,
+                "fallback_reason": "none",
                 "effective_limits": {
                     "time_limit_sec": int(config.time_limit_sec),
                     "alns_iterations": int(config.alns_iterations),
                     "no_improvement_limit": int(config.no_improvement_limit),
+                    "exact_repair_call_limit": int(max(1, min(5, int(config.alns_iterations // 250) + 1))),
+                    "exact_repair_time_budget_sec": float(max(10.0, min(float(config.time_limit_sec) * 0.2, 120.0))),
                 },
             },
             operator_stats=operator_stats,
@@ -304,12 +363,23 @@ class ALNSOptimizer:
         self,
         problem: CanonicalOptimizationProblem,
         plan,
+        *,
+        profile: SearchProfile | None = None,
+        started_at: float | None = None,
     ) -> SolutionState:
+        eval_started = time.perf_counter()
         report = self._feasibility.evaluate(problem, plan)
         breakdown = self._evaluator.evaluate(problem, plan)
         vehicle_ledger, daily_ledger = self._evaluator.build_plan_ledgers(problem, plan, breakdown)
         plan = replace(plan, vehicle_cost_ledger=vehicle_ledger, daily_cost_ledger=daily_ledger)
         costs = breakdown.to_dict()
+        if profile is not None:
+            elapsed = time.perf_counter() - eval_started
+            profile.record_evaluation(
+                elapsed,
+                feasible=report.feasible,
+                elapsed_sec=(time.perf_counter() - started_at) if started_at is not None else elapsed,
+            )
         return SolutionState(
             problem=problem,
             plan=plan,

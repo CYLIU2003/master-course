@@ -33,6 +33,7 @@ FALLBACK_MILP_STATUSES = {
     "auto_relaxed_baseline",
     "gurobi_unavailable_baseline",
     "baseline_feasible",
+    "truthful_baseline_guardrail",
 }
 # Standard 4-category result classification
 RESULT_CATEGORIES = {
@@ -40,6 +41,7 @@ RESULT_CATEGORIES = {
     "SOLVED_INFEASIBLE",
     "NO_INCUMBENT",
     "BASELINE_FALLBACK",
+    "truthful_baseline_guardrail",
 }
 MODE_MAP = {
     "milp": OptimizationMode.MILP,
@@ -47,6 +49,22 @@ MODE_MAP = {
     "ga": OptimizationMode.GA,
     "abc": OptimizationMode.ABC,
 }
+
+DEFAULT_SOLVER_DISPLAY_NAMES = {
+    "milp": "MILP",
+    "alns": "ALNS",
+    "ga": "GA prototype",
+    "abc": "ABC prototype",
+}
+
+DEFAULT_SOLVER_MATURITY = {
+    "milp": "core",
+    "alns": "core",
+    "ga": "prototype",
+    "abc": "prototype",
+}
+
+OBJECTIVE_CHECKPOINTS_SEC = (60, 300, 600, 1500)
 
 
 def _pick_text(*values: Any) -> str:
@@ -167,6 +185,42 @@ def _plan_trip_vehicle_type_map(result_payload: dict[str, Any]) -> dict[str, str
 
 def _count_by_counter(counter: Counter[str]) -> dict[str, int]:
     return {key: int(value) for key, value in sorted(counter.items(), key=lambda item: (-item[1], item[0]))}
+
+
+def _solver_display_name(mode_label: str, solver_metadata: dict[str, Any]) -> str:
+    return _pick_text(
+        solver_metadata.get("solver_display_name"),
+        DEFAULT_SOLVER_DISPLAY_NAMES.get(mode_label, mode_label.upper()),
+    )
+
+
+def _solver_maturity(mode_label: str, solver_metadata: dict[str, Any]) -> str:
+    return _pick_text(
+        solver_metadata.get("solver_maturity"),
+        DEFAULT_SOLVER_MATURITY.get(mode_label, "core"),
+    )
+
+
+def _objective_at_checkpoint(
+    incumbent_history: Iterable[dict[str, Any]],
+    checkpoint_sec: float,
+) -> float | None:
+    best_snapshot: dict[str, Any] | None = None
+    best_elapsed = float("-inf")
+    for snapshot in sorted(
+        (snap for snap in incumbent_history if isinstance(snap, dict)),
+        key=lambda snap: float(snap.get("wall_clock_sec") or 0.0),
+    ):
+        elapsed = float(snapshot.get("wall_clock_sec") or 0.0)
+        if elapsed <= float(checkpoint_sec) and elapsed >= best_elapsed:
+            best_snapshot = snapshot
+            best_elapsed = elapsed
+    if best_snapshot is None:
+        return None
+    objective_value = best_snapshot.get("objective_value")
+    if objective_value is None:
+        return None
+    return float(objective_value)
 
 
 def _used_vehicle_type_counts(
@@ -293,21 +347,51 @@ def _mode_config(base: OptimizationConfig, mode_label: str) -> OptimizationConfi
 
 def _write_csv(rows: Iterable[dict[str, Any]], csv_path: Path) -> None:
     fieldnames = [
+        "solver_name",
+        "solver_display_name",
+        "solver_maturity",
+        "comparison_tier",
         "mode",
         "solver_status",
         "result_category",
         "counts_for_comparison",
         "milp_exactness_class",
         "supports_exact_milp",
+        "delegates_to",
         "true_solver_family",
         "independent_implementation",
+        "candidate_generation_mode",
+        "evaluation_mode",
         "has_feasible_incumbent",
         "incumbent_count",
         "warm_start_applied",
         "warm_start_source",
         "termination_reason",
+        "fallback_applied",
+        "fallback_reason",
         "objective_value",
+        "objective_at_60s",
+        "objective_at_300s",
+        "objective_at_600s",
+        "objective_at_1500s",
         "solve_time_seconds",
+        "total_wall_clock_sec",
+        "first_feasible_sec",
+        "incumbent_updates",
+        "evaluator_calls",
+        "avg_evaluator_sec",
+        "repair_calls",
+        "avg_repair_sec",
+        "exact_repair_calls",
+        "avg_exact_repair_sec",
+        "feasible_candidate_ratio",
+        "rejected_candidate_ratio",
+        "fallback_count",
+        "best_bound",
+        "final_gap",
+        "nodes_explored",
+        "iis_generated",
+        "presolve_reduction_summary",
         "trip_count_served",
         "trip_count_unserved",
         "vehicle_count_used",
@@ -339,17 +423,52 @@ def _build_row(
     unserved_trip_ids = tuple(sorted(str(trip_id) for trip_id in (result_payload.get("unserved_trip_ids") or ())))
     served_trip_ids = tuple(sorted(str(trip_id) for trip_id in (result_payload.get("served_trip_ids") or ())))
     solver_metadata = dict(result_payload.get("solver_metadata") or {})
+    profile = dict(solver_metadata.get("search_profile") or {})
+    incumbent_history = [snap for snap in (result_payload.get("incumbent_history") or ()) if isinstance(snap, dict)]
     warnings = list(result_payload.get("warnings") or ())
     served_trip_vehicle_type = _plan_trip_vehicle_type_map(result_payload)
     unserved_breakdown = _unserved_breakdown(trip_meta_by_id, unserved_trip_ids)
+    solver_display_name = _solver_display_name(mode_label, solver_metadata)
+    solver_maturity = _solver_maturity(mode_label, solver_metadata)
+    result_category = _pick_text(result_payload.get("solver_status"), result_payload.get("status"))
+    comparison_tier = "prototype" if solver_maturity == "prototype" else (
+        "excluded"
+        if result_category in {"BASELINE_FALLBACK", "NO_INCUMBENT", "truthful_baseline_guardrail", "SOLVED_INFEASIBLE"}
+        else "core"
+    )
 
     row = {
+        "solver_name": mode_label,
+        "solver_display_name": solver_display_name,
+        "solver_maturity": solver_maturity,
+        "comparison_tier": comparison_tier,
         "mode": mode_label,
-        "solver_status": _pick_text(result_payload.get("solver_status"), result_payload.get("status")),
+        "solver_status": result_category,
         "supports_exact_milp": bool(solver_metadata.get("supports_exact_milp")),
+        "delegates_to": _pick_text(solver_metadata.get("delegates_to"), solver_metadata.get("delegate")),
+        "candidate_generation_mode": _pick_text(solver_metadata.get("candidate_generation_mode")),
+        "evaluation_mode": _pick_text(solver_metadata.get("evaluation_mode"), result_payload.get("objective_mode")),
         "termination_reason": _pick_text(result_payload.get("termination_reason"), solver_metadata.get("termination_reason")),
+        "fallback_applied": bool(solver_metadata.get("fallback_applied")),
+        "fallback_reason": _pick_text(solver_metadata.get("fallback_reason")),
         "objective_value": float(result_payload.get("objective_value") or 0.0),
+        "objective_at_60s": _objective_at_checkpoint(incumbent_history, 60),
+        "objective_at_300s": _objective_at_checkpoint(incumbent_history, 300),
+        "objective_at_600s": _objective_at_checkpoint(incumbent_history, 600),
+        "objective_at_1500s": _objective_at_checkpoint(incumbent_history, 1500),
         "solve_time_seconds": round(float(wall_clock_seconds), 6),
+        "total_wall_clock_sec": float(profile.get("total_wall_clock_sec") or wall_clock_seconds),
+        "first_feasible_sec": profile.get("first_feasible_sec"),
+        "incumbent_updates": int(profile.get("incumbent_updates", solver_metadata.get("incumbent_count", 0)) or 0),
+        "evaluator_calls": int(profile.get("evaluator_calls", 0) or 0),
+        "avg_evaluator_sec": float(profile.get("avg_evaluator_sec", 0.0) or 0.0),
+        "repair_calls": int(profile.get("repair_calls", 0) or 0),
+        "avg_repair_sec": float(profile.get("avg_repair_sec", 0.0) or 0.0),
+        "exact_repair_calls": int(profile.get("exact_repair_calls", 0) or 0),
+        "avg_exact_repair_sec": float(profile.get("avg_exact_repair_sec", 0.0) or 0.0),
+        "feasible_candidate_ratio": float(profile.get("feasible_candidate_ratio", 0.0) or 0.0),
+        "rejected_candidate_ratio": float(profile.get("rejected_candidate_ratio", 0.0) or 0.0),
+        "fallback_count": int(profile.get("fallback_count", 0) or 0),
         "trip_count_served": len(served_trip_ids),
         "trip_count_unserved": len(unserved_trip_ids),
         "vehicle_count_used": sum(1 for trip_ids in (result_payload.get("vehicle_paths") or {}).values() if trip_ids),
@@ -363,6 +482,11 @@ def _build_row(
         "incumbent_count": int(solver_metadata.get("incumbent_count", 0)),
         "warm_start_applied": bool(solver_metadata.get("warm_start_applied")),
         "warm_start_source": _pick_text(solver_metadata.get("warm_start_source")),
+        "best_bound": solver_metadata.get("best_bound"),
+        "final_gap": solver_metadata.get("final_gap"),
+        "nodes_explored": solver_metadata.get("nodes_explored"),
+        "iis_generated": bool(solver_metadata.get("iis_generated")),
+        "presolve_reduction_summary": dict(solver_metadata.get("presolve_reduction_summary") or {}),
         "result_category": _pick_text(result_payload.get("solver_status")) if _pick_text(result_payload.get("solver_status")) in RESULT_CATEGORIES else "UNKNOWN",
         "effective_limits": dict(result_payload.get("effective_limits") or {}),
         "warnings": warnings,
@@ -401,7 +525,7 @@ def _build_row(
             if bool((trip_meta_by_id.get(trip_id) or {}).get("is_shared_trip"))
         ),
     }
-    row["counts_for_comparison"] = row["result_category"] != "BASELINE_FALLBACK"
+    row["counts_for_comparison"] = row["comparison_tier"] == "core" and row["result_category"] == "SOLVED_FEASIBLE"
     row["milp_exactness_class"] = _milp_exactness_class(row)
     return row
 
@@ -516,8 +640,9 @@ def main() -> None:
             )
         )
 
-    competitive_rows = [row for row in rows if bool(row.get("counts_for_comparison"))]
-    excluded_rows = [row for row in rows if not bool(row.get("counts_for_comparison"))]
+    competitive_rows = [row for row in rows if row.get("comparison_tier") == "core" and bool(row.get("counts_for_comparison"))]
+    prototype_rows = [row for row in rows if row.get("comparison_tier") == "prototype"]
+    excluded_rows = [row for row in rows if row.get("comparison_tier") == "excluded"]
 
     comparison = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -533,11 +658,15 @@ def main() -> None:
         "timetable_rows_regenerated": False,
         "rows": rows,
         "competitive_rows": competitive_rows,
+        "prototype_rows": prototype_rows,
         "excluded_rows": excluded_rows,
         "comparison_summary": {
             "total_solver_rows": len(rows),
             "competitive_solver_rows": len(competitive_rows),
+            "prototype_solver_rows": len(prototype_rows),
             "excluded_solver_rows": len(excluded_rows),
+            "competitive_modes": [row["mode"] for row in competitive_rows],
+            "prototype_modes": [row["mode"] for row in prototype_rows],
             "excluded_modes": [row["mode"] for row in excluded_rows],
         },
     }
@@ -558,9 +687,11 @@ def main() -> None:
     ]
     all_zero_unserved = all(int(row["trip_count_unserved"]) == 0 for row in rows)
     milp_row = next(row for row in rows if row["mode"] == "milp")
-    competitive_modes = ", ".join(row["mode"] for row in competitive_rows) or "none"
+    competitive_modes = ", ".join(row["solver_display_name"] for row in competitive_rows) or "none"
+    prototype_modes = ", ".join(row["solver_display_name"] for row in prototype_rows) or "none"
     verdict_lines.append(f"- all_974_served: `{all_zero_unserved}`")
     verdict_lines.append(f"- competitive_modes: `{competitive_modes}`")
+    verdict_lines.append(f"- prototype_modes: `{prototype_modes}`")
     verdict_lines.append(f"- excluded_from_comparison: `{', '.join(row['mode'] for row in excluded_rows) or 'none'}`")
     verdict_lines.append(
         f"- milp_exactness: `{milp_row['milp_exactness_class']}` "

@@ -264,6 +264,7 @@ class ResultSerializer:
                     "iteration": snap.iteration,
                     "objective_value": snap.objective_value,
                     "feasible": snap.feasible,
+                    "wall_clock_sec": snap.wall_clock_sec,
                 }
                 for snap in result.incumbent_history
             ],

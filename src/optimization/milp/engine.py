@@ -48,6 +48,11 @@ class MILPOptimizer:
                 "supports_exact_milp": outcome.supports_exact_milp,
                 "true_solver_family": "milp",
                 "independent_implementation": True,
+                "delegates_to": "none",
+                "solver_display_name": "MILP",
+                "solver_maturity": "core",
+                "candidate_generation_mode": "exact_branch_and_cut",
+                "evaluation_mode": problem.scenario.objective_mode,
                 "has_feasible_incumbent": outcome.has_feasible_incumbent,
                 "incumbent_count": outcome.incumbent_count,
                 "warm_start_applied": outcome.warm_start_applied,
@@ -56,6 +61,15 @@ class MILPOptimizer:
                     if problem.baseline_plan
                     else None
                 ),
+                "best_bound": outcome.best_bound,
+                "final_gap": outcome.final_gap,
+                "nodes_explored": outcome.nodes_explored,
+                "runtime_sec": outcome.runtime_sec,
+                "first_feasible_sec": outcome.first_feasible_sec,
+                "presolve_reduction_summary": dict(outcome.presolve_reduction_summary or {}),
+                "iis_generated": outcome.iis_generated,
+                "fallback_reason": outcome.fallback_reason,
+                "fallback_applied": bool(outcome.fallback_reason or outcome.solver_status == "BASELINE_FALLBACK"),
                 "objective_mode": problem.scenario.objective_mode,
                 "objective_weights": {
                     "electricity_cost": float(problem.objective_weights.energy),
@@ -76,6 +90,20 @@ class MILPOptimizer:
                 "time_limit_sec": config.time_limit_sec,
                 "mip_gap": config.mip_gap,
                 "warm_start_enabled": config.warm_start,
+                "search_profile": {
+                    "total_wall_clock_sec": round(float(outcome.runtime_sec or 0.0), 6),
+                    "first_feasible_sec": None if outcome.first_feasible_sec is None else round(float(outcome.first_feasible_sec), 6),
+                    "incumbent_updates": int(outcome.incumbent_count),
+                    "evaluator_calls": 0,
+                    "avg_evaluator_sec": 0.0,
+                    "repair_calls": 0,
+                    "avg_repair_sec": 0.0,
+                    "exact_repair_calls": 0,
+                    "avg_exact_repair_sec": 0.0,
+                    "feasible_candidate_ratio": 1.0 if outcome.has_feasible_incumbent else 0.0,
+                    "rejected_candidate_ratio": 0.0 if outcome.has_feasible_incumbent else 1.0,
+                    "fallback_count": 1 if outcome.fallback_reason or outcome.solver_status == "BASELINE_FALLBACK" else 0,
+                },
             },
         )
 

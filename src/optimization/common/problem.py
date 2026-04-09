@@ -386,6 +386,7 @@ class IncumbentSnapshot:
     iteration: int
     objective_value: float
     feasible: bool
+    wall_clock_sec: float = 0.0
 
 
 @dataclass(frozen=True)

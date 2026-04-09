@@ -108,6 +108,11 @@ class OptimizationEngine:
             )
             if bool(solver_metadata.get("truthful_baseline_guardrail_applied")):
                 final_solver_status = "truthful_baseline_guardrail"
+                solver_metadata["fallback_applied"] = True
+                solver_metadata["fallback_reason"] = "truthful_baseline_guardrail"
+                profile = dict(solver_metadata.get("search_profile") or {})
+                profile["fallback_count"] = int(profile.get("fallback_count", 0) or 0) + 1
+                solver_metadata["search_profile"] = profile
         warnings = tuple(dict.fromkeys(str(item) for item in warnings if str(item).strip()))
 
         return replace(
