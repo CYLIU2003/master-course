@@ -343,6 +343,10 @@ class GAOptimizer:
         parent_b: AssignmentPlan,
         rng: random.Random,
     ) -> AssignmentPlan:
+        merged_map = merge_duty_vehicle_maps(
+            parent_a.metadata.get("duty_vehicle_map"),
+            parent_b.metadata.get("duty_vehicle_map"),
+        )
         selected_duties: List[VehicleDuty] = []
         seen_trip_ids: set[str] = set()
         shuffled_duties = list(parent_a.duties) + list(parent_b.duties)
@@ -355,11 +359,20 @@ class GAOptimizer:
                 selected_duties.append(duty)
                 seen_trip_ids.update(trip_ids)
         if not selected_duties:
-            selected_duties = [rng.choice(parent_a.duties or parent_b.duties)]
-        merged_map = merge_duty_vehicle_maps(
-            parent_a.metadata.get("duty_vehicle_map"),
-            parent_b.metadata.get("duty_vehicle_map"),
-        )
+            fallback_duties = list(parent_a.duties or parent_b.duties)
+            if not fallback_duties:
+                return rebuild_plan_from_duties(
+                    problem,
+                    parent_a,
+                    (),
+                    keep_energy_slots=False,
+                    preserve_unserved=True,
+                    metadata_updates={
+                        "crossover_mode": "empty_fallback",
+                        "duty_vehicle_map": merged_map,
+                    },
+                )
+            selected_duties = [rng.choice(fallback_duties)]
         return rebuild_plan_from_duties(
             problem,
             parent_a,

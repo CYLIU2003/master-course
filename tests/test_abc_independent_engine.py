@@ -72,6 +72,8 @@ def test_abc_optimizer_is_independent_and_reports_colony_stats(monkeypatch) -> N
     assert metadata["true_solver_family"] == "abc"
     assert metadata["independent_implementation"] is True
     assert metadata["delegates_to"] == "none"
+    assert metadata["solver_display_name"] == "ABC prototype"
+    assert metadata["solver_maturity"] == "prototype"
     assert metadata["candidate_generation_mode"] == "bee_colony_search"
     assert metadata["has_feasible_incumbent"] is True
     assert metadata["food_source_count"] >= 1

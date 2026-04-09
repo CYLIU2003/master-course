@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import random
+
 from src.dispatch.models import DispatchContext, Trip, VehicleProfile
 from src.optimization.common.builder import ProblemBuilder
-from src.optimization.common.problem import OptimizationConfig, OptimizationMode
+from src.optimization.common.problem import AssignmentPlan, OptimizationConfig, OptimizationMode
 from src.optimization.ga import engine as ga_engine
 from src.optimization.ga.engine import GAOptimizer
 
@@ -67,8 +69,21 @@ def test_ga_optimizer_is_independent_and_reports_profile(monkeypatch) -> None:
     assert metadata["true_solver_family"] == "ga"
     assert metadata["independent_implementation"] is True
     assert metadata["delegates_to"] == "none"
+    assert metadata["solver_display_name"] == "GA prototype"
+    assert metadata["solver_maturity"] == "prototype"
     assert metadata["candidate_generation_mode"] == "genetic_population_search"
     assert metadata["has_feasible_incumbent"] is True
     assert profile["evaluator_calls"] >= 1
     assert profile["repair_calls"] >= 1
     assert result.feasible is True
+
+
+def test_ga_crossover_handles_empty_parents() -> None:
+    optimizer = GAOptimizer()
+    problem = _tiny_problem()
+    empty_plan = AssignmentPlan(duties=(), served_trip_ids=(), unserved_trip_ids=("t1",))
+
+    child = optimizer._crossover(problem, empty_plan, empty_plan, random.Random(1))
+
+    assert child.duties == ()
+    assert child.unserved_trip_ids == ("t1",)
