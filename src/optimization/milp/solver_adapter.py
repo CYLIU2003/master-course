@@ -1,24 +1,13 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
 
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
-from src.optimization.common.soc_helpers import (
-    deadhead_distance_km as shared_deadhead_distance_km,
-    deadhead_energy_kwh as shared_deadhead_energy_kwh,
-    required_departure_soc_kwh as shared_required_departure_soc_kwh,
-    slot_absolute_min as shared_slot_absolute_min,
-    slot_index as shared_slot_index,
-    trip_active_in_slot as shared_trip_active_in_slot,
-    trip_active_slot_count as shared_trip_active_slot_count,
-    trip_energy_kwh as shared_trip_energy_kwh,
-    trip_slot_energy_fraction as shared_trip_slot_energy_fraction,
-)
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.route_code_utils import extract_route_series_from_candidates
 
@@ -31,6 +20,7 @@ from src.optimization.common.problem import (
     ProblemTrip,
     RefuelSlot,
     classify_peak_slots,
+    normalize_required_soc_departure_ratio,
 )
 
 
@@ -45,19 +35,6 @@ class MILPSolverOutcome:
     solver_status: str
     used_backend: str
     supports_exact_milp: bool
-    has_feasible_incumbent: bool = False
-    incumbent_count: int = 0
-    warm_start_applied: bool = False
-    warm_start_source: str = ""
-    best_bound: float | None = None
-    final_gap: float | None = None
-    nodes_explored: int = 0
-    runtime_sec: float = 0.0
-    first_feasible_sec: float | None = None
-    presolve_reduction_summary: Dict[str, Any] = field(default_factory=dict)
-    iis_generated: bool = False
-    fallback_reason: str = ""
-    termination_reason: str = ""
 
 
 class SolverAdapter(Protocol):
@@ -82,15 +59,9 @@ class DispatchBaselineMILPAdapter:
         plan = problem.baseline_plan or AssignmentPlan()
         return (
             MILPSolverOutcome(
-                solver_status="BASELINE_FALLBACK",
+                solver_status="baseline_feasible",
                 used_backend=self.backend_name,
                 supports_exact_milp=False,
-                has_feasible_incumbent=False,
-                incumbent_count=0,
-                warm_start_applied=False,
-                warm_start_source="none",
-                fallback_reason="dispatch_baseline_only",
-                termination_reason="dispatch_baseline_only",
             ),
             plan,
         )
@@ -98,20 +69,6 @@ class DispatchBaselineMILPAdapter:
 
 class GurobiMILPAdapter:
     backend_name = "gurobi"
-
-    def _termination_reason(self, solver_status: str) -> str:
-        status = str(solver_status or "").strip().lower()
-        if status == "optimal":
-            return "optimal"
-        if status in {"time_limit", "time_limit_baseline"}:
-            return "time_limit"
-        if status in {"infeasible", "inf_or_unbd", "unbounded"}:
-            return "infeasible_or_unbounded"
-        if status == "suboptimal":
-            return "stopped_with_feasible"
-        if status == "auto_relaxed_baseline":
-            return "baseline_after_relax"
-        return "unknown"
 
     def solve(
         self,
@@ -122,15 +79,9 @@ class GurobiMILPAdapter:
             baseline = problem.baseline_plan or AssignmentPlan()
             return (
                 MILPSolverOutcome(
-                    solver_status="BASELINE_FALLBACK",
+                    solver_status="gurobi_unavailable_baseline",
                     used_backend="dispatch_baseline",
                     supports_exact_milp=False,
-                    has_feasible_incumbent=False,
-                    incumbent_count=0,
-                    warm_start_applied=False,
-                    warm_start_source="gurobi_unavailable",
-                    fallback_reason="gurobi_unavailable",
-                    termination_reason="gurobi_unavailable",
                 ),
                 baseline,
             )
@@ -183,20 +134,6 @@ class GurobiMILPAdapter:
                 trip_by_id.get(str(trip_id)),
             )
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
-        allow_same_day_depot_cycles = bool(
-            problem.metadata.get(
-                "allow_same_day_depot_cycles",
-                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
-            )
-        )
-        max_depot_cycles_per_vehicle_per_day = self._safe_positive_int(
-            problem.metadata.get(
-                "max_depot_cycles_per_vehicle_per_day",
-                getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
-            ),
-            default=1,
-        )
-        effective_daily_fragment_cap = max_depot_cycles_per_vehicle_per_day if allow_same_day_depot_cycles else 1
         trip_day_index_by_trip_id = {
             trip.trip_id: self._trip_day_index(problem, trip.departure_min)
             for trip in problem.trips
@@ -310,24 +247,6 @@ class GurobiMILPAdapter:
                 vehicle_terms_end.append(end_arc[key])
             model.addConstr(gp.quicksum(vehicle_terms_start) <= max_start_fragments_per_vehicle)
             model.addConstr(gp.quicksum(vehicle_terms_end) <= max_end_fragments_per_vehicle)
-
-            for day_idx in day_indices:
-                day_trip_ids = [
-                    trip_id
-                    for trip_id in assignment_trip_ids_by_vehicle.get(vehicle.vehicle_id, [])
-                    if int(trip_day_index_by_trip_id.get(trip_id, 0)) == day_idx
-                    and (vehicle.vehicle_id, trip_id) in y
-                ]
-                if not day_trip_ids:
-                    continue
-                day_start_terms = [start_arc[(vehicle.vehicle_id, trip_id)] for trip_id in day_trip_ids if (vehicle.vehicle_id, trip_id) in start_arc]
-                day_end_terms = [end_arc[(vehicle.vehicle_id, trip_id)] for trip_id in day_trip_ids if (vehicle.vehicle_id, trip_id) in end_arc]
-                model.addConstr(
-                    gp.quicksum(day_start_terms) <= effective_daily_fragment_cap
-                )
-                model.addConstr(
-                    gp.quicksum(day_end_terms) <= effective_daily_fragment_cap
-                )
 
         # Fixed route-band mode is enforced on connection arcs, not across the
         # whole vehicle-day. A vehicle may switch bands only by starting a new
@@ -1467,36 +1386,6 @@ class GurobiMILPAdapter:
             GRB.UNBOUNDED: "unbounded",
         }
         
-        # =====================================================
-        # MIP Start (Warm Start) from baseline plan
-        # =====================================================
-        warm_start_applied = False
-        warm_start_source = "none"
-        
-        baseline_plan = self._repaired_baseline_plan_for_warm_start(problem)
-        if baseline_plan is not None and len(baseline_plan.served_trip_ids) > 0:
-            try:
-                warm_start_applied = self._apply_mip_start(
-                    model=model,
-                    baseline_plan=baseline_plan,
-                    problem=problem,
-                    y=y,
-                    x=x,
-                    start_arc=start_arc,
-                    end_arc=end_arc,
-                    unserved=unserved,
-                    used_vehicle=used_vehicle,
-                )
-                if warm_start_applied:
-                    warm_start_source = "repaired_baseline"
-                    if enable_milp_diagnostics:
-                        print(f"[MILP Diagnostics] MIP Start applied from baseline plan with {len(baseline_plan.served_trip_ids)} served trips")
-            except Exception as e:
-                if enable_milp_diagnostics:
-                    print(f"[MILP Diagnostics] MIP Start failed: {e}")
-                warm_start_applied = False
-                warm_start_source = "failed"
-        
         # Pre-optimization diagnostics
         if enable_milp_diagnostics:
             import json
@@ -1512,74 +1401,16 @@ class GurobiMILPAdapter:
                 "num_vehicles": len(problem.vehicles),
                 "time_limit_sec": config.time_limit_sec,
                 "mip_gap": config.mip_gap,
-                "warm_start_applied": warm_start_applied,
-                "warm_start_source": warm_start_source,
             }
             print(f"[MILP Diagnostics] Pre-optimization stats:")
             for key, val in pre_stats.items():
                 print(f"  {key}: {val}")
             with open(os.path.join(diagnostic_output_dir, f"pre_stats_{int(time.time())}.json"), "w") as f:
                 json.dump(pre_stats, f, indent=2)
-
-        solve_started_at = time.perf_counter()
-        first_feasible_sec: float | None = None
-        incumbent_count = 0
-        presolve_reduction_summary: Dict[str, Any] = {
-            "initial_num_vars": int(model.NumVars),
-            "initial_num_constrs": int(model.NumConstrs),
-            "initial_num_bin_vars": int(model.NumBinVars),
-            "initial_num_int_vars": int(model.NumIntVars),
-            "col_deleted": 0,
-            "row_deleted": 0,
-            "bound_changed": 0,
-            "coeff_changed": 0,
-            "sense_changed": 0,
-        }
-
-        def _callback(cb_model, where):  # type: ignore[no-untyped-def]
-            nonlocal first_feasible_sec, incumbent_count
-            try:
-                if where == GRB.Callback.PRESOLVE:
-                    try:
-                        presolve_reduction_summary["col_deleted"] = max(
-                            presolve_reduction_summary["col_deleted"],
-                            int(cb_model.cbGet(GRB.Callback.PRE_COLDEL)),
-                        )
-                        presolve_reduction_summary["row_deleted"] = max(
-                            presolve_reduction_summary["row_deleted"],
-                            int(cb_model.cbGet(GRB.Callback.PRE_ROWDEL)),
-                        )
-                        presolve_reduction_summary["bound_changed"] = max(
-                            presolve_reduction_summary["bound_changed"],
-                            int(cb_model.cbGet(GRB.Callback.PRE_BNDCHG)),
-                        )
-                        presolve_reduction_summary["coeff_changed"] = max(
-                            presolve_reduction_summary["coeff_changed"],
-                            int(cb_model.cbGet(GRB.Callback.PRE_COECHG)),
-                        )
-                        presolve_reduction_summary["sense_changed"] = max(
-                            presolve_reduction_summary["sense_changed"],
-                            int(cb_model.cbGet(GRB.Callback.PRE_SENCHG)),
-                        )
-                    except Exception:
-                        pass
-                elif where == GRB.Callback.MIPSOL:
-                    incumbent_count += 1
-                    if first_feasible_sec is None:
-                        try:
-                            first_feasible_sec = float(cb_model.cbGet(GRB.Callback.RUNTIME))
-                        except Exception:
-                            first_feasible_sec = time.perf_counter() - solve_started_at
-            except Exception:
-                pass
-
-        def _optimize() -> None:
-            model.optimize(_callback)
-
-        _optimize()
+        
+        model.optimize()
         
         # Post-optimization diagnostics
-        iis_generated = False
         if enable_milp_diagnostics:
             post_stats = {
                 "status": model.Status,
@@ -1602,7 +1433,6 @@ class GurobiMILPAdapter:
                 print("[MILP Diagnostics] Model is INFEASIBLE. Computing IIS...")
                 try:
                     model.computeIIS()
-                    iis_generated = True
                     iis_file = os.path.join(diagnostic_output_dir, f"infeasible_iis_{int(time.time())}.ilp")
                     model.write(iis_file)
                     print(f"[MILP Diagnostics] IIS written to: {iis_file}")
@@ -1620,7 +1450,7 @@ class GurobiMILPAdapter:
         if model.Status == GRB.INF_OR_UNBD:
             # Distinguish infeasible from unbounded before deciding fallback behavior.
             model.Params.DualReductions = 0
-            _optimize()
+            model.optimize()
 
         relaxed_partial_service = False
         if (
@@ -1633,26 +1463,10 @@ class GurobiMILPAdapter:
             for constr in hard_no_unserved_constraints:
                 model.remove(constr)
             model.update()
-            _optimize()
+            model.optimize()
             relaxed_partial_service = model.SolCount > 0
 
         solver_status = status_map.get(model.Status, f"status_{model.Status}")
-        runtime_sec = time.perf_counter() - solve_started_at
-        best_bound: float | None = None
-        final_gap: float | None = None
-        try:
-            best_bound = float(model.ObjBound)
-        except Exception:
-            best_bound = None
-        if model.SolCount > 0:
-            try:
-                final_gap = float(model.MIPGap)
-            except Exception:
-                final_gap = None
-        nodes_explored = int(getattr(model, "NodeCount", 0) or 0)
-        termination_reason = self._termination_reason(solver_status)
-        if model.SolCount <= 0 and termination_reason == "time_limit":
-            termination_reason = "time_limit_no_incumbent"
 
         if (
             model.SolCount > 0
@@ -1670,13 +1484,6 @@ class GurobiMILPAdapter:
                     source="dispatch_baseline_after_relax",
                     solver_status=solver_status,
                     relaxed_partial_service=True,
-                    runtime_sec=runtime_sec,
-                    best_bound=best_bound,
-                    final_gap=final_gap,
-                    nodes_explored=nodes_explored,
-                    first_feasible_sec=first_feasible_sec,
-                    presolve_reduction_summary=presolve_reduction_summary,
-                    iis_generated=iis_generated,
                 )
                 if baseline_fallback is not None:
                     return baseline_fallback
@@ -1689,13 +1496,6 @@ class GurobiMILPAdapter:
                     source="dispatch_baseline_after_time_limit_no_incumbent",
                     solver_status=solver_status,
                     relaxed_partial_service=bool(relaxed_partial_service),
-                    runtime_sec=runtime_sec,
-                    best_bound=best_bound,
-                    final_gap=final_gap,
-                    nodes_explored=nodes_explored,
-                    first_feasible_sec=first_feasible_sec,
-                    presolve_reduction_summary=presolve_reduction_summary,
-                    iis_generated=iis_generated,
                 )
                 if baseline_fallback is not None:
                     return baseline_fallback
@@ -1706,29 +1506,15 @@ class GurobiMILPAdapter:
                 unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
                 metadata={
                     "source": "milp_gurobi",
-                    "status": "NO_INCUMBENT",
-                    "original_solver_status": solver_status,
+                    "status": solver_status,
                     "auto_relaxed_allow_partial_service": bool(relaxed_partial_service),
                 },
             )
             return (
                 MILPSolverOutcome(
-                    solver_status="NO_INCUMBENT",
+                    solver_status=solver_status,
                     used_backend=self.backend_name,
                     supports_exact_milp=True,
-                    has_feasible_incumbent=False,
-                    incumbent_count=0,
-                    warm_start_applied=warm_start_applied,
-                    warm_start_source=warm_start_source,
-                    best_bound=best_bound,
-                    final_gap=final_gap,
-                    nodes_explored=nodes_explored,
-                    runtime_sec=runtime_sec,
-                    first_feasible_sec=first_feasible_sec,
-                    presolve_reduction_summary=dict(presolve_reduction_summary),
-                    iis_generated=iis_generated,
-                    fallback_reason="",
-                    termination_reason=termination_reason,
                 ),
                 empty,
             )
@@ -1922,28 +1708,11 @@ class GurobiMILPAdapter:
                 "charge_to_upper_buffer_penalty_yen_per_kwh": charge_upper_buffer_penalty_per_kwh,
             },
         )
-        # Determine result category based on solver status
-        has_incumbent = incumbent_count > 0
-        result_category = "SOLVED_FEASIBLE" if has_incumbent else "NO_INCUMBENT"
-        
         return (
             MILPSolverOutcome(
-                solver_status=result_category,
+                solver_status=solver_status,
                 used_backend=self.backend_name,
                 supports_exact_milp=True,
-                has_feasible_incumbent=has_incumbent,
-                incumbent_count=incumbent_count,
-                warm_start_applied=warm_start_applied,
-                warm_start_source=warm_start_source,
-                best_bound=best_bound,
-                final_gap=final_gap,
-                nodes_explored=nodes_explored,
-                runtime_sec=runtime_sec,
-                first_feasible_sec=first_feasible_sec,
-                presolve_reduction_summary=dict(presolve_reduction_summary),
-                iis_generated=iis_generated,
-                fallback_reason="",
-                termination_reason=termination_reason,
             ),
             plan,
         )
@@ -1956,13 +1725,6 @@ class GurobiMILPAdapter:
         source: str,
         solver_status: str,
         relaxed_partial_service: bool,
-        runtime_sec: float = 0.0,
-        best_bound: float | None = None,
-        final_gap: float | None = None,
-        nodes_explored: int = 0,
-        first_feasible_sec: float | None = None,
-        presolve_reduction_summary: Dict[str, Any] | None = None,
-        iis_generated: bool = False,
     ) -> Optional[Tuple[MILPSolverOutcome, AssignmentPlan]]:
         baseline_plan = self._repaired_baseline_plan_for_warm_start(problem)
         if baseline_plan is None or len(baseline_plan.served_trip_ids) <= 0:
@@ -1979,22 +1741,9 @@ class GurobiMILPAdapter:
         )
         return (
             MILPSolverOutcome(
-                solver_status="BASELINE_FALLBACK",
+                solver_status=fallback_status,
                 used_backend=self.backend_name,
                 supports_exact_milp=False,
-                has_feasible_incumbent=False,
-                incumbent_count=0,
-                warm_start_applied=False,
-                warm_start_source=f"fallback_{fallback_status}",
-                runtime_sec=float(runtime_sec),
-                best_bound=best_bound,
-                final_gap=final_gap,
-                nodes_explored=int(nodes_explored or 0),
-                first_feasible_sec=first_feasible_sec,
-                presolve_reduction_summary=dict(presolve_reduction_summary or {}),
-                iis_generated=bool(iis_generated),
-                fallback_reason=fallback_status,
-                termination_reason=fallback_status,
             ),
             replace(
                 baseline_plan,
@@ -2017,7 +1766,18 @@ class GurobiMILPAdapter:
         return repaired_plan
 
     def _slot_index(self, problem: CanonicalOptimizationProblem, departure_min: int) -> int:
-        return shared_slot_index(problem, departure_min)
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        if not problem.scenario.horizon_start:
+            return departure_min // timestep_min
+        try:
+            hh, mm = problem.scenario.horizon_start.split(":")
+            start_min = int(hh) * 60 + int(mm)
+        except ValueError:
+            return departure_min // timestep_min
+        adjusted = departure_min
+        if adjusted < start_min:
+            adjusted += 24 * 60
+        return (adjusted - start_min) // timestep_min
 
     def _slot_indices_for_interval(
         self,
@@ -2106,90 +1866,6 @@ class GurobiMILPAdapter:
             end_offset += 24 * 60
         day_end_abs = day_start + end_offset - 1
         return self._slot_index(problem, day_end_abs)
-
-    def _apply_mip_start(
-        self,
-        model: Any,
-        baseline_plan: AssignmentPlan,
-        problem: CanonicalOptimizationProblem,
-        y: Dict[Tuple[str, str], Any],
-        x: Dict[Tuple[str, str, str], Any],
-        start_arc: Dict[Tuple[str, str], Any],
-        end_arc: Dict[Tuple[str, str], Any],
-        unserved: Dict[str, Any],
-        used_vehicle: Dict[str, Any],
-    ) -> bool:
-        """Apply MIP start from baseline plan to provide a warm start for Gurobi.
-        
-        Sets Start attribute on binary variables (y, x, start_arc, end_arc, unserved, used_vehicle).
-        Does NOT set Start on continuous variables (SOC, charging) - Gurobi will compute these.
-        
-        Returns True if MIP start was successfully applied.
-        """
-        if not baseline_plan.duties:
-            return False
-        
-        # Build duty_vehicle_map from metadata
-        duty_vehicle_map = dict(baseline_plan.metadata.get("duty_vehicle_map", {}))
-        
-        # Track which trips are served and by which vehicle
-        trip_vehicle_assignment: Dict[str, str] = {}  # trip_id -> vehicle_id
-        vehicle_trips: Dict[str, List[str]] = {}  # vehicle_id -> ordered list of trip_ids
-        
-        for duty in baseline_plan.duties:
-            vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
-            if vehicle_id not in vehicle_trips:
-                vehicle_trips[vehicle_id] = []
-            
-            for leg in duty.legs:
-                if leg.trip:
-                    trip_id = leg.trip.trip_id
-                    trip_vehicle_assignment[trip_id] = vehicle_id
-                    vehicle_trips[vehicle_id].append(trip_id)
-        
-        # Set y variables (trip-vehicle assignment)
-        for (vehicle_id, trip_id), var in y.items():
-            if trip_vehicle_assignment.get(trip_id) == vehicle_id:
-                var.Start = 1.0
-            else:
-                var.Start = 0.0
-        
-        # Set x variables (trip sequence arcs)
-        for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
-            trips = vehicle_trips.get(vehicle_id, [])
-            arc_exists = False
-            for i in range(len(trips) - 1):
-                if trips[i] == from_trip_id and trips[i + 1] == to_trip_id:
-                    arc_exists = True
-                    break
-            var.Start = 1.0 if arc_exists else 0.0
-        
-        # Set start_arc variables (first trip in duty)
-        for (vehicle_id, trip_id), var in start_arc.items():
-            trips = vehicle_trips.get(vehicle_id, [])
-            if trips and trips[0] == trip_id:
-                var.Start = 1.0
-            else:
-                var.Start = 0.0
-        
-        # Set end_arc variables (last trip in duty)
-        for (vehicle_id, trip_id), var in end_arc.items():
-            trips = vehicle_trips.get(vehicle_id, [])
-            if trips and trips[-1] == trip_id:
-                var.Start = 1.0
-            else:
-                var.Start = 0.0
-        
-        # Set unserved variables
-        served_set = set(baseline_plan.served_trip_ids)
-        for trip_id, var in unserved.items():
-            var.Start = 0.0 if trip_id in served_set else 1.0
-        
-        # Set used_vehicle variables
-        for vehicle_id, var in used_vehicle.items():
-            var.Start = 1.0 if vehicle_id in vehicle_trips else 0.0
-        
-        return True
 
     def _operation_start_min(self, problem: CanonicalOptimizationProblem) -> int:
         return self._horizon_start_min(problem)
@@ -2411,7 +2087,7 @@ class GurobiMILPAdapter:
         arrival_min: int,
     ) -> int:
         adjusted_arrival = max(arrival_min - 1, departure_min)
-        return shared_slot_index(problem, adjusted_arrival)
+        return self._slot_index(problem, adjusted_arrival)
 
     def _charge_power_max_kw(self, problem: CanonicalOptimizationProblem, vehicle_type: str) -> float:
         vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type), None)
@@ -2434,7 +2110,17 @@ class GurobiMILPAdapter:
         arrival_min: int,
         slot_idx: int,
     ) -> bool:
-        return shared_trip_active_in_slot(problem, departure_min, arrival_min, slot_idx)
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        slot_start = self._slot_absolute_min(problem, slot_idx)
+        slot_end = slot_start + timestep_min
+        dep = departure_min
+        arr = arrival_min
+        if arr < dep:
+            arr += 24 * 60
+        if dep < slot_start - 24 * 60:
+            dep += 24 * 60
+            arr += 24 * 60
+        return dep < slot_end and arr > slot_start
 
     def _trip_slot_energy_fraction(
         self,
@@ -2443,7 +2129,38 @@ class GurobiMILPAdapter:
         arrival_min: int,
         slot_idx: int,
     ) -> float:
-        return shared_trip_slot_energy_fraction(problem, departure_min, arrival_min, slot_idx)
+        """
+        Compute the fraction of trip energy to attribute to the given slot.
+        
+        For mid-trip SOC safety, we spread trip energy proportionally across
+        the slots where the trip is active, rather than concentrating it at
+        the trip-end slot.
+        
+        This prevents hidden mid-trip SOC violations where a vehicle appears
+        safe at trip-end but actually goes below minimum SOC mid-trip.
+        """
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        slot_start = self._slot_absolute_min(problem, slot_idx)
+        slot_end = slot_start + timestep_min
+        
+        dep = departure_min
+        arr = arrival_min
+        if arr < dep:
+            arr += 24 * 60
+        if dep < slot_start - 24 * 60:
+            dep += 24 * 60
+            arr += 24 * 60
+        
+        # No overlap with this slot
+        if dep >= slot_end or arr <= slot_start:
+            return 0.0
+        
+        trip_duration = max(arr - dep, 1)
+        overlap_start = max(dep, slot_start)
+        overlap_end = min(arr, slot_end)
+        overlap_duration = max(overlap_end - overlap_start, 0)
+        
+        return overlap_duration / trip_duration
 
     def _build_trip_overlap_cliques(
         self,
@@ -2505,10 +2222,23 @@ class GurobiMILPAdapter:
         arrival_min: int,
         slot_indices: List[int],
     ) -> int:
-        return shared_trip_active_slot_count(problem, departure_min, arrival_min, slot_indices)
+        """Count how many slots a trip is active in."""
+        count = 0
+        for slot_idx in slot_indices:
+            if self._trip_active_in_slot(problem, departure_min, arrival_min, slot_idx):
+                count += 1
+        return max(count, 1)
 
     def _slot_absolute_min(self, problem: CanonicalOptimizationProblem, slot_idx: int) -> int:
-        return shared_slot_absolute_min(problem, slot_idx)
+        timestep_min = max(problem.scenario.timestep_min, 1)
+        if not problem.scenario.horizon_start:
+            return slot_idx * timestep_min
+        try:
+            hh, mm = problem.scenario.horizon_start.split(":")
+            start_min = int(hh) * 60 + int(mm)
+        except ValueError:
+            start_min = 0
+        return start_min + slot_idx * timestep_min
 
     def _deadhead_energy_kwh(
         self,
@@ -2521,7 +2251,16 @@ class GurobiMILPAdapter:
         to_trip = problem.trip_by_id().get(to_trip_id)
         if from_trip is None or to_trip is None:
             return 0.0
-        return shared_deadhead_energy_kwh(problem, vehicle, from_trip, to_trip)
+        deadhead_min = problem.dispatch_context.get_deadhead_min(
+            from_trip.destination,
+            to_trip.origin,
+        )
+        deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
+        vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle.vehicle_type), None)
+        if vt and vt.powertrain_type.upper() in {"BEV", "PHEV", "FCEV"}:
+            drive_rate = self._vehicle_energy_rate_kwh_per_km(problem, vehicle, from_trip)
+            return deadhead_km * drive_rate
+        return 0.0
 
     def _trip_energy_kwh(
         self,
@@ -2532,7 +2271,10 @@ class GurobiMILPAdapter:
         trip = problem.trip_by_id().get(trip_id)
         if trip is None:
             return 0.0
-        return shared_trip_energy_kwh(problem, vehicle, trip)
+        drive_rate = self._vehicle_energy_rate_kwh_per_km(problem, vehicle, trip)
+        if drive_rate > 0.0:
+            return max(float(trip.distance_km or 0.0), 0.0) * drive_rate
+        return max(float(trip.energy_kwh or 0.0), 0.0)
 
     def _vehicle_energy_rate_kwh_per_km(
         self,
@@ -2586,7 +2328,11 @@ class GurobiMILPAdapter:
         return max(deadhead_km, 0.0) * fuel_rate
 
     def _deadhead_distance_km(self, problem: CanonicalOptimizationProblem, deadhead_min: int) -> float:
-        return shared_deadhead_distance_km(problem, deadhead_min)
+        speed_kmh = self._safe_nonnegative_float(
+            problem.metadata.get("deadhead_speed_kmh"),
+            default=18.0,
+        )
+        return max(float(deadhead_min or 0), 0.0) * speed_kmh / 60.0
 
     def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
         return classify_peak_slots(problem.price_slots)
@@ -2670,12 +2416,19 @@ class GurobiMILPAdapter:
         *,
         cap_kwh: float,
         final_soc_floor_kwh: float,
-        ) -> float:
-        return shared_required_departure_soc_kwh(
-            problem,
-            vehicle,
-            trip,
-            cap_kwh=cap_kwh,
-            final_soc_floor_kwh=final_soc_floor_kwh,
+    ) -> float:
+        # Vehicle-specific readiness uses trip energy + terminal floor reserve.
+        # Keep required_soc_departure_percent as a backward-compatible lower bound.
+        trip_energy_kwh = self._trip_energy_kwh(problem, vehicle, trip.trip_id)
+        required_kwh = trip_energy_kwh + max(float(final_soc_floor_kwh or 0.0), 0.0)
+        required_ratio = normalize_required_soc_departure_ratio(
+            trip.required_soc_departure_percent,
+            treat_values_le_one_as_percent=(
+                str((problem.metadata or {}).get("required_soc_departure_unit") or "").strip().lower()
+                == "percent_0_100"
+            ),
         )
+        if required_ratio is not None and required_ratio > 0.0 and cap_kwh > 0.0:
+            required_kwh = max(required_kwh, required_ratio * cap_kwh)
+        return max(required_kwh, 0.0)
 

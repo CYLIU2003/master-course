@@ -179,6 +179,7 @@ class OptimizationScenario:
     overnight_charge_target_mode: str = "minimum_required"
     fixed_operations_before_t0: Tuple[LockedOperation, ...] = ()
     uncertainty_flags: Mapping[str, bool] = field(default_factory=dict)
+    service_coverage_mode: str = "strict"
     
     @property
     def planning_horizon_hours(self) -> float:

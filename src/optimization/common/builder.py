@@ -127,7 +127,7 @@ class ProblemBuilder:
         fixed_route_band_mode = bool(
             simulation_cfg.get(
                 "fixed_route_band_mode",
-                solver_cfg.get("fixed_route_band_mode", True),
+                solver_cfg.get("fixed_route_band_mode", False),
             )
         )
         context.fixed_route_band_mode = fixed_route_band_mode
@@ -174,6 +174,14 @@ class ProblemBuilder:
                 solver_cfg.get("allow_partial_service", False),
             )
         )
+        service_coverage_mode = str(
+            simulation_cfg.get(
+                "service_coverage_mode",
+                solver_cfg.get("service_coverage_mode", "strict"),
+            )
+        ).strip().lower()
+        if service_coverage_mode not in {"strict", "penalized"}:
+            service_coverage_mode = "strict"
         initial_soc_percent = self._safe_float(
             simulation_cfg.get("initial_soc_percent")
             or charging_cfg.get("initial_soc_percent")
@@ -629,6 +637,7 @@ class ProblemBuilder:
                 ice_co2_kg_per_l=float(ice_co2_kg_per_l),
                 allow_same_day_depot_cycles=bool(allow_same_day_depot_cycles),
                 max_depot_cycles_per_vehicle_per_day=max(1, int(max_depot_cycles_per_vehicle_per_day or 1)),
+                service_coverage_mode=service_coverage_mode,
             ),
             dispatch_context=context,
             trips=trip_nodes,
@@ -651,6 +660,7 @@ class ProblemBuilder:
                 "charger_count": len(chargers),
                 "baseline_plan_source": (baseline.metadata or {}).get("source", "dispatch_greedy_baseline"),
                 "fixed_route_band_mode": bool(fixed_route_band_mode),
+                "service_coverage_mode": service_coverage_mode,
                 "milp_max_successors_per_trip": milp_max_successors_per_trip,
                 "planning_days": planning_days,
                 "operation_start_time": normalized_start_time,
