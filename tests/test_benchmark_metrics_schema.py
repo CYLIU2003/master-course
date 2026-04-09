@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.benchmark_fixed_prepared_scope import _build_row
+from scripts.benchmark_solver_modes import _build_row as _build_solver_modes_row
 
 
 def test_benchmark_row_includes_required_profiling_columns() -> None:
@@ -110,3 +111,73 @@ def test_benchmark_row_includes_required_profiling_columns() -> None:
     assert row["objective_at_300s"] == 150.0
     assert row["objective_at_600s"] == 120.0
     assert row["objective_at_1500s"] == 100.0
+
+
+def test_benchmark_row_includes_fragment_cycle_metrics() -> None:
+    payload = {
+        "solver_status": "SOLVED_FEASIBLE",
+        "status": "SOLVED_FEASIBLE",
+        "objective_value": 100.0,
+        "served_trip_ids": ("t1", "t2"),
+        "unserved_trip_ids": (),
+        "vehicle_paths": {"veh-1": ("t1", "t2")},
+        "summary": {
+            "same_day_depot_cycles_enabled": True,
+            "max_depot_cycles_per_vehicle_per_day": 2,
+            "vehicle_fragment_counts": {"veh-1": 2},
+            "vehicles_with_multiple_fragments": ["veh-1"],
+            "max_fragments_observed": 2,
+        },
+        "solver_metadata": {
+            "true_solver_family": "milp",
+            "independent_implementation": True,
+            "delegates_to": "none",
+            "solver_display_name": "MILP",
+            "solver_maturity": "core",
+            "candidate_generation_mode": "exact_branch_and_cut",
+            "evaluation_mode": "total_cost",
+            "eligible_for_main_benchmark": True,
+            "eligible_for_appendix_benchmark": False,
+            "comparison_note": "Core exact solver.",
+            "fallback_applied": False,
+            "fallback_reason": "none",
+            "supports_exact_milp": True,
+            "has_feasible_incumbent": True,
+            "incumbent_count": 1,
+            "warm_start_applied": True,
+            "warm_start_source": "baseline_plan",
+            "uses_exact_repair": False,
+            "same_day_depot_cycles_enabled": True,
+            "max_depot_cycles_per_vehicle_per_day": 2,
+            "vehicle_fragment_counts": {"veh-1": 2},
+            "vehicles_with_multiple_fragments": ["veh-1"],
+            "max_fragments_observed": 2,
+            "search_profile": {
+                "total_wall_clock_sec": 5.0,
+                "first_feasible_sec": 0.2,
+                "incumbent_updates": 1,
+                "evaluator_calls": 10,
+                "avg_evaluator_sec": 0.01,
+                "repair_calls": 0,
+                "avg_repair_sec": 0.0,
+                "exact_repair_calls": 0,
+                "avg_exact_repair_sec": 0.0,
+                "feasible_candidate_ratio": 1.0,
+                "rejected_candidate_ratio": 0.0,
+                "fallback_count": 0,
+            },
+        },
+    }
+
+    row = _build_solver_modes_row(
+        mode_label="mode_milp_only",
+        result_payload=payload,
+        result_json_path=Path("milp.json"),
+        wall_clock_seconds=5.0,
+    )
+
+    assert row["same_day_depot_cycles_enabled"] is True
+    assert row["max_depot_cycles_per_vehicle_per_day"] == 2
+    assert row["vehicle_fragment_counts"] == {"veh-1": 2}
+    assert row["vehicles_with_multiple_fragments"] == ["veh-1"]
+    assert row["max_fragments_observed"] == 2

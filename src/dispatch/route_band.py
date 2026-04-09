@@ -128,7 +128,10 @@ def fragment_transition_allows_depot_reset(
     *,
     home_depot_id: str,
     dispatch_context: Any | None,
+    allow_same_day_depot_cycles: bool = True,
 ) -> bool:
+    if not allow_same_day_depot_cycles:
+        return False
     if dispatch_context is None:
         return True
     from_legs = tuple(getattr(from_duty, "legs", ()) or ())
@@ -191,6 +194,7 @@ def fragment_transition_is_feasible(
     home_depot_id: str,
     dispatch_context: Any | None,
     fixed_route_band_mode: bool,
+    allow_same_day_depot_cycles: bool = True,
 ) -> bool:
     from_band = duty_route_band_ids(from_duty)
     to_band = duty_route_band_ids(to_duty)
@@ -199,6 +203,7 @@ def fragment_transition_is_feasible(
         to_duty,
         home_depot_id=home_depot_id,
         dispatch_context=dispatch_context,
+        allow_same_day_depot_cycles=allow_same_day_depot_cycles,
     )
     if fixed_route_band_mode and from_band and to_band and from_band != to_band:
         return depot_reset_ok

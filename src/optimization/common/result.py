@@ -152,6 +152,7 @@ class ResultSerializer:
             infeasibility_info = str(getattr(result, "infeasibility_info", "") or "")
             fleet_size = len(assignment)
             used_vehicle_count = sum(1 for trip_ids in assignment.values() if trip_ids)
+            vehicle_fragment_counts = {str(vehicle_id): len(list(trip_ids or [])) for vehicle_id, trip_ids in assignment.items()}
             utilization_ratio = float(used_vehicle_count) / float(fleet_size) if fleet_size > 0 else 0.0
             return {
                 "solver_mode": str(getattr(getattr(result, "mode", None), "value", "mode_milp_only") or "mode_milp_only"),
@@ -178,6 +179,11 @@ class ResultSerializer:
                 "incumbent_history": [],
                 "duties": [],
                 "vehicle_paths": assignment,
+                "vehicle_fragment_counts": vehicle_fragment_counts,
+                "vehicles_with_multiple_fragments": [
+                    vehicle_id for vehicle_id, count in vehicle_fragment_counts.items() if count > 1
+                ],
+                "max_fragments_observed": max(vehicle_fragment_counts.values(), default=0),
                 "charging_schedule": [],
                 "refueling_schedule": [],
                 "served_trip_ids": served_trip_ids,
@@ -214,6 +220,9 @@ class ResultSerializer:
         fleet_size = len(result.plan.vehicle_paths())
         used_vehicle_count = sum(1 for trip_ids in result.plan.vehicle_paths().values() if trip_ids)
         utilization_ratio = float(used_vehicle_count) / float(fleet_size) if fleet_size > 0 else 0.0
+        vehicle_fragment_counts = result.plan.vehicle_fragment_counts()
+        vehicles_with_multiple_fragments = result.plan.vehicles_with_multiple_fragments()
+        max_fragments_observed = result.plan.max_fragments_observed()
         return {
             "solver_mode": result.mode.value,
             "solver_status": result.solver_status,
@@ -247,6 +256,9 @@ class ResultSerializer:
                 "used_vehicle_count": used_vehicle_count,
                 "utilization_ratio": utilization_ratio,
             },
+            "vehicle_fragment_counts": dict(vehicle_fragment_counts),
+            "vehicles_with_multiple_fragments": list(vehicles_with_multiple_fragments),
+            "max_fragments_observed": int(max_fragments_observed),
             "termination_reason": solver_metadata.get("termination_reason"),
             "effective_limits": dict(solver_metadata.get("effective_limits") or {}),
             "solver_metadata": solver_metadata,

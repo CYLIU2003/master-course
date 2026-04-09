@@ -250,6 +250,32 @@ class OptimizationEngine:
         from src.dispatch.route_band import duty_route_band_ids, fragment_transition_is_feasible
 
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
+        allow_same_day_depot_cycles = bool(
+            problem.metadata.get(
+                "allow_same_day_depot_cycles",
+                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+            )
+        )
+        max_fragments_per_vehicle_per_day = max(
+            int(
+                problem.metadata.get(
+                    "daily_fragment_limit",
+                    problem.metadata.get(
+                        "max_depot_cycles_per_vehicle_per_day",
+                        getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
+                    ),
+                )
+                or 1
+            ),
+            1,
+        )
+        horizon_start_min = int(problem.metadata.get("horizon_start_min") or 0)
+        if horizon_start_min <= 0 and getattr(problem.scenario, "horizon_start", None):
+            try:
+                hh_text, mm_text = str(problem.scenario.horizon_start).split(":", 1)
+                horizon_start_min = int(hh_text) * 60 + int(mm_text)
+            except ValueError:
+                horizon_start_min = 0
         max_fragments_per_vehicle = max(
             int(problem.metadata.get("max_start_fragments_per_vehicle") or 1),
             int(problem.metadata.get("max_end_fragments_per_vehicle") or 1),
@@ -290,6 +316,7 @@ class OptimizationEngine:
                     home_depot_id=home_depot_id,
                     dispatch_context=problem.dispatch_context,
                     fixed_route_band_mode=fixed_route_band_mode,
+                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
                 ):
                     kept_duties.append(duty)
                     kept_map[str(duty.duty_id)] = str(vehicle_id)
@@ -301,6 +328,9 @@ class OptimizationEngine:
             tuple(duties_to_reassign),
             vehicles=problem.vehicles,
             max_fragments_per_vehicle=max_fragments_per_vehicle,
+            max_fragments_per_vehicle_per_day=max_fragments_per_vehicle_per_day,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+            horizon_start_min=horizon_start_min,
             existing_duties=tuple(kept_duties),
             existing_duty_vehicle_map=kept_map,
             dispatch_context=problem.dispatch_context,

@@ -7,6 +7,7 @@ from .model_builder import MILPModelBuilder
 from .solver_adapter import GurobiMILPAdapter
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
+from src.optimization.common.benchmarking import solver_benchmark_eligibility
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
     OptimizationConfig,
@@ -34,6 +35,15 @@ class MILPOptimizer:
         vehicle_ledger, daily_ledger = self._evaluator.build_plan_ledgers(problem, plan, breakdown)
         plan = replace(plan, vehicle_cost_ledger=vehicle_ledger, daily_cost_ledger=daily_ledger)
         costs = breakdown.to_dict()
+        vehicle_fragment_counts = plan.vehicle_fragment_counts()
+        vehicles_with_multiple_fragments = plan.vehicles_with_multiple_fragments()
+        max_fragments_observed = plan.max_fragments_observed()
+        allow_same_day_depot_cycles = bool(
+            problem.metadata.get(
+                "allow_same_day_depot_cycles",
+                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+            )
+        )
         return OptimizationEngineResult(
             mode=OptimizationMode.MILP,
             solver_status=outcome.solver_status,
@@ -51,6 +61,29 @@ class MILPOptimizer:
                 "delegates_to": "none",
                 "solver_display_name": "MILP",
                 "solver_maturity": "core",
+                "same_day_depot_cycles_enabled": allow_same_day_depot_cycles,
+                "max_depot_cycles_per_vehicle_per_day": int(
+                    problem.metadata.get(
+                        "max_depot_cycles_per_vehicle_per_day",
+                        getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
+                    )
+                    or 1
+                ),
+                "max_start_fragments_per_vehicle": int(
+                    problem.metadata.get("max_start_fragments_per_vehicle") or 1
+                ),
+                "max_end_fragments_per_vehicle": int(
+                    problem.metadata.get("max_end_fragments_per_vehicle") or 1
+                ),
+                "vehicle_fragment_counts": vehicle_fragment_counts,
+                "vehicles_with_multiple_fragments": list(vehicles_with_multiple_fragments),
+                "max_fragments_observed": int(max_fragments_observed),
+                **solver_benchmark_eligibility(
+                    OptimizationMode.MILP,
+                    solver_maturity="core",
+                    true_solver_family="milp",
+                    solver_display_name="MILP",
+                ),
                 "candidate_generation_mode": "exact_branch_and_cut",
                 "evaluation_mode": problem.scenario.objective_mode,
                 "has_feasible_incumbent": outcome.has_feasible_incumbent,
@@ -66,6 +99,7 @@ class MILPOptimizer:
                 "nodes_explored": outcome.nodes_explored,
                 "runtime_sec": outcome.runtime_sec,
                 "first_feasible_sec": outcome.first_feasible_sec,
+                "uses_exact_repair": False,
                 "presolve_reduction_summary": dict(outcome.presolve_reduction_summary or {}),
                 "iis_generated": outcome.iis_generated,
                 "fallback_reason": outcome.fallback_reason,

@@ -171,6 +171,8 @@ class OptimizationScenario:
     co2_price_per_kg: float = 0.0
     ice_co2_kg_per_l: float = 2.64
     planning_days: int = 1
+    allow_same_day_depot_cycles: bool = True
+    max_depot_cycles_per_vehicle_per_day: int = 3
     allow_overnight_depot_moves: str = "forbid"
     overnight_window_start: str = "23:00"
     overnight_window_end: str = "05:00"
@@ -332,6 +334,19 @@ class AssignmentPlan:
             for vehicle_id, duties in self.duties_by_vehicle().items()
         }
 
+    def vehicles_with_multiple_fragments(self) -> Tuple[str, ...]:
+        return tuple(
+            sorted(
+                vehicle_id
+                for vehicle_id, count in self.vehicle_fragment_counts().items()
+                if count > 1
+            )
+        )
+
+    def max_fragments_observed(self) -> int:
+        counts = self.vehicle_fragment_counts()
+        return max(counts.values(), default=0)
+
     def vehicle_paths(self) -> Dict[str, Tuple[str, ...]]:
         paths: Dict[str, List[str]] = {}
         for vehicle_id, duties in self.duties_by_vehicle().items():
@@ -346,6 +361,15 @@ class AssignmentPlan:
 
 
 _FRAGMENT_SUFFIX_RE = re.compile(r"(?:__frag\d+)(?:__[^_]+\d*)*$")
+
+DAY_MINUTES = 24 * 60
+
+
+def day_index_for_minute(minute: int, horizon_start_min: int = 0) -> int:
+    adjusted = int(minute) - int(horizon_start_min or 0)
+    if adjusted < 0:
+        adjusted = 0
+    return adjusted // DAY_MINUTES
 
 
 def _fallback_vehicle_id_from_duty_id(duty_id: str) -> str:

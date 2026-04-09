@@ -31,6 +31,7 @@ from .operators_repair import (
 )
 from .selection import AdaptiveRouletteSelector, OperatorSelector, UniformRandomSelector
 from .stopping import CompositeStop
+from src.optimization.common.benchmarking import exact_repair_policy, solver_benchmark_eligibility
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
@@ -132,11 +133,13 @@ class ALNSOptimizer:
             elapsed_sec=0.0,
         )
 
+        exact_repair_limits = exact_repair_policy(config)
+        exact_repair_time_budget_sec = exact_repair_limits.time_budget_sec
+        exact_repair_call_limit = exact_repair_limits.call_limit
+
         while not stopper.should_stop(iteration, no_improve, started_at):
             destroy_name = selector.choose(destroy_ops.keys(), rng)
             available_repairs = list(repair_ops.keys())
-            exact_repair_time_budget_sec = max(10.0, min(float(config.time_limit_sec) * 0.2, 120.0))
-            exact_repair_call_limit = max(1, min(5, int(config.alns_iterations // 250) + 1))
             if (
                 profile.exact_repair_calls >= exact_repair_call_limit
                 or profile.exact_repair_time_sec >= exact_repair_time_budget_sec
@@ -241,6 +244,15 @@ class ALNSOptimizer:
         else:
             result_category = "feasible" if best.is_feasible() else "infeasible_candidate"
 
+        vehicle_fragment_counts = best.plan.vehicle_fragment_counts()
+        vehicles_with_multiple_fragments = best.plan.vehicles_with_multiple_fragments()
+        max_fragments_observed = best.plan.max_fragments_observed()
+        same_day_depot_cycles_enabled = bool(
+            problem.metadata.get(
+                "allow_same_day_depot_cycles",
+                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+            )
+        )
         return OptimizationEngineResult(
             mode=OptimizationMode.ALNS,
             solver_status=result_category,
@@ -263,6 +275,29 @@ class ALNSOptimizer:
                 "delegates_to": "none",
                 "solver_display_name": "ALNS",
                 "solver_maturity": "core",
+                "same_day_depot_cycles_enabled": same_day_depot_cycles_enabled,
+                "max_depot_cycles_per_vehicle_per_day": int(
+                    problem.metadata.get(
+                        "max_depot_cycles_per_vehicle_per_day",
+                        getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
+                    )
+                    or 1
+                ),
+                "max_start_fragments_per_vehicle": int(
+                    problem.metadata.get("max_start_fragments_per_vehicle") or 1
+                ),
+                "max_end_fragments_per_vehicle": int(
+                    problem.metadata.get("max_end_fragments_per_vehicle") or 1
+                ),
+                "vehicle_fragment_counts": vehicle_fragment_counts,
+                "vehicles_with_multiple_fragments": list(vehicles_with_multiple_fragments),
+                "max_fragments_observed": int(max_fragments_observed),
+                **solver_benchmark_eligibility(
+                    OptimizationMode.ALNS,
+                    solver_maturity="core",
+                    true_solver_family="alns",
+                    solver_display_name="ALNS",
+                ),
                 "candidate_generation_mode": "destroy_repair_local_search",
                 "evaluation_mode": problem.scenario.objective_mode,
                 "warm_start_applied": bool(problem.baseline_plan is not None or initial_state is not None),
@@ -319,8 +354,8 @@ class ALNSOptimizer:
                     "time_limit_sec": int(config.time_limit_sec),
                     "alns_iterations": int(config.alns_iterations),
                     "no_improvement_limit": int(config.no_improvement_limit),
-                    "exact_repair_call_limit": int(max(1, min(5, int(config.alns_iterations // 250) + 1))),
-                    "exact_repair_time_budget_sec": float(max(10.0, min(float(config.time_limit_sec) * 0.2, 120.0))),
+                    "exact_repair_call_limit": int(exact_repair_call_limit),
+                    "exact_repair_time_budget_sec": float(exact_repair_time_budget_sec),
                 },
             },
             operator_stats=operator_stats,

@@ -21,6 +21,7 @@ from src.optimization.alns.operators_repair import (
     regret_k_insertion,
     soc_repair,
 )
+from src.optimization.common.benchmarking import exact_repair_policy, solver_benchmark_eligibility
 from src.optimization.common.metaheuristic_utils import (
     build_solution_state,
     feasibility_first_better,
@@ -60,8 +61,9 @@ class GAOptimizer:
 
         destroy_ops = self._build_destroy_ops(problem, config, rng)
         repair_ops = self._build_repair_ops(problem, config)
-        exact_repair_call_limit = max(1, min(5, int(config.alns_iterations // 250) + 1))
-        exact_repair_time_budget_sec = max(10.0, min(float(config.time_limit_sec) * 0.2, 120.0))
+        exact_repair_limits = exact_repair_policy(config)
+        exact_repair_call_limit = exact_repair_limits.call_limit
+        exact_repair_time_budget_sec = exact_repair_limits.time_budget_sec
         population_size = max(8, min(24, max(1, len(problem.trips) // 50 + 8)))
         tournament_size = max(2, min(5, population_size // 3))
         elitism_count = max(1, min(3, population_size // 4))
@@ -176,6 +178,15 @@ class GAOptimizer:
         else:
             result_category = "SOLVED_INFEASIBLE"
 
+        vehicle_fragment_counts = best.plan.vehicle_fragment_counts()
+        vehicles_with_multiple_fragments = best.plan.vehicles_with_multiple_fragments()
+        max_fragments_observed = best.plan.max_fragments_observed()
+        same_day_depot_cycles_enabled = bool(
+            problem.metadata.get(
+                "allow_same_day_depot_cycles",
+                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+            )
+        )
         profile_snapshot = profile.snapshot(total_wall_clock_sec=time.perf_counter() - started_at)
         warm_start_source = "baseline_plan" if problem.baseline_plan is not None else "generated_seed"
         uses_exact_repair = bool(profile.exact_repair_calls > 0)
@@ -195,6 +206,29 @@ class GAOptimizer:
                 "independent_implementation": True,
                 "solver_display_name": "GA prototype",
                 "solver_maturity": "prototype",
+                "same_day_depot_cycles_enabled": same_day_depot_cycles_enabled,
+                "max_depot_cycles_per_vehicle_per_day": int(
+                    problem.metadata.get(
+                        "max_depot_cycles_per_vehicle_per_day",
+                        getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
+                    )
+                    or 1
+                ),
+                "max_start_fragments_per_vehicle": int(
+                    problem.metadata.get("max_start_fragments_per_vehicle") or 1
+                ),
+                "max_end_fragments_per_vehicle": int(
+                    problem.metadata.get("max_end_fragments_per_vehicle") or 1
+                ),
+                "vehicle_fragment_counts": vehicle_fragment_counts,
+                "vehicles_with_multiple_fragments": list(vehicles_with_multiple_fragments),
+                "max_fragments_observed": int(max_fragments_observed),
+                **solver_benchmark_eligibility(
+                    OptimizationMode.GA,
+                    solver_maturity="prototype",
+                    true_solver_family="ga",
+                    solver_display_name="GA prototype",
+                ),
                 "candidate_generation_mode": "genetic_population_search",
                 "evaluation_mode": problem.scenario.objective_mode,
                 "warm_start_applied": problem.baseline_plan is not None,

@@ -183,6 +183,20 @@ class GurobiMILPAdapter:
                 trip_by_id.get(str(trip_id)),
             )
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
+        allow_same_day_depot_cycles = bool(
+            problem.metadata.get(
+                "allow_same_day_depot_cycles",
+                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+            )
+        )
+        max_depot_cycles_per_vehicle_per_day = self._safe_positive_int(
+            problem.metadata.get(
+                "max_depot_cycles_per_vehicle_per_day",
+                getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
+            ),
+            default=1,
+        )
+        effective_daily_fragment_cap = max_depot_cycles_per_vehicle_per_day if allow_same_day_depot_cycles else 1
         trip_day_index_by_trip_id = {
             trip.trip_id: self._trip_day_index(problem, trip.departure_min)
             for trip in problem.trips
@@ -296,6 +310,24 @@ class GurobiMILPAdapter:
                 vehicle_terms_end.append(end_arc[key])
             model.addConstr(gp.quicksum(vehicle_terms_start) <= max_start_fragments_per_vehicle)
             model.addConstr(gp.quicksum(vehicle_terms_end) <= max_end_fragments_per_vehicle)
+
+            for day_idx in day_indices:
+                day_trip_ids = [
+                    trip_id
+                    for trip_id in assignment_trip_ids_by_vehicle.get(vehicle.vehicle_id, [])
+                    if int(trip_day_index_by_trip_id.get(trip_id, 0)) == day_idx
+                    and (vehicle.vehicle_id, trip_id) in y
+                ]
+                if not day_trip_ids:
+                    continue
+                day_start_terms = [start_arc[(vehicle.vehicle_id, trip_id)] for trip_id in day_trip_ids if (vehicle.vehicle_id, trip_id) in start_arc]
+                day_end_terms = [end_arc[(vehicle.vehicle_id, trip_id)] for trip_id in day_trip_ids if (vehicle.vehicle_id, trip_id) in end_arc]
+                model.addConstr(
+                    gp.quicksum(day_start_terms) <= effective_daily_fragment_cap
+                )
+                model.addConstr(
+                    gp.quicksum(day_end_terms) <= effective_daily_fragment_cap
+                )
 
         # Fixed route-band mode is enforced on connection arcs, not across the
         # whole vehicle-day. A vehicle may switch bands only by starting a new

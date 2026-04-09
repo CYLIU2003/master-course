@@ -116,11 +116,12 @@ def test_optimization_engine_rebuilds_impossible_fragment_sequence() -> None:
         OptimizationConfig(mode=OptimizationMode.MILP, time_limit_sec=5, mip_gap=0.0),
     )
 
-    assert result.feasible is True
+    assert result.feasible is False
     assert result.plan.served_trip_ids == ("t_a",)
     assert result.plan.unserved_trip_ids == ("t_b",)
     assert result.plan.duty_vehicle_map() == {"BEV_001": "BEV_001"}
     assert result.solver_metadata.get("postsolve_assignment_rebuilt") is True
+    assert result.solver_metadata.get("postsolve_feasible") is False
 
 
 def test_optimization_engine_merges_directly_connectable_same_band_fragments() -> None:

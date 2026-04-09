@@ -10,6 +10,7 @@ from src.dispatch.validator import DutyValidator
 from .problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
+    day_index_for_minute,
 )
 from .soc_helpers import (
     deadhead_energy_kwh,
@@ -42,6 +43,7 @@ class FeasibilityChecker:
         plan: AssignmentPlan,
     ) -> FeasibilityReport:
         eligible_trip_ids = set(problem.eligible_trip_ids())
+        allow_partial_service = bool(problem.metadata.get("allow_partial_service", True))
         assigned_trip_ids: List[str] = []
         validation: Dict[str, ValidationResult] = {}
         errors: List[str] = []
@@ -67,9 +69,11 @@ class FeasibilityChecker:
 
         uncovered = sorted(eligible_trip_ids - set(assigned_trip_ids))
         if uncovered:
-            warnings.append(
-                "Uncovered trips: " + ", ".join(uncovered)
-            )
+            uncovered_message = "Uncovered trips: " + ", ".join(uncovered)
+            if allow_partial_service:
+                warnings.append(uncovered_message)
+            else:
+                errors.append(uncovered_message)
         if duplicates:
             errors.append(
                 "Duplicate trip assignments: " + ", ".join(sorted(set(duplicates)))
@@ -86,9 +90,7 @@ class FeasibilityChecker:
         soc_errors = self._evaluate_soc(problem, plan)
         errors.extend(soc_errors)
 
-        # Unserved trips are a penalized soft term in the objective, so they
-        # should remain warnings rather than forcing the candidate to be marked
-        # infeasible.
+        # Unserved trips are only soft when partial service is explicitly allowed.
         feasible = not errors
         return FeasibilityReport(
             feasible=feasible,
@@ -268,8 +270,27 @@ class FeasibilityChecker:
         plan: AssignmentPlan,
     ) -> List[str]:
         errors: List[str] = []
-        max_start_fragments = int(problem.metadata.get("max_start_fragments_per_vehicle") or 1)
-        max_end_fragments = int(problem.metadata.get("max_end_fragments_per_vehicle") or 1)
+        max_start_fragments = max(int(problem.metadata.get("max_start_fragments_per_vehicle") or 1), 1)
+        max_end_fragments = max(int(problem.metadata.get("max_end_fragments_per_vehicle") or 1), 1)
+        allow_same_day_depot_cycles = bool(
+            problem.metadata.get(
+                "allow_same_day_depot_cycles",
+                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+            )
+        )
+        max_depot_cycles_per_vehicle_per_day = max(
+            int(
+                problem.metadata.get(
+                    "max_depot_cycles_per_vehicle_per_day",
+                    getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
+                )
+                or 1
+            ),
+            1,
+        )
+        if not allow_same_day_depot_cycles:
+            max_depot_cycles_per_vehicle_per_day = 1
+        horizon_start_min = self._horizon_start_min(problem)
         fixed_route_band_mode = bool((problem.metadata or {}).get("fixed_route_band_mode", False))
         duties_by_vehicle = plan.duties_by_vehicle()
         for vehicle_id, duties in duties_by_vehicle.items():
@@ -282,6 +303,26 @@ class FeasibilityChecker:
                 errors.append(
                     f"[FRAGMENT] vehicle={vehicle_id} fragment_count={fragment_count} exceeds max_end_fragments_per_vehicle={max_end_fragments}"
                 )
+            day_start_counts: Dict[int, int] = {}
+            day_end_counts: Dict[int, int] = {}
+            for duty in duties:
+                if not duty.legs:
+                    continue
+                start_day = day_index_for_minute(int(duty.legs[0].trip.departure_min), horizon_start_min)
+                end_day = day_index_for_minute(int(duty.legs[-1].trip.arrival_min), horizon_start_min)
+                day_start_counts[start_day] = day_start_counts.get(start_day, 0) + 1
+                day_end_counts[end_day] = day_end_counts.get(end_day, 0) + 1
+            for day_idx in sorted(set(day_start_counts) | set(day_end_counts)):
+                start_count = int(day_start_counts.get(day_idx, 0))
+                end_count = int(day_end_counts.get(day_idx, 0))
+                if start_count > max_depot_cycles_per_vehicle_per_day:
+                    errors.append(
+                        f"[FRAGMENT] vehicle={vehicle_id} day={day_idx} start_fragment_count={start_count} exceeds max_depot_cycles_per_vehicle_per_day={max_depot_cycles_per_vehicle_per_day}"
+                    )
+                if end_count > max_depot_cycles_per_vehicle_per_day:
+                    errors.append(
+                        f"[FRAGMENT] vehicle={vehicle_id} day={day_idx} end_fragment_count={end_count} exceeds max_depot_cycles_per_vehicle_per_day={max_depot_cycles_per_vehicle_per_day}"
+                    )
             ordered = sorted(
                 duties,
                 key=lambda duty: (
@@ -313,11 +354,17 @@ class FeasibilityChecker:
                     home_depot_id=home_depot_id,
                     dispatch_context=problem.dispatch_context,
                     fixed_route_band_mode=fixed_route_band_mode,
+                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
                 ):
                     continue
-                errors.append(
-                    f"[FRAGMENT] vehicle={vehicle_id} lacks direct-or-depot transition feasibility between {prev_duty.duty_id} and {next_duty.duty_id}"
-                )
+                if allow_same_day_depot_cycles:
+                    errors.append(
+                        f"[FRAGMENT] vehicle={vehicle_id} lacks direct-or-depot transition feasibility between {prev_duty.duty_id} and {next_duty.duty_id}"
+                    )
+                else:
+                    errors.append(
+                        f"[FRAGMENT] vehicle={vehicle_id} lacks direct connection and same-day depot cycles are disabled between {prev_duty.duty_id} and {next_duty.duty_id}"
+                    )
         return errors
 
     def _evaluate_route_band_integrity(
@@ -330,6 +377,12 @@ class FeasibilityChecker:
         errors: List[str] = []
         duties_by_vehicle = plan.duties_by_vehicle()
         vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+        allow_same_day_depot_cycles = bool(
+            problem.metadata.get(
+                "allow_same_day_depot_cycles",
+                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+            )
+        )
         for duty in plan.duties:
             duty_bands = duty_route_band_ids(duty)
             if len(duty_bands) > 1:
@@ -357,12 +410,28 @@ class FeasibilityChecker:
                     next_duty,
                     home_depot_id=home_depot_id,
                     dispatch_context=problem.dispatch_context,
+                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
                 ):
                     continue
-                errors.append(
-                    f"[ROUTE_BAND] vehicle={vehicle_id} changes route band from {list(prev_band)} to {list(next_band)} without depot-reset feasibility"
-                )
+                if allow_same_day_depot_cycles:
+                    errors.append(
+                        f"[ROUTE_BAND] vehicle={vehicle_id} changes route band from {list(prev_band)} to {list(next_band)} without depot-reset feasibility"
+                    )
+                else:
+                    errors.append(
+                        f"[ROUTE_BAND] vehicle={vehicle_id} changes route band from {list(prev_band)} to {list(next_band)} while same-day depot cycles are disabled"
+                    )
         return errors
+
+    def _horizon_start_min(self, problem: CanonicalOptimizationProblem) -> int:
+        start = str(getattr(problem.scenario, "horizon_start", "") or "").strip()
+        if not start:
+            return 0
+        try:
+            hh_text, mm_text = start.split(":", 1)
+            return int(hh_text) * 60 + int(mm_text)
+        except ValueError:
+            return 0
 
     def _duties_overlap_in_time(
         self,

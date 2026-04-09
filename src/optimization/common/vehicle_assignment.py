@@ -11,6 +11,7 @@ from src.dispatch.route_band import (
 )
 
 from .problem import ProblemVehicle
+from .problem import day_index_for_minute
 
 
 def assign_duty_fragments_to_vehicles(
@@ -18,6 +19,9 @@ def assign_duty_fragments_to_vehicles(
     *,
     vehicles: Sequence[ProblemVehicle],
     max_fragments_per_vehicle: int,
+    max_fragments_per_vehicle_per_day: int = 1,
+    allow_same_day_depot_cycles: bool = True,
+    horizon_start_min: int = 0,
     existing_duties: Sequence[VehicleDuty] = (),
     existing_duty_vehicle_map: Mapping[str, str] | None = None,
     dispatch_context: Any | None = None,
@@ -45,6 +49,17 @@ def assign_duty_fragments_to_vehicles(
 
     skipped_trip_ids: List[str] = []
     fragment_cap = max(int(max_fragments_per_vehicle or 1), 1)
+    day_fragment_cap = (
+        max(int(max_fragments_per_vehicle_per_day or 1), 1)
+        if allow_same_day_depot_cycles
+        else 1
+    )
+    fragment_counts_by_vehicle_day: Dict[tuple[str, int], int] = {}
+    for vehicle_id, fragments in grouped.items():
+        for fragment in fragments:
+            day_idx = _duty_day_index(fragment, horizon_start_min=horizon_start_min)
+            key = (str(vehicle_id), day_idx)
+            fragment_counts_by_vehicle_day[key] = fragment_counts_by_vehicle_day.get(key, 0) + 1
     for duty in sorted(duties, key=_duty_sort_key):
         if fixed_route_band_mode and len(duty_route_band_ids(duty)) > 1:
             skipped_trip_ids.extend(duty.trip_ids)
@@ -54,9 +69,13 @@ def assign_duty_fragments_to_vehicles(
             grouped,
             vehicle_ids_by_type.get(str(duty.vehicle_type), []),
             fragment_cap,
+            day_fragment_cap,
+            fragment_counts_by_vehicle_day,
             vehicle_by_id=vehicle_by_id,
             dispatch_context=dispatch_context,
             fixed_route_band_mode=fixed_route_band_mode,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+            horizon_start_min=horizon_start_min,
         )
         if not vehicle_id:
             skipped_trip_ids.extend(duty.trip_ids)
@@ -71,6 +90,9 @@ def assign_duty_fragments_to_vehicles(
         )
         grouped[vehicle_id].append(materialized)
         duty_vehicle_map[duty_id] = vehicle_id
+        day_idx = _duty_day_index(materialized, horizon_start_min=horizon_start_min)
+        key = (vehicle_id, day_idx)
+        fragment_counts_by_vehicle_day[key] = fragment_counts_by_vehicle_day.get(key, 0) + 1
         assigned_duties.append(materialized)
 
     return tuple(assigned_duties), duty_vehicle_map, tuple(sorted(set(skipped_trip_ids)))
@@ -96,12 +118,17 @@ def _select_vehicle_id_for_duty(
     grouped: Mapping[str, Sequence[VehicleDuty]],
     candidate_vehicle_ids: Iterable[str],
     fragment_cap: int,
+    day_fragment_cap: int,
+    fragment_counts_by_vehicle_day: Mapping[tuple[str, int], int],
     *,
     vehicle_by_id: Mapping[str, ProblemVehicle],
     dispatch_context: Any | None,
     fixed_route_band_mode: bool,
+    allow_same_day_depot_cycles: bool,
+    horizon_start_min: int,
 ) -> str:
     duty_start, duty_end = _duty_time_bounds(duty)
+    duty_day_idx = _duty_day_index(duty, horizon_start_min=horizon_start_min)
     duty_bands = duty_route_band_ids(duty)
     duty_band = duty_bands[0] if len(duty_bands) == 1 else ""
     best_score: tuple[int, int, int, int, str] | None = None
@@ -110,12 +137,16 @@ def _select_vehicle_id_for_duty(
         fragments = sorted(grouped.get(vehicle_id, ()), key=_duty_sort_key)
         if len(fragments) >= fragment_cap:
             continue
+        day_count = int(fragment_counts_by_vehicle_day.get((str(vehicle_id), duty_day_idx), 0))
+        if day_count >= day_fragment_cap:
+            continue
         if fragments and not _fragment_insert_is_feasible_via_depot_reset(
             fragments,
             duty,
             vehicle=vehicle_by_id.get(str(vehicle_id)),
             dispatch_context=dispatch_context,
             fixed_route_band_mode=fixed_route_band_mode,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
         ):
             continue
         band_change_rank = 0
@@ -269,6 +300,7 @@ def _fragment_insert_is_feasible_via_depot_reset(
     vehicle: ProblemVehicle | None,
     dispatch_context: Any | None,
     fixed_route_band_mode: bool,
+    allow_same_day_depot_cycles: bool,
 ) -> bool:
     if vehicle is None or dispatch_context is None:
         return True
@@ -299,6 +331,7 @@ def _fragment_insert_is_feasible_via_depot_reset(
             home_depot_id=home_depot_id,
             dispatch_context=dispatch_context,
             fixed_route_band_mode=fixed_route_band_mode,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
         ):
             return False
     if next_duty is not None:
@@ -308,6 +341,13 @@ def _fragment_insert_is_feasible_via_depot_reset(
             home_depot_id=home_depot_id,
             dispatch_context=dispatch_context,
             fixed_route_band_mode=fixed_route_band_mode,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
         ):
             return False
     return True
+
+
+def _duty_day_index(duty: VehicleDuty, *, horizon_start_min: int = 0) -> int:
+    if not duty.legs:
+        return 0
+    return day_index_for_minute(int(duty.legs[0].trip.departure_min), horizon_start_min)

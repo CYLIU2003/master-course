@@ -680,6 +680,32 @@ def _append_generated_duties(
     operator_name: str,
 ) -> AssignmentPlan:
     existing_map = plan.duty_vehicle_map()
+    allow_same_day_depot_cycles = bool(
+        problem.metadata.get(
+            "allow_same_day_depot_cycles",
+            getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+        )
+    )
+    max_fragments_per_vehicle_per_day = max(
+        int(
+            problem.metadata.get(
+                "daily_fragment_limit",
+                problem.metadata.get(
+                    "max_depot_cycles_per_vehicle_per_day",
+                    getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
+                ),
+            )
+            or 1
+        ),
+        1,
+    )
+    horizon_start_min = int(problem.metadata.get("horizon_start_min") or 0)
+    if horizon_start_min <= 0 and getattr(problem.scenario, "horizon_start", None):
+        try:
+            hh_text, mm_text = str(problem.scenario.horizon_start).split(":", 1)
+            horizon_start_min = int(hh_text) * 60 + int(mm_text)
+        except ValueError:
+            horizon_start_min = 0
     all_duties, duty_vehicle_map, skipped_trip_ids = assign_duty_fragments_to_vehicles(
         duties,
         vehicles=problem.vehicles,
@@ -688,6 +714,9 @@ def _append_generated_duties(
             int(problem.metadata.get("max_end_fragments_per_vehicle") or 1),
             1,
         ),
+        max_fragments_per_vehicle_per_day=max_fragments_per_vehicle_per_day,
+        allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+        horizon_start_min=horizon_start_min,
         existing_duties=plan.duties,
         existing_duty_vehicle_map=existing_map,
         dispatch_context=problem.dispatch_context,

@@ -135,7 +135,25 @@ class ProblemBuilder:
         if milp_max_successors_per_trip is None:
             milp_max_successors_per_trip = simulation_cfg.get("milp_max_successors_per_trip")
         planning_days_effective = max(int(planning_days or 1), 1)
-        default_fragment_limit = max(planning_days_effective, 1)
+        allow_same_day_depot_cycles = bool(
+            simulation_cfg.get(
+                "allow_same_day_depot_cycles",
+                solver_cfg.get("allow_same_day_depot_cycles", True),
+            )
+        )
+        max_depot_cycles_per_vehicle_per_day = int(
+            simulation_cfg.get(
+                "max_depot_cycles_per_vehicle_per_day",
+                solver_cfg.get("max_depot_cycles_per_vehicle_per_day", 3),
+            )
+            or 3
+        )
+        if max_depot_cycles_per_vehicle_per_day <= 0:
+            max_depot_cycles_per_vehicle_per_day = 1
+        daily_fragment_limit = (
+            max_depot_cycles_per_vehicle_per_day if allow_same_day_depot_cycles else 1
+        )
+        default_fragment_limit = max(daily_fragment_limit, 1) * planning_days_effective
         max_start_fragments_per_vehicle = int(
             simulation_cfg.get(
                 "max_start_fragments_per_vehicle",
@@ -150,15 +168,6 @@ class ProblemBuilder:
             )
             or default_fragment_limit
         )
-        if planning_days_effective > 1:
-            max_start_fragments_per_vehicle = max(
-                max_start_fragments_per_vehicle,
-                planning_days_effective,
-            )
-            max_end_fragments_per_vehicle = max(
-                max_end_fragments_per_vehicle,
-                planning_days_effective,
-            )
         allow_partial_service = bool(
             simulation_cfg.get(
                 "allow_partial_service",
@@ -221,6 +230,7 @@ class ProblemBuilder:
             )
         if home_depot_charge_post_window_min is None:
             home_depot_charge_post_window_min = float(timestep_min)
+        horizon_start_min = hhmm_to_min(operation_start_time)
         enable_contract_overage_penalty = simulation_cfg.get("enable_contract_overage_penalty")
         if enable_contract_overage_penalty is None:
             enable_contract_overage_penalty = solver_cfg.get("enable_contract_overage_penalty")
@@ -300,6 +310,10 @@ class ProblemBuilder:
             planning_days=planning_days_effective,
             max_start_fragments_per_vehicle=max(1, max_start_fragments_per_vehicle),
             max_end_fragments_per_vehicle=max(1, max_end_fragments_per_vehicle),
+            max_fragments_per_vehicle_per_day=max(1, daily_fragment_limit),
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+            horizon_start_min=horizon_start_min,
+            max_depot_cycles_per_vehicle_per_day=max(1, max_depot_cycles_per_vehicle_per_day),
             allow_partial_service=allow_partial_service,
             initial_soc_percent=initial_soc_percent,
             final_soc_floor_percent=final_soc_floor_percent,
@@ -355,6 +369,10 @@ class ProblemBuilder:
         planning_days: int = 1,
         max_start_fragments_per_vehicle: int = 1,
         max_end_fragments_per_vehicle: int = 1,
+        max_fragments_per_vehicle_per_day: int = 1,
+        allow_same_day_depot_cycles: bool = True,
+        horizon_start_min: int = 0,
+        max_depot_cycles_per_vehicle_per_day: int = 3,
         allow_partial_service: bool = False,
         initial_soc_percent: Optional[float] = None,
         final_soc_floor_percent: Optional[float] = None,
@@ -573,6 +591,9 @@ class ProblemBuilder:
                 baseline_plan,
                 vehicles,
                 max_fragments_per_vehicle=max_fragments,
+                max_fragments_per_vehicle_per_day=max(1, int(max_fragments_per_vehicle_per_day or 1)),
+                allow_same_day_depot_cycles=bool(allow_same_day_depot_cycles),
+                horizon_start_min=int(horizon_start_min or 0),
                 all_trip_ids=all_trip_ids,
                 dispatch_context=context,
                 fixed_route_band_mode=bool(fixed_route_band_mode),
@@ -582,6 +603,9 @@ class ProblemBuilder:
                 context,
                 vehicles=vehicles,
                 max_fragments_per_vehicle=max_fragments,
+                max_fragments_per_vehicle_per_day=max(1, int(max_fragments_per_vehicle_per_day or 1)),
+                allow_same_day_depot_cycles=bool(allow_same_day_depot_cycles),
+                horizon_start_min=int(horizon_start_min or 0),
                 all_trip_ids=all_trip_ids,
                 feasible_connections=feasible_connections,
                 fixed_route_band_mode=bool(fixed_route_band_mode),
@@ -603,6 +627,8 @@ class ProblemBuilder:
                     else 0.0
                 ),
                 ice_co2_kg_per_l=float(ice_co2_kg_per_l),
+                allow_same_day_depot_cycles=bool(allow_same_day_depot_cycles),
+                max_depot_cycles_per_vehicle_per_day=max(1, int(max_depot_cycles_per_vehicle_per_day or 1)),
             ),
             dispatch_context=context,
             trips=trip_nodes,
@@ -629,6 +655,11 @@ class ProblemBuilder:
                 "planning_days": planning_days,
                 "operation_start_time": normalized_start_time,
                 "operation_end_time": normalized_end_time,
+                "horizon_start_min": int(horizon_start_min or 0),
+                "same_day_depot_cycles_enabled": bool(allow_same_day_depot_cycles),
+                "allow_same_day_depot_cycles": bool(allow_same_day_depot_cycles),
+                "max_depot_cycles_per_vehicle_per_day": max(1, int(max_depot_cycles_per_vehicle_per_day or 1)),
+                "daily_fragment_limit": max(1, int(max_fragments_per_vehicle_per_day or 1)),
                 "max_start_fragments_per_vehicle": int(max(1, max_start_fragments_per_vehicle)),
                 "max_end_fragments_per_vehicle": int(max(1, max_end_fragments_per_vehicle)),
                 "allow_partial_service": bool(allow_partial_service),
@@ -1415,6 +1446,9 @@ class ProblemBuilder:
         *,
         vehicles: Sequence[ProblemVehicle] = (),
         max_fragments_per_vehicle: int = 1,
+        max_fragments_per_vehicle_per_day: int = 1,
+        allow_same_day_depot_cycles: bool = True,
+        horizon_start_min: int = 0,
         all_trip_ids: Optional[set[str]] = None,
         feasible_connections: Optional[Mapping[str, Tuple[str, ...]]] = None,
         fixed_route_band_mode: bool = False,
@@ -1488,6 +1522,9 @@ class ProblemBuilder:
                     vt_duties,
                     vehicles=vehicles_by_type.get(vehicle_type, ()),
                     max_fragments_per_vehicle=max_fragments_per_vehicle,
+                    max_fragments_per_vehicle_per_day=max_fragments_per_vehicle_per_day,
+                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                    horizon_start_min=horizon_start_min,
                     dispatch_context=context,
                     fixed_route_band_mode=bool(fixed_route_band_mode),
                 )
@@ -1813,6 +1850,9 @@ class ProblemBuilder:
         vehicles: Sequence[ProblemVehicle],
         *,
         max_fragments_per_vehicle: int,
+        max_fragments_per_vehicle_per_day: int = 1,
+        allow_same_day_depot_cycles: bool = True,
+        horizon_start_min: int = 0,
         all_trip_ids: set[str],
         dispatch_context: Optional[DispatchContext] = None,
         fixed_route_band_mode: bool = False,
@@ -1830,6 +1870,9 @@ class ProblemBuilder:
             plan.duties,
             vehicles=vehicles,
             max_fragments_per_vehicle=max_fragments_per_vehicle,
+            max_fragments_per_vehicle_per_day=max_fragments_per_vehicle_per_day,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+            horizon_start_min=horizon_start_min,
             dispatch_context=dispatch_context,
             fixed_route_band_mode=bool(fixed_route_band_mode),
         )

@@ -8,7 +8,7 @@
 | ALNS | ALNS | alns | True | none | core |
 | GA | GA prototype | ga | True | none | prototype |
 | ABC | ABC prototype | abc | True | none | prototype |
-| Hybrid | MILP-seeded ALNS | mixed | False | `MILPOptimizer` -> `ALNSOptimizer` | experimental |
+| Hybrid | MILPSeededALNS | milp_seeded_alns | True | alns | prototype |
 
 ## Current metadata surface
 
@@ -58,7 +58,8 @@
 ### Hybrid
 - `src/optimization/hybrid/hybrid_engine.py`
 - Current behavior is `MILP seed -> ALNS improve`
-- Name is still "Hybrid", but the implementation is closer to `MILPSeededALNS`
+- Metadata now reports `solver_display_name=MILPSeededALNS` and `true_solver_family=milp_seeded_alns`
+- Comparison placement is appendix-only; it no longer inherits plain ALNS identity
 
 ## Partial MILP repair
 
@@ -77,7 +78,7 @@
 | GA prototype | prototype | SOLVED_FEASIBLE | 4333550.952272254 | 1502.582494 | prototype |
 | ABC prototype | prototype | SOLVED_INFEASIBLE | 4281666.598847793 | 1500.217698 | prototype |
 
-Main comparison rows should be restricted to `comparison_tier=core` **and** `SOLVED_FEASIBLE`; this run has no such row.
+Main comparison rows should be restricted to solver eligibility for the main table **and** `SOLVED_FEASIBLE`; this run has no such row.
 
 ## Immediate implementation plan
 

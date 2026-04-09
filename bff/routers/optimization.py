@@ -1004,6 +1004,11 @@ def _persist_rich_run_outputs(
         "trip_count_served": (optimization_result.get("summary") or {}).get("trip_count_served"),
         "trip_count_unserved": (optimization_result.get("summary") or {}).get("trip_count_unserved"),
         "vehicle_count_used": (optimization_result.get("summary") or {}).get("vehicle_count_used"),
+        "same_day_depot_cycles_enabled": (optimization_result.get("summary") or {}).get("same_day_depot_cycles_enabled"),
+        "max_depot_cycles_per_vehicle_per_day": (optimization_result.get("summary") or {}).get("max_depot_cycles_per_vehicle_per_day"),
+        "vehicle_fragment_counts": (optimization_result.get("summary") or {}).get("vehicle_fragment_counts"),
+        "vehicles_with_multiple_fragments": (optimization_result.get("summary") or {}).get("vehicles_with_multiple_fragments"),
+        "max_fragments_observed": (optimization_result.get("summary") or {}).get("max_fragments_observed"),
     }
     (run_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -3052,6 +3057,19 @@ def _run_optimization(
             "dispatch_report": scenario.get("graph") or store.get_field(scenario_id, "graph") or {},
             "build_report": build_report.to_dict(),
             "summary": {
+                "same_day_depot_cycles_enabled": bool(
+                    dict(engine_result.solver_metadata or {}).get(
+                        "same_day_depot_cycles_enabled",
+                        getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+                    )
+                ),
+                "max_depot_cycles_per_vehicle_per_day": int(
+                    dict(engine_result.solver_metadata or {}).get(
+                        "max_depot_cycles_per_vehicle_per_day",
+                        getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
+                    )
+                    or 1
+                ),
                 "vehicle_count_used": sum(
                     1
                     for _vehicle_id, task_ids in (
@@ -3066,6 +3084,13 @@ def _run_optimization(
                     for task_ids in (result_payload.get("assignment") or {}).values()
                 ),
                 "trip_count_unserved": len(result_payload.get("unserved_tasks") or []),
+                "vehicle_fragment_counts": dict(
+                    engine_result.plan.vehicle_fragment_counts()
+                ),
+                "vehicles_with_multiple_fragments": list(
+                    engine_result.plan.vehicles_with_multiple_fragments()
+                ),
+                "max_fragments_observed": int(engine_result.plan.max_fragments_observed()),
             },
             "solver_result": result_payload,
             "canonical_solver_result": _full_new_result,
