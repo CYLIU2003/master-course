@@ -13,6 +13,11 @@ from src.optimization.common.problem import (
     OptimizationEngineResult,
     OptimizationMode,
 )
+from src.optimization.common.benchmarking import solver_benchmark_eligibility
+from src.optimization.common.strict_precheck import (
+    StrictCoveragePrecheckResult,
+    evaluate_strict_coverage_precheck,
+)
 from src.optimization.common.vehicle_assignment import assign_duty_fragments_to_vehicles
 from src.optimization.ga.engine import GAOptimizer
 from src.optimization.hybrid.hybrid_engine import HybridOptimizer
@@ -34,6 +39,11 @@ class OptimizationEngine:
         problem: CanonicalOptimizationProblem,
         config: OptimizationConfig,
     ) -> OptimizationEngineResult:
+        precheck = evaluate_strict_coverage_precheck(problem)
+        if precheck.infeasible:
+            result = self._strict_precheck_infeasible_result(problem, config, precheck)
+            return self._finalize_result(problem, result)
+
         if config.mode == OptimizationMode.MILP:
             result = self._milp.solve(problem, config)
         elif config.mode == OptimizationMode.ALNS:
@@ -45,6 +55,109 @@ class OptimizationEngine:
         else:
             result = self._hybrid.solve(problem, config)
         return self._finalize_result(problem, result)
+
+    def _strict_precheck_infeasible_result(
+        self,
+        problem: CanonicalOptimizationProblem,
+        config: OptimizationConfig,
+        precheck: StrictCoveragePrecheckResult,
+    ) -> OptimizationEngineResult:
+        mode = config.mode
+        display_name, maturity, true_family = self._solver_identity(mode)
+        plan = problem.baseline_plan or AssignmentPlan(
+            served_trip_ids=(),
+            unserved_trip_ids=tuple(sorted(problem.eligible_trip_ids())),
+            metadata={"source": "strict_coverage_precheck"},
+        )
+        profile = {
+            "total_wall_clock_sec": 0.0,
+            "first_feasible_sec": None,
+            "incumbent_updates": 0,
+            "evaluator_calls": 0,
+            "avg_evaluator_sec": 0.0,
+            "repair_calls": 0,
+            "avg_repair_sec": 0.0,
+            "exact_repair_calls": 0,
+            "avg_exact_repair_sec": 0.0,
+            "feasible_candidate_ratio": 0.0,
+            "rejected_candidate_ratio": 0.0,
+            "fallback_count": 0,
+        }
+        solver_metadata = {
+            "true_solver_family": true_family,
+            "independent_implementation": True,
+            "delegates_to": "none",
+            "solver_display_name": display_name,
+            "solver_maturity": maturity,
+            **solver_benchmark_eligibility(
+                mode,
+                solver_maturity=maturity,
+                true_solver_family=true_family,
+                solver_display_name=display_name,
+            ),
+            "candidate_generation_mode": "strict_coverage_precheck",
+            "evaluation_mode": problem.scenario.objective_mode,
+            "objective_mode": problem.scenario.objective_mode,
+            "service_coverage_mode": problem.scenario.service_coverage_mode,
+            "termination_reason": "strict_coverage_precheck_infeasible",
+            "fallback_applied": False,
+            "fallback_reason": "none",
+            "supports_exact_milp": False,
+            "has_feasible_incumbent": False,
+            "incumbent_count": 0,
+            "warm_start_applied": bool(problem.baseline_plan is not None),
+            "warm_start_source": "baseline_plan" if problem.baseline_plan is not None else "none",
+            "strict_coverage_precheck": precheck.to_metadata(),
+            "available_vehicle_count_total": int(precheck.available_vehicle_count),
+            "strict_coverage_relaxed_vehicle_lower_bound": int(
+                precheck.relaxed_vehicle_lower_bound
+            ),
+            "search_profile": profile,
+            "effective_limits": {
+                "time_limit_sec": int(config.time_limit_sec),
+                "mip_gap": float(config.mip_gap),
+            },
+            "objective_weights": {
+                "electricity_cost": float(problem.objective_weights.energy),
+                "demand_charge_cost": float(problem.objective_weights.demand),
+                "vehicle_fixed_cost": float(problem.objective_weights.vehicle),
+                "unserved_penalty": float(problem.objective_weights.unserved),
+                "switch_cost": float(problem.objective_weights.switch),
+                "deviation_cost": float(problem.objective_weights.deviation),
+                "degradation": float(problem.objective_weights.degradation),
+                "utilization": float(problem.objective_weights.utilization),
+            },
+        }
+        return OptimizationEngineResult(
+            mode=mode,
+            solver_status="SOLVED_INFEASIBLE",
+            objective_value=float("inf"),
+            plan=plan,
+            feasible=False,
+            warnings=(
+                "Strict coverage precheck proved this input infeasible before solver invocation.",
+            ),
+            infeasibility_reasons=(
+                "strict coverage relaxed path-cover lower bound "
+                f"requires at least {precheck.relaxed_vehicle_lower_bound} vehicles, "
+                f"but only {precheck.available_vehicle_count} are available",
+            ),
+            cost_breakdown={"objective_value": float("inf"), "total_cost": float("inf")},
+            solver_metadata=solver_metadata,
+            incumbent_history=(),
+        )
+
+    @staticmethod
+    def _solver_identity(mode: OptimizationMode) -> tuple[str, str, str]:
+        if mode == OptimizationMode.MILP:
+            return ("MILP", "core", "milp")
+        if mode == OptimizationMode.ALNS:
+            return ("ALNS", "core", "alns")
+        if mode == OptimizationMode.GA:
+            return ("GA prototype", "prototype", "ga")
+        if mode == OptimizationMode.ABC:
+            return ("ABC prototype", "prototype", "abc")
+        return ("MILPSeededALNS", "prototype", "milp_seeded_alns")
 
     def _finalize_result(
         self,

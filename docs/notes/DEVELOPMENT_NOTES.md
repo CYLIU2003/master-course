@@ -39,6 +39,28 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-04-10] Strict coverage infeasibility precheck
+
+- 自分で上げた問題:
+  - strict coverage の fixed prepared scope で feasible incumbent が存在しない条件でも、各 solver が 900 秒級で探索して `Infinity` を返すだけになり、ユーザーには「solver が回っていない」のか「入力が数学的に infeasible」なのか判別しづらかった。
+  - `prepared-37586d60b9c53eba` を確認したところ、598 trips に対して available vehicles は 40 台だった。SOC・燃料・型別台数制約を無視した緩和 path-cover 下限でも 46 台以上が必要で、strict full coverage はこの snapshot では feasible incumbent を持てない。
+
+- 対応:
+  - `src/optimization/common/strict_precheck.py` を追加し、strict coverage のみ solver 前に緩和 vehicle lower bound を計算するようにした。
+  - 緩和問題でも `required vehicles > available vehicles` なら、元問題は infeasible と証明できるため、`OptimizationEngine` が solver を呼ばずに `SOLVED_INFEASIBLE` を返す。
+  - 結果 metadata には `strict_coverage_precheck`、`strict_coverage_relaxed_vehicle_lower_bound`、`available_vehicle_count_total`、`termination_reason=strict_coverage_precheck_infeasible` を残す。
+
+- 研究上の影響:
+  - strict feasibility 条件、dispatch feasibility 条件、`timetable_rows` は変更していない。
+  - 今回の変更は「解けない入力を feasible に見せる」ものではなく、「緩和下限で infeasible と証明できる入力を早期に比較対象外へ分類する」ための監査強化である。
+
+- 回帰テスト:
+  - `tests/test_strict_coverage_precheck.py`
+
+- 確認:
+  - `python -m pytest tests/test_strict_coverage_precheck.py tests/test_benchmark_metrics_schema.py tests/test_benchmark_cost_min_strict_schema.py tests/test_benchmark_prepare_snapshot_match.py tests/test_benchmark_prepare_mismatch_excluded.py tests/test_benchmark_fail_flag_for_unserved_with_unused_available.py tests/test_problem_service_coverage_mode.py tests/test_evaluator_strict_vs_penalized_coverage.py tests/test_evaluator_strict_unserved_is_infeasible.py -q`
+  - `python -m py_compile src/optimization/common/strict_precheck.py src/optimization/engine.py`
+
 ### [DEV-2026-04-09] Strict coverage / same-day depot cycle repair
 
 - 背景:
