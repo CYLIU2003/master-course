@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Iterable, Tuple
 
 from src.route_code_utils import extract_route_series_from_candidates
+
+
+@dataclass(frozen=True)
+class FragmentTransitionDiagnostic:
+    feasible: bool
+    reason_code: str
+    direct_ok: bool
+    depot_reset_ok: bool
+    route_band_blocked: bool = False
+    deadhead_missing: bool = False
+    location_alias_missing: bool = False
 
 
 def trip_route_band_key(trip_like: Any, fallback_route_id: str = "") -> str:
@@ -196,8 +208,37 @@ def fragment_transition_is_feasible(
     fixed_route_band_mode: bool,
     allow_same_day_depot_cycles: bool = True,
 ) -> bool:
+    return fragment_transition_diagnostic(
+        from_duty,
+        to_duty,
+        home_depot_id=home_depot_id,
+        dispatch_context=dispatch_context,
+        fixed_route_band_mode=fixed_route_band_mode,
+        allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+    ).feasible
+
+
+def fragment_transition_diagnostic(
+    from_duty: Any,
+    to_duty: Any,
+    *,
+    home_depot_id: str,
+    dispatch_context: Any | None,
+    fixed_route_band_mode: bool,
+    allow_same_day_depot_cycles: bool = True,
+) -> FragmentTransitionDiagnostic:
     from_band = duty_route_band_ids(from_duty)
     to_band = duty_route_band_ids(to_duty)
+    direct_exists, _direct_deadhead = fragment_transition_direct_deadhead_min(
+        from_duty,
+        to_duty,
+        dispatch_context=dispatch_context,
+    )
+    direct_ok = fragment_transition_allows_direct_connection(
+        from_duty,
+        to_duty,
+        dispatch_context=dispatch_context,
+    )
     depot_reset_ok = fragment_transition_allows_depot_reset(
         from_duty,
         to_duty,
@@ -205,12 +246,27 @@ def fragment_transition_is_feasible(
         dispatch_context=dispatch_context,
         allow_same_day_depot_cycles=allow_same_day_depot_cycles,
     )
+    route_band_blocked = bool(
+        fixed_route_band_mode and from_band and to_band and from_band != to_band
+    )
     if fixed_route_band_mode and from_band and to_band and from_band != to_band:
-        return depot_reset_ok
-    return depot_reset_ok or fragment_transition_allows_direct_connection(
-        from_duty,
-        to_duty,
-        dispatch_context=dispatch_context,
+        return FragmentTransitionDiagnostic(
+            feasible=depot_reset_ok,
+            reason_code="depot_reset_ok" if depot_reset_ok else "route_band_blocked",
+            direct_ok=False,
+            depot_reset_ok=depot_reset_ok,
+            route_band_blocked=not depot_reset_ok,
+            deadhead_missing=not direct_exists,
+        )
+    feasible = depot_reset_ok or direct_ok
+    reason_code = "direct_ok" if direct_ok else ("depot_reset_ok" if depot_reset_ok else "deadhead_missing")
+    return FragmentTransitionDiagnostic(
+        feasible=feasible,
+        reason_code=reason_code,
+        direct_ok=direct_ok,
+        depot_reset_ok=depot_reset_ok,
+        deadhead_missing=not direct_exists and not depot_reset_ok,
+        location_alias_missing=not direct_exists and dispatch_context is not None,
     )
 
 
@@ -238,3 +294,25 @@ def _required_deadhead_min(
     if callable(has_location_data) and (has_location_data(from_location) or has_location_data(to_location)):
         return (False, 0)
     return (True, 0)
+
+
+def required_deadhead_diagnostic(
+    from_location: str,
+    to_location: str,
+    *,
+    dispatch_context: Any | None,
+) -> tuple[bool, int, str]:
+    exists, minutes = _required_deadhead_min(
+        from_location,
+        to_location,
+        dispatch_context=dispatch_context,
+    )
+    if exists:
+        return (True, minutes, "direct_ok")
+    has_location_data = getattr(dispatch_context, "has_location_data", None)
+    if callable(has_location_data):
+        from_known = bool(has_location_data(from_location))
+        to_known = bool(has_location_data(to_location))
+        if from_known and to_known:
+            return (False, minutes, "deadhead_missing")
+    return (False, minutes, "location_alias_missing")

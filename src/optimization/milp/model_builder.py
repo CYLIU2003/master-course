@@ -61,7 +61,7 @@ class MILPModelBuilder:
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
         max_successors_per_trip = self._safe_positive_int(
             problem.metadata.get("milp_max_successors_per_trip"),
-            default=10000,  # Benchmark default: unlimited (changed from 8)
+            default=999999,
         )
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         route_band_by_trip_id = {

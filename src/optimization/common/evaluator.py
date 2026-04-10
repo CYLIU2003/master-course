@@ -60,6 +60,7 @@ class CostBreakdown:
     total_cost_with_assets: float = 0.0
     total_cost: float = 0.0
     objective_value: float = 0.0
+    evaluation_feasible: bool = True
 
     def to_dict(self) -> Dict[str, float]:
         return {
@@ -105,6 +106,7 @@ class CostBreakdown:
             "total_cost_with_assets": self.total_cost_with_assets,
             "total_cost": self.total_cost,
             "objective_value": self.objective_value,
+            "evaluation_feasible": float(1.0 if self.evaluation_feasible else 0.0),
         }
 
 
@@ -257,7 +259,10 @@ class CostEvaluator:
         total_co2_kg = self._total_co2_kg(problem, plan, operating_slot_totals)
         co2_cost = max(problem.scenario.co2_price_per_kg, 0.0) * total_co2_kg
 
-        total_vehicle_count = max(len(problem.vehicles), 1)
+        total_vehicle_count = max(
+            sum(1 for vehicle in problem.vehicles if bool(getattr(vehicle, "available", True))),
+            1,
+        )
         used_vehicle_count = len(used_vehicle_ids)
         utilization_score = float(used_vehicle_count) / float(total_vehicle_count)
 
@@ -403,6 +408,7 @@ class CostEvaluator:
                 total_cost_with_assets=total_cost_with_assets,
                 total_cost=total_cost,
                 objective_value=float("inf"),
+                evaluation_feasible=False,
             )
         objective_value = objective_value_for_mode(
             objective_mode=problem.scenario.objective_mode,

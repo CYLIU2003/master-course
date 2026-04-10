@@ -14,7 +14,9 @@
     },
     "contracted_power_kw": { "type": "number", "default": 0 },
     "import_limit_kw": { "type": "number", "default": 0 },
-    "export_limit_kw": { "type": "number", "default": 0 }
+    "export_limit_kw": { "type": "number", "default": 0 },
+    "depotAreaM2": { "type": ["number", "null"], "minimum": 0, "default": null },
+    "depot_area_m2": { "type": ["number", "null"], "minimum": 0, "default": null }
   },
   "additionalProperties": false
 }

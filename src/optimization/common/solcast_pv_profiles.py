@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
+from src.optimization.common.pv_area import DEFAULT_PERFORMANCE_RATIO
+
 
 _DEFAULT_IRRADIANCE_COLUMNS: Tuple[str, ...] = (
     "gti",
@@ -243,6 +245,7 @@ def _build_daily_profile(
     target_date: str,
     slot_minutes: int,
     pv_capacity_kw: float,
+    performance_ratio: float = DEFAULT_PERFORMANCE_RATIO,
 ) -> Dict[str, List[float]]:
     date_start = datetime.fromisoformat(f"{target_date}T00:00:00")
     if date_start.tzinfo is None:
@@ -267,7 +270,7 @@ def _build_daily_profile(
         index = int((slot_start - date_start).total_seconds() // (slot_minutes * 60))
         if index < 0 or index >= slot_count:
             continue
-        cf = max(0.0, min(irradiance_wm2 / 1000.0, 1.0))
+        cf = max(0.0, min((irradiance_wm2 / 1000.0) * max(float(performance_ratio), 0.0), 1.0))
         weighted_cf[index] += cf * period_h
         slot_hours[index] += period_h
 
@@ -298,6 +301,7 @@ def build_daily_profiles_from_csv(
     timezone_offset: str,
     pv_capacity_kw: float,
     fallback_period_min: int,
+    performance_ratio: float = DEFAULT_PERFORMANCE_RATIO,
     time_column: Optional[str] = None,
     irradiance_column: Optional[str] = None,
 ) -> List[Path]:
@@ -318,6 +322,7 @@ def build_daily_profiles_from_csv(
             target_date=date,
             slot_minutes=slot_minutes,
             pv_capacity_kw=pv_capacity_kw,
+            performance_ratio=performance_ratio,
         )
         payload = {
             "depot_id": depot_id,
@@ -327,9 +332,15 @@ def build_daily_profiles_from_csv(
             "source_csv": str(csv_path),
             "time_column": selected_time_col,
             "irradiance_column": selected_irr_col,
+            "performance_ratio": float(performance_ratio),
+            "capacity_kw": float(pv_capacity_kw),
             "pv_capacity_kw": float(pv_capacity_kw),
             "capacity_factor_by_slot": profile["capacity_factor_by_slot"],
             "pv_generation_kwh_by_slot": profile["pv_generation_kwh_by_slot"],
+            "metadata": {
+                "system_efficiency": float(performance_ratio),
+                "note": "PV generation estimated from Solcast irradiance using CF=min(1, irradiance/1000*performance_ratio).",
+            },
         }
         out_path = output_dir / f"{depot_id}_{date}_{int(slot_minutes)}min.json"
         with out_path.open("w", encoding="utf-8") as f:

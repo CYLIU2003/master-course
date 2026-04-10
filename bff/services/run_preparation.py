@@ -11,6 +11,10 @@ from typing import Any, Optional
 
 import pandas as pd
 from bff.services.route_catalog_audit import audit_route_catalog_consistency
+from src.optimization.common.pv_area import (
+    DEFAULT_PERFORMANCE_RATIO,
+    estimate_depot_pv_from_area,
+)
 from src.value_normalization import normalize_for_python
 
 
@@ -586,6 +590,161 @@ def _route_catalog_audit_warnings(audit: dict[str, Any]) -> list[str]:
     return [summary, *details]
 
 
+def _depot_area_value(depot: dict[str, Any]) -> Any:
+    return depot.get("depotAreaM2", depot.get("depot_area_m2"))
+
+
+def _compose_generation_from_capacity_factor_rows(
+    capacity_kw: float,
+    rows: list[Any],
+) -> tuple[list[float], list[dict[str, Any]]]:
+    combined: list[float] = []
+    generation_rows: list[dict[str, Any]] = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        try:
+            slot_minutes = max(int(item.get("slot_minutes") or item.get("slotMinutes") or 60), 1)
+        except (TypeError, ValueError):
+            slot_minutes = 60
+        duration_h = max(slot_minutes / 60.0, 1.0e-9)
+        factors = []
+        for value in item.get("capacity_factor_by_slot") or item.get("capacityFactorBySlot") or []:
+            try:
+                factors.append(max(0.0, min(float(value or 0.0), 1.0)))
+            except (TypeError, ValueError):
+                factors.append(0.0)
+        daily = [round(max(capacity_kw, 0.0) * factor * duration_h, 6) for factor in factors]
+        generation_rows.append(
+            {
+                "date": str(item.get("date") or ""),
+                "slot_minutes": slot_minutes,
+                "pv_generation_kwh_by_slot": daily,
+            }
+        )
+        combined.extend(daily)
+    return combined, generation_rows
+
+
+def _capacity_factor_from_generation_series(
+    generation_kwh_by_slot: list[Any],
+    *,
+    legacy_capacity_kw: Any,
+    slot_minutes: Any = 60,
+) -> list[float]:
+    try:
+        capacity_kw = max(float(legacy_capacity_kw or 0.0), 0.0)
+    except (TypeError, ValueError):
+        capacity_kw = 0.0
+    try:
+        duration_h = max(int(slot_minutes or 60), 1) / 60.0
+    except (TypeError, ValueError):
+        duration_h = 1.0
+    values: list[float] = []
+    for value in generation_kwh_by_slot:
+        try:
+            values.append(max(float(value or 0.0), 0.0))
+        except (TypeError, ValueError):
+            values.append(0.0)
+    if not values:
+        return []
+    if capacity_kw <= 0.0:
+        capacity_kw = max(value / max(duration_h, 1.0e-9) for value in values)
+    if capacity_kw <= 0.0:
+        return [0.0 for _value in values]
+    denominator = capacity_kw * max(duration_h, 1.0e-9)
+    return [max(0.0, min(value / denominator, 1.0)) for value in values]
+
+
+def _prepare_depot_energy_assets(
+    simulation_config: dict[str, Any],
+    depots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    existing_by_depot: dict[str, dict[str, Any]] = {}
+    ordered_ids: list[str] = []
+    for item in simulation_config.get("depot_energy_assets") or []:
+        if not isinstance(item, dict):
+            continue
+        depot_id = str(item.get("depot_id") or item.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        existing_by_depot[depot_id] = dict(item)
+        ordered_ids.append(depot_id)
+
+    depot_area_by_id = {
+        str(depot.get("id") or depot.get("depot_id") or depot.get("depotId") or "").strip(): _depot_area_value(depot)
+        for depot in depots
+        if str(depot.get("id") or depot.get("depot_id") or depot.get("depotId") or "").strip()
+    }
+    for depot_id in depot_area_by_id:
+        if depot_id not in ordered_ids:
+            ordered_ids.append(depot_id)
+
+    prepared_rows: list[dict[str, Any]] = []
+    for depot_id in ordered_ids:
+        row = dict(existing_by_depot.get(depot_id) or {"depot_id": depot_id})
+        row["depot_id"] = depot_id
+        legacy_capacity_kw = row.get("pv_capacity_kw", row.get("pvCapacityKw"))
+        area_value = row.get("depot_area_m2", row.get("depotAreaM2"))
+        if area_value is None:
+            area_value = depot_area_by_id.get(depot_id)
+        estimate = estimate_depot_pv_from_area(
+            area_value,
+            usable_area_ratio=row.get("usable_area_ratio", row.get("usableAreaRatio")),
+            panel_power_density_kw_m2=row.get(
+                "panel_power_density_kw_m2",
+                row.get("panelPowerDensityKwM2"),
+            ),
+        )
+        row["depot_area_m2"] = estimate.depot_area_m2
+        row["usable_area_ratio"] = estimate.usable_area_ratio
+        row["panel_power_density_kw_m2"] = estimate.panel_power_density_kw_m2
+        try:
+            performance_ratio = float(row.get("performance_ratio") or DEFAULT_PERFORMANCE_RATIO)
+        except (TypeError, ValueError):
+            performance_ratio = DEFAULT_PERFORMANCE_RATIO
+        row["performance_ratio"] = performance_ratio if performance_ratio > 0.0 else DEFAULT_PERFORMANCE_RATIO
+        row["estimated_installable_area_m2"] = round(estimate.installable_area_m2, 6)
+        row["pv_capacity_kw"] = round(estimate.capacity_kw, 6) if estimate.depot_area_m2 is not None else 0.0
+        row["derived_pv_capacity_kw"] = row["pv_capacity_kw"]
+        row["pv_enabled"] = estimate.depot_area_m2 is not None and estimate.capacity_kw > 0.0
+
+        factor_rows = list(row.get("pv_capacity_factor_by_date") or [])
+        if (
+            row["pv_enabled"]
+            and not factor_rows
+            and not row.get("capacity_factor_by_slot")
+            and row.get("pv_generation_kwh_by_slot")
+        ):
+            try:
+                direct_slot_minutes = max(int(row.get("pv_slot_minutes", row.get("pvSlotMinutes", 60)) or 60), 1)
+            except (TypeError, ValueError):
+                direct_slot_minutes = 60
+            direct_duration_h = direct_slot_minutes / 60.0
+            row["legacy_pv_capacity_kw"] = legacy_capacity_kw
+            row["capacity_factor_by_slot"] = _capacity_factor_from_generation_series(
+                list(row.get("pv_generation_kwh_by_slot") or []),
+                legacy_capacity_kw=legacy_capacity_kw,
+                slot_minutes=direct_slot_minutes,
+            )
+            row["pv_generation_kwh_by_slot"] = [
+                round(float(row["pv_capacity_kw"]) * factor * direct_duration_h, 6)
+                for factor in row["capacity_factor_by_slot"]
+            ]
+        if row["pv_enabled"] and factor_rows:
+            combined, generation_rows = _compose_generation_from_capacity_factor_rows(
+                float(row["pv_capacity_kw"]),
+                factor_rows,
+            )
+            row["pv_generation_kwh_by_slot"] = combined
+            row["pv_generation_kwh_by_date"] = generation_rows
+        elif not row["pv_enabled"]:
+            row["pv_generation_kwh_by_slot"] = []
+            row["pv_generation_kwh_by_date"] = []
+        prepared_rows.append(row)
+    return prepared_rows
+
+
 def _build_canonical_input(
     *,
     scenario: dict,
@@ -621,6 +780,10 @@ def _build_canonical_input(
     depots = _select_items_by_ids(
         [dict(item) for item in list(scenario.get("depots") or [])],
         list(scope.depot_ids),
+    )
+    simulation_config["depot_energy_assets"] = _prepare_depot_energy_assets(
+        simulation_config,
+        depots,
     )
     routes = _select_items_by_ids(
         [dict(item) for item in list(scenario.get("routes") or [])],
@@ -857,13 +1020,15 @@ def get_or_build_run_preparation(
     built_dir: Path,
     scenarios_dir: Path,
     routes_df,
+    *,
+    force_rebuild: bool = False,
 ) -> RunPreparation:
     scenario_id = _scenario_id(scenario)
     dataset_version = _dataset_version(scenario)
     scenario_hash = _scenario_hash(scenario)
     cache_key = (scenario_id, dataset_version, scenario_hash)
 
-    if cache_key in _prep_cache:
+    if cache_key in _prep_cache and not force_rebuild:
         cached = _prep_cache[cache_key]
         if cached.is_valid:
             log.debug("run_prep cache HIT: %s %s", scenario_id, scenario_hash)

@@ -32,6 +32,13 @@ from src.optimization.common.cost_components import (
     default_cost_component_flags,
     normalize_cost_component_flags,
 )
+from src.optimization.common.pv_area import (
+    DEFAULT_PANEL_POWER_DENSITY_KW_M2,
+    DEFAULT_PERFORMANCE_RATIO,
+    DEFAULT_USABLE_AREA_RATIO,
+    estimate_depot_pv_from_area,
+    positive_or_none,
+)
 from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
@@ -619,6 +626,12 @@ def _default_depot_energy_asset_row(depot_id: str) -> dict[str, Any]:
         "depot_id": depot_id,
         "pv_enabled": False,
         "pv_generation_kwh_by_slot": [],
+        "capacity_factor_by_slot": [],
+        "depot_area_m2": None,
+        "usable_area_ratio": DEFAULT_USABLE_AREA_RATIO,
+        "panel_power_density_kw_m2": DEFAULT_PANEL_POWER_DENSITY_KW_M2,
+        "performance_ratio": DEFAULT_PERFORMANCE_RATIO,
+        "estimated_installable_area_m2": 0.0,
         "pv_capacity_kw": 0.0,
         "bess_enabled": False,
         "bess_energy_kwh": 0.0,
@@ -699,7 +712,7 @@ def _load_daily_pv_profile_for_depot(
         slot_minutes = 60
     duration_h = max(slot_minutes / 60.0, 1.0e-9)
     try:
-        capacity_kw = float(doc.get("capacity_kw") or 0.0)
+        capacity_kw = float(doc.get("capacity_kw") or doc.get("pv_capacity_kw") or 0.0)
     except (TypeError, ValueError):
         capacity_kw = 0.0
     slots = _coerce_float_list(doc.get("pv_generation_kwh_by_slot") or [])
@@ -769,15 +782,39 @@ def _compose_pv_generation_from_capacity_factors(
     return combined_slots, generation_rows
 
 
+def _apply_area_pv_estimate_to_row(row: dict[str, Any]) -> float:
+    area_value = row.get("depot_area_m2")
+    if area_value is None:
+        area_value = row.get("depotAreaM2")
+    estimate = estimate_depot_pv_from_area(
+        area_value,
+        usable_area_ratio=row.get("usable_area_ratio", row.get("usableAreaRatio")),
+        panel_power_density_kw_m2=row.get(
+            "panel_power_density_kw_m2",
+            row.get("panelPowerDensityKwM2"),
+        ),
+    )
+    row["depot_area_m2"] = estimate.depot_area_m2
+    row["usable_area_ratio"] = estimate.usable_area_ratio
+    row["panel_power_density_kw_m2"] = estimate.panel_power_density_kw_m2
+    try:
+        performance_ratio = float(row.get("performance_ratio") or row.get("performanceRatio") or DEFAULT_PERFORMANCE_RATIO)
+    except (TypeError, ValueError):
+        performance_ratio = DEFAULT_PERFORMANCE_RATIO
+    if performance_ratio <= 0.0:
+        performance_ratio = DEFAULT_PERFORMANCE_RATIO
+    row["performance_ratio"] = performance_ratio
+    row["estimated_installable_area_m2"] = round(estimate.installable_area_m2, 6)
+    row["pv_capacity_kw"] = round(estimate.capacity_kw, 6) if estimate.depot_area_m2 is not None else 0.0
+    row["pv_enabled"] = estimate.depot_area_m2 is not None and estimate.capacity_kw > 0.0
+    return float(row["pv_capacity_kw"])
+
+
 def _rebuild_pv_generation_for_row(row: dict[str, Any]) -> dict[str, Any]:
+    capacity_kw = _apply_area_pv_estimate_to_row(row)
     factor_rows = list(row.get("pv_capacity_factor_by_date") or [])
     if not factor_rows:
         return row
-    capacity_kw = 0.0
-    try:
-        capacity_kw = float(row.get("pv_capacity_kw") or 0.0)
-    except (TypeError, ValueError):
-        capacity_kw = 0.0
     combined_slots, generation_rows = _compose_pv_generation_from_capacity_factors(
         capacity_kw,
         factor_rows,
@@ -796,7 +833,7 @@ def _load_selected_date_pv_profile_for_depot(
     depot_id: str,
     service_dates: list[str],
     *,
-    current_capacity_kw: float = 0.0,
+    current_depot_area_m2: Any = None,
     profile_root: Path = _DERIVED_PV_PROFILE_DIR,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     profiles: list[dict[str, Any]] = []
@@ -825,11 +862,8 @@ def _load_selected_date_pv_profile_for_depot(
         if value > 0.0:
             default_capacity_kw = value
             break
-    effective_capacity_kw = (
-        float(current_capacity_kw)
-        if float(current_capacity_kw or 0.0) > 0.0
-        else default_capacity_kw
-    )
+    estimate = estimate_depot_pv_from_area(current_depot_area_m2)
+    effective_capacity_kw = estimate.capacity_kw if estimate.depot_area_m2 is not None else 0.0
     factor_rows = [
         {
             "date": item["date"],
@@ -853,6 +887,8 @@ def _load_selected_date_pv_profile_for_depot(
             "slotMinutes": int(profiles[0]["slotMinutes"]),
             "capacityKw": round(effective_capacity_kw, 6),
             "defaultCapacityKw": round(default_capacity_kw, 6),
+            "depotAreaM2": estimate.depot_area_m2,
+            "estimatedInstallableAreaM2": round(estimate.installable_area_m2, 6),
             "pvGenerationKwhBySlot": combined_slots,
             "pvGenerationKwhByDate": generation_rows,
             "pvCapacityFactorByDate": factor_rows,
@@ -866,6 +902,7 @@ def _merge_selected_depot_pv_assets(
     current_rows: list[dict[str, Any]] | None,
     service_dates: list[str],
     *,
+    depot_area_by_id: dict[str, Any] | None = None,
     profile_root: Path = _DERIVED_PV_PROFILE_DIR,
 ) -> tuple[list[dict[str, Any]], list[str], list[str]]:
     rows_by_depot: dict[str, dict[str, Any]] = {}
@@ -884,14 +921,23 @@ def _merge_selected_depot_pv_assets(
     for depot_id in selected_depot_ids:
         row = dict(rows_by_depot.get(depot_id) or _default_depot_energy_asset_row(depot_id))
         row["depot_id"] = depot_id
-        try:
-            current_capacity_kw = float(row.get("pv_capacity_kw") or 0.0)
-        except (TypeError, ValueError):
-            current_capacity_kw = 0.0
+        if row.get("depot_area_m2") is None and row.get("depotAreaM2") is None:
+            area_value = (depot_area_by_id or {}).get(depot_id)
+            if area_value is not None:
+                row["depot_area_m2"] = area_value
+        area_m2 = row.get("depot_area_m2") if row.get("depot_area_m2") is not None else row.get("depotAreaM2")
+        if positive_or_none(area_m2) is None:
+            row["pv_capacity_factor_by_date"] = []
+            row["pv_generation_kwh_by_slot"] = []
+            row["pv_generation_kwh_by_date"] = []
+            row["pv_profile_dates"] = []
+            _apply_area_pv_estimate_to_row(row)
+            rows_by_depot[depot_id] = row
+            continue
         profile, missing_dates = _load_selected_date_pv_profile_for_depot(
             depot_id,
             service_dates,
-            current_capacity_kw=current_capacity_kw,
+            current_depot_area_m2=area_m2,
             profile_root=profile_root,
         )
         if profile is None:
@@ -922,6 +968,11 @@ def _merge_selected_depot_pv_assets(
             }
             for item in profile.get("pvCapacityFactorByDate") or []
         ]
+        row["depot_area_m2"] = profile.get("depotAreaM2")
+        row["estimated_installable_area_m2"] = profile.get("estimatedInstallableAreaM2")
+        row["usable_area_ratio"] = DEFAULT_USABLE_AREA_RATIO
+        row["panel_power_density_kw_m2"] = DEFAULT_PANEL_POWER_DENSITY_KW_M2
+        row["performance_ratio"] = DEFAULT_PERFORMANCE_RATIO
         row["pv_capacity_kw"] = float(profile.get("capacityKw") or 0.0)
         rows_by_depot[depot_id] = row
         synced_ids.append(depot_id)
@@ -3056,10 +3107,16 @@ class App:
             return None
 
         selected_depot_ids = self._selected_depot_ids()
+        depot_area_by_id = {
+            str(item.get("id") or "").strip(): item.get("depotAreaM2", item.get("depot_area_m2"))
+            for item in self.scope_depots
+            if str(item.get("id") or "").strip()
+        }
         merged_rows, synced_ids, missing_ids = _merge_selected_depot_pv_assets(
             selected_depot_ids,
             current_rows,
             service_dates,
+            depot_area_by_id=depot_area_by_id,
         )
         if not synced_ids and not current_rows:
             if announce:
@@ -3142,6 +3199,8 @@ class App:
             "depot_id",
             "pv_period",
             "pv_slots",
+            "depot_area_m2",
+            "estimated_installable_area_m2",
             "pv_enabled",
             "pv_capacity_kw",
             "bess_enabled",
@@ -3156,8 +3215,10 @@ class App:
             "depot_id": "営業所ID",
             "pv_period": "PV対象日",
             "pv_slots": "PVスロット数",
+            "depot_area_m2": "営業所面積[m²]",
+            "estimated_installable_area_m2": "PV設置可能面積[m²]",
             "pv_enabled": "PV有効",
-            "pv_capacity_kw": "PV容量[kW]",
+            "pv_capacity_kw": "推定PV容量[kW]",
             "bess_enabled": "BESS有効",
             "bess_energy_kwh": "BESS容量[kWh]",
             "bess_power_kw": "BESS出力[kW]",
@@ -3169,6 +3230,8 @@ class App:
             "depot_id": 120,
             "pv_period": 180,
             "pv_slots": 90,
+            "depot_area_m2": 110,
+            "estimated_installable_area_m2": 130,
             "pv_enabled": 70,
             "pv_capacity_kw": 100,
             "bess_enabled": 80,
@@ -3191,6 +3254,8 @@ class App:
 
         depot_id_var = tk.StringVar(value="")
         pv_enabled_var = tk.BooleanVar(value=False)
+        depot_area_m2_var = tk.StringVar(value="")
+        estimated_installable_area_var = tk.StringVar(value="0")
         pv_capacity_kw_var = tk.StringVar(value="0")
         bess_enabled_var = tk.BooleanVar(value=False)
         bess_energy_kwh_var = tk.StringVar(value="0")
@@ -3218,11 +3283,13 @@ class App:
 
         flag_row = ttk.Frame(editor)
         flag_row.pack(fill=tk.X, pady=2)
-        ttk.Checkbutton(flag_row, text="PV有効", variable=pv_enabled_var).pack(side=tk.LEFT)
+        ttk.Checkbutton(flag_row, text="PV有効(面積>0で自動)", variable=pv_enabled_var).pack(side=tk.LEFT)
         ttk.Checkbutton(flag_row, text="BESS有効", variable=bess_enabled_var).pack(side=tk.LEFT, padx=(12, 0))
         ttk.Checkbutton(flag_row, text="Grid→BESS許可", variable=allow_grid_to_bess_var).pack(side=tk.LEFT, padx=(12, 0))
 
-        self._labeled_entry(editor, "PV容量[kW] pv_capacity_kw", pv_capacity_kw_var)
+        self._labeled_entry(editor, "営業所面積[m²] depot_area_m2", depot_area_m2_var)
+        self._labeled_entry(editor, "推定PV設置可能面積[m²]", estimated_installable_area_var, readonly=True)
+        self._labeled_entry(editor, "推定PV容量[kW] pv_capacity_kw", pv_capacity_kw_var, readonly=True)
         self._labeled_entry(editor, "BESS容量[kWh] bess_energy_kwh", bess_energy_kwh_var)
         self._labeled_entry(editor, "BESS出力[kW] bess_power_kw", bess_power_kw_var)
         self._labeled_entry(editor, "BESS初期SOC[kWh] bess_initial_soc_kwh", bess_initial_soc_kwh_var)
@@ -3237,6 +3304,14 @@ class App:
 
         selected_index: list[int | None] = [None]
 
+        def _refresh_pv_area_preview(*_args: Any) -> None:
+            estimate = estimate_depot_pv_from_area(depot_area_m2_var.get())
+            estimated_installable_area_var.set(f"{estimate.installable_area_m2:.3f}")
+            pv_capacity_kw_var.set(f"{estimate.capacity_kw:.3f}" if estimate.depot_area_m2 is not None else "0")
+            pv_enabled_var.set(estimate.depot_area_m2 is not None and estimate.capacity_kw > 0.0)
+
+        depot_area_m2_var.trace_add("write", _refresh_pv_area_preview)
+
         def _row_to_values(row: dict[str, Any]) -> tuple[Any, ...]:
             pv_dates = list(row.get("pv_profile_dates") or [])
             pv_slots = list(row.get("pv_generation_kwh_by_slot") or [])
@@ -3244,6 +3319,8 @@ class App:
                 str(row.get("depot_id") or row.get("depotId") or ""),
                 _format_service_dates_summary(pv_dates),
                 len(pv_slots),
+                row.get("depot_area_m2", row.get("depotAreaM2")),
+                row.get("estimated_installable_area_m2", 0.0),
                 bool(row.get("pv_enabled", False)),
                 row.get("pv_capacity_kw", 0.0),
                 bool(row.get("bess_enabled", False)),
@@ -3262,7 +3339,9 @@ class App:
         def _set_form_from_row(row: dict[str, Any]) -> None:
             depot_id_var.set(str(row.get("depot_id") or row.get("depotId") or ""))
             pv_enabled_var.set(bool(row.get("pv_enabled", False)))
-            pv_capacity_kw_var.set(str(row.get("pv_capacity_kw", 0.0)))
+            depot_area = row.get("depot_area_m2", row.get("depotAreaM2"))
+            depot_area_m2_var.set("" if depot_area is None else str(depot_area))
+            _refresh_pv_area_preview()
             bess_enabled_var.set(bool(row.get("bess_enabled", False)))
             bess_energy_kwh_var.set(str(row.get("bess_energy_kwh", 0.0)))
             bess_power_kw_var.set(str(row.get("bess_power_kw", 0.0)))
@@ -3289,8 +3368,8 @@ class App:
                 return None
             row = dict(base or {})
             row["depot_id"] = depot_id
-            row["pv_enabled"] = bool(pv_enabled_var.get())
-            row["pv_capacity_kw"] = self._parse_float(pv_capacity_kw_var.get(), 0.0)
+            area_text = depot_area_m2_var.get().strip()
+            row["depot_area_m2"] = self._parse_float(area_text, 0.0) if area_text else None
             row["bess_enabled"] = bool(bess_enabled_var.get())
             row["bess_energy_kwh"] = self._parse_float(bess_energy_kwh_var.get(), 0.0)
             row["bess_power_kw"] = self._parse_float(bess_power_kw_var.get(), 0.0)
@@ -3320,6 +3399,8 @@ class App:
             selected_index[0] = None
             depot_id_var.set("")
             pv_enabled_var.set(False)
+            depot_area_m2_var.set("")
+            estimated_installable_area_var.set("0")
             pv_capacity_kw_var.set("0")
             bess_enabled_var.set(False)
             bess_energy_kwh_var.set("0")
@@ -3380,7 +3461,13 @@ class App:
             _clear_form()
 
         def _build_default_row_for_depot(depot_id: str) -> dict[str, Any]:
-            return _default_depot_energy_asset_row(depot_id)
+            row = _default_depot_energy_asset_row(depot_id)
+            depot = getattr(self, "scope_depot_by_id", {}).get(depot_id) or {}
+            if isinstance(depot, dict):
+                area_value = depot.get("depotAreaM2", depot.get("depot_area_m2"))
+                if area_value is not None:
+                    row["depot_area_m2"] = area_value
+            return _rebuild_pv_generation_for_row(row)
 
         def _generate_rows_for_all_depots() -> None:
             depot_ids = [
@@ -6390,6 +6477,9 @@ class App:
         self.dm_normal_kw_var = tk.StringVar(value="0")
         self.dm_fast_count_var = tk.StringVar(value="0")
         self.dm_fast_kw_var = tk.StringVar(value="0")
+        self.dm_depot_area_m2_var = tk.StringVar(value="")
+        self.dm_installable_area_m2_var = tk.StringVar(value="0")
+        self.dm_pv_capacity_kw_var = tk.StringVar(value="0")
 
         self._labeled_entry(charger_box, "営業所ID", self.dm_depot_id_var, readonly=True)
         self._labeled_entry(charger_box, "営業所名", self.dm_depot_name_var, readonly=True)
@@ -6397,6 +6487,10 @@ class App:
         self._labeled_entry(charger_box, "普通充電器出力(kW)", self.dm_normal_kw_var)
         self._labeled_entry(charger_box, "急速充電器台数", self.dm_fast_count_var)
         self._labeled_entry(charger_box, "急速充電器出力(kW)", self.dm_fast_kw_var)
+        self._labeled_entry(charger_box, "営業所面積 [m²]", self.dm_depot_area_m2_var)
+        self._labeled_entry(charger_box, "推定PV設置可能面積 [m²]", self.dm_installable_area_m2_var, readonly=True)
+        self._labeled_entry(charger_box, "推定PV設備容量 [kW]", self.dm_pv_capacity_kw_var, readonly=True)
+        self.dm_depot_area_m2_var.trace_add("write", lambda *_args: self._refresh_depot_manager_pv_preview())
 
         btn_row = ttk.Frame(charger_box)
         btn_row.pack(fill=tk.X, pady=4)
@@ -6406,6 +6500,14 @@ class App:
 
         depot_list.bind("<<ListboxSelect>>", lambda _e: self._on_depot_manager_select(depot_list))
         self._load_depot_manager_data(depot_list)
+
+    def _refresh_depot_manager_pv_preview(self) -> None:
+        area_var = getattr(self, "dm_depot_area_m2_var", None)
+        estimate = estimate_depot_pv_from_area(area_var.get() if area_var is not None else "")
+        if hasattr(self, "dm_installable_area_m2_var"):
+            self.dm_installable_area_m2_var.set(f"{estimate.installable_area_m2:.3f}")
+        if hasattr(self, "dm_pv_capacity_kw_var"):
+            self.dm_pv_capacity_kw_var.set(f"{estimate.capacity_kw:.3f}" if estimate.depot_area_m2 is not None else "0")
 
     def _load_depot_manager_data(self, depot_list: tk.Listbox) -> None:
         scenario_id = self._selected_scenario_id()
@@ -6448,6 +6550,9 @@ class App:
             self.dm_normal_kw_var.set(str(detail.get("normalChargerPowerKw") or 0))
             self.dm_fast_count_var.set(str(detail.get("fastChargerCount") or 0))
             self.dm_fast_kw_var.set(str(detail.get("fastChargerPowerKw") or 0))
+            area_value = detail.get("depotAreaM2", detail.get("depot_area_m2"))
+            self.dm_depot_area_m2_var.set("" if area_value is None else str(area_value))
+            self._refresh_depot_manager_pv_preview()
 
         self.run_bg(lambda: self.client.get_depot(scenario_id, depot_id), done)
 
@@ -6463,12 +6568,21 @@ class App:
             "normalChargerPowerKw": max(0.0, self._parse_float(self.dm_normal_kw_var.get(), 0.0)),
             "fastChargerCount": max(0, self._parse_int(self.dm_fast_count_var.get(), 0)),
             "fastChargerPowerKw": max(0.0, self._parse_float(self.dm_fast_kw_var.get(), 0.0)),
+            "depotAreaM2": max(0.0, self._parse_float(self.dm_depot_area_m2_var.get(), 0.0)),
         }
 
-        self.run_bg(
-            lambda: self.client.update_depot(scenario_id, depot_id, payload),
-            lambda _resp: self.log_line(f"営業所充電器設定を更新: {depot_id}"),
-        )
+        def done(resp: dict[str, Any]) -> None:
+            if isinstance(resp, dict):
+                if hasattr(self, "scope_depot_by_id"):
+                    self.scope_depot_by_id[depot_id] = {**self.scope_depot_by_id.get(depot_id, {}), **resp}
+                for idx, depot in enumerate(getattr(self, "scope_depots", []) or []):
+                    if str(depot.get("id") or "").strip() == depot_id:
+                        self.scope_depots[idx] = {**depot, **resp}
+                        break
+            self.log_line(f"営業所充電器設定を更新: {depot_id}")
+            self._mark_prepared_stale("営業所充電器/PV面積設定を変更したため再Prepareが必要です", announce=False)
+
+        self.run_bg(lambda: self.client.update_depot(scenario_id, depot_id, payload), done)
 
     def _apply_selected_depot_to_vehicle_tab(self, depot_list: tk.Listbox) -> None:
         sel = depot_list.curselection()

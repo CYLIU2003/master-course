@@ -50,6 +50,12 @@ from .problem import (
     normalize_service_coverage_mode,
     service_coverage_allows_partial_service,
 )
+from .pv_area import (
+    DEFAULT_PERFORMANCE_RATIO,
+    estimate_depot_pv_from_area,
+    positive_ratio_or_default,
+    safe_optional_float,
+)
 from .vehicle_assignment import assign_duty_fragments_to_vehicles, merge_duty_vehicle_maps
 
 
@@ -516,6 +522,12 @@ class ProblemBuilder:
                     default_home_depot_id=canonical_depot_id,
                 )
             )
+        available_vehicles = tuple(
+            vehicle for vehicle in vehicles if bool(getattr(vehicle, "available", True))
+        )
+        unavailable_vehicles = tuple(
+            vehicle for vehicle in vehicles if not bool(getattr(vehicle, "available", True))
+        )
         inferred_import_limit = depot_import_limit_kw
         if inferred_import_limit is None:
             charger_capacity = sum(charger.power_kw * max(charger.simultaneous_ports, 1) for charger in chargers)
@@ -602,7 +614,7 @@ class ProblemBuilder:
         if baseline_plan is not None:
             baseline = self._materialize_baseline_plan(
                 baseline_plan,
-                vehicles,
+                available_vehicles,
                 max_fragments_per_vehicle=max_fragments,
                 max_fragments_per_vehicle_per_day=max(1, int(max_fragments_per_vehicle_per_day or 1)),
                 allow_same_day_depot_cycles=bool(allow_same_day_depot_cycles),
@@ -614,7 +626,7 @@ class ProblemBuilder:
         else:
             baseline = self._build_baseline_plan(
                 context,
-                vehicles=vehicles,
+                vehicles=available_vehicles,
                 max_fragments_per_vehicle=max_fragments,
                 max_fragments_per_vehicle_per_day=max(1, int(max_fragments_per_vehicle_per_day or 1)),
                 allow_same_day_depot_cycles=bool(allow_same_day_depot_cycles),
@@ -664,6 +676,7 @@ class ProblemBuilder:
                 "route_count": len(route_nodes),
                 "charger_count": len(chargers),
                 "baseline_plan_source": (baseline.metadata or {}).get("source", "dispatch_greedy_baseline"),
+                "objective_mode": normalize_objective_mode(objective_mode),
                 "fixed_route_band_mode": bool(fixed_route_band_mode),
                 "service_coverage_mode": service_coverage_mode,
                 "milp_max_successors_per_trip": milp_max_successors_per_trip,
@@ -677,6 +690,14 @@ class ProblemBuilder:
                 "daily_fragment_limit": max(1, int(max_fragments_per_vehicle_per_day or 1)),
                 "max_start_fragments_per_vehicle": int(max(1, max_start_fragments_per_vehicle)),
                 "max_end_fragments_per_vehicle": int(max(1, max_end_fragments_per_vehicle)),
+                "available_vehicle_count_total": len(available_vehicles),
+                "unavailable_vehicle_count_total": len(unavailable_vehicles),
+                "available_vehicle_ids": tuple(
+                    sorted(str(vehicle.vehicle_id) for vehicle in available_vehicles)
+                ),
+                "unavailable_vehicle_ids": tuple(
+                    sorted(str(vehicle.vehicle_id) for vehicle in unavailable_vehicles)
+                ),
                 "allow_partial_service": bool(allow_partial_service),
                 "initial_soc_percent": initial_soc_percent,
                 "final_soc_floor_percent": final_soc_floor_percent,
@@ -785,6 +806,9 @@ class ProblemBuilder:
 
         slot_count = len(time_slots)
         slot_h = max(float(timestep_min) / 60.0, 1.0e-9)
+        has_explicit_pv_profiles = bool(
+            metadata_source.get("pv_profiles") if isinstance(metadata_source, Mapping) else False
+        )
         pv_kwh_by_slot = [0.0] * slot_count
         for pv in pv_slots:
             if 0 <= int(pv.slot_index) < slot_count:
@@ -797,23 +821,63 @@ class ProblemBuilder:
             depot_id = str(item.get("depot_id") or item.get("depotId") or "depot_default")
             by_depot_raw[depot_id] = dict(item)
 
+        depot_area_by_id = self._depot_area_by_id(metadata_source)
+
         for depot in depots:
             raw = by_depot_raw.get(depot.depot_id, {})
             if not raw and len(depots) == 1:
                 raw = by_depot_raw.get("depot_default") or by_depot_raw.get(canonical_depot_id) or {}
-            pv_series = self._align_energy_series_to_slot_count(
-                self._pv_generation_series_for_depot_asset(raw, fallback=pv_kwh_by_slot),
+            depot_area_m2 = (
+                raw.get("depot_area_m2")
+                if "depot_area_m2" in raw
+                else raw.get("depotAreaM2", depot_area_by_id.get(depot.depot_id))
+            )
+            usable_area_ratio = raw.get("usable_area_ratio", raw.get("usableAreaRatio"))
+            panel_power_density_kw_m2 = raw.get(
+                "panel_power_density_kw_m2",
+                raw.get("panelPowerDensityKwM2"),
+            )
+            estimate = estimate_depot_pv_from_area(
+                depot_area_m2,
+                usable_area_ratio=usable_area_ratio,
+                panel_power_density_kw_m2=panel_power_density_kw_m2,
+            )
+            performance_ratio = positive_ratio_or_default(
+                raw.get("performance_ratio", raw.get("performanceRatio")),
+                DEFAULT_PERFORMANCE_RATIO,
+            )
+            capacity_factor_series = self._align_factor_series_to_slot_count(
+                self._capacity_factor_series_for_depot_asset(
+                    raw,
+                    fallback_generation_kwh_by_slot=pv_kwh_by_slot if has_explicit_pv_profiles else [],
+                    fallback_slot_h=slot_h,
+                ),
                 slot_count,
             )
+            pv_enabled = estimate.depot_area_m2 is not None and estimate.capacity_kw > 0.0
+            if pv_enabled:
+                pv_series = tuple(
+                    round(estimate.capacity_kw * max(float(factor or 0.0), 0.0) * slot_h, 6)
+                    for factor in capacity_factor_series
+                )
+            else:
+                capacity_factor_series = tuple(0.0 for _ in range(slot_count))
+                pv_series = tuple(0.0 for _ in range(slot_count))
             asset = DepotEnergyAsset(
                 depot_id=depot.depot_id,
-                pv_enabled=bool(raw.get("pv_enabled", len(pv_slots) > 0)),
+                pv_enabled=pv_enabled,
                 pv_generation_kwh_by_slot=pv_series,
+                capacity_factor_by_slot=capacity_factor_series,
                 pv_case_id=str(raw.get("pv_case_id") or "default"),
                 pv_capex_jpy_per_kw=float(raw.get("pv_capex_jpy_per_kw") or 0.0),
                 pv_om_jpy_per_kw_year=float(raw.get("pv_om_jpy_per_kw_year") or 0.0),
                 pv_life_years=int(raw.get("pv_life_years") or 25),
-                pv_capacity_kw=float(raw.get("pv_capacity_kw") or 0.0),
+                pv_capacity_kw=round(estimate.capacity_kw, 6) if pv_enabled else 0.0,
+                depot_area_m2=estimate.depot_area_m2,
+                pv_installable_area_m2=round(estimate.installable_area_m2, 6),
+                usable_area_ratio=estimate.usable_area_ratio,
+                panel_power_density_kw_m2=estimate.panel_power_density_kw_m2,
+                performance_ratio=performance_ratio,
                 bess_enabled=bool(raw.get("bess_enabled", False)),
                 bess_energy_kwh=float(raw.get("bess_energy_kwh") or 0.0),
                 bess_power_kw=float(raw.get("bess_power_kw") or 0.0),
@@ -842,6 +906,184 @@ class ProblemBuilder:
             )
             assets[depot.depot_id] = asset
         return assets
+
+    def _depot_area_by_id(self, metadata_source: Mapping[str, Any]) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        if not isinstance(metadata_source, Mapping):
+            return out
+        for depot in metadata_source.get("depots") or []:
+            if not isinstance(depot, Mapping):
+                continue
+            depot_id = str(depot.get("id") or depot.get("depot_id") or depot.get("depotId") or "").strip()
+            if not depot_id:
+                continue
+            if "depot_area_m2" in depot:
+                out[depot_id] = depot.get("depot_area_m2")
+            elif "depotAreaM2" in depot:
+                out[depot_id] = depot.get("depotAreaM2")
+            elif "areaM2" in depot:
+                out[depot_id] = depot.get("areaM2")
+        return out
+
+    def _capacity_factor_series_for_depot_asset(
+        self,
+        raw: Mapping[str, Any],
+        *,
+        fallback_generation_kwh_by_slot: Sequence[Any],
+        fallback_slot_h: float,
+    ) -> Sequence[Any]:
+        if raw:
+            factor_rows = self._flatten_capacity_factor_rows(
+                raw.get("pv_capacity_factor_by_date") or raw.get("pvCapacityFactorByDate") or []
+            )
+            if factor_rows:
+                return factor_rows
+            direct_factors = raw.get("capacity_factor_by_slot") or raw.get("capacityFactorBySlot")
+            if direct_factors:
+                return direct_factors
+            generated_by_date = self._capacity_factor_from_generation_rows(
+                raw,
+                raw.get("pv_generation_kwh_by_date") or raw.get("pvGenerationKwhByDate") or [],
+                fallback_slot_h=fallback_slot_h,
+            )
+            if generated_by_date:
+                return generated_by_date
+            direct_generation = raw.get("pv_generation_kwh_by_slot") or raw.get("pvGenerationKwhBySlot")
+            if direct_generation:
+                return self._capacity_factor_from_generation_series(
+                    raw,
+                    direct_generation,
+                    slot_h=fallback_slot_h,
+                )
+        return self._capacity_factor_from_generation_series(
+            raw,
+            fallback_generation_kwh_by_slot,
+            slot_h=fallback_slot_h,
+        )
+
+    def _flatten_capacity_factor_rows(self, rows: Sequence[Any]) -> list[float]:
+        combined: list[float] = []
+        for item in rows:
+            if not isinstance(item, Mapping):
+                continue
+            for value in item.get("capacity_factor_by_slot") or item.get("capacityFactorBySlot") or []:
+                try:
+                    combined.append(max(0.0, min(float(value or 0.0), 1.0)))
+                except (TypeError, ValueError):
+                    combined.append(0.0)
+        return combined
+
+    def _legacy_pv_capacity_kw(self, raw: Mapping[str, Any]) -> float:
+        parsed = safe_optional_float(
+            raw.get("legacy_pv_capacity_kw")
+            or raw.get("legacyPvCapacityKw")
+            or raw.get("pv_capacity_kw")
+            or raw.get("pvCapacityKw")
+        )
+        return max(float(parsed or 0.0), 0.0)
+
+    def _capacity_factor_from_generation_rows(
+        self,
+        raw: Mapping[str, Any],
+        rows: Sequence[Any],
+        *,
+        fallback_slot_h: float,
+    ) -> list[float]:
+        values: list[tuple[float, float]] = []
+        for item in rows:
+            if not isinstance(item, Mapping):
+                continue
+            try:
+                slot_minutes = max(int(item.get("slot_minutes") or item.get("slotMinutes") or 60), 1)
+            except (TypeError, ValueError):
+                slot_minutes = 60
+            duration_h = max(slot_minutes / 60.0, 1.0e-9)
+            for value in item.get("pv_generation_kwh_by_slot") or item.get("pvGenerationKwhBySlot") or []:
+                try:
+                    values.append((max(float(value or 0.0), 0.0), duration_h))
+                except (TypeError, ValueError):
+                    values.append((0.0, duration_h))
+        if not values:
+            return []
+        legacy_capacity_kw = self._legacy_pv_capacity_kw(raw)
+        if legacy_capacity_kw <= 0.0:
+            legacy_capacity_kw = max((energy / max(duration_h, 1.0e-9)) for energy, duration_h in values)
+        if legacy_capacity_kw <= 0.0:
+            return [0.0 for _energy, _duration_h in values]
+        return [
+            max(0.0, min(energy / (legacy_capacity_kw * max(duration_h, 1.0e-9)), 1.0))
+            for energy, duration_h in values
+        ]
+
+    def _capacity_factor_from_generation_series(
+        self,
+        raw: Mapping[str, Any],
+        values: Sequence[Any],
+        *,
+        slot_h: float,
+    ) -> list[float]:
+        energies: list[float] = []
+        for value in values:
+            try:
+                energies.append(max(float(value or 0.0), 0.0))
+            except (TypeError, ValueError):
+                energies.append(0.0)
+        if not energies:
+            return []
+        legacy_capacity_kw = self._legacy_pv_capacity_kw(raw)
+        if legacy_capacity_kw <= 0.0:
+            legacy_capacity_kw = max(energy / max(slot_h, 1.0e-9) for energy in energies)
+        if legacy_capacity_kw <= 0.0:
+            return [0.0 for _value in energies]
+        denominator = legacy_capacity_kw * max(slot_h, 1.0e-9)
+        return [max(0.0, min(energy / denominator, 1.0)) for energy in energies]
+
+    def _align_factor_series_to_slot_count(
+        self,
+        values: Sequence[Any],
+        slot_count: int,
+    ) -> Tuple[float, ...]:
+        series: list[float] = []
+        for value in values:
+            try:
+                series.append(max(0.0, min(float(value or 0.0), 1.0)))
+            except (TypeError, ValueError):
+                series.append(0.0)
+        if slot_count <= 0:
+            return tuple()
+        if not series:
+            return tuple(0.0 for _ in range(slot_count))
+        if len(series) == slot_count:
+            return tuple(series)
+        if slot_count % len(series) == 0:
+            expand_factor = slot_count // len(series)
+            aligned: List[float] = []
+            for value in series:
+                aligned.extend([value] * expand_factor)
+            return tuple(aligned)
+        if len(series) % slot_count == 0:
+            compress_factor = len(series) // slot_count
+            return tuple(
+                sum(series[idx * compress_factor : (idx + 1) * compress_factor]) / float(compress_factor)
+                for idx in range(slot_count)
+            )
+        aligned = [0.0] * slot_count
+        scale = len(series) / float(slot_count)
+        for slot_idx in range(slot_count):
+            start = slot_idx * scale
+            end = (slot_idx + 1) * scale
+            left = int(start)
+            right = int(math.ceil(end))
+            total_weight = 0.0
+            weighted_value = 0.0
+            for raw_idx in range(left, min(right, len(series))):
+                overlap_start = max(start, raw_idx)
+                overlap_end = min(end, raw_idx + 1)
+                weight = max(0.0, overlap_end - overlap_start)
+                weighted_value += series[raw_idx] * weight
+                total_weight += weight
+            aligned[slot_idx] = weighted_value / total_weight if total_weight > 0.0 else 0.0
+        return tuple(aligned)
 
     def _pv_generation_series_for_depot_asset(
         self,
@@ -1322,6 +1564,9 @@ class ProblemBuilder:
                 or default_home_depot_id
                 or "depot_default"
             ).strip() or "depot_default"
+            raw_available = vehicle.get("available")
+            if raw_available is None:
+                raw_available = vehicle.get("enabled", True)
 
             yield ProblemVehicle(
                 vehicle_id=vehicle_id,
@@ -1330,7 +1575,7 @@ class ProblemBuilder:
                 initial_soc=initial_soc,
                 battery_capacity_kwh=battery_capacity_kwh,
                 reserve_soc=reserve_soc,
-                available=bool(vehicle.get("enabled", True)),
+                available=bool(raw_available),
                 initial_fuel_l=initial_fuel_l,
                 fuel_tank_capacity_l=fuel_tank_capacity_l,
                 fuel_reserve_l=fuel_reserve_l,
@@ -1491,6 +1736,7 @@ class ProblemBuilder:
         duties: List[VehicleDuty] = []
         assigned_trip_ids: set[str] = set()
         duty_vehicle_map: Dict[str, str] = {}
+        startup_rejected_vehicle_ids_by_duty: Dict[str, List[str]] = {}
         dispatcher = DispatchGenerator()
         vehicles_by_type: Dict[str, Tuple[ProblemVehicle, ...]] = {}
         for vehicle in vehicles:
@@ -1533,6 +1779,7 @@ class ProblemBuilder:
             )
             vt_duties = dispatcher.generate_greedy_duties(temp_ctx, vehicle_type)
             if vehicles:
+                assignment_debug: Dict[str, Any] = {}
                 materialized_duties, materialized_map, _skipped_trip_ids = assign_duty_fragments_to_vehicles(
                     vt_duties,
                     vehicles=vehicles_by_type.get(vehicle_type, ()),
@@ -1542,12 +1789,19 @@ class ProblemBuilder:
                     horizon_start_min=horizon_start_min,
                     dispatch_context=context,
                     fixed_route_band_mode=bool(fixed_route_band_mode),
+                    debug_metadata=assignment_debug,
                 )
                 duties.extend(materialized_duties)
                 duty_vehicle_map = merge_duty_vehicle_maps(
                     duty_vehicle_map,
                     materialized_map,
                 )
+                for duty_id, vehicle_ids in dict(
+                    assignment_debug.get("startup_rejected_vehicle_ids_by_duty") or {}
+                ).items():
+                    startup_rejected_vehicle_ids_by_duty.setdefault(str(duty_id), []).extend(
+                        str(vehicle_id) for vehicle_id in vehicle_ids
+                    )
                 selected_duties = materialized_duties
             else:
                 duties.extend(vt_duties)
@@ -1564,6 +1818,10 @@ class ProblemBuilder:
             metadata={
                 "source": "dispatch_greedy_baseline",
                 "duty_vehicle_map": merge_duty_vehicle_maps(duty_vehicle_map),
+                "startup_rejected_vehicle_ids_by_duty": {
+                    duty_id: tuple(sorted(set(vehicle_ids)))
+                    for duty_id, vehicle_ids in startup_rejected_vehicle_ids_by_duty.items()
+                },
             },
         )
         if pooled_plan is not None and len(pooled_plan.served_trip_ids) > len(fallback_plan.served_trip_ids):
@@ -1881,6 +2139,7 @@ class ProblemBuilder:
                 unserved_trip_ids=tuple(sorted(all_trip_ids)),
                 metadata={"source": "dispatch_greedy_baseline", "duty_vehicle_map": {}},
             )
+        assignment_debug: Dict[str, Any] = {}
         assigned_duties, duty_vehicle_map, skipped_trip_ids = assign_duty_fragments_to_vehicles(
             plan.duties,
             vehicles=vehicles,
@@ -1890,6 +2149,7 @@ class ProblemBuilder:
             horizon_start_min=horizon_start_min,
             dispatch_context=dispatch_context,
             fixed_route_band_mode=bool(fixed_route_band_mode),
+            debug_metadata=assignment_debug,
         )
         served_trip_ids = tuple(
             sorted({trip_id for duty in assigned_duties for trip_id in duty.trip_ids})
@@ -1906,6 +2166,9 @@ class ProblemBuilder:
             metadata={
                 **dict(plan.metadata),
                 "duty_vehicle_map": merge_duty_vehicle_maps(duty_vehicle_map),
+                "startup_rejected_vehicle_ids_by_duty": dict(
+                    assignment_debug.get("startup_rejected_vehicle_ids_by_duty") or {}
+                ),
             },
         )
 

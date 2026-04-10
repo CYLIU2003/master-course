@@ -294,6 +294,9 @@ class OptimizationEngine:
             if vehicle is None:
                 duties_to_reassign.extend(duty for duty in duties if duty.legs)
                 continue
+            if not bool(getattr(vehicle, "available", True)):
+                duties_to_reassign.extend(duty for duty in duties if duty.legs)
+                continue
             home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
             previous_kept = None
             for duty in duties:

@@ -90,6 +90,7 @@ class RunOptimizationBody(BaseModel):
     service_id: Optional[str] = None
     depot_id: Optional[str] = None
     rebuild_dispatch: bool = True
+    force_reprepare: bool = False
     use_existing_duties: bool = False
     alns_iterations: int = 500
     no_improvement_limit: int = 100
@@ -3050,6 +3051,11 @@ def _run_optimization(
         service_coverage_mode = str(getattr(problem.scenario, "service_coverage_mode", "strict") or "strict")
         fixed_route_band_mode = bool((problem.metadata or {}).get("fixed_route_band_mode", False))
         daily_fragment_limit = int((problem.metadata or {}).get("daily_fragment_limit") or 1)
+        available_vehicle_count_total = sum(
+            1 for vehicle in problem.vehicles if bool(getattr(vehicle, "available", True))
+        )
+        unused_available_vehicle_ids = list(engine_result.plan.unused_available_vehicle_ids(problem))
+        solver_metadata = dict(engine_result.solver_metadata or {})
 
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
@@ -3085,8 +3091,25 @@ def _run_optimization(
                 "prepared_input_id": prepared_input_id,
                 "scenario_hash": prepared_scenario_hash,
                 "scope_hash": prepared_scope_hash,
+                "available_vehicle_count_total": available_vehicle_count_total,
+                "unused_available_vehicle_ids": unused_available_vehicle_ids,
+                "startup_infeasible_assignment_count": int(
+                    solver_metadata.get("startup_infeasible_assignment_count")
+                    or (engine_result.plan.metadata or {}).get("startup_infeasible_assignment_count")
+                    or 0
+                ),
+                "startup_infeasible_trip_ids": list(
+                    solver_metadata.get("startup_infeasible_trip_ids")
+                    or (engine_result.plan.metadata or {}).get("startup_infeasible_trip_ids")
+                    or []
+                ),
+                "startup_infeasible_vehicle_ids": list(
+                    solver_metadata.get("startup_infeasible_vehicle_ids")
+                    or (engine_result.plan.metadata or {}).get("startup_infeasible_vehicle_ids")
+                    or []
+                ),
                 "max_depot_cycles_per_vehicle_per_day": int(
-                    dict(engine_result.solver_metadata or {}).get(
+                    solver_metadata.get(
                         "max_depot_cycles_per_vehicle_per_day",
                         getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
                     )
@@ -3119,6 +3142,7 @@ def _run_optimization(
             "canonical_problem_summary": {
                 "trip_count": build_report.task_count,
                 "vehicle_count": build_report.vehicle_count,
+                "available_vehicle_count_total": available_vehicle_count_total,
                 "charger_count": build_report.charger_count,
                 "price_slot_count": len(price_slots),
                 "pv_slot_count": len(pv_slots),
@@ -3161,6 +3185,8 @@ def _run_optimization(
             "service_coverage_mode": service_coverage_mode,
             "fixed_route_band_mode": fixed_route_band_mode,
             "daily_fragment_limit": daily_fragment_limit,
+            "available_vehicle_count_total": available_vehicle_count_total,
+            "unused_available_vehicle_ids": unused_available_vehicle_ids,
             "time_limit": time_limit_seconds,
             "mip_gap": mip_gap,
             "random_seed": random_seed,
@@ -3561,6 +3587,7 @@ def run_optimization(
         built_dir=Path(_app_state.get("built_dir") or "data/built/tokyu_core"),
         scenarios_dir=_prepared_inputs_root(),
         routes_df=_app_state.get("routes_df"),
+        force_rebuild=bool(request.force_reprepare),
     )
     if not prep.is_valid:
         raise HTTPException(

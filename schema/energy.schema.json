@@ -24,6 +24,34 @@
         "pv_available_kw": { "type": "number", "minimum": 0 }
       },
       "additionalProperties": false
+    },
+    "DepotEnergyAsset": {
+      "type": "object",
+      "required": ["depot_id"],
+      "properties": {
+        "depot_id": { "type": "string" },
+        "depot_area_m2": { "type": ["number", "null"], "minimum": 0, "default": null },
+        "pv_enabled": { "type": "boolean", "default": false },
+        "usable_area_ratio": { "type": "number", "minimum": 0, "default": 0.35 },
+        "panel_power_density_kw_m2": { "type": "number", "minimum": 0, "default": 0.2 },
+        "performance_ratio": { "type": "number", "minimum": 0, "default": 0.85 },
+        "estimated_installable_area_m2": { "type": "number", "minimum": 0, "default": 0 },
+        "pv_capacity_kw": { "type": "number", "minimum": 0, "default": 0 },
+        "capacity_factor_by_slot": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0, "maximum": 1 },
+          "default": []
+        },
+        "pv_generation_kwh_by_slot": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0 },
+          "default": []
+        },
+        "bess_enabled": { "type": "boolean", "default": false },
+        "bess_energy_kwh": { "type": "number", "minimum": 0, "default": 0 },
+        "bess_power_kw": { "type": "number", "minimum": 0, "default": 0 }
+      },
+      "additionalProperties": true
     }
   }
 }

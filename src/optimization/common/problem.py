@@ -87,6 +87,13 @@ class ProblemVehicleType:
 
 @dataclass(frozen=True)
 class ProblemVehicle:
+    """Concrete vehicle candidate for optimization.
+
+    available=True means solvers may assign duties to this vehicle.
+    available=False means baseline builders, MILP, and metaheuristics must
+    exclude it from assignment candidates while keeping it available for audit.
+    """
+
     vehicle_id: str
     vehicle_type: str
     home_depot_id: str
@@ -131,11 +138,17 @@ class DepotEnergyAsset:
     depot_id: str
     pv_enabled: bool = False
     pv_generation_kwh_by_slot: Tuple[float, ...] = ()
+    capacity_factor_by_slot: Tuple[float, ...] = ()
     pv_case_id: str = "none"
     pv_capex_jpy_per_kw: float = 0.0
     pv_om_jpy_per_kw_year: float = 0.0
     pv_life_years: int = 25
     pv_capacity_kw: float = 0.0
+    depot_area_m2: Optional[float] = None
+    pv_installable_area_m2: float = 0.0
+    usable_area_ratio: float = 0.35
+    panel_power_density_kw_m2: float = 0.20
+    performance_ratio: float = 0.85
     bess_enabled: bool = False
     bess_energy_kwh: float = 0.0
     bess_power_kw: float = 0.0
@@ -369,6 +382,31 @@ class AssignmentPlan:
         counts = self.vehicle_fragment_counts()
         return max(counts.values(), default=0)
 
+    def count_used_available_vehicles(
+        self,
+        problem: "CanonicalOptimizationProblem",
+    ) -> int:
+        available_ids = {
+            str(vehicle.vehicle_id)
+            for vehicle in problem.vehicles
+            if bool(getattr(vehicle, "available", True))
+        }
+        return len(set(self.duties_by_vehicle()).intersection(available_ids))
+
+    def unused_available_vehicle_ids(
+        self,
+        problem: "CanonicalOptimizationProblem",
+    ) -> Tuple[str, ...]:
+        used_ids = set(self.duties_by_vehicle())
+        return tuple(
+            sorted(
+                str(vehicle.vehicle_id)
+                for vehicle in problem.vehicles
+                if bool(getattr(vehicle, "available", True))
+                and str(vehicle.vehicle_id) not in used_ids
+            )
+        )
+
     def vehicle_paths(self) -> Dict[str, Tuple[str, ...]]:
         paths: Dict[str, List[str]] = {}
         for vehicle_id, duties in self.duties_by_vehicle().items():
@@ -475,6 +513,12 @@ class CanonicalOptimizationProblem:
                 if slot_count > 0 and len(asset.pv_generation_kwh_by_slot) != slot_count:
                     raise ValueError(
                         f"Depot {depot_id} pv_generation_kwh_by_slot length ({len(asset.pv_generation_kwh_by_slot)}) "
+                        f"must match price slot count ({slot_count})"
+                    )
+            if asset.pv_enabled and asset.capacity_factor_by_slot:
+                if slot_count > 0 and len(asset.capacity_factor_by_slot) != slot_count:
+                    raise ValueError(
+                        f"Depot {depot_id} capacity_factor_by_slot length ({len(asset.capacity_factor_by_slot)}) "
                         f"must match price slot count ({slot_count})"
                     )
             if asset.bess_enabled:

@@ -5,7 +5,12 @@ from typing import Dict, List
 
 from src.dispatch.feasibility import evaluate_startup_feasibility
 from src.dispatch.models import ValidationResult, VehicleDuty
-from src.dispatch.route_band import duty_route_band_ids, fragment_transition_allows_depot_reset, fragment_transition_is_feasible
+from src.dispatch.route_band import (
+    duty_route_band_ids,
+    fragment_transition_allows_depot_reset,
+    fragment_transition_diagnostic,
+    fragment_transition_is_feasible,
+)
 from src.dispatch.validator import DutyValidator
 
 from .problem import (
@@ -78,7 +83,10 @@ class FeasibilityChecker:
             if service_coverage_mode == "penalized":
                 warnings.append(uncovered_message)
             else:
-                errors.append(uncovered_message)
+                errors.append(
+                    f"strict coverage violated with {len(uncovered)} uncovered trips: "
+                    + ", ".join(uncovered)
+                )
         if duplicates:
             errors.append(
                 "Duplicate trip assignments: " + ", ".join(sorted(set(duplicates)))
@@ -89,6 +97,7 @@ class FeasibilityChecker:
         )
 
         errors.extend(self._evaluate_vehicle_fragment_integrity(problem, plan))
+        errors.extend(self._evaluate_vehicle_availability(problem, plan))
         errors.extend(self._evaluate_route_band_integrity(problem, plan))
         errors.extend(self._evaluate_startup_deadhead(problem, plan))
 
@@ -349,23 +358,39 @@ class FeasibilityChecker:
                         f"[FRAGMENT] vehicle={vehicle_id} has overlapping fragments {prev_duty.duty_id} and {next_duty.duty_id}"
                     )
             for prev_duty, next_duty in zip(ordered, ordered[1:]):
-                if fragment_transition_is_feasible(
+                transition = fragment_transition_diagnostic(
                     prev_duty,
                     next_duty,
                     home_depot_id=home_depot_id,
                     dispatch_context=problem.dispatch_context,
                     fixed_route_band_mode=fixed_route_band_mode,
                     allow_same_day_depot_cycles=allow_same_day_depot_cycles,
-                ):
+                )
+                if transition.feasible:
                     continue
                 if allow_same_day_depot_cycles:
                     errors.append(
-                        f"[FRAGMENT] vehicle={vehicle_id} lacks direct-or-depot transition feasibility between {prev_duty.duty_id} and {next_duty.duty_id}"
+                        f"[FRAGMENT] vehicle={vehicle_id} transition_reason={transition.reason_code} lacks direct-or-depot transition feasibility between {prev_duty.duty_id} and {next_duty.duty_id}"
                     )
                 else:
                     errors.append(
-                        f"[FRAGMENT] vehicle={vehicle_id} lacks direct connection and same-day depot cycles are disabled between {prev_duty.duty_id} and {next_duty.duty_id}"
+                        f"[FRAGMENT] vehicle={vehicle_id} transition_reason={transition.reason_code} lacks direct connection and same-day depot cycles are disabled between {prev_duty.duty_id} and {next_duty.duty_id}"
                     )
+        return errors
+
+    def _evaluate_vehicle_availability(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> List[str]:
+        errors: List[str] = []
+        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+        for vehicle_id, duties in plan.duties_by_vehicle().items():
+            vehicle = vehicle_by_id.get(str(vehicle_id))
+            if vehicle is not None and not bool(getattr(vehicle, "available", True)):
+                errors.append(
+                    f"[AVAILABILITY] unavailable vehicle={vehicle_id} has {len(duties)} assigned duties"
+                )
         return errors
 
     def _evaluate_route_band_integrity(

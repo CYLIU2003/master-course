@@ -38,12 +38,18 @@ class MILPOptimizer:
         vehicle_fragment_counts = plan.vehicle_fragment_counts()
         vehicles_with_multiple_fragments = plan.vehicles_with_multiple_fragments()
         max_fragments_observed = plan.max_fragments_observed()
+        available_vehicle_count_total = sum(
+            1 for vehicle in problem.vehicles if bool(getattr(vehicle, "available", True))
+        )
+        unused_available_vehicle_ids = plan.unused_available_vehicle_ids(problem)
         allow_same_day_depot_cycles = bool(
             problem.metadata.get(
                 "allow_same_day_depot_cycles",
                 getattr(problem.scenario, "allow_same_day_depot_cycles", True),
             )
         )
+        service_coverage_mode = str(getattr(problem.scenario, "service_coverage_mode", "strict") or "strict")
+        allow_partial_service = service_coverage_mode == "penalized"
         return OptimizationEngineResult(
             mode=OptimizationMode.MILP,
             solver_status=outcome.solver_status,
@@ -61,6 +67,9 @@ class MILPOptimizer:
                 "delegates_to": "none",
                 "solver_display_name": "MILP",
                 "solver_maturity": "core",
+                "service_coverage_mode": service_coverage_mode,
+                "allow_partial_service": allow_partial_service,
+                "strict_coverage_enforced": service_coverage_mode == "strict",
                 "same_day_depot_cycles_enabled": allow_same_day_depot_cycles,
                 "max_depot_cycles_per_vehicle_per_day": int(
                     problem.metadata.get(
@@ -78,6 +87,17 @@ class MILPOptimizer:
                 "vehicle_fragment_counts": vehicle_fragment_counts,
                 "vehicles_with_multiple_fragments": list(vehicles_with_multiple_fragments),
                 "max_fragments_observed": int(max_fragments_observed),
+                "available_vehicle_count_total": available_vehicle_count_total,
+                "unused_available_vehicle_ids": list(unused_available_vehicle_ids),
+                "startup_infeasible_assignment_count": int(
+                    (plan.metadata or {}).get("startup_infeasible_assignment_count") or 0
+                ),
+                "startup_infeasible_trip_ids": list(
+                    (plan.metadata or {}).get("startup_infeasible_trip_ids") or []
+                ),
+                "startup_infeasible_vehicle_ids": list(
+                    (plan.metadata or {}).get("startup_infeasible_vehicle_ids") or []
+                ),
                 **solver_benchmark_eligibility(
                     OptimizationMode.MILP,
                     solver_maturity="core",

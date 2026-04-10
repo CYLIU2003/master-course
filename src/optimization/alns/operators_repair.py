@@ -745,7 +745,11 @@ def _append_generated_duties(
 def _ordered_vehicle_types_for_repair(
     problem: CanonicalOptimizationProblem,
 ) -> Tuple[str, ...]:
-    vehicle_counts = Counter(str(vehicle.vehicle_type) for vehicle in problem.vehicles)
+    vehicle_counts = Counter(
+        str(vehicle.vehicle_type)
+        for vehicle in problem.vehicles
+        if bool(getattr(vehicle, "available", True))
+    )
     return tuple(
         sorted(
             problem.dispatch_context.vehicle_profiles.keys(),

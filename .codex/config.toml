@@ -1,1 +1,14 @@
+personality = "pragmatic"
+model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+model_context_window = 1000000
+model_auto_compact_token_limit = 900000
 approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+
+[windows]
+sandbox = "elevated"
+
+[plugins."github@openai-curated"]
+enabled = true

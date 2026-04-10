@@ -47,6 +47,13 @@
       "type": "array",
       "items": { "$ref": "energy.schema.json#/definitions/PVSlot" },
       "default": []
+    },
+    "depot_energy_assets": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "energy.schema.json#/definitions/DepotEnergyAsset"
+      },
+      "default": {}
     }
   },
   "additionalProperties": true

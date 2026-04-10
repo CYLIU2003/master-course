@@ -115,6 +115,9 @@ def evaluate_startup_feasibility(
     trip_like: Any,
     context: DispatchContext,
     home_depot_id: str,
+    *,
+    earliest_available_min: int | None = None,
+    allowed_route_band_ids: tuple[str, ...] = (),
 ) -> ConnectionResult:
     home_depot = str(home_depot_id or "").strip()
     origin_stop = str(
@@ -128,8 +131,32 @@ def evaluate_startup_feasibility(
             reason_code="startup_location_unknown",
             reason="Startup location check skipped because depot or origin is missing.",
         )
+    trip_band = trip_route_band_key(trip_like)
+    allowed_bands = {str(item) for item in allowed_route_band_ids if str(item).strip()}
+    if allowed_bands and trip_band and trip_band not in allowed_bands:
+        return ConnectionResult(
+            feasible=False,
+            reason_code="startup_route_band_blocked",
+            reason=(
+                f"Startup trip band '{trip_band}' is not in allowed route bands "
+                f"{sorted(allowed_bands)}."
+            ),
+        )
 
-    if context.locations_equivalent(home_depot, origin_stop):
+    locations_equivalent = getattr(context, "locations_equivalent", None)
+    get_deadhead_min = getattr(context, "get_deadhead_min", None)
+    has_location_data = getattr(context, "has_location_data", None)
+    if callable(locations_equivalent) and locations_equivalent(home_depot, origin_stop):
+        departure_min = int(getattr(trip_like, "departure_min", 0) or 0)
+        if earliest_available_min is not None and int(earliest_available_min or 0) > departure_min:
+            return ConnectionResult(
+                feasible=False,
+                reason_code="startup_time_insufficient",
+                reason=(
+                    f"Vehicle earliest availability {earliest_available_min} is after "
+                    f"trip departure {departure_min}."
+                ),
+            )
         return ConnectionResult(
             feasible=True,
             reason_code="feasible",
@@ -139,8 +166,27 @@ def evaluate_startup_feasibility(
             deadhead_time_min=0,
         )
 
-    deadhead_min = max(int(context.get_deadhead_min(home_depot, origin_stop) or 0), 0)
+    if not callable(get_deadhead_min):
+        return ConnectionResult(
+            feasible=True,
+            reason_code="startup_location_unknown",
+            reason="Startup path check skipped because no deadhead lookup is available.",
+        )
+    deadhead_min = max(int(get_deadhead_min(home_depot, origin_stop) or 0), 0)
     if deadhead_min > 0:
+        departure_min = int(getattr(trip_like, "departure_min", 0) or 0)
+        earliest_ready = int(earliest_available_min or 0) + deadhead_min
+        if earliest_available_min is not None and earliest_ready > departure_min:
+            return ConnectionResult(
+                feasible=False,
+                reason_code="startup_time_insufficient",
+                reason=(
+                    f"Startup deadhead {deadhead_min} min from depot '{home_depot}' "
+                    f"arrives at {earliest_ready}, after trip departure {departure_min}."
+                ),
+                deadhead_time_min=deadhead_min,
+                slack_min=departure_min - earliest_ready,
+            )
         return ConnectionResult(
             feasible=True,
             reason_code="feasible",
@@ -151,7 +197,6 @@ def evaluate_startup_feasibility(
             deadhead_time_min=deadhead_min,
         )
 
-    has_location_data = getattr(context, "has_location_data", None)
     home_has_data = bool(callable(has_location_data) and has_location_data(home_depot))
     origin_has_data = bool(callable(has_location_data) and has_location_data(origin_stop))
     if home_has_data and origin_has_data:

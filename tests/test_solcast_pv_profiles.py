@@ -51,5 +51,6 @@ def test_build_daily_profiles_from_csv_creates_24_slots(tmp_path: Path) -> None:
     assert len(doc["capacity_factor_by_slot"]) == 24
     assert len(doc["pv_generation_kwh_by_slot"]) == 24
     # 02:00 period_end belongs to 01:00-02:00 slot.
-    assert doc["capacity_factor_by_slot"][1] == 0.2
-    assert doc["pv_generation_kwh_by_slot"][1] == 20.0
+    assert doc["capacity_factor_by_slot"][1] == 0.17
+    assert doc["pv_generation_kwh_by_slot"][1] == 17.0
+    assert doc["performance_ratio"] == 0.85

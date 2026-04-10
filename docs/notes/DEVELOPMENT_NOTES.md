@@ -98,6 +98,120 @@ tests/       回帰テスト
     - `python -m pytest tests/test_problem_service_coverage_mode.py tests/test_evaluator_strict_vs_penalized_coverage.py tests/test_same_day_depot_cycles.py tests/test_milp_route_band_settings.py tests/test_milp_baseline_fallbacks.py tests/test_benchmark_search_profile_export.py tests/test_benchmark_metrics_schema.py tests/test_builder_same_day_and_coverage_wiring.py tests/test_vehicle_assignment_per_day_fragment_cap.py tests/test_route_band_depot_reset_flag.py tests/test_dispatch_feasibility_startup_reason_codes.py tests/test_milp_strict_coverage.py tests/test_milp_same_day_vehicle_day_caps.py tests/test_feasibility_strict_service.py tests/test_feasibility_day_fragment_caps.py tests/test_model_builder_vehicle_available_and_successor_cap.py tests/test_optimization_audit_common_snapshot.py tests/test_benchmark_cost_min_strict_schema.py tests/test_problem_builder_depot_energy_asset_controls.py -q` → `59 passed`
     - `python -m compileall src bff scripts` は touched file 群は通過。既存の `scripts/unzip_and_rename_solcast.py` に unicode escape の SyntaxError が残っているため full pass にはなっていない
 
+### [DEV-2026-04-10] 営業所面積由来PV容量とSolcast形状の分離
+
+- 背景:
+  - 従来は `pv_capacity_kw` を営業所エネルギー資産に直接持たせていたため、「PV規模」と「Solcast実日プロファイルの形状」が同じ入力欄に混ざっていた。
+  - 自分で確認した問題として、旧 `pv_generation_kwh_by_slot` だけを持つ行をそのまま面積モデルへ通すと、面積変更時に発電量が2倍にならず、旧固定容量の発電列が残り得た。
+
+- 対応:
+  - `src/optimization/common/pv_area.py`
+    - `depot_area_m2 * usable_area_ratio(0.35) * panel_power_density_kw_m2(0.20)` の共通計算を追加。
+    - `depot_area_m2` が null / 0 以下の場合はPV容量0として扱う。
+  - `tools/scenario_backup_tk.py`
+    - `営業所別充電器管理` に `営業所面積 [m²]`、`推定PV設置可能面積 [m²]`、`推定PV設備容量 [kW]` を追加。
+    - 営業所エネルギー資産の行編集では `pv_capacity_kw` を読取専用の推定値にし、入力は `depot_area_m2` へ寄せた。
+  - `bff/routers/master_data.py` / `bff/routers/scenarios.py`
+    - 営業所CRUDとQuick Setup payloadに `depotAreaM2` を通す。
+  - `bff/services/run_preparation.py`
+    - Prepare時に `depot_energy_assets` へ `depot_area_m2`、`estimated_installable_area_m2`、`derived_pv_capacity_kw`、面積由来の `pv_capacity_kw` を埋める。
+    - 旧 `pv_generation_kwh_by_slot` + `pv_capacity_kw` は `legacy_pv_capacity_kw` から容量係数へ戻してから、面積由来容量で再スケールする。
+  - `src/optimization/common/builder.py`
+    - canonical problemでは固定 `pv_capacity_kw` をPV有効条件に使わず、`depot_area_m2 > 0` のみでPV規模を決める。
+    - Solcast由来の `pv_capacity_factor_by_date` / `capacity_factor_by_slot` を形状として扱い、`pv_generation_kwh_by_slot = derived_capacity_kw * capacity_factor * Δt[h]` で再構築する。
+  - `src/optimization/common/solcast_pv_profiles.py`
+    - Solcast容量係数を `min(1, irradiance/1000 * performance_ratio)` に変更し、既定 `performance_ratio=0.85` を出力メタデータへ保存。
+  - `schema/depot.schema.json` / `schema/energy.schema.json` / `schema/canonical-problem.schema.json`
+    - `depotAreaM2` と `DepotEnergyAsset` の面積・容量係数フィールドを追加。
+
+- 数理・互換性:
+  - この変更はPV容量の数学的意味を変更する。旧固定容量PVのKPIとは直接比較しない。
+  - 旧シナリオに `depot_area_m2` が無い場合はPV無効として落ちずに動く。
+  - Solcastは天候・時刻の形状、営業所面積はPV規模という役割分担を維持する。
+
+- テスト:
+  - 追加/更新:
+    - `tests/test_run_preparation_depot_area_pv_assets.py`
+    - `tests/test_problem_builder_depot_energy_asset_controls.py`
+    - `tests/test_problem_builder_timestep_and_pv_scaling.py`
+    - `tests/test_scenario_backup_tk_pv_sync.py`
+    - `tests/test_solcast_pv_profiles.py`
+    - `tests/test_depot_energy_asset_schema.py`
+  - 回帰:
+    - `python -m pytest tests/test_solcast_pv_profiles.py tests/test_problem_builder_depot_energy_asset_controls.py tests/test_problem_builder_timestep_and_pv_scaling.py tests/test_depot_energy_asset_schema.py tests/test_scenario_backup_tk_pv_sync.py tests/test_run_preparation_depot_area_pv_assets.py -q` → `24 passed`
+    - `python -m pytest tests/test_simulation_builder_prepare_scope.py tests/test_quick_setup_advanced_persistence.py tests/test_scenario_backup_tk_pv_sync.py tests/test_problem_builder_depot_energy_asset_controls.py tests/test_problem_builder_timestep_and_pv_scaling.py tests/test_case_comparison_pv_bess.py tests/test_evaluator_co2_from_actual_grid_import.py tests/test_demand_charge_unit_contract.py -q` → `28 passed`
+    - `python -m compileall src\optimization\common\pv_area.py src\optimization\common\solcast_pv_profiles.py src\optimization\common\builder.py src\optimization\common\problem.py bff\routers\master_data.py bff\routers\scenarios.py bff\routers\pv_management.py bff\services\run_preparation.py tools\scenario_backup_tk.py` → passed
+
+### [DEV-2026-04-10] Availability-aware strict benchmark guard v2
+
+- 背景:
+  - same-day / strict coverage の配線後も、`ProblemVehicle.available` が比較母数と solver candidate で完全に統一されていなかった。
+  - fixed prepared input を使い回す比較は stale snapshot の不安が残るため、各 solver run 前に scenario から再 prepare し、prepare 後の canonical snapshot が一致した row だけを主比較に載せる方針へ更新した。
+
+- 対応:
+  - `src/optimization/common/problem.py`
+    - `ProblemVehicle.available` の契約を docstring に明記。
+    - `AssignmentPlan.count_used_available_vehicles(problem)` / `unused_available_vehicle_ids(problem)` を追加。
+  - `src/optimization/common/builder.py`
+    - available / unavailable vehicle count と id を metadata に出力。
+    - baseline materialize / greedy baseline には available vehicle のみを渡す。
+    - scenario vehicle の `available` / `enabled` を読み、`available=False` を維持したまま audit 可能にした。
+  - `src/optimization/common/vehicle_assignment.py`
+    - unavailable vehicle を候補から除外。
+    - startup rejection を `debug_metadata["startup_rejected_vehicle_ids_by_duty"]` に記録可能にした。
+  - `src/dispatch/route_band.py`
+    - `FragmentTransitionDiagnostic` と `fragment_transition_diagnostic()` を追加し、`direct_ok` / `depot_reset_ok` / `route_band_blocked` / `deadhead_missing` / `location_alias_missing` を区別。
+  - `src/dispatch/feasibility.py`
+    - startup reason に `startup_time_insufficient` / `startup_route_band_blocked` を追加。既定では horizon 前 deadhead を許容し、`earliest_available_min` が明示された場合だけ時間不足を判定。
+  - `src/optimization/milp/solver_adapter.py`
+    - unavailable vehicle の `used_vehicle` を 0 固定。
+    - strict coverage metadata (`service_coverage_mode`, `allow_partial_service`, `strict_coverage_enforced`) を出力。
+    - startup infeasible assignment の trip / vehicle summary を plan metadata へ出力。
+    - Gurobi callback で初 incumbent 時刻を記録し、`first_feasible_sec=0.0` の fake 値をやめた。
+    - 同一日 fragment の `end_arc + start_arc <= 1` depot-reset incompatibility cut を追加。
+  - `src/optimization/milp/model_builder.py`
+    - assignment / arc pair の両方で unavailable vehicle を除外。
+    - successor cap 未指定時の default を `999999` にして 8 本剪定へ戻らないようにした。
+  - `src/optimization/common/feasibility.py`
+    - unavailable vehicle に duty が載った場合は hard error。
+    - strict uncovered message を `strict coverage violated with N uncovered trips` に変更。
+    - fragment transition error に reason code を含める。
+  - `src/optimization/common/evaluator.py`
+    - `evaluation_feasible` を cost breakdown に追加。
+    - utilization denominator を available vehicle count に変更。
+  - `bff/services/run_preparation.py`
+    - `get_or_build_run_preparation(..., force_rebuild=True)` を追加。
+  - `bff/routers/optimization.py`
+    - `RunOptimizationBody.force_reprepare` を追加。
+    - summary / audit / canonical_problem_summary に availability と startup infeasible audit を追加。
+  - `scripts/benchmark_solver_modes.py`
+    - prepared input 未指定時は各 solver run で `force_reprepare=true` を送る。
+    - availability / startup / strict / prepare snapshot audit columns を追加。
+    - `mark_prepare_snapshot_matches()` を追加し、snapshot mismatch row を `appendix_prepare_mismatch` へ隔離。
+
+- テスト:
+  - 追加:
+    - `tests/test_problem_vehicle_available_contract.py`
+    - `tests/test_builder_available_vehicle_metadata.py`
+    - `tests/test_vehicle_assignment_excludes_unavailable.py`
+    - `tests/test_vehicle_assignment_startup_rejection_trace.py`
+    - `tests/test_route_band_transition_reason_codes.py`
+    - `tests/test_startup_feasibility_reason_codes.py`
+    - `tests/test_feasibility_rejects_unavailable_vehicle_usage.py`
+    - `tests/test_feasibility_strict_message.py`
+    - `tests/test_evaluator_strict_unserved_is_infeasible.py`
+    - `tests/test_model_builder_respects_available.py`
+    - `tests/test_model_builder_successor_cap_default.py`
+    - `tests/test_milp_strict_coverage_metadata.py`
+    - `tests/test_milp_first_feasible_time_not_fake_zero.py`
+    - `tests/test_milp_fragment_pairwise_reset_cut.py`
+    - `tests/test_benchmark_availability_audit_columns.py`
+    - `tests/test_benchmark_prepare_snapshot_match.py`
+    - `tests/test_benchmark_prepare_mismatch_excluded.py`
+    - `tests/test_benchmark_fail_flag_for_unserved_with_unused_available.py`
+  - 回帰:
+    - `python -m pytest tests/test_problem_service_coverage_mode.py tests/test_evaluator_strict_vs_penalized_coverage.py tests/test_same_day_depot_cycles.py tests/test_milp_route_band_settings.py tests/test_milp_baseline_fallbacks.py tests/test_benchmark_search_profile_export.py tests/test_benchmark_metrics_schema.py tests/test_problem_vehicle_available_contract.py tests/test_builder_available_vehicle_metadata.py tests/test_vehicle_assignment_excludes_unavailable.py tests/test_vehicle_assignment_startup_rejection_trace.py tests/test_route_band_transition_reason_codes.py tests/test_startup_feasibility_reason_codes.py tests/test_feasibility_rejects_unavailable_vehicle_usage.py tests/test_feasibility_strict_message.py tests/test_evaluator_strict_unserved_is_infeasible.py tests/test_model_builder_respects_available.py tests/test_model_builder_successor_cap_default.py tests/test_milp_strict_coverage_metadata.py tests/test_milp_first_feasible_time_not_fake_zero.py tests/test_milp_fragment_pairwise_reset_cut.py tests/test_benchmark_availability_audit_columns.py tests/test_benchmark_prepare_snapshot_match.py tests/test_benchmark_prepare_mismatch_excluded.py tests/test_benchmark_fail_flag_for_unserved_with_unused_available.py -q` → `60 passed`
+
 ### [DEV-2026-03-28] MILP重大バグ7件の一括修正（core_pv）
 
 - **背景**:

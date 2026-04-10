@@ -198,7 +198,15 @@ CSV_FIELDNAMES = [
     "presolve_reduction_summary",
     "trip_count_served",
     "trip_count_unserved",
+    "trip_count",
+    "vehicle_count",
     "vehicle_count_used",
+    "available_vehicle_count_total",
+    "unused_available_vehicle_ids",
+    "startup_infeasible_assignment_count",
+    "startup_infeasible_trip_ids",
+    "startup_infeasible_vehicle_ids",
+    "strict_coverage_enforced",
     "same_day_depot_cycles_enabled",
     "max_depot_cycles_per_vehicle_per_day",
     "vehicle_fragment_counts",
@@ -209,6 +217,9 @@ CSV_FIELDNAMES = [
     "daily_fragment_limit",
     "scenario_hash",
     "scope_hash",
+    "prepare_snapshot_match",
+    "prepare_mismatch_reason",
+    "strict_unused_available_failure",
     "submitted_at",
     "completed_at",
     "dated_run_dir",
@@ -299,6 +310,7 @@ def _build_row(
         if isinstance(snap, dict)
     ]
     summary = dict(result_payload.get("summary") or solver_result.get("summary") or {})
+    canonical_problem_summary = dict(result_payload.get("canonical_problem_summary") or {})
     served_trip_ids = solver_result.get("served_trip_ids") or result_payload.get("served_trip_ids") or []
     unserved_trip_ids = solver_result.get("unserved_trip_ids") or result_payload.get("unserved_trip_ids") or []
     solver_display_name = pick_text(
@@ -355,6 +367,17 @@ def _build_row(
     scope_hash = pick_text(
         result_payload.get("scope_hash"),
         summary.get("scope_hash"),
+    )
+    available_vehicle_count_total = pick_int(
+        solver_metadata.get("available_vehicle_count_total"),
+        summary.get("available_vehicle_count_total"),
+        canonical_problem_summary.get("available_vehicle_count_total"),
+        canonical_problem_summary.get("vehicle_count"),
+    )
+    unused_available_vehicle_ids = list(
+        solver_metadata.get("unused_available_vehicle_ids")
+        or summary.get("unused_available_vehicle_ids")
+        or []
     )
     fallback_applied = bool(solver_metadata.get("fallback_applied"))
     has_feasible_incumbent = bool(solver_metadata.get("has_feasible_incumbent"))
@@ -442,8 +465,44 @@ def _build_row(
         "presolve_reduction_summary": dict(solver_metadata.get("presolve_reduction_summary") or {}),
         "trip_count_served": len(served_trip_ids) or int(summary.get("trip_count_served") or 0),
         "trip_count_unserved": len(unserved_trip_ids) or int(summary.get("trip_count_unserved") or 0),
+        "trip_count": int(
+            canonical_problem_summary.get("trip_count")
+            or summary.get("trip_count")
+            or ((len(served_trip_ids) or int(summary.get("trip_count_served") or 0)) + (len(unserved_trip_ids) or int(summary.get("trip_count_unserved") or 0)))
+            or 0
+        ),
+        "vehicle_count": int(
+            canonical_problem_summary.get("vehicle_count")
+            or summary.get("vehicle_count")
+            or 0
+        ),
         "vehicle_count_used": sum(1 for trip_ids in (result_payload.get("vehicle_paths") or {}).values() if trip_ids)
         or int(summary.get("vehicle_count_used") or 0),
+        "available_vehicle_count_total": available_vehicle_count_total,
+        "unused_available_vehicle_ids": unused_available_vehicle_ids,
+        "startup_infeasible_assignment_count": int(
+            solver_metadata.get(
+                "startup_infeasible_assignment_count",
+                summary.get("startup_infeasible_assignment_count", 0),
+            )
+            or 0
+        ),
+        "startup_infeasible_trip_ids": list(
+            solver_metadata.get("startup_infeasible_trip_ids")
+            or summary.get("startup_infeasible_trip_ids")
+            or []
+        ),
+        "startup_infeasible_vehicle_ids": list(
+            solver_metadata.get("startup_infeasible_vehicle_ids")
+            or summary.get("startup_infeasible_vehicle_ids")
+            or []
+        ),
+        "strict_coverage_enforced": bool(
+            solver_metadata.get(
+                "strict_coverage_enforced",
+                service_coverage_mode == "strict",
+            )
+        ),
         "same_day_depot_cycles_enabled": bool(
             solver_metadata.get(
                 "same_day_depot_cycles_enabled",
@@ -494,9 +553,65 @@ def _build_row(
         "prepared_input_id": prepared_input_id,
         "scenario_hash": scenario_hash,
         "scope_hash": scope_hash,
+        "prepare_snapshot_match": True,
+        "prepare_mismatch_reason": "",
+        "strict_unused_available_failure": False,
         "per_solver_result_json": str(result_json_path) if result_json_path else "",
     }
+    result["strict_unused_available_failure"] = bool(
+        result["service_coverage_mode"] == "strict"
+        and int(result["trip_count_unserved"] or 0) > 0
+        and len(result["unused_available_vehicle_ids"]) > 0
+    )
     return result
+
+
+def _prepare_snapshot_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        pick_text(row.get("scenario_hash")),
+        pick_text(row.get("scope_hash")),
+        int(row.get("trip_count") or 0),
+        int(row.get("vehicle_count") or 0),
+        int(row.get("available_vehicle_count_total") or 0),
+        pick_text(row.get("objective_mode")),
+        pick_text(row.get("service_coverage_mode")),
+    )
+
+
+def mark_prepare_snapshot_matches(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not rows:
+        return rows
+    expected = _prepare_snapshot_key(rows[0])
+    for row in rows:
+        actual = _prepare_snapshot_key(row)
+        matches = actual == expected and all(str(item).strip() for item in actual[:2])
+        row["prepare_snapshot_match"] = bool(matches)
+        if matches:
+            row["prepare_mismatch_reason"] = ""
+            continue
+        mismatch_parts = [
+            f"{name}: expected={exp!r} actual={act!r}"
+            for name, exp, act in zip(
+                (
+                    "scenario_hash",
+                    "scope_hash",
+                    "trip_count",
+                    "vehicle_count",
+                    "available_vehicle_count_total",
+                    "objective_mode",
+                    "service_coverage_mode",
+                ),
+                expected,
+                actual,
+            )
+            if exp != act
+        ]
+        if not all(str(item).strip() for item in actual[:2]):
+            mismatch_parts.append("missing scenario_hash or scope_hash")
+        row["prepare_mismatch_reason"] = "; ".join(mismatch_parts)
+        row["counts_for_comparison"] = False
+        row["benchmark_tier"] = "appendix_prepare_mismatch"
+    return rows
 
 
 def load_run_result_from_job(job: dict[str, Any]) -> dict[str, Any] | None:
@@ -564,6 +679,7 @@ def run_mode(
         "service_id": service_id,
         "depot_id": depot_id,
         "prepared_input_id": prepared_input_id,
+        "force_reprepare": prepared_input_id is None,
         "time_limit_seconds": time_limit_seconds,
         "mip_gap": mip_gap,
         "random_seed": random_seed,
@@ -658,6 +774,8 @@ def main() -> None:
             f"[DONE] mode={mode} tier={row.get('benchmark_tier')} status={row.get('status')} "
             f"objective={row.get('objective_value')} solve_time={row.get('solve_time_seconds')}"
         )
+
+    rows = mark_prepare_snapshot_matches(rows)
 
     def _comparison_key(row: dict[str, Any]) -> tuple[str, str, str, str, str]:
         return (

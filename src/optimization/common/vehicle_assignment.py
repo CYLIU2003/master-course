@@ -27,10 +27,13 @@ def assign_duty_fragments_to_vehicles(
     existing_duty_vehicle_map: Mapping[str, str] | None = None,
     dispatch_context: Any | None = None,
     fixed_route_band_mode: bool = False,
+    debug_metadata: Dict[str, Any] | None = None,
 ) -> tuple[Tuple[VehicleDuty, ...], Dict[str, str], Tuple[str, ...]]:
     vehicle_ids_by_type: Dict[str, List[str]] = {}
     vehicle_by_id: Dict[str, ProblemVehicle] = {}
     for vehicle in vehicles:
+        if not bool(getattr(vehicle, "available", True)):
+            continue
         vehicle_ids_by_type.setdefault(str(vehicle.vehicle_type), []).append(str(vehicle.vehicle_id))
         vehicle_by_id[str(vehicle.vehicle_id)] = vehicle
     for vehicle_ids in vehicle_ids_by_type.values():
@@ -41,7 +44,7 @@ def assign_duty_fragments_to_vehicles(
         for duty_id, vehicle_id in dict(existing_duty_vehicle_map or {}).items()
         if str(duty_id).strip() and str(vehicle_id).strip()
     }
-    grouped: Dict[str, List[VehicleDuty]] = {str(vehicle.vehicle_id): [] for vehicle in vehicles}
+    grouped: Dict[str, List[VehicleDuty]] = {str(vehicle.vehicle_id): [] for vehicle in vehicle_by_id.values()}
     assigned_duties: List[VehicleDuty] = list(existing_duties)
     for duty in existing_duties:
         vehicle_id = duty_vehicle_map.get(str(duty.duty_id)) or str(duty.duty_id)
@@ -77,6 +80,7 @@ def assign_duty_fragments_to_vehicles(
             fixed_route_band_mode=fixed_route_band_mode,
             allow_same_day_depot_cycles=allow_same_day_depot_cycles,
             horizon_start_min=horizon_start_min,
+            debug_metadata=debug_metadata,
         )
         if not vehicle_id:
             skipped_trip_ids.extend(duty.trip_ids)
@@ -127,14 +131,19 @@ def _select_vehicle_id_for_duty(
     fixed_route_band_mode: bool,
     allow_same_day_depot_cycles: bool,
     horizon_start_min: int,
+    debug_metadata: Dict[str, Any] | None,
 ) -> str:
     duty_start, duty_end = _duty_time_bounds(duty)
     duty_day_idx = _duty_day_index(duty, horizon_start_min=horizon_start_min)
     duty_bands = duty_route_band_ids(duty)
     duty_band = duty_bands[0] if len(duty_bands) == 1 else ""
-    best_score: tuple[int, int, int, int, str] | None = None
+    best_score: tuple[int, int, int, int, int, str] | None = None
     best_vehicle_id = ""
+    duty_key = str(duty.duty_id)
     for vehicle_id in candidate_vehicle_ids:
+        vehicle = vehicle_by_id.get(str(vehicle_id))
+        if vehicle is not None and not bool(getattr(vehicle, "available", True)):
+            continue
         fragments = sorted(grouped.get(vehicle_id, ()), key=_duty_sort_key)
         if len(fragments) >= fragment_cap:
             continue
@@ -164,12 +173,23 @@ def _select_vehicle_id_for_duty(
             continue
         if not _startup_path_exists_for_assignment(
             duty,
-            vehicle=vehicle_by_id.get(str(vehicle_id)),
+            vehicle=vehicle,
             fragments=fragments,
             dispatch_context=dispatch_context,
         ):
+            if debug_metadata is not None:
+                rejected = debug_metadata.setdefault("startup_rejected_vehicle_ids_by_duty", {})
+                rejected.setdefault(duty_key, []).append(str(vehicle_id))
             continue
-        score = (band_change_rank, fit_score[0], fit_score[1], len(fragments), str(vehicle_id))
+        same_day_reuse_rank = 0 if day_count > 0 else 1
+        score = (
+            band_change_rank,
+            same_day_reuse_rank,
+            fit_score[0],
+            fit_score[1],
+            len(fragments),
+            str(vehicle_id),
+        )
         if best_score is None or score < best_score:
             best_score = score
             best_vehicle_id = str(vehicle_id)

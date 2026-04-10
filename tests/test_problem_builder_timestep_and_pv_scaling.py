@@ -15,7 +15,7 @@ def _scenario(timestep_min: int) -> dict:
             "cost_coefficients": {},
             "charging_constraints": {},
         },
-        "depots": [{"id": "dep-1", "name": "Depot 1"}],
+        "depots": [{"id": "dep-1", "name": "Depot 1", "depotAreaM2": 1000.0}],
         "routes": [{"id": "r1", "route_id": "r1"}],
         "vehicles": [
             {
@@ -61,8 +61,8 @@ def test_problem_builder_uses_configured_timestep_60() -> None:
     problem = ProblemBuilder().build_from_scenario(_scenario(60), depot_id="dep-1", service_id="WEEKDAY")
 
     assert problem.scenario.timestep_min == 60
-    # Fallback conversion uses pv_available_kw * (timestep/60)
-    assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (2.0, 4.0)
+    assert problem.depot_energy_assets["dep-1"].pv_capacity_kw == 70.0
+    assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (35.0, 70.0)
     assert [vehicle.vehicle_id for vehicle in problem.vehicles] == ["bev-1"]
     assert [vehicle.home_depot_id for vehicle in problem.vehicles] == ["dep-1"]
 
@@ -71,7 +71,7 @@ def test_problem_builder_uses_configured_timestep_30() -> None:
     problem = ProblemBuilder().build_from_scenario(_scenario(30), depot_id="dep-1", service_id="WEEKDAY")
 
     assert problem.scenario.timestep_min == 30
-    assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (1.0, 2.0)
+    assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (17.5, 35.0)
 
 
 def test_problem_builder_preserves_explicit_zero_turnaround() -> None:
@@ -93,4 +93,16 @@ def test_problem_builder_build_from_scenario_forwards_planning_days() -> None:
 
     assert problem.scenario.planning_days == 2
     assert len(problem.trips) == 2
-    assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (2.0, 4.0, 2.0, 4.0)
+    assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (35.0, 70.0, 35.0, 70.0)
+
+
+def test_problem_builder_disables_pv_without_depot_area() -> None:
+    scenario = _scenario(60)
+    scenario["depots"][0].pop("depotAreaM2", None)
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    asset = problem.depot_energy_assets["dep-1"]
+
+    assert asset.pv_enabled is False
+    assert asset.pv_capacity_kw == 0.0
+    assert asset.pv_generation_kwh_by_slot == (0.0, 0.0)

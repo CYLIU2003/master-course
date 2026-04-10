@@ -1568,6 +1568,7 @@ def _quick_setup_depots(
                 "id": depot_id,
                 "name": depot.get("name") or depot_id,
                 "location": depot.get("location") or "",
+                "depotAreaM2": depot.get("depotAreaM2", depot.get("depot_area_m2")),
                 "routeCount": len(total_route_ids),
                 "familyCount": len(total_family_codes),
                 "vehicleCount": vehicle_count_by_depot.get(depot_id, 0),

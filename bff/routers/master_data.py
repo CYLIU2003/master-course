@@ -77,6 +77,7 @@ def _depot_summary(depot: Dict[str, Any]) -> Dict[str, Any]:
         "location": depot.get("location"),
         "lat": depot.get("lat"),
         "lon": depot.get("lon"),
+        "depotAreaM2": depot.get("depotAreaM2", depot.get("depot_area_m2")),
         "routeCount": route_count,
     }
 
@@ -149,6 +150,7 @@ class CreateDepotBody(BaseModel):
     normalChargerPowerKw: float = Field(default=0.0, ge=0.0)
     fastChargerCount: int = Field(default=0, ge=0)
     fastChargerPowerKw: float = Field(default=0.0, ge=0.0)
+    depotAreaM2: Optional[float] = Field(default=None, ge=0.0)
     hasFuelFacility: bool = False
     parkingCapacity: int = Field(default=0, ge=0)
     overnightCharging: bool = False
@@ -164,6 +166,7 @@ class UpdateDepotBody(BaseModel):
     normalChargerPowerKw: Optional[float] = Field(default=None, ge=0.0)
     fastChargerCount: Optional[int] = Field(default=None, ge=0)
     fastChargerPowerKw: Optional[float] = Field(default=None, ge=0.0)
+    depotAreaM2: Optional[float] = Field(default=None, ge=0.0)
     hasFuelFacility: Optional[bool] = None
     parkingCapacity: Optional[int] = Field(default=None, ge=0)
     overnightCharging: Optional[bool] = None

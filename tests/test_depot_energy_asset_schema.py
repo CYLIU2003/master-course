@@ -62,3 +62,24 @@ def test_depot_energy_asset_rejects_invalid_initial_soc_bounds() -> None:
                 )
             },
         )
+
+
+def test_depot_energy_asset_rejects_capacity_factor_length_mismatch() -> None:
+    with pytest.raises(ValueError, match="capacity_factor_by_slot length"):
+        CanonicalOptimizationProblem(
+            scenario=_scenario(),
+            dispatch_context=None,
+            trips=(),
+            vehicles=(),
+            price_slots=(
+                EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),
+                EnergyPriceSlot(slot_index=1, grid_buy_yen_per_kwh=20.0),
+            ),
+            depot_energy_assets={
+                "dep-1": DepotEnergyAsset(
+                    depot_id="dep-1",
+                    pv_enabled=True,
+                    capacity_factor_by_slot=(0.5,),
+                )
+            },
+        )

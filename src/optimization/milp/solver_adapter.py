@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field, replace
-from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Set, Tuple
 
 from src.dispatch.feasibility import evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
+from src.dispatch.route_band import fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
@@ -181,6 +182,8 @@ class GurobiMILPAdapter:
         assignment_trip_ids_by_vehicle: Dict[str, List[str]] = {}
         assignment_vehicle_ids_by_trip: Dict[str, List[str]] = {}
         startup_feasible_by_assignment: Dict[Tuple[str, str], bool] = {}
+        startup_infeasible_trip_ids: Set[str] = set()
+        startup_infeasible_vehicle_ids: Set[str] = set()
         for vehicle_id, trip_id in assignment_pairs:
             assignment_trip_ids_by_vehicle.setdefault(vehicle_id, []).append(trip_id)
             assignment_vehicle_ids_by_trip.setdefault(trip_id, []).append(vehicle_id)
@@ -189,6 +192,9 @@ class GurobiMILPAdapter:
                 vehicle_by_id.get(str(vehicle_id)),
                 trip_by_id.get(str(trip_id)),
             )
+            if not startup_feasible_by_assignment[(vehicle_id, trip_id)]:
+                startup_infeasible_trip_ids.add(str(trip_id))
+                startup_infeasible_vehicle_ids.add(str(vehicle_id))
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
         service_coverage_mode = normalize_service_coverage_mode(
             getattr(problem.scenario, "service_coverage_mode", None)
@@ -258,6 +264,9 @@ class GurobiMILPAdapter:
         # Vehicle-use linkage.
         for (vehicle_id, trip_id), var in y.items():
             model.addConstr(var <= used_vehicle[vehicle_id])
+        for vehicle in problem.vehicles:
+            if not bool(getattr(vehicle, "available", True)):
+                model.addConstr(used_vehicle[vehicle.vehicle_id] == 0)
 
         # Per-day vehicle usage linkage for multi-day constraints.
         for vehicle in problem.vehicles:
@@ -340,6 +349,19 @@ class GurobiMILPAdapter:
                     )
                     <= daily_fragment_limit
                 )
+
+        self._add_fragment_pairwise_depot_reset_cuts(
+            model,
+            trip_by_id=trip_by_id,
+            vehicles=problem.vehicles,
+            assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+            start_arc=start_arc,
+            end_arc=end_arc,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+            problem=problem,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+            fixed_route_band_mode=fixed_route_band_mode,
+        )
 
         # Fixed route-band mode is enforced on connection arcs, not across the
         # whole vehicle-day. A vehicle may switch bands only by starting a new
@@ -1505,7 +1527,18 @@ class GurobiMILPAdapter:
             with open(os.path.join(diagnostic_output_dir, f"pre_stats_{int(time.time())}.json"), "w") as f:
                 json.dump(pre_stats, f, indent=2)
         
-        model.optimize()
+        optimize_started_at = time.perf_counter()
+        first_feasible_sec: Optional[float] = None
+
+        def _capture_first_feasible(_model: Any, where: Any) -> None:
+            nonlocal first_feasible_sec
+            try:
+                if where == GRB.Callback.MIPSOL and first_feasible_sec is None:
+                    first_feasible_sec = time.perf_counter() - optimize_started_at
+            except Exception:
+                return
+
+        model.optimize(_capture_first_feasible)
         
         # Post-optimization diagnostics
         if enable_milp_diagnostics:
@@ -1548,7 +1581,7 @@ class GurobiMILPAdapter:
         if model.Status == GRB.INF_OR_UNBD:
             # Distinguish infeasible from unbounded before deciding fallback behavior.
             model.Params.DualReductions = 0
-            model.optimize()
+            model.optimize(_capture_first_feasible)
 
         relaxed_partial_service = False
 
@@ -1594,7 +1627,7 @@ class GurobiMILPAdapter:
             "final_gap": final_gap,
             "nodes_explored": nodes_explored,
             "runtime_sec": runtime_sec,
-            "first_feasible_sec": 0.0 if has_feasible_incumbent else None,
+            "first_feasible_sec": first_feasible_sec,
             "presolve_reduction_summary": presolve_reduction_summary,
             "iis_generated": bool(iis_generated),
         }
@@ -1639,6 +1672,12 @@ class GurobiMILPAdapter:
                     "source": "milp_gurobi",
                     "status": solver_status,
                     "auto_relaxed_allow_partial_service": bool(relaxed_partial_service),
+                    "service_coverage_mode": service_coverage_mode,
+                    "allow_partial_service": bool(allow_partial_service),
+                    "strict_coverage_enforced": service_coverage_mode == "strict",
+                    "startup_infeasible_assignment_count": len(startup_infeasible_trip_ids),
+                    "startup_infeasible_trip_ids": tuple(sorted(startup_infeasible_trip_ids)),
+                    "startup_infeasible_vehicle_ids": tuple(sorted(startup_infeasible_vehicle_ids)),
                 },
             )
             return (
@@ -1838,6 +1877,12 @@ class GurobiMILPAdapter:
                 "slot_concurrency_penalty_yen": slot_concurrency_penalty,
                 "early_charge_penalty_yen_per_kwh": early_charge_penalty_per_kwh,
                 "charge_to_upper_buffer_penalty_yen_per_kwh": charge_upper_buffer_penalty_per_kwh,
+                "service_coverage_mode": service_coverage_mode,
+                "allow_partial_service": bool(allow_partial_service),
+                "strict_coverage_enforced": service_coverage_mode == "strict",
+                "startup_infeasible_assignment_count": len(startup_infeasible_trip_ids),
+                "startup_infeasible_trip_ids": tuple(sorted(startup_infeasible_trip_ids)),
+                "startup_infeasible_vehicle_ids": tuple(sorted(startup_infeasible_vehicle_ids)),
             },
         )
         return (
@@ -1895,6 +1940,67 @@ class GurobiMILPAdapter:
                 metadata=baseline_meta,
             ),
         )
+
+    def _add_fragment_pairwise_depot_reset_cuts(
+        self,
+        model: Any,
+        *,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Tuple[Any, ...],
+        assignment_trip_ids_by_vehicle: Mapping[str, List[str]],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+        problem: CanonicalOptimizationProblem,
+        allow_same_day_depot_cycles: bool,
+        fixed_route_band_mode: bool,
+    ) -> int:
+        cut_count = 0
+        for vehicle in vehicles:
+            vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
+            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+            trip_ids = list(assignment_trip_ids_by_vehicle.get(vehicle_id, ()))
+            for end_trip_id in trip_ids:
+                end_trip = trip_by_id.get(end_trip_id)
+                if end_trip is None:
+                    continue
+                for start_trip_id in trip_ids:
+                    if start_trip_id == end_trip_id:
+                        continue
+                    start_trip = trip_by_id.get(start_trip_id)
+                    if start_trip is None:
+                        continue
+                    if int(trip_day_index_by_trip_id.get(end_trip_id, 0)) != int(
+                        trip_day_index_by_trip_id.get(start_trip_id, 0)
+                    ):
+                        continue
+                    if int(end_trip.arrival_min) > int(start_trip.departure_min):
+                        continue
+                    end_key = (vehicle_id, end_trip_id)
+                    start_key = (vehicle_id, start_trip_id)
+                    if end_key not in end_arc or start_key not in start_arc:
+                        continue
+                    diagnostic = fragment_transition_diagnostic(
+                        VehicleDuty(
+                            duty_id=f"{vehicle_id}__end_probe",
+                            vehicle_type=str(getattr(vehicle, "vehicle_type", "")),
+                            legs=(DutyLeg(trip=end_trip),),
+                        ),
+                        VehicleDuty(
+                            duty_id=f"{vehicle_id}__start_probe",
+                            vehicle_type=str(getattr(vehicle, "vehicle_type", "")),
+                            legs=(DutyLeg(trip=start_trip),),
+                        ),
+                        home_depot_id=home_depot_id,
+                        dispatch_context=problem.dispatch_context,
+                        fixed_route_band_mode=fixed_route_band_mode,
+                        allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                    )
+                    if diagnostic.depot_reset_ok:
+                        continue
+                    model.addConstr(end_arc[end_key] + start_arc[start_key] <= 1)
+                    cut_count += 1
+        return cut_count
 
     def _repaired_baseline_plan_for_warm_start(
         self,
