@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
+from src.dispatch.feasibility import evaluate_startup_feasibility
 from src.dispatch.models import VehicleDuty
 from src.dispatch.route_band import (
     duty_route_band_ids,
@@ -137,7 +138,11 @@ def _select_vehicle_id_for_duty(
         fragments = sorted(grouped.get(vehicle_id, ()), key=_duty_sort_key)
         if len(fragments) >= fragment_cap:
             continue
-        day_count = int(fragment_counts_by_vehicle_day.get((str(vehicle_id), duty_day_idx), 0))
+        day_count = _fragment_count_on_day(
+            fragment_counts_by_vehicle_day,
+            vehicle_id=str(vehicle_id),
+            day_idx=duty_day_idx,
+        )
         if day_count >= day_fragment_cap:
             continue
         if fragments and not _fragment_insert_is_feasible_via_depot_reset(
@@ -193,6 +198,15 @@ def _fragment_fit_score(
     return None
 
 
+def _fragment_count_on_day(
+    fragment_counts_by_vehicle_day: Mapping[tuple[str, int], int],
+    *,
+    vehicle_id: str,
+    day_idx: int,
+) -> int:
+    return int(fragment_counts_by_vehicle_day.get((str(vehicle_id), int(day_idx)), 0))
+
+
 def _duty_sort_key(duty: VehicleDuty) -> tuple[int, int, str]:
     start_min, end_min = _duty_time_bounds(duty)
     return (start_min, end_min, str(duty.duty_id))
@@ -236,20 +250,17 @@ def _startup_deadhead_min(
 ) -> int:
     if vehicle is None or dispatch_context is None or not duty.legs:
         return 0
-    first_trip = duty.legs[0].trip
-    origin_key = str(getattr(first_trip, "origin_stop_id", "") or getattr(first_trip, "origin", "") or "").strip()
-    if not origin_key:
-        return 0
     from_location = str(getattr(vehicle, "home_depot_id", "") or "").strip()
     if not from_location:
         return 0
-    get_deadhead_min = getattr(dispatch_context, "get_deadhead_min", None)
-    if not callable(get_deadhead_min):
+    startup_result = evaluate_startup_feasibility(
+        duty.legs[0].trip,
+        dispatch_context,
+        from_location,
+    )
+    if not startup_result.feasible:
         return 0
-    try:
-        return max(int(get_deadhead_min(from_location, origin_key) or 0), 0)
-    except Exception:
-        return 0
+    return max(int(startup_result.deadhead_time_min or 0), 0)
 
 
 def _startup_path_exists_for_assignment(
@@ -268,29 +279,12 @@ def _startup_path_exists_for_assignment(
         if duty_start >= first_start or duty_end > first_start:
             return True
     home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
-    first_trip = duty.legs[0].trip
-    origin_key = str(
-        getattr(first_trip, "origin_stop_id", "")
-        or getattr(first_trip, "origin", "")
-        or ""
-    ).strip()
-    if not home_depot_id or not origin_key:
-        return True
-    locations_equivalent = getattr(dispatch_context, "locations_equivalent", None)
-    if callable(locations_equivalent) and locations_equivalent(home_depot_id, origin_key):
-        return True
-    has_location_data = getattr(dispatch_context, "has_location_data", None)
-    get_deadhead_min = getattr(dispatch_context, "get_deadhead_min", None)
-    if not callable(get_deadhead_min):
-        return True
-    try:
-        if int(get_deadhead_min(home_depot_id, origin_key) or 0) > 0:
-            return True
-        if callable(has_location_data) and has_location_data(home_depot_id):
-            return False
-        return True
-    except Exception:
-        return True
+    startup_result = evaluate_startup_feasibility(
+        duty.legs[0].trip,
+        dispatch_context,
+        home_depot_id,
+    )
+    return bool(startup_result.feasible)
 
 
 def _fragment_insert_is_feasible_via_depot_reset(

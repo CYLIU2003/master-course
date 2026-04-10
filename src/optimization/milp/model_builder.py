@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
-from src.optimization.common.problem import CanonicalOptimizationProblem
+from src.optimization.common.problem import (
+    CanonicalOptimizationProblem,
+    normalize_service_coverage_mode,
+)
 
 
 @dataclass(frozen=True)
@@ -69,6 +72,8 @@ class MILPModelBuilder:
             for trip in problem.trips
         }
         for vehicle in problem.vehicles:
+            if not getattr(vehicle, "available", True):
+                continue
             for trip_i in problem.trips:
                 if vehicle.vehicle_type not in trip_i.allowed_vehicle_types:
                     continue
@@ -104,6 +109,10 @@ class MILPModelBuilder:
     def build(self, problem: CanonicalOptimizationProblem) -> MILPModelDescription:
         variables: List[MILPVariableDefinition] = []
         constraints: List[MILPConstraintDefinition] = []
+        service_coverage_mode = normalize_service_coverage_mode(
+            getattr(problem.scenario, "service_coverage_mode", None)
+            or problem.metadata.get("service_coverage_mode", "strict")
+        )
         trip_by_id = problem.trip_by_id()
         slot_indices = sorted({slot.slot_index for slot in problem.price_slots})
         slot_pos_map = {slot_index: pos for pos, slot_index in enumerate(slot_indices)}
@@ -200,13 +209,18 @@ class MILPModelBuilder:
                 for vehicle_id, trip_id in assignment_pairs
                 if trip_id == trip.trip_id
             )
+            cover_terms = eligible_terms
+            cover_description = "each trip covered exactly once"
+            if service_coverage_mode == "penalized":
+                cover_terms = eligible_terms + (f"u[{trip.trip_id}]",)
+                cover_description = "each trip covered exactly once or marked unserved"
             constraints.append(
                 MILPConstraintDefinition(
                     name=f"cover_trip[{trip.trip_id}]",
                     sense="EQ",
                     rhs=1.0,
-                    terms=eligible_terms + (f"u[{trip.trip_id}]",),
-                    description="each trip covered exactly once or marked unserved",
+                    terms=cover_terms,
+                    description=cover_description,
                 )
             )
 

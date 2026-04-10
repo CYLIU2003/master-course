@@ -116,6 +116,8 @@ def pick_text(*values: Any) -> str:
 DEFAULT_SOLVER_DISPLAY_NAMES: dict[str, str] = {
     "mode_milp_only": "MILP",
     "mode_alns_only": "ALNS",
+    "mode_ga_only": "GA prototype",
+    "mode_abc_only": "ABC prototype",
     "mode_hybrid": "MILPSeededALNS",
     "hybrid": "MILPSeededALNS",
     "ga": "GA prototype",
@@ -125,6 +127,8 @@ DEFAULT_SOLVER_DISPLAY_NAMES: dict[str, str] = {
 DEFAULT_SOLVER_MATURITY: dict[str, str] = {
     "mode_milp_only": "core",
     "mode_alns_only": "core",
+    "mode_ga_only": "prototype",
+    "mode_abc_only": "prototype",
     "mode_hybrid": "prototype",
     "hybrid": "prototype",
     "ga": "prototype",
@@ -134,6 +138,8 @@ DEFAULT_SOLVER_MATURITY: dict[str, str] = {
 DEFAULT_TRUE_SOLVER_FAMILY: dict[str, str] = {
     "mode_milp_only": "milp",
     "mode_alns_only": "alns",
+    "mode_ga_only": "ga",
+    "mode_abc_only": "abc",
     "mode_hybrid": "milp_seeded_alns",
     "hybrid": "milp_seeded_alns",
     "ga": "ga",
@@ -147,6 +153,7 @@ CSV_FIELDNAMES = [
     "job_message",
     "job_progress",
     "status",
+    "objective_mode",
     "objective_value",
     "objective_at_60s",
     "objective_at_300s",
@@ -200,6 +207,8 @@ CSV_FIELDNAMES = [
     "service_coverage_mode",
     "fixed_route_band_mode",
     "daily_fragment_limit",
+    "scenario_hash",
+    "scope_hash",
     "submitted_at",
     "completed_at",
     "dated_run_dir",
@@ -327,6 +336,26 @@ def _build_row(
         result_payload.get("objective_value"),
         solver_result.get("objective_value"),
     )
+    objective_mode = pick_text(
+        result_payload.get("objective_mode"),
+        solver_metadata.get("objective_mode"),
+        summary.get("objective_mode"),
+        result_payload.get("evaluation_mode"),
+        "total_cost",
+    )
+    service_coverage_mode = pick_text(
+        solver_metadata.get("service_coverage_mode"),
+        summary.get("service_coverage_mode"),
+        "strict",
+    )
+    scenario_hash = pick_text(
+        result_payload.get("scenario_hash"),
+        summary.get("scenario_hash"),
+    )
+    scope_hash = pick_text(
+        result_payload.get("scope_hash"),
+        summary.get("scope_hash"),
+    )
     fallback_applied = bool(solver_metadata.get("fallback_applied"))
     has_feasible_incumbent = bool(solver_metadata.get("has_feasible_incumbent"))
     main_comparison_eligible = (
@@ -335,8 +364,19 @@ def _build_row(
         and has_feasible_incumbent
         and not fallback_applied
     )
+    fixed_snapshot_candidate = (
+        true_solver_family in {"milp", "alns", "ga", "abc"}
+        and status == "SOLVED_FEASIBLE"
+        and has_feasible_incumbent
+        and not fallback_applied
+        and service_coverage_mode == "strict"
+        and bool(prepared_input_id)
+        and bool(scope_hash)
+    )
     benchmark_tier = "main" if main_comparison_eligible else ("appendix" if eligible_for_appendix else "excluded")
-    counts_for_comparison = benchmark_tier == "main"
+    if fixed_snapshot_candidate and benchmark_tier != "main":
+        benchmark_tier = "main_fixed_snapshot"
+    counts_for_comparison = benchmark_tier in {"main", "main_fixed_snapshot"}
     result = {
         "mode": mode_label,
         "job_id": job_id,
@@ -344,6 +384,7 @@ def _build_row(
         "job_message": pick_text(job_message),
         "job_progress": job_progress,
         "status": status,
+        "objective_mode": objective_mode,
         "objective_value": objective_value,
         "objective_at_60s": _objective_at_checkpoint(incumbent_history, 60),
         "objective_at_300s": _objective_at_checkpoint(incumbent_history, 300),
@@ -433,11 +474,7 @@ def _build_row(
             )
             or 0
         ),
-        "service_coverage_mode": pick_text(
-            solver_metadata.get("service_coverage_mode"),
-            summary.get("service_coverage_mode"),
-            "strict",
-        ),
+        "service_coverage_mode": service_coverage_mode,
         "fixed_route_band_mode": bool(
             solver_metadata.get(
                 "fixed_route_band_mode",
@@ -455,6 +492,8 @@ def _build_row(
         "completed_at": completed_at,
         "dated_run_dir": dated_run_dir,
         "prepared_input_id": prepared_input_id,
+        "scenario_hash": scenario_hash,
+        "scope_hash": scope_hash,
         "per_solver_result_json": str(result_json_path) if result_json_path else "",
     }
     return result
@@ -514,6 +553,7 @@ def run_mode(
     prepared_input_id: str | None,
     time_limit_seconds: int,
     mip_gap: float,
+    random_seed: int,
     alns_iterations: int,
     poll_seconds: float,
     timeout_seconds: int,
@@ -526,6 +566,7 @@ def run_mode(
         "prepared_input_id": prepared_input_id,
         "time_limit_seconds": time_limit_seconds,
         "mip_gap": mip_gap,
+        "random_seed": random_seed,
         "alns_iterations": alns_iterations,
     }
 
@@ -565,13 +606,14 @@ def main() -> None:
     parser.add_argument("--prepared-input-id", default="", help="Optional prepared input ID to pin the comparison to a fixed prepared scope")
     parser.add_argument(
         "--modes",
-        default="mode_milp_only,mode_alns_only,ga,abc",
+        default="mode_milp_only,mode_alns_only,mode_ga_only,mode_abc_only",
         help="Comma-separated solver modes",
     )
     parser.add_argument("--service-id", default="WEEKDAY", help="Service/day type")
     parser.add_argument("--depot-id", default="", help="Optional depot id")
     parser.add_argument("--time-limit-seconds", type=int, default=300)
     parser.add_argument("--mip-gap", type=float, default=0.01)
+    parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--alns-iterations", type=int, default=500)
     parser.add_argument("--poll-seconds", type=float, default=2.0)
     parser.add_argument("--timeout-seconds", type=int, default=1200)
@@ -606,6 +648,7 @@ def main() -> None:
             prepared_input_id=args.prepared_input_id or None,
             time_limit_seconds=args.time_limit_seconds,
             mip_gap=args.mip_gap,
+            random_seed=args.random_seed,
             alns_iterations=args.alns_iterations,
             poll_seconds=args.poll_seconds,
             timeout_seconds=args.timeout_seconds,
@@ -616,7 +659,32 @@ def main() -> None:
             f"objective={row.get('objective_value')} solve_time={row.get('solve_time_seconds')}"
         )
 
-    main_rows = [row for row in rows if row.get("counts_for_comparison")]
+    def _comparison_key(row: dict[str, Any]) -> tuple[str, str, str, str, str]:
+        return (
+            pick_text(row.get("prepared_input_id")),
+            pick_text(row.get("scenario_hash")),
+            pick_text(row.get("scope_hash")),
+            pick_text(row.get("objective_mode")),
+            pick_text(row.get("service_coverage_mode")),
+        )
+
+    supported_families = {"milp", "alns", "ga", "abc"}
+    grouped_rows: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped_rows.setdefault(_comparison_key(row), []).append(row)
+
+    main_rows: list[dict[str, Any]] = []
+    for group_key, group in grouped_rows.items():
+        families = {
+            pick_text(item.get("true_solver_family"))
+            for item in group
+            if item.get("counts_for_comparison")
+        }
+        if families >= supported_families:
+            main_rows = sorted(group, key=lambda item: pick_text(item.get("mode")))
+            break
+    if not main_rows:
+        main_rows = [row for row in rows if row.get("counts_for_comparison")]
     appendix_rows = [row for row in rows if row.get("benchmark_tier") == "appendix"]
     excluded_rows = [row for row in rows if row.get("benchmark_tier") == "excluded"]
 
@@ -639,6 +707,7 @@ def main() -> None:
             "main_modes": [row.get("mode") for row in main_rows],
             "appendix_modes": [row.get("mode") for row in appendix_rows],
             "excluded_modes": [row.get("mode") for row in excluded_rows],
+            "main_comparison_key": _comparison_key(main_rows[0]) if main_rows else (),
         },
     }
 

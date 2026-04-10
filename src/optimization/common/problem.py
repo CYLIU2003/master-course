@@ -16,6 +16,27 @@ class OptimizationMode(str, Enum):
     HYBRID = "hybrid"
 
 
+VALID_SERVICE_COVERAGE_MODES: Set[str] = {"strict", "penalized"}
+
+
+def normalize_service_coverage_mode(
+    raw_value: Any,
+    *,
+    default: str = "strict",
+) -> str:
+    normalized_default = str(default or "strict").strip().lower() or "strict"
+    if normalized_default not in VALID_SERVICE_COVERAGE_MODES:
+        normalized_default = "strict"
+    normalized = str(raw_value or normalized_default).strip().lower()
+    if normalized in VALID_SERVICE_COVERAGE_MODES:
+        return normalized
+    return normalized_default
+
+
+def service_coverage_allows_partial_service(raw_value: Any) -> bool:
+    return normalize_service_coverage_mode(raw_value) == "penalized"
+
+
 @dataclass(frozen=True)
 class ProblemTrip:
     trip_id: str

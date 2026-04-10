@@ -84,7 +84,7 @@ class SolverConfig(BaseModel):
     unserved_penalty: float = Field(default=10000.0, ge=0.0)
     objective_weights: dict[str, float] = Field(default_factory=dict)
     objective_preset: Optional[str] = None
-    fixed_route_band_mode: bool = True
+    fixed_route_band_mode: bool = False
     max_start_fragments_per_vehicle: int = Field(default=100, ge=1)
     max_end_fragments_per_vehicle: int = Field(default=100, ge=1)
     milp_max_successors_per_trip: Optional[int] = Field(default=None, ge=1)

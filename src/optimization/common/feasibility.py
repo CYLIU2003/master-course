@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
 
+from src.dispatch.feasibility import evaluate_startup_feasibility
 from src.dispatch.models import ValidationResult, VehicleDuty
 from src.dispatch.route_band import duty_route_band_ids, fragment_transition_allows_depot_reset, fragment_transition_is_feasible
 from src.dispatch.validator import DutyValidator
@@ -11,6 +12,7 @@ from .problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
     day_index_for_minute,
+    normalize_service_coverage_mode,
 )
 from .soc_helpers import (
     deadhead_energy_kwh,
@@ -43,7 +45,10 @@ class FeasibilityChecker:
         plan: AssignmentPlan,
     ) -> FeasibilityReport:
         eligible_trip_ids = set(problem.eligible_trip_ids())
-        allow_partial_service = bool(problem.metadata.get("allow_partial_service", True))
+        service_coverage_mode = normalize_service_coverage_mode(
+            getattr(problem.scenario, "service_coverage_mode", None)
+            or problem.metadata.get("service_coverage_mode", "strict")
+        )
         assigned_trip_ids: List[str] = []
         validation: Dict[str, ValidationResult] = {}
         errors: List[str] = []
@@ -70,7 +75,7 @@ class FeasibilityChecker:
         uncovered = sorted(eligible_trip_ids - set(assigned_trip_ids))
         if uncovered:
             uncovered_message = "Uncovered trips: " + ", ".join(uncovered)
-            if allow_partial_service:
+            if service_coverage_mode == "penalized":
                 warnings.append(uncovered_message)
             else:
                 errors.append(uncovered_message)
@@ -224,13 +229,6 @@ class FeasibilityChecker:
         if not plan.duties:
             return errors
 
-        context = problem.dispatch_context
-        get_deadhead_min = getattr(context, "get_deadhead_min", None)
-        locations_equivalent = getattr(context, "locations_equivalent", None)
-        has_location_data = getattr(context, "has_location_data", None)
-        if not callable(get_deadhead_min):
-            return errors
-
         vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
         duty_vehicle_map = plan.duty_vehicle_map()
         for duty in plan.duties:
@@ -242,20 +240,19 @@ class FeasibilityChecker:
                 continue
             home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
             first_leg = duty.legs[0]
-            origin_key = str(
-                getattr(first_leg.trip, "origin_stop_id", "")
-                or getattr(first_leg.trip, "origin", "")
-                or ""
-            ).strip()
-            if not home_depot_id or not origin_key:
+            if not home_depot_id:
                 continue
-            equivalent = bool(callable(locations_equivalent) and locations_equivalent(home_depot_id, origin_key))
-            required_deadhead_min = max(int(get_deadhead_min(home_depot_id, origin_key) or 0), 0)
-            if required_deadhead_min <= 0 and not equivalent:
-                if callable(has_location_data) and has_location_data(home_depot_id):
-                    errors.append(
-                        f"[STARTUP] duty={duty.duty_id} vehicle={vehicle_id} has no deadhead path from depot '{home_depot_id}' to first origin '{origin_key}'"
-                    )
+            startup_result = evaluate_startup_feasibility(
+                first_leg.trip,
+                problem.dispatch_context,
+                home_depot_id,
+            )
+            required_deadhead_min = max(int(startup_result.deadhead_time_min or 0), 0)
+            if not startup_result.feasible:
+                errors.append(
+                    f"[STARTUP] duty={duty.duty_id} vehicle={vehicle_id} "
+                    f"{startup_result.reason_code}: {startup_result.reason}"
+                )
                 continue
             actual_deadhead_min = max(int(first_leg.deadhead_from_prev_min or 0), 0)
             if actual_deadhead_min + 1.0e-6 < required_deadhead_min:
@@ -273,17 +270,14 @@ class FeasibilityChecker:
         max_start_fragments = max(int(problem.metadata.get("max_start_fragments_per_vehicle") or 1), 1)
         max_end_fragments = max(int(problem.metadata.get("max_end_fragments_per_vehicle") or 1), 1)
         allow_same_day_depot_cycles = bool(
-            problem.metadata.get(
-                "allow_same_day_depot_cycles",
-                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
-            )
+            getattr(problem.scenario, "allow_same_day_depot_cycles", True)
+            if getattr(problem.scenario, "allow_same_day_depot_cycles", None) is not None
+            else problem.metadata.get("allow_same_day_depot_cycles", True)
         )
         max_depot_cycles_per_vehicle_per_day = max(
             int(
-                problem.metadata.get(
-                    "max_depot_cycles_per_vehicle_per_day",
-                    getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
-                )
+                getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", None)
+                or problem.metadata.get("max_depot_cycles_per_vehicle_per_day", 1)
                 or 1
             ),
             1,
@@ -305,6 +299,7 @@ class FeasibilityChecker:
                 )
             day_start_counts: Dict[int, int] = {}
             day_end_counts: Dict[int, int] = {}
+            day_fragment_counts: Dict[int, int] = {}
             for duty in duties:
                 if not duty.legs:
                     continue
@@ -312,9 +307,11 @@ class FeasibilityChecker:
                 end_day = day_index_for_minute(int(duty.legs[-1].trip.arrival_min), horizon_start_min)
                 day_start_counts[start_day] = day_start_counts.get(start_day, 0) + 1
                 day_end_counts[end_day] = day_end_counts.get(end_day, 0) + 1
+                day_fragment_counts[start_day] = day_fragment_counts.get(start_day, 0) + 1
             for day_idx in sorted(set(day_start_counts) | set(day_end_counts)):
                 start_count = int(day_start_counts.get(day_idx, 0))
                 end_count = int(day_end_counts.get(day_idx, 0))
+                fragment_count = int(day_fragment_counts.get(day_idx, 0))
                 if start_count > max_depot_cycles_per_vehicle_per_day:
                     errors.append(
                         f"[FRAGMENT] vehicle={vehicle_id} day={day_idx} start_fragment_count={start_count} exceeds max_depot_cycles_per_vehicle_per_day={max_depot_cycles_per_vehicle_per_day}"
@@ -322,6 +319,10 @@ class FeasibilityChecker:
                 if end_count > max_depot_cycles_per_vehicle_per_day:
                     errors.append(
                         f"[FRAGMENT] vehicle={vehicle_id} day={day_idx} end_fragment_count={end_count} exceeds max_depot_cycles_per_vehicle_per_day={max_depot_cycles_per_vehicle_per_day}"
+                    )
+                if fragment_count > max_depot_cycles_per_vehicle_per_day:
+                    errors.append(
+                        f"[FRAGMENT] vehicle={vehicle_id} day={day_idx} fragment_count={fragment_count} exceeds max_depot_cycles_per_vehicle_per_day={max_depot_cycles_per_vehicle_per_day}"
                     )
             ordered = sorted(
                 duties,
@@ -378,10 +379,9 @@ class FeasibilityChecker:
         duties_by_vehicle = plan.duties_by_vehicle()
         vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
         allow_same_day_depot_cycles = bool(
-            problem.metadata.get(
-                "allow_same_day_depot_cycles",
-                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
-            )
+            getattr(problem.scenario, "allow_same_day_depot_cycles", True)
+            if getattr(problem.scenario, "allow_same_day_depot_cycles", None) is not None
+            else problem.metadata.get("allow_same_day_depot_cycles", True)
         )
         for duty in plan.duties:
             duty_bands = duty_route_band_ids(duty)

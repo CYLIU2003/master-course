@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
 
+from src.dispatch.feasibility import evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
@@ -20,6 +21,7 @@ from src.optimization.common.problem import (
     ProblemTrip,
     RefuelSlot,
     classify_peak_slots,
+    normalize_service_coverage_mode,
     normalize_required_soc_departure_ratio,
 )
 
@@ -35,6 +37,18 @@ class MILPSolverOutcome:
     solver_status: str
     used_backend: str
     supports_exact_milp: bool
+    has_feasible_incumbent: bool = False
+    incumbent_count: int = 0
+    warm_start_applied: bool = False
+    warm_start_source: str = ""
+    best_bound: Optional[float] = None
+    final_gap: Optional[float] = None
+    nodes_explored: Optional[int] = None
+    runtime_sec: float = 0.0
+    first_feasible_sec: Optional[float] = None
+    presolve_reduction_summary: Dict[str, Any] = field(default_factory=dict)
+    iis_generated: bool = False
+    fallback_reason: str = ""
 
 
 class SolverAdapter(Protocol):
@@ -57,11 +71,29 @@ class DispatchBaselineMILPAdapter:
         config: OptimizationConfig,
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
         plan = problem.baseline_plan or AssignmentPlan()
+        service_coverage_mode = normalize_service_coverage_mode(
+            getattr(problem.scenario, "service_coverage_mode", None)
+            or problem.metadata.get("service_coverage_mode", "strict")
+        )
+        has_feasible_incumbent = bool(plan.served_trip_ids) and not (
+            service_coverage_mode == "strict" and plan.unserved_trip_ids
+        )
+        if not has_feasible_incumbent:
+            plan = AssignmentPlan(
+                duties=(),
+                charging_slots=(),
+                served_trip_ids=(),
+                unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
+                metadata={"source": "dispatch_baseline", "status": "strict_infeasible"},
+            )
         return (
             MILPSolverOutcome(
-                solver_status="baseline_feasible",
+                solver_status="baseline_feasible" if has_feasible_incumbent else "baseline_infeasible_strict",
                 used_backend=self.backend_name,
                 supports_exact_milp=False,
+                has_feasible_incumbent=has_feasible_incumbent,
+                incumbent_count=1 if has_feasible_incumbent else 0,
+                warm_start_source=str((plan.metadata or {}).get("source") or ""),
             ),
             plan,
         )
@@ -77,11 +109,32 @@ class GurobiMILPAdapter:
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
         if not is_gurobi_available():
             baseline = problem.baseline_plan or AssignmentPlan()
+            service_coverage_mode = normalize_service_coverage_mode(
+                getattr(problem.scenario, "service_coverage_mode", None)
+                or problem.metadata.get("service_coverage_mode", "strict")
+            )
+            has_feasible_incumbent = bool(baseline.served_trip_ids) and not (
+                service_coverage_mode == "strict" and baseline.unserved_trip_ids
+            )
+            if not has_feasible_incumbent:
+                baseline = AssignmentPlan(
+                    duties=(),
+                    charging_slots=(),
+                    served_trip_ids=(),
+                    unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
+                    metadata={"source": "dispatch_baseline", "status": "strict_infeasible"},
+                )
             return (
                 MILPSolverOutcome(
-                    solver_status="gurobi_unavailable_baseline",
+                    solver_status="gurobi_unavailable_baseline"
+                    if has_feasible_incumbent
+                    else "gurobi_unavailable_strict_infeasible",
                     used_backend="dispatch_baseline",
                     supports_exact_milp=False,
+                    has_feasible_incumbent=has_feasible_incumbent,
+                    incumbent_count=1 if has_feasible_incumbent else 0,
+                    warm_start_source=str((baseline.metadata or {}).get("source") or ""),
+                    fallback_reason="gurobi_unavailable_baseline" if has_feasible_incumbent else "",
                 ),
                 baseline,
             )
@@ -113,6 +166,9 @@ class GurobiMILPAdapter:
         model.Params.Heuristics = 0.5  # Increased heuristics effort
         model.Params.Presolve = 2  # Aggressive presolve
 
+        pre_stats: Dict[str, Any] = {}
+        iis_generated = False
+
         builder = MILPModelBuilder()
         trip_by_id = problem.trip_by_id()
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
@@ -134,6 +190,21 @@ class GurobiMILPAdapter:
                 trip_by_id.get(str(trip_id)),
             )
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
+        service_coverage_mode = normalize_service_coverage_mode(
+            getattr(problem.scenario, "service_coverage_mode", None)
+            or problem.metadata.get("service_coverage_mode", "strict")
+        )
+        allow_same_day_depot_cycles = bool(
+            getattr(problem.scenario, "allow_same_day_depot_cycles", True)
+        )
+        daily_fragment_limit = self._safe_positive_int(
+            problem.metadata.get("daily_fragment_limit")
+            or problem.metadata.get("max_depot_cycles_per_vehicle_per_day")
+            or getattr(problem.scenario, "max_depot_cycles_per_vehicle_per_day", 1),
+            default=1,
+        )
+        if not allow_same_day_depot_cycles:
+            daily_fragment_limit = 1
         trip_day_index_by_trip_id = {
             trip.trip_id: self._trip_day_index(problem, trip.departure_min)
             for trip in problem.trips
@@ -178,9 +249,7 @@ class GurobiMILPAdapter:
             assign_terms = [y[(vehicle_id, trip.trip_id)] for vehicle_id in assignment_vehicle_ids_by_trip.get(trip.trip_id, [])]
             model.addConstr(gp.quicksum(assign_terms) + unserved[trip.trip_id] == 1)
 
-        # Allow partial service by default for better feasibility
-        # High unserved penalty in objective will strongly discourage unserved trips
-        allow_partial_service = bool(problem.metadata.get("allow_partial_service", True))  # Changed default to True
+        allow_partial_service = service_coverage_mode == "penalized"
         hard_no_unserved_constraints: List[Any] = []
         if not allow_partial_service:
             for trip in problem.trips:
@@ -247,6 +316,30 @@ class GurobiMILPAdapter:
                 vehicle_terms_end.append(end_arc[key])
             model.addConstr(gp.quicksum(vehicle_terms_start) <= max_start_fragments_per_vehicle)
             model.addConstr(gp.quicksum(vehicle_terms_end) <= max_end_fragments_per_vehicle)
+            for day_idx in day_indices:
+                day_trip_ids = [
+                    trip_id
+                    for trip_id in assignment_trip_ids_by_vehicle.get(vehicle.vehicle_id, [])
+                    if int(trip_day_index_by_trip_id.get(trip_id, 0)) == day_idx
+                ]
+                if not day_trip_ids:
+                    continue
+                model.addConstr(
+                    gp.quicksum(
+                        start_arc[(vehicle.vehicle_id, trip_id)]
+                        for trip_id in day_trip_ids
+                        if (vehicle.vehicle_id, trip_id) in start_arc
+                    )
+                    <= daily_fragment_limit
+                )
+                model.addConstr(
+                    gp.quicksum(
+                        end_arc[(vehicle.vehicle_id, trip_id)]
+                        for trip_id in day_trip_ids
+                        if (vehicle.vehicle_id, trip_id) in end_arc
+                    )
+                    <= daily_fragment_limit
+                )
 
         # Fixed route-band mode is enforced on connection arcs, not across the
         # whole vehicle-day. A vehicle may switch bands only by starting a new
@@ -1277,7 +1370,11 @@ class GurobiMILPAdapter:
                 if isinstance(key, tuple) and len(key) == 3:
                     objective += soc_violation_penalty_per_kwh * var
 
-        if component_flags.get("unserved_penalty", True) and unserved_penalty_weight > 0.0:
+        if (
+            service_coverage_mode == "penalized"
+            and component_flags.get("unserved_penalty", True)
+            and unserved_penalty_weight > 0.0
+        ):
             # Gradient unserved penalty: higher for peak hours, lower for off-peak
             for trip in problem.trips:
                 trip_hour = trip.departure_min / 60.0
@@ -1387,21 +1484,21 @@ class GurobiMILPAdapter:
         }
         
         # Pre-optimization diagnostics
+        pre_stats = {
+            "num_vars": model.NumVars,
+            "num_constrs": model.NumConstrs,
+            "num_binary_vars": model.NumBinVars,
+            "num_integer_vars": model.NumIntVars,
+            "num_continuous_vars": model.NumVars - model.NumBinVars - model.NumIntVars,
+            "num_assignment_pairs": len(assignment_pairs),
+            "num_arc_pairs": len(arc_pairs),
+            "num_trips": len(problem.trips),
+            "num_vehicles": len(problem.vehicles),
+            "time_limit_sec": config.time_limit_sec,
+            "mip_gap": config.mip_gap,
+        }
         if enable_milp_diagnostics:
             import json
-            pre_stats = {
-                "num_vars": model.NumVars,
-                "num_constrs": model.NumConstrs,
-                "num_binary_vars": model.NumBinVars,
-                "num_integer_vars": model.NumIntVars,
-                "num_continuous_vars": model.NumVars - model.NumBinVars - model.NumIntVars,
-                "num_assignment_pairs": len(assignment_pairs),
-                "num_arc_pairs": len(arc_pairs),
-                "num_trips": len(problem.trips),
-                "num_vehicles": len(problem.vehicles),
-                "time_limit_sec": config.time_limit_sec,
-                "mip_gap": config.mip_gap,
-            }
             print(f"[MILP Diagnostics] Pre-optimization stats:")
             for key, val in pre_stats.items():
                 print(f"  {key}: {val}")
@@ -1433,6 +1530,7 @@ class GurobiMILPAdapter:
                 print("[MILP Diagnostics] Model is INFEASIBLE. Computing IIS...")
                 try:
                     model.computeIIS()
+                    iis_generated = True
                     iis_file = os.path.join(diagnostic_output_dir, f"infeasible_iis_{int(time.time())}.ilp")
                     model.write(iis_file)
                     print(f"[MILP Diagnostics] IIS written to: {iis_file}")
@@ -1453,20 +1551,53 @@ class GurobiMILPAdapter:
             model.optimize()
 
         relaxed_partial_service = False
-        if (
-            model.SolCount <= 0
-            and model.Status in {GRB.INFEASIBLE, GRB.INF_OR_UNBD, GRB.UNBOUNDED}
-            and hard_no_unserved_constraints
-        ):
-            # If strict full-coverage is infeasible, relax to penalty-based unserved mode
-            # to keep the run operationally usable and comparable with heuristic modes.
-            for constr in hard_no_unserved_constraints:
-                model.remove(constr)
-            model.update()
-            model.optimize()
-            relaxed_partial_service = model.SolCount > 0
 
         solver_status = status_map.get(model.Status, f"status_{model.Status}")
+        runtime_sec = float(getattr(model, "Runtime", 0.0) or 0.0)
+        has_feasible_incumbent = bool(model.SolCount > 0)
+        presolve_reduction_summary = {
+            "initial_num_vars": int(pre_stats.get("num_vars", 0) or 0),
+            "initial_num_constrs": int(pre_stats.get("num_constrs", 0) or 0),
+            "initial_num_bin_vars": int(pre_stats.get("num_binary_vars", 0) or 0),
+            "initial_num_int_vars": int(pre_stats.get("num_integer_vars", 0) or 0),
+        }
+        best_bound = None
+        if hasattr(model, "ObjBound"):
+            try:
+                best_bound = float(model.ObjBound)
+            except Exception:
+                best_bound = None
+        final_gap = None
+        if has_feasible_incumbent and hasattr(model, "MIPGap"):
+            try:
+                final_gap = float(model.MIPGap)
+            except Exception:
+                final_gap = None
+        nodes_explored = None
+        if hasattr(model, "NodeCount"):
+            try:
+                nodes_explored = int(model.NodeCount)
+            except Exception:
+                nodes_explored = None
+        warm_start_applied = bool(getattr(config, "warm_start", True) and problem.baseline_plan is not None)
+        warm_start_source = (
+            str((problem.baseline_plan.metadata or {}).get("source") or "")
+            if problem.baseline_plan is not None
+            else ""
+        )
+        common_outcome_kwargs = {
+            "has_feasible_incumbent": has_feasible_incumbent,
+            "incumbent_count": int(model.SolCount),
+            "warm_start_applied": warm_start_applied,
+            "warm_start_source": warm_start_source,
+            "best_bound": best_bound,
+            "final_gap": final_gap,
+            "nodes_explored": nodes_explored,
+            "runtime_sec": runtime_sec,
+            "first_feasible_sec": 0.0 if has_feasible_incumbent else None,
+            "presolve_reduction_summary": presolve_reduction_summary,
+            "iis_generated": bool(iis_generated),
+        }
 
         if (
             model.SolCount > 0
@@ -1515,6 +1646,7 @@ class GurobiMILPAdapter:
                     solver_status=solver_status,
                     used_backend=self.backend_name,
                     supports_exact_milp=True,
+                    **common_outcome_kwargs,
                 ),
                 empty,
             )
@@ -1713,6 +1845,7 @@ class GurobiMILPAdapter:
                 solver_status=solver_status,
                 used_backend=self.backend_name,
                 supports_exact_milp=True,
+                **common_outcome_kwargs,
             ),
             plan,
         )
@@ -1729,6 +1862,12 @@ class GurobiMILPAdapter:
         baseline_plan = self._repaired_baseline_plan_for_warm_start(problem)
         if baseline_plan is None or len(baseline_plan.served_trip_ids) <= 0:
             return None
+        service_coverage_mode = normalize_service_coverage_mode(
+            getattr(problem.scenario, "service_coverage_mode", None)
+            or problem.metadata.get("service_coverage_mode", "strict")
+        )
+        if service_coverage_mode == "strict" and baseline_plan.unserved_trip_ids:
+            return None
         baseline_meta = dict(baseline_plan.metadata or {})
         baseline_meta.update(
             {
@@ -1741,9 +1880,15 @@ class GurobiMILPAdapter:
         )
         return (
             MILPSolverOutcome(
-                solver_status=fallback_status,
+                solver_status="BASELINE_FALLBACK",
                 used_backend=self.backend_name,
                 supports_exact_milp=False,
+                has_feasible_incumbent=False,
+                incumbent_count=0,
+                warm_start_applied=False,
+                warm_start_source=f"fallback_{fallback_status}",
+                runtime_sec=0.0,
+                fallback_reason=fallback_status,
             ),
             replace(
                 baseline_plan,
@@ -2046,24 +2191,16 @@ class GurobiMILPAdapter:
         if vehicle is None or trip is None:
             return False
         home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
-        origin_key = str(getattr(trip, "origin", "") or "").strip()
-        if not home_depot_id or not origin_key:
+        if not home_depot_id:
             return False
         dispatch_trip = problem.dispatch_context.trips_by_id().get(trip.trip_id)
-        if dispatch_trip is not None:
-            origin_key = str(
-                getattr(dispatch_trip, "origin_stop_id", None)
-                or getattr(dispatch_trip, "origin", None)
-                or origin_key
-            ).strip()
-        if problem.dispatch_context.locations_equivalent(home_depot_id, origin_key):
-            return True
-        if int(problem.dispatch_context.get_deadhead_min(home_depot_id, origin_key) or 0) > 0:
-            return True
-        has_location_data = getattr(problem.dispatch_context, "has_location_data", None)
-        if callable(has_location_data) and has_location_data(home_depot_id):
-            return False
-        return True
+        startup_trip = dispatch_trip if dispatch_trip is not None else trip
+        startup_result = evaluate_startup_feasibility(
+            startup_trip,
+            problem.dispatch_context,
+            home_depot_id,
+        )
+        return bool(startup_result.feasible)
 
     def _binary_value(self, var: Any) -> bool:
         try:

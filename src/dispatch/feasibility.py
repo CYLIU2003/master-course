@@ -10,6 +10,8 @@ after trip_i, applying the hard constraint:
 
 from __future__ import annotations
 
+from typing import Any
+
 from .models import ConnectionResult, DispatchContext, Trip
 from .route_band import trip_route_band_key
 
@@ -107,3 +109,74 @@ class FeasibilityEngine:
             turnaround_time_min=turnaround_min,
             slack_min=slack,
         )
+
+
+def evaluate_startup_feasibility(
+    trip_like: Any,
+    context: DispatchContext,
+    home_depot_id: str,
+) -> ConnectionResult:
+    home_depot = str(home_depot_id or "").strip()
+    origin_stop = str(
+        getattr(trip_like, "origin_stop_id", "")
+        or getattr(trip_like, "origin", "")
+        or ""
+    ).strip()
+    if not home_depot or not origin_stop:
+        return ConnectionResult(
+            feasible=True,
+            reason_code="startup_location_unknown",
+            reason="Startup location check skipped because depot or origin is missing.",
+        )
+
+    if context.locations_equivalent(home_depot, origin_stop):
+        return ConnectionResult(
+            feasible=True,
+            reason_code="feasible",
+            reason=(
+                f"Depot '{home_depot}' is equivalent to startup origin '{origin_stop}'."
+            ),
+            deadhead_time_min=0,
+        )
+
+    deadhead_min = max(int(context.get_deadhead_min(home_depot, origin_stop) or 0), 0)
+    if deadhead_min > 0:
+        return ConnectionResult(
+            feasible=True,
+            reason_code="feasible",
+            reason=(
+                f"Startup deadhead from depot '{home_depot}' to '{origin_stop}' exists "
+                f"({deadhead_min} min)."
+            ),
+            deadhead_time_min=deadhead_min,
+        )
+
+    has_location_data = getattr(context, "has_location_data", None)
+    home_has_data = bool(callable(has_location_data) and has_location_data(home_depot))
+    origin_has_data = bool(callable(has_location_data) and has_location_data(origin_stop))
+    if home_has_data and origin_has_data:
+        return ConnectionResult(
+            feasible=False,
+            reason_code="startup_deadhead_missing",
+            reason=(
+                f"No startup deadhead rule from depot '{home_depot}' to first origin "
+                f"'{origin_stop}'."
+            ),
+        )
+    if home_has_data or origin_has_data:
+        return ConnectionResult(
+            feasible=False,
+            reason_code="startup_alias_missing",
+            reason=(
+                f"Depot '{home_depot}' and startup origin '{origin_stop}' do not resolve "
+                f"to an equivalent alias set."
+            ),
+        )
+    return ConnectionResult(
+        feasible=True,
+        reason_code="startup_location_unknown",
+        reason=(
+            f"Startup path from depot '{home_depot}' to '{origin_stop}' could not be "
+            "validated because location metadata is incomplete."
+        ),
+    )

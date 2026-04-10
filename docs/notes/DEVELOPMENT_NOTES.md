@@ -39,6 +39,65 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-04-09] Strict coverage / same-day depot cycle repair
+
+- 背景:
+  - `OptimizationScenario` には `allow_same_day_depot_cycles` / `max_depot_cycles_per_vehicle_per_day` が既に入っていたが、builder / assignment / feasibility / MILP / benchmark summary まで一貫して伝播していなかった。
+  - `service_coverage_mode=strict` のつもりでも、実 solver path では `allow_partial_service` と有限 `unserved_penalty` が残り、unused vehicle があっても欠便を合法的に返せる穴があった。
+  - fixed prepared scope 比較でも `prepared_input_id` 以外に scope fingerprint が残っておらず、同一 snapshot 監査が弱かった。
+
+- 対応:
+  - `src/optimization/common/problem.py`
+    - `normalize_service_coverage_mode()` / `service_coverage_allows_partial_service()` を追加し、coverage mode の正規化を共通化。
+  - `src/optimization/common/builder.py`
+    - `build_from_dispatch()` に `service_coverage_mode` を追加し、`allow_partial_service` は coverage mode から mirror する形へ変更。
+    - same-day fragment metadata (`daily_fragment_limit`, `service_coverage_mode`, `fixed_route_band_mode`) を canonical problem metadata へ明示保存。
+  - `src/scenario_overlay.py`
+    - `SolverConfig.fixed_route_band_mode` の既定値を `False` へ変更。未指定 scenario で暗黙に route band 固定が有効になる drift を止めた。
+  - `src/dispatch/feasibility.py`
+    - `evaluate_startup_feasibility()` を追加し、`startup_alias_missing` / `startup_deadhead_missing` を reason code として返すようにした。
+  - `src/optimization/common/vehicle_assignment.py`
+    - startup feasibility helper を流用し、day-aware fragment cap helper を追加。
+  - `src/optimization/common/feasibility.py`
+    - `service_coverage_mode=strict` では uncovered trip を error、`penalized` では warning に分離。
+    - same-day per-day fragment cap を `fragment_count` まで含めて検証。
+  - `src/optimization/common/evaluator.py`
+    - strict mode かつ `plan.unserved_trip_ids` 非空なら `objective_value=inf` を返し、`unserved_penalty` は penalized mode でのみ加算。
+  - `src/optimization/milp/solver_adapter.py`
+    - strict mode では `u[i]==0` を強制し、auto relax を停止。
+    - vehicle × day の `start_arc` / `end_arc` 上限を追加。
+    - startup feasibility を alias-aware helper へ統一。
+    - `MILPSolverOutcome` に benchmark/audit 用 runtime metadata を追加。
+    - strict mode で unserved baseline を fallback として返さないよう修正。
+  - `src/optimization/milp/model_builder.py`
+    - arc enumeration でも unavailable vehicle を除外。
+    - strict / penalized で `cover_trip` description を分岐。
+  - `bff/services/run_preparation.py`
+    - prepared input に `scope_hash` を追加し、materialized scenario の `prepared_scope_summary` にも反映。
+  - `bff/routers/optimization.py`
+    - `optimization_result.summary` / `optimization_audit` に `service_coverage_mode`, `fixed_route_band_mode`, `daily_fragment_limit`, `scenario_hash`, `scope_hash` を追加。
+  - `scripts/benchmark_solver_modes.py`
+    - `objective_mode`, `service_coverage_mode`, `scenario_hash`, `scope_hash` を row schema に追加。
+    - `random_seed` を run request body へ送るよう修正。
+    - fixed snapshot 4 solver 比較では prototype maturity の GA / ABC も main comparison group に残せるよう grouping を補強。
+
+- テスト:
+  - 追加:
+    - `tests/test_builder_same_day_and_coverage_wiring.py`
+    - `tests/test_vehicle_assignment_per_day_fragment_cap.py`
+    - `tests/test_route_band_depot_reset_flag.py`
+    - `tests/test_dispatch_feasibility_startup_reason_codes.py`
+    - `tests/test_milp_strict_coverage.py`
+    - `tests/test_milp_same_day_vehicle_day_caps.py`
+    - `tests/test_feasibility_strict_service.py`
+    - `tests/test_feasibility_day_fragment_caps.py`
+    - `tests/test_model_builder_vehicle_available_and_successor_cap.py`
+    - `tests/test_optimization_audit_common_snapshot.py`
+    - `tests/test_benchmark_cost_min_strict_schema.py`
+  - 回帰:
+    - `python -m pytest tests/test_problem_service_coverage_mode.py tests/test_evaluator_strict_vs_penalized_coverage.py tests/test_same_day_depot_cycles.py tests/test_milp_route_band_settings.py tests/test_milp_baseline_fallbacks.py tests/test_benchmark_search_profile_export.py tests/test_benchmark_metrics_schema.py tests/test_builder_same_day_and_coverage_wiring.py tests/test_vehicle_assignment_per_day_fragment_cap.py tests/test_route_band_depot_reset_flag.py tests/test_dispatch_feasibility_startup_reason_codes.py tests/test_milp_strict_coverage.py tests/test_milp_same_day_vehicle_day_caps.py tests/test_feasibility_strict_service.py tests/test_feasibility_day_fragment_caps.py tests/test_model_builder_vehicle_available_and_successor_cap.py tests/test_optimization_audit_common_snapshot.py tests/test_benchmark_cost_min_strict_schema.py tests/test_problem_builder_depot_energy_asset_controls.py -q` → `59 passed`
+    - `python -m compileall src bff scripts` は touched file 群は通過。既存の `scripts/unzip_and_rename_solcast.py` に unicode escape の SyntaxError が残っているため full pass にはなっていない
+
 ### [DEV-2026-03-28] MILP重大バグ7件の一括修正（core_pv）
 
 - **背景**:

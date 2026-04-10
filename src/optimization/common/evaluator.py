@@ -12,6 +12,7 @@ from .problem import (
     DailyCostLedgerEntry,
     VehicleCostLedgerEntry,
     classify_peak_slots,
+    normalize_service_coverage_mode,
 )
 
 
@@ -130,6 +131,10 @@ class CostEvaluator:
         component_flags = normalize_cost_component_flags(
             problem.metadata.get("cost_component_flags")
         )
+        service_coverage_mode = normalize_service_coverage_mode(
+            problem.scenario.service_coverage_mode
+            or problem.metadata.get("service_coverage_mode", "strict")
+        )
         vehicle_cost = 0.0
         driver_cost = 0.0
 
@@ -239,48 +244,14 @@ class CostEvaluator:
             degradation_cycles += charged_kwh / capacity_kwh
         degradation_cost = weights.degradation * degradation_cycles * 50.0
 
-        # In strict mode, unserved penalty is not applicable (handled as inf above)
-        # In penalized mode, apply penalty for each unserved trip
-        service_coverage_mode_pre = str(
-            problem.scenario.service_coverage_mode
-            or problem.metadata.get("service_coverage_mode", "strict")
-        ).strip().lower()
-        if service_coverage_mode_pre == "strict":
-            unserved_penalty = 0.0  # Not used in strict mode
-        else:
+        if service_coverage_mode == "penalized":
             unserved_penalty = weights.unserved * len(plan.unserved_trip_ids)
+        else:
+            unserved_penalty = 0.0
 
         baseline_ids = set(problem.baseline_plan.served_trip_ids) if problem.baseline_plan else set()
         deviation_count = len(set(plan.served_trip_ids).symmetric_difference(baseline_ids))
         deviation_cost = weights.deviation * deviation_count
-
-        # Check strict coverage mode: if strict and unserved trips exist, return inf
-        service_coverage_mode = str(
-            problem.scenario.service_coverage_mode
-            or problem.metadata.get("service_coverage_mode", "strict")
-        ).strip().lower()
-        if service_coverage_mode == "strict" and plan.unserved_trip_ids:
-            # Return infinity to mark as infeasible
-            objective_value = float('inf')
-            return CostBreakdown(
-                energy_cost=energy_cost,
-                demand_cost=demand_cost,
-                vehicle_cost=vehicle_cost,
-                driver_cost=driver_cost,
-                unserved_penalty=unserved_penalty,
-                switch_cost=switch_cost,
-                degradation_cost=degradation_cost,
-                deviation_cost=deviation_cost,
-                co2_cost=co2_cost,
-                total_co2_kg=total_co2_kg,
-                utilization_score=utilization_score,
-                pv_generated_kwh=pv_generated_kwh,
-                pv_used_direct_kwh=pv_used_direct_kwh,
-                pv_curtailed_kwh=pv_curtailed_kwh,
-                grid_import_kwh=grid_import_kwh,
-                peak_grid_kw=peak_grid_kw,
-                objective_value=objective_value,
-            )
 
         # CO₂ metrics: calculate from ICE fuel and grid electricity.
         total_co2_kg = self._total_co2_kg(problem, plan, operating_slot_totals)
@@ -388,6 +359,51 @@ class CostEvaluator:
             + co2_cost
         )
         total_cost_with_assets = total_cost + pv_asset_cost + bess_asset_cost
+        if service_coverage_mode == "strict" and plan.unserved_trip_ids:
+            return CostBreakdown(
+                energy_cost=energy_cost,
+                demand_cost=demand_cost,
+                vehicle_cost=vehicle_cost,
+                driver_cost=driver_cost,
+                unserved_penalty=0.0,
+                switch_cost=switch_cost,
+                degradation_cost=degradation_cost,
+                deviation_cost=deviation_cost,
+                co2_cost=co2_cost,
+                total_co2_kg=total_co2_kg,
+                utilization_score=utilization_score,
+                pv_generated_kwh=pv_generated_kwh,
+                pv_used_direct_kwh=pv_used_direct_kwh,
+                pv_curtailed_kwh=pv_curtailed_kwh,
+                grid_import_kwh=grid_import_kwh,
+                peak_grid_kw=peak_grid_kw,
+                grid_to_bus_kwh=float(energy_cost_components.get("grid_to_bus_kwh", 0.0)),
+                pv_to_bus_kwh=float(energy_cost_components.get("pv_to_bus_kwh", 0.0)),
+                bess_to_bus_kwh=float(energy_cost_components.get("bess_to_bus_kwh", 0.0)),
+                pv_to_bess_kwh=float(energy_cost_components.get("pv_to_bess_kwh", 0.0)),
+                grid_to_bess_kwh=float(energy_cost_components.get("grid_to_bess_kwh", 0.0)),
+                contract_over_limit_kwh=float(energy_cost_components.get("contract_over_limit_kwh", 0.0)),
+                electricity_cost_final=electricity_cost_final,
+                electricity_cost_provisional_leftover=electricity_cost_provisional_leftover,
+                provisional_ev_drive_cost=provisional_ev_drive_cost,
+                realized_ev_charge_cost=realized_ev_charge_cost,
+                leftover_ev_provisional_cost=leftover_ev_provisional_cost,
+                provisional_ice_drive_cost=provisional_ice_drive_cost,
+                realized_ice_refuel_cost=realized_ice_refuel_cost,
+                leftover_ice_provisional_cost=leftover_ice_provisional_cost,
+                operating_cost_provisional_total=operating_cost_provisional_total,
+                operating_cost_realized_total=operating_cost_realized_total,
+                operating_cost_leftover_total=operating_cost_leftover_total,
+                grid_purchase_cost=grid_purchase_cost,
+                bess_discharge_cost=bess_discharge_cost,
+                contract_overage_cost=contract_overage_cost,
+                stationary_battery_degradation_cost=stationary_battery_degradation_cost,
+                pv_asset_cost=pv_asset_cost,
+                bess_asset_cost=bess_asset_cost,
+                total_cost_with_assets=total_cost_with_assets,
+                total_cost=total_cost,
+                objective_value=float("inf"),
+            )
         objective_value = objective_value_for_mode(
             objective_mode=problem.scenario.objective_mode,
             total_cost=total_cost,

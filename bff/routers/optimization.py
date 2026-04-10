@@ -3036,13 +3036,29 @@ def _run_optimization(
                 or "total_cost"
             )
         )
+        prepared_scope_summary = dict(scenario.get("prepared_scope_summary") or {})
+        prepared_scenario_hash = str(
+            prepared_scope_summary.get("scenario_hash")
+            or (prepared_payload.get("scenario_hash") if isinstance(prepared_payload, dict) else "")
+            or ""
+        )
+        prepared_scope_hash = str(
+            prepared_scope_summary.get("scope_hash")
+            or (prepared_payload.get("scope_hash") if isinstance(prepared_payload, dict) else "")
+            or ""
+        )
+        service_coverage_mode = str(getattr(problem.scenario, "service_coverage_mode", "strict") or "strict")
+        fixed_route_band_mode = bool((problem.metadata or {}).get("fixed_route_band_mode", False))
+        daily_fragment_limit = int((problem.metadata or {}).get("daily_fragment_limit") or 1)
 
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
             "feed_context": feed_context,
             "scope": {"serviceId": service_id, "depotId": depot_id},
             "prepared_input_id": prepared_input_id,
-            "prepared_scope_summary": dict(scenario.get("prepared_scope_summary") or {}),
+            "prepared_scope_summary": prepared_scope_summary,
+            "scenario_hash": prepared_scenario_hash,
+            "scope_hash": prepared_scope_hash,
             "solver_status": result_payload["status"],
             "mode": mode,
             "solver_mode": solver_mode,
@@ -3063,6 +3079,12 @@ def _run_optimization(
                         getattr(problem.scenario, "allow_same_day_depot_cycles", True),
                     )
                 ),
+                "service_coverage_mode": service_coverage_mode,
+                "fixed_route_band_mode": fixed_route_band_mode,
+                "daily_fragment_limit": daily_fragment_limit,
+                "prepared_input_id": prepared_input_id,
+                "scenario_hash": prepared_scenario_hash,
+                "scope_hash": prepared_scope_hash,
                 "max_depot_cycles_per_vehicle_per_day": int(
                     dict(engine_result.solver_metadata or {}).get(
                         "max_depot_cycles_per_vehicle_per_day",
@@ -3116,7 +3138,9 @@ def _run_optimization(
             "depot_id": depot_id,
             "service_id": service_id,
             "prepared_input_id": prepared_input_id,
-            "prepared_scope_summary": dict(scenario.get("prepared_scope_summary") or {}),
+            "prepared_scope_summary": prepared_scope_summary,
+            "scenario_hash": prepared_scenario_hash,
+            "scope_hash": prepared_scope_hash,
             "case_type": scenario.get("experiment_case_type"),
             "input_counts": {
                 "vehicles": build_report.vehicle_count,
@@ -3134,6 +3158,9 @@ def _run_optimization(
             "errors": build_report.errors,
             "solver_mode": mode,
             "solver_mode_effective": solver_mode,
+            "service_coverage_mode": service_coverage_mode,
+            "fixed_route_band_mode": fixed_route_band_mode,
+            "daily_fragment_limit": daily_fragment_limit,
             "time_limit": time_limit_seconds,
             "mip_gap": mip_gap,
             "random_seed": random_seed,

@@ -94,6 +94,7 @@ class RunPreparation:
     scenario_id: str
     dataset_version: str
     scenario_hash: str
+    scope_hash: Optional[str]
     solver_input_path: Optional[Path]
     scope_summary: dict
     prepared_input_id: Optional[str] = None
@@ -165,6 +166,16 @@ def _scenario_hash(scenario_dict: dict) -> str:
 
 def _prepared_input_id(scenario_hash: str) -> str:
     return f"prepared-{scenario_hash}"
+
+
+def _scope_hash(scope_payload: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        _canonicalize_for_hash(scope_payload),
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
 def _as_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -642,6 +653,16 @@ def _build_canonical_input(
         for idx, charger in enumerate(chargers)
         if charger.get("id") is not None or charger.get("charger_id") is not None
     }
+    scope_payload = {
+        "depot_ids": list(scope.depot_ids),
+        "route_ids": list(scope.route_ids),
+        "service_ids": list(scope.service_ids),
+        "service_date": scope.service_date,
+        "service_dates": service_dates,
+        "planning_days": planning_days,
+        "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
+    }
+    scope_hash = _scope_hash(scope_payload)
 
     return {
         "prepared_input_id": prepared_input_id,
@@ -650,6 +671,7 @@ def _build_canonical_input(
         "dataset_version": dataset_version,
         "random_seed": random_seed,
         "scenario_hash": scenario_hash,
+        "scope_hash": scope_hash,
         "prepared_at": time.time(),
         "solver_mode_requested": solver_mode_requested,
         "solver_mode_effective": solver_mode_effective,
@@ -663,15 +685,7 @@ def _build_canonical_input(
         "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
         "trip_count": len(trip_records),
         "timetable_row_count": len(stop_time_records),
-        "scope": {
-            "depot_ids": list(scope.depot_ids),
-            "route_ids": list(scope.route_ids),
-            "service_ids": list(scope.service_ids),
-            "service_date": scope.service_date,
-            "service_dates": service_dates,
-            "planning_days": planning_days,
-            "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
-        },
+        "scope": scope_payload,
         "counts": {
             "depot_count": len(scope.depot_ids),
             "route_count": len(scope.route_ids),
@@ -832,7 +846,9 @@ def materialize_scenario_from_prepared_input(
 
     hydrated["prepared_input_id"] = str(prepared_input.get("prepared_input_id") or "")
     hydrated["prepared_scope_summary"] = dict(prepared_input.get("scope") or {})
+    hydrated["prepared_scope_summary"]["scope_hash"] = str(prepared_input.get("scope_hash") or "")
     hydrated["prepare_profile"] = dict(prepared_input.get("prepare_profile") or {})
+    hydrated["scope_hash"] = str(prepared_input.get("scope_hash") or "")
     return hydrated
 
 
@@ -924,6 +940,7 @@ def _build_run_preparation(
             scenario_id=scenario_id,
             dataset_version=dataset_version,
             scenario_hash=scenario_hash,
+            scope_hash=str(solver_input.get("scope_hash") or ""),
             solver_input_path=solver_input_path,
             prepared_input_id=prepared_input_id,
             warnings=warnings,
@@ -935,6 +952,8 @@ def _build_run_preparation(
                 "service_dates": service_dates,
                 "planning_days": planning_days,
                 "prepared_input_id": prepared_input_id,
+                "scenario_hash": scenario_hash,
+                "scope_hash": str(solver_input.get("scope_hash") or ""),
                 "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
                 "trip_count": len(trips_df),
                 "timetable_row_count": len(timetables_df),
@@ -948,6 +967,7 @@ def _build_run_preparation(
             scenario_id=scenario_id,
             dataset_version=dataset_version,
             scenario_hash=scenario_hash,
+            scope_hash=None,
             solver_input_path=None,
             scope_summary={},
             error=str(exc),

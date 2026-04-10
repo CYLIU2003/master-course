@@ -47,6 +47,8 @@ from .problem import (
     ProblemVehicle,
     ProblemVehicleType,
     PVSlot,
+    normalize_service_coverage_mode,
+    service_coverage_allows_partial_service,
 )
 from .vehicle_assignment import assign_duty_fragments_to_vehicles, merge_duty_vehicle_maps
 
@@ -168,20 +170,15 @@ class ProblemBuilder:
             )
             or default_fragment_limit
         )
-        allow_partial_service = bool(
-            simulation_cfg.get(
-                "allow_partial_service",
-                solver_cfg.get("allow_partial_service", False),
-            )
-        )
-        service_coverage_mode = str(
+        service_coverage_mode = normalize_service_coverage_mode(
             simulation_cfg.get(
                 "service_coverage_mode",
                 solver_cfg.get("service_coverage_mode", "strict"),
             )
-        ).strip().lower()
-        if service_coverage_mode not in {"strict", "penalized"}:
-            service_coverage_mode = "strict"
+        )
+        allow_partial_service = service_coverage_allows_partial_service(
+            service_coverage_mode
+        )
         initial_soc_percent = self._safe_float(
             simulation_cfg.get("initial_soc_percent")
             or charging_cfg.get("initial_soc_percent")
@@ -323,6 +320,7 @@ class ProblemBuilder:
             horizon_start_min=horizon_start_min,
             max_depot_cycles_per_vehicle_per_day=max(1, max_depot_cycles_per_vehicle_per_day),
             allow_partial_service=allow_partial_service,
+            service_coverage_mode=service_coverage_mode,
             initial_soc_percent=initial_soc_percent,
             final_soc_floor_percent=final_soc_floor_percent,
             final_soc_target_percent=final_soc_target_percent,
@@ -382,6 +380,7 @@ class ProblemBuilder:
         horizon_start_min: int = 0,
         max_depot_cycles_per_vehicle_per_day: int = 3,
         allow_partial_service: bool = False,
+        service_coverage_mode: str = "strict",
         initial_soc_percent: Optional[float] = None,
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
@@ -415,6 +414,12 @@ class ProblemBuilder:
         vehicle_counts = vehicle_counts or {}
         timestep_min = max(int(timestep_min or 60), 1)
         context.fixed_route_band_mode = bool(fixed_route_band_mode)
+        service_coverage_mode = normalize_service_coverage_mode(
+            service_coverage_mode
+        )
+        allow_partial_service = service_coverage_allows_partial_service(
+            service_coverage_mode
+        )
         normalized_cost_component_flags = normalize_cost_component_flags(
             cost_component_flags,
             legacy_disable_vehicle_acquisition_cost=disable_vehicle_acquisition_cost,
