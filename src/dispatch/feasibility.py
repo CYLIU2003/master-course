@@ -10,10 +10,132 @@ after trip_i, applying the hard constraint:
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Sequence
 
 from .models import ConnectionResult, DispatchContext, Trip
 from .route_band import trip_route_band_key
+
+
+@dataclass(frozen=True)
+class StartupFeasibilityResult:
+    """Result of a single vehicle-trip startup feasibility check."""
+
+    vehicle_id: str
+    trip_id: str
+    feasible: bool
+    reason_code: str
+    reason: str = ""
+
+
+@dataclass
+class StartupFeasibilitySummary:
+    """Aggregate startup feasibility diagnostics for a vehicle fleet + trip set."""
+
+    total_checks: int = 0
+    feasible_count: int = 0
+    alias_count: int = 0
+    deadhead_count: int = 0
+    time_insufficiency_count: int = 0
+    unavailable_skipped: int = 0
+    results: List[StartupFeasibilityResult] = field(default_factory=list)
+
+    @property
+    def infeasible_count(self) -> int:
+        return self.alias_count + self.deadhead_count + self.time_insufficiency_count
+
+
+class StartupFeasibilityChecker:
+    """Check whether a vehicle can start each trip in a scenario."""
+
+    def check_all(
+        self,
+        vehicles: Sequence[object],
+        trips: Sequence[Trip],
+        context: DispatchContext,
+        *,
+        depot_departure_min: int = 0,
+    ) -> StartupFeasibilitySummary:
+        summary = StartupFeasibilitySummary()
+        for vehicle in vehicles:
+            vehicle_id = str(getattr(vehicle, "vehicle_id", ""))
+            vehicle_type = str(getattr(vehicle, "vehicle_type", ""))
+            home_depot_id = str(getattr(vehicle, "home_depot_id", ""))
+            if not bool(getattr(vehicle, "available", True)):
+                summary.unavailable_skipped += 1
+                continue
+
+            for trip in trips:
+                summary.total_checks += 1
+                result = self.check_one(
+                    vehicle_id=vehicle_id,
+                    vehicle_type=vehicle_type,
+                    home_depot_id=home_depot_id,
+                    trip=trip,
+                    context=context,
+                    depot_departure_min=depot_departure_min,
+                )
+                summary.results.append(result)
+                if result.feasible:
+                    summary.feasible_count += 1
+                elif result.reason_code == "alias":
+                    summary.alias_count += 1
+                elif result.reason_code == "deadhead":
+                    summary.deadhead_count += 1
+                elif result.reason_code == "time_insufficiency":
+                    summary.time_insufficiency_count += 1
+        return summary
+
+    def check_one(
+        self,
+        vehicle_id: str,
+        vehicle_type: str,
+        home_depot_id: str,
+        trip: Trip,
+        context: DispatchContext,
+        *,
+        depot_departure_min: int = 0,
+    ) -> StartupFeasibilityResult:
+        allowed_types = getattr(trip, "allowed_vehicle_types", ())
+        if vehicle_type not in allowed_types:
+            return StartupFeasibilityResult(
+                vehicle_id=vehicle_id,
+                trip_id=trip.trip_id,
+                feasible=False,
+                reason_code="alias",
+                reason=(
+                    f"Vehicle type '{vehicle_type}' not in allowed types {allowed_types} "
+                    f"for trip '{trip.trip_id}'"
+                ),
+            )
+
+        startup_result = evaluate_startup_feasibility(
+            trip,
+            context,
+            home_depot_id,
+            earliest_available_min=depot_departure_min,
+        )
+        if startup_result.feasible:
+            return StartupFeasibilityResult(
+                vehicle_id=vehicle_id,
+                trip_id=trip.trip_id,
+                feasible=True,
+                reason_code="feasible",
+                reason=startup_result.reason,
+            )
+
+        reason_code_map = {
+            "startup_time_insufficient": "time_insufficiency",
+            "startup_deadhead_missing": "deadhead",
+            "startup_alias_missing": "deadhead",
+        }
+        return StartupFeasibilityResult(
+            vehicle_id=vehicle_id,
+            trip_id=trip.trip_id,
+            feasible=False,
+            reason_code=reason_code_map.get(startup_result.reason_code, "deadhead"),
+            reason=startup_result.reason,
+        )
 
 
 class FeasibilityEngine:
