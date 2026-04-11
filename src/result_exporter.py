@@ -26,6 +26,7 @@ from .data_schema import ProblemData
 from .milp_model import MILPResult
 from .model_sets import ModelSets
 from .parameter_builder import DerivedParams, get_grid_price
+from .run_output_layout import allocate_run_dir
 from .route_code_utils import extract_route_series_from_candidates
 from .simulator import SimulationResult
 
@@ -48,11 +49,9 @@ def _to_scalar_metric(value: Any) -> float:
 
 
 def _make_run_dir(output_root: str | Path) -> Path:
-    """output/run_yyyymmdd_hhmm/ ディレクトリを作成して返す"""
-    ts = datetime.now().strftime("%Y%m%d_%H%M")
-    run_dir = Path(output_root) / f"run_{ts}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
+    """output/<date>/run_yyyymmdd_hhmm/ ディレクトリを作成して返す"""
+
+    return allocate_run_dir(output_root)
 
 
 def export_all(
@@ -87,11 +86,50 @@ def export_all(
     export_vehicle_timelines(run_dir, data, ms, dp, milp_result)
     export_objective_breakdown(run_dir, milp_result, sim_result)
     export_simulation_conditions(run_dir, data, dp)
-    export_graph_exports_phase1(run_dir, data, ms, dp, milp_result, sim_result, run_label)
+    graph_artifacts = export_graph_exports_phase1(run_dir, data, ms, dp, milp_result, sim_result, run_label)
     try:
         export_excel(data, ms, dp, milp_result, sim_result, run_dir, run_label)
     except ImportError:
         pass  # openpyxl 未インストール時はスキップ
+
+    run_manifest = {
+        "generated_at": datetime.now().isoformat(),
+        "run_dir": str(run_dir),
+        "files": sorted(
+            [
+                path.relative_to(run_dir).as_posix()
+                for path in run_dir.rglob("*")
+                if path.is_file()
+            ]
+        ),
+        "units": {
+            "objective_value": "JPY",
+            "solve_time_seconds": "s",
+            "energy_cost": "JPY",
+            "demand_charge": "JPY",
+            "vehicle_cost": "JPY",
+            "driver_cost": "JPY",
+            "fuel_cost": "JPY",
+            "penalty_unserved": "JPY",
+            "total_cost": "JPY",
+            "co2_cost": "JPY",
+            "total_co2_kg": "kg-CO2",
+            "grid_to_bus_kwh": "kWh",
+            "pv_to_bus_kwh": "kWh",
+            "grid_to_bess_kwh": "kWh",
+            "bess_to_bus_kwh": "kWh",
+            "pv_to_bess_kwh": "kWh",
+            "pv_curtail_kwh": "kWh",
+            "grid_import_total_kwh": "kWh",
+            "contract_over_limit_kwh": "kWh",
+            "contract_overage_cost": "JPY",
+            "peak_grid_kw": "kW",
+        },
+        "graph": graph_artifacts,
+    }
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps(run_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     return run_dir
 
@@ -104,7 +142,7 @@ def export_graph_exports_phase1(
     milp: MILPResult,
     sim: SimulationResult,
     run_label: Optional[str] = None,
-) -> None:
+) -> Dict[str, Any]:
     """
     Graph export specification Phase 1.
 
@@ -260,11 +298,7 @@ def export_graph_exports_phase1(
                 "enabled": bool(route_band_diagrams["entries"]),
                 "grouping_key": "band_id",
                 "diagram_format": "svg",
-                "manifest_file": (
-                    "route_band_diagrams/manifest.json"
-                    if route_band_diagrams["entries"]
-                    else ""
-                ),
+                "manifest_file": "route_band_diagrams/manifest.json",
                 "diagram_count": len(route_band_diagrams["entries"]),
             },
             "vehicle_operation_diagrams": {
@@ -282,6 +316,18 @@ def export_graph_exports_phase1(
     }
     with open(graph_dir / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    return {
+        "graph_manifest_path": "graph/manifest.json",
+        "route_band_diagrams_manifest": "graph/route_band_diagrams/manifest.json",
+        "route_band_diagram_count": len(route_band_diagrams["entries"]),
+        "vehicle_operation_diagrams_manifest": (
+            "graph/vehicle_operation_diagrams/manifest.json"
+            if all_vehicle_operation_diagrams["entries"]
+            else ""
+        ),
+        "vehicle_operation_diagram_count": len(all_vehicle_operation_diagrams["entries"]),
+    }
 
 
 def _tokyo_now() -> datetime:
@@ -2334,8 +2380,6 @@ def _write_route_band_diagram_assets(
 ) -> None:
     entries = list(assets.get("entries") or [])
     svg_payloads = dict(assets.get("svg_payloads") or assets.get("svgs") or {})
-    if not entries:
-        return
     output_dir = target_root / "route_band_diagrams"
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -2351,6 +2395,7 @@ def _write_route_band_diagram_assets(
         "diagram_format": "svg",
         "planning_days": planning_days,
         "entries": entries,
+        "diagram_count": len(entries),
     }
     with open(output_dir / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)

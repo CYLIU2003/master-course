@@ -155,45 +155,7 @@ def resolve_simulation_result_path(
     local_path = run_dir / "simulation_result.json"
     if local_path.exists():
         return local_path
-
-    if not isinstance(optimization_result, Mapping):
-        return None
-
-    scenario_id = pick_text(optimization_result.get("scenario_id"))
-    scope = optimization_result.get("scope") if isinstance(optimization_result.get("scope"), Mapping) else {}
-    depot_id = pick_text(scope.get("depotId"))
-    service_id = pick_text(scope.get("serviceId"))
-    feed_context = (
-        optimization_result.get("feed_context")
-        if isinstance(optimization_result.get("feed_context"), Mapping)
-        else {}
-    )
-    feed_id = pick_text(feed_context.get("feedId"), "unscoped")
-    snapshot_id = pick_text(feed_context.get("snapshotId"), scenario_id)
-    if not (scenario_id and depot_id and service_id):
-        return None
-
-    direct_path = (
-        outputs_root()
-        / feed_id
-        / snapshot_id
-        / "simulation"
-        / scenario_id
-        / depot_id
-        / service_id
-        / "simulation_result.json"
-    )
-    if direct_path.exists():
-        return direct_path
-
-    fallback_candidates = sorted(
-        outputs_root().glob(
-            f"*/*/simulation/{scenario_id}/{depot_id}/{service_id}/simulation_result.json"
-        ),
-        key=lambda item: item.stat().st_mtime if item.exists() else 0.0,
-        reverse=True,
-    )
-    return fallback_candidates[0] if fallback_candidates else None
+    return None
 
 
 def load_run_payloads(run_dir: Path) -> dict[str, dict]:
@@ -227,28 +189,18 @@ def load_run_payloads(run_dir: Path) -> dict[str, dict]:
 
 def parse_run_path(run_dir: Path) -> dict[str, str]:
     parts = [part for part in run_dir.as_posix().split("/") if part]
-    if "scenario" in parts:
-        idx = parts.index("scenario")
-        if idx >= 1 and len(parts) > idx + 5:
-            return {
-                "date": parts[idx - 1],
-                "scenario_id": parts[idx + 1],
-                "mode": parts[idx + 2],
-                "depot": parts[idx + 3],
-                "service": parts[idx + 4],
-                "run_id": parts[idx + 5],
-            }
-    if "optimization" in parts:
-        idx = parts.index("optimization")
-        if idx >= 1 and len(parts) > idx + 4:
-            return {
-                "date": parts[idx - 1],
-                "scenario_id": parts[idx + 1],
-                "mode": "",
-                "depot": parts[idx + 2],
-                "service": parts[idx + 3],
-                "run_id": parts[idx + 4],
-            }
+    for idx, part in enumerate(parts):
+        if len(part) == 10 and part[4] == "-" and part[7] == "-" and idx + 1 < len(parts):
+            run_id = parts[idx + 1]
+            if run_id.startswith("run_"):
+                return {
+                    "date": part,
+                    "scenario_id": "unknown",
+                    "mode": "",
+                    "depot": "unknown",
+                    "service": "unknown",
+                    "run_id": run_id,
+                }
     return {
         "date": "unknown",
         "scenario_id": "unknown",
@@ -327,10 +279,14 @@ def discover_run_dirs(base_dir: Path) -> List[Path]:
     for path in base_dir.rglob("run_*"):
         if not path.is_dir():
             continue
+        parsed = parse_run_path(path)
+        if parsed.get("date", "unknown") == "unknown":
+            continue
         has_summary = (path / "summary.json").exists()
         has_gantt = (path / "vehicle_timeline_gantt.csv").exists()
         has_optimization = (path / "optimization_result.json").exists()
-        if has_summary or has_gantt or has_optimization:
+        has_simulation = (path / "simulation_result.json").exists()
+        if has_summary or has_gantt or has_optimization or has_simulation:
             run_dirs.append(path)
     run_dirs.sort(key=lambda item: item.as_posix())
     return run_dirs

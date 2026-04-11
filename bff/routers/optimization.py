@@ -60,6 +60,7 @@ from src.optimization import (
     ResultSerializer,
 )
 from src.optimization.rolling.reoptimizer import RollingReoptimizer
+from src.run_output_layout import allocate_run_dir
 from src.pipeline.solve import solve_problem_data
 
 router = APIRouter(tags=["optimization"])
@@ -495,11 +496,13 @@ def _scoped_output_dir(
     service_id: Optional[str] = None,
     depot_id: Optional[str] = None,
 ) -> str:
-    feed_id = str(feed_context.get("feedId") or "unscoped")
-    snapshot_id = str(feed_context.get("snapshotId") or scenario_id)
-    service_scope = str(service_id or "all_services")
-    depot_scope = str(depot_id or "all_depots")
-    return str(Path(root) / feed_id / snapshot_id / stage / scenario_id / depot_scope / service_scope)
+    run_date = str(
+        feed_context.get("snapshotId")
+        or feed_context.get("serviceDate")
+        or feed_context.get("service_date")
+        or ""
+    ).strip()
+    return str(allocate_run_dir(root, run_date))
 
 
 def _persist_json_outputs(output_dir: str, payloads: Dict[str, Dict[str, Any]]) -> None:
@@ -537,10 +540,7 @@ def _dated_scenario_run_dir(
 ) -> Path:
     root = output_paths.outputs_root()
     service_date = _service_date_for_output(scenario)
-    depot_scope = str(depot_id or "all_depots")
-    run_dir = root / service_date / "scenario" / scenario_id / str(mode) / depot_scope / service_id / _run_stamp()
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
+    return allocate_run_dir(root, service_date)
 
 
 def _write_csv_rows(path: Path, rows: List[Dict[str, Any]], fieldnames: List[str]) -> None:
@@ -1199,6 +1199,46 @@ def _persist_rich_run_outputs(
         ["component", "value"],
     )
 
+    raw_dir = run_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "optimization_result.json").write_text(
+        json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (raw_dir / "optimization_audit.json").write_text(
+        json.dumps(optimization_audit, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (raw_dir / "solver_result.json").write_text(
+        json.dumps(result_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    if canonical_solver_result is not None:
+        (raw_dir / "canonical_solver_result.json").write_text(
+            json.dumps(canonical_solver_result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    raw_assignment_rows: List[Dict[str, Any]] = []
+    for vehicle_id, trip_ids in assignment.items():
+        for order, trip_id in enumerate(list(trip_ids or []), start=1):
+            raw_assignment_rows.append(
+                {
+                    "vehicle_id": vehicle_id,
+                    "sequence": order,
+                    "trip_id": trip_id,
+                }
+            )
+    _write_csv_rows(
+        raw_dir / "assignment.csv",
+        raw_assignment_rows,
+        ["vehicle_id", "sequence", "trip_id"],
+    )
+    raw_unserved_rows = [
+        {"trip_id": trip_id, "status": "unserved"}
+        for trip_id in list(result_payload.get("unserved_tasks") or [])
+    ]
+    _write_csv_rows(
+        raw_dir / "unserved_trips.csv",
+        raw_unserved_rows,
+        ["trip_id", "status"],
+    )
+
     graph_artifacts = dict(optimization_result.get("graph_artifacts") or {})
     timeline_candidates: List[Path] = []
     if graph_artifacts.get("vehicle_timeline_path"):
@@ -1480,8 +1520,23 @@ def _persist_rich_run_outputs(
 
     run_manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "files": sorted([p.name for p in run_dir.iterdir() if p.is_file()]),
+        "files": sorted(
+            [p.relative_to(run_dir).as_posix() for p in run_dir.rglob("*") if p.is_file()]
+        ),
         "units": unit_map,
+        "graph": {
+            "manifest_path": "graph/manifest.json",
+            "route_band_diagrams_manifest": str(
+                graph_artifacts.get("manifest_path") or "graph/route_band_diagrams/manifest.json"
+            ),
+            "route_band_diagram_count": int(graph_artifacts.get("diagram_count") or 0),
+            "vehicle_operation_diagrams_manifest": str(
+                graph_artifacts.get("vehicle_operation_diagram_manifest_path") or ""
+            ),
+            "vehicle_operation_diagram_count": int(
+                graph_artifacts.get("vehicle_operation_diagram_count") or 0
+            ),
+        },
     }
     (run_dir / "run_manifest.json").write_text(
         json.dumps(run_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -2418,16 +2473,11 @@ def _persist_canonical_graph_exports(
     planning_days = int(problem.scenario.planning_days or 1)
     simulation_cfg = scenario.get("simulation_config") or {}
     solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
-    diagrams_enabled = bool(
-        simulation_cfg.get("enable_vehicle_diagram_output", True)
-        or simulation_cfg.get("fixed_route_band_mode", False)
-        or solver_cfg.get("fixed_route_band_mode", False)
-        or bool((problem.metadata or {}).get("fixed_route_band_mode", False))
-    )
     assets: Dict[str, Any] = {"entries": [], "svgs": {}}
     vehicle_operation_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
     if planning_days > 1:
         all_vehicle_operation_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
+        all_route_band_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
         timestep_min = int(problem.scenario.timestep_min or 30)
         for day_idx in range(planning_days):
             day_rows = _filter_timeline_rows_for_day(timeline_rows, day_idx, timestep_min)
@@ -2435,45 +2485,39 @@ def _persist_canonical_graph_exports(
                 day_rows,
                 f"{scenario_id}_d{day_idx}",
             )
+            day_route_band_assets = _build_route_band_diagram_assets(
+                day_rows,
+                f"{scenario_id}_d{day_idx}",
+                graph_context=graph_context,
+            )
             for entry in day_vehicle_operation_assets.get("entries", []):
                 entry["day_index"] = day_idx
                 entry["diagram_file"] = f"day_{day_idx}/{entry.get('diagram_file', '')}"
                 all_vehicle_operation_assets["entries"].append(entry)
             for svg_key, svg_content in (day_vehicle_operation_assets.get("svg_payloads") or day_vehicle_operation_assets.get("svgs") or {}).items():
                 all_vehicle_operation_assets["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
+            for entry in day_route_band_assets.get("entries", []):
+                entry["day_index"] = day_idx
+                entry["diagram_file"] = f"day_{day_idx}/{entry.get('diagram_file', '')}"
+                all_route_band_assets["entries"].append(entry)
+            for svg_key, svg_content in (day_route_band_assets.get("svg_payloads") or day_route_band_assets.get("svgs") or {}).items():
+                all_route_band_assets["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
         vehicle_operation_assets = all_vehicle_operation_assets
-        if diagrams_enabled:
-            all_assets: Dict[str, Any] = {"entries": [], "svgs": {}}
-            for day_idx in range(planning_days):
-                day_rows = _filter_timeline_rows_for_day(timeline_rows, day_idx, timestep_min)
-                day_assets = _build_route_band_diagram_assets(
-                    day_rows,
-                    f"{scenario_id}_d{day_idx}",
-                    graph_context=graph_context,
-                )
-                for entry in day_assets.get("entries", []):
-                    entry["day_index"] = day_idx
-                    entry["diagram_file"] = f"day_{day_idx}/{entry.get('diagram_file', '')}"
-                    all_assets["entries"].append(entry)
-                for svg_key, svg_content in (day_assets.get("svg_payloads") or day_assets.get("svgs") or {}).items():
-                    all_assets["svgs"][f"day_{day_idx}/{svg_key}"] = svg_content
-            assets = all_assets
+        assets = all_route_band_assets
     else:
         vehicle_operation_assets = _build_vehicle_operation_diagram_assets(
             timeline_rows,
             scenario_id,
         )
-        if diagrams_enabled:
-            assets = _build_route_band_diagram_assets(
-                timeline_rows,
-                scenario_id,
-                graph_context=graph_context,
-            )
+        assets = _build_route_band_diagram_assets(
+            timeline_rows,
+            scenario_id,
+            graph_context=graph_context,
+        )
     route_band_dir = graph_dir / "route_band_diagrams"
-    if not assets.get("entries") and route_band_dir.exists():
+    if route_band_dir.exists():
         shutil.rmtree(route_band_dir)
-    if diagrams_enabled:
-        _write_route_band_diagram_assets(graph_dir, assets, planning_days=planning_days)
+    _write_route_band_diagram_assets(graph_dir, assets, planning_days=planning_days)
     _write_vehicle_operation_diagram_assets(
         graph_dir,
         vehicle_operation_assets,
@@ -2501,11 +2545,7 @@ def _persist_canonical_graph_exports(
                 "enabled": bool(assets.get("entries")),
                 "grouping_key": "band_id",
                 "diagram_format": "svg",
-                "manifest_file": (
-                    "route_band_diagrams/manifest.json"
-                    if assets.get("entries")
-                    else ""
-                ),
+                "manifest_file": "route_band_diagrams/manifest.json",
                 "diagram_count": len(list(assets.get("entries") or [])),
             },
             "vehicle_operation_diagrams": {
@@ -2526,8 +2566,7 @@ def _persist_canonical_graph_exports(
         encoding="utf-8",
     )
     manifest_relpath = None
-    if assets.get("entries"):
-        manifest_relpath = "graph/route_band_diagrams/manifest.json"
+    manifest_relpath = "graph/route_band_diagrams/manifest.json"
     return {
         "enabled": bool(assets.get("entries")),
         "diagram_count": len(list(assets.get("entries") or [])),
@@ -3274,29 +3313,6 @@ def _run_optimization(
             charging_summary=charging_summary_payload,
             charging_flow_payload=charging_flow_payload,
         )
-        dated_run_dir = _dated_scenario_run_dir(
-            scenario=scenario,
-            scenario_id=scenario_id,
-            mode=mode,
-            service_id=service_id,
-            depot_id=depot_id,
-        )
-        src_graph_dir = Path(output_dir) / "graph"
-        dst_graph_dir = dated_run_dir / "graph"
-        if src_graph_dir.exists():
-            shutil.copytree(src_graph_dir, dst_graph_dir, dirs_exist_ok=True)
-        _persist_rich_run_outputs(
-            run_dir=dated_run_dir,
-            scenario=scenario,
-            optimization_result=optimization_result,
-            optimization_audit=optimization_audit,
-            result_payload=result_payload,
-            sim_payload=sim_payload,
-            canonical_solver_result=_full_new_result,
-            graph_source_dir=dst_graph_dir,
-            charging_summary=charging_summary_payload,
-            charging_flow_payload=charging_flow_payload,
-        )
         store.update_scenario(scenario_id, status="optimized")
         job_store.update_job(
             job_id,
@@ -3314,7 +3330,7 @@ def _run_optimization(
                     "objective_value": optimization_result.get("objective_value"),
                     "solver_status": optimization_result.get("solver_status"),
                     "feed_context": feed_context,
-                    "dated_run_dir": str(dated_run_dir),
+                    "run_dir": output_dir,
                 },
             ),
         )

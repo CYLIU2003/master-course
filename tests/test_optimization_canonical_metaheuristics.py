@@ -38,6 +38,12 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
         ],
     }
     canonical_problem = SimpleNamespace(
+        scenario=SimpleNamespace(
+            service_coverage_mode="strict",
+            fixed_route_band_mode=False,
+            daily_fragment_limit=1,
+            timestep_min=30,
+        ),
         trips=[object()],
         vehicles=[SimpleNamespace(vehicle_id="veh-1", vehicle_type="BEV")],
         chargers=[],
@@ -51,6 +57,9 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
         plan=SimpleNamespace(
             vehicle_paths=lambda: {"veh-1": ["trip-1"]},
             unserved_trip_ids=[],
+            vehicle_fragment_counts=lambda: {"veh-1": 1},
+            vehicles_with_multiple_fragments=lambda: [],
+            max_fragments_observed=lambda: 1,
         ),
         solver_metadata={"objective_mode": "total_cost"},
         cost_breakdown={"energy_cost": 10.0, "demand_cost": 0.0, "vehicle_cost": 0.0},
@@ -158,6 +167,12 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
         ],
     }
     canonical_problem = SimpleNamespace(
+        scenario=SimpleNamespace(
+            service_coverage_mode="strict",
+            fixed_route_band_mode=False,
+            daily_fragment_limit=1,
+            timestep_min=30,
+        ),
         trips=[object()],
         vehicles=[SimpleNamespace(vehicle_id="veh-1", vehicle_type="BEV")],
         chargers=[],
@@ -171,6 +186,9 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
         plan=SimpleNamespace(
             vehicle_paths=lambda: {"veh-1": ["trip-1"]},
             unserved_trip_ids=[],
+            vehicle_fragment_counts=lambda: {"veh-1": 1},
+            vehicles_with_multiple_fragments=lambda: [],
+            max_fragments_observed=lambda: 1,
         ),
         solver_metadata={"objective_mode": "total_cost"},
         cost_breakdown={"energy_cost": 10.0, "demand_cost": 0.0, "vehicle_cost": 0.0},

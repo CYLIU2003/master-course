@@ -22,21 +22,18 @@ def _write_json(path: Path, payload: object) -> None:
 
 def test_parse_run_path_supports_new_scenario_layout() -> None:
     run_dir = Path(
-        "C:/master-course/output/2025-08-04/scenario/237d5623-aa94-4f72-9da1-17b9070264be/mode_alns_only/tsurumaki/WEEKDAY/run_20260405_1713"
+        "C:/master-course/output/2025-08-04/run_20260405_1713"
     )
 
     parsed = parse_run_path(run_dir)
 
     assert parsed["date"] == "2025-08-04"
-    assert parsed["scenario_id"] == "237d5623-aa94-4f72-9da1-17b9070264be"
-    assert parsed["mode"] == "mode_alns_only"
-    assert parsed["depot"] == "tsurumaki"
-    assert parsed["service"] == "WEEKDAY"
     assert parsed["run_id"] == "run_20260405_1713"
+    assert parsed["scenario_id"] == "unknown"
 
 
 def test_collect_run_metas_from_report_bundle_reads_comparison_rows_and_manifest(tmp_path: Path) -> None:
-    run_dir = tmp_path / "output" / "2025-08-04" / "scenario" / "scenario-1" / "mode_milp_only" / "dep-1" / "WEEKDAY" / "run_20260405_1708"
+    run_dir = tmp_path / "output" / "2025-08-04" / "run_20260405_1708"
     _write_json(
         run_dir / "optimization_result.json",
         {
@@ -114,8 +111,8 @@ def test_collect_run_metas_from_report_bundle_reads_comparison_rows_and_manifest
 
 
 def test_resolve_run_dir_input_picks_best_objective_from_report_bundle_and_professor_report_mentions_exactness(tmp_path: Path) -> None:
-    run_dir_a = tmp_path / "output" / "2025-08-04" / "scenario" / "scenario-1" / "mode_ga_only" / "dep-1" / "WEEKDAY" / "run_a"
-    run_dir_b = tmp_path / "output" / "2025-08-04" / "scenario" / "scenario-1" / "mode_alns_only" / "dep-1" / "WEEKDAY" / "run_b"
+    run_dir_a = tmp_path / "output" / "2025-08-04" / "run_a"
+    run_dir_b = tmp_path / "output" / "2025-08-04" / "run_b"
     for run_dir, total_cost in ((run_dir_a, 200.0), (run_dir_b, 150.0)):
         _write_json(
             run_dir / "optimization_result.json",
@@ -186,21 +183,12 @@ def test_resolve_run_dir_input_picks_best_objective_from_report_bundle_and_profe
 
 
 def test_collect_run_meta_loads_external_simulation_result_and_professor_report_mentions_it(tmp_path: Path, monkeypatch) -> None:
-    run_dir = (
-        tmp_path
-        / "output"
-        / "2025-08-04"
-        / "scenario"
-        / "scenario-1"
-        / "mode_alns_only"
-        / "dep-1"
-        / "WEEKDAY"
-        / "run_20260405_1713"
-    )
+    run_dir = tmp_path / "output" / "2025-08-04" / "run_20260405_1713"
     _write_json(
         run_dir / "optimization_result.json",
         {
             "scenario_id": "scenario-1",
+            "mode": "mode_alns_only",
             "feed_context": {"feedId": "tokyu", "snapshotId": "2026-03-23"},
             "prepared_input_id": "prepared-1",
             "objective_mode": "total_cost",
@@ -228,18 +216,8 @@ def test_collect_run_meta_loads_external_simulation_result_and_professor_report_
     )
     _write_json(run_dir / "cost_breakdown_detail.json", {"total_operating_cost": 123.4})
     _write_json(run_dir / "co2_breakdown.json", {"total_co2_kg": 56.7})
-    simulation_dir = (
-        tmp_path
-        / "output"
-        / "tokyu"
-        / "2026-03-23"
-        / "simulation"
-        / "scenario-1"
-        / "dep-1"
-        / "WEEKDAY"
-    )
     _write_json(
-        simulation_dir / "simulation_result.json",
+        run_dir / "simulation_result.json",
         {
             "scenario_id": "scenario-1",
             "source": "optimization_result",
@@ -253,7 +231,6 @@ def test_collect_run_meta_loads_external_simulation_result_and_professor_report_
             },
         },
     )
-    monkeypatch.setenv("MC_OUTPUTS_DIR", str(tmp_path / "output"))
 
     meta = collect_run_meta(run_dir)
     markdown = build_professor_report_markdown([meta], title="教授向けシナリオ報告")
@@ -263,7 +240,7 @@ def test_collect_run_meta_loads_external_simulation_result_and_professor_report_
     assert meta.route_count == 2
     assert meta.vehicle_count_available == 12
     assert meta.charger_count_available == 3
-    assert meta.simulation_result_path == simulation_dir / "simulation_result.json"
+    assert meta.simulation_result_path == run_dir / "simulation_result.json"
     assert meta.simulation_source == "optimization_result"
     assert meta.simulation_feasible is True
     assert meta.simulation_total_distance_km == 88.0
@@ -277,21 +254,12 @@ def test_solver_comparison_and_route_band_exports_write_explicit_files(tmp_path:
     report_dir = tmp_path / "output" / "reports" / "bundle-3"
     metas = []
     for mode, objective_value in (("mode_milp_only", 120.0), ("mode_alns_only", 100.0)):
-        run_dir = (
-            tmp_path
-            / "output"
-            / "2025-08-04"
-            / "scenario"
-            / "scenario-1"
-            / mode
-            / "dep-1"
-            / "WEEKDAY"
-            / f"run_{mode}"
-        )
+        run_dir = tmp_path / "output" / "2025-08-04" / f"run_{mode}"
         _write_json(
             run_dir / "optimization_result.json",
             {
                 "scenario_id": "scenario-1",
+                "mode": mode,
                 "prepared_input_id": "prepared-1",
                 "objective_mode": "total_cost",
                 "scope": {"depotId": "dep-1", "serviceId": "WEEKDAY"},

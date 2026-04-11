@@ -44,6 +44,7 @@ from bff.services.run_preparation import (
 )
 from bff.store import job_store, output_paths, scenario_store as store
 from src.milp_model import MILPResult
+from src.run_output_layout import allocate_run_dir
 from src.pipeline.simulate import simulate_problem_data
 
 router = APIRouter(tags=["simulation"])
@@ -351,11 +352,13 @@ def _scoped_output_dir(
     service_id: Optional[str] = None,
     depot_id: Optional[str] = None,
 ) -> str:
-    feed_id = str(feed_context.get("feedId") or "unscoped")
-    snapshot_id = str(feed_context.get("snapshotId") or scenario_id)
-    service_scope = str(service_id or "all_services")
-    depot_scope = str(depot_id or "all_depots")
-    return str(Path(root) / feed_id / snapshot_id / stage / scenario_id / depot_scope / service_scope)
+    run_date = str(
+        feed_context.get("snapshotId")
+        or feed_context.get("serviceDate")
+        or feed_context.get("service_date")
+        or ""
+    ).strip()
+    return str(allocate_run_dir(root, run_date))
 
 
 def _persist_json_outputs(output_dir: str, payloads: Dict[str, Dict[str, Any]]) -> None:

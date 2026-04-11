@@ -217,6 +217,19 @@ def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
     assert (out_dir / "route_band_diagrams" / "route_22.svg").exists()
 
 
+
+def test_route_band_diagram_assets_write_empty_manifest_when_no_entries(tmp_path) -> None:
+    out_dir = tmp_path / "graph_exports"
+
+    _write_route_band_diagram_assets(out_dir, {"entries": [], "svgs": {}})
+
+    manifest_path = out_dir / "route_band_diagrams" / "manifest.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["entries"] == []
+    assert manifest["diagram_count"] == 0
+    assert (out_dir / "route_band_diagrams").exists()
+
 def test_route_band_diagram_infers_depot_stay_rows() -> None:
     rows = [
         _timeline_row(

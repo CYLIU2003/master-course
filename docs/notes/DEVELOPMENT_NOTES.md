@@ -39,6 +39,28 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-04-11] dated run output layout and mandatory route-band manifest
+
+- 背景:
+  - canonical / simulation / exporter の run 保存先が `output/<service_date>/scenario/...` や feed/snapshot 系の深い階層に分散しており、run 単位の成果物確認がしづらかった。
+  - `graph/route_band_diagrams` は条件付き生成だったため、SVG が出ない run で manifest が欠けることがあった。
+
+- 対応:
+  - `src/run_output_layout.py` を追加し、`output/<YYYY-MM-DD>/run_YYYYMMDD_HHMM[/_02]` の collision-safe な割当を共通化した。
+  - `bff/routers/optimization.py` / `bff/routers/simulation.py` の保存先を新 layout に統一し、optimization は `raw/` 配下に `optimization_result.json` / `optimization_audit.json` / `solver_result.json` / `canonical_solver_result.json` / `assignment.csv` / `unserved_trips.csv` を残すようにした。
+  - `src/result_exporter.py` は `graph/route_band_diagrams/manifest.json` を常時出力し、`run_manifest.json` に graph artifact 参照を載せるようにした。
+  - `tools/_visualizer_report_utils.py` は新 run 形式の読み取りへ寄せ、simulation_result は run 直下の同名ファイルを優先参照するようにした。
+
+- 研究上の影響:
+  - output の正本は run 直下に一本化され、旧 scenario/deep-feed 階層を正本として使わない。
+  - route-band 図は「出せるときだけ」ではなく run の標準成果物になった。SVG が 0 件でも manifest は残る。
+
+- 回帰テスト:
+  - `tests/test_run_output_layout.py`
+  - `tests/test_graph_export_route_band_diagrams.py`
+  - `tests/test_canonical_graph_export_parity.py`
+  - `tests/test_visualizer_report_utils.py`
+
 ### [DEV-2026-04-11] strict precheck の route-family 欠落による偽 infeasible 修正
 
 - 背景:

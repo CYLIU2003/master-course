@@ -155,7 +155,7 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
         output_dir=str(tmp_path),
     )
 
-    assert artifacts["enabled"] is False
+    assert artifacts["enabled"] is True
     assert (tmp_path / "graph" / "vehicle_timeline.csv").exists()
     assert (tmp_path / "graph" / "soc_events.csv").exists()
     assert (tmp_path / "graph" / "depot_power_timeseries_5min.csv").exists()
@@ -163,6 +163,10 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert (tmp_path / "graph" / "cost_breakdown.json").exists()
     assert (tmp_path / "graph" / "kpi_summary.json").exists()
     assert (tmp_path / "graph" / "manifest.json").exists()
+    assert artifacts["manifest_path"] == "graph/route_band_diagrams/manifest.json"
+    route_band_manifest = json.loads((tmp_path / "graph" / "route_band_diagrams" / "manifest.json").read_text(encoding="utf-8"))
+    assert route_band_manifest["entries"]
+    assert route_band_manifest["diagram_count"] == len(route_band_manifest["entries"])
     assert (tmp_path / "graph" / "vehicle_operation_diagrams" / "manifest.json").exists()
 
 
@@ -212,6 +216,16 @@ def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(t
     assert (run_dir / "charging_summary.json").exists()
     assert (run_dir / "depot_energy_flows.csv").exists()
     assert (run_dir / "site_power_balance.csv").exists()
+    assert (run_dir / "raw" / "optimization_result.json").exists()
+    assert (run_dir / "raw" / "optimization_audit.json").exists()
+    assert (run_dir / "raw" / "solver_result.json").exists()
+    assert (run_dir / "raw" / "canonical_solver_result.json").exists()
+    assert (run_dir / "raw" / "assignment.csv").exists()
+    assert (run_dir / "raw" / "unserved_trips.csv").exists()
+    run_manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert run_manifest["graph"]["manifest_path"] == "graph/manifest.json"
+    assert run_manifest["graph"]["route_band_diagrams_manifest"] == "graph/route_band_diagrams/manifest.json"
+    assert run_manifest["graph"]["route_band_diagram_count"] == artifacts["diagram_count"]
     charging_summary_json = json.loads((run_dir / "charging_summary.json").read_text(encoding="utf-8"))
     assert charging_summary_json["totals"]["grid_to_bus_kwh"] == 1.0
     assert charging_summary_json["totals"]["pv_to_bus_kwh"] == 0.5
