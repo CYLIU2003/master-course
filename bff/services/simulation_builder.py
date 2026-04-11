@@ -475,6 +475,9 @@ def apply_builder_configuration(
     overlay.solver_config.allow_partial_service = bool(
         body.simulation_settings.allow_partial_service
     )
+    overlay.solver_config.service_coverage_mode = (
+        "penalized" if overlay.solver_config.allow_partial_service else "strict"
+    )
     overlay.solver_config.unserved_penalty = float(
         body.simulation_settings.unserved_penalty
     )
@@ -664,6 +667,7 @@ def apply_builder_configuration(
         "milp_max_successors_per_trip": overlay.solver_config.milp_max_successors_per_trip,
         "enable_vehicle_diagram_output": overlay.solver_config.enable_vehicle_diagram_output,
         "output_vehicle_diagram": overlay.solver_config.output_vehicle_diagram,
+        "service_coverage_mode": overlay.solver_config.service_coverage_mode,
         "allow_partial_service": overlay.solver_config.allow_partial_service,
         "unserved_penalty": overlay.solver_config.unserved_penalty,
         "objective_weights": dict(overlay.solver_config.objective_weights),

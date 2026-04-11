@@ -23,6 +23,7 @@ from src.objective_modes import (
     legacy_objective_weights_for_mode,
     normalize_objective_mode,
 )
+from src.optimization.common.problem import resolve_service_coverage_mode
 from src.preprocess.trip_converter import (
     build_vehicle_charger_compat,
     build_vehicle_task_compat,
@@ -1718,11 +1719,13 @@ def build_problem_data_from_scenario(
         start_time=start_time,
     )
     objective_weights = _objective_weights_from_scenario(scenario)
+    service_coverage_mode = resolve_service_coverage_mode(
+        simulation_cfg.get("service_coverage_mode", solver_cfg.get("service_coverage_mode")),
+        simulation_cfg.get("allow_partial_service", solver_cfg.get("allow_partial_service")),
+        default="strict",
+    )
     allow_partial_service = bool(
-        simulation_cfg.get(
-            "allow_partial_service",
-            solver_cfg.get("allow_partial_service", False),
-        )
+        service_coverage_mode == "penalized"
     )
     demand_charge_rate_per_kw = _safe_float(
         cost_cfg.get("demand_charge_cost_per_kw"),
@@ -1756,6 +1759,7 @@ def build_problem_data_from_scenario(
         demand_charge_rate_per_kw=demand_charge_rate_per_kw,
         co2_price_per_kg=co2_price_per_kg,
     )
+    setattr(data, "service_coverage_mode", service_coverage_mode)
     setattr(data, "initial_ice_fuel_percent", _safe_float(simulation_cfg.get("initial_ice_fuel_percent"), 100.0))
     setattr(data, "min_ice_fuel_percent", _safe_float(simulation_cfg.get("min_ice_fuel_percent"), 10.0))
     setattr(data, "max_ice_fuel_percent", _safe_float(simulation_cfg.get("max_ice_fuel_percent"), 90.0))

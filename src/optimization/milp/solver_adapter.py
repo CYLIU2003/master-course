@@ -1493,7 +1493,13 @@ class GurobiMILPAdapter:
                     continue
                 var.Start = float(refuel_l)
 
-        model.setObjective(objective, GRB.MINIMIZE)
+        coverage_objective = gp.quicksum(unserved[trip.trip_id] for trip in problem.trips)
+        if service_coverage_mode == "penalized":
+            model.ModelSense = GRB.MINIMIZE
+            model.setObjectiveN(coverage_objective, index=0, priority=2, name="coverage")
+            model.setObjectiveN(objective, index=1, priority=1, name="secondary_cost")
+        else:
+            model.setObjective(objective, GRB.MINIMIZE)
         
         # Define status_map early for diagnostics
         status_map = {
@@ -1588,6 +1594,14 @@ class GurobiMILPAdapter:
         solver_status = status_map.get(model.Status, f"status_{model.Status}")
         runtime_sec = float(getattr(model, "Runtime", 0.0) or 0.0)
         has_feasible_incumbent = bool(model.SolCount > 0)
+        incumbent_unserved_count = None
+        if has_feasible_incumbent:
+            try:
+                incumbent_unserved_count = int(
+                    round(sum(float(unserved[trip.trip_id].X or 0.0) for trip in problem.trips))
+                )
+            except Exception:
+                incumbent_unserved_count = None
         presolve_reduction_summary = {
             "initial_num_vars": int(pre_stats.get("num_vars", 0) or 0),
             "initial_num_constrs": int(pre_stats.get("num_constrs", 0) or 0),
@@ -1639,9 +1653,8 @@ class GurobiMILPAdapter:
             and problem.baseline_plan is not None
             and len(problem.baseline_plan.served_trip_ids) > 0
         ):
-            full_unserved_obj = unserved_penalty_weight * float(len(problem.trips))
-            incumbent_obj = float(model.ObjVal)
-            if incumbent_obj >= full_unserved_obj - 1.0e-6:
+            full_unserved_count = int(len(problem.trips))
+            if incumbent_unserved_count is not None and incumbent_unserved_count >= full_unserved_count:
                 baseline_fallback = self._baseline_fallback(
                     problem,
                     fallback_status="auto_relaxed_baseline",
@@ -1996,7 +2009,7 @@ class GurobiMILPAdapter:
                         fixed_route_band_mode=fixed_route_band_mode,
                         allow_same_day_depot_cycles=allow_same_day_depot_cycles,
                     )
-                    if diagnostic.depot_reset_ok:
+                    if diagnostic.feasible:
                         continue
                     model.addConstr(end_arc[end_key] + start_arc[start_key] <= 1)
                     cut_count += 1

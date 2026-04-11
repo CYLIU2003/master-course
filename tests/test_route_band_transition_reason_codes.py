@@ -41,13 +41,15 @@ def test_transition_diagnostic_distinguishes_route_band_block() -> None:
         _duty("d1", "t1", "A", "B", "FAM1"),
         _duty("d2", "t2", "C", "D", "FAM2"),
         home_depot_id="DEPOT",
-        dispatch_context=_Context(),
+        dispatch_context=_Context({("DEPOT", "C"): 5, ("B", "DEPOT"): 5, ("B", "C"): 25}),
         fixed_route_band_mode=True,
-        allow_same_day_depot_cycles=False,
+        allow_same_day_depot_cycles=True,
     )
 
     assert diagnostic.reason_code == "route_band_blocked"
     assert diagnostic.route_band_blocked is True
+    assert diagnostic.depot_reset_ok is True
+    assert diagnostic.feasible is False
 
 
 def test_required_deadhead_diagnostic_distinguishes_missing_deadhead() -> None:

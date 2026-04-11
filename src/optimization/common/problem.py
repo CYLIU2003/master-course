@@ -37,6 +37,20 @@ def service_coverage_allows_partial_service(raw_value: Any) -> bool:
     return normalize_service_coverage_mode(raw_value) == "penalized"
 
 
+def resolve_service_coverage_mode(
+    explicit_mode: Any,
+    legacy_allow_partial_service: Any | None = None,
+    *,
+    default: str = "strict",
+) -> str:
+    explicit_text = str(explicit_mode or "").strip()
+    if explicit_text:
+        return normalize_service_coverage_mode(explicit_text, default=default)
+    if legacy_allow_partial_service is None:
+        return normalize_service_coverage_mode(None, default=default)
+    return "penalized" if bool(legacy_allow_partial_service) else "strict"
+
+
 @dataclass(frozen=True)
 class ProblemTrip:
     trip_id: str

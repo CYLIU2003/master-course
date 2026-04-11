@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple
 
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
+    day_index_for_minute,
     normalize_service_coverage_mode,
 )
 
@@ -59,6 +60,7 @@ class MILPModelBuilder:
     ) -> List[Tuple[str, str, str]]:
         pairs: List[Tuple[str, str, str]] = []
         fixed_route_band_mode = bool(problem.metadata.get("fixed_route_band_mode", False))
+        horizon_start_min = int(problem.metadata.get("horizon_start_min") or 0)
         max_successors_per_trip = self._safe_positive_int(
             problem.metadata.get("milp_max_successors_per_trip"),
             default=999999,
@@ -71,6 +73,10 @@ class MILPModelBuilder:
             )
             for trip in problem.trips
         }
+        trip_day_index_by_trip_id = {
+            trip.trip_id: day_index_for_minute(int(getattr(trip, "departure_min", 0) or 0), horizon_start_min)
+            for trip in problem.trips
+        }
         for vehicle in problem.vehicles:
             if not getattr(vehicle, "available", True):
                 continue
@@ -81,6 +87,7 @@ class MILPModelBuilder:
                     trip_j_id
                     for trip_j_id in problem.feasible_connections.get(trip_i.trip_id, ())
                     if not fixed_route_band_mode
+                    or trip_day_index_by_trip_id.get(trip_i.trip_id) != trip_day_index_by_trip_id.get(trip_j_id)
                     or route_band_by_trip_id.get(trip_i.trip_id) == route_band_by_trip_id.get(trip_j_id)
                 ]
                 candidate_successors.sort(

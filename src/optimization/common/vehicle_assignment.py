@@ -7,7 +7,6 @@ from src.dispatch.feasibility import evaluate_startup_feasibility
 from src.dispatch.models import VehicleDuty
 from src.dispatch.route_band import (
     duty_route_band_ids,
-    duties_route_band_ids,
     fragment_transition_is_feasible,
 )
 
@@ -165,8 +164,13 @@ def _select_vehicle_id_for_duty(
             continue
         band_change_rank = 0
         if fixed_route_band_mode and duty_band:
-            fragment_bands = duties_route_band_ids(fragments)
-            if fragment_bands and duty_band not in fragment_bands:
+            fragment_bands_today = {
+                band
+                for fragment in fragments
+                if _duty_day_index(fragment, horizon_start_min=horizon_start_min) == duty_day_idx
+                for band in duty_route_band_ids(fragment)
+            }
+            if fragment_bands_today and duty_band not in fragment_bands_today:
                 band_change_rank = 1
         fit_score = _fragment_fit_score(fragments, duty_start, duty_end)
         if fit_score is None:

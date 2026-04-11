@@ -43,6 +43,7 @@ from src.optimization.common.problem import (
     OperatorStats,
     SolutionState,
 )
+from src.optimization.common.metaheuristic_utils import solution_state_rank_key
 from src.optimization.common.search_profile import SearchProfile
 
 
@@ -174,18 +175,14 @@ class ALNSOptimizer:
                 # 2. If both feasible, prefer lower objective
                 # 3. If both infeasible, prefer lower objective (less penalty)
                 is_new_best = False
-                if not best.is_feasible() and candidate.is_feasible():
-                    # Major improvement: found a feasible solution!
+                if solution_state_rank_key(candidate) < solution_state_rank_key(best):
                     is_new_best = True
-                    reward = 10.0  # Higher reward for achieving feasibility
-                elif candidate.is_feasible() and best.is_feasible() and candidate.objective() < best.objective():
-                    # Both feasible, candidate has better objective
-                    is_new_best = True
-                    reward = 5.0
-                elif not candidate.is_feasible() and not best.is_feasible() and candidate.objective() < best.objective():
-                    # Both infeasible but candidate has less penalty
-                    is_new_best = True
-                    reward = 3.0
+                    if candidate.is_feasible() and not best.is_feasible():
+                        reward = 10.0
+                    elif candidate.is_feasible() and best.is_feasible():
+                        reward = 5.0
+                    else:
+                        reward = 3.0
                 
                 if is_new_best:
                     best = candidate

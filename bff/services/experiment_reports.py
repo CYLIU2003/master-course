@@ -276,6 +276,7 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
     summary = dict(optimization_result.get("summary") or {})
     trip_count_by_type = dict(summary.get("trip_count_by_type") or {})
     simulation_summary = dict(optimization_result.get("simulation_summary") or {})
+    trip_count_unserved = int(summary.get("trip_count_unserved") or len(optimization_result.get("unserved_trip_ids") or []))
     electricity_cost_final = (
         cost_breakdown.get("electricity_cost_final")
         if cost_breakdown.get("electricity_cost_final") is not None
@@ -304,6 +305,9 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
         "bev_trips": trip_count_by_type.get("BEV"),
         "ice_trips": trip_count_by_type.get("ICE"),
         "total_trips": summary.get("trip_count_served"),
+        "trip_count_unserved": trip_count_unserved,
+        "coverage_rank_primary": int(summary.get("coverage_rank_primary") or trip_count_unserved),
+        "secondary_objective_value": summary.get("secondary_objective_value"),
         "total_charging_kwh": simulation_summary.get("total_grid_kwh"),
         "peak_charging_kw": simulation_summary.get("peak_demand_kw"),
         "solve_time_sec": optimization_result.get("solve_time_seconds"),

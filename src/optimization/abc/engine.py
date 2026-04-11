@@ -21,7 +21,7 @@ from src.optimization.alns.operators_repair import (
     soc_repair,
 )
 from src.optimization.common.benchmarking import exact_repair_policy, solver_benchmark_eligibility
-from src.optimization.common.metaheuristic_utils import build_solution_state
+from src.optimization.common.metaheuristic_utils import build_solution_state, solution_state_rank_key
 from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
@@ -470,13 +470,8 @@ class ABCOptimizer:
         repaired_plan = repair(problem, plan)
         return repaired_plan, time.perf_counter() - repair_started
 
-    def _state_key(self, state: SolutionState) -> tuple[int, float, int, int]:
-        return (
-            0 if state.is_feasible() else 1,
-            float(state.objective()),
-            -len(state.plan.served_trip_ids),
-            len(state.infeasibility_reasons),
-        )
+    def _state_key(self, state: SolutionState) -> tuple[int, int, float, int]:
+        return solution_state_rank_key(state)
 
     def _selection_weights(self, food_sources: List[SolutionState]) -> List[float]:
         ranked = sorted(enumerate(food_sources), key=lambda item: self._state_key(item[1]))

@@ -28,7 +28,15 @@ class _DepotResetContext:
         return True
 
 
-def _duty(duty_id: str, trip_id: str, origin: str, destination: str, departure: str, arrival: str) -> VehicleDuty:
+def _duty(
+    duty_id: str,
+    trip_id: str,
+    origin: str,
+    destination: str,
+    departure: str,
+    arrival: str,
+    band: str = "FAM01",
+) -> VehicleDuty:
     trip = Trip(
         trip_id=trip_id,
         route_id="route-1",
@@ -38,7 +46,7 @@ def _duty(duty_id: str, trip_id: str, origin: str, destination: str, departure: 
         arrival_time=arrival,
         distance_km=5.0,
         allowed_vehicle_types=("ICE",),
-        route_family_code="FAM01",
+        route_family_code=band,
     )
     return VehicleDuty(duty_id=duty_id, vehicle_type="ICE", legs=(DutyLeg(trip=trip),))
 
@@ -71,6 +79,21 @@ def test_depot_reset_flag_controls_route_band_fragment_transition() -> None:
         allow_same_day_depot_cycles=True,
     )
     assert not fragment_transition_is_feasible(
+        first,
+        second,
+        home_depot_id="DEPOT",
+        dispatch_context=context,
+        fixed_route_band_mode=True,
+        allow_same_day_depot_cycles=False,
+    )
+
+
+def test_route_band_can_reset_on_next_day() -> None:
+    context = _DepotResetContext()
+    first = _duty("veh-1", "t1", "A", "B", "08:00", "08:10", band="FAM01")
+    second = _duty("veh-1__frag2", "t2", "C", "D", "32:30", "32:40", band="FAM02")
+
+    assert fragment_transition_is_feasible(
         first,
         second,
         home_depot_id="DEPOT",

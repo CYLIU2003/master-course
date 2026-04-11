@@ -12,6 +12,15 @@ from .problem import AssignmentPlan, CanonicalOptimizationProblem, SolutionState
 from .search_profile import SearchProfile
 
 
+def solution_state_rank_key(state: SolutionState) -> tuple[int, int, float, int]:
+    return (
+        len(state.plan.unserved_trip_ids),
+        0 if state.is_feasible() else 1,
+        float(state.objective()),
+        len(state.infeasibility_reasons),
+    )
+
+
 def build_solution_state(
     problem: CanonicalOptimizationProblem,
     plan: AssignmentPlan,
@@ -33,24 +42,24 @@ def build_solution_state(
             feasible=report.feasible,
             elapsed_sec=(time.perf_counter() - started_at) if started_at is not None else elapsed,
         )
+    secondary_objective_value = float(breakdown.objective_value) - float(breakdown.unserved_penalty)
     return SolutionState(
         problem=problem,
         plan=plan,
         cost_breakdown=breakdown.to_dict(),
         feasible=report.feasible,
         infeasibility_reasons=report.errors,
-        metadata={"warnings": report.warnings},
+        metadata={
+            "warnings": report.warnings,
+            "trip_count_unserved": len(plan.unserved_trip_ids),
+            "coverage_rank_primary": len(plan.unserved_trip_ids),
+            "secondary_objective_value": secondary_objective_value,
+        },
     )
 
 
 def feasibility_first_better(candidate: SolutionState, incumbent: SolutionState, best: SolutionState) -> bool:
-    if candidate.is_feasible() and not best.is_feasible():
-        return True
-    if candidate.is_feasible() and best.is_feasible():
-        return candidate.objective() < best.objective()
-    if not candidate.is_feasible() and not best.is_feasible():
-        return candidate.objective() < best.objective()
-    return False
+    return solution_state_rank_key(candidate) < solution_state_rank_key(best)
 
 
 def rebuild_plan_from_duties(

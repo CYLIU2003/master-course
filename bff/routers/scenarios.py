@@ -1244,10 +1244,23 @@ def _builder_defaults(
                 ),
             )
         ),
-        "allowPartialService": bool(
-            overlay_solver.get(
-                "allow_partial_service",
-                simulation_config.get("allow_partial_service", False),
+        "allowPartialService": (
+            str(
+                overlay_solver.get("service_coverage_mode")
+                or simulation_config.get("service_coverage_mode")
+                or ""
+            ).strip().lower()
+            == "penalized"
+            if str(
+                overlay_solver.get("service_coverage_mode")
+                or simulation_config.get("service_coverage_mode")
+                or ""
+            ).strip()
+            else bool(
+                overlay_solver.get(
+                    "allow_partial_service",
+                    simulation_config.get("allow_partial_service", False),
+                )
             )
         ),
         "unservedPenalty": float(
@@ -1757,7 +1770,11 @@ def _build_quick_setup_payload(
             "objectiveWeights": dict(builder_defaults.get("objectiveWeights") or {}),
             "touPricing": list(builder_defaults.get("touPricing") or []),
             "degradationWeight": builder_defaults.get("degradationWeight"),
-            "allowPartialService": bool(builder_defaults.get("allowPartialService", False)),
+            "allowPartialService": (
+                str(builder_defaults.get("service_coverage_mode") or "").strip().lower() == "penalized"
+                if str(builder_defaults.get("service_coverage_mode") or "").strip()
+                else bool(builder_defaults.get("allowPartialService", False))
+            ),
             "unservedPenalty": float(builder_defaults.get("unservedPenalty") or 10000.0),
             "startTime": builder_defaults.get("startTime") or "05:00",
             "endTime": builder_defaults.get("endTime") or "23:00",
@@ -2111,7 +2128,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         if body.destroyFraction is not None:
             solver_config["destroy_fraction"] = float(body.destroyFraction)
         if body.allowPartialService is not None:
-            solver_config["allow_partial_service"] = bool(body.allowPartialService)
+            allow_partial_service = bool(body.allowPartialService)
+            solver_config["allow_partial_service"] = allow_partial_service
+            solver_config["service_coverage_mode"] = (
+                "penalized" if allow_partial_service else "strict"
+            )
         if body.unservedPenalty is not None:
             solver_config["unserved_penalty"] = float(body.unservedPenalty)
         if body.fixedRouteBandMode is not None:
@@ -2213,7 +2234,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         if body.destroyFraction is not None:
             simulation_config["destroy_fraction"] = float(body.destroyFraction)
         if body.allowPartialService is not None:
-            simulation_config["allow_partial_service"] = bool(body.allowPartialService)
+            allow_partial_service = bool(body.allowPartialService)
+            simulation_config["allow_partial_service"] = allow_partial_service
+            simulation_config["service_coverage_mode"] = (
+                "penalized" if allow_partial_service else "strict"
+            )
         if body.unservedPenalty is not None:
             simulation_config["unserved_penalty"] = float(body.unservedPenalty)
         if body.objectiveWeights is not None or saved_weights:

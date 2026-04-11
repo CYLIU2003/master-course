@@ -47,7 +47,7 @@ from .problem import (
     ProblemVehicle,
     ProblemVehicleType,
     PVSlot,
-    normalize_service_coverage_mode,
+    resolve_service_coverage_mode,
     service_coverage_allows_partial_service,
 )
 from .pv_area import (
@@ -176,11 +176,10 @@ class ProblemBuilder:
             )
             or default_fragment_limit
         )
-        service_coverage_mode = normalize_service_coverage_mode(
-            simulation_cfg.get(
-                "service_coverage_mode",
-                solver_cfg.get("service_coverage_mode", "strict"),
-            )
+        service_coverage_mode = resolve_service_coverage_mode(
+            simulation_cfg.get("service_coverage_mode", solver_cfg.get("service_coverage_mode")),
+            simulation_cfg.get("allow_partial_service", solver_cfg.get("allow_partial_service")),
+            default="strict",
         )
         allow_partial_service = service_coverage_allows_partial_service(
             service_coverage_mode
@@ -386,7 +385,7 @@ class ProblemBuilder:
         horizon_start_min: int = 0,
         max_depot_cycles_per_vehicle_per_day: int = 3,
         allow_partial_service: bool = False,
-        service_coverage_mode: str = "strict",
+        service_coverage_mode: Optional[str] = None,
         initial_soc_percent: Optional[float] = None,
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
@@ -419,9 +418,12 @@ class ProblemBuilder:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
         timestep_min = max(int(timestep_min or 60), 1)
+        context.horizon_start_min = int(horizon_start_min or 0)
         context.fixed_route_band_mode = bool(fixed_route_band_mode)
-        service_coverage_mode = normalize_service_coverage_mode(
-            service_coverage_mode
+        service_coverage_mode = resolve_service_coverage_mode(
+            service_coverage_mode,
+            allow_partial_service,
+            default="strict",
         )
         allow_partial_service = service_coverage_allows_partial_service(
             service_coverage_mode

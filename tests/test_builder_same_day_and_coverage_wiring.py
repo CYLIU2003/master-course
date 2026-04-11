@@ -55,3 +55,42 @@ def test_builder_wires_same_day_coverage_and_band_defaults() -> None:
     assert problem.metadata["service_coverage_mode"] == "strict"
     assert problem.metadata["allow_partial_service"] is False
     assert problem.metadata["fixed_route_band_mode"] is False
+
+
+def test_builder_prefers_explicit_service_coverage_mode_over_allow_partial_service() -> None:
+    scenario = _scenario()
+    scenario["simulation_config"] = {
+        **scenario["simulation_config"],
+        "service_coverage_mode": "strict",
+        "allow_partial_service": True,
+    }
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+        planning_days=1,
+    )
+
+    assert problem.metadata["service_coverage_mode"] == "strict"
+    assert problem.metadata["allow_partial_service"] is False
+
+
+def test_builder_falls_back_to_allow_partial_service_when_coverage_mode_is_missing() -> None:
+    scenario = _scenario()
+    scenario["simulation_config"] = {
+        key: value
+        for key, value in scenario["simulation_config"].items()
+        if key != "service_coverage_mode"
+    }
+    scenario["simulation_config"]["allow_partial_service"] = True
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+        planning_days=1,
+    )
+
+    assert problem.metadata["service_coverage_mode"] == "penalized"
+    assert problem.metadata["allow_partial_service"] is True

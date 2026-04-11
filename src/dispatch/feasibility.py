@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Sequence
 
 from .models import ConnectionResult, DispatchContext, Trip
-from .route_band import trip_route_band_key
+from .route_band import trip_route_band_key, trip_service_day_index
 
 
 @dataclass(frozen=True)
@@ -172,12 +172,17 @@ class FeasibilityEngine:
         if bool(getattr(context, "fixed_route_band_mode", False)):
             from_band = trip_route_band_key(trip_i)
             to_band = trip_route_band_key(trip_j)
-            if from_band and to_band and from_band != to_band:
+            horizon_start_min = int(getattr(context, "horizon_start_min", 0) or 0)
+            same_day = trip_service_day_index(trip_i, horizon_start_min=horizon_start_min) == trip_service_day_index(
+                trip_j,
+                horizon_start_min=horizon_start_min,
+            )
+            if same_day and from_band and to_band and from_band != to_band:
                 return ConnectionResult(
                     feasible=False,
                     reason_code="route_band_mismatch",
                     reason=(
-                        f"Fixed route-band mode forbids connecting trip '{trip_i.trip_id}' "
+                        f"Fixed route-band mode forbids same-day connection from trip '{trip_i.trip_id}' "
                         f"({from_band}) to trip '{trip_j.trip_id}' ({to_band})"
                     ),
                 )

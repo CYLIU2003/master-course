@@ -5,6 +5,8 @@ from typing import Any, Iterable, Tuple
 
 from src.route_code_utils import extract_route_series_from_candidates
 
+DAY_MINUTES = 24 * 60
+
 
 @dataclass(frozen=True)
 class FragmentTransitionDiagnostic:
@@ -33,6 +35,24 @@ def trip_route_band_key(trip_like: Any, fallback_route_id: str = "") -> str:
     if family_code:
         return family_code
     return route_id
+
+
+def trip_service_day_index(trip_like: Any, *, horizon_start_min: int = 0) -> int:
+    departure_min = int(getattr(trip_like, "departure_min", 0) or 0)
+    adjusted = departure_min - int(horizon_start_min or 0)
+    if adjusted < 0:
+        adjusted = 0
+    return adjusted // DAY_MINUTES
+
+
+def duty_service_day_index(duty: Any, *, horizon_start_min: int = 0) -> int:
+    legs = tuple(getattr(duty, "legs", ()) or ())
+    if not legs:
+        return 0
+    trip = getattr(legs[0], "trip", None)
+    if trip is None:
+        return 0
+    return trip_service_day_index(trip, horizon_start_min=horizon_start_min)
 
 
 def duty_route_band_ids(duty: Any) -> Tuple[str, ...]:
@@ -99,7 +119,7 @@ def fragment_transition_allows_direct_connection(
     dispatch_context: Any | None,
 ) -> bool:
     if dispatch_context is None:
-        return True
+        return bool(allow_same_day_depot_cycles)
     from_legs = tuple(getattr(from_duty, "legs", ()) or ())
     to_legs = tuple(getattr(to_duty, "legs", ()) or ())
     if not from_legs or not to_legs:
@@ -140,10 +160,9 @@ def fragment_transition_allows_depot_reset(
     *,
     home_depot_id: str,
     dispatch_context: Any | None,
+    horizon_start_min: int = 0,
     allow_same_day_depot_cycles: bool = True,
 ) -> bool:
-    if not allow_same_day_depot_cycles:
-        return False
     if dispatch_context is None:
         return True
     from_legs = tuple(getattr(from_duty, "legs", ()) or ())
@@ -153,6 +172,12 @@ def fragment_transition_allows_depot_reset(
     home_depot = str(home_depot_id or "").strip()
     if not home_depot:
         return True
+    same_day = duty_service_day_index(from_duty, horizon_start_min=horizon_start_min) == duty_service_day_index(
+        to_duty,
+        horizon_start_min=horizon_start_min,
+    )
+    if same_day and not allow_same_day_depot_cycles:
+        return False
     get_deadhead_min = getattr(dispatch_context, "get_deadhead_min", None)
     get_turnaround_min = getattr(dispatch_context, "get_turnaround_min", None)
     if not callable(get_deadhead_min):
@@ -206,6 +231,7 @@ def fragment_transition_is_feasible(
     home_depot_id: str,
     dispatch_context: Any | None,
     fixed_route_band_mode: bool,
+    horizon_start_min: int = 0,
     allow_same_day_depot_cycles: bool = True,
 ) -> bool:
     return fragment_transition_diagnostic(
@@ -214,6 +240,7 @@ def fragment_transition_is_feasible(
         home_depot_id=home_depot_id,
         dispatch_context=dispatch_context,
         fixed_route_band_mode=fixed_route_band_mode,
+        horizon_start_min=horizon_start_min,
         allow_same_day_depot_cycles=allow_same_day_depot_cycles,
     ).feasible
 
@@ -225,10 +252,17 @@ def fragment_transition_diagnostic(
     home_depot_id: str,
     dispatch_context: Any | None,
     fixed_route_band_mode: bool,
+    horizon_start_min: int = 0,
     allow_same_day_depot_cycles: bool = True,
 ) -> FragmentTransitionDiagnostic:
+    if not horizon_start_min and dispatch_context is not None:
+        horizon_start_min = int(getattr(dispatch_context, "horizon_start_min", 0) or 0)
     from_band = duty_route_band_ids(from_duty)
     to_band = duty_route_band_ids(to_duty)
+    same_day = duty_service_day_index(from_duty, horizon_start_min=horizon_start_min) == duty_service_day_index(
+        to_duty,
+        horizon_start_min=horizon_start_min,
+    )
     direct_exists, _direct_deadhead = fragment_transition_direct_deadhead_min(
         from_duty,
         to_duty,
@@ -244,19 +278,21 @@ def fragment_transition_diagnostic(
         to_duty,
         home_depot_id=home_depot_id,
         dispatch_context=dispatch_context,
+        horizon_start_min=horizon_start_min,
         allow_same_day_depot_cycles=allow_same_day_depot_cycles,
     )
     route_band_blocked = bool(
-        fixed_route_band_mode and from_band and to_band and from_band != to_band
+        fixed_route_band_mode and same_day and from_band and to_band and from_band != to_band
     )
-    if fixed_route_band_mode and from_band and to_band and from_band != to_band:
+    if route_band_blocked:
         return FragmentTransitionDiagnostic(
-            feasible=depot_reset_ok,
-            reason_code="depot_reset_ok" if depot_reset_ok else "route_band_blocked",
-            direct_ok=False,
+            feasible=False,
+            reason_code="route_band_blocked",
+            direct_ok=direct_ok,
             depot_reset_ok=depot_reset_ok,
-            route_band_blocked=not depot_reset_ok,
-            deadhead_missing=not direct_exists,
+            route_band_blocked=True,
+            deadhead_missing=not direct_exists and not depot_reset_ok,
+            location_alias_missing=not direct_exists and dispatch_context is not None,
         )
     feasible = depot_reset_ok or direct_ok
     reason_code = "direct_ok" if direct_ok else ("depot_reset_ok" if depot_reset_ok else "deadhead_missing")
@@ -265,6 +301,7 @@ def fragment_transition_diagnostic(
         reason_code=reason_code,
         direct_ok=direct_ok,
         depot_reset_ok=depot_reset_ok,
+        route_band_blocked=False,
         deadhead_missing=not direct_exists and not depot_reset_ok,
         location_alias_missing=not direct_exists and dispatch_context is not None,
     )

@@ -25,6 +25,7 @@ from src.optimization.common.benchmarking import exact_repair_policy, solver_ben
 from src.optimization.common.metaheuristic_utils import (
     build_solution_state,
     feasibility_first_better,
+    solution_state_rank_key,
     rebuild_plan_from_duties,
 )
 from src.optimization.common.problem import (
@@ -428,13 +429,8 @@ class GAOptimizer:
         contenders = rng.sample(population, k=min(max(tournament_size, 1), len(population)))
         return min(contenders, key=self._state_key)
 
-    def _state_key(self, state: SolutionState) -> tuple[int, float, int, int]:
-        return (
-            0 if state.is_feasible() else 1,
-            float(state.objective()),
-            -len(state.plan.served_trip_ids),
-            len(state.infeasibility_reasons),
-        )
+    def _state_key(self, state: SolutionState) -> tuple[int, int, float, int]:
+        return solution_state_rank_key(state)
 
     def _exact_repair_available(
         self,

@@ -8,9 +8,18 @@ from src.simulator import FeasibilityIssue, FeasibilityReport, SimulationResult
 
 def serialize_milp_result(result: MILPResult) -> Dict[str, Any]:
     """Serialize MILPResult to dict, preserving all energy flow fields (Phase 2.3)."""
+    unserved_tasks = list(result.unserved_tasks or [])
+    trip_count_served = sum(len(list(trips or [])) for trips in (result.assignment or {}).values())
+    trip_count_unserved = len(unserved_tasks)
+    secondary_objective_value = None
+    try:
+        secondary_objective_value = float(result.objective_value) - float(result.obj_breakdown.get("unserved_penalty", 0.0) or 0.0)
+    except Exception:
+        secondary_objective_value = result.objective_value
     serialized = {
         "status": result.status,
         "objective_value": result.objective_value,
+        "secondary_objective_value": secondary_objective_value,
         "solve_time_seconds": result.solve_time_sec,
         "mip_gap": result.mip_gap,
         "assignment": result.assignment,
@@ -24,7 +33,10 @@ def serialize_milp_result(result: MILPResult) -> Dict[str, Any]:
         "pv_to_bus_kwh": result.pv_to_bus_kwh,
         "peak_demand_kw": result.peak_demand_kw,
         "obj_breakdown": result.obj_breakdown,
-        "unserved_tasks": result.unserved_tasks,
+        "unserved_tasks": unserved_tasks,
+        "trip_count_served": trip_count_served,
+        "trip_count_unserved": trip_count_unserved,
+        "coverage_rank_primary": trip_count_unserved,
         "infeasibility_info": result.infeasibility_info,
         # Phase 1.3: Vehicle-level energy provenance honesty
         "soc_modeling_note": result.soc_modeling_note,

@@ -7,7 +7,6 @@ from src.dispatch.feasibility import evaluate_startup_feasibility
 from src.dispatch.models import ValidationResult, VehicleDuty
 from src.dispatch.route_band import (
     duty_route_band_ids,
-    fragment_transition_allows_depot_reset,
     fragment_transition_diagnostic,
     fragment_transition_is_feasible,
 )
@@ -402,7 +401,7 @@ class FeasibilityChecker:
             return []
         errors: List[str] = []
         duties_by_vehicle = plan.duties_by_vehicle()
-        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+        horizon_start_min = self._horizon_start_min(problem)
         allow_same_day_depot_cycles = bool(
             getattr(problem.scenario, "allow_same_day_depot_cycles", True)
             if getattr(problem.scenario, "allow_same_day_depot_cycles", None) is not None
@@ -415,8 +414,6 @@ class FeasibilityChecker:
                     f"[ROUTE_BAND] duty={duty.duty_id} spans multiple route bands {list(duty_bands)}"
                 )
         for vehicle_id, duties in duties_by_vehicle.items():
-            vehicle = vehicle_by_id.get(str(vehicle_id))
-            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
             ordered = sorted(
                 duties,
                 key=lambda duty: (
@@ -430,21 +427,23 @@ class FeasibilityChecker:
                 next_band = duty_route_band_ids(next_duty)
                 if not prev_band or not next_band or prev_band == next_band:
                     continue
-                if fragment_transition_allows_depot_reset(
-                    prev_duty,
-                    next_duty,
-                    home_depot_id=home_depot_id,
-                    dispatch_context=problem.dispatch_context,
-                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
-                ):
+                prev_day = day_index_for_minute(
+                    int(prev_duty.legs[0].trip.departure_min),
+                    horizon_start_min,
+                )
+                next_day = day_index_for_minute(
+                    int(next_duty.legs[0].trip.departure_min),
+                    horizon_start_min,
+                )
+                if prev_day != next_day:
                     continue
                 if allow_same_day_depot_cycles:
                     errors.append(
-                        f"[ROUTE_BAND] vehicle={vehicle_id} changes route band from {list(prev_band)} to {list(next_band)} without depot-reset feasibility"
+                        f"[ROUTE_BAND] vehicle={vehicle_id} changes route band within day {prev_day} from {list(prev_band)} to {list(next_band)}"
                     )
                 else:
                     errors.append(
-                        f"[ROUTE_BAND] vehicle={vehicle_id} changes route band from {list(prev_band)} to {list(next_band)} while same-day depot cycles are disabled"
+                        f"[ROUTE_BAND] vehicle={vehicle_id} changes route band within day {prev_day} from {list(prev_band)} to {list(next_band)} while same-day depot cycles are disabled"
                     )
         return errors
 

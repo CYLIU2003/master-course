@@ -42,6 +42,8 @@ class MILPOptimizer:
             1 for vehicle in problem.vehicles if bool(getattr(vehicle, "available", True))
         )
         unused_available_vehicle_ids = plan.unused_available_vehicle_ids(problem)
+        trip_count_unserved = len(plan.unserved_trip_ids)
+        secondary_objective_value = float(costs.get("objective_value", 0.0)) - float(costs.get("unserved_penalty", 0.0) or 0.0)
         allow_same_day_depot_cycles = bool(
             problem.metadata.get(
                 "allow_same_day_depot_cycles",
@@ -89,6 +91,10 @@ class MILPOptimizer:
                 "max_fragments_observed": int(max_fragments_observed),
                 "available_vehicle_count_total": available_vehicle_count_total,
                 "unused_available_vehicle_ids": list(unused_available_vehicle_ids),
+                "trip_count_served": len(plan.served_trip_ids),
+                "trip_count_unserved": trip_count_unserved,
+                "coverage_rank_primary": trip_count_unserved,
+                "secondary_objective_value": secondary_objective_value,
                 "startup_infeasible_assignment_count": int(
                     (plan.metadata or {}).get("startup_infeasible_assignment_count") or 0
                 ),

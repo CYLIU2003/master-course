@@ -2987,6 +2987,7 @@ def _run_optimization(
                 and not bool(getattr(data, "allow_partial_service", False))
             ):
                 setattr(data, "allow_partial_service", True)
+                setattr(data, "service_coverage_mode", "penalized")
                 auto_relax_msg = (
                     "No travel connections generated while allow_partial_service is OFF. "
                     "Auto-relaxed allow_partial_service=True for this run to avoid hard infeasible stop. "
@@ -3200,6 +3201,8 @@ def _run_optimization(
                     for task_ids in (result_payload.get("assignment") or {}).values()
                 ),
                 "trip_count_unserved": len(result_payload.get("unserved_tasks") or []),
+                "coverage_rank_primary": len(result_payload.get("unserved_tasks") or []),
+                "secondary_objective_value": result_payload.get("secondary_objective_value"),
                 "vehicle_fragment_counts": dict(
                     engine_result.plan.vehicle_fragment_counts()
                 ),

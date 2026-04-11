@@ -149,6 +149,7 @@ class ResultSerializer:
             cost_breakdown = dict(getattr(result, "cost_breakdown", {}) or getattr(result, "obj_breakdown", {}) or {})
             assignment = dict(getattr(result, "assignment", {}) or {})
             served_trip_ids = sorted({trip_id for trips in assignment.values() for trip_id in (trips or [])})
+            unserved_trip_ids = list(getattr(result, "unserved_tasks", []) or [])
             infeasibility_info = str(getattr(result, "infeasibility_info", "") or "")
             fleet_size = len(assignment)
             used_vehicle_count = sum(1 for trip_ids in assignment.values() if trip_ids)
@@ -187,7 +188,11 @@ class ResultSerializer:
                 "charging_schedule": [],
                 "refueling_schedule": [],
                 "served_trip_ids": served_trip_ids,
-                "unserved_trip_ids": list(getattr(result, "unserved_tasks", []) or []),
+                "unserved_trip_ids": unserved_trip_ids,
+                "trip_count_served": len(served_trip_ids),
+                "trip_count_unserved": len(unserved_trip_ids),
+                "coverage_rank_primary": len(unserved_trip_ids),
+                "secondary_objective_value": getattr(result, "objective_value", None),
                 "contract_over_limit_kwh_by_depot_slot": {},
                 "metadata": {},
             }
@@ -223,11 +228,15 @@ class ResultSerializer:
         vehicle_fragment_counts = result.plan.vehicle_fragment_counts()
         vehicles_with_multiple_fragments = result.plan.vehicles_with_multiple_fragments()
         max_fragments_observed = result.plan.max_fragments_observed()
+        trip_count_served = len(result.plan.served_trip_ids)
+        trip_count_unserved = len(result.plan.unserved_trip_ids)
+        secondary_objective_value = float(result.objective_value) - float(cost_breakdown.get("unserved_penalty", 0.0) or 0.0)
         return {
             "solver_mode": result.mode.value,
             "solver_status": result.solver_status,
             "objective_mode": solver_metadata.get("objective_mode", "total_cost"),
             "objective_value": result.objective_value,
+            "secondary_objective_value": secondary_objective_value,
             "feasible": result.feasible,
             "warnings": list(result.warnings),
             "infeasibility_reasons": list(result.infeasibility_reasons),
@@ -256,6 +265,9 @@ class ResultSerializer:
                 "used_vehicle_count": used_vehicle_count,
                 "utilization_ratio": utilization_ratio,
             },
+            "trip_count_served": trip_count_served,
+            "trip_count_unserved": trip_count_unserved,
+            "coverage_rank_primary": trip_count_unserved,
             "vehicle_fragment_counts": dict(vehicle_fragment_counts),
             "vehicles_with_multiple_fragments": list(vehicles_with_multiple_fragments),
             "max_fragments_observed": int(max_fragments_observed),
