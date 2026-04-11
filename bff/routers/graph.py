@@ -680,6 +680,7 @@ def _build_dispatch_context(
         trip_rows=merged_trip_rows or timetable_rows or raw_trips,
         routes=list(route_lookup.values()),
         stops=store.get_field(scenario_id, "stops") or [],
+        depots=store.get_field(scenario_id, "depots") or [],
         assumed_speed_kmh=deadhead_speed_kmh,
     )
     deadhead_rules = {

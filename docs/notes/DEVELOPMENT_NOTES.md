@@ -90,6 +90,30 @@ tests/       回帰テスト
 - 回帰テスト:
   - `tests/test_job_store_windows_persistence.py`
 
+### [DEV-2026-04-11] Depot startup deadhead inference
+
+- 背景:
+  - `tsurumaki / WEEKDAY / prepared-ca500b7c95b16ca9` では startup assignment が全件 `startup_deadhead_missing` になり、Gurobi が routing / charging に入る前に止まっていた。
+  - 既存の route-family terminal inference は stop→stop の deadhead しか作らず、depot→first origin と last destination→depot が抜けていた。
+
+- 対応:
+  - `src/route_family_runtime.py`
+    - `merge_deadhead_metrics()` に `depots` を追加し、depot 座標と stop 座標から startup / return deadhead を推論するようにした。
+    - 既存の stop-platform alias と route-family terminal inference は維持し、`arrival + turnaround + deadhead <= next departure` の strict feasibility は変えない。
+  - `src/optimization/common/builder.py`
+    - canonical problem 生成時に scenario の `depots` を deadhead merge に渡すようにした。
+  - `bff/mappers/scenario_to_problemdata.py`
+    - BFF の problem-data 生成でも `depots` を deadhead merge に渡すようにした。
+  - `bff/routers/graph.py`
+    - graph/debug path でも同じ depot deadhead inference を使うようにした。
+
+- 研究上の影響:
+  - これは欠けていた depot-stop connectivity を復元する修正であり、startup feasibility の意味を弱めていない。
+  - route-band の意味、strict coverage、dispatch feasibility 条件は変更していない。
+
+- 回帰テスト:
+  - `tests/test_depot_deadhead_inference.py`
+
 ### [DEV-2026-04-10] Strict coverage infeasibility precheck
 
 - 自分で上げた問題:

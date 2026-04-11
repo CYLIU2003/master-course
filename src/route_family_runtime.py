@@ -132,6 +132,20 @@ def _stop_coord_lookup(stops: Sequence[Mapping[str, Any]]) -> Dict[str, Tuple[fl
     return lookup
 
 
+def _depot_coord_lookup(depots: Sequence[Mapping[str, Any]]) -> Dict[str, Tuple[float, float]]:
+    lookup: Dict[str, Tuple[float, float]] = {}
+    for depot in depots:
+        depot_id = str(depot.get("id") or depot.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        lat = _safe_float(depot.get("lat", depot.get("latitude")), 0.0)
+        lon = _safe_float(depot.get("lon", depot.get("longitude")), 0.0)
+        if lat == 0.0 and lon == 0.0:
+            continue
+        lookup[depot_id] = (lat, lon)
+    return lookup
+
+
 def _stop_name_lookup(stops: Sequence[Mapping[str, Any]]) -> Dict[str, str]:
     lookup: Dict[str, str] = {}
     for stop in stops:
@@ -245,6 +259,45 @@ def _metric_distance_with_fallback(
     return round(straight_km * max(detour_factor, 1.0), 4)
 
 
+def _infer_metric_from_coords(
+    from_stop: str,
+    to_stop: str,
+    from_coords: Optional[Tuple[float, float]],
+    to_coords: Optional[Tuple[float, float]],
+    *,
+    source: str,
+    route_family_code: Optional[str],
+    detour_factor: float,
+    assumed_speed_kmh: float,
+    min_deadhead_min: int,
+    max_deadhead_km: float,
+) -> Optional[DeadheadMetric]:
+    if not from_coords or not to_coords or from_stop == to_stop:
+        return None
+    straight_km = _haversine_km(
+        from_coords[0],
+        from_coords[1],
+        to_coords[0],
+        to_coords[1],
+    )
+    distance_km = round(straight_km * max(detour_factor, 1.0), 4)
+    if distance_km <= 0.0 or distance_km > max_deadhead_km:
+        return None
+    speed_kmh = assumed_speed_kmh if assumed_speed_kmh > 0.0 else 18.0
+    travel_time_min = max(
+        int(min_deadhead_min),
+        int(math.ceil((distance_km / speed_kmh) * 60.0)),
+    )
+    return DeadheadMetric(
+        from_stop=from_stop,
+        to_stop=to_stop,
+        travel_time_min=travel_time_min,
+        distance_km=distance_km,
+        source=source,
+        route_family_code=route_family_code,
+    )
+
+
 def _enforce_metric_speed_cap(
     metric: DeadheadMetric,
     *,
@@ -289,6 +342,7 @@ def merge_deadhead_metrics(
     trip_rows: Sequence[Mapping[str, Any]],
     routes: Sequence[Mapping[str, Any]],
     stops: Sequence[Mapping[str, Any]],
+    depots: Sequence[Mapping[str, Any]] | None = None,
     max_deadhead_km: float = 20.0,
     detour_factor: float = 1.35,
     assumed_speed_kmh: float = 18.0,
@@ -319,6 +373,7 @@ def merge_deadhead_metrics(
                 metrics[(from_stop, to_stop)] = metric
 
     stop_coords = _stop_coord_lookup(stops)
+    depot_coords = _depot_coord_lookup(depots or [])
     stop_ids_by_name = _stop_name_lookup(stops)
     stop_ids_by_platform_family: Dict[str, set[str]] = {}
     for stop in stops:
@@ -390,48 +445,32 @@ def merge_deadhead_metrics(
         if destination_stop_id:
             destinations_by_family.setdefault(family_code, set()).add(destination_stop_id)
 
-    if assumed_speed_kmh <= 0:
-        assumed_speed_kmh = 18.0
-
     for family_code in sorted(set(origins_by_family) | set(destinations_by_family)):
         origin_ids = sorted(origins_by_family.get(family_code) or ())
         destination_ids = sorted(destinations_by_family.get(family_code) or ())
         if not origin_ids or not destination_ids:
             continue
         for from_stop in destination_ids:
-            from_coords = stop_coords.get(from_stop)
-            if not from_coords:
-                continue
             for to_stop in origin_ids:
                 if from_stop == to_stop:
                     continue
                 key = (from_stop, to_stop)
                 if key in metrics:
                     continue
-                to_coords = stop_coords.get(to_stop)
-                if not to_coords:
-                    continue
-                straight_km = _haversine_km(
-                    from_coords[0],
-                    from_coords[1],
-                    to_coords[0],
-                    to_coords[1],
-                )
-                distance_km = round(straight_km * max(detour_factor, 1.0), 4)
-                if distance_km <= 0.0 or distance_km > max_deadhead_km:
-                    continue
-                travel_time_min = max(
-                    int(min_deadhead_min),
-                    int(math.ceil((distance_km / assumed_speed_kmh) * 60.0)),
-                )
-                metrics[key] = DeadheadMetric(
-                    from_stop=from_stop,
-                    to_stop=to_stop,
-                    travel_time_min=travel_time_min,
-                    distance_km=distance_km,
+                metric = _infer_metric_from_coords(
+                    from_stop,
+                    to_stop,
+                    stop_coords.get(from_stop),
+                    stop_coords.get(to_stop),
                     source="route_family_terminal_inference",
                     route_family_code=family_code,
+                    detour_factor=detour_factor,
+                    assumed_speed_kmh=assumed_speed_kmh,
+                    min_deadhead_min=min_deadhead_min,
+                    max_deadhead_km=max_deadhead_km,
                 )
+                if metric is not None:
+                    metrics[key] = metric
 
     all_origin_ids = sorted(
         {
@@ -449,37 +488,62 @@ def merge_deadhead_metrics(
     )
 
     for from_stop in all_destination_ids:
-        from_coords = stop_coords.get(from_stop)
-        if not from_coords:
-            continue
         for to_stop in all_origin_ids:
             if from_stop == to_stop:
                 continue
             key = (from_stop, to_stop)
             if key in metrics:
                 continue
-            to_coords = stop_coords.get(to_stop)
-            if not to_coords:
-                continue
-            straight_km = _haversine_km(
-                from_coords[0],
-                from_coords[1],
-                to_coords[0],
-                to_coords[1],
-            )
-            distance_km = round(straight_km * max(detour_factor, 1.0), 4)
-            if distance_km <= 0.0 or distance_km > max_deadhead_km:
-                continue
-            travel_time_min = max(
-                int(min_deadhead_min),
-                int(math.ceil((distance_km / assumed_speed_kmh) * 60.0)),
-            )
-            metrics[key] = DeadheadMetric(
-                from_stop=from_stop,
-                to_stop=to_stop,
-                travel_time_min=travel_time_min,
-                distance_km=distance_km,
+            metric = _infer_metric_from_coords(
+                from_stop,
+                to_stop,
+                stop_coords.get(from_stop),
+                stop_coords.get(to_stop),
                 source="cross_family_terminal_inference",
                 route_family_code=None,
+                detour_factor=detour_factor,
+                assumed_speed_kmh=assumed_speed_kmh,
+                min_deadhead_min=min_deadhead_min,
+                max_deadhead_km=max_deadhead_km,
             )
+            if metric is not None:
+                metrics[key] = metric
+
+    for depot_id, coords in depot_coords.items():
+        for origin_stop in all_origin_ids:
+            key = (depot_id, origin_stop)
+            if key in metrics:
+                continue
+            metric = _infer_metric_from_coords(
+                depot_id,
+                origin_stop,
+                coords,
+                stop_coords.get(origin_stop),
+                source="depot_terminal_inference",
+                route_family_code=None,
+                detour_factor=detour_factor,
+                assumed_speed_kmh=assumed_speed_kmh,
+                min_deadhead_min=min_deadhead_min,
+                max_deadhead_km=max_deadhead_km,
+            )
+            if metric is not None:
+                metrics[key] = metric
+        for destination_stop in all_destination_ids:
+            key = (destination_stop, depot_id)
+            if key in metrics:
+                continue
+            metric = _infer_metric_from_coords(
+                destination_stop,
+                depot_id,
+                stop_coords.get(destination_stop),
+                coords,
+                source="depot_terminal_inference",
+                route_family_code=None,
+                detour_factor=detour_factor,
+                assumed_speed_kmh=assumed_speed_kmh,
+                min_deadhead_min=min_deadhead_min,
+                max_deadhead_km=max_deadhead_km,
+            )
+            if metric is not None:
+                metrics[key] = metric
     return metrics

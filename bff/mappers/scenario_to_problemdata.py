@@ -1584,6 +1584,7 @@ def _build_deadhead_metrics(
         trip_rows=trips or [],
         routes=_as_list(scenario.get("routes")),
         stops=_as_list(scenario.get("stops")),
+        depots=_as_list(scenario.get("depots")),
         assumed_speed_kmh=deadhead_speed_kmh,
     )
 

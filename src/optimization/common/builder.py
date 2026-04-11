@@ -1353,6 +1353,7 @@ class ProblemBuilder:
             trip_rows=source_rows,
             routes=scenario.get("routes") or [],
             stops=scenario.get("stops") or [],
+            depots=scenario.get("depots") or [],
             assumed_speed_kmh=float(
                 self._safe_float(
                     (scenario.get("simulation_config") or {}).get(
