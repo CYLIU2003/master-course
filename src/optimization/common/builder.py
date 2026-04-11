@@ -470,6 +470,7 @@ class ProblemBuilder:
                     fuel_l=self._estimate_trip_fuel(trip.distance_km, context),
                     service_id=context.service_date,
                     required_soc_departure_percent=required_soc_departure_percent,
+                    route_family_code=str(getattr(trip, "route_family_code", "") or ""),
                 )
             )
         
@@ -495,6 +496,7 @@ class ProblemBuilder:
                         fuel_l=base_trip.fuel_l,
                         service_id=f"{base_trip.service_id}_d{day_idx}" if base_trip.service_id else f"d{day_idx}",
                         required_soc_departure_percent=base_trip.required_soc_departure_percent,
+                        route_family_code=base_trip.route_family_code,
                     )
                     trip_nodes_list.append(replicated_trip)
         

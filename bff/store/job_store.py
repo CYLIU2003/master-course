@@ -8,6 +8,7 @@ Jobs survive BFF restarts; in-flight jobs are marked orphaned/failed on reload.
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from datetime import datetime, timezone
@@ -46,7 +47,10 @@ def _persist_job(job: Job) -> None:
     _JOB_DIR.mkdir(parents=True, exist_ok=True)
     path = _job_path(job.job_id)
     temp_path = path.with_suffix(".json.tmp")
-    temp_path.write_text(json.dumps(job_to_dict(job), ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path.write_text(
+        json.dumps(job_to_dict(job), ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
     temp_path.replace(path)
 
 
@@ -61,6 +65,18 @@ def _job_from_payload(payload: Dict[str, Any]) -> Job:
         error=payload.get("error"),
         metadata=metadata,
     )
+
+
+def _json_compatible(value: Any) -> Any:
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {str(key): _json_compatible(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_compatible(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_compatible(item) for item in value]
+    return value
 
 
 def _pid_exists(pid: int) -> bool:
@@ -167,7 +183,7 @@ def update_job(
 
 
 def job_to_dict(job: Job) -> Dict[str, Any]:
-    return {
+    payload = {
         "job_id": job.job_id,
         "status": job.status,
         "progress": job.progress,
@@ -177,3 +193,4 @@ def job_to_dict(job: Job) -> Dict[str, Any]:
         "metadata": job.metadata,
         "persistence": dict(JOB_PERSISTENCE_INFO),
     }
+    return _json_compatible(payload)

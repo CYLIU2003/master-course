@@ -51,6 +51,7 @@ class ProblemTrip:
     fuel_l: float = 0.0
     service_id: Optional[str] = None
     required_soc_departure_percent: Optional[float] = None
+    route_family_code: str = ""
 
 
 @dataclass(frozen=True)

@@ -1625,13 +1625,16 @@ class App:
 
         ttk.Label(
             action_bar,
-            text="① 保存  →  ② ソルバー設定  →  ③ Solver対応 Prepare  →  ④ 実行",
+            text="① シナリオ保存  →  ② ソルバー設定  →  ③ Solver対応 Prepare  →  ④ 実行",
             foreground="#1a5276",
             font=("TkDefaultFont", 9, "bold"),
         ).pack(anchor="w", pady=(0, 4))
 
         btn_row = ttk.Frame(action_bar)
         btn_row.pack(fill=tk.X)
+        ttk.Button(
+            btn_row, text="① シナリオ保存", command=self.save_quick_setup,
+        ).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(btn_row, text="② ソルバー設定", command=self.open_solver_settings_window).pack(side=tk.LEFT, padx=(0, 4))
         ttk.Button(btn_row, text="③ Solver対応 Prepare", command=self.prepare).pack(side=tk.LEFT, padx=4)
         self.execution_mode_var = tk.StringVar(value="最適化計算")
@@ -1684,108 +1687,13 @@ class App:
             key: tk.BooleanVar(value=value)
             for key, value in default_cost_component_flags().items()
         }
-        # ── よく使うパラメータ（最上部）──
-        basic = ttk.LabelFrame(ops, text="基本パラメータ", padding=6)
-        basic.pack(fill=tk.X, pady=(0, 4))
+        # ── パラメータ変数の初期化 ──
         self.grid_flat_price_var = tk.StringVar(value="30")
         self.diesel_price_var = tk.StringVar(value="145")
         self.demand_charge_var = tk.StringVar(value="1500")
         self.depot_power_limit_var = tk.StringVar(value="500")
         self.deadhead_speed_kmh_var = tk.StringVar(value="18")
         self.tou_text_var = tk.StringVar(value="0-12:15,12-20:40,20-48:20")
-        self._labeled_entry(
-            basic, "燃料単価 diesel_price_per_l", self.diesel_price_var,
-            tooltip="軽油の単価 [円/L]。ICE バスの燃料費（O1）計算に使用。例: 145",
-        )
-        self._labeled_entry(
-            basic, "電気代単価 grid_flat_price_per_kwh", self.grid_flat_price_var,
-            tooltip="系統電力の平均単価 [円/kWh]。TOU帯が設定されていない場合にフォールバック。例: 30",
-        )
-        self._labeled_entry(
-            basic, "TOU帯 (例 0-12:15,12-20:40)", self.tou_text_var,
-            tooltip=(
-                "時間帯別電力単価（Time-of-Use）の設定。\n"
-                "形式: 開始スロット-終了スロット:単価[円/kWh], ...\n"
-                "スロット番号は 30 分刻みで 0〜48（0=0:00, 24=12:00, 48=24:00）。\n"
-                "例: 0-12:15,12-20:40,20-48:20\n"
-                "  → 0:00〜6:00 は 15円, 6:00〜10:00 は 40円, 10:00〜24:00 は 20円"
-            ),
-        )
-        self._labeled_entry(
-            basic, "初期SOC initial_soc", self.initial_soc_var,
-            tooltip="運行開始時の電池残量比率（0〜1）。1.0 = 満充電。例: 0.8",
-        )
-        self._labeled_entry(
-            basic, "バッファSOC下限 soc_min", self.soc_min_var,
-            tooltip="走行中に下回れない SOC 下限（0〜1）。小さいほど柔軟だが電欠リスクが上がる。例: 0.2",
-        )
-        self._labeled_entry(
-            basic, "バッファSOC上限 soc_max", self.soc_max_var,
-            tooltip="充電を停止する SOC 上限（0〜1）。過充電防止。例: 0.9",
-        )
-        self._labeled_entry(
-            basic, "需要単価 (月額) demand_charge_cost_per_kw", self.demand_charge_var,
-            tooltip=(
-                "ピーク需要電力 1 kW あたりの月額基本料金 [円/kW/月]。\n"
-                "電力会社との契約で決まる「その月の最大需要電力 × 単価」が加算される。\n"
-                "計画期間に応じて日割り換算されます（例: 1日計画 = 月額/30）。\n"
-                "充電タイミングを分散させるインセンティブとして機能。例: 1500"
-            ),
-        )
-        self._labeled_entry(
-            basic, "契約上限 depot_power_limit_kw", self.depot_power_limit_var,
-            tooltip=(
-                "営業所の系統受電契約電力上限 [kW]。\n"
-                "この値を超える系統受電は制約違反（罰則または INFEASIBLE）になる。例: 500"
-            ),
-        )
-        self._labeled_entry(
-            basic, "回送速度 deadhead_speed_kmh", self.deadhead_speed_kmh_var,
-            tooltip=(
-                "BEV が営業所↔停留所間を回送する際の推定速度 [km/h]。\n"
-                "便連結の接続可否判定（arrival + turnaround + deadhead_time ≤ departure）に使用。例: 18"
-            ),
-        )
-        cost_toggle_frame = ttk.LabelFrame(basic, text="目的関数に含めるコスト項目", padding=6)
-        cost_toggle_frame.pack(fill=tk.X, pady=(6, 0))
-        ttk.Label(cost_toggle_frame, text="項目").grid(row=0, column=0, sticky="w", padx=(0, 8))
-        ttk.Label(cost_toggle_frame, text="目的関数に含める").grid(row=0, column=1, sticky="w", padx=(0, 8))
-        ttk.Label(cost_toggle_frame, text="内容").grid(row=0, column=2, sticky="w")
-        row_idx = 1
-        for section, definitions in _group_cost_components_for_ui():
-            ttk.Label(
-                cost_toggle_frame,
-                text=section,
-                foreground="#1a5276",
-                font=("TkDefaultFont", 9, "bold"),
-            ).grid(row=row_idx, column=0, sticky="w", pady=(6 if row_idx > 1 else 4, 2))
-            row_idx += 1
-            for definition in definitions:
-                ttk.Label(cost_toggle_frame, text=definition.label).grid(
-                    row=row_idx,
-                    column=0,
-                    sticky="w",
-                    padx=(0, 8),
-                    pady=2,
-                )
-                ttk.Checkbutton(
-                    cost_toggle_frame,
-                    variable=self.cost_component_vars[definition.key],
-                ).grid(row=row_idx, column=1, sticky="w", padx=(0, 8), pady=2)
-                description = definition.description
-                if definition.solver_scope == "milp_only":
-                    description = "MILPのみ: " + description
-                ttk.Label(
-                    cost_toggle_frame,
-                    text=description,
-                    foreground="#555",
-                ).grid(row=row_idx, column=2, sticky="w", pady=2)
-                row_idx += 1
-        cost_toggle_frame.columnconfigure(2, weight=1)
-
-        # ── 詳細・ペナルティ・CO₂パラメータ（スクロール下部）──
-        advanced = ttk.LabelFrame(ops, text="詳細パラメータ / CO₂・劣化費", padding=6)
-        advanced.pack(fill=tk.X, pady=(0, 4))
         self.grid_sell_price_var = tk.StringVar(value="0")
         self.grid_co2_var = tk.StringVar(value="0")
         self.co2_price_var = tk.StringVar(value="0")
@@ -1812,58 +1720,198 @@ class App:
         self.co2_price_source_var = tk.StringVar(value="manual")
         self.co2_reference_date_var = tk.StringVar(value="")
         self.enable_vehicle_diagram_output_var = tk.BooleanVar(value=True)
-        self._labeled_entry(advanced, "売電単価 grid_sell_price_per_kwh", self.grid_sell_price_var,
-            tooltip="PV 余剰電力の売電単価 [円/kWh]。現行実装では売電を目的関数に含まないため参考値。例: 0")
-        self._labeled_entry(advanced, "未配車罰金 unserved_penalty", self.unserved_penalty_var,
+
+        # ════════════════════════════════
+        # 基本パラメータ
+        # ════════════════════════════════
+        basic = ttk.LabelFrame(ops, text="基本パラメータ", padding=6)
+        basic.pack(fill=tk.X, pady=(0, 4))
+
+        # ── エネルギー単価 ──
+        energy_grp = ttk.LabelFrame(basic, text="エネルギー単価", padding=4)
+        energy_grp.pack(fill=tk.X, pady=(0, 4))
+        self._param_row2(
+            energy_grp,
+            "燃料単価 [円/L]", self.diesel_price_var,
+            tip0="軽油の単価 [円/L]。ICE バスの燃料費（O1）計算に使用。例: 145",
+            label1="電気代単価 [円/kWh]", var1=self.grid_flat_price_var,
+            tip1="系統電力の平均単価 [円/kWh]。TOU帯が未設定のときフォールバック。例: 30",
+        )
+        self._param_row2(
+            energy_grp,
+            "需要単価 [円/kW/月]", self.demand_charge_var,
+            tip0=(
+                "ピーク需要電力 1kW あたりの月額基本料金 [円/kW/月]。\n"
+                "充電タイミングを分散させるインセンティブとして機能。例: 1500"
+            ),
+            label1="契約上限 [kW]", var1=self.depot_power_limit_var,
+            tip1=(
+                "営業所の系統受電契約電力上限 [kW]。\n"
+                "この値を超えると制約違反になる。例: 500"
+            ),
+        )
+        self._param_row2(
+            energy_grp,
+            "売電単価 [円/kWh]", self.grid_sell_price_var,
+            tip0="PV 余剰電力の売電単価 [円/kWh]。現行実装では参考値。例: 0",
+            label1="回送速度 [km/h]", var1=self.deadhead_speed_kmh_var,
+            tip1=(
+                "営業所↔停留所間の回送推定速度 [km/h]。\n"
+                "便連結の接続可否判定（到着+折返+回送 ≤ 出発）に使用。例: 18"
+            ),
+        )
+        self._labeled_entry(
+            energy_grp, "TOU帯", self.tou_text_var,
             tooltip=(
+                "時間帯別電力単価（Time-of-Use）の設定。\n"
+                "形式: 開始スロット-終了スロット:単価[円/kWh], ...\n"
+                "スロット番号は 30 分刻みで 0〜48（0=0:00, 24=12:00, 48=24:00）。\n"
+                "例: 0-12:15,12-20:40,20-48:20\n"
+                "  → 0:00〜6:00 は 15円, 6:00〜10:00 は 40円, 10:00〜24:00 は 20円"
+            ),
+        )
+
+        # ── 充電・SOC ──
+        soc_grp = ttk.LabelFrame(basic, text="充電・SOC", padding=4)
+        soc_grp.pack(fill=tk.X, pady=(0, 4))
+        self._param_row2(
+            soc_grp,
+            "初期SOC", self.initial_soc_var,
+            tip0="運行開始時の電池残量比率（0〜1）。1.0 = 満充電。例: 0.8",
+            label1="SOC下限 (バッファ)", var1=self.soc_min_var,
+            tip1="走行中に下回れない SOC 下限（0〜1）。小さいほど柔軟だが電欠リスクが上がる。例: 0.2",
+        )
+        self._param_row2(
+            soc_grp,
+            "SOC上限 (過充電防止)", self.soc_max_var,
+            tip0="充電を停止する SOC 上限（0〜1）。過充電防止。例: 0.9",
+        )
+
+        # ── 目的関数コスト項目 ──
+        cost_toggle_frame = ttk.LabelFrame(basic, text="目的関数に含めるコスト項目", padding=6)
+        cost_toggle_frame.pack(fill=tk.X, pady=(0, 0))
+        ttk.Label(cost_toggle_frame, text="項目").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        ttk.Label(cost_toggle_frame, text="目的関数に含める").grid(row=0, column=1, sticky="w", padx=(0, 8))
+        ttk.Label(cost_toggle_frame, text="内容").grid(row=0, column=2, sticky="w")
+        row_idx = 1
+        for section, definitions in _group_cost_components_for_ui():
+            ttk.Label(
+                cost_toggle_frame,
+                text=section,
+                foreground="#1a5276",
+                font=("TkDefaultFont", 9, "bold"),
+            ).grid(row=row_idx, column=0, sticky="w", pady=(6 if row_idx > 1 else 4, 2))
+            row_idx += 1
+            for definition in definitions:
+                ttk.Label(cost_toggle_frame, text=definition.label).grid(
+                    row=row_idx, column=0, sticky="w", padx=(0, 8), pady=2,
+                )
+                ttk.Checkbutton(
+                    cost_toggle_frame,
+                    variable=self.cost_component_vars[definition.key],
+                ).grid(row=row_idx, column=1, sticky="w", padx=(0, 8), pady=2)
+                description = definition.description
+                if definition.solver_scope == "milp_only":
+                    description = "MILPのみ: " + description
+                ttk.Label(
+                    cost_toggle_frame,
+                    text=description,
+                    foreground="#555",
+                ).grid(row=row_idx, column=2, sticky="w", pady=2)
+                row_idx += 1
+        cost_toggle_frame.columnconfigure(2, weight=1)
+
+        # ════════════════════════════════
+        # 詳細パラメータ
+        # ════════════════════════════════
+        advanced = ttk.LabelFrame(ops, text="詳細パラメータ", padding=6)
+        advanced.pack(fill=tk.X, pady=(0, 4))
+
+        # ── ペナルティ ──
+        penalty_grp = ttk.LabelFrame(advanced, text="ペナルティ", padding=4)
+        penalty_grp.pack(fill=tk.X, pady=(0, 4))
+        self._param_row2(
+            penalty_grp,
+            "未配車罰金 [円/便]", self.unserved_penalty_var,
+            tip0=(
                 "便が未配車になった場合のペナルティ [円/便]。\n"
-                "大きいほど欠便を嫌うが、小さすぎると欠便が許容されて費用が下がって見える。\n"
-                "最小値 10,000 円。通常は 100,000 以上推奨。"
-            ))
-        self._labeled_entry(advanced, "契約超過罰金係数(slack_penalty)", self.contract_penalty_coeff_var,
-            tooltip="系統受電が depot_power_limit_kw を超えた際の罰則係数。大きいほど制約を厳しく守る。例: 1000000")
-        self._labeled_entry(advanced, "CO2原単位 grid_co2_kg_per_kwh", self.grid_co2_var,
-            tooltip="系統電力の CO₂排出係数 [kg/kWh]。co2 モードでの排出量計算に使用。例: 0.5")
-        self._labeled_entry(advanced, "CO2単価 co2_price_per_kg (0=無効)", self.co2_price_var,
-            tooltip=(
-                "CO₂排出 1 kg あたりのコスト [円/kg]（total_cost モード用）。\n"
-                "0 = CO₂費は目的関数に加算しない。\n"
-                "co2 モードではこの値が 0 でも CO₂排出量そのものを最小化する。"
-            ))
-        self._labeled_entry(advanced, "CO2価格ソース co2_price_source", self.co2_price_source_var,
-            tooltip="CO₂価格の参照元。manual = 手動入力、jets = JETS 市場価格（co2_reference_date 要設定）")
-        self._labeled_entry(advanced, "CO2参照日 co2_reference_date", self.co2_reference_date_var,
-            tooltip="co2_price_source=jets の場合の参照日（YYYY-MM-DD）。manual の場合は不要。")
-        self._labeled_entry(advanced, "軽油CO2係数 ice_co2_kg_per_l", self.ice_co2_kg_per_l_var,
-            tooltip="軽油 1 L 燃焼時の CO₂排出量 [kg/L]。デフォルト 2.64（環境省係数）。")
-        self._labeled_entry(advanced, "劣化重み degradation_weight (0=無効)", self.degradation_weight_var,
-            tooltip=(
+                "大きいほど欠便を嫌う。通常は 100,000 以上推奨。"
+            ),
+            label1="契約超過係数", var1=self.contract_penalty_coeff_var,
+            tip1="系統受電が契約上限を超えた際の罰則係数。大きいほど厳しく守る。例: 1000000",
+        )
+
+        # ── CO₂・環境 ──
+        co2_grp = ttk.LabelFrame(advanced, text="CO₂・環境", padding=4)
+        co2_grp.pack(fill=tk.X, pady=(0, 4))
+        self._param_row2(
+            co2_grp,
+            "CO2原単位 [kg/kWh]", self.grid_co2_var,
+            tip0="系統電力の CO₂排出係数 [kg/kWh]。co2 モードの排出量計算に使用。例: 0.5",
+            label1="CO2単価 [円/kg]", var1=self.co2_price_var,
+            tip1=(
+                "CO₂排出 1kg あたりのコスト [円/kg]（total_cost モード用）。\n"
+                "0 = CO₂費は目的関数に加算しない。"
+            ),
+        )
+        self._param_row2(
+            co2_grp,
+            "CO2価格ソース", self.co2_price_source_var,
+            tip0="CO₂価格の参照元。manual = 手動入力、jets = JETS 市場価格（参照日要設定）",
+            label1="CO2参照日 (JETS)", var1=self.co2_reference_date_var,
+            tip1="co2_price_source=jets の場合の参照日（YYYY-MM-DD）。manual の場合は不要。",
+        )
+        self._param_row2(
+            co2_grp,
+            "軽油CO2係数 [kg/L]", self.ice_co2_kg_per_l_var,
+            tip0="軽油 1L 燃焼時の CO₂排出量 [kg/L]。デフォルト 2.64（環境省係数）。",
+            label1="劣化重み", var1=self.degradation_weight_var,
+            tip1=(
                 "電池劣化コストの重み係数。\n"
-                "充電量 / バッテリー容量 × 50 円/cycle × この重みが目的関数に加算される。\n"
-                "0 = 劣化費用を目的関数に含まない。"
-            ))
-        self._labeled_entry(advanced, "目的プリセット objective_preset", self.objective_preset_var,
-            tooltip="重みプリセット。cost / co2 / balanced / utilization から選択。ソルバー設定の objectiveMode と合わせること。")
-        self._labeled_entry(advanced, "開始断片上限 max_start_fragments", self.max_start_fragments_var,
-            tooltip=(
-                "各車両が 1 日に出庫できる最大回数（C3 制約）。\n"
-                "通常は 1（1 日 1 出庫）。増やすと分割シフト（午前・午後）を許容する。\n"
-                "大きくしすぎると変数数が増えソルバーが遅くなる。"
-            ))
-        self._labeled_entry(advanced, "終了断片上限 max_end_fragments", self.max_end_fragments_var,
-            tooltip="各車両が 1 日に入庫できる最大回数（C3 制約）。通常は max_start_fragments と同じ値にする。")
-        self._labeled_entry(advanced, "初期SOC比 initial_soc_percent", self.initial_soc_percent_var)
-        self._labeled_entry(advanced, "終了SOC床 final_soc_floor_percent", self.final_soc_floor_percent_var)
-        self._labeled_entry(advanced, "終了SOC目標 final_soc_target_percent", self.final_soc_target_percent_var)
-        self._labeled_entry(advanced, "終了SOC目標許容± final_soc_target_tolerance_percent", self.final_soc_target_tolerance_percent_var)
-        self._labeled_entry(advanced, "ICE初期燃料比 initial_ice_fuel_percent", self.initial_ice_fuel_percent_var)
-        self._labeled_entry(advanced, "ICE最低燃料バッファ min_ice_fuel_percent", self.min_ice_fuel_percent_var)
-        self._labeled_entry(advanced, "ICE燃料バッファ上限 max_ice_fuel_percent", self.max_ice_fuel_percent_var)
-        self._labeled_entry(advanced, "ICE既定タンク容量[L] default_ice_tank_capacity_l", self.default_ice_tank_capacity_l_var)
-        self._labeled_entry(advanced, "PVプロファイルID pv_profile_id", self.pv_profile_id_var)
-        weather_row = ttk.Frame(advanced)
-        weather_row.pack(fill=tk.X, pady=2)
-        weather_label = ttk.Label(weather_row, text="天気モード weather_mode", width=36)
+                "充電量/容量 × 50円/cycle × この重みが目的関数に加算される。\n"
+                "0 = 劣化費用を含まない。"
+            ),
+        )
+
+        # ── ICE燃料 ──
+        ice_grp = ttk.LabelFrame(advanced, text="ICE燃料", padding=4)
+        ice_grp.pack(fill=tk.X, pady=(0, 4))
+        self._param_row2(
+            ice_grp,
+            "初期燃料比", self.initial_ice_fuel_percent_var,
+            label1="最低燃料バッファ", var1=self.min_ice_fuel_percent_var,
+        )
+        self._param_row2(
+            ice_grp,
+            "燃料上限バッファ", self.max_ice_fuel_percent_var,
+            label1="タンク容量 [L]", var1=self.default_ice_tank_capacity_l_var,
+        )
+
+        # ── SOC詳細 ──
+        soc_detail_grp = ttk.LabelFrame(advanced, text="SOC詳細", padding=4)
+        soc_detail_grp.pack(fill=tk.X, pady=(0, 4))
+        self._param_row2(
+            soc_detail_grp,
+            "初期SOC比", self.initial_soc_percent_var,
+            label1="終了SOC目標", var1=self.final_soc_target_percent_var,
+        )
+        self._param_row2(
+            soc_detail_grp,
+            "終了SOC床", self.final_soc_floor_percent_var,
+            label1="目標許容±", var1=self.final_soc_target_tolerance_percent_var,
+        )
+
+        # ── PV・天候 ──
+        pv_grp = ttk.LabelFrame(advanced, text="PV・天候", padding=4)
+        pv_grp.pack(fill=tk.X, pady=(0, 4))
+        self._param_row2(
+            pv_grp,
+            "PVプロファイルID", self.pv_profile_id_var,
+            label1="天気係数", var1=self.weather_factor_scalar_var,
+        )
+        weather_row = ttk.Frame(pv_grp)
+        weather_row.pack(fill=tk.X, pady=1)
+        weather_label = ttk.Label(weather_row, text="天気モード", width=18)
         weather_label.pack(side=tk.LEFT)
         _Tooltip(
             weather_label,
@@ -1876,10 +1924,9 @@ class App:
             values=self.weather_mode_options,
         )
         self.weather_mode_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self._labeled_entry(advanced, "天気係数 weather_factor_scalar", self.weather_factor_scalar_var)
         asset_row = self._labeled_entry(
-            advanced,
-            "営業所エネルギー資産 depot_energy_assets(JSON)",
+            pv_grp,
+            "営業所エネルギー資産(JSON)",
             self.depot_energy_assets_json_var,
             tooltip=(
                 "営業所別のPV/BESS設定をJSON配列で入力します。\n"
@@ -1893,9 +1940,28 @@ class App:
             text="選択営業所へ実日PV同期",
             command=self.sync_selected_depot_pv_assets,
         ).pack(side=tk.LEFT, padx=(6, 0))
-        self._labeled_entry(advanced, "拡張係数 objective_weights(JSON)", self.objective_weights_json_var)
-        ttk.Checkbutton(advanced, text="車両ダイヤグラム出力", variable=self.enable_vehicle_diagram_output_var).pack(anchor="w", pady=(2, 0))
-        self._labeled_entry(advanced, "車両導入費(編集は車両/テンプレ画面)", tk.StringVar(value="個別設定"), readonly=True)
+
+        # ── 最適化・その他 ──
+        optim_grp = ttk.LabelFrame(advanced, text="最適化・その他", padding=4)
+        optim_grp.pack(fill=tk.X, pady=(0, 0))
+        self._param_row2(
+            optim_grp,
+            "目的プリセット", self.objective_preset_var,
+            tip0="重みプリセット。cost / co2 / balanced / utilization から選択。ソルバー設定の objectiveMode と合わせること。",
+            label1="開始断片上限", var1=self.max_start_fragments_var,
+            tip1=(
+                "各車両が 1 日に出庫できる最大回数（C3 制約）。\n"
+                "通常は 1。増やすと分割シフト（午前・午後）を許容する。"
+            ),
+        )
+        self._param_row2(
+            optim_grp,
+            "終了断片上限", self.max_end_fragments_var,
+            tip0="各車両が 1 日に入庫できる最大回数。通常は開始断片上限と同じ値にする。",
+        )
+        self._labeled_entry(optim_grp, "拡張係数(JSON)", self.objective_weights_json_var)
+        ttk.Checkbutton(optim_grp, text="車両ダイヤグラム出力", variable=self.enable_vehicle_diagram_output_var).pack(anchor="w", pady=(2, 0))
+        self._labeled_entry(optim_grp, "車両導入費(編集は車両/テンプレ画面)", tk.StringVar(value="個別設定"), readonly=True)
 
         # ── ソルバー詳細設定 ──
         self.solver_mode_var = tk.StringVar(value="mode_hybrid")  # Default to canonical hybrid mode
@@ -2245,6 +2311,34 @@ class App:
         state = "readonly" if readonly else "normal"
         ttk.Entry(row, textvariable=var, state=state).pack(side=tk.LEFT, fill=tk.X, expand=True)
         return row
+
+    def _param_row2(
+        self,
+        parent: ttk.Frame,
+        label0: str,
+        var0: tk.Variable,
+        tip0: str = "",
+        label1: str = "",
+        var1: "tk.Variable | None" = None,
+        tip1: str = "",
+    ) -> None:
+        """2列パラメータ行。var1=None のときは左列のみ表示。"""
+        frame = ttk.Frame(parent)
+        frame.pack(fill=tk.X, pady=1)
+        frame.columnconfigure(1, weight=1)
+        if var1 is not None:
+            frame.columnconfigure(3, weight=1)
+        lbl0 = ttk.Label(frame, text=label0, width=18, anchor="w")
+        lbl0.grid(row=0, column=0, sticky="w")
+        if tip0:
+            _Tooltip(lbl0, tip0)
+        ttk.Entry(frame, textvariable=var0).grid(row=0, column=1, sticky="ew", padx=(2, 4))
+        if var1 is not None:
+            lbl1 = ttk.Label(frame, text=label1, width=18, anchor="w")
+            lbl1.grid(row=0, column=2, sticky="w", padx=(4, 0))
+            if tip1:
+                _Tooltip(lbl1, tip1)
+            ttk.Entry(frame, textvariable=var1).grid(row=0, column=3, sticky="ew", padx=(2, 0))
 
     def log_line(self, msg: str) -> None:
         self.log.insert(tk.END, msg + "\n")

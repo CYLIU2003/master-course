@@ -39,6 +39,34 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### [DEV-2026-04-11] strict precheck の route-family 欠落による偽 infeasible 修正
+
+- 背景:
+  - `tsurumaki` の strict coverage 実行で `strict_coverage_precheck_infeasible` が solver 呼び出し前に返り、MILP に到達しないケースがあった。
+  - call chain を追うと `bff/routers/optimization.py` → `ProblemBuilder.build_from_scenario()` → `OptimizationEngine.solve()` → `evaluate_strict_coverage_precheck()` の順に実行され、停止点は precheck だった。
+  - 根因は、dispatch `Trip` が持つ `route_family_code`（例: `渋21` / `渋22`）を canonical `ProblemTrip` に渡していなかったこと。`fixed_route_band_mode=true` 時に route-band key が family ではなく `route_id` fallback になり、緩和 lower bound が過大化していた。
+
+- 対応:
+  - `src/optimization/common/problem.py`
+    - `ProblemTrip` に `route_family_code: str = ""` を末尾フィールドとして追加（既存位置引数呼び出し互換を維持）。
+  - `src/optimization/common/builder.py`
+    - dispatch `Trip` → canonical `ProblemTrip` 変換で `route_family_code` を伝播。
+    - multi-day 複製時も `route_family_code` を保持。
+  - strict precheck アルゴリズム本体は変更せず、`trip_route_band_key()` が canonical family metadata を参照できる状態へ戻した。
+  - 低リスク追従として、baseline materialize 時の startup rejection 監査を `optimization_result.summary` / `optimization_audit` に追加（`startup_rejected_*` 集計と `startup_rejected_vehicle_ids_by_duty`）。
+
+- 研究上の影響:
+  - `fixed_route_band_mode=true` の数学的意味（family ベースの route-band 固定）を保ったまま誤検知のみ除去。
+  - `fixed_route_band_mode=false` へ落として回避する運用は可行性ワークアラウンドとしてのみ扱い、benchmark 比較の正本には使わない。
+  - dispatch feasibility 条件 `arrival + turnaround + deadhead <= next departure`、depot-reset 可否ロジック、目的関数の意味は変更していない。
+
+- 回帰テスト:
+  - `tests/test_strict_coverage_precheck.py`
+    - fixed route-band かつ同一 family の複数 variant で、family metadata あり/なしの lower bound 差分を検証。
+    - prepared-input 相当形状（variant 混在）で family metadata ありなら `relaxed_vehicle_lower_bound <= available_vehicle_count` となり、偽 infeasible にならないことを検証。
+  - `tests/test_problem_builder_route_family_metadata.py`
+    - canonical 変換時の `route_family_code` 伝播と multi-day 複製保持を検証。
+
 ### [DEV-2026-04-10] Strict coverage infeasibility precheck
 
 - 自分で上げた問題:

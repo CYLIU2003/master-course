@@ -3056,6 +3056,34 @@ def _run_optimization(
         )
         unused_available_vehicle_ids = list(engine_result.plan.unused_available_vehicle_ids(problem))
         solver_metadata = dict(engine_result.solver_metadata or {})
+        startup_rejected_raw = (
+            solver_metadata.get("startup_rejected_vehicle_ids_by_duty")
+            or (engine_result.plan.metadata or {}).get("startup_rejected_vehicle_ids_by_duty")
+            or {}
+        )
+        startup_rejected_vehicle_ids_by_duty: Dict[str, List[str]] = {}
+        if isinstance(startup_rejected_raw, dict):
+            for duty_id, vehicle_ids in startup_rejected_raw.items():
+                normalized_vehicle_ids = sorted(
+                    {
+                        str(vehicle_id).strip()
+                        for vehicle_id in list(vehicle_ids or [])
+                        if str(vehicle_id).strip()
+                    }
+                )
+                if normalized_vehicle_ids:
+                    startup_rejected_vehicle_ids_by_duty[str(duty_id)] = normalized_vehicle_ids
+        startup_rejected_duty_count = len(startup_rejected_vehicle_ids_by_duty)
+        startup_rejected_vehicle_candidate_count = sum(
+            len(vehicle_ids) for vehicle_ids in startup_rejected_vehicle_ids_by_duty.values()
+        )
+        startup_rejected_vehicle_count = len(
+            {
+                vehicle_id
+                for vehicle_ids in startup_rejected_vehicle_ids_by_duty.values()
+                for vehicle_id in vehicle_ids
+            }
+        )
 
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
@@ -3108,6 +3136,10 @@ def _run_optimization(
                     or (engine_result.plan.metadata or {}).get("startup_infeasible_vehicle_ids")
                     or []
                 ),
+                "startup_rejected_duty_count": int(startup_rejected_duty_count),
+                "startup_rejected_vehicle_candidate_count": int(startup_rejected_vehicle_candidate_count),
+                "startup_rejected_vehicle_count": int(startup_rejected_vehicle_count),
+                "startup_rejected_vehicle_ids_by_duty": startup_rejected_vehicle_ids_by_duty,
                 "max_depot_cycles_per_vehicle_per_day": int(
                     solver_metadata.get(
                         "max_depot_cycles_per_vehicle_per_day",
@@ -3187,6 +3219,10 @@ def _run_optimization(
             "daily_fragment_limit": daily_fragment_limit,
             "available_vehicle_count_total": available_vehicle_count_total,
             "unused_available_vehicle_ids": unused_available_vehicle_ids,
+            "startup_rejected_duty_count": int(startup_rejected_duty_count),
+            "startup_rejected_vehicle_candidate_count": int(startup_rejected_vehicle_candidate_count),
+            "startup_rejected_vehicle_count": int(startup_rejected_vehicle_count),
+            "startup_rejected_vehicle_ids_by_duty": startup_rejected_vehicle_ids_by_duty,
             "time_limit": time_limit_seconds,
             "mip_gap": mip_gap,
             "random_seed": random_seed,
