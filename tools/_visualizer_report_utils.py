@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import os
+import re
 from pathlib import Path
 from collections import Counter
 import shutil
@@ -12,6 +13,8 @@ from typing import Any, Iterable, List, Mapping, Optional
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+_DATE_SEGMENT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_RUN_LAYOUT_SEGMENTS = {"optimization", "simulation"}
 
 
 def outputs_root() -> Path:
@@ -189,18 +192,46 @@ def load_run_payloads(run_dir: Path) -> dict[str, dict]:
 
 def parse_run_path(run_dir: Path) -> dict[str, str]:
     parts = [part for part in run_dir.as_posix().split("/") if part]
-    for idx, part in enumerate(parts):
-        if len(part) == 10 and part[4] == "-" and part[7] == "-" and idx + 1 < len(parts):
-            run_id = parts[idx + 1]
-            if run_id.startswith("run_"):
-                return {
-                    "date": part,
-                    "scenario_id": "unknown",
-                    "mode": "",
-                    "depot": "unknown",
-                    "service": "unknown",
-                    "run_id": run_id,
-                }
+    date_index = next((idx for idx, part in enumerate(parts) if _DATE_SEGMENT_RE.match(part)), None)
+    run_index = next((idx for idx in range(len(parts) - 1, -1, -1) if parts[idx].startswith("run_")), None)
+    if date_index is not None and run_index is not None:
+        run_id = parts[run_index]
+        if run_index == date_index + 1:
+            return {
+                "date": parts[date_index],
+                "scenario_id": "unknown",
+                "mode": "",
+                "depot": "unknown",
+                "service": "unknown",
+                "run_id": run_id,
+            }
+
+        stage_index = next(
+            (
+                idx
+                for idx in range(date_index + 1, run_index)
+                if parts[idx] in _RUN_LAYOUT_SEGMENTS
+            ),
+            None,
+        )
+        if stage_index is not None and run_index >= stage_index + 4:
+            return {
+                "date": parts[date_index],
+                "scenario_id": parts[stage_index + 1],
+                "mode": "",
+                "depot": parts[stage_index + 2],
+                "service": parts[stage_index + 3],
+                "run_id": run_id,
+            }
+        if run_index >= date_index + 4:
+            return {
+                "date": parts[date_index],
+                "scenario_id": parts[date_index + 1],
+                "mode": "",
+                "depot": parts[date_index + 2],
+                "service": parts[date_index + 3],
+                "run_id": run_id,
+            }
     return {
         "date": "unknown",
         "scenario_id": "unknown",
@@ -737,6 +768,7 @@ def export_route_band_diagram_assets(
 ) -> dict[str, Any]:
     rows = _ordered_solver_rows(metas)
     out_root = Path(out_root)
+    out_root.mkdir(parents=True, exist_ok=True)
     if not rows:
         return {
             "best_bundle_route_band_dir": None,
@@ -761,13 +793,12 @@ def export_route_band_diagram_assets(
 
     for row in rows:
         source_dir = row.run_dir / "graph" / "route_band_diagrams"
-        source_manifest = read_json(source_dir / "manifest.json") or {}
-        diagram_count = len(source_manifest.get("entries") or [])
-        if diagram_count == 0 and source_dir.exists():
+        manifest_path = source_dir / "manifest.json"
+        source_manifest = read_json(manifest_path)
+        diagram_count = len(source_manifest.get("entries") or []) if isinstance(source_manifest, dict) else 0
+        if isinstance(source_manifest, dict) and diagram_count == 0 and source_dir.exists():
             diagram_count = len([path for path in source_dir.rglob("*.svg") if path.is_file()])
-        available = source_dir.exists() and (
-            (source_dir / "manifest.json").exists() or diagram_count > 0
-        )
+        available = source_dir.exists() and source_manifest is not None
         target_dir: Optional[Path] = None
         if available:
             copied_solver_count += 1

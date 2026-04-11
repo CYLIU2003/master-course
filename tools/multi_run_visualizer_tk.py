@@ -1,7 +1,7 @@
 """
 複数 run 比較可視化ツール（Tkinter）
 
-`output/<date>/scenario/.../run_*` と `output/reports/.../comparison.json`
+`output/<date>/.../run_*` と `output/reports/.../comparison.json`
 の両方を収集し、比較表・比較図・教授向けレポートを生成する。
 
 実行:

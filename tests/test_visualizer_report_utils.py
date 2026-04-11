@@ -8,6 +8,7 @@ from tools._visualizer_report_utils import (
     build_solver_comparison_markdown,
     collect_run_meta,
     collect_run_metas_from_report_bundle,
+    discover_run_dirs,
     export_route_band_diagram_assets,
     parse_run_path,
     resolve_run_dir_input,
@@ -30,6 +31,30 @@ def test_parse_run_path_supports_new_scenario_layout() -> None:
     assert parsed["date"] == "2025-08-04"
     assert parsed["run_id"] == "run_20260405_1713"
     assert parsed["scenario_id"] == "unknown"
+
+
+def test_parse_run_path_supports_nested_optimization_layout() -> None:
+    run_dir = Path(
+        "C:/master-course/output/tokyu/2026-03-22/optimization/2b0a60cf-61ad-4094-807c-f766641984c6/tsurumaki/WEEKDAY/run_20260322_2229"
+    )
+
+    parsed = parse_run_path(run_dir)
+
+    assert parsed["date"] == "2026-03-22"
+    assert parsed["scenario_id"] == "2b0a60cf-61ad-4094-807c-f766641984c6"
+    assert parsed["mode"] == ""
+    assert parsed["depot"] == "tsurumaki"
+    assert parsed["service"] == "WEEKDAY"
+    assert parsed["run_id"] == "run_20260322_2229"
+
+
+def test_discover_run_dirs_accepts_nested_optimization_layout(tmp_path: Path) -> None:
+    run_dir = tmp_path / "output" / "tokyu" / "2026-03-22" / "optimization" / "scenario-1" / "dep-1" / "WEEKDAY" / "run_20260322_2229"
+    _write_json(run_dir / "summary.json", {"solver_status": "feasible", "objective_value": 1.0})
+
+    discovered = discover_run_dirs(tmp_path / "output")
+
+    assert run_dir in discovered
 
 
 def test_collect_run_metas_from_report_bundle_reads_comparison_rows_and_manifest(tmp_path: Path) -> None:
@@ -108,6 +133,44 @@ def test_collect_run_metas_from_report_bundle_reads_comparison_rows_and_manifest
     assert meta.trip_count_unserved == 0
     assert meta.vehicle_count_used == 2
     assert meta.exactness_label == "fallback"
+
+
+def test_export_route_band_diagram_assets_requires_manifest(tmp_path: Path) -> None:
+    run_dir = tmp_path / "output" / "2025-08-04" / "run_20260405_1713"
+    _write_json(
+        run_dir / "optimization_result.json",
+        {
+            "scenario_id": "scenario-1",
+            "prepared_input_id": "prepared-1",
+            "objective_mode": "total_cost",
+            "scope": {"depotId": "dep-1", "serviceId": "WEEKDAY"},
+            "summary": {
+                "trip_count_served": 10,
+                "trip_count_unserved": 0,
+                "vehicle_count_used": 2,
+            },
+            "cost_breakdown": {
+                "total_cost": 123.4,
+                "total_co2_kg": 56.7,
+            },
+        },
+    )
+    _write_json(run_dir / "summary.json", {"solver_status": "feasible", "objective_value": 123.4, "solve_time_seconds": 100.0})
+    _write_json(run_dir / "cost_breakdown_detail.json", {"total_operating_cost": 123.4})
+    _write_json(run_dir / "co2_breakdown.json", {"total_co2_kg": 56.7})
+    route_band_dir = run_dir / "graph" / "route_band_diagrams"
+    route_band_dir.mkdir(parents=True, exist_ok=True)
+    (route_band_dir / "渋24.svg").write_text("<svg/>", encoding="utf-8")
+
+    meta = collect_run_meta(run_dir)
+    exports = export_route_band_diagram_assets([meta], tmp_path / "report")
+
+    manifest_path = tmp_path / "report" / "solver_route_band_diagrams_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert exports["copied_solver_count"] == 0
+    assert exports["best_bundle_route_band_dir"] is None
+    assert manifest["entries"][0]["available"] is False
 
 
 def test_resolve_run_dir_input_picks_best_objective_from_report_bundle_and_professor_report_mentions_exactness(tmp_path: Path) -> None:
