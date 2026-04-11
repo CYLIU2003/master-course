@@ -1311,7 +1311,7 @@ def build_trips(
         depot_id=body.depot_id if body else None,
         persist=True,
     )
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model="thread")
     background_tasks.add_task(
         _run_build_trips,
         scenario_id,
@@ -1400,7 +1400,7 @@ def build_graph(
         depot_id=body.depot_id if body else None,
         persist=True,
     )
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model="thread")
     background_tasks.add_task(
         _run_build_graph,
         scenario_id,
@@ -1508,7 +1508,7 @@ def build_blocks(
         depot_id=body.depot_id if body else None,
         persist=True,
     )
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model="thread")
     background_tasks.add_task(
         _run_build_blocks,
         scenario_id,
@@ -1537,7 +1537,7 @@ def build_dispatch_plan(
         depot_id=body.depot_id if body else None,
         persist=True,
     )
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model="thread")
     background_tasks.add_task(
         _run_build_dispatch_plan,
         scenario_id,
@@ -1566,7 +1566,7 @@ def generate_duties(
         depot_id=body.depot_id if body else None,
         persist=True,
     )
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model="thread")
     background_tasks.add_task(
         _run_generate_duties,
         scenario_id,

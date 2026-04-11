@@ -67,6 +67,29 @@ tests/       回帰テスト
   - `tests/test_problem_builder_route_family_metadata.py`
     - canonical 変換時の `route_family_code` 伝播と multi-day 複製保持を検証。
 
+### [DEV-2026-04-11] Windows job persistence retry/fallback
+
+- 背景:
+  - Windows で `bff/store/job_store.py` の `temp_path.replace(path)` が `PermissionError [WinError 5]` を返し、job 永続化が落ちることがあった。
+  - 同じ BFF プロセス内で background task や graph build job を poll する経路では、`get_job()` が毎回 disk を再読込して self-contention を起こしやすかった。
+
+- 対応:
+  - `bff/store/job_store.py`
+    - `_persist_job()` に retry/backoff を追加し、Windows の一時ロック時に即死せず再試行するようにした。
+    - `create_job()` に `execution_model` を追加し、job metadata に `thread` / `process` を保存できるようにした。
+    - `get_job()` は `execution_model=thread` の job では disk reload を避け、disk read が失敗した場合も既存の in-memory job を返すようにした。
+  - `bff/routers/optimization.py` / `bff/routers/simulation.py`
+    - executor 実行モードを job metadata に付与した。
+  - `bff/routers/graph.py` / `scripts/run_build_graph.py`
+    - background task / standalone graph build job も `execution_model=thread` として統一した。
+
+- 研究上の影響:
+  - dispatch feasibility、`timetable_rows`、route-family strict precheck の数学的意味は変更していない。
+  - これは Windows 上の job 永続化・polling の競合を減らす実装上の耐障害化であり、solver 結果の比較可否には影響しない。
+
+- 回帰テスト:
+  - `tests/test_job_store_windows_persistence.py`
+
 ### [DEV-2026-04-10] Strict coverage infeasibility precheck
 
 - 自分で上げた問題:

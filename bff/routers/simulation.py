@@ -948,7 +948,7 @@ def run_prepared_simulation(
         depot_id=depot_id,
         persist=True,
     )
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model=_simulation_executor_mode())
     job_store.update_job(
         job.job_id,
         metadata={
@@ -1025,7 +1025,7 @@ def run_simulation(
         depot_id=request.depot_id,
         persist=True,
     )
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model=_simulation_executor_mode())
     job_store.update_job(
         job.job_id,
         metadata={

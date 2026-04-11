@@ -3650,7 +3650,7 @@ def run_optimization(
         depot_id=request.depot_id,
         persist=True,
     )
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model=_executor_mode())
     job_store.update_job(
         job.job_id,
         metadata=_job_metadata(
@@ -3745,7 +3745,7 @@ def reoptimize(
         depot_id=body.depot_id,
         persist=True,
     )
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model=_executor_mode())
     job_store.update_job(
         job.job_id,
         metadata=_job_metadata(

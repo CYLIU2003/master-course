@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 import uuid
@@ -20,6 +21,7 @@ from bff.store import output_paths
 
 
 _JOB_DIR = output_paths.outputs_root() / "jobs"
+_PERSIST_RETRY_DELAYS = (0.05, 0.1, 0.2, 0.4)
 
 JOB_PERSISTENCE_INFO: Dict[str, Any] = {
     "store": "json_files",
@@ -43,15 +45,33 @@ def _job_path(job_id: str) -> Path:
     return _JOB_DIR / f"{job_id}.json"
 
 
+def _normalize_execution_model(execution_model: Any) -> str:
+    value = str(execution_model or "").strip().lower()
+    return value if value in {"thread", "process"} else ""
+
+
+def _should_reload_job_from_disk(job: Job) -> bool:
+    return _normalize_execution_model(job.metadata.get("execution_model")) != "thread"
+
+
 def _persist_job(job: Job) -> None:
     _JOB_DIR.mkdir(parents=True, exist_ok=True)
     path = _job_path(job.job_id)
     temp_path = path.with_suffix(".json.tmp")
-    temp_path.write_text(
-        json.dumps(job_to_dict(job), ensure_ascii=False, indent=2, allow_nan=False),
-        encoding="utf-8",
-    )
-    temp_path.replace(path)
+    payload = json.dumps(job_to_dict(job), ensure_ascii=False, indent=2, allow_nan=False)
+    last_error: Optional[BaseException] = None
+    for attempt, delay in enumerate(_PERSIST_RETRY_DELAYS, start=1):
+        try:
+            temp_path.write_text(payload, encoding="utf-8")
+            temp_path.replace(path)
+            return
+        except PermissionError as exc:
+            last_error = exc
+            if attempt >= len(_PERSIST_RETRY_DELAYS):
+                raise
+            time.sleep(delay)
+    if last_error is not None:
+        raise last_error
 
 
 def _job_from_payload(payload: Dict[str, Any]) -> Job:
@@ -121,33 +141,38 @@ def _load_jobs_from_disk() -> Dict[str, Job]:
 _jobs: Dict[str, Job] = _load_jobs_from_disk()
 
 
-def create_job() -> Job:
+def create_job(*, execution_model: Optional[str] = None) -> Job:
     job_id = str(uuid.uuid4())
-    job = Job(
-        job_id=job_id,
-        metadata={
-            "persistence": dict(JOB_PERSISTENCE_INFO),
-            "pid": os.getpid(),
-            "started_at": datetime.now(timezone.utc).isoformat(),
-        },
-    )
+    metadata: Dict[str, Any] = {
+        "persistence": dict(JOB_PERSISTENCE_INFO),
+        "pid": os.getpid(),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }
+    normalized_execution_model = _normalize_execution_model(execution_model)
+    if normalized_execution_model:
+        metadata["execution_model"] = normalized_execution_model
+    job = Job(job_id=job_id, metadata=metadata)
     _jobs[job_id] = job
     _persist_job(job)
     return job
 
 
 def get_job(job_id: str) -> Job:
-    # Always reload from disk if it exists, to get updates from worker processes
+    job = _jobs.get(job_id)
+    if job is not None and not _should_reload_job_from_disk(job):
+        return job
     path = _job_path(job_id)
     if path.exists():
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-            _jobs[job_id] = _job_from_payload(payload)
+            job = _job_from_payload(payload)
+            _jobs[job_id] = job
         except Exception:
-            pass
-    if job_id not in _jobs:
+            if job is not None:
+                return job
+    if job is None:
         raise KeyError(job_id)
-    return _jobs[job_id]
+    return job
 
 
 def update_job(

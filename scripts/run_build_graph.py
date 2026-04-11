@@ -19,7 +19,7 @@ def main() -> int:
     args = parser.parse_args()
     scenario_id = args.scenario
 
-    job = job_store.create_job()
+    job = job_store.create_job(execution_model="thread")
     print(job.job_id, flush=True)
     try:
         graph._run_build_graph(scenario_id, job.job_id, service_id=None, depot_id=None)
