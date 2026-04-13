@@ -496,13 +496,7 @@ def _scoped_output_dir(
     service_id: Optional[str] = None,
     depot_id: Optional[str] = None,
 ) -> str:
-    run_date = str(
-        feed_context.get("snapshotId")
-        or feed_context.get("serviceDate")
-        or feed_context.get("service_date")
-        or ""
-    ).strip()
-    return str(allocate_run_dir(root, run_date))
+    return str(allocate_run_dir(root))
 
 
 def _persist_json_outputs(output_dir: str, payloads: Dict[str, Dict[str, Any]]) -> None:
@@ -539,8 +533,7 @@ def _dated_scenario_run_dir(
     depot_id: Optional[str],
 ) -> Path:
     root = output_paths.outputs_root()
-    service_date = _service_date_for_output(scenario)
-    return allocate_run_dir(root, service_date)
+    return allocate_run_dir(root)
 
 
 def _write_csv_rows(path: Path, rows: List[Dict[str, Any]], fieldnames: List[str]) -> None:
