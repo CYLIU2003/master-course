@@ -39,7 +39,7 @@ def test_strict_service_marks_uncovered_trip_infeasible() -> None:
     report = FeasibilityChecker().evaluate(_problem("strict"), AssignmentPlan())
 
     assert report.feasible is False
-    assert any("Uncovered trips:" in error for error in report.errors)
+    assert any("uncovered trips" in error for error in report.errors)
 
 
 def test_penalized_service_keeps_uncovered_trip_as_warning() -> None:

@@ -119,7 +119,7 @@ def fragment_transition_allows_direct_connection(
     dispatch_context: Any | None,
 ) -> bool:
     if dispatch_context is None:
-        return bool(allow_same_day_depot_cycles)
+        return True
     from_legs = tuple(getattr(from_duty, "legs", ()) or ())
     to_legs = tuple(getattr(to_duty, "legs", ()) or ())
     if not from_legs or not to_legs:

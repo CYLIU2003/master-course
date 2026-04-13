@@ -99,7 +99,7 @@ def test_assign_duty_fragments_skips_vehicle_without_startup_deadhead_path() -> 
     assert skipped == ("t1",)
 
 
-def test_assign_duty_fragments_allows_cross_band_fragments_via_depot_reset() -> None:
+def test_assign_duty_fragments_blocks_same_day_cross_band_in_fixed_route_band_mode() -> None:
     trip_a = Trip(
         trip_id="t_a",
         route_id="route-a",
@@ -175,9 +175,12 @@ def test_assign_duty_fragments_allows_cross_band_fragments_via_depot_reset() -> 
         fixed_route_band_mode=True,
     )
 
-    assert len(duties) == 2
-    assert duty_vehicle_map == {"veh-1": "veh-1", "veh-1__frag2": "veh-1"}
-    assert skipped == ()
+    # fixed_route_band_mode=True では同一日 cross-family 遷移をブロックする。
+    # duty_a (黒07) は veh-1 に割当て、duty_b (渋24) は別バンドのため skipped になる。
+    assert len(duties) == 1
+    assert duty_vehicle_map == {"veh-1": "veh-1"}
+    assert len(skipped) == 1
+    assert skipped[0] == "t_b"  # skipped はトリップIDのタプル
 
 
 def test_assign_duty_fragments_skips_cross_band_fragment_without_depot_reset_gap() -> None:

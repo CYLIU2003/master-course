@@ -634,6 +634,7 @@ def test_build_quick_setup_payload_uses_tokyu_bus_data_when_shards_unavailable(
             "id": "dep1",
             "name": "Depot 1",
             "location": "",
+            "depotAreaM2": None,
             "routeCount": 2,
             "familyCount": 2,
             "vehicleCount": 0,

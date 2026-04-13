@@ -317,6 +317,7 @@ def test_feasibility_checker_keeps_unserved_trips_as_warning_only() -> None:
             horizon_start="00:00",
             timestep_min=60,
             objective_mode="total_cost",
+            service_coverage_mode="penalized",
         ),
         dispatch_context=DispatchContext(
             service_date="2026-03-23",
@@ -494,7 +495,7 @@ def test_feasibility_checker_marks_unserved_as_error_when_partial_service_disabl
     report = FeasibilityChecker().evaluate(problem, plan)
 
     assert report.feasible is False
-    assert any(msg.startswith("Uncovered trips:") for msg in report.errors)
+    assert any("uncovered trips" in msg for msg in report.errors)
     assert not report.warnings
 
 

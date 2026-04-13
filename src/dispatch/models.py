@@ -218,6 +218,7 @@ class DispatchContext:
     allow_inter_depot_swap: bool = False   # permit vehicle swap across different depots
     fixed_route_band_mode: bool = False
     location_aliases: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
+    horizon_start_min: int = 0
 
     def __post_init__(self) -> None:
         alias_sets: Dict[str, set[str]] = {}

@@ -1971,6 +1971,7 @@ class App:
         self.alns_iter_var = tk.StringVar(value="500")
         self.no_improvement_limit_var = tk.StringVar(value="100")
         self.destroy_fraction_var = tk.StringVar(value="0.25")
+        self.milp_max_successors_var = tk.StringVar(value="")  # 空 = 無制限
         self.allow_partial_service_var = tk.BooleanVar(value=False)
 
         settings_box = ttk.LabelFrame(ops, text="ソルバー詳細設定", padding=6)
@@ -5343,7 +5344,7 @@ class App:
                 "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
                 "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),
                 "destroy_fraction": self._parse_float(self.destroy_fraction_var.get(), 0.25),
-                "include_deadhead": self.include_deadhead_var.get(),
+                "milp_max_successors_per_trip": self._parse_int(self.milp_max_successors_var.get(), None) or None,
                 "grid_flat_price_per_kwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
                 "grid_sell_price_per_kwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
                 "demand_charge_cost_per_kw": self._parse_float(self.demand_charge_var.get(), 0.0),
@@ -6439,11 +6440,11 @@ class App:
             row_obj,
             textvariable=self.objective_mode_var,
             state="readonly",
-            values=["total_cost", "co2"],
+            values=["total_cost", "co2", "balanced", "utilization"],
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(
             solver_box,
-            text="total_cost = コスト最小 / co2 = CO2排出最小",
+            text="total_cost = コスト最小 / co2 = CO2最小 / balanced = 均衡 / utilization = 稼働率最大",
             foreground="#555",
         ).pack(anchor="w")
 
@@ -6479,6 +6480,17 @@ class App:
         ttk.Label(row_gap, text="MILPギャップ", width=24).pack(side=tk.LEFT)
         ttk.Entry(row_gap, textvariable=self.mip_gap_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+        row_successors = ttk.Frame(solver_box)
+        lbl_successors = ttk.Label(row_successors, text="MILP後継便上限", width=24)
+        lbl_successors.pack(side=tk.LEFT)
+        _Tooltip(
+            lbl_successors,
+            "MILP: 1便あたりの後継便候補の最大数。\n"
+            "空欄 = 無制限 (デフォルト)。\n"
+            "小さくすると求解が高速になるが最適性が下がる。",
+        )
+        ttk.Entry(row_successors, textvariable=self.milp_max_successors_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
         row_iter = ttk.Frame(solver_box)
         row_iter.pack(fill=tk.X, pady=3)
         ttk.Label(row_iter, text="反復回数(ALNS/GA/ABC)", width=24).pack(side=tk.LEFT)
@@ -6512,14 +6524,16 @@ class App:
 
         def refresh_visibility(_event=None) -> None:
             mode = self.solver_mode_var.get().strip().lower()
-            is_milp_like = mode in {"mode_milp_only", "hybrid", "milp"}
-            is_meta_like = mode in {"mode_alns_only", "ga", "abc", "alns"}
-            uses_alns = is_meta_like or mode == "hybrid"
+            is_milp_like = mode in {"mode_milp_only", "mode_hybrid", "mode_alns_milp", "hybrid", "milp"}
+            is_meta_like = mode in {"mode_alns_only", "mode_ga_only", "mode_abc_only", "ga", "abc", "alns"}
+            uses_alns = is_meta_like or mode in {"mode_hybrid", "mode_alns_milp", "hybrid"}
 
             if is_milp_like:
                 row_gap.pack(fill=tk.X, pady=3)
+                row_successors.pack(fill=tk.X, pady=3)
             else:
                 row_gap.pack_forget()
+                row_successors.pack_forget()
 
             if uses_alns:
                 row_iter.pack(fill=tk.X, pady=3)

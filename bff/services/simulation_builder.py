@@ -488,8 +488,27 @@ def apply_builder_configuration(
     overlay.solver_config.alns_iterations = int(
         body.simulation_settings.alns_iterations or overlay.solver_config.alns_iterations
     )
+    overlay.solver_config.no_improvement_limit = int(
+        body.simulation_settings.no_improvement_limit
+        or overlay.solver_config.no_improvement_limit
+    )
+    overlay.solver_config.destroy_fraction = float(
+        body.simulation_settings.destroy_fraction
+        or overlay.solver_config.destroy_fraction
+    )
+    if body.simulation_settings.max_start_fragments_per_vehicle is not None:
+        overlay.solver_config.max_start_fragments_per_vehicle = int(
+            body.simulation_settings.max_start_fragments_per_vehicle
+        )
+    if body.simulation_settings.max_end_fragments_per_vehicle is not None:
+        overlay.solver_config.max_end_fragments_per_vehicle = int(
+            body.simulation_settings.max_end_fragments_per_vehicle
+        )
     # Rebuild base weights per mode and preserve only advanced add-ons.
     saved_weights = dict((current_overlay.get("solver_config") or {}).get("objective_weights") or {})
+    # Merge any explicit override weights from the UI request body.
+    if body.simulation_settings.objective_weights:
+        saved_weights.update(body.simulation_settings.objective_weights)
     overlay.solver_config.objective_weights = legacy_objective_weights_for_mode(
         objective_mode=overlay.solver_config.objective_mode,
         unserved_penalty=overlay.solver_config.unserved_penalty,

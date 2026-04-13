@@ -7,10 +7,11 @@ from bff.routers.simulation import PrepareSimulationBody, PrepareSimulationSetti
 from bff.services import simulation_builder
 
 
-def test_prepare_simulation_settings_defaults_enable_route_band_and_diagrams() -> None:
+def test_prepare_simulation_settings_defaults_enable_diagrams() -> None:
     settings = PrepareSimulationSettingsBody()
 
-    assert settings.fixed_route_band_mode is True
+    # fixed_route_band_mode defaults to False (opt-in); matches SolverConfig default
+    assert settings.fixed_route_band_mode is False
     assert settings.enable_vehicle_diagram_output is True
 
 

@@ -107,7 +107,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     solver_mode: str = "mode_milp_only"
     objective_mode: str = "total_cost"
     objective_preset: Optional[str] = None
-    fixed_route_band_mode: bool = True
+    fixed_route_band_mode: bool = False
     enable_vehicle_diagram_output: bool = True
     allow_partial_service: bool = False
     unserved_penalty: float = 10000.0
@@ -136,6 +136,11 @@ class PrepareSimulationSettingsBody(BaseModel):
     weather_mode: Optional[str] = None
     weather_factor_scalar: Optional[float] = None
     alns_iterations: int = 500
+    no_improvement_limit: int = 100
+    destroy_fraction: float = 0.25
+    objective_weights: Dict[str, float] = Field(default_factory=dict)
+    max_start_fragments_per_vehicle: Optional[int] = None
+    max_end_fragments_per_vehicle: Optional[int] = None
     random_seed: Optional[int] = None
     experiment_method: Optional[str] = None
     experiment_notes: Optional[str] = None

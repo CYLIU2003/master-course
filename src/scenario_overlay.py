@@ -79,8 +79,11 @@ class SolverConfig(BaseModel):
     time_limit_seconds: int = Field(default=300, ge=1)
     mip_gap: float = Field(default=0.01, ge=0.0)
     alns_iterations: int = Field(default=500, ge=1)
+    no_improvement_limit: int = Field(default=100, ge=1)
+    destroy_fraction: float = Field(default=0.25, gt=0.0, le=1.0)
     objective_mode: Literal["total_cost", "co2", "balanced", "utilization"] = "total_cost"
     allow_partial_service: bool = False
+    service_coverage_mode: Literal["strict", "penalized"] = "strict"
     unserved_penalty: float = Field(default=10000.0, ge=0.0)
     objective_weights: dict[str, float] = Field(default_factory=dict)
     objective_preset: Optional[str] = None
