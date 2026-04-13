@@ -370,6 +370,24 @@ class UpdateScenarioBody(BaseModel):
     description: Optional[str] = None
     mode: Optional[str] = None
     operatorId: Optional[Literal["tokyu"]] = None
+    initialSocPercent: Optional[float] = None
+    finalSocFloorPercent: Optional[float] = None
+    finalSocTargetPercent: Optional[float] = None
+    finalSocTargetTolerancePercent: Optional[float] = None
+    initialIceFuelPercent: Optional[float] = None
+    minIceFuelPercent: Optional[float] = None
+    maxIceFuelPercent: Optional[float] = None
+    defaultIceTankCapacityL: Optional[float] = None
+    initialSoc: Optional[float] = None
+    socMin: Optional[float] = None
+    socMax: Optional[float] = None
+    deadheadSpeedKmh: Optional[float] = None
+    pvProfileId: Optional[str] = None
+    weatherMode: Optional[str] = None
+    weatherFactorScalar: Optional[float] = None
+    depotEnergyAssets: Optional[List[Dict[str, Any]]] = None
+    co2PriceSource: Optional[str] = None
+    co2ReferenceDate: Optional[str] = None
 
 
 class DuplicateScenarioBody(BaseModel):
@@ -501,6 +519,54 @@ def _coerce_float_mapping(value: Any) -> Dict[str, float]:
         except (TypeError, ValueError):
             continue
     return out
+
+
+def _apply_scenario_simulation_settings(
+    simulation_config: Dict[str, Any],
+    body: UpdateScenarioBody,
+) -> Dict[str, Any]:
+    """Apply scenario save fields that belong to simulation_config."""
+    if body.initialSocPercent is not None:
+        simulation_config["initial_soc_percent"] = float(body.initialSocPercent)
+    if body.finalSocFloorPercent is not None:
+        simulation_config["final_soc_floor_percent"] = float(body.finalSocFloorPercent)
+    if body.finalSocTargetPercent is not None:
+        simulation_config["final_soc_target_percent"] = float(body.finalSocTargetPercent)
+    if body.finalSocTargetTolerancePercent is not None:
+        simulation_config["final_soc_target_tolerance_percent"] = float(
+            body.finalSocTargetTolerancePercent
+        )
+    if body.initialIceFuelPercent is not None:
+        simulation_config["initial_ice_fuel_percent"] = float(body.initialIceFuelPercent)
+    if body.minIceFuelPercent is not None:
+        simulation_config["min_ice_fuel_percent"] = float(body.minIceFuelPercent)
+    if body.maxIceFuelPercent is not None:
+        simulation_config["max_ice_fuel_percent"] = float(body.maxIceFuelPercent)
+    if body.defaultIceTankCapacityL is not None:
+        simulation_config["default_ice_tank_capacity_l"] = float(body.defaultIceTankCapacityL)
+    if body.initialSoc is not None:
+        simulation_config["initial_soc"] = float(body.initialSoc)
+    if body.socMin is not None:
+        simulation_config["soc_min"] = float(body.socMin)
+    if body.socMax is not None:
+        simulation_config["soc_max"] = float(body.socMax)
+    if body.deadheadSpeedKmh is not None:
+        simulation_config["deadhead_speed_kmh"] = float(body.deadheadSpeedKmh)
+    if body.pvProfileId is not None:
+        simulation_config["pv_profile_id"] = str(body.pvProfileId)
+    if body.weatherMode is not None:
+        simulation_config["weather_mode"] = str(body.weatherMode)
+    if body.weatherFactorScalar is not None:
+        simulation_config["weather_factor_scalar"] = float(body.weatherFactorScalar)
+    if body.depotEnergyAssets is not None:
+        simulation_config["depot_energy_assets"] = [
+            dict(item) for item in body.depotEnergyAssets if isinstance(item, dict)
+        ]
+    if body.co2PriceSource is not None:
+        simulation_config["co2_price_source"] = str(body.co2PriceSource)
+    if body.co2ReferenceDate is not None:
+        simulation_config["co2_reference_date"] = str(body.co2ReferenceDate)
+    return simulation_config
 
 
 def _runtime_err_to_http(e: RuntimeError) -> HTTPException:
@@ -2366,12 +2432,17 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
 @router.put("/scenarios/{scenario_id}")
 def update_scenario(scenario_id: str, body: UpdateScenarioBody) -> Dict[str, Any]:
     try:
+        simulation_config = store.get_field(scenario_id, "simulation_config") or {}
+        if not isinstance(simulation_config, dict):
+            simulation_config = {}
+        simulation_config = _apply_scenario_simulation_settings(simulation_config, body)
         return store.update_scenario(
             scenario_id,
             name=body.name,
             description=body.description,
             mode=body.mode,
             operator_id=body.operatorId,
+            simulation_config=simulation_config if simulation_config else None,
         )
     except KeyError:
         raise _not_found(scenario_id)

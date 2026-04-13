@@ -2114,6 +2114,7 @@ def update_scenario(
     mode: Optional[str] = None,
     operator_id: Optional[str] = None,
     status: Optional[str] = None,
+    simulation_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     doc = _load_shallow(scenario_id)
     if name is not None:
@@ -2130,6 +2131,8 @@ def update_scenario(
         doc["dispatch_scope"] = scope
     if status is not None:
         doc["meta"]["status"] = status
+    if simulation_config is not None:
+        doc["simulation_config"] = dict(simulation_config)
     doc["meta"]["updatedAt"] = _now_iso()
     _save_master_only(doc, invalidate_dispatch=False)
     return _meta_payload(doc)
