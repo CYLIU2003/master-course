@@ -904,6 +904,7 @@ def prepare_simulation(
         "solverModeEffective": prepare_profile.get("solver_mode_effective"),
         "objectiveMode": body.simulation_settings.objective_mode,
         "prepareProfile": prepare_profile,
+        "preparedScopeAudit": prep.scope_summary.get("prepared_scope_audit") or {},
         "warnings": warnings,
         "scopeSummary": prep.scope_summary,
     }

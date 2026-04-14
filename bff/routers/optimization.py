@@ -2933,6 +2933,13 @@ def _run_optimization(
             _full_new_result = ResultSerializer.serialize_result(engine_result)
             if charging_summary_payload is not None:
                 _full_new_result["charging_summary"] = charging_summary_payload
+            result_payload["warnings"] = list(_full_new_result.get("warnings") or [])
+            result_payload["infeasibility_reasons"] = list(
+                _full_new_result.get("infeasibility_reasons") or []
+            )
+            result_payload["strict_coverage_precheck"] = dict(
+                _full_new_result.get("strict_coverage_precheck") or {}
+            )
         else:
             # ── LEGACY PATH: Should not reach here due to _normalize_solver_mode gating ──
             # This branch is kept temporarily for backward compatibility during migration.
@@ -3081,6 +3088,15 @@ def _run_optimization(
             or (prepared_payload.get("scope_hash") if isinstance(prepared_payload, dict) else "")
             or ""
         )
+        prepared_scope_audit = dict(
+            prepared_scope_summary.get("prepared_scope_audit")
+            or (prepared_payload.get("prepared_scope_audit") if isinstance(prepared_payload, dict) else {})
+            or {}
+        )
+        if prepared_scope_audit:
+            result_payload["prepared_scope_audit"] = prepared_scope_audit
+            if isinstance(_full_new_result, dict):
+                _full_new_result["prepared_scope_audit"] = prepared_scope_audit
         service_coverage_mode = str(getattr(problem.scenario, "service_coverage_mode", "strict") or "strict")
         fixed_route_band_mode = bool((problem.metadata or {}).get("fixed_route_band_mode", False))
         daily_fragment_limit = int((problem.metadata or {}).get("daily_fragment_limit") or 1)
@@ -3089,6 +3105,22 @@ def _run_optimization(
         )
         unused_available_vehicle_ids = list(engine_result.plan.unused_available_vehicle_ids(problem))
         solver_metadata = dict(engine_result.solver_metadata or {})
+        strict_coverage_precheck = dict(
+            solver_metadata.get("strict_coverage_precheck")
+            or (result_payload.get("strict_coverage_precheck") if isinstance(result_payload, dict) else {})
+            or (_full_new_result.get("strict_coverage_precheck") if isinstance(_full_new_result, dict) else {})
+            or {}
+        )
+        result_warnings = list(
+            (_full_new_result.get("warnings") if isinstance(_full_new_result, dict) else None)
+            or result_payload.get("warnings")
+            or []
+        )
+        result_infeasibility_reasons = list(
+            (_full_new_result.get("infeasibility_reasons") if isinstance(_full_new_result, dict) else None)
+            or result_payload.get("infeasibility_reasons")
+            or []
+        )
         startup_rejected_raw = (
             solver_metadata.get("startup_rejected_vehicle_ids_by_duty")
             or (engine_result.plan.metadata or {}).get("startup_rejected_vehicle_ids_by_duty")
@@ -3133,6 +3165,10 @@ def _run_optimization(
             "objective_value": result_payload.get("objective_value"),
             "solve_time_seconds": result_payload.get("solve_time_seconds", 0.0),
             "mip_gap": result_payload.get("mip_gap"),
+            "warnings": result_warnings,
+            "infeasibility_reasons": result_infeasibility_reasons,
+            "strict_coverage_precheck": strict_coverage_precheck,
+            "prepared_scope_audit": prepared_scope_audit,
             "electricity_cost_basis": str(
                 (sim_payload or {}).get("electricity_cost_basis") or "provisional_drive"
             ),
@@ -3152,6 +3188,8 @@ def _run_optimization(
                 "prepared_input_id": prepared_input_id,
                 "scenario_hash": prepared_scenario_hash,
                 "scope_hash": prepared_scope_hash,
+                "strict_coverage_precheck": strict_coverage_precheck,
+                "prepared_scope_audit": prepared_scope_audit,
                 "available_vehicle_count_total": available_vehicle_count_total,
                 "unused_available_vehicle_ids": unused_available_vehicle_ids,
                 "startup_infeasible_assignment_count": int(
@@ -3245,13 +3283,30 @@ def _run_optimization(
                 "served_trips": optimization_result["summary"]["trip_count_served"],
                 "unserved_trips": optimization_result["summary"]["trip_count_unserved"],
             },
-            "warnings": build_report.warnings,
-            "errors": build_report.errors,
+            "warnings": list(
+                dict.fromkeys(
+                    [
+                        *list(build_report.warnings or []),
+                        *result_warnings,
+                        *list(prepared_scope_audit.get("warnings") or []),
+                    ]
+                )
+            ),
+            "errors": list(
+                dict.fromkeys(
+                    [
+                        *list(build_report.errors or []),
+                        *result_infeasibility_reasons,
+                    ]
+                )
+            ),
             "solver_mode": mode,
             "solver_mode_effective": solver_mode,
             "service_coverage_mode": service_coverage_mode,
             "fixed_route_band_mode": fixed_route_band_mode,
             "daily_fragment_limit": daily_fragment_limit,
+            "strict_coverage_precheck": strict_coverage_precheck,
+            "prepared_scope_audit": prepared_scope_audit,
             "available_vehicle_count_total": available_vehicle_count_total,
             "unused_available_vehicle_ids": unused_available_vehicle_ids,
             "startup_rejected_duty_count": int(startup_rejected_duty_count),

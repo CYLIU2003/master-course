@@ -78,7 +78,17 @@ def test_result_serializer_includes_objective_components_and_limits() -> None:
             },
             "termination_reason": "optimal",
             "effective_limits": {"time_limit_sec": 300, "mip_gap": 0.01},
+            "strict_coverage_precheck": {
+                "checked": True,
+                "infeasible": False,
+                "relaxed_vehicle_lower_bound": 1,
+                "available_vehicle_count": 1,
+                "interval_only_lower_bound": 1,
+                "diagnostic_message": "strict coverage lower bound is 1 vehicle, current fleet is 1.",
+            },
         },
+        warnings=("warning-1",),
+        infeasibility_reasons=(),
     )
 
     payload = ResultSerializer.serialize_result(result)
@@ -89,6 +99,8 @@ def test_result_serializer_includes_objective_components_and_limits() -> None:
     assert payload["objective_components_weighted"]["co2_cost"] == 35.0
     assert payload["termination_reason"] == "optimal"
     assert payload["effective_limits"]["time_limit_sec"] == 300
+    assert payload["warnings"] == ["warning-1"]
+    assert payload["strict_coverage_precheck"]["relaxed_vehicle_lower_bound"] == 1
     assert "pv_generated_kwh" in payload["pv_summary"]
     assert "grid_import_kwh" in payload["pv_summary"]
     assert payload["utilization_summary"]["fleet_size"] == 1

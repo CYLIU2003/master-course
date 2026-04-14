@@ -5391,6 +5391,14 @@ class App:
             )
             for warning in resp.get("warnings") or []:
                 self.log_line(f"警告: {warning}")
+            self._log_prepared_scope_audit(
+                dict(
+                    resp.get("preparedScopeAudit")
+                    or ((resp.get("scopeSummary") or {}).get("prepared_scope_audit") or {})
+                ),
+                prefix="prepared_scope_audit",
+                console=False,
+            )
             if self.prepared_ready:
                 messagebox.showinfo("Prepare完了", f"prepared_input_id: {self.prepared_input_id or '-'}")
             else:
@@ -5925,6 +5933,7 @@ class App:
             return {}
 
         candidates = [
+            _REPO_ROOT / "output" / "scenarios" / scenario_id / "prepared_inputs" / f"{prepared_input_id}.json",
             _REPO_ROOT / "output" / "prepared_inputs" / scenario_id / f"{prepared_input_id}.json",
             _REPO_ROOT / "outputs" / "prepared_inputs" / scenario_id / f"{prepared_input_id}.json",
         ]
@@ -5943,8 +5952,109 @@ class App:
                 "vehicle_count": counts.get("vehicle_count"),
                 "depot_count": counts.get("depot_count"),
                 "timetable_row_count": raw.get("timetable_row_count") if raw.get("timetable_row_count") is not None else counts.get("timetable_row_count"),
+                "prepared_scope_audit": dict(
+                    raw.get("prepared_scope_audit")
+                    or (raw.get("scope") or {}).get("prepared_scope_audit")
+                    or {}
+                ),
             }
         return {}
+
+    def _prepared_scope_audit_lines(
+        self,
+        audit: dict[str, Any],
+        *,
+        prefix: str,
+    ) -> list[str]:
+        if not isinstance(audit, dict) or not audit:
+            return []
+
+        lines: list[str] = []
+        strict = dict(audit.get("strict_coverage_precheck") or {})
+        if strict:
+            lines.append(
+                f"{prefix}.strict_coverage: "
+                f"checked={bool(strict.get('checked'))} "
+                f"infeasible={bool(strict.get('infeasible'))} "
+                f"reason={strict.get('reason') or '-'} "
+                f"dispatch_lower_bound={int(strict.get('relaxed_vehicle_lower_bound') or 0)} "
+                f"interval_only_lower_bound={int(strict.get('interval_only_lower_bound') or 0)} "
+                f"available_vehicle_count={int(strict.get('available_vehicle_count') or 0)}"
+            )
+            diagnostic_message = str(strict.get("diagnostic_message") or "").strip()
+            if diagnostic_message:
+                lines.append(f"{prefix}.strict_coverage.message: {diagnostic_message}")
+            blocked_counts = dict(strict.get("blocked_transition_reason_counts") or {})
+            if blocked_counts:
+                lines.append(
+                    f"{prefix}.strict_coverage.blocked_transition_reason_counts="
+                    + json.dumps(blocked_counts, ensure_ascii=False)
+                )
+
+        trip_distance = dict(audit.get("trip_distance_audit") or {})
+        if trip_distance:
+            lines.append(
+                f"{prefix}.trip_distance: "
+                f"zero_or_missing={int(trip_distance.get('zero_or_missing_count') or 0)}/"
+                f"{int(trip_distance.get('total_count') or 0)}"
+            )
+
+        route_distance = dict(audit.get("route_distance_audit") or {})
+        if route_distance:
+            lines.append(
+                f"{prefix}.route_distance: "
+                f"zero_or_missing={int(route_distance.get('zero_or_missing_count') or 0)}/"
+                f"{int(route_distance.get('total_count') or 0)}"
+            )
+
+        warning_codes = list(audit.get("warning_codes") or [])
+        if warning_codes:
+            lines.append(f"{prefix}.warning_codes=" + json.dumps(warning_codes, ensure_ascii=False))
+
+        for warning in list(audit.get("warnings") or []):
+            lines.append(f"{prefix}.warning: {warning}")
+        return lines
+
+    def _log_prepared_scope_audit(
+        self,
+        audit: dict[str, Any],
+        *,
+        prefix: str,
+        console: bool,
+    ) -> None:
+        logger = self._optimization_console_log if console else self.log_line
+        for line in self._prepared_scope_audit_lines(audit, prefix=prefix):
+            logger(line)
+
+    def _log_completed_optimization_result(self, result: dict[str, Any]) -> None:
+        if not isinstance(result, dict) or not result:
+            return
+        self._optimization_console_log(
+            "optimization_result: "
+            f"solver_status={result.get('solver_status') or result.get('status') or '-'} "
+            f"objective={result.get('objective_value')}"
+        )
+        for warning in list(result.get("warnings") or []):
+            self._optimization_console_log(f"optimization_result.warning: {warning}")
+        for reason in list(result.get("infeasibility_reasons") or []):
+            self._optimization_console_log(f"optimization_result.infeasibility: {reason}")
+        strict = dict(
+            result.get("strict_coverage_precheck")
+            or ((result.get("canonical_solver_result") or {}).get("strict_coverage_precheck") or {})
+        )
+        if strict:
+            self._log_prepared_scope_audit(
+                {"strict_coverage_precheck": strict},
+                prefix="optimization_result",
+                console=True,
+            )
+        prepared_scope_audit = dict(result.get("prepared_scope_audit") or {})
+        if prepared_scope_audit:
+            self._log_prepared_scope_audit(
+                prepared_scope_audit,
+                prefix="optimization_result.prepared_scope_audit",
+                console=True,
+            )
 
     def _log_failure_guidance(self, error_text: str) -> None:
         lowered = str(error_text or "").lower()
@@ -5992,6 +6102,11 @@ class App:
                 )
                 self._optimization_console_log(
                     f"prepared_input_path: {prepared_summary.get('path')}"
+                )
+                self._log_prepared_scope_audit(
+                    dict(prepared_summary.get("prepared_scope_audit") or {}),
+                    prefix="prepared_input_audit",
+                    console=True,
                 )
         opt_audit = dict(scenario_doc.get("optimization_audit") or {})
         if opt_audit:
@@ -6088,6 +6203,13 @@ class App:
                         self._log_failure_guidance(error_text)
                     self._log_job_snapshot_if_changed(job, force=True)
                     self._log_runtime_failure_diagnostics(error_text=error_text)
+                    if not error_text and action_label in {"最適化計算", "再最適化"}:
+                        scenario_id = self._selected_scenario_id()
+                        if scenario_id:
+                            self.run_bg(
+                                lambda: self.client.get_optimization_result(scenario_id),
+                                self._log_completed_optimization_result,
+                            )
                     self._optimization_console_log(f"ジョブ終了: status={shown}")
                     if error_text:
                         first_line = next(

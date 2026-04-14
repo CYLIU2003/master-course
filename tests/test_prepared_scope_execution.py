@@ -25,7 +25,12 @@ def test_materialize_scenario_from_prepared_input_overlays_scope_artifacts() -> 
         "route_ids": ["route-a"],
         "service_ids": ["WEEKDAY"],
         "prepare_profile": solver_prepare_profile("hybrid"),
-        "scope": {"primary_depot_id": "dep1"},
+        "scope": {
+            "primary_depot_id": "dep1",
+            "prepared_scope_audit": {
+                "warning_codes": ["trip_distance_zero_or_missing"],
+            },
+        },
         "scenario_overlay": {"dataset_id": "tokyu_full", "route_ids": ["route-a"]},
         "dispatch_scope": {"effectiveRouteIds": ["route-a"]},
         "simulation_config": {"solver_mode": "hybrid"},
@@ -57,6 +62,9 @@ def test_materialize_scenario_from_prepared_input_overlays_scope_artifacts() -> 
     assert hydrated["trips"][0]["trip_id"] == "trip-1"
     assert hydrated["timetable_rows"][0]["trip_id"] == "trip-1"
     assert hydrated["prepare_profile"]["profile"] == "hybrid_seeded"
+    assert hydrated["prepared_scope_summary"]["prepared_scope_audit"]["warning_codes"] == [
+        "trip_distance_zero_or_missing"
+    ]
     assert hydrated["deadhead_rules"][0]["travel_time_min"] == 5
 
 

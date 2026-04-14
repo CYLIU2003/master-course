@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from typing import Dict, Iterable, Mapping, Sequence, Tuple
 
 from src.dispatch.models import DutyLeg, VehicleDuty
-from src.dispatch.route_band import fragment_transition_is_feasible
+from src.dispatch.route_band import FragmentTransitionDiagnostic, fragment_transition_diagnostic
 
 from .problem import CanonicalOptimizationProblem, ProblemTrip, normalize_service_coverage_mode
 
@@ -18,6 +19,12 @@ class StrictCoveragePrecheckResult:
     available_vehicle_count: int = 0
     relaxed_vehicle_lower_bound: int = 0
     missing_vehicle_type_trip_ids: Tuple[str, ...] = ()
+    interval_only_lower_bound: int = 0
+    interval_feasible_pair_count: int = 0
+    dispatch_feasible_pair_count: int = 0
+    blocked_transition_reason_counts: Dict[str, int] = field(default_factory=dict)
+    dominant_blocked_transition_reason: str = ""
+    diagnostic_message: str = ""
 
     def to_metadata(self) -> dict:
         return {
@@ -28,6 +35,12 @@ class StrictCoveragePrecheckResult:
             "available_vehicle_count": int(self.available_vehicle_count),
             "relaxed_vehicle_lower_bound": int(self.relaxed_vehicle_lower_bound),
             "missing_vehicle_type_trip_ids": list(self.missing_vehicle_type_trip_ids),
+            "interval_only_lower_bound": int(self.interval_only_lower_bound),
+            "interval_feasible_pair_count": int(self.interval_feasible_pair_count),
+            "dispatch_feasible_pair_count": int(self.dispatch_feasible_pair_count),
+            "blocked_transition_reason_counts": dict(self.blocked_transition_reason_counts),
+            "dominant_blocked_transition_reason": self.dominant_blocked_transition_reason,
+            "diagnostic_message": self.diagnostic_message,
         }
 
 
@@ -50,15 +63,25 @@ def evaluate_strict_coverage_precheck(
     available_vehicles = tuple(
         vehicle for vehicle in (problem.vehicles or ()) if bool(getattr(vehicle, "available", True))
     )
+    interval_only_lower_bound = _interval_only_lower_bound(trips)
     if service_coverage_mode != "strict" or not trips:
         return StrictCoveragePrecheckResult(
             checked=False,
             infeasible=False,
             trip_count=len(trips),
             available_vehicle_count=len(available_vehicles),
+            interval_only_lower_bound=interval_only_lower_bound,
         )
 
     if not available_vehicles:
+        diagnostic_message = _strict_coverage_diagnostic_message(
+            reason="no_available_vehicles_for_strict_coverage",
+            trip_count=len(trips),
+            available_vehicle_count=0,
+            relaxed_vehicle_lower_bound=1 if trips else 0,
+            interval_only_lower_bound=interval_only_lower_bound,
+            missing_vehicle_type_trip_ids=(),
+        )
         return StrictCoveragePrecheckResult(
             checked=True,
             infeasible=True,
@@ -67,6 +90,8 @@ def evaluate_strict_coverage_precheck(
             available_vehicle_count=0,
             relaxed_vehicle_lower_bound=1 if trips else 0,
             missing_vehicle_type_trip_ids=tuple(sorted(trip.trip_id for trip in trips)),
+            interval_only_lower_bound=interval_only_lower_bound,
+            diagnostic_message=diagnostic_message,
         )
 
     type_to_home_depots = _available_home_depots_by_type(available_vehicles)
@@ -79,6 +104,14 @@ def evaluate_strict_coverage_precheck(
         )
     )
     if missing_type_trip_ids:
+        diagnostic_message = _strict_coverage_diagnostic_message(
+            reason="strict_trip_has_no_available_vehicle_type",
+            trip_count=len(trips),
+            available_vehicle_count=len(available_vehicles),
+            relaxed_vehicle_lower_bound=len(available_vehicles) + 1,
+            interval_only_lower_bound=interval_only_lower_bound,
+            missing_vehicle_type_trip_ids=missing_type_trip_ids,
+        )
         return StrictCoveragePrecheckResult(
             checked=True,
             infeasible=True,
@@ -87,9 +120,11 @@ def evaluate_strict_coverage_precheck(
             available_vehicle_count=len(available_vehicles),
             relaxed_vehicle_lower_bound=len(available_vehicles) + 1,
             missing_vehicle_type_trip_ids=missing_type_trip_ids,
+            interval_only_lower_bound=interval_only_lower_bound,
+            diagnostic_message=diagnostic_message,
         )
 
-    transition_graph = _build_relaxed_transition_graph(
+    transition_graph, transition_audit = _build_relaxed_transition_graph(
         problem,
         trips,
         type_to_home_depots=type_to_home_depots,
@@ -97,6 +132,18 @@ def evaluate_strict_coverage_precheck(
     matching_size = _hopcroft_karp_size(transition_graph)
     lower_bound = len(trips) - matching_size
     infeasible = lower_bound > len(available_vehicles)
+    diagnostic_message = _strict_coverage_diagnostic_message(
+        reason=(
+            "strict_relaxed_path_cover_requires_more_vehicles_than_available"
+            if infeasible
+            else "not_proven_infeasible"
+        ),
+        trip_count=len(trips),
+        available_vehicle_count=len(available_vehicles),
+        relaxed_vehicle_lower_bound=lower_bound,
+        interval_only_lower_bound=interval_only_lower_bound,
+        missing_vehicle_type_trip_ids=(),
+    )
     return StrictCoveragePrecheckResult(
         checked=True,
         infeasible=infeasible,
@@ -108,6 +155,67 @@ def evaluate_strict_coverage_precheck(
         trip_count=len(trips),
         available_vehicle_count=len(available_vehicles),
         relaxed_vehicle_lower_bound=lower_bound,
+        interval_only_lower_bound=interval_only_lower_bound,
+        interval_feasible_pair_count=int(transition_audit.get("interval_feasible_pair_count") or 0),
+        dispatch_feasible_pair_count=int(transition_audit.get("dispatch_feasible_pair_count") or 0),
+        blocked_transition_reason_counts=dict(
+            transition_audit.get("blocked_transition_reason_counts") or {}
+        ),
+        dominant_blocked_transition_reason=str(
+            transition_audit.get("dominant_blocked_transition_reason") or ""
+        ),
+        diagnostic_message=diagnostic_message,
+    )
+
+
+def _interval_only_lower_bound(trips: Sequence[ProblemTrip]) -> int:
+    if not trips:
+        return 0
+    events: list[tuple[int, int]] = []
+    for trip in trips:
+        departure_min = int(getattr(trip, "departure_min", 0) or 0)
+        arrival_min = int(getattr(trip, "arrival_min", 0) or 0)
+        events.append((departure_min, 1))
+        events.append((arrival_min, -1))
+    events.sort(key=lambda item: (item[0], item[1]))
+    active = 0
+    peak = 0
+    for _minute, delta in events:
+        active += delta
+        if active > peak:
+            peak = active
+    return peak
+
+
+def _strict_coverage_diagnostic_message(
+    *,
+    reason: str,
+    trip_count: int,
+    available_vehicle_count: int,
+    relaxed_vehicle_lower_bound: int,
+    interval_only_lower_bound: int,
+    missing_vehicle_type_trip_ids: Sequence[str],
+) -> str:
+    if reason == "strict_trip_has_no_available_vehicle_type":
+        return (
+            "strict coverage is infeasible because "
+            f"{len(missing_vehicle_type_trip_ids)} trips have no compatible available vehicle type."
+        )
+    if reason == "no_available_vehicles_for_strict_coverage":
+        return (
+            "strict coverage needs at least 1 vehicle, "
+            "but the current fleet has 0 available vehicles."
+        )
+    if reason == "strict_relaxed_path_cover_requires_more_vehicles_than_available":
+        return (
+            "strict coverage needs at least "
+            f"{relaxed_vehicle_lower_bound} vehicles, current fleet is {available_vehicle_count} "
+            f"(interval-only lower bound: {interval_only_lower_bound}, trips: {trip_count})."
+        )
+    return (
+        "strict coverage lower bound is "
+        f"{relaxed_vehicle_lower_bound} vehicles, current fleet is {available_vehicle_count} "
+        f"(interval-only lower bound: {interval_only_lower_bound}, trips: {trip_count})."
     )
 
 
@@ -138,7 +246,7 @@ def _build_relaxed_transition_graph(
     trips: Sequence[ProblemTrip],
     *,
     type_to_home_depots: Mapping[str, Tuple[str, ...]],
-) -> dict[str, Tuple[str, ...]]:
+) -> tuple[dict[str, Tuple[str, ...]], dict[str, object]]:
     ordered = tuple(
         sorted(
             trips,
@@ -170,6 +278,9 @@ def _build_relaxed_transition_graph(
     )
 
     graph: dict[str, list[str]] = {trip.trip_id: [] for trip in ordered}
+    blocked_transition_reason_counts: Counter[str] = Counter()
+    interval_feasible_pair_count = 0
+    dispatch_feasible_pair_count = 0
     for index, from_trip in enumerate(ordered):
         from_allowed = allowed_by_trip_id[from_trip.trip_id]
         if not from_allowed:
@@ -181,8 +292,9 @@ def _build_relaxed_transition_graph(
             common_types = from_allowed.intersection(allowed_by_trip_id[to_trip.trip_id])
             if not common_types:
                 continue
+            interval_feasible_pair_count += 1
             to_duty = duty_by_trip_id[to_trip.trip_id]
-            if _has_relaxed_transition(
+            transition = _transition_diagnostic_for_common_types(
                 from_duty,
                 to_duty,
                 common_types=common_types,
@@ -190,12 +302,31 @@ def _build_relaxed_transition_graph(
                 dispatch_context=problem.dispatch_context,
                 fixed_route_band_mode=fixed_route_band_mode,
                 allow_same_day_depot_cycles=allow_same_day_depot_cycles,
-            ):
+            )
+            if transition.feasible:
                 graph[from_trip.trip_id].append(to_trip.trip_id)
-    return {trip_id: tuple(successors) for trip_id, successors in graph.items()}
+                dispatch_feasible_pair_count += 1
+                continue
+            blocked_transition_reason_counts[transition.reason_code or "unknown"] += 1
+    audit = {
+        "interval_feasible_pair_count": interval_feasible_pair_count,
+        "dispatch_feasible_pair_count": dispatch_feasible_pair_count,
+        "blocked_transition_reason_counts": dict(sorted(blocked_transition_reason_counts.items())),
+        "dominant_blocked_transition_reason": _dominant_reason(blocked_transition_reason_counts),
+    }
+    return ({trip_id: tuple(successors) for trip_id, successors in graph.items()}, audit)
 
 
-def _has_relaxed_transition(
+def _dominant_reason(reason_counts: Counter[str]) -> str:
+    if not reason_counts:
+        return ""
+    return max(
+        reason_counts.items(),
+        key=lambda item: (int(item[1]), str(item[0])),
+    )[0]
+
+
+def _transition_diagnostic_for_common_types(
     from_duty: VehicleDuty,
     to_duty: VehicleDuty,
     *,
@@ -204,19 +335,30 @@ def _has_relaxed_transition(
     dispatch_context: object,
     fixed_route_band_mode: bool,
     allow_same_day_depot_cycles: bool,
-) -> bool:
+) -> FragmentTransitionDiagnostic:
+    reason_counts: Counter[str] = Counter()
     for vehicle_type in common_types:
         for home_depot_id in type_to_home_depots.get(str(vehicle_type), ("",)):
-            if fragment_transition_is_feasible(
+            diagnostic = fragment_transition_diagnostic(
                 from_duty,
                 to_duty,
                 home_depot_id=str(home_depot_id or ""),
                 dispatch_context=dispatch_context,
                 fixed_route_band_mode=fixed_route_band_mode,
                 allow_same_day_depot_cycles=allow_same_day_depot_cycles,
-            ):
-                return True
-    return False
+            )
+            if diagnostic.feasible:
+                return diagnostic
+            reason_counts[diagnostic.reason_code or "unknown"] += 1
+    return FragmentTransitionDiagnostic(
+        feasible=False,
+        reason_code=_dominant_reason(reason_counts) or "unknown",
+        direct_ok=False,
+        depot_reset_ok=False,
+        route_band_blocked="route_band_blocked" in reason_counts,
+        deadhead_missing="deadhead_missing" in reason_counts,
+        location_alias_missing="location_alias_missing" in reason_counts,
+    )
 
 
 def _hopcroft_karp_size(graph: Mapping[str, Sequence[str]]) -> int:

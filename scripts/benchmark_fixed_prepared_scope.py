@@ -395,6 +395,17 @@ def _write_csv(rows: Iterable[dict[str, Any]], csv_path: Path) -> None:
         "trip_count_served",
         "trip_count_unserved",
         "vehicle_count_used",
+        "strict_coverage_checked",
+        "strict_coverage_reason",
+        "strict_coverage_relaxed_vehicle_lower_bound",
+        "strict_coverage_available_vehicle_count",
+        "strict_coverage_interval_only_lower_bound",
+        "strict_coverage_message",
+        "blocked_transition_reason_counts",
+        "prepared_scope_warning_count",
+        "prepared_scope_warning_codes",
+        "prepared_scope_zero_or_missing_trip_distance_count",
+        "prepared_scope_zero_or_missing_route_distance_count",
         "plan_source",
         "plan_status",
         "milp_status",
@@ -426,6 +437,8 @@ def _build_row(
     profile = dict(solver_metadata.get("search_profile") or {})
     incumbent_history = [snap for snap in (result_payload.get("incumbent_history") or ()) if isinstance(snap, dict)]
     warnings = list(result_payload.get("warnings") or ())
+    strict_coverage_precheck = dict(result_payload.get("strict_coverage_precheck") or {})
+    prepared_scope_audit = dict(result_payload.get("prepared_scope_audit") or {})
     served_trip_vehicle_type = _plan_trip_vehicle_type_map(result_payload)
     unserved_breakdown = _unserved_breakdown(trip_meta_by_id, unserved_trip_ids)
     solver_display_name = _solver_display_name(mode_label, solver_metadata)
@@ -472,6 +485,29 @@ def _build_row(
         "trip_count_served": len(served_trip_ids),
         "trip_count_unserved": len(unserved_trip_ids),
         "vehicle_count_used": sum(1 for trip_ids in (result_payload.get("vehicle_paths") or {}).values() if trip_ids),
+        "strict_coverage_checked": bool(strict_coverage_precheck.get("checked")),
+        "strict_coverage_reason": _pick_text(strict_coverage_precheck.get("reason")),
+        "strict_coverage_relaxed_vehicle_lower_bound": int(
+            strict_coverage_precheck.get("relaxed_vehicle_lower_bound") or 0
+        ),
+        "strict_coverage_available_vehicle_count": int(
+            strict_coverage_precheck.get("available_vehicle_count") or 0
+        ),
+        "strict_coverage_interval_only_lower_bound": int(
+            strict_coverage_precheck.get("interval_only_lower_bound") or 0
+        ),
+        "strict_coverage_message": _pick_text(strict_coverage_precheck.get("diagnostic_message")),
+        "blocked_transition_reason_counts": dict(
+            strict_coverage_precheck.get("blocked_transition_reason_counts") or {}
+        ),
+        "prepared_scope_warning_count": len(list(prepared_scope_audit.get("warnings") or [])),
+        "prepared_scope_warning_codes": list(prepared_scope_audit.get("warning_codes") or []),
+        "prepared_scope_zero_or_missing_trip_distance_count": int(
+            ((prepared_scope_audit.get("trip_distance_audit") or {}).get("zero_or_missing_count")) or 0
+        ),
+        "prepared_scope_zero_or_missing_route_distance_count": int(
+            ((prepared_scope_audit.get("route_distance_audit") or {}).get("zero_or_missing_count")) or 0
+        ),
         "plan_source": _pick_text((result_payload.get("metadata") or {}).get("source")),
         "plan_status": _pick_text((result_payload.get("metadata") or {}).get("status")),
         "milp_status": _pick_text((result_payload.get("metadata") or {}).get("milp_status")),
@@ -602,6 +638,7 @@ def main() -> None:
         result = engine.solve(problem, config)
         elapsed = time.perf_counter() - started
         payload = ResultSerializer.serialize_result(result)
+        payload["prepared_scope_audit"] = dict(prepared_payload.get("prepared_scope_audit") or {})
         payload["comparison_context"] = {
             "scenario_id": args.scenario_id,
             "prepared_input_id": args.prepared_input_id,
@@ -655,6 +692,7 @@ def main() -> None:
         "objective_mode": args.objective_mode,
         "time_limit_seconds": args.time_limit_seconds,
         "mip_gap": args.mip_gap,
+        "prepared_scope_audit": dict(prepared_payload.get("prepared_scope_audit") or {}),
         "timetable_rows_regenerated": False,
         "rows": rows,
         "competitive_rows": competitive_rows,

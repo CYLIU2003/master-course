@@ -145,8 +145,10 @@ def test_strict_precheck_proves_vehicle_lower_bound_infeasible() -> None:
     assert result.checked is True
     assert result.infeasible is True
     assert result.relaxed_vehicle_lower_bound == 2
+    assert result.interval_only_lower_bound == 2
     assert result.available_vehicle_count == 1
     assert result.reason == "strict_relaxed_path_cover_requires_more_vehicles_than_available"
+    assert "strict coverage needs at least 2 vehicles" in result.diagnostic_message
 
 
 def test_strict_precheck_is_skipped_for_penalized_coverage() -> None:
@@ -172,7 +174,9 @@ def test_engine_short_circuits_strict_precheck_infeasible_problem() -> None:
     assert result.solver_metadata["candidate_generation_mode"] == "strict_coverage_precheck"
     assert result.solver_metadata["termination_reason"] == "strict_coverage_precheck_infeasible"
     assert precheck["relaxed_vehicle_lower_bound"] == 2
+    assert precheck["interval_only_lower_bound"] == 2
     assert precheck["available_vehicle_count"] == 1
+    assert "strict coverage needs at least 2 vehicles" in precheck["diagnostic_message"]
 
 
 def test_strict_precheck_uses_route_family_for_fixed_route_band_grouping() -> None:
@@ -198,6 +202,50 @@ def test_strict_precheck_prepared_like_scope_avoids_false_infeasible_with_family
     result = evaluate_strict_coverage_precheck(
         _family_variant_problem(include_family_metadata=True, available_vehicle_count=2)
     )
+
+    assert result.checked is True
+    assert result.infeasible is False
+    assert result.relaxed_vehicle_lower_bound == 2
+    assert result.available_vehicle_count == 2
+
+
+def test_strict_precheck_allows_fleet_when_available_vehicle_count_meets_lower_bound() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="strict-precheck-lower-bound-match",
+            service_coverage_mode="strict",
+        ),
+        dispatch_context=SimpleNamespace(),
+        trips=(
+            ProblemTrip(
+                trip_id="t1",
+                route_id="r",
+                origin="A",
+                destination="B",
+                departure_min=8 * 60,
+                arrival_min=9 * 60,
+                distance_km=10.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+            ProblemTrip(
+                trip_id="t2",
+                route_id="r",
+                origin="C",
+                destination="D",
+                departure_min=8 * 60 + 30,
+                arrival_min=9 * 60 + 30,
+                distance_km=10.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(vehicle_id="veh-1", vehicle_type="ICE", home_depot_id="DEPOT"),
+            ProblemVehicle(vehicle_id="veh-2", vehicle_type="ICE", home_depot_id="DEPOT"),
+        ),
+        metadata={"service_coverage_mode": "strict"},
+    )
+
+    result = evaluate_strict_coverage_precheck(problem)
 
     assert result.checked is True
     assert result.infeasible is False

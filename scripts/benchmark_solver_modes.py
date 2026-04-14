@@ -203,6 +203,17 @@ CSV_FIELDNAMES = [
     "vehicle_count_used",
     "available_vehicle_count_total",
     "unused_available_vehicle_ids",
+    "strict_coverage_checked",
+    "strict_coverage_reason",
+    "strict_coverage_relaxed_vehicle_lower_bound",
+    "strict_coverage_available_vehicle_count",
+    "strict_coverage_interval_only_lower_bound",
+    "strict_coverage_message",
+    "blocked_transition_reason_counts",
+    "prepared_scope_warning_count",
+    "prepared_scope_warning_codes",
+    "prepared_scope_zero_or_missing_trip_distance_count",
+    "prepared_scope_zero_or_missing_route_distance_count",
     "startup_infeasible_assignment_count",
     "startup_infeasible_trip_ids",
     "startup_infeasible_vehicle_ids",
@@ -379,6 +390,17 @@ def _build_row(
         or summary.get("unused_available_vehicle_ids")
         or []
     )
+    strict_coverage_precheck = dict(
+        solver_metadata.get("strict_coverage_precheck")
+        or solver_result.get("strict_coverage_precheck")
+        or result_payload.get("strict_coverage_precheck")
+        or {}
+    )
+    prepared_scope_audit = dict(
+        result_payload.get("prepared_scope_audit")
+        or summary.get("prepared_scope_audit")
+        or {}
+    )
     fallback_applied = bool(solver_metadata.get("fallback_applied"))
     has_feasible_incumbent = bool(solver_metadata.get("has_feasible_incumbent"))
     main_comparison_eligible = (
@@ -480,6 +502,29 @@ def _build_row(
         or int(summary.get("vehicle_count_used") or 0),
         "available_vehicle_count_total": available_vehicle_count_total,
         "unused_available_vehicle_ids": unused_available_vehicle_ids,
+        "strict_coverage_checked": bool(strict_coverage_precheck.get("checked")),
+        "strict_coverage_reason": pick_text(strict_coverage_precheck.get("reason")),
+        "strict_coverage_relaxed_vehicle_lower_bound": int(
+            strict_coverage_precheck.get("relaxed_vehicle_lower_bound") or 0
+        ),
+        "strict_coverage_available_vehicle_count": int(
+            strict_coverage_precheck.get("available_vehicle_count") or 0
+        ),
+        "strict_coverage_interval_only_lower_bound": int(
+            strict_coverage_precheck.get("interval_only_lower_bound") or 0
+        ),
+        "strict_coverage_message": pick_text(strict_coverage_precheck.get("diagnostic_message")),
+        "blocked_transition_reason_counts": dict(
+            strict_coverage_precheck.get("blocked_transition_reason_counts") or {}
+        ),
+        "prepared_scope_warning_count": len(list(prepared_scope_audit.get("warnings") or [])),
+        "prepared_scope_warning_codes": list(prepared_scope_audit.get("warning_codes") or []),
+        "prepared_scope_zero_or_missing_trip_distance_count": int(
+            ((prepared_scope_audit.get("trip_distance_audit") or {}).get("zero_or_missing_count")) or 0
+        ),
+        "prepared_scope_zero_or_missing_route_distance_count": int(
+            ((prepared_scope_audit.get("route_distance_audit") or {}).get("zero_or_missing_count")) or 0
+        ),
         "startup_infeasible_assignment_count": int(
             solver_metadata.get(
                 "startup_infeasible_assignment_count",

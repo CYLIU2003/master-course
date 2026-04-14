@@ -18,6 +18,21 @@ def test_benchmark_row_includes_required_profiling_columns() -> None:
         "metadata": {"source": "unit-test", "status": "SOLVED_FEASIBLE"},
         "warnings": (),
         "infeasibility_reasons": (),
+        "strict_coverage_precheck": {
+            "checked": True,
+            "reason": "not_proven_infeasible",
+            "relaxed_vehicle_lower_bound": 1,
+            "available_vehicle_count": 1,
+            "interval_only_lower_bound": 1,
+            "diagnostic_message": "strict coverage lower bound is 1 vehicle, current fleet is 1.",
+            "blocked_transition_reason_counts": {"deadhead_missing": 2},
+        },
+        "prepared_scope_audit": {
+            "warning_codes": ["trip_distance_zero_or_missing"],
+            "warnings": ["Prepared scope audit: 1/1 trips have zero or missing distance_km."],
+            "trip_distance_audit": {"zero_or_missing_count": 1},
+            "route_distance_audit": {"zero_or_missing_count": 0},
+        },
         "incumbent_history": [
             {"iteration": 0, "objective_value": 150.0, "feasible": False, "wall_clock_sec": 10.0},
             {"iteration": 1, "objective_value": 120.0, "feasible": True, "wall_clock_sec": 305.0},
@@ -96,6 +111,11 @@ def test_benchmark_row_includes_required_profiling_columns() -> None:
         "nodes_explored",
         "iis_generated",
         "presolve_reduction_summary",
+        "strict_coverage_checked",
+        "strict_coverage_relaxed_vehicle_lower_bound",
+        "strict_coverage_message",
+        "prepared_scope_warning_count",
+        "prepared_scope_warning_codes",
     }
 
     assert required_columns.issubset(row.keys())
@@ -111,6 +131,10 @@ def test_benchmark_row_includes_required_profiling_columns() -> None:
     assert row["objective_at_300s"] == 150.0
     assert row["objective_at_600s"] == 120.0
     assert row["objective_at_1500s"] == 100.0
+    assert row["strict_coverage_checked"] is True
+    assert row["strict_coverage_relaxed_vehicle_lower_bound"] == 1
+    assert row["prepared_scope_warning_count"] == 1
+    assert row["prepared_scope_warning_codes"] == ["trip_distance_zero_or_missing"]
 
 
 def test_benchmark_row_includes_fragment_cycle_metrics() -> None:
@@ -127,6 +151,12 @@ def test_benchmark_row_includes_fragment_cycle_metrics() -> None:
             "vehicle_fragment_counts": {"veh-1": 2},
             "vehicles_with_multiple_fragments": ["veh-1"],
             "max_fragments_observed": 2,
+            "prepared_scope_audit": {
+                "warning_codes": ["trip_distance_zero_or_missing"],
+                "warnings": ["Prepared scope audit: 2/2 trips have zero or missing distance_km."],
+                "trip_distance_audit": {"zero_or_missing_count": 2},
+                "route_distance_audit": {"zero_or_missing_count": 1},
+            },
         },
         "solver_metadata": {
             "true_solver_family": "milp",
@@ -152,6 +182,14 @@ def test_benchmark_row_includes_fragment_cycle_metrics() -> None:
             "vehicle_fragment_counts": {"veh-1": 2},
             "vehicles_with_multiple_fragments": ["veh-1"],
             "max_fragments_observed": 2,
+            "strict_coverage_precheck": {
+                "checked": True,
+                "infeasible": False,
+                "relaxed_vehicle_lower_bound": 1,
+                "available_vehicle_count": 1,
+                "interval_only_lower_bound": 1,
+                "diagnostic_message": "strict coverage lower bound is 1 vehicle, current fleet is 1.",
+            },
             "search_profile": {
                 "total_wall_clock_sec": 5.0,
                 "first_feasible_sec": 0.2,
@@ -181,3 +219,6 @@ def test_benchmark_row_includes_fragment_cycle_metrics() -> None:
     assert row["vehicle_fragment_counts"] == {"veh-1": 2}
     assert row["vehicles_with_multiple_fragments"] == ["veh-1"]
     assert row["max_fragments_observed"] == 2
+    assert row["strict_coverage_checked"] is True
+    assert row["prepared_scope_warning_count"] == 1
+    assert row["prepared_scope_zero_or_missing_trip_distance_count"] == 2

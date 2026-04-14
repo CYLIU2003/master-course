@@ -240,6 +240,9 @@ class ResultSerializer:
             "feasible": result.feasible,
             "warnings": list(result.warnings),
             "infeasibility_reasons": list(result.infeasibility_reasons),
+            "strict_coverage_precheck": dict(
+                solver_metadata.get("strict_coverage_precheck") or {}
+            ),
             "cost_breakdown": cost_breakdown,
             "operating_cost_provisional_jpy": float(cost_breakdown.get("operating_cost_provisional_total", 0.0) or 0.0),
             "operating_cost_realized_jpy": float(cost_breakdown.get("operating_cost_realized_total", 0.0) or 0.0),

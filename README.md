@@ -152,6 +152,7 @@ flowchart LR
 - 2026-04-11: `tsurumaki` の strict coverage で `strict_coverage_precheck_infeasible` が誤検知される問題を修正した。原因は dispatch trip の `route_family_code` が canonical `ProblemTrip` へ伝播しておらず、`fixed_route_band_mode=true` の precheck が family ではなく `route_id` を band key として扱っていたこと。現在は `ProblemTrip.route_family_code` を追加し、dispatch→canonical 変換と multi-day 複製で保持する。これにより route variant が異なっても同一 family なら precheck が同一 band として評価される。`fixed_route_band_mode=false` で回避する暫定運用はモデル意味を変えるため benchmark 比較には使わない
 - 2026-04-11: Windows で job_store の `temp_path.replace(path)` が `PermissionError [WinError 5]` になることがあったため、job 永続化に retry/backoff を追加し、thread 実行の job は polling 時に disk を再読込しないようにした。API の background task や graph ビルドは `execution_model=thread` を明示し、同一プロセス内の self-contention を避けている
 - 2026-04-11: `tsurumaki / WEEKDAY / prepared-ca500b7c95b16ca9` では startup deadhead の depot→stop ルールが欠けていたため、`startup_deadhead_missing` が 152 件まとめて発生して MILP に進めなかった。`src/route_family_runtime.py` に depot 座標由来の deadhead 推論を追加し、`arrival + turnaround + deadhead <= next departure` の strict feasibility は維持したまま、`tsurumaki -> 上町駅` のような startup connectivity を復元した
+- 2026-04-13: strict infeasible の診断を強化した。`strict_coverage_precheck` は solver 実行前の構造的 feasibility gate であり、SOC / charger / PV / weather / objective cost には依存しない。最適化結果・benchmark export・Tk モニター・Prepare 応答には `strict coverage needs at least N vehicles, current fleet is M` の説明、`interval_only_lower_bound` と dispatch lower bound、blocked transition reason counts、prepared scope audit（zero/missing distance・deadhead_missing 優勢警告）を出すようにした。`distance_km=0` は strict precheck の直接原因ではないが、energy/cost KPI の研究妥当性を壊すため必ず warning として扱う
 - 2026-04-05: `bff/routers/simulation.py` の canonical bridge は旧 `plan.vehicle_paths` 前提で current canonical output の top-level `vehicle_paths` を落としていたため修正し、`src/simulator.py` は `feasible` / `time_limit_baseline` を valid status として扱うよう更新した。slot 境界の back-to-back trip を overlap 扱いする fallback も修正し、ALNS best run の prepared simulation は `served=974`, `vehicle_count_used=88`, `simulation_total_cost=3245610.92`, `simulation_total_co2_kg=3845.7289`, residual `time_connection=21` まで改善した
 - 2026-04-01: canonical 最適化の保存先を拡張し、従来の feed/snapshot スコープ出力に加えて `output/<YYYY-MM-DD>/run_YYYYMMDD_HHMM/` を同時生成するようにした。run 配下には `summary.json`, `solver_result.json`, `canonical_solver_result.json`, `cost_breakdown_detail.(json/csv)`, `objective_breakdown.(json/csv)`, `kpi_summary.json`, `site_power_balance.csv`, `depot_energy_flows.(json/csv)`, `graph/manifest.json`, `graph/route_band_diagrams/manifest.json` など単位付き成果物を出力し、系統受電量（`grid_to_bus_kwh`, `grid_to_bess_kwh`, `grid_import_total_kwh`）を明示確認できるようにした
 - 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
@@ -921,6 +922,13 @@ python catalog_update_app.py refresh gtfs-pipeline `
 - `Solver対応 Prepare` → 現在の UI 選択と solver 設定から prepared input を再生成
 - `④ 実行` → dispatch 再構築が不要なら prepared input を直接使用（従来より軽量）
 - 実行時に prepared input の stale 409 が返った場合は、Tkinter が `currentPreparedInputId` へ自動同期して再送し、必要時のみ自動 Prepare を再実行して再送する
+
+**`objective=Infinity` / `SOLVED_INFEASIBLE` の見方**
+
+- `candidate_generation_mode=strict_coverage_precheck` かつ `strict_coverage_precheck.infeasible=true` なら、solver search は本格実行前に止まっています。まず `strict coverage needs at least N vehicles, current fleet is M` を確認してください。
+- この precheck は `arrival + turnaround + deadhead <= next departure` を維持した relaxed path-cover 下界であり、SOC / charger / PV / weather / cost は使いません。したがって `finalSocTargetTolerancePercent` や PV 設定の変更でこの判定が覆るわけではありません。
+- `interval_only_lower_bound < dispatch lower bound` の差が大きいときは、単純な同時運行台数不足ではなく、deadhead / turnaround / depot reset 接続が fleet を追加で必要としていることを意味します。`blocked_transition_reason_counts` の dominant reason を確認してください。
+- `prepared_scope_audit` に `trip_distance_zero_or_missing` や `route_distance_zero_or_missing` が出た場合、strict infeasible の直接原因とは限りませんが、energy/cost/CO2 KPI は比較不能になります。研究結果として扱う前に距離データを修復してください。
 
 **`rebuild_dispatch` と duty**
 

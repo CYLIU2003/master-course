@@ -878,6 +878,145 @@ def _build_canonical_input(
     }
 
 
+def _distance_audit(
+    rows: list[dict[str, Any]],
+    *,
+    keys: tuple[str, ...] = ("distance_km", "distanceKm", "distance"),
+) -> dict[str, Any]:
+    total_count = len(rows)
+    zero_or_missing_count = 0
+    missing_count = 0
+    for row in rows:
+        raw_value: Any = None
+        for key in keys:
+            if key in row and row.get(key) is not None:
+                raw_value = row.get(key)
+                break
+        if raw_value is None:
+            missing_count += 1
+            zero_or_missing_count += 1
+            continue
+        try:
+            numeric_value = float(raw_value)
+        except (TypeError, ValueError):
+            missing_count += 1
+            zero_or_missing_count += 1
+            continue
+        if numeric_value <= 0.0:
+            zero_or_missing_count += 1
+    return {
+        "total_count": total_count,
+        "zero_or_missing_count": zero_or_missing_count,
+        "missing_count": missing_count,
+        "zero_or_missing_ratio": (
+            float(zero_or_missing_count) / float(total_count) if total_count > 0 else 0.0
+        ),
+    }
+
+
+def _prepared_scope_audit_warnings(audit: dict[str, Any]) -> list[str]:
+    warnings: list[str] = []
+    trip_distance = dict(audit.get("trip_distance_audit") or {})
+    route_distance = dict(audit.get("route_distance_audit") or {})
+    strict_precheck = dict(audit.get("strict_coverage_precheck") or {})
+
+    trip_zero_or_missing = int(trip_distance.get("zero_or_missing_count") or 0)
+    trip_total = int(trip_distance.get("total_count") or 0)
+    if trip_total > 0 and trip_zero_or_missing > 0:
+        warnings.append(
+            "Prepared scope audit: "
+            f"{trip_zero_or_missing}/{trip_total} trips have zero or missing distance_km. "
+            "This does not explain strict coverage infeasibility by itself, but it invalidates energy/cost interpretation."
+        )
+
+    route_zero_or_missing = int(route_distance.get("zero_or_missing_count") or 0)
+    route_total = int(route_distance.get("total_count") or 0)
+    if route_total > 0 and route_zero_or_missing > 0:
+        warnings.append(
+            "Prepared scope audit: "
+            f"{route_zero_or_missing}/{route_total} scoped routes have zero or missing route distance."
+        )
+
+    diagnostic_message = str(strict_precheck.get("diagnostic_message") or "").strip()
+    if diagnostic_message:
+        warnings.append(f"Prepared scope audit: {diagnostic_message}")
+
+    blocked_reason_counts = dict(strict_precheck.get("blocked_transition_reason_counts") or {})
+    dominant_reason = str(strict_precheck.get("dominant_blocked_transition_reason") or "").strip()
+    dominant_count = int(blocked_reason_counts.get(dominant_reason) or 0)
+    interval_pair_count = int(strict_precheck.get("interval_feasible_pair_count") or 0)
+    if dominant_reason and dominant_count > 0:
+        warnings.append(
+            "Prepared scope audit: blocked interval-feasible transitions are dominated by "
+            f"`{dominant_reason}` ({dominant_count}/{interval_pair_count})."
+        )
+    return warnings
+
+
+def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any]:
+    trip_rows = [
+        dict(item)
+        for item in list(prepared_input.get("trips") or [])
+        if isinstance(item, dict)
+    ]
+    route_rows = [
+        dict(item)
+        for item in list(prepared_input.get("routes") or [])
+        if isinstance(item, dict)
+    ]
+    audit: dict[str, Any] = {
+        "trip_distance_audit": _distance_audit(trip_rows),
+        "route_distance_audit": _distance_audit(route_rows),
+        "strict_coverage_precheck": {},
+        "warning_codes": [],
+        "warnings": [],
+    }
+    try:
+        from src.optimization.common.builder import ProblemBuilder
+        from src.optimization.common.problem import OptimizationConfig, OptimizationMode
+        from src.optimization.common.strict_precheck import evaluate_strict_coverage_precheck
+
+        service_ids = list(prepared_input.get("service_ids") or [])
+        primary_depot_id = str(prepared_input.get("primary_depot_id") or "").strip()
+        planning_days = max(int(prepared_input.get("planning_days") or 1), 1)
+        if primary_depot_id and service_ids:
+            problem = ProblemBuilder().build_from_scenario(
+                prepared_input,
+                depot_id=primary_depot_id,
+                service_id=str(service_ids[0]),
+                config=OptimizationConfig(mode=OptimizationMode.MILP),
+                planning_days=planning_days,
+            )
+            audit["strict_coverage_precheck"] = evaluate_strict_coverage_precheck(problem).to_metadata()
+    except Exception as exc:
+        audit["strict_coverage_precheck"] = {
+            "checked": False,
+            "infeasible": False,
+            "reason": "prepared_scope_audit_failed",
+            "diagnostic_message": f"prepared scope audit failed: {exc}",
+        }
+        audit["warning_codes"].append("prepared_scope_audit_failed")
+
+    trip_zero_or_missing = int((audit.get("trip_distance_audit") or {}).get("zero_or_missing_count") or 0)
+    if trip_zero_or_missing > 0:
+        audit["warning_codes"].append("trip_distance_zero_or_missing")
+
+    route_zero_or_missing = int((audit.get("route_distance_audit") or {}).get("zero_or_missing_count") or 0)
+    if route_zero_or_missing > 0:
+        audit["warning_codes"].append("route_distance_zero_or_missing")
+
+    strict_precheck = dict(audit.get("strict_coverage_precheck") or {})
+    if bool(strict_precheck.get("infeasible")):
+        audit["warning_codes"].append("strict_coverage_precheck_infeasible")
+    dominant_reason = str(strict_precheck.get("dominant_blocked_transition_reason") or "").strip()
+    if dominant_reason == "deadhead_missing":
+        audit["warning_codes"].append("deadhead_missing_dominates_relaxed_connectivity")
+
+    audit["warning_codes"] = sorted(set(audit.get("warning_codes") or []))
+    audit["warnings"] = _prepared_scope_audit_warnings(audit)
+    return audit
+
+
 def materialize_scenario_from_prepared_input(
     scenario: dict[str, Any],
     prepared_input: dict[str, Any],
@@ -1096,6 +1235,12 @@ def _build_run_preparation(
             timetables_df=timetables_df,
             stops=stops,
         ))
+        prepared_scope_audit = normalize_for_python(_build_prepared_scope_audit(solver_input))
+        solver_input["prepared_scope_audit"] = prepared_scope_audit
+        scope_payload = dict(solver_input.get("scope") or {})
+        scope_payload["prepared_scope_audit"] = prepared_scope_audit
+        solver_input["scope"] = scope_payload
+        warnings.extend(list(prepared_scope_audit.get("warnings") or []))
         scenario_dir = _prepared_input_dir(scenarios_dir, scenario_id)
         scenario_dir.mkdir(parents=True, exist_ok=True)
         solver_input_path = scenario_dir / f"{prepared_input_id}.json"
@@ -1126,6 +1271,7 @@ def _build_run_preparation(
                 "timetable_row_count": len(timetables_df),
                 "load_source": load_source,
                 "route_catalog_audit": route_catalog_audit,
+                "prepared_scope_audit": prepared_scope_audit,
             },
         )
     except Exception as exc:
