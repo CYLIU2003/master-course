@@ -473,9 +473,10 @@ class ProblemBuilder:
                     service_id=context.service_date,
                     required_soc_departure_percent=required_soc_departure_percent,
                     route_family_code=str(getattr(trip, "route_family_code", "") or ""),
+                    direction=str(getattr(trip, "direction", "") or ""),
                 )
             )
-        
+
         # ===== Multi-day trip replication =====
         # When planning_days > 1, replicate base day trips for each additional day
         planning_days = max(1, planning_days)
@@ -499,6 +500,7 @@ class ProblemBuilder:
                         service_id=f"{base_trip.service_id}_d{day_idx}" if base_trip.service_id else f"d{day_idx}",
                         required_soc_departure_percent=base_trip.required_soc_departure_percent,
                         route_family_code=base_trip.route_family_code,
+                        direction=base_trip.direction,
                     )
                     trip_nodes_list.append(replicated_trip)
         

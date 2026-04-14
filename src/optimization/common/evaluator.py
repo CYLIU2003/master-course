@@ -61,6 +61,7 @@ class CostBreakdown:
     total_cost: float = 0.0
     objective_value: float = 0.0
     evaluation_feasible: bool = True
+    return_leg_bonus: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
         return {
@@ -107,6 +108,7 @@ class CostBreakdown:
             "total_cost": self.total_cost,
             "objective_value": self.objective_value,
             "evaluation_feasible": float(1.0 if self.evaluation_feasible else 0.0),
+            "return_leg_bonus": self.return_leg_bonus,
         }
 
 
@@ -352,6 +354,11 @@ class CostEvaluator:
             "utilization": float(weights.utilization),
         }
 
+        # 復路ボーナス: 同一路線の折り返し接続に対する報酬（負コスト）
+        return_leg_bonus = self._compute_return_leg_bonus(
+            problem, plan, weights.return_leg_bonus
+        )
+
         total_cost = (
             energy_cost
             + demand_cost
@@ -362,6 +369,7 @@ class CostEvaluator:
             + degradation_cost
             + deviation_cost
             + co2_cost
+            - return_leg_bonus
         )
         total_cost_with_assets = total_cost + pv_asset_cost + bess_asset_cost
         if service_coverage_mode == "strict" and plan.unserved_trip_ids:
@@ -409,6 +417,7 @@ class CostEvaluator:
                 total_cost=total_cost,
                 objective_value=float("inf"),
                 evaluation_feasible=False,
+                return_leg_bonus=return_leg_bonus,
             )
         objective_value = objective_value_for_mode(
             objective_mode=problem.scenario.objective_mode,
@@ -464,6 +473,7 @@ class CostEvaluator:
             total_cost_with_assets=total_cost_with_assets,
             total_cost=total_cost,
             objective_value=objective_value,
+            return_leg_bonus=return_leg_bonus,
         )
 
     def _evaluate_electricity_with_overwrite(
@@ -1369,6 +1379,54 @@ class CostEvaluator:
         vt = vehicle_type_by_id.get(vehicle_type)
         powertrain = getattr(vt, "powertrain_type", "") if vt else ""
         return str(powertrain).upper() not in {"BEV", "PHEV", "FCEV"}
+
+    # 復路ボーナスの基準値 [円/接続]
+    # MILP side の parameter_builder._RETURN_LEG_BONUS_YEN と同値にすること
+    _RETURN_LEG_BONUS_BASE_YEN: float = 500.0
+
+    def _compute_return_leg_bonus(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: "AssignmentPlan",
+        weight: float,
+    ) -> float:
+        """同一路線の折り返し接続に対してボーナス（負コスト）を計算する。
+
+        判定条件:
+          - 同一 route_family_code を持つ連続した 2 便
+          - かつ leg1.trip.destination == leg2.trip.origin（同一バス停で乗り継ぎ）
+
+        direction フィールドが正しく設定されている場合はそちらでも検出できるが、
+        データが全件 "outbound" の場合は geometry のみで判定する。
+        """
+        if weight <= 0.0:
+            return 0.0
+        trip_by_id = problem.trip_by_id()
+        total_bonus = 0.0
+        for duty in plan.duties:
+            legs = duty.legs
+            for i in range(len(legs) - 1):
+                t1_ref = legs[i].trip
+                t2_ref = legs[i + 1].trip
+                # leg.trip は dispatch.models.Trip — route_family_code/direction/origin/destination 保有
+                fam1 = str(getattr(t1_ref, "route_family_code", "") or "").strip()
+                if not fam1:
+                    # dispatch.Trip になければ ProblemTrip からフォールバック
+                    pt1 = trip_by_id.get(t1_ref.trip_id)
+                    fam1 = str(getattr(pt1, "route_family_code", "") or "").strip() if pt1 else ""
+                if not fam1:
+                    continue
+                fam2 = str(getattr(t2_ref, "route_family_code", "") or "").strip()
+                if not fam2:
+                    pt2 = trip_by_id.get(t2_ref.trip_id)
+                    fam2 = str(getattr(pt2, "route_family_code", "") or "").strip() if pt2 else ""
+                if fam1 != fam2:
+                    continue
+                dest1 = str(getattr(t1_ref, "destination", "") or "").strip()
+                orig2 = str(getattr(t2_ref, "origin", "") or "").strip()
+                if dest1 and dest1 == orig2:
+                    total_bonus += weight * self._RETURN_LEG_BONUS_BASE_YEN
+        return total_bonus
 
     def _fuel_rate_l_per_km(
         self,

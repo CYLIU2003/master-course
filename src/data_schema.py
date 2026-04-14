@@ -225,6 +225,7 @@ class ProblemData:
         "emission_cost": 0.0,
         "unserved_penalty": 10000.0,
         "slack_penalty": 1000000.0,
+        "return_leg_bonus": 1.0,
     })
     demand_charge_rate_per_kw: float = 1500.0
     co2_price_per_kg: float = 1.0

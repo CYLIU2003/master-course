@@ -16,6 +16,7 @@ objective.py — 目的関数構築
   w7  * emission_cost
   w8  * unserved_penalty
   w9  * slack_penalty
+  -w12 * return_leg_bonus  (同一路線逆方向接続への報酬; 負コスト)
 
 単位: 円
 """
@@ -268,6 +269,21 @@ def build_objective(
         for site_id in ms.I_CHARGE:
             term += peak_shaving_weight * peak[site_id]
         _append_term("peak_shaving_cost", term)
+
+    # ===== w12: 復路ボーナス (同一路線・逆方向接続への報酬; 負コスト) =====
+    # 往路 → 復路の乗り継ぎを optimizer に促す。
+    # 貪欲ディスパッチャーの「同一路線逆方向 +200 スコア」に相当するソフト優先度。
+    if w.get("return_leg_bonus", 0.0) > 0:
+        term = gp.LinExpr()
+        y = vars.get("y_follow")
+        if y is not None:
+            for (k, r1_id, r2_id) in y.keys():
+                bonus = float(dp.return_leg_bonus_yen.get(r1_id, {}).get(r2_id, 0.0))
+                if bonus <= 0.0:
+                    continue
+                # 報酬なので目的関数から減算（最小化のため負コスト）
+                term += -w["return_leg_bonus"] * bonus * y[k, r1_id, r2_id]
+        _append_term("return_leg_bonus", term)
 
     vars["obj_terms"] = obj_terms
     model.setObjective(obj_expr, GRB.MINIMIZE)

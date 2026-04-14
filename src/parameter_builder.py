@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .data_schema import ProblemData
 from .model_sets import ModelSets
@@ -75,6 +75,10 @@ class DerivedParams:
 
     # --- 重複タスクペア ---
     overlap_pairs: List[Tuple[str, str]] = field(default_factory=list)
+
+    # --- 復路ボーナス [円] ---
+    # return_leg_bonus_yen[r1][r2]: r1 → r2 が同一路線の逆方向接続である場合の報酬値
+    return_leg_bonus_yen: Dict[str, Dict[str, float]] = field(default_factory=dict)
 
 
 def build_derived_params(data: ProblemData, ms: ModelSets) -> DerivedParams:
@@ -199,6 +203,9 @@ def build_derived_params(data: ProblemData, ms: ModelSets) -> DerivedParams:
     # can_follow を ProblemData にも保存
     data.can_follow_matrix = dp.can_follow
 
+    # --- 復路ボーナス: 同一路線・逆方向の接続に報酬 ---
+    _build_return_leg_bonuses(data, dp)
+
     return dp
 
 
@@ -220,6 +227,57 @@ def _default_can_follow(data: ProblemData, dp: DerivedParams) -> None:
             dp.deadhead_time_slot[t1.task_id][t2.task_id] = dh_slot if can else 0
             dp.deadhead_energy_kwh[t1.task_id][t2.task_id] = 0.0 if same_loc else 5.0
             dp.deadhead_distance_km[t1.task_id][t2.task_id] = 0.0 if same_loc else 15.0
+
+
+_RETURN_LEG_BONUS_YEN = 500.0  # 復路接続ボーナス [円/接続]
+
+
+def _opp_direction(d: str) -> str:
+    if d == "outbound":
+        return "inbound"
+    if d == "inbound":
+        return "outbound"
+    return ""
+
+
+def _build_return_leg_bonuses(data: ProblemData, dp: DerivedParams) -> None:
+    """同一路線の乗り継ぎ接続（往路→復路）に対してボーナスを設定する。
+
+    MILP 目的関数で ``return_leg_bonus`` 項が有効なとき、
+    このボーナス（負コスト）が optimizer に復路乗り継ぎを促す。
+    貪欲ディスパッチャーの +200 スコアに相当するソフト優先度。
+
+    判定方針:
+    データ上の ``direction`` フィールドは往路/復路の区別に使えないことが多い
+    （全便 "outbound" などのケースがある）ため、地理的接続性で判定する:
+
+    同一 route_family_code かつ t1.destination == t2.origin
+    → 同一路線のバス停で折り返し乗り継ぎ（往路終点＝復路起点）
+
+    この条件は異なる route_id を持つ往路・復路（同一 routeCode 系統）でも
+    終点/起点のバス停 ID が一致すれば検出できる。
+    """
+    task_lut: Dict[str, Any] = {t.task_id: t for t in data.tasks}
+    for t1 in data.tasks:
+        fam1 = str(t1.route_family_code or "").strip()
+        if not fam1:
+            continue
+        dest1 = str(t1.destination or "").strip()
+        if not dest1:
+            continue
+        for t2_id, can in dp.can_follow.get(t1.task_id, {}).items():
+            if not can:
+                continue
+            t2 = task_lut.get(t2_id)
+            if t2 is None:
+                continue
+            fam2 = str(t2.route_family_code or "").strip()
+            if fam1 != fam2:
+                continue
+            orig2 = str(t2.origin or "").strip()
+            # 同一路線の終点→起点乗り継ぎ: 復路として扱い報酬を与える
+            if dest1 == orig2:
+                dp.return_leg_bonus_yen.setdefault(t1.task_id, {})[t2_id] = _RETURN_LEG_BONUS_YEN
 
 
 def _estimate_bev_energy_rate_kwh_per_km(data: ProblemData, default: float = 1.8) -> float:

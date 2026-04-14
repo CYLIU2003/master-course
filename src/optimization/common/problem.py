@@ -66,6 +66,7 @@ class ProblemTrip:
     service_id: Optional[str] = None
     required_soc_departure_percent: Optional[float] = None
     route_family_code: str = ""
+    direction: str = ""
 
 
 @dataclass(frozen=True)
@@ -205,6 +206,7 @@ class OptimizationObjectiveWeights:
     degradation: float = 0.0
     deviation: float = 0.0
     utilization: float = 0.0
+    return_leg_bonus: float = 1.0  # 同一路線の折り返し接続に対するボーナス係数
 
 
 @dataclass(frozen=True)
