@@ -5748,11 +5748,10 @@ class App:
     _SOLVER_HARD_CAP_SECONDS = 86400  # 1 日
 
     def _effective_optimization_time_limit_seconds(self) -> int:
-        if self.wait_until_finish_var.get():
-            # 「終了まで待機」モードでもサーバー側ハードキャップ (1 日) を使う。
-            # かつてここで 604800 (7 日) を返していたが、Gurobi が
-            # OutputFlag=0 のまま 7 日間ブロックする事故が発生したため廃止。
-            return self._SOLVER_HARD_CAP_SECONDS
+        # 「終了まで待つ」チェックはUI監視の継続を意味するだけで、
+        # ソルバー側のタイムリミットは常にユーザー設定値を使う。
+        # （以前は wait_until_finish=True のとき 86400s を渡していたため
+        #   MILP が24時間ブロックする事故が発生したため修正）
         raw = self._parse_int(self.time_limit_var.get(), 300)
         if raw > self._SOLVER_HARD_CAP_SECONDS:
             self.log_line(
@@ -6585,7 +6584,7 @@ class App:
         row_wait.pack(fill=tk.X, pady=3)
         ttk.Checkbutton(
             row_wait,
-            text="終了まで待つ（ハードキャップ内で最大時間を使う）",
+            text="終了まで画面を監視する（ソルバーは上記タイムリミットで停止）",
             variable=self.wait_until_finish_var,
         ).pack(side=tk.LEFT)
 
