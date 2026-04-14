@@ -566,7 +566,6 @@ def _route_catalog_audit_warnings(audit: dict[str, Any]) -> list[str]:
     if checked_count <= 0:
         return []
     issue_count = int(audit.get("issueCount") or 0)
-    family_issue_count = int(audit.get("familyIssueCount") or 0)
     trip_count_mismatch_count = int(audit.get("tripCountMismatchCount") or 0)
     source = str(audit.get("actualCountsSource") or "unavailable")
     if issue_count <= 0:
@@ -575,13 +574,27 @@ def _route_catalog_audit_warnings(audit: dict[str, Any]) -> list[str]:
             f"checked={checked_count}, family_issues=0, trip_count_mismatches=0, source={source}"
         ]
 
+    # same_code_split_across_families is expected for depot-move, express, and direct routes
+    # that intentionally span multiple families — exclude from actionable warnings.
+    _ACTIONABLE_KINDS = {"missing_family_code", "family_code_mismatch", "trip_count_mismatch"}
+    all_issues = list(audit.get("issues") or [])
+    actionable_issues = [i for i in all_issues if str(i.get("kind") or "") in _ACTIONABLE_KINDS]
+    family_issue_count = sum(
+        1 for i in all_issues
+        if str(i.get("kind") or "") in {"missing_family_code", "family_code_mismatch"}
+    )
+
+    if not actionable_issues:
+        # Only non-actionable issues (e.g. same_code_split_across_families) — not worth warning
+        return []
+
     summary = (
         "Route catalog audit found inconsistencies: "
         f"checked={checked_count}, family_issues={family_issue_count}, "
         f"trip_count_mismatches={trip_count_mismatch_count}, source={source}"
     )
     details: list[str] = []
-    for issue in list(audit.get("issues") or [])[:3]:
+    for issue in actionable_issues[:3]:
         kind = str(issue.get("kind") or "unknown")
         route_id = str(issue.get("routeId") or "").strip()
         route_code = str(issue.get("routeCode") or "").strip()
@@ -745,6 +758,23 @@ def _prepare_depot_energy_assets(
     return prepared_rows
 
 
+def _load_stop_sequences(built_dir: Path) -> list[dict[str, Any]]:
+    """Load per-stop sequence rows from stop_times.parquet if available.
+
+    Returns a list of dicts with at least ``trip_id``, ``stop_id``, ``sequence``
+    fields used to compute cumulative Haversine distances during problem building.
+    """
+    p = built_dir / "stop_times.parquet"
+    if not p.exists():
+        return []
+    try:
+        df = pd.read_parquet(p)
+        return [dict(row) for row in df.to_dict(orient="records")]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Could not load stop_times.parquet: %s", exc)
+        return []
+
+
 def _build_canonical_input(
     *,
     scenario: dict,
@@ -756,6 +786,7 @@ def _build_canonical_input(
     trips_df: pd.DataFrame,
     timetables_df: pd.DataFrame,
     stops: list[dict[str, Any]],
+    stop_sequences: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     scenario_overlay = dict(
         _scenario_value(scenario, "scenario_overlay", "scenarioOverlay", default={}) or {}
@@ -867,6 +898,7 @@ def _build_canonical_input(
         "chargers": chargers,
         "trips": trip_records,
         "stop_time_sequences": stop_time_records,
+        "stop_sequences": list(stop_sequences or []),
         "stops": stops,
         "solver_ready_ids": {
             "depot_index": depot_index,
@@ -945,11 +977,17 @@ def _prepared_scope_audit_warnings(audit: dict[str, Any]) -> list[str]:
     dominant_reason = str(strict_precheck.get("dominant_blocked_transition_reason") or "").strip()
     dominant_count = int(blocked_reason_counts.get(dominant_reason) or 0)
     interval_pair_count = int(strict_precheck.get("interval_feasible_pair_count") or 0)
+    fixed_route_band = bool(audit.get("fixed_route_band_mode", False))
     if dominant_reason and dominant_count > 0:
-        warnings.append(
-            "Prepared scope audit: blocked interval-feasible transitions are dominated by "
-            f"`{dominant_reason}` ({dominant_count}/{interval_pair_count})."
-        )
+        # route_band_blocked is the expected dominant reason when fixed_route_band_mode is
+        # enabled — cross-family transitions are intentionally blocked in that mode.
+        if dominant_reason == "route_band_blocked" and fixed_route_band:
+            pass
+        else:
+            warnings.append(
+                "Prepared scope audit: blocked interval-feasible transitions are dominated by "
+                f"`{dominant_reason}` ({dominant_count}/{interval_pair_count})."
+            )
     return warnings
 
 
@@ -964,10 +1002,14 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
         for item in list(prepared_input.get("routes") or [])
         if isinstance(item, dict)
     ]
+    solver_config = dict(
+        (prepared_input.get("scenario_overlay") or {}).get("solver_config") or {}
+    )
     audit: dict[str, Any] = {
         "trip_distance_audit": _distance_audit(trip_rows),
         "route_distance_audit": _distance_audit(route_rows),
         "strict_coverage_precheck": {},
+        "fixed_route_band_mode": bool(solver_config.get("fixed_route_band_mode", False)),
         "warning_codes": [],
         "warnings": [],
     }
@@ -988,6 +1030,18 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
                 planning_days=planning_days,
             )
             audit["strict_coverage_precheck"] = evaluate_strict_coverage_precheck(problem).to_metadata()
+            # Reflect builder-estimated distances: ProblemBuilder applies duration-based
+            # fallback so raw zeros in trip_records don't indicate a real problem.
+            if problem.trips:
+                effective_zero = sum(
+                    1 for t in problem.trips if (t.distance_km or 0.0) <= 0.0
+                )
+                audit["trip_distance_audit"]["zero_or_missing_count"] = effective_zero
+                audit["trip_distance_audit"]["total_count"] = len(problem.trips)
+                audit["trip_distance_audit"]["builder_estimated"] = True
+                # If all trip distances are filled, route zeros don't invalidate interpretation
+                if effective_zero == 0:
+                    audit["route_distance_audit"]["zero_or_missing_count"] = 0
     except Exception as exc:
         audit["strict_coverage_precheck"] = {
             "checked": False,
@@ -1224,6 +1278,7 @@ def _build_run_preparation(
         )
         service_dates = list(simulation_config.get("service_dates") or [])
         planning_days = max(int(simulation_config.get("planning_days") or 1), 1)
+        stop_sequences = _load_stop_sequences(built_dir)
         solver_input = normalize_for_python(_build_canonical_input(
             scenario=scenario,
             prepared_input_id=prepared_input_id,
@@ -1234,6 +1289,7 @@ def _build_run_preparation(
             trips_df=trips_df,
             timetables_df=timetables_df,
             stops=stops,
+            stop_sequences=stop_sequences,
         ))
         prepared_scope_audit = normalize_for_python(_build_prepared_scope_audit(solver_input))
         solver_input["prepared_scope_audit"] = prepared_scope_audit

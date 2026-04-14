@@ -262,6 +262,61 @@ def _variant_distance_factor(trip_like: Dict[str, Any], route_like: Dict[str, An
     return float(factors.get(route_variant_bucket(variant, direction=direction), factors["unknown"]))
 
 
+def _build_trip_stop_seqmap(
+    stop_sequence_rows: List[Dict[str, Any]],
+) -> Dict[str, List[str]]:
+    """Build ``{trip_id: [stop_id, ...]}`` ordered by sequence from per-stop rows.
+
+    Input rows are expected to have ``trip_id``, ``stop_id``, and ``sequence``
+    fields (as stored in ``stop_times.parquet`` / ``scenario["stop_sequences"]``).
+    """
+    from collections import defaultdict
+
+    by_trip: Dict[str, List[tuple]] = defaultdict(list)
+    for row in stop_sequence_rows:
+        if not isinstance(row, dict):
+            continue
+        trip_id = str(row.get("trip_id") or "").strip()
+        stop_id = str(row.get("stop_id") or row.get("stopId") or "").strip()
+        seq = _safe_int(row.get("sequence") or row.get("stop_sequence"), 0)
+        if trip_id and stop_id:
+            by_trip[trip_id].append((seq, stop_id))
+    result: Dict[str, List[str]] = {}
+    for trip_id, entries in by_trip.items():
+        entries.sort(key=lambda x: x[0])
+        stops: List[str] = []
+        for _, sid in entries:
+            if not stops or stops[-1] != sid:
+                stops.append(sid)
+        if len(stops) >= 2:
+            result[trip_id] = stops
+    return result
+
+
+def _build_trip_origin_dest_coord_map(
+    stop_time_sequences: List[Dict[str, Any]],
+) -> Dict[str, tuple]:
+    """Build ``{trip_id: (origin_lat, origin_lon, dest_lat, dest_lon)}`` from
+    timetable rows that carry origin/destination coordinates.
+
+    Used as a 2-point Haversine fallback when per-stop sequences are unavailable.
+    """
+    result: Dict[str, tuple] = {}
+    for row in stop_time_sequences:
+        if not isinstance(row, dict):
+            continue
+        trip_id = str(row.get("trip_id") or "").strip()
+        if not trip_id or trip_id in result:
+            continue
+        olat = _safe_float(row.get("origin_lat"), 0.0)
+        olon = _safe_float(row.get("origin_lon"), 0.0)
+        dlat = _safe_float(row.get("destination_lat"), 0.0)
+        dlon = _safe_float(row.get("destination_lon"), 0.0)
+        if olat != 0.0 and olon != 0.0 and dlat != 0.0 and dlon != 0.0:
+            result[trip_id] = (olat, olon, dlat, dlon)
+    return result
+
+
 def _stop_sequence_from_trip_stop_times(trip_like: Dict[str, Any]) -> List[str]:
     raw_stop_times = _as_list(trip_like.get("stop_times") or trip_like.get("stopTimes"))
     if not raw_stop_times:
@@ -556,6 +611,18 @@ def _estimate_trip_distance_km(
     if base_distance > 0.0:
         return round(base_distance, 4)
 
+    # Step 4a: origin/destination lat/lon embedded directly in the trip dict
+    # (populated from timetables.parquet which carries pre-computed coordinates).
+    od_lat1 = _safe_float(trip_like.get("origin_lat"), 0.0)
+    od_lon1 = _safe_float(trip_like.get("origin_lon"), 0.0)
+    od_lat2 = _safe_float(trip_like.get("destination_lat"), 0.0)
+    od_lon2 = _safe_float(trip_like.get("destination_lon"), 0.0)
+    if od_lat1 != 0.0 and od_lon1 != 0.0 and od_lat2 != 0.0 and od_lon2 != 0.0:
+        straight_km = _haversine_km(od_lat1, od_lon1, od_lat2, od_lon2)
+        if straight_km > 0.0:
+            return round(straight_km * detour_factor, 4)
+
+    # Step 4b: origin/destination coordinates via stop_coords table lookup
     origin_coords = stop_coords.get(origin_stop_id)
     destination_coords = stop_coords.get(destination_stop_id)
     if origin_coords and destination_coords:
@@ -579,6 +646,39 @@ def _estimate_trip_distance_km(
     return 0.0
 
 
+def _enrich_trip_for_distance(
+    item: Dict[str, Any],
+    trip_stop_seqmap: Dict[str, List[str]],
+    trip_od_coords: Dict[str, tuple],
+) -> Dict[str, Any]:
+    """Return a copy of *item* enriched with distance estimation aids.
+
+    Priority:
+    1. ``stop_times`` list populated from per-stop sequence data (enables cumulative
+       Haversine through every stop on the route via ``_estimate_distance_from_trip_stop_times_km``).
+    2. ``origin_lat/lon`` + ``destination_lat/lon`` from timetable data (enables
+       straight-line origin→destination Haversine inside ``_estimate_trip_distance_km``).
+    """
+    trip_id = str(item.get("trip_id") or "").strip()
+    stop_seq = trip_stop_seqmap.get(trip_id)
+    od = trip_od_coords.get(trip_id)
+    if not stop_seq and not od:
+        return item  # nothing to enrich — avoid dict copy overhead
+    enriched = dict(item)
+    if stop_seq:
+        # Inject synthetic stop_times so _estimate_distance_from_trip_stop_times_km works
+        enriched["stop_times"] = [
+            {"stop_id": sid, "stop_sequence": idx}
+            for idx, sid in enumerate(stop_seq)
+        ]
+    if od and not enriched.get("origin_lat"):
+        enriched["origin_lat"] = od[0]
+        enriched["origin_lon"] = od[1]
+        enriched["destination_lat"] = od[2]
+        enriched["destination_lon"] = od[3]
+    return enriched
+
+
 def _collect_trips_for_scope(
     scenario: Dict[str, Any],
     depot_id: str,
@@ -587,6 +687,14 @@ def _collect_trips_for_scope(
 ) -> List[Dict[str, Any]]:
     scoped_rows = _filter_rows_for_scope(scenario, depot_id, service_id, analysis_scope)
     stop_coords = _build_stop_coord_lookup(scenario)
+    # Per-stop sequence map for cumulative Haversine (from stop_times.parquet)
+    trip_stop_seqmap = _build_trip_stop_seqmap(
+        _as_list(scenario.get("stop_sequences"))
+    )
+    # Origin/destination coordinate map as 2-point Haversine fallback
+    trip_od_coords = _build_trip_origin_dest_coord_map(
+        _as_list(scenario.get("stop_time_sequences"))
+    )
     total_stops = len(_as_list(scenario.get("stops")))
     if total_stops > 0:
         stop_coord_ratio = len(stop_coords) / float(total_stops)
@@ -705,7 +813,11 @@ def _collect_trips_for_scope(
                 "destination_stop_id": str(item.get("destination_stop_id") or ""),
                 "departure": str(item.get("departure")),
                 "arrival": str(item.get("arrival")),
-                "distance_km": _estimate_trip_distance_km(item, route_like, stop_coords),
+                "distance_km": _estimate_trip_distance_km(
+                    _enrich_trip_for_distance(item, trip_stop_seqmap, trip_od_coords),
+                    route_like,
+                    stop_coords,
+                ),
                 "allowed_vehicle_types": allowed_types,
             }
         )

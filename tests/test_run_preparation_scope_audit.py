@@ -83,12 +83,16 @@ def _prepared_payload(*, vehicle_count: int = 1) -> dict:
 def test_prepared_scope_audit_flags_zero_distance_and_strict_infeasible_scope() -> None:
     audit = _build_prepared_scope_audit(_prepared_payload(vehicle_count=1))
 
-    assert audit["trip_distance_audit"]["zero_or_missing_count"] == 2
-    assert audit["route_distance_audit"]["zero_or_missing_count"] == 1
+    # ProblemBuilder fills in distances via duration-based estimation (departure/arrival
+    # times are present), so effective zero count is 0 after builder pass.
+    assert audit["trip_distance_audit"]["zero_or_missing_count"] == 0
+    assert audit["trip_distance_audit"].get("builder_estimated") is True
+    # Route distance warning also cleared when all trip distances are filled.
+    assert audit["route_distance_audit"]["zero_or_missing_count"] == 0
+    assert "trip_distance_zero_or_missing" not in audit["warning_codes"]
     assert audit["strict_coverage_precheck"]["checked"] is True
     assert audit["strict_coverage_precheck"]["infeasible"] is True
     assert audit["strict_coverage_precheck"]["relaxed_vehicle_lower_bound"] == 2
-    assert "trip_distance_zero_or_missing" in audit["warning_codes"]
     assert "strict_coverage_precheck_infeasible" in audit["warning_codes"]
     assert any("strict coverage needs at least 2 vehicles" in warning for warning in audit["warnings"])
 
