@@ -127,15 +127,24 @@ class ProblemBuilder:
         cost_cfg = ((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {})
         solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
         simulation_cfg = scenario.get("simulation_config") or {}
+        dispatch_scope = scenario.get("dispatch_scope") or {}
         objective_mode = normalize_objective_mode(
             simulation_cfg.get("objective_mode")
             or solver_cfg.get("objective_mode")
             or "total_cost"
         )
-        fixed_route_band_mode = bool(
+        requested_fixed_route_band_mode = bool(
             simulation_cfg.get(
                 "fixed_route_band_mode",
                 solver_cfg.get("fixed_route_band_mode", False),
+            )
+        )
+        allow_intra_route_swap_raw = dispatch_scope.get("allowIntraDepotRouteSwap")
+        fixed_route_band_mode = bool(
+            requested_fixed_route_band_mode
+            or (
+                allow_intra_route_swap_raw is not None
+                and not bool(allow_intra_route_swap_raw)
             )
         )
         context.fixed_route_band_mode = fixed_route_band_mode
@@ -316,6 +325,12 @@ class ProblemBuilder:
             co2_price_per_kg=co2_price_per_kg,
             ice_co2_kg_per_l=ice_co2_kg_per_l,
             fixed_route_band_mode=fixed_route_band_mode,
+            fixed_route_band_mode_requested=requested_fixed_route_band_mode,
+            allow_intra_depot_route_swap=(
+                bool(allow_intra_route_swap_raw)
+                if allow_intra_route_swap_raw is not None
+                else None
+            ),
             milp_max_successors_per_trip=milp_max_successors_per_trip,
             planning_days=planning_days_effective,
             max_start_fragments_per_vehicle=max(1, max_start_fragments_per_vehicle),
@@ -376,6 +391,8 @@ class ProblemBuilder:
         co2_price_per_kg: float = 0.0,
         ice_co2_kg_per_l: float = 2.64,
         fixed_route_band_mode: bool = False,
+        fixed_route_band_mode_requested: Optional[bool] = None,
+        allow_intra_depot_route_swap: Optional[bool] = None,
         milp_max_successors_per_trip: Optional[int] = None,
         planning_days: int = 1,
         max_start_fragments_per_vehicle: int = 1,
@@ -420,6 +437,8 @@ class ProblemBuilder:
         timestep_min = max(int(timestep_min or 60), 1)
         context.horizon_start_min = int(horizon_start_min or 0)
         context.fixed_route_band_mode = bool(fixed_route_band_mode)
+        if fixed_route_band_mode_requested is None:
+            fixed_route_band_mode_requested = bool(fixed_route_band_mode)
         service_coverage_mode = resolve_service_coverage_mode(
             service_coverage_mode,
             allow_partial_service,
@@ -684,6 +703,17 @@ class ProblemBuilder:
                 "baseline_plan_source": (baseline.metadata or {}).get("source", "dispatch_greedy_baseline"),
                 "objective_mode": normalize_objective_mode(objective_mode),
                 "fixed_route_band_mode": bool(fixed_route_band_mode),
+                "fixed_route_band_mode_requested": bool(fixed_route_band_mode_requested),
+                "allow_intra_depot_route_swap": (
+                    bool(allow_intra_depot_route_swap)
+                    if allow_intra_depot_route_swap is not None
+                    else None
+                ),
+                "fixed_route_band_mode_forced_by_scope_swap_lock": bool(
+                    not bool(fixed_route_band_mode_requested)
+                    and allow_intra_depot_route_swap is not None
+                    and not bool(allow_intra_depot_route_swap)
+                ),
                 "service_coverage_mode": service_coverage_mode,
                 "milp_max_successors_per_trip": milp_max_successors_per_trip,
                 "planning_days": planning_days,
@@ -1895,7 +1925,11 @@ class ProblemBuilder:
                 for trip_id, next_ids in graph.items()
             }
 
-        matched_successor, matched_predecessor = self._maximum_bipartite_matching(graph)
+        matched_successor, matched_predecessor, matching_cost = self._minimum_cost_maximum_matching(
+            graph,
+            trip_map=trip_map,
+            context=context,
+        )
         predecessor_by_trip = {
             trip_id: predecessor
             for trip_id, predecessor in matched_predecessor.items()
@@ -1989,6 +2023,8 @@ class ProblemBuilder:
                 "source": "dispatch_pooled_shared_path_cover_baseline",
                 "duty_vehicle_map": merge_duty_vehicle_maps(duty_vehicle_map),
                 "path_cover_chain_count": len(chains),
+                "path_cover_matching_cost": float(matching_cost),
+                "path_cover_matching_mode": "max_cardinality_min_deadhead_wait",
             },
         )
 
@@ -2106,6 +2142,106 @@ class ProblemBuilder:
                     dfs(node)
 
         return pair_left, pair_right
+
+    def _minimum_cost_maximum_matching(
+        self,
+        graph: Mapping[str, Tuple[str, ...]],
+        *,
+        trip_map: Mapping[str, Trip],
+        context: DispatchContext,
+    ) -> Tuple[Dict[str, Optional[str]], Dict[str, Optional[str]], float]:
+        """Maximum-cardinality path-cover matching with deadhead/wait tie-breaks.
+
+        The large dummy cost makes every feasible edge preferable to leaving a
+        trip unmatched, preserving minimum vehicle count. Among maximum
+        matchings, edge cost favors lower deadhead first, then lower idle wait.
+        """
+        left_nodes = sorted(
+            graph.keys(),
+            key=lambda trip_id: (
+                trip_map[trip_id].departure_min if trip_id in trip_map else 10**9,
+                trip_map[trip_id].arrival_min if trip_id in trip_map else 10**9,
+                trip_id,
+            ),
+        )
+        right_nodes = sorted(
+            trip_map.keys(),
+            key=lambda trip_id: (
+                trip_map[trip_id].departure_min,
+                trip_map[trip_id].arrival_min,
+                trip_id,
+            ),
+        )
+        if not left_nodes or not right_nodes:
+            pair_left, pair_right = self._maximum_bipartite_matching(graph)
+            return pair_left, pair_right, 0.0
+
+        try:
+            import numpy as np
+            from scipy.optimize import linear_sum_assignment
+        except Exception:
+            pair_left, pair_right = self._maximum_bipartite_matching(graph)
+            return pair_left, pair_right, 0.0
+
+        dummy_cost = 1.0e9
+        invalid_cost = 1.0e12
+        right_index = {trip_id: idx for idx, trip_id in enumerate(right_nodes)}
+        cost_matrix = np.full(
+            (len(left_nodes), len(right_nodes) + len(left_nodes)),
+            invalid_cost,
+            dtype=float,
+        )
+        for left_idx, from_trip_id in enumerate(left_nodes):
+            cost_matrix[left_idx, len(right_nodes) + left_idx] = dummy_cost
+            for to_trip_id in graph.get(from_trip_id, ()):
+                to_idx = right_index.get(to_trip_id)
+                if to_idx is None:
+                    continue
+                edge_cost = self._path_cover_edge_cost(
+                    trip_map.get(from_trip_id),
+                    trip_map.get(to_trip_id),
+                    context=context,
+                )
+                cost_matrix[left_idx, to_idx] = min(edge_cost, dummy_cost - 1.0)
+
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        pair_left: Dict[str, Optional[str]] = {node: None for node in left_nodes}
+        pair_right: Dict[str, Optional[str]] = {node: None for node in right_nodes}
+        total_cost = 0.0
+        for row_idx, col_idx in zip(row_ind, col_ind):
+            from_trip_id = left_nodes[int(row_idx)]
+            chosen_cost = float(cost_matrix[int(row_idx), int(col_idx)])
+            if int(col_idx) >= len(right_nodes) or chosen_cost >= dummy_cost:
+                continue
+            to_trip_id = right_nodes[int(col_idx)]
+            pair_left[from_trip_id] = to_trip_id
+            pair_right[to_trip_id] = from_trip_id
+            total_cost += chosen_cost
+        return pair_left, pair_right, total_cost
+
+    def _path_cover_edge_cost(
+        self,
+        from_trip: Optional[Trip],
+        to_trip: Optional[Trip],
+        *,
+        context: DispatchContext,
+    ) -> float:
+        if from_trip is None or to_trip is None:
+            return 1.0e8
+        from_location = str(from_trip.destination_stop_id or from_trip.destination or "").strip()
+        to_location = str(to_trip.origin_stop_id or to_trip.origin or "").strip()
+        if not from_location or not to_location:
+            deadhead_min = 0
+        elif context.locations_equivalent(from_location, to_location):
+            deadhead_min = 0
+        else:
+            deadhead_min = max(int(context.get_deadhead_min(from_location, to_location) or 0), 0)
+        ready_min = int(from_trip.arrival_min) + int(deadhead_min)
+        wait_min = max(int(to_trip.departure_min) - ready_min, 0)
+        # Deadhead dominates idle wait; deterministic suffix avoids arbitrary
+        # solver-dependent choices between otherwise identical arcs.
+        deterministic_tie = (sum(ord(ch) for ch in str(to_trip.trip_id)) % 1000) / 1000.0
+        return float(deadhead_min) * 1000.0 + float(wait_min) + deterministic_tie
 
     def _ordered_vehicle_types_for_baseline(
         self,

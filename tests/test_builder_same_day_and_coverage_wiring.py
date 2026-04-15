@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.dispatch.models import DeadheadRule, DispatchContext, Trip, VehicleProfile
 from src.optimization.common.builder import ProblemBuilder
 
 
@@ -94,3 +95,49 @@ def test_builder_falls_back_to_allow_partial_service_when_coverage_mode_is_missi
 
     assert problem.metadata["service_coverage_mode"] == "penalized"
     assert problem.metadata["allow_partial_service"] is True
+
+
+def test_builder_forces_fixed_route_band_when_intra_depot_swap_is_disabled() -> None:
+    scenario = _scenario()
+    scenario["dispatch_scope"] = {"allowIntraDepotRouteSwap": False}
+    scenario["simulation_config"] = {
+        **scenario["simulation_config"],
+        "fixed_route_band_mode": False,
+    }
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+        planning_days=1,
+    )
+
+    assert problem.metadata["fixed_route_band_mode"] is True
+    assert problem.metadata["fixed_route_band_mode_requested"] is False
+    assert problem.metadata["fixed_route_band_mode_forced_by_scope_swap_lock"] is True
+
+
+def test_weighted_path_cover_prefers_lower_deadhead_matching() -> None:
+    context = DispatchContext(
+        service_date="WEEKDAY",
+        trips=[
+            Trip("a", "r", "A", "B", "08:00", "08:20", 1.0, ("BEV",)),
+            Trip("b", "r", "C", "D", "08:30", "09:00", 1.0, ("BEV",)),
+            Trip("c", "r", "E", "F", "08:35", "09:05", 1.0, ("BEV",)),
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("B", "C"): DeadheadRule("B", "C", 9),
+            ("B", "E"): DeadheadRule("B", "E", 1),
+        },
+        vehicle_profiles={"BEV": VehicleProfile("BEV")},
+    )
+    trip_map = context.trips_by_id()
+
+    pair_left, _pair_right, _cost = ProblemBuilder()._minimum_cost_maximum_matching(
+        {"a": ("b", "c"), "b": (), "c": ()},
+        trip_map=trip_map,
+        context=context,
+    )
+
+    assert pair_left["a"] == "c"

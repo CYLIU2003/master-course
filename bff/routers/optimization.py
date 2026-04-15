@@ -1003,6 +1003,8 @@ def _persist_rich_run_outputs(
         "vehicle_fragment_counts": (optimization_result.get("summary") or {}).get("vehicle_fragment_counts"),
         "vehicles_with_multiple_fragments": (optimization_result.get("summary") or {}).get("vehicles_with_multiple_fragments"),
         "max_fragments_observed": (optimization_result.get("summary") or {}).get("max_fragments_observed"),
+        "solution_validity": optimization_result.get("solution_validity")
+        or (optimization_result.get("summary") or {}).get("solution_validity"),
     }
     (run_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -1030,6 +1032,22 @@ def _persist_rich_run_outputs(
         {"key": key, "value": value, "unit": unit_map.get(key, "")}
         for key, value in dict(result_payload.get("obj_breakdown") or {}).items()
     ]
+    solution_validity = dict(
+        optimization_result.get("solution_validity")
+        or (optimization_result.get("summary") or {}).get("solution_validity")
+        or {}
+    )
+    if solution_validity:
+        objective_rows = [
+            row for row in objective_rows if row.get("key") != "evaluation_feasible"
+        ]
+        objective_rows.append(
+            {
+                "key": "evaluation_feasible",
+                "value": 1.0 if bool(solution_validity.get("validated_feasible")) else 0.0,
+                "unit": "",
+            }
+        )
     (run_dir / "objective_breakdown.json").write_text(
         json.dumps({"rows": objective_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -2374,6 +2392,52 @@ def _canonical_kpi_summary_json(
     }
 
 
+def _canonical_deadhead_ratio_by_band(timeline_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    accum: Dict[str, Dict[str, float]] = {}
+    for row in timeline_rows:
+        band_id = str(row.get("band_id") or row.get("event_route_band_id") or "").strip()
+        if not band_id:
+            continue
+        item = accum.setdefault(
+            band_id,
+            {
+                "service_events": 0.0,
+                "deadhead_events": 0.0,
+                "service_km": 0.0,
+                "deadhead_km": 0.0,
+                "service_min": 0.0,
+                "deadhead_min": 0.0,
+            },
+        )
+        distance_km = float(row.get("distance_km") or 0.0)
+        duration_min = float(row.get("duration_min") or 0.0)
+        if bool(row.get("is_service")) or str(row.get("state") or "") == "service":
+            item["service_events"] += 1.0
+            item["service_km"] += distance_km
+            item["service_min"] += duration_min
+        if bool(row.get("is_deadhead")) or str(row.get("state") or "") == "deadhead":
+            item["deadhead_events"] += 1.0
+            item["deadhead_km"] += distance_km
+            item["deadhead_min"] += duration_min
+    rows: List[Dict[str, Any]] = []
+    for band_id, values in sorted(accum.items()):
+        service_km = float(values.get("service_km") or 0.0)
+        deadhead_km = float(values.get("deadhead_km") or 0.0)
+        rows.append(
+            {
+                "band_id": band_id,
+                "service_events": int(values.get("service_events") or 0),
+                "deadhead_events": int(values.get("deadhead_events") or 0),
+                "service_km": service_km,
+                "deadhead_km": deadhead_km,
+                "service_min": float(values.get("service_min") or 0.0),
+                "deadhead_min": float(values.get("deadhead_min") or 0.0),
+                "deadhead_service_km_ratio": deadhead_km / service_km if service_km > 0 else 0.0,
+            }
+        )
+    return rows
+
+
 def _persist_canonical_graph_exports(
     *,
     scenario: Dict[str, Any],
@@ -2453,6 +2517,12 @@ def _persist_canonical_graph_exports(
     _write_csv(graph_dir / "depot_power_timeseries_5min.csv", depot_power_rows)
     _write_csv(graph_dir / "trip_assignment.csv", trip_assignment_rows)
     _write_csv(graph_dir / "refuel_events.csv", refuel_rows)
+    deadhead_ratio_rows = _canonical_deadhead_ratio_by_band(timeline_rows)
+    _write_csv(graph_dir / "deadhead_ratio_by_band.csv", deadhead_ratio_rows)
+    (graph_dir / "deadhead_ratio_by_band.json").write_text(
+        json.dumps({"rows": deadhead_ratio_rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     (graph_dir / "cost_breakdown.json").write_text(
         json.dumps(cost_breakdown, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -2482,6 +2552,7 @@ def _persist_canonical_graph_exports(
                 day_rows,
                 f"{scenario_id}_d{day_idx}",
                 graph_context=graph_context,
+                trip_assignment_rows=trip_assignment_rows,
             )
             for entry in day_vehicle_operation_assets.get("entries", []):
                 entry["day_index"] = day_idx
@@ -2506,6 +2577,7 @@ def _persist_canonical_graph_exports(
             timeline_rows,
             scenario_id,
             graph_context=graph_context,
+            trip_assignment_rows=trip_assignment_rows,
         )
     route_band_dir = graph_dir / "route_band_diagrams"
     if route_band_dir.exists():
@@ -2530,6 +2602,8 @@ def _persist_canonical_graph_exports(
             "depot_power_timeseries_5min.csv",
             "trip_assignment.csv",
             "refuel_events.csv",
+            "deadhead_ratio_by_band.csv",
+            "deadhead_ratio_by_band.json",
             "cost_breakdown.json",
             "kpi_summary.json",
         ],
@@ -2572,6 +2646,7 @@ def _persist_canonical_graph_exports(
         "vehicle_timeline_path": "graph/vehicle_timeline.csv",
         "graph_manifest_path": "graph/manifest.json",
         "trip_assignment_path": "graph/trip_assignment.csv",
+        "deadhead_ratio_by_band_path": "graph/deadhead_ratio_by_band.csv",
         "soc_events_path": "graph/soc_events.csv",
         "depot_power_timeseries_path": "graph/depot_power_timeseries_5min.csv",
         "cost_breakdown_path": "graph/cost_breakdown.json",
@@ -2686,6 +2761,48 @@ def _cost_breakdown(
             or obj_breakdown.get("total_cost", 0.0)
             or 0.0
         ),
+    }
+
+
+def _solution_validity_payload(
+    *,
+    solver_status: Any,
+    feasible: Any,
+    trip_count_unserved: Any,
+    infeasibility_reasons: List[Any],
+) -> Dict[str, Any]:
+    status = str(solver_status or "").strip()
+    status_upper = status.upper()
+    reasons = [str(item) for item in list(infeasibility_reasons or []) if str(item).strip()]
+    blocking_reasons: List[str] = []
+    if status_upper == "BASELINE_FALLBACK":
+        blocking_reasons.append("baseline_fallback")
+    if not bool(feasible):
+        blocking_reasons.append("postsolve_infeasible")
+    if reasons:
+        blocking_reasons.append("infeasibility_reasons_present")
+    try:
+        unserved = int(trip_count_unserved or 0)
+    except (TypeError, ValueError):
+        unserved = 0
+    if unserved > 0:
+        blocking_reasons.append("unserved_trips_present")
+    blocking_reasons = sorted(set(blocking_reasons))
+    validated_feasible = not blocking_reasons and status_upper in {"SOLVED_FEASIBLE", "OPTIMAL", "FEASIBLE"}
+    validated_no_cancellation = bool(validated_feasible and unserved == 0)
+    if not blocking_reasons:
+        status_reason = "validated_feasible_no_cancellation" if validated_no_cancellation else "validated_feasible"
+    elif "baseline_fallback" in blocking_reasons or "postsolve_infeasible" in blocking_reasons:
+        status_reason = "baseline_fallback_or_postsolve_infeasible"
+    elif "unserved_trips_present" in blocking_reasons:
+        status_reason = "unserved_trips_present"
+    else:
+        status_reason = "infeasibility_reasons_present"
+    return {
+        "validated_no_cancellation": validated_no_cancellation,
+        "validated_feasible": bool(validated_feasible),
+        "status_reason": status_reason,
+        "blocking_reasons": blocking_reasons,
     }
 
 
@@ -3149,6 +3266,25 @@ def _run_optimization(
                 for vehicle_id in vehicle_ids
             }
         )
+        trip_count_served = sum(
+            len(task_ids)
+            for task_ids in (result_payload.get("assignment") or {}).values()
+        )
+        trip_count_unserved = len(result_payload.get("unserved_tasks") or [])
+        canonical_feasible = (
+            bool(_full_new_result.get("feasible"))
+            if isinstance(_full_new_result, dict) and "feasible" in _full_new_result
+            else bool(engine_result.feasible)
+        )
+        solution_validity = _solution_validity_payload(
+            solver_status=result_payload["status"],
+            feasible=canonical_feasible,
+            trip_count_unserved=trip_count_unserved,
+            infeasibility_reasons=result_infeasibility_reasons,
+        )
+        if isinstance(_full_new_result, dict):
+            _full_new_result["solution_validity"] = solution_validity
+        result_payload["solution_validity"] = solution_validity
 
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
@@ -3169,6 +3305,7 @@ def _run_optimization(
             "infeasibility_reasons": result_infeasibility_reasons,
             "strict_coverage_precheck": strict_coverage_precheck,
             "prepared_scope_audit": prepared_scope_audit,
+            "solution_validity": solution_validity,
             "electricity_cost_basis": str(
                 (sim_payload or {}).get("electricity_cost_basis") or "provisional_drive"
             ),
@@ -3227,12 +3364,10 @@ def _run_optimization(
                 ),
                 "vehicle_count_by_type": vehicle_count_by_type,
                 "trip_count_by_type": trip_count_by_type,
-                "trip_count_served": sum(
-                    len(task_ids)
-                    for task_ids in (result_payload.get("assignment") or {}).values()
-                ),
-                "trip_count_unserved": len(result_payload.get("unserved_tasks") or []),
-                "coverage_rank_primary": len(result_payload.get("unserved_tasks") or []),
+                "trip_count_served": trip_count_served,
+                "trip_count_unserved": trip_count_unserved,
+                "coverage_rank_primary": trip_count_unserved,
+                "solution_validity": solution_validity,
                 "secondary_objective_value": result_payload.get("secondary_objective_value"),
                 "vehicle_fragment_counts": dict(
                     engine_result.plan.vehicle_fragment_counts()
@@ -3260,6 +3395,18 @@ def _run_optimization(
             optimization_result["charging_summary_warning"] = charging_payload_warning
         if sim_payload is not None:
             optimization_result["simulation_summary"] = sim_payload
+        if isinstance(optimization_result.get("cost_breakdown"), dict):
+            optimization_result["cost_breakdown"]["evaluation_feasible"] = (
+                1.0 if bool(solution_validity.get("validated_feasible")) else 0.0
+            )
+        if isinstance(result_payload.get("obj_breakdown"), dict):
+            result_payload["obj_breakdown"]["evaluation_feasible"] = (
+                1.0 if bool(solution_validity.get("validated_feasible")) else 0.0
+            )
+        if isinstance(_full_new_result, dict) and isinstance(_full_new_result.get("cost_breakdown"), dict):
+            _full_new_result["cost_breakdown"]["evaluation_feasible"] = (
+                1.0 if bool(solution_validity.get("validated_feasible")) else 0.0
+            )
 
         optimization_audit = {
             "scenario_id": scenario_id,

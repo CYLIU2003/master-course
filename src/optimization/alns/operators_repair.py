@@ -384,6 +384,7 @@ def soc_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> A
         current_soc = vehicle.initial_soc if vehicle.initial_soc is not None else 0.8 * capacity
         if current_soc <= 1.0:
             current_soc *= capacity
+        active_slots = _duty_active_slot_indices(problem, duty)
 
         for leg in duty.legs:
             trip = trip_map.get(leg.trip.trip_id)
@@ -391,7 +392,9 @@ def soc_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> A
                 continue
             current_soc -= max(trip.energy_kwh, 0.0)
             if current_soc < reserve:
-                slot_index = leg.trip.arrival_min // max(problem.scenario.timestep_min, 1)
+                slot_index = _slot_index(problem, leg.trip.arrival_min)
+                if slot_index in active_slots:
+                    continue
                 slot_key = (duty_vehicle_id, slot_index)
                 if slot_key not in existing_slot_keys:
                     repaired_slots.append(
@@ -493,6 +496,7 @@ def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: Assig
         soc = min(max(soc, 0.0), capacity)
 
         prev_arrival = duty.legs[0].trip.departure_min if duty.legs else 0
+        active_slots = _duty_active_slot_indices(problem, duty)
         for leg in duty.legs:
             trip = trip_map.get(leg.trip.trip_id)
             if trip is None:
@@ -513,6 +517,7 @@ def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: Assig
                 idx
                 for idx in range(first_slot, last_slot + 1)
                 if _is_replenishment_slot_allowed(problem, idx, overnight_mode, overnight_start, overnight_end)
+                and idx not in active_slots
             ]
             for slot_idx in reversed(candidate_slots):
                 if soc + 1.0e-9 >= needed_before_depart:
@@ -551,6 +556,23 @@ def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: Assig
 
     out.sort(key=lambda s: (str(s.vehicle_id), int(s.slot_index), str(s.charger_id or "")))
     return tuple(out)
+
+
+def _duty_active_slot_indices(problem: CanonicalOptimizationProblem, duty: VehicleDuty) -> set[int]:
+    active_slots: set[int] = set()
+    step = max(problem.scenario.timestep_min, 1)
+    for leg in duty.legs:
+        trip = leg.trip
+        for minute in range(int(trip.departure_min), max(int(trip.arrival_min), int(trip.departure_min) + 1), step):
+            active_slots.add(_slot_index(problem, minute))
+        active_slots.add(_slot_index(problem, max(int(trip.arrival_min) - 1, int(trip.departure_min))))
+        deadhead_min = max(int(getattr(leg, "deadhead_from_prev_min", 0) or 0), 0)
+        if deadhead_min > 0:
+            start_min = int(trip.departure_min) - deadhead_min
+            for minute in range(start_min, int(trip.departure_min), step):
+                active_slots.add(_slot_index(problem, minute))
+            active_slots.add(_slot_index(problem, max(int(trip.departure_min) - 1, start_min)))
+    return active_slots
 
 
 def _recompute_refuel_slots(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> Tuple[RefuelSlot, ...]:

@@ -1957,6 +1957,7 @@ def _route_band_diagram_svg(
     band_label: Optional[str] = None,
     location_labels: Optional[List[str]] = None,
     graph_context: Optional[Dict[str, Any]] = None,
+    coverage_diagnostics: Optional[Dict[str, Any]] = None,
 ) -> str:
     if not rows:
         return ""
@@ -1977,7 +1978,7 @@ def _route_band_diagram_svg(
     if not location_labels:
         location_labels = ["depot"]
 
-    top_margin = 90
+    top_margin = 126
     max_stop_label_len = max(len(str(label or "")) for label in location_labels)
     left_margin = max(220, min(480, 48 + max_stop_label_len * 14))
     right_margin = 420
@@ -2029,6 +2030,28 @@ def _route_band_diagram_svg(
         f'<text x="{left_margin}" y="34" font-size="24" font-family="Segoe UI, Meiryo, sans-serif" fill="#14213d">Route Band Diagram: {html.escape(display_label)}</text>',
         f'<text x="{left_margin}" y="60" font-size="13" font-family="Segoe UI, Meiryo, sans-serif" fill="#5c677d">scenario={html.escape(scenario_id)} / vehicles={len(vehicle_ids)} / route-only stop axis / full-day 00:00-23:59 / depot stay inferred</text>',
     ]
+    if coverage_diagnostics:
+        strip_y = 76
+        strip_h = 14
+        hourly = list(coverage_diagnostics.get("hourly_scheduled_served_unserved") or [])
+        for row in hourly:
+            hour = int(row.get("hour") or 0)
+            scheduled = int(row.get("scheduled") or 0)
+            unserved = int(row.get("unserved") or 0)
+            fill = "#d9dde5" if scheduled <= 0 else ("#c92a2a" if unserved > 0 else "#2f9e44")
+            x = _x(hour * 60)
+            next_x = _x(min((hour + 1) * 60, 24 * 60 - 1))
+            svg_parts.append(
+                f'<rect x="{x:.1f}" y="{strip_y}" width="{max(next_x - x, 1.0):.1f}" height="{strip_h}" fill="{fill}" opacity="0.82"/>'
+            )
+        svg_parts.append(
+            f'<text x="{left_margin}" y="{strip_y - 6}" font-size="12" font-family="Segoe UI, Meiryo, sans-serif" fill="#394867">coverage strip: gray=scheduled 0 / green=all served / red=unserved exists</text>'
+        )
+        longest_gap = dict(coverage_diagnostics.get("longest_no_scheduled_gap") or {})
+        if longest_gap:
+            svg_parts.append(
+                f'<text x="{left_margin}" y="{strip_y + strip_h + 18}" font-size="12" font-family="Segoe UI, Meiryo, sans-serif" fill="#5c677d">No scheduled trips {html.escape(str(longest_gap.get("start_time") or ""))}-{html.escape(str(longest_gap.get("end_time") or ""))} ({int(longest_gap.get("duration_min") or 0)} min)</text>'
+            )
 
     for label in location_labels:
         y = _y(label)
@@ -2258,6 +2281,7 @@ def _build_route_band_diagram_assets(
     scenario_id: str,
     *,
     graph_context: Optional[Dict[str, Any]] = None,
+    trip_assignment_rows: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     service_rows_all = [
         row
@@ -2339,10 +2363,24 @@ def _build_route_band_diagram_assets(
                 if str(row.get("event_route_band_id") or "").strip()
             }
         )
+        service_km = sum(
+            float(row.get("distance_km") or 0.0)
+            for row in band_rows
+            if str(row.get("state") or "") == "service"
+        )
+        deadhead_km = sum(
+            float(row.get("distance_km") or 0.0)
+            for row in band_rows
+            if str(row.get("state") or "") == "deadhead"
+        )
         shared_vehicle_ids = sorted(
             vehicle_id
             for vehicle_id in vehicle_ids
             if len(service_bands_by_vehicle.get(vehicle_id, set())) > 1
+        )
+        coverage_diagnostics = _route_band_coverage_diagnostics(
+            trip_assignment_rows or [],
+            band_id=band_id,
         )
         filename = f"{_safe_export_name(band_id, fallback='route_band')}.svg"
         svg_payloads[filename] = _route_band_diagram_svg(
@@ -2352,6 +2390,7 @@ def _build_route_band_diagram_assets(
             band_label=band_label,
             location_labels=route_location_labels,
             graph_context=graph_context,
+            coverage_diagnostics=coverage_diagnostics,
         )
         entries.append(
             {
@@ -2366,10 +2405,108 @@ def _build_route_band_diagram_assets(
                 "event_route_band_ids": event_route_band_ids,
                 "shared_vehicle_ids": shared_vehicle_ids,
                 "mixed_event_route_band_detected": bool(shared_vehicle_ids),
+                "hourly_scheduled_served_unserved": coverage_diagnostics.get("hourly_scheduled_served_unserved", []),
+                "no_scheduled_gaps": coverage_diagnostics.get("no_scheduled_gaps", []),
+                "unserved_gaps": coverage_diagnostics.get("unserved_gaps", []),
+                "longest_no_scheduled_gap_min": int(coverage_diagnostics.get("longest_no_scheduled_gap_min") or 0),
+                "longest_unserved_gap_min": int(coverage_diagnostics.get("longest_unserved_gap_min") or 0),
+                "deadhead_ratio_by_band": {
+                    "service_km": service_km,
+                    "deadhead_km": deadhead_km,
+                    "deadhead_service_km_ratio": deadhead_km / service_km if service_km > 0 else 0.0,
+                },
                 "diagram_file": filename,
             }
         )
     return {"entries": entries, "svg_payloads": svg_payloads}
+
+
+def _route_band_coverage_diagnostics(
+    trip_assignment_rows: List[Dict[str, Any]],
+    *,
+    band_id: str,
+) -> Dict[str, Any]:
+    rows = [
+        dict(row)
+        for row in trip_assignment_rows
+        if str(row.get("band_id") or row.get("route_series_code") or "").strip() == str(band_id)
+    ]
+    hourly = [
+        {"hour": hour, "scheduled": 0, "served": 0, "unserved": 0}
+        for hour in range(24)
+    ]
+    departure_minutes: List[int] = []
+    unserved_hours: set[int] = set()
+    for row in rows:
+        minute = _parse_iso_minute(row.get("scheduled_departure") or row.get("actual_departure"))
+        if minute is None:
+            continue
+        hour = max(0, min(int(minute // 60), 23))
+        hourly[hour]["scheduled"] += 1
+        departure_minutes.append(int(minute))
+        served = str(row.get("served_flag")).strip().lower() in {"true", "1", "yes"}
+        if served:
+            hourly[hour]["served"] += 1
+        else:
+            hourly[hour]["unserved"] += 1
+            unserved_hours.add(hour)
+
+    no_scheduled_gaps = _gaps_between_minutes(sorted(departure_minutes), minimum_gap_min=60)
+    unserved_gaps = _hour_gaps(sorted(unserved_hours))
+    longest_no = max(no_scheduled_gaps, key=lambda item: int(item.get("duration_min") or 0), default={})
+    longest_unserved = max(unserved_gaps, key=lambda item: int(item.get("duration_min") or 0), default={})
+    return {
+        "hourly_scheduled_served_unserved": hourly,
+        "no_scheduled_gaps": no_scheduled_gaps,
+        "unserved_gaps": unserved_gaps,
+        "longest_no_scheduled_gap": longest_no,
+        "longest_no_scheduled_gap_min": int(longest_no.get("duration_min") or 0),
+        "longest_unserved_gap": longest_unserved,
+        "longest_unserved_gap_min": int(longest_unserved.get("duration_min") or 0),
+    }
+
+
+def _gaps_between_minutes(minutes: List[int], *, minimum_gap_min: int) -> List[Dict[str, Any]]:
+    gaps: List[Dict[str, Any]] = []
+    for prev_min, next_min in zip(minutes, minutes[1:]):
+        duration = int(next_min - prev_min)
+        if duration < int(minimum_gap_min):
+            continue
+        gaps.append(
+            {
+                "start_minute": int(prev_min),
+                "end_minute": int(next_min),
+                "start_time": f"{(prev_min // 60) % 24:02d}:{prev_min % 60:02d}",
+                "end_time": f"{(next_min // 60) % 24:02d}:{next_min % 60:02d}",
+                "duration_min": duration,
+            }
+        )
+    return gaps
+
+
+def _hour_gaps(hours: List[int]) -> List[Dict[str, Any]]:
+    if not hours:
+        return []
+    gaps: List[Dict[str, Any]] = []
+    start = prev = int(hours[0])
+    for hour in [int(item) for item in hours[1:]]:
+        if hour == prev + 1:
+            prev = hour
+            continue
+        gaps.append(_hour_gap_row(start, prev))
+        start = prev = hour
+    gaps.append(_hour_gap_row(start, prev))
+    return gaps
+
+
+def _hour_gap_row(start_hour: int, end_hour: int) -> Dict[str, Any]:
+    return {
+        "start_hour": int(start_hour),
+        "end_hour": int(end_hour),
+        "start_time": f"{int(start_hour):02d}:00",
+        "end_time": f"{int(end_hour) + 1:02d}:00",
+        "duration_min": (int(end_hour) - int(start_hour) + 1) * 60,
+    }
 
 
 def _write_route_band_diagram_assets(

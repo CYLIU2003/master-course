@@ -1396,8 +1396,8 @@ class CostEvaluator:
           - 同一 route_family_code を持つ連続した 2 便
           - かつ leg1.trip.destination == leg2.trip.origin（同一バス停で乗り継ぎ）
 
-        direction フィールドが正しく設定されている場合はそちらでも検出できるが、
-        データが全件 "outbound" の場合は geometry のみで判定する。
+        dispatch.Trip にフィールドが欠けている場合は ProblemTrip からフォールバックする。
+        direction が全件 "outbound" でもジオメトリ（同一停留所）で折り返しを検出できる。
         """
         if weight <= 0.0:
             return 0.0
@@ -1408,22 +1408,27 @@ class CostEvaluator:
             for i in range(len(legs) - 1):
                 t1_ref = legs[i].trip
                 t2_ref = legs[i + 1].trip
-                # leg.trip は dispatch.models.Trip — route_family_code/direction/origin/destination 保有
+                # ProblemTrip を先に引いて全フィールドのフォールバックに使う
+                pt1 = trip_by_id.get(t1_ref.trip_id)
+                pt2 = trip_by_id.get(t2_ref.trip_id)
+                # route_family_code: dispatch.Trip → ProblemTrip の順で取得
                 fam1 = str(getattr(t1_ref, "route_family_code", "") or "").strip()
-                if not fam1:
-                    # dispatch.Trip になければ ProblemTrip からフォールバック
-                    pt1 = trip_by_id.get(t1_ref.trip_id)
-                    fam1 = str(getattr(pt1, "route_family_code", "") or "").strip() if pt1 else ""
+                if not fam1 and pt1 is not None:
+                    fam1 = str(getattr(pt1, "route_family_code", "") or "").strip()
                 if not fam1:
                     continue
                 fam2 = str(getattr(t2_ref, "route_family_code", "") or "").strip()
-                if not fam2:
-                    pt2 = trip_by_id.get(t2_ref.trip_id)
-                    fam2 = str(getattr(pt2, "route_family_code", "") or "").strip() if pt2 else ""
+                if not fam2 and pt2 is not None:
+                    fam2 = str(getattr(pt2, "route_family_code", "") or "").strip()
                 if fam1 != fam2:
                     continue
+                # destination / origin: dispatch.Trip → ProblemTrip の順で取得
                 dest1 = str(getattr(t1_ref, "destination", "") or "").strip()
+                if not dest1 and pt1 is not None:
+                    dest1 = str(getattr(pt1, "destination", "") or "").strip()
                 orig2 = str(getattr(t2_ref, "origin", "") or "").strip()
+                if not orig2 and pt2 is not None:
+                    orig2 = str(getattr(pt2, "origin", "") or "").strip()
                 if dest1 and dest1 == orig2:
                     total_bonus += weight * self._RETURN_LEG_BONUS_BASE_YEN
         return total_bonus

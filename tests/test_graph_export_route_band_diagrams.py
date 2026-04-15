@@ -170,7 +170,30 @@ def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
         },
     }
 
-    assets = _build_route_band_diagram_assets(rows, "scenario-1", graph_context=graph_context)
+    trip_assignment_rows = [
+        {
+            "band_id": "route/22",
+            "scheduled_departure": "2026-03-23T08:00:00+09:00",
+            "served_flag": True,
+        },
+        {
+            "band_id": "route/22",
+            "scheduled_departure": "2026-03-23T09:00:00+09:00",
+            "served_flag": True,
+        },
+        {
+            "band_id": "route/22",
+            "scheduled_departure": "2026-03-23T11:00:00+09:00",
+            "served_flag": False,
+        },
+    ]
+
+    assets = _build_route_band_diagram_assets(
+        rows,
+        "scenario-1",
+        graph_context=graph_context,
+        trip_assignment_rows=trip_assignment_rows,
+    )
 
     assert len(assets["entries"]) == 2
     entry = next(item for item in assets["entries"] if item["band_id"] == "route/22")
@@ -180,9 +203,14 @@ def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
     assert entry["diagram_file"] == "route_22.svg"
     assert entry["shared_vehicle_ids"] == ["veh-ice"]
     assert entry["mixed_event_route_band_detected"] is True
+    assert entry["hourly_scheduled_served_unserved"][8]["scheduled"] == 1
+    assert entry["hourly_scheduled_served_unserved"][11]["unserved"] == 1
+    assert entry["longest_no_scheduled_gap_min"] >= 120
+    assert "deadhead_service_km_ratio" in entry["deadhead_ratio_by_band"]
 
     svg = assets["svg_payloads"]["route_22.svg"]
     assert "Route Band Diagram: Route 22" in svg
+    assert "coverage strip: gray=scheduled 0 / green=all served / red=unserved exists" in svg
     assert "route-only stop axis / full-day 00:00-23:59 / depot stay inferred" in svg
     assert ">00:00<" in svg
     assert ">23:59<" in svg
@@ -214,6 +242,9 @@ def test_route_band_diagram_assets_emit_svg_and_manifest(tmp_path) -> None:
     )
     manifest_entry = next(item for item in manifest["entries"] if item["band_id"] == "route/22")
     assert manifest_entry["diagram_file"] == "route_22.svg"
+    assert manifest_entry["hourly_scheduled_served_unserved"][11]["unserved"] == 1
+    assert manifest_entry["longest_no_scheduled_gap_min"] >= 120
+    assert "deadhead_service_km_ratio" in manifest_entry["deadhead_ratio_by_band"]
     assert (out_dir / "route_band_diagrams" / "route_22.svg").exists()
 
 

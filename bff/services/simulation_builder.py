@@ -574,7 +574,7 @@ def apply_builder_configuration(
         if hasattr(body, "include_depot_moves") and body.include_depot_moves is not None
         else bool((current_scope.get("tripSelection") or {}).get("includeDepotMoves", True))
     )
-    allow_intra_depot_swap = (
+    requested_allow_intra_depot_swap = (
         body.allow_intra_depot_route_swap
         if hasattr(body, "allow_intra_depot_route_swap") and body.allow_intra_depot_route_swap is not None
         else bool(current_scope.get("allowIntraDepotRouteSwap", False))
@@ -584,8 +584,20 @@ def apply_builder_configuration(
         if hasattr(body, "allow_inter_depot_swap") and body.allow_inter_depot_swap is not None
         else bool(current_scope.get("allowInterDepotSwap", False))
     )
-    if overlay.solver_config.fixed_route_band_mode:
-        allow_intra_depot_swap = False
+    effective_fixed_route_band_mode = bool(
+        body.simulation_settings.fixed_route_band_mode or not requested_allow_intra_depot_swap
+    )
+    overlay.solver_config.fixed_route_band_mode = effective_fixed_route_band_mode
+    overlay.solver_config.enable_vehicle_diagram_output = bool(
+        body.simulation_settings.enable_vehicle_diagram_output
+        or effective_fixed_route_band_mode
+    )
+    overlay.solver_config.output_vehicle_diagram = (
+        overlay.solver_config.enable_vehicle_diagram_output
+    )
+    allow_intra_depot_swap = (
+        False if effective_fixed_route_band_mode else bool(requested_allow_intra_depot_swap)
+    )
 
     primary_depot_id = selected_depot_ids[0]
     service_date = body.service_date or body.simulation_settings.service_date

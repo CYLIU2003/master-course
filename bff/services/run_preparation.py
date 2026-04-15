@@ -1030,18 +1030,6 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
                 planning_days=planning_days,
             )
             audit["strict_coverage_precheck"] = evaluate_strict_coverage_precheck(problem).to_metadata()
-            # Reflect builder-estimated distances: ProblemBuilder applies duration-based
-            # fallback so raw zeros in trip_records don't indicate a real problem.
-            if problem.trips:
-                effective_zero = sum(
-                    1 for t in problem.trips if (t.distance_km or 0.0) <= 0.0
-                )
-                audit["trip_distance_audit"]["zero_or_missing_count"] = effective_zero
-                audit["trip_distance_audit"]["total_count"] = len(problem.trips)
-                audit["trip_distance_audit"]["builder_estimated"] = True
-                # If all trip distances are filled, route zeros don't invalidate interpretation
-                if effective_zero == 0:
-                    audit["route_distance_audit"]["zero_or_missing_count"] = 0
     except Exception as exc:
         audit["strict_coverage_precheck"] = {
             "checked": False,

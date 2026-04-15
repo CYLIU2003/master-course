@@ -127,3 +127,69 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             "bess_energy_kwh": 500.0,
         }
     ]
+
+
+def test_apply_builder_configuration_forces_fixed_route_band_when_intra_swap_is_disabled() -> None:
+    scenario_doc = {
+        "meta": {},
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [{"id": "route-a", "depotId": "dep1", "routeCode": "黒01"}],
+        "vehicles": [{"id": "veh-1", "depotId": "dep1", "type": "BEV", "enabled": True}],
+        "chargers": [{"id": "chg-1", "siteId": "dep1", "powerKw": 90}],
+        "vehicle_templates": [],
+        "scenario_overlay": {},
+        "simulation_config": {},
+        "dispatch_scope": {
+            "allowIntraDepotRouteSwap": False,
+            "fixedRouteBandMode": False,
+        },
+        "calendar": [{"service_id": "WEEKDAY"}],
+    }
+    scenario_meta = {
+        "datasetId": "tokyu_full",
+        "datasetVersion": "v1",
+        "operatorId": "tokyu",
+        "randomSeed": 42,
+    }
+    body = PrepareSimulationBody(
+        selected_depot_ids=["dep1"],
+        selected_route_ids=["route-a"],
+        day_type="WEEKDAY",
+        allow_intra_depot_route_swap=False,
+        simulation_settings=PrepareSimulationSettingsBody(
+            use_selected_depot_vehicle_inventory=True,
+            use_selected_depot_charger_inventory=True,
+            fixed_route_band_mode=False,
+        ),
+    )
+
+    with (
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario_document_shallow",
+            return_value=copy.deepcopy(scenario_doc),
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario",
+            return_value=scenario_meta,
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "route_ids_for_selected_depots",
+            return_value=["route-a"],
+        ),
+        mock.patch.object(simulation_builder.store, "_invalidate_dispatch_artifacts"),
+        mock.patch.object(simulation_builder.store, "_save"),
+        mock.patch.object(
+            simulation_builder.store,
+            "_now_iso",
+            return_value="2026-03-22T00:00:00Z",
+        ),
+    ):
+        updated = simulation_builder.apply_builder_configuration("scenario-1", body)
+
+    assert updated["dispatch_scope"]["allowIntraDepotRouteSwap"] is False
+    assert updated["dispatch_scope"]["fixedRouteBandMode"] is True
+    assert updated["simulation_config"]["fixed_route_band_mode"] is True
+    assert updated["scenario_overlay"]["solver_config"]["fixed_route_band_mode"] is True

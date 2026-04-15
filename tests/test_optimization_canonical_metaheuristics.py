@@ -133,10 +133,9 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_ga_only"
     assert stored_fields["optimization_result"]["summary"]["trip_count_served"] == 1
     assert stored_fields["optimization_result"]["solver_result"]["assignment"] == {"veh-1": ["trip-1"]}
-    assert stored_fields["optimization_result"]["canonical_solver_result"] == {
-        "solver_mode": "ga",
-        "vehicle_paths": {"veh-1": ["trip-1"]},
-    }
+    assert stored_fields["optimization_result"]["canonical_solver_result"]["solver_mode"] == "ga"
+    assert stored_fields["optimization_result"]["canonical_solver_result"]["vehicle_paths"] == {"veh-1": ["trip-1"]}
+    assert stored_fields["optimization_result"]["canonical_solver_result"]["solution_validity"]["validated_no_cancellation"] is True
 
 
 def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> None:

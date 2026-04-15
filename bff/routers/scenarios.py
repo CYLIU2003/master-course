@@ -2130,6 +2130,23 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
     ]
     day_type = str(body.dayType or current_scope.get("serviceId") or "WEEKDAY")
 
+    requested_allow_intra_depot_swap = (
+        bool(body.allowIntraDepotRouteSwap)
+        if body.allowIntraDepotRouteSwap is not None
+        else bool(current_scope.get("allowIntraDepotRouteSwap", False))
+    )
+    requested_fixed_route_band_mode = (
+        bool(body.fixedRouteBandMode)
+        if body.fixedRouteBandMode is not None
+        else bool(current_scope.get("fixedRouteBandMode", True))
+    )
+    effective_fixed_route_band_mode = (
+        requested_fixed_route_band_mode or not requested_allow_intra_depot_swap
+    )
+    effective_allow_intra_depot_swap = (
+        False if effective_fixed_route_band_mode else requested_allow_intra_depot_swap
+    )
+
     patch: Dict[str, Any] = {
         "serviceId": day_type,
         "serviceSelection": {"serviceIds": [day_type]},
@@ -2145,6 +2162,8 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             selected_depot_ids=selected_depot_ids,
             selected_route_ids=selected_route_ids,
         ),
+        "allowIntraDepotRouteSwap": effective_allow_intra_depot_swap,
+        "fixedRouteBandMode": effective_fixed_route_band_mode,
     }
     if selected_depot_ids:
         patch["depotId"] = selected_depot_ids[0]
@@ -2167,12 +2186,8 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
                 else {}
             ),
         }
-    if body.allowIntraDepotRouteSwap is not None:
-        patch["allowIntraDepotRouteSwap"] = bool(body.allowIntraDepotRouteSwap)
     if body.allowInterDepotSwap is not None:
         patch["allowInterDepotSwap"] = bool(body.allowInterDepotSwap)
-    if body.fixedRouteBandMode is not None:
-        patch["fixedRouteBandMode"] = bool(body.fixedRouteBandMode)
 
     try:
         normalized_scope = store.set_dispatch_scope(scenario_id, patch)
@@ -2201,8 +2216,7 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             )
         if body.unservedPenalty is not None:
             solver_config["unserved_penalty"] = float(body.unservedPenalty)
-        if body.fixedRouteBandMode is not None:
-            solver_config["fixed_route_band_mode"] = bool(body.fixedRouteBandMode)
+        solver_config["fixed_route_band_mode"] = effective_fixed_route_band_mode
         if body.maxStartFragmentsPerVehicle is not None:
             solver_config["max_start_fragments_per_vehicle"] = int(body.maxStartFragmentsPerVehicle)
         if body.maxEndFragmentsPerVehicle is not None:
@@ -2309,8 +2323,7 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["unserved_penalty"] = float(body.unservedPenalty)
         if body.objectiveWeights is not None or saved_weights:
             simulation_config["objective_weights"] = dict(saved_weights)
-        if body.fixedRouteBandMode is not None:
-            simulation_config["fixed_route_band_mode"] = bool(body.fixedRouteBandMode)
+        simulation_config["fixed_route_band_mode"] = effective_fixed_route_band_mode
         if body.maxStartFragmentsPerVehicle is not None:
             simulation_config["max_start_fragments_per_vehicle"] = int(body.maxStartFragmentsPerVehicle)
         if body.maxEndFragmentsPerVehicle is not None:

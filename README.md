@@ -153,6 +153,8 @@ flowchart LR
 - 2026-04-11: Windows で job_store の `temp_path.replace(path)` が `PermissionError [WinError 5]` になることがあったため、job 永続化に retry/backoff を追加し、thread 実行の job は polling 時に disk を再読込しないようにした。API の background task や graph ビルドは `execution_model=thread` を明示し、同一プロセス内の self-contention を避けている
 - 2026-04-11: `tsurumaki / WEEKDAY / prepared-ca500b7c95b16ca9` では startup deadhead の depot→stop ルールが欠けていたため、`startup_deadhead_missing` が 152 件まとめて発生して MILP に進めなかった。`src/route_family_runtime.py` に depot 座標由来の deadhead 推論を追加し、`arrival + turnaround + deadhead <= next departure` の strict feasibility は維持したまま、`tsurumaki -> 上町駅` のような startup connectivity を復元した
 - 2026-04-13: strict infeasible の診断を強化した。`strict_coverage_precheck` は solver 実行前の構造的 feasibility gate であり、SOC / charger / PV / weather / objective cost には依存しない。最適化結果・benchmark export・Tk モニター・Prepare 応答には `strict coverage needs at least N vehicles, current fleet is M` の説明、`interval_only_lower_bound` と dispatch lower bound、blocked transition reason counts、prepared scope audit（zero/missing distance・deadhead_missing 優勢警告）を出すようにした。`distance_km=0` は strict precheck の直接原因ではないが、energy/cost KPI の研究妥当性を壊すため必ず warning として扱う
+- 2026-04-14: 当面の運用方針として、`allowIntraDepotRouteSwap=false` の場合は canonical optimization / Prepare 保存時に `fixed_route_band_mode` を実効的に強制 ON とし、同一営業所内でも `渋22 -> 渋21` のような route family を跨ぐ車両トレードを許さないようにした。UI 上の stale 設定で `fixedRouteBandMode=false` が残っていても、solver 実行時は family 跨ぎを禁止する
+- 2026-04-15: 小型 `渋21/渋22` 検証で `BASELINE_FALLBACK` かつ `trip_count_unserved=0` が「検証済み欠便なし」に見えていた問題を修正した。出力に `solution_validity` を追加し、fallback / postsolve infeasible / infeasibility reason が残る場合は `validated_no_cancellation=false` として扱う。fallback baseline は maximum cardinality のまま deadhead/wait 最小化 matching を使うようにし、route-band SVG/manifest には hourly coverage strip、scheduled=0 gap、unserved gap、deadhead ratio export を追加した。SOC repair は active service/deadhead slot に充電を挿入しない
 - 2026-04-05: `bff/routers/simulation.py` の canonical bridge は旧 `plan.vehicle_paths` 前提で current canonical output の top-level `vehicle_paths` を落としていたため修正し、`src/simulator.py` は `feasible` / `time_limit_baseline` を valid status として扱うよう更新した。slot 境界の back-to-back trip を overlap 扱いする fallback も修正し、ALNS best run の prepared simulation は `served=974`, `vehicle_count_used=88`, `simulation_total_cost=3245610.92`, `simulation_total_co2_kg=3845.7289`, residual `time_connection=21` まで改善した
 - 2026-04-01: canonical 最適化の保存先を拡張し、従来の feed/snapshot スコープ出力に加えて `output/<YYYY-MM-DD>/run_YYYYMMDD_HHMM/` を同時生成するようにした。run 配下には `summary.json`, `solver_result.json`, `canonical_solver_result.json`, `cost_breakdown_detail.(json/csv)`, `objective_breakdown.(json/csv)`, `kpi_summary.json`, `site_power_balance.csv`, `depot_energy_flows.(json/csv)`, `graph/manifest.json`, `graph/route_band_diagrams/manifest.json` など単位付き成果物を出力し、系統受電量（`grid_to_bus_kwh`, `grid_to_bess_kwh`, `grid_import_total_kwh`）を明示確認できるようにした
 - 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
@@ -934,6 +936,17 @@ python catalog_update_app.py refresh gtfs-pipeline `
 
 - `rebuild_dispatch=false`（既定）では duty 再生成は行わないため `dutyCount=0` になる場合あり
 - dispatch duty を確認したい場合は `dispatch再構築ON` で実行
+
+**route family を跨ぐ車両トレード**
+
+- 当面は `allowIntraDepotRouteSwap=false` を優先し、同一営業所内でも route family を跨ぐ車両トレードは許可しません。`渋22` の空き車両が `渋21` の昼間便を拾う、といった挙動は canonical optimization / Prepare 保存時に止めます。
+- `fixedRouteBandMode=false` の stale 設定が残っていても、`allowIntraDepotRouteSwap=false` なら solver 実行時の実効値は family lock ありとして扱います。
+
+**fallback 結果と「欠便なし」の扱い**
+
+- `solver_status=BASELINE_FALLBACK`、`canonical_solver_result.feasible=false`、または `infeasibility_reasons` が残る run は、`trip_count_unserved=0` でも検証済みの欠便なし解ではありません。
+- `solution_validity.validated_no_cancellation=true` のときだけ、欠便なし・実行可能な解として扱います。`baseline_fallback_or_postsolve_infeasible` が出た場合は、`trip_assignment.csv` は割当候補の説明用であり、運用計画としては未承認です。
+- route-band SVG の灰色帯は scheduled trip がない時間帯、緑は全 scheduled trip served、赤は unserved ありを示します。渋21の昼間が空白に見える場合は、まず manifest の `hourly_scheduled_served_unserved` と `no_scheduled_gaps` を確認してください。
 
 **`No travel connections generated` と INFEASIBLE**
 

@@ -1405,6 +1405,51 @@ class GurobiMILPAdapter:
                 penalty_multiplier = 2.0 if is_peak else 1.0
                 objective += unserved_penalty_weight * penalty_multiplier * unserved[trip.trip_id]
 
+        # Return-leg bonus: subtract reward when a vehicle makes an efficient
+        # outbound→return (turnaround) connection on the same route family.
+        # Condition: same route_family_code + trip_i.destination == trip_j.origin (same stop).
+        _return_leg_bonus_weight = max(
+            float(getattr(problem.objective_weights, "return_leg_bonus", 0.0) or 0.0), 0.0
+        )
+        if _return_leg_bonus_weight > 0.0 and x:
+            _RETURN_LEG_BONUS_BASE_YEN = 500.0
+            turnaround_pairs: Dict[Tuple[str, str], float] = {}
+            for trip_i in problem.trips:
+                dt_i = dispatch_trip_by_id.get(trip_i.trip_id)
+                fam_i = (
+                    str(getattr(dt_i, "route_family_code", "") or "").strip()
+                    or str(getattr(trip_i, "route_family_code", "") or "").strip()
+                )
+                if not fam_i:
+                    continue
+                dest_i = (
+                    str(getattr(dt_i, "destination", "") or "").strip()
+                    or str(getattr(trip_i, "destination", "") or "").strip()
+                )
+                if not dest_i:
+                    continue
+                for trip_j_id in problem.feasible_connections.get(trip_i.trip_id, ()):
+                    pt_j = trip_by_id.get(trip_j_id)
+                    if pt_j is None:
+                        continue
+                    dt_j = dispatch_trip_by_id.get(trip_j_id)
+                    fam_j = (
+                        str(getattr(dt_j, "route_family_code", "") or "").strip()
+                        or str(getattr(pt_j, "route_family_code", "") or "").strip()
+                    )
+                    if fam_i != fam_j:
+                        continue
+                    orig_j = (
+                        str(getattr(dt_j, "origin", "") or "").strip()
+                        or str(getattr(pt_j, "origin", "") or "").strip()
+                    )
+                    if dest_i == orig_j:
+                        turnaround_pairs[(trip_i.trip_id, trip_j_id)] = _RETURN_LEG_BONUS_BASE_YEN
+            for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
+                bonus = turnaround_pairs.get((from_trip_id, to_trip_id), 0.0)
+                if bonus > 0.0:
+                    objective -= _return_leg_bonus_weight * bonus * var
+
         if getattr(config, "warm_start", True) and problem.baseline_plan is not None:
             baseline_plan = self._repaired_baseline_plan_for_warm_start(problem)
             baseline_duty_vehicle_map = baseline_plan.duty_vehicle_map()

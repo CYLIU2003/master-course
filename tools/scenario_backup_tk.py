@@ -1558,7 +1558,7 @@ class App:
         self.include_deadhead_var = tk.BooleanVar(value=True)
         self.allow_intra_var = tk.BooleanVar(value=False)
         self.allow_inter_var = tk.BooleanVar(value=False)
-        self.fixed_route_band_mode_var = tk.BooleanVar(value=True)
+        self.fixed_route_band_mode_var = tk.BooleanVar(value=False)
         frow1 = ttk.Frame(flags_lf)
         frow1.pack(fill=tk.X)
         ttk.Checkbutton(frow1, text="区間便", variable=self.include_short_turn_var).pack(side=tk.LEFT)
@@ -4357,7 +4357,7 @@ class App:
             self._suspend_route_lock_sync = True
             self.allow_intra_var.set(bool(dispatch_scope.get("allowIntraDepotRouteSwap", False)))
             self.allow_inter_var.set(bool(dispatch_scope.get("allowInterDepotSwap", False)))
-            self.fixed_route_band_mode_var.set(bool(dispatch_scope.get("fixedRouteBandMode", True)))
+            self.fixed_route_band_mode_var.set(bool(dispatch_scope.get("fixedRouteBandMode", False)))
             self._suspend_route_lock_sync = False
 
             solver = dict(resp.get("solverSettings") or {})
@@ -6033,6 +6033,18 @@ class App:
             f"solver_status={result.get('solver_status') or result.get('status') or '-'} "
             f"objective={result.get('objective_value')}"
         )
+        solution_validity = dict(
+            result.get("solution_validity")
+            or ((result.get("summary") or {}).get("solution_validity") or {})
+        )
+        if solution_validity:
+            self._optimization_console_log(
+                "optimization_result.solution_validity: "
+                f"validated_no_cancellation={solution_validity.get('validated_no_cancellation')} "
+                f"validated_feasible={solution_validity.get('validated_feasible')} "
+                f"reason={solution_validity.get('status_reason')} "
+                f"blocking={solution_validity.get('blocking_reasons')}"
+            )
         for warning in list(result.get("warnings") or []):
             self._optimization_console_log(f"optimization_result.warning: {warning}")
         for reason in list(result.get("infeasibility_reasons") or []):
