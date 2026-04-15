@@ -389,6 +389,8 @@ def simulate(
         "TIME_LIMIT",
         "SUBOPTIMAL",
         "FEASIBLE",
+        "BASELINE_FALLBACK",
+        "PARTIAL_BASELINE_FALLBACK",
         "TIME_LIMIT_BASELINE",
         "AUTO_RELAXED_BASELINE",
     }

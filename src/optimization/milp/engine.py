@@ -52,6 +52,10 @@ class MILPOptimizer:
         )
         service_coverage_mode = str(getattr(problem.scenario, "service_coverage_mode", "strict") or "strict")
         allow_partial_service = service_coverage_mode == "penalized"
+        is_baseline_fallback = outcome.solver_status in {
+            "BASELINE_FALLBACK",
+            "PARTIAL_BASELINE_FALLBACK",
+        }
         return OptimizationEngineResult(
             mode=OptimizationMode.MILP,
             solver_status=outcome.solver_status,
@@ -129,7 +133,7 @@ class MILPOptimizer:
                 "presolve_reduction_summary": dict(outcome.presolve_reduction_summary or {}),
                 "iis_generated": outcome.iis_generated,
                 "fallback_reason": outcome.fallback_reason,
-                "fallback_applied": bool(outcome.fallback_reason or outcome.solver_status == "BASELINE_FALLBACK"),
+                "fallback_applied": bool(outcome.fallback_reason or is_baseline_fallback),
                 "objective_mode": problem.scenario.objective_mode,
                 "objective_weights": {
                     "electricity_cost": float(problem.objective_weights.energy),
@@ -162,7 +166,7 @@ class MILPOptimizer:
                     "avg_exact_repair_sec": 0.0,
                     "feasible_candidate_ratio": 1.0 if outcome.has_feasible_incumbent else 0.0,
                     "rejected_candidate_ratio": 0.0 if outcome.has_feasible_incumbent else 1.0,
-                    "fallback_count": 1 if outcome.fallback_reason or outcome.solver_status == "BASELINE_FALLBACK" else 0,
+                    "fallback_count": 1 if outcome.fallback_reason or is_baseline_fallback else 0,
                 },
             },
         )
@@ -173,6 +177,8 @@ class MILPOptimizer:
             return "optimal"
         if status in {"time_limit", "time_limit_baseline"}:
             return "time_limit"
+        if status in {"baseline_fallback", "partial_baseline_fallback"}:
+            return "baseline_fallback"
         if status in {"infeasible", "inf_or_unbd", "unbounded"}:
             return "infeasible_or_unbounded"
         if status == "suboptimal":

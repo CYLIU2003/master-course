@@ -2775,8 +2775,10 @@ def _solution_validity_payload(
     status_upper = status.upper()
     reasons = [str(item) for item in list(infeasibility_reasons or []) if str(item).strip()]
     blocking_reasons: List[str] = []
-    if status_upper == "BASELINE_FALLBACK":
+    if status_upper in {"BASELINE_FALLBACK", "PARTIAL_BASELINE_FALLBACK"}:
         blocking_reasons.append("baseline_fallback")
+    if status_upper == "PARTIAL_BASELINE_FALLBACK":
+        blocking_reasons.append("partial_baseline_fallback")
     if not bool(feasible):
         blocking_reasons.append("postsolve_infeasible")
     if reasons:
@@ -2792,6 +2794,8 @@ def _solution_validity_payload(
     validated_no_cancellation = bool(validated_feasible and unserved == 0)
     if not blocking_reasons:
         status_reason = "validated_feasible_no_cancellation" if validated_no_cancellation else "validated_feasible"
+    elif "partial_baseline_fallback" in blocking_reasons:
+        status_reason = "partial_baseline_fallback"
     elif "baseline_fallback" in blocking_reasons or "postsolve_infeasible" in blocking_reasons:
         status_reason = "baseline_fallback_or_postsolve_infeasible"
     elif "unserved_trips_present" in blocking_reasons:

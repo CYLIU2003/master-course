@@ -29,6 +29,7 @@ from src.optimization import (
 
 FALLBACK_MILP_STATUSES = {
     "BASELINE_FALLBACK",
+    "PARTIAL_BASELINE_FALLBACK",
     "time_limit_baseline",
     "auto_relaxed_baseline",
     "gurobi_unavailable_baseline",
@@ -41,6 +42,7 @@ RESULT_CATEGORIES = {
     "SOLVED_INFEASIBLE",
     "NO_INCUMBENT",
     "BASELINE_FALLBACK",
+    "PARTIAL_BASELINE_FALLBACK",
     "truthful_baseline_guardrail",
 }
 MODE_MAP = {
@@ -446,7 +448,13 @@ def _build_row(
     result_category = _pick_text(result_payload.get("solver_status"), result_payload.get("status"))
     comparison_tier = "prototype" if solver_maturity == "prototype" else (
         "excluded"
-        if result_category in {"BASELINE_FALLBACK", "NO_INCUMBENT", "truthful_baseline_guardrail", "SOLVED_INFEASIBLE"}
+        if result_category in {
+            "BASELINE_FALLBACK",
+            "PARTIAL_BASELINE_FALLBACK",
+            "NO_INCUMBENT",
+            "truthful_baseline_guardrail",
+            "SOLVED_INFEASIBLE",
+        }
         else "core"
     )
 

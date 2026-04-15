@@ -1969,8 +1969,8 @@ class GurobiMILPAdapter:
             getattr(problem.scenario, "service_coverage_mode", None)
             or problem.metadata.get("service_coverage_mode", "strict")
         )
-        if service_coverage_mode == "strict" and baseline_plan.unserved_trip_ids:
-            return None
+        baseline_unserved_trip_count = int(len(baseline_plan.unserved_trip_ids))
+        partial_baseline_fallback = baseline_unserved_trip_count > 0
         baseline_meta = dict(baseline_plan.metadata or {})
         baseline_meta.update(
             {
@@ -1979,11 +1979,19 @@ class GurobiMILPAdapter:
                 "milp_status": solver_status,
                 "milp_backend": self.backend_name,
                 "auto_relaxed_allow_partial_service": bool(relaxed_partial_service),
+                "service_coverage_mode": service_coverage_mode,
+                "strict_coverage_enforced": service_coverage_mode == "strict",
+                "partial_baseline_fallback": bool(partial_baseline_fallback),
+                "baseline_unserved_trip_count": baseline_unserved_trip_count,
             }
         )
         return (
             MILPSolverOutcome(
-                solver_status="BASELINE_FALLBACK",
+                solver_status=(
+                    "PARTIAL_BASELINE_FALLBACK"
+                    if partial_baseline_fallback
+                    else "BASELINE_FALLBACK"
+                ),
                 used_backend=self.backend_name,
                 supports_exact_milp=False,
                 has_feasible_incumbent=False,
