@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import re
 import time
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -1046,130 +1048,327 @@ def _distance_audit(
     }
 
 
-def _build_route_lookup_for_distance_audit(route_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    lookup: dict[str, dict[str, Any]] = {}
-    for route in route_rows:
-        if not isinstance(route, dict):
-            continue
-        route_like = dict(route)
-        route_id = _normalize_scope_text(route.get("id") or route.get("route_id"))
-        route_code = _normalize_scope_text(route.get("routeCode") or route.get("route_code"))
-        family_code = _normalize_scope_text(
-            route.get("routeFamilyCode")
-            or route.get("route_family_code")
-            or route_code
-            or route_id
-        )
-        direction = _normalize_scope_text(route.get("direction") or route.get("canonicalDirection"))
-        variant_type = _normalize_scope_text(
-            route.get("routeVariantType")
-            or route.get("route_variant_type")
-            or route.get("routeVariantTypeManual")
-        )
-        for key in {
-            route_id,
-            route_code,
-            family_code,
-            f"{family_code}|{direction}|{variant_type}",
-            f"{route_code}|{direction}|{variant_type}",
-        }:
-            if key:
-                lookup[key] = route_like
-    return lookup
-
-
-def _distance_source_for_trip(
-    trip_row: dict[str, Any],
-    route_lookup: dict[str, dict[str, Any]],
-) -> dict[str, Any]:
-    trip_id = _normalize_scope_text(trip_row.get("trip_id"))
-    route_id = _normalize_scope_text(trip_row.get("route_id"))
-    route_code = _normalize_scope_text(trip_row.get("route_code") or trip_row.get("routeCode"))
+def _route_identity_fields(row: dict[str, Any]) -> dict[str, str]:
+    route_id = _normalize_scope_text(row.get("route_id") or row.get("id"))
+    route_code = _normalize_scope_text(row.get("route_code") or row.get("routeCode"))
     family_code = _normalize_scope_text(
-        trip_row.get("routeFamilyCode")
-        or trip_row.get("route_family_code")
+        row.get("routeFamilyCode")
+        or row.get("route_family_code")
         or route_code
         or route_id
     )
-    direction = _normalize_scope_text(trip_row.get("direction") or trip_row.get("canonicalDirection"))
+    direction = _normalize_scope_text(row.get("direction") or row.get("canonicalDirection"))
     variant_type = _normalize_scope_text(
-        trip_row.get("routeVariantType")
-        or trip_row.get("route_variant_type")
+        row.get("routeVariantType")
+        or row.get("route_variant_type")
+        or row.get("routeVariantTypeManual")
     )
-    route_like = (
-        route_lookup.get(route_id)
-        or route_lookup.get(route_code)
-        or route_lookup.get(family_code)
-        or route_lookup.get(f"{family_code}|{direction}|{variant_type}")
-        or route_lookup.get(f"{route_code}|{direction}|{variant_type}")
-        or {}
-    )
-    explicit_distance = trip_row.get("distance_km")
-    if explicit_distance is None:
-        explicit_distance = trip_row.get("distanceKm")
-    if explicit_distance is not None:
-        try:
-            explicit_value = float(explicit_distance)
-        except (TypeError, ValueError):
-            explicit_value = None
-        else:
-            if explicit_value > 0.0:
-                return {
-                    "trip_id": trip_id,
-                    "route_id": route_id,
-                    "route_code": route_code,
-                    "route_family_code": family_code,
-                    "direction": direction,
-                    "route_variant_type": variant_type,
-                    "distance_source": "trip.distance_km",
-                    "distance_km": explicit_value,
-                    "miss_reason": "",
-                }
-    route_distance = route_like.get("distance_km")
-    if route_distance is None:
-        route_distance = route_like.get("distanceKm")
-    try:
-        route_distance_value = float(route_distance) if route_distance is not None else None
-    except (TypeError, ValueError):
-        route_distance_value = None
-    if route_distance_value is not None and route_distance_value > 0.0:
-        return {
-            "trip_id": trip_id,
-            "route_id": route_id,
-            "route_code": route_code,
-            "route_family_code": family_code,
-            "direction": direction,
-            "route_variant_type": variant_type,
-            "distance_source": "route.distance_km",
-            "distance_km": route_distance_value,
-            "miss_reason": "",
-        }
     return {
-        "trip_id": trip_id,
         "route_id": route_id,
         "route_code": route_code,
-        "route_family_code": family_code,
+        "family_code": family_code,
         "direction": direction,
         "route_variant_type": variant_type,
-        "distance_source": "missing",
-        "distance_km": 0.0,
-        "miss_reason": "missing_trip_distance_and_route_distance",
     }
 
 
-def _trip_distance_audit_with_samples(
+def _canonical_route_distance_keys(
+    *,
+    route_id: str,
+    family_code: str,
+    direction: str,
+    route_variant_type: str,
+    route_code: str,
+) -> list[str]:
+    keys: list[str] = []
+    if route_id:
+        keys.append(f"route_id:{route_id}")
+    if family_code and direction and route_variant_type:
+        keys.append(f"family:{family_code}|{direction}|{route_variant_type}")
+    if route_code:
+        keys.append(f"route_code:{route_code}")
+    return keys
+
+
+def _try_trip_distance_estimate_from_geometry_or_runtime(
+    row: dict[str, Any],
+) -> tuple[float, str]:
+    origin_lat = _safe_float_number(row.get("origin_lat") or row.get("originLat"))
+    origin_lon = _safe_float_number(row.get("origin_lon") or row.get("originLon"))
+    dest_lat = _safe_float_number(row.get("destination_lat") or row.get("destinationLat"))
+    dest_lon = _safe_float_number(row.get("destination_lon") or row.get("destinationLon"))
+    if all(value is not None for value in (origin_lat, origin_lon, dest_lat, dest_lon)):
+        radius_km = 6371.0
+        lat1 = math.radians(float(origin_lat))
+        lon1 = math.radians(float(origin_lon))
+        lat2 = math.radians(float(dest_lat))
+        lon2 = math.radians(float(dest_lon))
+        d_lat = lat2 - lat1
+        d_lon = lon2 - lon1
+        h = (
+            math.sin(d_lat / 2.0) ** 2
+            + math.cos(lat1) * math.cos(lat2) * math.sin(d_lon / 2.0) ** 2
+        )
+        d = 2.0 * radius_km * math.asin(min(1.0, math.sqrt(max(h, 0.0))))
+        if d > 0.0:
+            return max(d * 1.3, 0.1), "trip.haversine_distance"
+    runtime_min = _safe_float_number(row.get("runtime_min") or row.get("runtimeMin"))
+    if runtime_min is not None and runtime_min > 0.0:
+        return max((runtime_min / 60.0) * 17.0, 0.1), "trip.runtime_distance"
+    return 0.0, "missing"
+
+
+def _build_route_distance_source_map(
+    *,
     trip_rows: list[dict[str, Any]],
     route_rows: list[dict[str, Any]],
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    route_lookup = _build_route_lookup_for_distance_audit(route_rows)
-    total_count = len(trip_rows)
-    zero_or_missing_count = 0
-    missing_count = 0
-    samples: list[dict[str, Any]] = []
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    source_map: dict[str, dict[str, Any]] = {}
+    source_counts: Counter[str] = Counter()
+
+    def register_source(
+        *,
+        keys: list[str],
+        distance_km: float,
+        source: str,
+        sample_id: str,
+    ) -> None:
+        if not keys or distance_km <= 0.0:
+            return
+        source_counts[source] += 1
+        for key in keys:
+            existing = source_map.get(key)
+            if existing and float(existing.get("distance_km") or 0.0) >= distance_km:
+                continue
+            source_map[key] = {
+                "distance_km": float(distance_km),
+                "distance_source": source,
+                "sample_id": sample_id,
+            }
+
+    for row in route_rows:
+        identity = _route_identity_fields(row)
+        keys = _canonical_route_distance_keys(
+            route_id=identity["route_id"],
+            family_code=identity["family_code"],
+            direction=identity["direction"],
+            route_variant_type=identity["route_variant_type"],
+            route_code=identity["route_code"],
+        )
+        route_distance = _safe_float_number(row.get("distance_km") or row.get("distanceKm"))
+        if route_distance is not None and route_distance > 0.0:
+            register_source(
+                keys=keys,
+                distance_km=route_distance,
+                source="route.distance_km",
+                sample_id=identity["route_id"] or identity["route_code"],
+            )
+
+    for row in trip_rows:
+        identity = _route_identity_fields(row)
+        keys = _canonical_route_distance_keys(
+            route_id=identity["route_id"],
+            family_code=identity["family_code"],
+            direction=identity["direction"],
+            route_variant_type=identity["route_variant_type"],
+            route_code=identity["route_code"],
+        )
+        trip_distance = _safe_float_number(row.get("distance_km") or row.get("distanceKm"))
+        if trip_distance is not None and trip_distance > 0.0:
+            register_source(
+                keys=keys,
+                distance_km=trip_distance,
+                source="trip.distance_km",
+                sample_id=_normalize_scope_text(row.get("trip_id")),
+            )
+            continue
+        estimated_distance, estimate_source = _try_trip_distance_estimate_from_geometry_or_runtime(row)
+        if estimated_distance > 0.0:
+            register_source(
+                keys=keys,
+                distance_km=estimated_distance,
+                source=estimate_source,
+                sample_id=_normalize_scope_text(row.get("trip_id")),
+            )
+
+    return (
+        source_map,
+        {
+            "route_distance_source_count": len(source_map),
+            "route_distance_source_kind_counts": dict(source_counts),
+            "sample_source_keys": list(source_map.keys())[:20],
+        },
+    )
+
+
+def _distance_source_for_trip(
+    *,
+    trip_row: dict[str, Any],
+    route_distance_sources: dict[str, dict[str, Any]],
+    route_distance_source_count: int,
+) -> dict[str, Any]:
+    identity = _route_identity_fields(trip_row)
+    keys = _canonical_route_distance_keys(
+        route_id=identity["route_id"],
+        family_code=identity["family_code"],
+        direction=identity["direction"],
+        route_variant_type=identity["route_variant_type"],
+        route_code=identity["route_code"],
+    )
+    matched_key = next((key for key in keys if key in route_distance_sources), "")
+    matched_source = route_distance_sources.get(matched_key) or {}
+    route_distance_found = bool(matched_source)
+    joined_distance = float(matched_source.get("distance_km") or 0.0) if matched_source else 0.0
+
+    explicit_distance = _safe_float_number(trip_row.get("distance_km") or trip_row.get("distanceKm"))
+    if explicit_distance is not None and explicit_distance > 0.0:
+        return {
+            "trip_id": _normalize_scope_text(trip_row.get("trip_id")),
+            "route_id": identity["route_id"],
+            "route_code": identity["route_code"],
+            "route_family_code": identity["family_code"],
+            "direction": identity["direction"],
+            "route_variant_type": identity["route_variant_type"],
+            "service_id": _normalize_scope_text(trip_row.get("service_id") or trip_row.get("serviceId")),
+            "join_key": matched_key,
+            "join_hit": route_distance_found,
+            "route_distance_found": route_distance_found,
+            "distance_source": "trip.distance_km",
+            "distance_km": float(explicit_distance),
+            "miss_reason": "",
+            "route_distance_km": joined_distance,
+        }
+
+    if route_distance_found and joined_distance > 0.0:
+        return {
+            "trip_id": _normalize_scope_text(trip_row.get("trip_id")),
+            "route_id": identity["route_id"],
+            "route_code": identity["route_code"],
+            "route_family_code": identity["family_code"],
+            "direction": identity["direction"],
+            "route_variant_type": identity["route_variant_type"],
+            "service_id": _normalize_scope_text(trip_row.get("service_id") or trip_row.get("serviceId")),
+            "join_key": matched_key,
+            "join_hit": True,
+            "route_distance_found": True,
+            "distance_source": str(matched_source.get("distance_source") or "route.distance_km"),
+            "distance_km": joined_distance,
+            "miss_reason": "",
+            "route_distance_km": joined_distance,
+        }
+
+    estimated_distance, estimate_source = _try_trip_distance_estimate_from_geometry_or_runtime(trip_row)
+    if estimated_distance > 0.0:
+        return {
+            "trip_id": _normalize_scope_text(trip_row.get("trip_id")),
+            "route_id": identity["route_id"],
+            "route_code": identity["route_code"],
+            "route_family_code": identity["family_code"],
+            "direction": identity["direction"],
+            "route_variant_type": identity["route_variant_type"],
+            "service_id": _normalize_scope_text(trip_row.get("service_id") or trip_row.get("serviceId")),
+            "join_key": matched_key,
+            "join_hit": route_distance_found,
+            "route_distance_found": route_distance_found,
+            "distance_source": estimate_source,
+            "distance_km": estimated_distance,
+            "miss_reason": "",
+            "route_distance_km": joined_distance,
+        }
+
+    miss_reason = "missing_trip_distance_and_route_distance"
+    if route_distance_source_count <= 0:
+        miss_reason = "route_distance_source_empty"
+    elif not route_distance_found:
+        miss_reason = "route_distance_join_miss"
+    elif joined_distance <= 0.0:
+        miss_reason = "trip_distance_propagation_failed"
+    return {
+        "trip_id": _normalize_scope_text(trip_row.get("trip_id")),
+        "route_id": identity["route_id"],
+        "route_code": identity["route_code"],
+        "route_family_code": identity["family_code"],
+        "direction": identity["direction"],
+        "route_variant_type": identity["route_variant_type"],
+        "service_id": _normalize_scope_text(trip_row.get("service_id") or trip_row.get("serviceId")),
+        "join_key": matched_key,
+        "join_hit": route_distance_found,
+        "route_distance_found": route_distance_found,
+        "distance_source": "missing",
+        "distance_km": 0.0,
+        "miss_reason": miss_reason,
+        "route_distance_km": joined_distance,
+    }
+
+
+def _build_distance_join_analysis(
+    *,
+    trip_rows: list[dict[str, Any]],
+    route_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    route_distance_sources, route_source_summary = _build_route_distance_source_map(
+        trip_rows=trip_rows,
+        route_rows=route_rows,
+    )
+
+    route_samples: list[dict[str, Any]] = []
+    route_zero_or_missing = 0
+    route_missing = 0
+    route_join_hit_count = 0
+    for row in route_rows:
+        identity = _route_identity_fields(row)
+        keys = _canonical_route_distance_keys(
+            route_id=identity["route_id"],
+            family_code=identity["family_code"],
+            direction=identity["direction"],
+            route_variant_type=identity["route_variant_type"],
+            route_code=identity["route_code"],
+        )
+        matched_key = next((key for key in keys if key in route_distance_sources), "")
+        matched_source = route_distance_sources.get(matched_key) or {}
+        joined_distance = float(matched_source.get("distance_km") or 0.0) if matched_source else 0.0
+        join_hit = bool(matched_source)
+        if join_hit:
+            route_join_hit_count += 1
+        miss_reason = ""
+        if joined_distance <= 0.0:
+            route_zero_or_missing += 1
+            route_missing += 1
+            if route_source_summary["route_distance_source_count"] <= 0:
+                miss_reason = "route_distance_source_empty"
+            elif not join_hit:
+                miss_reason = "route_distance_join_miss"
+            else:
+                miss_reason = "route_distance_non_positive"
+        if len(route_samples) < 50:
+            route_samples.append(
+                {
+                    "route_id": identity["route_id"],
+                    "route_code": identity["route_code"],
+                    "family_id": identity["family_code"],
+                    "direction": identity["direction"],
+                    "route_variant_type": identity["route_variant_type"],
+                    "service_id": _normalize_scope_text(row.get("service_id") or row.get("serviceId")),
+                    "join_key": matched_key,
+                    "join_hit": join_hit,
+                    "distance_source": str(matched_source.get("distance_source") or "missing"),
+                    "joined_distance_km": joined_distance,
+                    "miss_reason": miss_reason,
+                }
+            )
+
+    trip_samples: list[dict[str, Any]] = []
+    trip_zero_or_missing = 0
+    trip_missing = 0
+    trip_propagation_failure_count = 0
     for trip_row in trip_rows:
-        record = _distance_source_for_trip(trip_row, route_lookup)
-        if len(samples) < 20:
-            samples.append(
+        record = _distance_source_for_trip(
+            trip_row=trip_row,
+            route_distance_sources=route_distance_sources,
+            route_distance_source_count=int(route_source_summary["route_distance_source_count"]),
+        )
+        if len(trip_samples) < 20:
+            trip_samples.append(
                 {
                     "trip_id": record["trip_id"],
                     "route_id": record["route_id"],
@@ -1177,27 +1376,65 @@ def _trip_distance_audit_with_samples(
                     "family_id": record["route_family_code"],
                     "direction": record["direction"],
                     "route_variant_type": record["route_variant_type"],
-                    "service_id": _normalize_scope_text(trip_row.get("service_id") or trip_row.get("serviceId")),
+                    "service_id": record["service_id"],
+                    "join_key": record["join_key"],
+                    "join_hit": bool(record["join_hit"]),
+                    "route_distance_found": bool(record["route_distance_found"]),
                     "distance_source": record["distance_source"],
-                    "joined_distance_km": record["distance_km"],
+                    "joined_distance_km": float(record["distance_km"]),
+                    "route_distance_km": float(record["route_distance_km"]),
                     "miss_reason": record["miss_reason"],
                 }
             )
-        if not record["distance_km"] or float(record["distance_km"]) <= 0.0:
-            zero_or_missing_count += 1
-            if record["distance_source"] == "missing":
-                missing_count += 1
-    return (
-        {
-            "total_count": total_count,
-            "zero_or_missing_count": zero_or_missing_count,
-            "missing_count": missing_count,
+        if float(record["distance_km"]) <= 0.0:
+            trip_zero_or_missing += 1
+            if str(record["distance_source"]) == "missing":
+                trip_missing += 1
+            if bool(record["route_distance_found"]) and float(record["route_distance_km"]) > 0.0:
+                trip_propagation_failure_count += 1
+
+    route_total = len(route_rows)
+    trip_total = len(trip_rows)
+    diagnosis = {
+        "route_distance_source_summary": route_source_summary,
+        "route_join_total": route_total,
+        "route_join_hit_count": route_join_hit_count,
+        "route_join_all_miss": (
+            route_total > 0
+            and int(route_source_summary["route_distance_source_count"]) > 0
+            and route_join_hit_count == 0
+        ),
+        "trip_propagation_failure_count": trip_propagation_failure_count,
+        "classified_issue": "none",
+    }
+    if int(route_source_summary["route_distance_source_count"]) <= 0:
+        diagnosis["classified_issue"] = "source_empty"
+    elif bool(diagnosis["route_join_all_miss"]):
+        diagnosis["classified_issue"] = "route_join_all_miss"
+    elif trip_propagation_failure_count > 0:
+        diagnosis["classified_issue"] = "trip_propagation_failure"
+
+    return {
+        "trip_distance_audit": {
+            "total_count": trip_total,
+            "zero_or_missing_count": trip_zero_or_missing,
+            "missing_count": trip_missing,
             "zero_or_missing_ratio": (
-                float(zero_or_missing_count) / float(total_count) if total_count > 0 else 0.0
+                float(trip_zero_or_missing) / float(trip_total) if trip_total > 0 else 0.0
             ),
         },
-        samples,
-    )
+        "trip_distance_samples": trip_samples,
+        "route_distance_audit": {
+            "total_count": route_total,
+            "zero_or_missing_count": route_zero_or_missing,
+            "missing_count": route_missing,
+            "zero_or_missing_ratio": (
+                float(route_zero_or_missing) / float(route_total) if route_total > 0 else 0.0
+            ),
+        },
+        "route_distance_samples": route_samples,
+        "distance_join_diagnosis": diagnosis,
+    }
 
 
 def _prepared_scope_audit_warnings(audit: dict[str, Any]) -> list[str]:
@@ -1259,39 +1496,16 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
     solver_config = dict(
         (prepared_input.get("scenario_overlay") or {}).get("solver_config") or {}
     )
-    trip_distance_audit, trip_distance_samples = _trip_distance_audit_with_samples(trip_rows, route_rows)
-    route_distance_audit = _distance_audit(route_rows)
+    distance_join_analysis = _build_distance_join_analysis(
+        trip_rows=trip_rows,
+        route_rows=route_rows,
+    )
     audit: dict[str, Any] = {
-        "trip_distance_audit": trip_distance_audit,
-        "trip_distance_samples": trip_distance_samples,
-        "route_distance_audit": route_distance_audit,
-        "route_distance_samples": [
-            {
-                "route_id": _normalize_scope_text(row.get("route_id") or row.get("id")),
-                "route_code": _normalize_scope_text(row.get("route_code") or row.get("routeCode")),
-                "family_id": _normalize_scope_text(
-                    row.get("routeFamilyCode")
-                    or row.get("route_family_code")
-                    or row.get("route_code")
-                    or row.get("routeCode")
-                    or row.get("route_id")
-                    or row.get("id")
-                ),
-                "direction": _normalize_scope_text(row.get("direction") or row.get("canonicalDirection")),
-                "route_variant_type": _normalize_scope_text(
-                    row.get("routeVariantType") or row.get("route_variant_type")
-                ),
-                "service_id": _normalize_scope_text(row.get("service_id") or row.get("serviceId")),
-                "distance_source": "route.distance_km"
-                if _safe_float_number(row.get("distance_km") or row.get("distanceKm")) > 0.0
-                else "missing",
-                "joined_distance_km": _safe_float_number(row.get("distance_km") or row.get("distanceKm")),
-                "miss_reason": ""
-                if _safe_float_number(row.get("distance_km") or row.get("distanceKm")) > 0.0
-                else "missing_route_distance",
-            }
-            for row in route_rows[:20]
-        ],
+        "trip_distance_audit": dict(distance_join_analysis.get("trip_distance_audit") or {}),
+        "trip_distance_samples": list(distance_join_analysis.get("trip_distance_samples") or []),
+        "route_distance_audit": dict(distance_join_analysis.get("route_distance_audit") or {}),
+        "route_distance_samples": list(distance_join_analysis.get("route_distance_samples") or []),
+        "distance_join_diagnosis": dict(distance_join_analysis.get("distance_join_diagnosis") or {}),
         "strict_coverage_precheck": {},
         "fixed_route_band_mode": bool(solver_config.get("fixed_route_band_mode", False)),
         "warning_codes": [],
@@ -1349,6 +1563,110 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
     audit["warning_codes"] = sorted(set(audit.get("warning_codes") or []))
     audit["warnings"] = _prepared_scope_audit_warnings(audit)
     return audit
+
+
+def _log_prepared_scope_audit_details(
+    *,
+    scope: _NormalizedScope,
+    prepared_input: dict[str, Any],
+    prepared_scope_audit: dict[str, Any],
+) -> None:
+    route_rows = [
+        dict(item)
+        for item in list(prepared_input.get("routes") or [])
+        if isinstance(item, dict)
+    ]
+    trip_rows = [
+        dict(item)
+        for item in list(prepared_input.get("trips") or [])
+        if isinstance(item, dict)
+    ]
+    selected_route_codes = sorted(
+        {
+            _normalize_scope_text(row.get("route_code") or row.get("routeCode"))
+            for row in route_rows
+            if _normalize_scope_text(row.get("route_code") or row.get("routeCode"))
+        }
+    )
+    selected_family_ids = sorted(
+        {
+            _normalize_scope_text(
+                row.get("routeFamilyCode")
+                or row.get("route_family_code")
+                or row.get("route_code")
+                or row.get("routeCode")
+                or row.get("route_id")
+                or row.get("id")
+            )
+            for row in route_rows
+            if _normalize_scope_text(
+                row.get("routeFamilyCode")
+                or row.get("route_family_code")
+                or row.get("route_code")
+                or row.get("routeCode")
+                or row.get("route_id")
+                or row.get("id")
+            )
+        }
+    )
+    selected_directions = sorted(
+        {
+            _normalize_scope_text(row.get("direction") or row.get("canonicalDirection"))
+            for row in route_rows
+            if _normalize_scope_text(row.get("direction") or row.get("canonicalDirection"))
+        }
+    )
+    selected_variant_types = sorted(
+        {
+            _normalize_scope_text(row.get("routeVariantType") or row.get("route_variant_type"))
+            for row in route_rows
+            if _normalize_scope_text(row.get("routeVariantType") or row.get("route_variant_type"))
+        }
+    )
+    distance_join_diagnosis = dict(prepared_scope_audit.get("distance_join_diagnosis") or {})
+    route_source_summary = dict(distance_join_diagnosis.get("route_distance_source_summary") or {})
+    route_samples = list(prepared_scope_audit.get("route_distance_samples") or [])
+    trip_samples = list(prepared_scope_audit.get("trip_distance_samples") or [])
+    strict_precheck = dict(prepared_scope_audit.get("strict_coverage_precheck") or {})
+    blocked_samples = list(strict_precheck.get("blocked_transition_samples") or [])
+
+    log.warning(
+        "Prepare scope input audit: depot_ids=%s route_ids=%s route_codes=%s family_ids=%s "
+        "directions=%s route_variant_types=%s target_date=%s service_day=%s service_ids=%s "
+        "route_count=%s trip_count=%s",
+        list(scope.depot_ids),
+        list(scope.route_ids),
+        selected_route_codes,
+        selected_family_ids,
+        selected_directions,
+        selected_variant_types,
+        scope.service_date,
+        str(getattr(scope, "day_type", "") or ""),
+        list(scope.service_ids),
+        len(route_rows),
+        len(trip_rows),
+    )
+    log.warning(
+        "Prepare route distance source summary: route_distance_source_count=%s source_kind_counts=%s sample_source_keys=%s",
+        route_source_summary.get("route_distance_source_count", 0),
+        route_source_summary.get("route_distance_source_kind_counts", {}),
+        route_source_summary.get("sample_source_keys", []),
+    )
+    for sample in route_samples:
+        log.warning(
+            "Prepare route distance join sample: %s",
+            json.dumps(sample, ensure_ascii=False, default=str),
+        )
+    for sample in trip_samples[:20]:
+        log.warning(
+            "Prepare trip distance propagation sample: %s",
+            json.dumps(sample, ensure_ascii=False, default=str),
+        )
+    for sample in blocked_samples[:20]:
+        log.warning(
+            "Prepare blocked transition sample: %s",
+            json.dumps(sample, ensure_ascii=False, default=str),
+        )
 
 
 def materialize_scenario_from_prepared_input(
@@ -1600,6 +1918,11 @@ def _build_run_preparation(
         scope_payload = dict(solver_input.get("scope") or {})
         scope_payload["prepared_scope_audit"] = prepared_scope_audit
         solver_input["scope"] = scope_payload
+        _log_prepared_scope_audit_details(
+            scope=scope,
+            prepared_input=solver_input,
+            prepared_scope_audit=prepared_scope_audit,
+        )
         warnings.extend(list(prepared_scope_audit.get("warnings") or []))
         trip_distance_audit = dict(prepared_scope_audit.get("trip_distance_audit") or {})
         route_distance_audit = dict(prepared_scope_audit.get("route_distance_audit") or {})

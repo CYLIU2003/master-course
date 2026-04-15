@@ -5,7 +5,11 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, Mapping, Sequence, Tuple
 
 from src.dispatch.models import DutyLeg, VehicleDuty
-from src.dispatch.route_band import FragmentTransitionDiagnostic, fragment_transition_diagnostic
+from src.dispatch.route_band import (
+    FragmentTransitionDiagnostic,
+    fragment_transition_diagnostic,
+    trip_route_band_key,
+)
 
 from .problem import CanonicalOptimizationProblem, ProblemTrip, normalize_service_coverage_mode
 

@@ -86,12 +86,18 @@ def _prepared_payload(*, vehicle_count: int = 1) -> dict:
     }
 
 
-def test_prepared_scope_audit_flags_zero_distance_and_strict_infeasible_scope() -> None:
+def test_prepared_scope_audit_uses_runtime_distance_fallback_and_keeps_strict_infeasible_signal() -> None:
     audit = _build_prepared_scope_audit(_prepared_payload(vehicle_count=1))
 
-    assert audit["trip_distance_audit"]["zero_or_missing_count"] == 2
-    assert audit["route_distance_audit"]["zero_or_missing_count"] == 1
-    assert "trip_distance_zero_or_missing" in audit["warning_codes"]
+    assert audit["trip_distance_audit"]["zero_or_missing_count"] == 0
+    assert audit["route_distance_audit"]["zero_or_missing_count"] == 0
+    assert "trip_distance_zero_or_missing" not in audit["warning_codes"]
+    assert "route_distance_zero_or_missing" not in audit["warning_codes"]
+    assert audit["distance_join_diagnosis"]["classified_issue"] == "none"
+    assert (
+        audit["distance_join_diagnosis"]["route_distance_source_summary"]["route_distance_source_count"]
+        > 0
+    )
     assert audit["strict_coverage_precheck"]["checked"] is True
     assert audit["strict_coverage_precheck"]["infeasible"] is True
     assert audit["strict_coverage_precheck"]["relaxed_vehicle_lower_bound"] == 2
@@ -105,6 +111,67 @@ def test_prepared_scope_audit_relaxes_warning_when_vehicle_lower_bound_is_met() 
     assert audit["strict_coverage_precheck"]["checked"] is True
     assert audit["strict_coverage_precheck"]["infeasible"] is False
     assert audit["strict_coverage_precheck"]["relaxed_vehicle_lower_bound"] == 2
+
+
+def test_prepared_scope_audit_does_not_fail_when_route_band_block_samples_are_emitted() -> None:
+    payload = _prepared_payload(vehicle_count=1)
+    payload["scenario_overlay"] = {"solver_config": {"fixed_route_band_mode": True}}
+    payload["routes"] = [
+        {
+            "id": "route-a",
+            "routeCode": "A",
+            "routeFamilyCode": "FAM-A",
+            "direction": "outbound",
+            "routeVariantType": "base",
+            "distanceKm": 12.0,
+        },
+        {
+            "id": "route-b",
+            "routeCode": "B",
+            "routeFamilyCode": "FAM-B",
+            "direction": "outbound",
+            "routeVariantType": "base",
+            "distanceKm": 12.0,
+        },
+    ]
+    payload["trips"] = [
+        {
+            "trip_id": "trip-1",
+            "route_id": "route-a",
+            "route_code": "A",
+            "routeFamilyCode": "FAM-A",
+            "direction": "outbound",
+            "routeVariantType": "base",
+            "origin": "A",
+            "destination": "B",
+            "departure": "08:00",
+            "arrival": "09:00",
+            "distance_km": 12.0,
+            "runtime_min": 60.0,
+            "allowed_vehicle_types": ["BEV"],
+        },
+        {
+            "trip_id": "trip-2",
+            "route_id": "route-b",
+            "route_code": "B",
+            "routeFamilyCode": "FAM-B",
+            "direction": "outbound",
+            "routeVariantType": "base",
+            "origin": "B",
+            "destination": "C",
+            "departure": "09:30",
+            "arrival": "10:00",
+            "distance_km": 12.0,
+            "runtime_min": 30.0,
+            "allowed_vehicle_types": ["BEV"],
+        },
+    ]
+
+    audit = _build_prepared_scope_audit(payload)
+
+    assert "prepared_scope_audit_failed" not in audit["warning_codes"]
+    assert audit["strict_coverage_precheck"]["checked"] is True
+    assert "route_band_blocked" in audit["strict_coverage_precheck"]["blocked_transition_reason_counts"]
 
 
 def test_run_preparation_fails_hard_when_all_scope_distances_are_missing(monkeypatch) -> None:
@@ -130,6 +197,7 @@ def test_run_preparation_fails_hard_when_all_scope_distances_are_missing(monkeyp
             "route_ids": ["route-a"],
             "service_ids": ["WEEKDAY"],
             "service_date": "2025-08-05",
+            "day_type": "WEEKDAY",
             "route_selectors": ["route-a"],
         },
     )()
