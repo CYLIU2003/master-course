@@ -579,6 +579,8 @@ def _save_master_only(
             "feed_context": doc.get("feed_context"),
             "refs": refs,
             "stats": stats,
+            "simulation_config": doc.get("simulation_config"),
+            "scenario_overlay": doc.get("scenario_overlay"),
         }
         scenario_meta_store.save_meta(_STORE_DIR, scenario_id, slim_doc)
         doc["stats"] = stats
