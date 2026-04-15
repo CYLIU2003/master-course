@@ -26,6 +26,7 @@ class AppErrorCode(StrEnum):
     RUNTIME_VERSION_TOO_OLD = "RUNTIME_VERSION_TOO_OLD"
     ARTIFACT_MISSING = "ARTIFACT_MISSING"
     ARTIFACT_HASH_MISMATCH = "ARTIFACT_HASH_MISMATCH"
+    PREPARE_DISTANCE_JOIN_BROKEN = "PREPARE_DISTANCE_JOIN_BROKEN"
 
 
 def make_error(code: AppErrorCode, message: str, **extra: Any) -> dict[str, Any]:

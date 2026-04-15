@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -104,6 +105,7 @@ class RunPreparation:
     prepared_input_id: Optional[str] = None
     warnings: list[str] = field(default_factory=list)
     prepared_at: float = field(default_factory=time.time)
+    error_code: Optional[str] = None
     error: Optional[str] = None
 
     @property
@@ -111,7 +113,7 @@ class RunPreparation:
         return self.error is None and self.solver_input_path is not None
 
 
-_prep_cache: dict[tuple[str, str, str], RunPreparation] = {}
+_prep_cache: dict[tuple[str, str, str, str, str, str], RunPreparation] = {}
 _VOLATILE_HASH_KEYS = {
     "__unloaded_artifact_fields__",
     "updatedAt",
@@ -168,8 +170,8 @@ def _scenario_hash(scenario_dict: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
-def _prepared_input_id(scenario_hash: str) -> str:
-    return f"prepared-{scenario_hash}"
+def _prepared_input_id(scenario_hash: str, scope_hash: str) -> str:
+    return f"prepared-{scenario_hash}-{scope_hash}"
 
 
 def _scope_hash(scope_payload: dict[str, Any]) -> str:
@@ -180,6 +182,100 @@ def _scope_hash(scope_payload: dict[str, Any]) -> str:
         default=str,
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def _normalize_scope_text(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return unicodedata.normalize("NFKC", raw)
+
+
+def _normalize_scope_list(values: list[Any] | tuple[Any, ...] | None) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in list(values or []):
+        normalized = _normalize_scope_text(value)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
+
+
+def _safe_float_number(value: Any) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _scope_cache_payload(scenario: dict, scope) -> dict[str, Any]:
+    scenario_overlay = dict(
+        _scenario_value(scenario, "scenario_overlay", "scenarioOverlay", default={}) or {}
+    )
+    dispatch_scope = dict(
+        _scenario_value(scenario, "dispatch_scope", "dispatchScope", default={}) or {}
+    )
+    simulation_config = dict(
+        _scenario_value(scenario, "simulation_config", "simulationConfig", default={}) or {}
+    )
+    selected_depot_ids = _normalize_scope_list(getattr(scope, "depot_ids", None))
+    selected_route_ids = _normalize_scope_list(getattr(scope, "route_ids", None))
+    service_ids = _normalize_scope_list(getattr(scope, "service_ids", None))
+    service_dates = _normalize_scope_list(simulation_config.get("service_dates") or [])
+    operator_id = _normalize_scope_text(
+        _scenario_value(
+            scenario,
+            "operator_id",
+            "operatorId",
+            default=(scenario_overlay.get("operator_id") or scenario_overlay.get("operatorId")),
+        )
+    )
+    trip_type_flags = {
+        "include_short_turn": dispatch_scope.get("includeShortTurn"),
+        "include_depot_moves": dispatch_scope.get("includeDepotMoves"),
+        "include_deadhead": dispatch_scope.get("includeDeadhead"),
+    }
+    swap_flags = {
+        "allow_intra_depot_route_swap": dispatch_scope.get("allowIntraDepotRouteSwap"),
+        "allow_inter_depot_swap": dispatch_scope.get("allowInterDepotSwap"),
+    }
+    day_type = _normalize_scope_text(
+        _scenario_value(
+            scenario,
+            "day_type",
+            "dayType",
+            default=simulation_config.get("day_type") or simulation_config.get("dayType"),
+        )
+    )
+    return {
+        "scenario_id": _scenario_id(scenario),
+        "dataset_id": _dataset_id(scenario),
+        "dataset_version": _dataset_version(scenario),
+        "operator_id": operator_id,
+        "selected_depot_ids": selected_depot_ids,
+        "selected_route_ids": selected_route_ids,
+        "route_selectors": _normalize_scope_list(getattr(scope, "route_selectors", None)),
+        "service_ids": service_ids,
+        "service_date": _normalize_scope_text(getattr(scope, "service_date", None)),
+        "service_dates": service_dates,
+        "day_type": day_type,
+        "planning_days": max(int(simulation_config.get("planning_days") or 1), 1),
+        "trip_type_flags": trip_type_flags,
+        "swap_flags": swap_flags,
+        "fixed_route_band_mode": bool(
+            simulation_config.get(
+                "fixed_route_band_mode",
+                ((scenario_overlay.get("solver_config") or {}).get("fixed_route_band_mode", False)),
+            )
+        ),
+        "allow_partial_service": bool(
+            simulation_config.get("allow_partial_service")
+            if simulation_config.get("allow_partial_service") is not None
+            else ((scenario_overlay.get("solver_config") or {}).get("allow_partial_service", False))
+        ),
+    }
 
 
 def _as_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -782,6 +878,7 @@ def _build_canonical_input(
     scenario_id: str,
     dataset_version: str,
     scenario_hash: str,
+    scope_payload: dict[str, Any],
     scope,
     trips_df: pd.DataFrame,
     timetables_df: pd.DataFrame,
@@ -847,15 +944,18 @@ def _build_canonical_input(
         for idx, charger in enumerate(chargers)
         if charger.get("id") is not None or charger.get("charger_id") is not None
     }
-    scope_payload = {
-        "depot_ids": list(scope.depot_ids),
-        "route_ids": list(scope.route_ids),
-        "service_ids": list(scope.service_ids),
-        "service_date": scope.service_date,
-        "service_dates": service_dates,
-        "planning_days": planning_days,
-        "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
-    }
+    scope_payload = dict(scope_payload)
+    scope_payload.update(
+        {
+            "depot_ids": list(scope.depot_ids),
+            "route_ids": list(scope.route_ids),
+            "service_ids": list(scope.service_ids),
+            "service_date": scope.service_date,
+            "service_dates": service_dates,
+            "planning_days": planning_days,
+            "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
+        }
+    )
     scope_hash = _scope_hash(scope_payload)
 
     return {
@@ -946,6 +1046,160 @@ def _distance_audit(
     }
 
 
+def _build_route_lookup_for_distance_audit(route_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    lookup: dict[str, dict[str, Any]] = {}
+    for route in route_rows:
+        if not isinstance(route, dict):
+            continue
+        route_like = dict(route)
+        route_id = _normalize_scope_text(route.get("id") or route.get("route_id"))
+        route_code = _normalize_scope_text(route.get("routeCode") or route.get("route_code"))
+        family_code = _normalize_scope_text(
+            route.get("routeFamilyCode")
+            or route.get("route_family_code")
+            or route_code
+            or route_id
+        )
+        direction = _normalize_scope_text(route.get("direction") or route.get("canonicalDirection"))
+        variant_type = _normalize_scope_text(
+            route.get("routeVariantType")
+            or route.get("route_variant_type")
+            or route.get("routeVariantTypeManual")
+        )
+        for key in {
+            route_id,
+            route_code,
+            family_code,
+            f"{family_code}|{direction}|{variant_type}",
+            f"{route_code}|{direction}|{variant_type}",
+        }:
+            if key:
+                lookup[key] = route_like
+    return lookup
+
+
+def _distance_source_for_trip(
+    trip_row: dict[str, Any],
+    route_lookup: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    trip_id = _normalize_scope_text(trip_row.get("trip_id"))
+    route_id = _normalize_scope_text(trip_row.get("route_id"))
+    route_code = _normalize_scope_text(trip_row.get("route_code") or trip_row.get("routeCode"))
+    family_code = _normalize_scope_text(
+        trip_row.get("routeFamilyCode")
+        or trip_row.get("route_family_code")
+        or route_code
+        or route_id
+    )
+    direction = _normalize_scope_text(trip_row.get("direction") or trip_row.get("canonicalDirection"))
+    variant_type = _normalize_scope_text(
+        trip_row.get("routeVariantType")
+        or trip_row.get("route_variant_type")
+    )
+    route_like = (
+        route_lookup.get(route_id)
+        or route_lookup.get(route_code)
+        or route_lookup.get(family_code)
+        or route_lookup.get(f"{family_code}|{direction}|{variant_type}")
+        or route_lookup.get(f"{route_code}|{direction}|{variant_type}")
+        or {}
+    )
+    explicit_distance = trip_row.get("distance_km")
+    if explicit_distance is None:
+        explicit_distance = trip_row.get("distanceKm")
+    if explicit_distance is not None:
+        try:
+            explicit_value = float(explicit_distance)
+        except (TypeError, ValueError):
+            explicit_value = None
+        else:
+            if explicit_value > 0.0:
+                return {
+                    "trip_id": trip_id,
+                    "route_id": route_id,
+                    "route_code": route_code,
+                    "route_family_code": family_code,
+                    "direction": direction,
+                    "route_variant_type": variant_type,
+                    "distance_source": "trip.distance_km",
+                    "distance_km": explicit_value,
+                    "miss_reason": "",
+                }
+    route_distance = route_like.get("distance_km")
+    if route_distance is None:
+        route_distance = route_like.get("distanceKm")
+    try:
+        route_distance_value = float(route_distance) if route_distance is not None else None
+    except (TypeError, ValueError):
+        route_distance_value = None
+    if route_distance_value is not None and route_distance_value > 0.0:
+        return {
+            "trip_id": trip_id,
+            "route_id": route_id,
+            "route_code": route_code,
+            "route_family_code": family_code,
+            "direction": direction,
+            "route_variant_type": variant_type,
+            "distance_source": "route.distance_km",
+            "distance_km": route_distance_value,
+            "miss_reason": "",
+        }
+    return {
+        "trip_id": trip_id,
+        "route_id": route_id,
+        "route_code": route_code,
+        "route_family_code": family_code,
+        "direction": direction,
+        "route_variant_type": variant_type,
+        "distance_source": "missing",
+        "distance_km": 0.0,
+        "miss_reason": "missing_trip_distance_and_route_distance",
+    }
+
+
+def _trip_distance_audit_with_samples(
+    trip_rows: list[dict[str, Any]],
+    route_rows: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    route_lookup = _build_route_lookup_for_distance_audit(route_rows)
+    total_count = len(trip_rows)
+    zero_or_missing_count = 0
+    missing_count = 0
+    samples: list[dict[str, Any]] = []
+    for trip_row in trip_rows:
+        record = _distance_source_for_trip(trip_row, route_lookup)
+        if len(samples) < 20:
+            samples.append(
+                {
+                    "trip_id": record["trip_id"],
+                    "route_id": record["route_id"],
+                    "route_code": record["route_code"],
+                    "family_id": record["route_family_code"],
+                    "direction": record["direction"],
+                    "route_variant_type": record["route_variant_type"],
+                    "service_id": _normalize_scope_text(trip_row.get("service_id") or trip_row.get("serviceId")),
+                    "distance_source": record["distance_source"],
+                    "joined_distance_km": record["distance_km"],
+                    "miss_reason": record["miss_reason"],
+                }
+            )
+        if not record["distance_km"] or float(record["distance_km"]) <= 0.0:
+            zero_or_missing_count += 1
+            if record["distance_source"] == "missing":
+                missing_count += 1
+    return (
+        {
+            "total_count": total_count,
+            "zero_or_missing_count": zero_or_missing_count,
+            "missing_count": missing_count,
+            "zero_or_missing_ratio": (
+                float(zero_or_missing_count) / float(total_count) if total_count > 0 else 0.0
+            ),
+        },
+        samples,
+    )
+
+
 def _prepared_scope_audit_warnings(audit: dict[str, Any]) -> list[str]:
     warnings: list[str] = []
     trip_distance = dict(audit.get("trip_distance_audit") or {})
@@ -1005,9 +1259,39 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
     solver_config = dict(
         (prepared_input.get("scenario_overlay") or {}).get("solver_config") or {}
     )
+    trip_distance_audit, trip_distance_samples = _trip_distance_audit_with_samples(trip_rows, route_rows)
+    route_distance_audit = _distance_audit(route_rows)
     audit: dict[str, Any] = {
-        "trip_distance_audit": _distance_audit(trip_rows),
-        "route_distance_audit": _distance_audit(route_rows),
+        "trip_distance_audit": trip_distance_audit,
+        "trip_distance_samples": trip_distance_samples,
+        "route_distance_audit": route_distance_audit,
+        "route_distance_samples": [
+            {
+                "route_id": _normalize_scope_text(row.get("route_id") or row.get("id")),
+                "route_code": _normalize_scope_text(row.get("route_code") or row.get("routeCode")),
+                "family_id": _normalize_scope_text(
+                    row.get("routeFamilyCode")
+                    or row.get("route_family_code")
+                    or row.get("route_code")
+                    or row.get("routeCode")
+                    or row.get("route_id")
+                    or row.get("id")
+                ),
+                "direction": _normalize_scope_text(row.get("direction") or row.get("canonicalDirection")),
+                "route_variant_type": _normalize_scope_text(
+                    row.get("routeVariantType") or row.get("route_variant_type")
+                ),
+                "service_id": _normalize_scope_text(row.get("service_id") or row.get("serviceId")),
+                "distance_source": "route.distance_km"
+                if _safe_float_number(row.get("distance_km") or row.get("distanceKm")) > 0.0
+                else "missing",
+                "joined_distance_km": _safe_float_number(row.get("distance_km") or row.get("distanceKm")),
+                "miss_reason": ""
+                if _safe_float_number(row.get("distance_km") or row.get("distanceKm")) > 0.0
+                else "missing_route_distance",
+            }
+            for row in route_rows[:20]
+        ],
         "strict_coverage_precheck": {},
         "fixed_route_band_mode": bool(solver_config.get("fixed_route_band_mode", False)),
         "warning_codes": [],
@@ -1046,6 +1330,14 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
     route_zero_or_missing = int((audit.get("route_distance_audit") or {}).get("zero_or_missing_count") or 0)
     if route_zero_or_missing > 0:
         audit["warning_codes"].append("route_distance_zero_or_missing")
+    trip_total = int((audit.get("trip_distance_audit") or {}).get("total_count") or 0)
+    route_total = int((audit.get("route_distance_audit") or {}).get("total_count") or 0)
+    if trip_total > 0 and trip_zero_or_missing >= trip_total:
+        audit["warning_codes"].append("trip_distance_join_broken")
+        audit["distance_join_broken"] = True
+    if route_total > 0 and route_zero_or_missing >= route_total:
+        audit["warning_codes"].append("route_distance_join_broken")
+        audit["distance_join_broken"] = True
 
     strict_precheck = dict(audit.get("strict_coverage_precheck") or {})
     if bool(strict_precheck.get("infeasible")):
@@ -1207,19 +1499,41 @@ def get_or_build_run_preparation(
     force_rebuild: bool = False,
 ) -> RunPreparation:
     scenario_id = _scenario_id(scenario)
+    dataset_id = _dataset_id(scenario)
     dataset_version = _dataset_version(scenario)
     scenario_hash = _scenario_hash(scenario)
-    cache_key = (scenario_id, dataset_version, scenario_hash)
+    from src.runtime_scope import resolve_scope
+
+    scope = resolve_scope(scenario, routes_df if routes_df is not None else pd.DataFrame())
+    scope_payload = _scope_cache_payload(scenario, scope)
+    scope_hash = _scope_hash(scope_payload)
+    cache_key = (
+        scenario_id,
+        dataset_id,
+        dataset_version,
+        str(scope_payload.get("operator_id") or ""),
+        scenario_hash,
+        scope_hash,
+    )
 
     if cache_key in _prep_cache and not force_rebuild:
         cached = _prep_cache[cache_key]
-        if cached.is_valid:
+        if cached.is_valid or cached.error_code == "PREPARE_DISTANCE_JOIN_BROKEN":
             log.debug("run_prep cache HIT: %s %s", scenario_id, scenario_hash)
             return cached
         log.debug("run_prep cache INVALID: %s", scenario_id)
 
     log.info("Building run preparation for scenario %s (hash=%s)", scenario_id, scenario_hash)
-    prep = _build_run_preparation(scenario, built_dir, scenarios_dir, routes_df, scenario_hash)
+    prep = _build_run_preparation(
+        scenario,
+        built_dir,
+        scenarios_dir,
+        routes_df,
+        scenario_hash,
+        scope=scope,
+        scope_payload=scope_payload,
+        scope_hash=scope_hash,
+    )
     _prep_cache[cache_key] = prep
     return prep
 
@@ -1230,13 +1544,14 @@ def _build_run_preparation(
     scenarios_dir: Path,
     routes_df,
     scenario_hash: str,
+    *,
+    scope,
+    scope_payload: dict[str, Any],
+    scope_hash: str,
 ) -> RunPreparation:
     scenario_id = _scenario_id(scenario)
     dataset_version = _dataset_version(scenario)
     try:
-        from src.runtime_scope import resolve_scope
-
-        scope = resolve_scope(scenario, routes_df if routes_df is not None else pd.DataFrame())
         trips_df, timetables_df, load_source = _load_scope_frames(
             scenario,
             built_dir=built_dir,
@@ -1260,7 +1575,7 @@ def _build_run_preparation(
         route_catalog_audit = audit_route_catalog_consistency(scenario)
         warnings.extend(_route_catalog_audit_warnings(route_catalog_audit))
 
-        prepared_input_id = _prepared_input_id(scenario_hash)
+        prepared_input_id = _prepared_input_id(scenario_hash, scope_hash)
         simulation_config = dict(
             _scenario_value(scenario, "simulation_config", "simulationConfig", default={}) or {}
         )
@@ -1273,6 +1588,7 @@ def _build_run_preparation(
             scenario_id=scenario_id,
             dataset_version=dataset_version,
             scenario_hash=scenario_hash,
+            scope_payload=scope_payload,
             scope=scope,
             trips_df=trips_df,
             timetables_df=timetables_df,
@@ -1285,8 +1601,48 @@ def _build_run_preparation(
         scope_payload["prepared_scope_audit"] = prepared_scope_audit
         solver_input["scope"] = scope_payload
         warnings.extend(list(prepared_scope_audit.get("warnings") or []))
+        trip_distance_audit = dict(prepared_scope_audit.get("trip_distance_audit") or {})
+        route_distance_audit = dict(prepared_scope_audit.get("route_distance_audit") or {})
+        trip_total = int(trip_distance_audit.get("total_count") or 0)
+        route_total = int(route_distance_audit.get("total_count") or 0)
+        trip_zero_or_missing = int(trip_distance_audit.get("zero_or_missing_count") or 0)
+        route_zero_or_missing = int(route_distance_audit.get("zero_or_missing_count") or 0)
+        distance_join_broken = bool(
+            (trip_total > 0 and trip_zero_or_missing >= trip_total)
+            or (route_total > 0 and route_zero_or_missing >= route_total)
+        )
         scenario_dir = _prepared_input_dir(scenarios_dir, scenario_id)
         scenario_dir.mkdir(parents=True, exist_ok=True)
+        if distance_join_broken:
+            message = "Prepared scope distance metadata is fully broken after route selection changes."
+            return RunPreparation(
+                scenario_id=scenario_id,
+                dataset_version=dataset_version,
+                scenario_hash=scenario_hash,
+                scope_hash=str(scope_hash),
+                solver_input_path=None,
+                prepared_input_id=prepared_input_id,
+                warnings=warnings,
+                error_code="PREPARE_DISTANCE_JOIN_BROKEN",
+                error=message,
+                scope_summary={
+                    "depot_ids": scope.depot_ids,
+                    "route_ids": scope.route_ids,
+                    "service_ids": scope.service_ids,
+                    "service_date": scope.service_date,
+                    "service_dates": service_dates,
+                    "planning_days": planning_days,
+                    "prepared_input_id": prepared_input_id,
+                    "scenario_hash": scenario_hash,
+                    "scope_hash": str(scope_hash),
+                    "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
+                    "trip_count": len(trips_df),
+                    "timetable_row_count": len(timetables_df),
+                    "load_source": load_source,
+                    "route_catalog_audit": route_catalog_audit,
+                    "prepared_scope_audit": prepared_scope_audit,
+                },
+            )
         solver_input_path = scenario_dir / f"{prepared_input_id}.json"
         solver_input_path.write_text(
             json.dumps(solver_input, ensure_ascii=False, indent=2, default=str),
@@ -1296,7 +1652,7 @@ def _build_run_preparation(
             scenario_id=scenario_id,
             dataset_version=dataset_version,
             scenario_hash=scenario_hash,
-            scope_hash=str(solver_input.get("scope_hash") or ""),
+            scope_hash=str(scope_hash),
             solver_input_path=solver_input_path,
             prepared_input_id=prepared_input_id,
             warnings=warnings,
@@ -1309,7 +1665,7 @@ def _build_run_preparation(
                 "planning_days": planning_days,
                 "prepared_input_id": prepared_input_id,
                 "scenario_hash": scenario_hash,
-                "scope_hash": str(solver_input.get("scope_hash") or ""),
+                "scope_hash": str(scope_hash),
                 "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
                 "trip_count": len(trips_df),
                 "timetable_row_count": len(timetables_df),

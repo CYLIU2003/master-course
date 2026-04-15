@@ -67,6 +67,7 @@ class ProblemTrip:
     required_soc_departure_percent: Optional[float] = None
     route_family_code: str = ""
     direction: str = ""
+    route_variant_type: str = "unknown"
 
 
 @dataclass(frozen=True)

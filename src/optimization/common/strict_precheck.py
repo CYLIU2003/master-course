@@ -23,6 +23,7 @@ class StrictCoveragePrecheckResult:
     interval_feasible_pair_count: int = 0
     dispatch_feasible_pair_count: int = 0
     blocked_transition_reason_counts: Dict[str, int] = field(default_factory=dict)
+    blocked_transition_samples: Tuple[dict[str, object], ...] = ()
     dominant_blocked_transition_reason: str = ""
     diagnostic_message: str = ""
 
@@ -39,6 +40,7 @@ class StrictCoveragePrecheckResult:
             "interval_feasible_pair_count": int(self.interval_feasible_pair_count),
             "dispatch_feasible_pair_count": int(self.dispatch_feasible_pair_count),
             "blocked_transition_reason_counts": dict(self.blocked_transition_reason_counts),
+            "blocked_transition_samples": list(self.blocked_transition_samples),
             "dominant_blocked_transition_reason": self.dominant_blocked_transition_reason,
             "diagnostic_message": self.diagnostic_message,
         }
@@ -161,6 +163,7 @@ def evaluate_strict_coverage_precheck(
         blocked_transition_reason_counts=dict(
             transition_audit.get("blocked_transition_reason_counts") or {}
         ),
+        blocked_transition_samples=tuple(transition_audit.get("blocked_transition_samples") or ()),
         dominant_blocked_transition_reason=str(
             transition_audit.get("dominant_blocked_transition_reason") or ""
         ),
@@ -279,8 +282,10 @@ def _build_relaxed_transition_graph(
 
     graph: dict[str, list[str]] = {trip.trip_id: [] for trip in ordered}
     blocked_transition_reason_counts: Counter[str] = Counter()
+    blocked_transition_samples: list[dict[str, object]] = []
     interval_feasible_pair_count = 0
     dispatch_feasible_pair_count = 0
+    sample_limit = 20
     for index, from_trip in enumerate(ordered):
         from_allowed = allowed_by_trip_id[from_trip.trip_id]
         if not from_allowed:
@@ -308,10 +313,49 @@ def _build_relaxed_transition_graph(
                 dispatch_feasible_pair_count += 1
                 continue
             blocked_transition_reason_counts[transition.reason_code or "unknown"] += 1
+            if len(blocked_transition_samples) < sample_limit:
+                from_legs = tuple(getattr(from_duty, "legs", ()) or ())
+                to_legs = tuple(getattr(to_duty, "legs", ()) or ())
+                from_leg = from_legs[-1] if from_legs else None
+                to_leg = to_legs[0] if to_legs else None
+                from_trip_like = getattr(from_leg, "trip", None)
+                to_trip_like = getattr(to_leg, "trip", None)
+                blocked_transition_samples.append(
+                    {
+                        "from_trip_id": str(from_trip.trip_id),
+                        "to_trip_id": str(to_trip.trip_id),
+                        "from_route_code": str(
+                            getattr(from_trip_like, "route_id", "") or getattr(from_trip_like, "route_family_code", "") or ""
+                        ),
+                        "to_route_code": str(
+                            getattr(to_trip_like, "route_id", "") or getattr(to_trip_like, "route_family_code", "") or ""
+                        ),
+                        "from_route_family_code": str(getattr(from_trip_like, "route_family_code", "") or ""),
+                        "to_route_family_code": str(getattr(to_trip_like, "route_family_code", "") or ""),
+                        "from_direction": str(getattr(from_trip_like, "direction", "") or ""),
+                        "to_direction": str(getattr(to_trip_like, "direction", "") or ""),
+                        "from_route_variant_type": str(getattr(from_trip_like, "route_variant_type", "") or ""),
+                        "to_route_variant_type": str(getattr(to_trip_like, "route_variant_type", "") or ""),
+                        "from_stop": str(getattr(from_trip_like, "destination_stop_id", "") or getattr(from_trip_like, "destination", "") or ""),
+                        "to_stop": str(getattr(to_trip_like, "origin_stop_id", "") or getattr(to_trip_like, "origin", "") or ""),
+                        "from_arrival": int(getattr(from_trip_like, "arrival_min", 0) or 0),
+                        "to_departure": int(getattr(to_trip_like, "departure_min", 0) or 0),
+                        "deadhead_lookup_key": f"{getattr(from_trip_like, 'destination_stop_id', '') or getattr(from_trip_like, 'destination', '')}->{getattr(to_trip_like, 'origin_stop_id', '') or getattr(to_trip_like, 'origin', '')}",
+                        "route_band_key_from": trip_route_band_key(from_trip_like),
+                        "route_band_key_to": trip_route_band_key(to_trip_like),
+                        "blocked_reason": str(transition.reason_code or "unknown"),
+                        "direct_ok": bool(transition.direct_ok),
+                        "depot_reset_ok": bool(transition.depot_reset_ok),
+                        "route_band_blocked": bool(transition.route_band_blocked),
+                        "deadhead_missing": bool(transition.deadhead_missing),
+                        "location_alias_missing": bool(transition.location_alias_missing),
+                    }
+                )
     audit = {
         "interval_feasible_pair_count": interval_feasible_pair_count,
         "dispatch_feasible_pair_count": dispatch_feasible_pair_count,
         "blocked_transition_reason_counts": dict(sorted(blocked_transition_reason_counts.items())),
+        "blocked_transition_samples": blocked_transition_samples,
         "dominant_blocked_transition_reason": _dominant_reason(blocked_transition_reason_counts),
     }
     return ({trip_id: tuple(successors) for trip_id, successors in graph.items()}, audit)

@@ -872,6 +872,38 @@ def prepare_simulation(
         routes_df=_app_state.get("routes_df"),
     )
     if not prep.is_valid:
+        if prep.error_code:
+            warnings = list(prep.warnings)
+            if not prep.scope_summary.get("primary_depot_id"):
+                warnings.append("A primary depot is required before simulation can run.")
+            prepare_profile = solver_prepare_profile(body.simulation_settings.solver_mode)
+            vehicle_count = len(scenario_doc.get("vehicles") or [])
+            charger_count = len(scenario_doc.get("chargers") or [])
+            return {
+                "preparedInputId": prep.prepared_input_id or "",
+                "ready": False,
+                "errorCode": prep.error_code,
+                "message": prep.error or "Simulation prepare failed.",
+                "tripCount": prep.scope_summary.get("trip_count", 0),
+                "vehicleCount": vehicle_count,
+                "chargerCount": charger_count,
+                "blockCount": 0,
+                "routeCount": len(prep.scope_summary.get("route_ids") or []),
+                "depotCount": len(prep.scope_summary.get("depot_ids") or []),
+                "timetableRowCount": prep.scope_summary.get("timetable_row_count", 0),
+                "primaryDepotId": prep.scope_summary.get("primary_depot_id"),
+                "serviceIds": prep.scope_summary.get("service_ids") or [],
+                "serviceDate": prep.scope_summary.get("service_date"),
+                "serviceDates": prep.scope_summary.get("service_dates") or [],
+                "planningDays": prep.scope_summary.get("planning_days") or 1,
+                "solverModeRequested": body.simulation_settings.solver_mode,
+                "solverModeEffective": prepare_profile.get("solver_mode_effective"),
+                "objectiveMode": body.simulation_settings.objective_mode,
+                "prepareProfile": prepare_profile,
+                "preparedScopeAudit": prep.scope_summary.get("prepared_scope_audit") or {},
+                "warnings": warnings,
+                "scopeSummary": prep.scope_summary,
+            }
         raise HTTPException(
             status_code=500,
             detail=make_error(
@@ -925,11 +957,14 @@ def run_prepared_simulation(
         routes_df=_app_state.get("routes_df"),
     )
     if not prep.is_valid:
+        error_code = AppErrorCode(prep.error_code) if prep.error_code else AppErrorCode.SCENARIO_INCOMPLETE
         raise HTTPException(
-            status_code=500,
+            status_code=422 if prep.error_code else 500,
             detail=make_error(
-                AppErrorCode.SCENARIO_INCOMPLETE,
+                error_code,
                 f"Run preparation failed: {prep.error}",
+                preparedInputId=prep.prepared_input_id,
+                scopeSummary=prep.scope_summary,
             ),
         )
     _require_nonempty_prepared_scope(prep, action="Prepared simulation")
@@ -1013,11 +1048,14 @@ def run_simulation(
         routes_df=_app_state.get("routes_df"),
     )
     if not prep.is_valid:
+        error_code = AppErrorCode(prep.error_code) if prep.error_code else AppErrorCode.SCENARIO_INCOMPLETE
         raise HTTPException(
-            status_code=500,
+            status_code=422 if prep.error_code else 500,
             detail=make_error(
-                AppErrorCode.SCENARIO_INCOMPLETE,
+                error_code,
                 f"Run preparation failed: {prep.error}",
+                preparedInputId=prep.prepared_input_id,
+                scopeSummary=prep.scope_summary,
             ),
         )
     _require_nonempty_prepared_scope(prep, action="Simulation preflight")

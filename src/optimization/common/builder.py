@@ -493,6 +493,7 @@ class ProblemBuilder:
                     required_soc_departure_percent=required_soc_departure_percent,
                     route_family_code=str(getattr(trip, "route_family_code", "") or ""),
                     direction=str(getattr(trip, "direction", "") or ""),
+                    route_variant_type=str(getattr(trip, "route_variant_type", "") or ""),
                 )
             )
 
@@ -517,10 +518,11 @@ class ProblemBuilder:
                         energy_kwh=base_trip.energy_kwh,
                         fuel_l=base_trip.fuel_l,
                         service_id=f"{base_trip.service_id}_d{day_idx}" if base_trip.service_id else f"d{day_idx}",
-                        required_soc_departure_percent=base_trip.required_soc_departure_percent,
-                        route_family_code=base_trip.route_family_code,
-                        direction=base_trip.direction,
-                    )
+                    required_soc_departure_percent=base_trip.required_soc_departure_percent,
+                    route_family_code=base_trip.route_family_code,
+                    direction=base_trip.direction,
+                    route_variant_type=base_trip.route_variant_type,
+                )
                     trip_nodes_list.append(replicated_trip)
         
         trip_nodes = tuple(trip_nodes_list)
@@ -1309,11 +1311,38 @@ class ProblemBuilder:
             vehicles,
             allowed_route_ids,
         )
-        route_lookup = {
-            str(route.get("id") or route.get("route_id") or ""): dict(route)
-            for route in scenario.get("routes") or []
-            if str(route.get("id") or route.get("route_id") or "")
-        }
+        route_lookup: Dict[str, Dict[str, Any]] = {}
+        for route in scenario.get("routes") or []:
+            if not isinstance(route, dict):
+                continue
+            route_like = dict(route)
+            route_id = str(route.get("id") or route.get("route_id") or "").strip()
+            route_code = str(route.get("routeCode") or route.get("route_code") or "").strip()
+            family_code = str(
+                route.get("routeFamilyCode")
+                or route.get("route_family_code")
+                or route_code
+                or route_id
+            ).strip()
+            direction = normalize_direction(route.get("direction") or route.get("canonicalDirection") or "outbound")
+            variant_type = normalize_variant_type(
+                route.get("routeVariantType")
+                or route.get("route_variant_type")
+                or route.get("routeVariantTypeManual")
+                or "unknown",
+                direction=direction,
+            )
+            lookup_keys = {
+                route_id,
+                route_code,
+                family_code,
+                f"{family_code}|{direction}|{variant_type}",
+                f"{route_code}|{direction}|{variant_type}",
+            }
+            for key in lookup_keys:
+                key_text = str(key or "").strip()
+                if key_text:
+                    route_lookup[key_text] = route_like
         trips: List[Trip] = []
         source_rows = list(scenario.get("timetable_rows") or [])
         if not source_rows:
@@ -1325,7 +1354,32 @@ class ProblemBuilder:
             route_id = str(row.get("route_id") or "")
             if allowed_route_ids is not None and route_id not in allowed_route_ids:
                 continue
-            route_like = route_lookup.get(route_id) or {}
+            route_code = str(row.get("route_code") or row.get("routeCode") or "").strip()
+            family_code = str(
+                row.get("routeFamilyCode")
+                or row.get("route_family_code")
+                or route_code
+                or route_id
+            ).strip()
+            direction = normalize_direction(
+                row.get("direction")
+                or row.get("canonicalDirection")
+                or "outbound"
+            )
+            variant_type = normalize_variant_type(
+                row.get("routeVariantType")
+                or row.get("route_variant_type")
+                or "unknown",
+                direction=direction,
+            )
+            route_like = (
+                route_lookup.get(route_id)
+                or route_lookup.get(route_code)
+                or route_lookup.get(family_code)
+                or route_lookup.get(f"{family_code}|{direction}|{variant_type}")
+                or route_lookup.get(f"{route_code}|{direction}|{variant_type}")
+                or {}
+            )
             explicit_allowed = row.get("allowed_vehicle_types")
             allowed = (
                 tuple(str(item) for item in explicit_allowed)
@@ -1350,27 +1404,10 @@ class ProblemBuilder:
                         row.get("routeFamilyCode")
                         or row.get("route_family_code")
                         or route_like.get("routeFamilyCode")
-                        or route_id
+                        or family_code
                     ),
-                    direction=normalize_direction(
-                        row.get("direction")
-                        or row.get("canonicalDirection")
-                        or route_like.get("canonicalDirection")
-                        or "outbound"
-                    ),
-                    route_variant_type=normalize_variant_type(
-                        row.get("routeVariantType")
-                        or row.get("route_variant_type")
-                        or route_like.get("routeVariantType")
-                        or route_like.get("routeVariantTypeManual")
-                        or "unknown",
-                        direction=normalize_direction(
-                            row.get("direction")
-                            or row.get("canonicalDirection")
-                            or route_like.get("canonicalDirection")
-                            or "outbound"
-                        ),
-                    ),
+                    direction=direction,
+                    route_variant_type=variant_type,
                 )
             )
 

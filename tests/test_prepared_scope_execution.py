@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from bff.routers import optimization
 from bff.services.run_preparation import (
     _scenario_hash,
+    RunPreparation,
+    get_or_build_run_preparation,
+    invalidate_scenario,
     materialize_scenario_from_prepared_input,
     solver_prepare_profile,
 )
@@ -258,3 +262,61 @@ def test_scenario_hash_ignores_optimization_and_build_audits() -> None:
     }
 
     assert _scenario_hash(base) == _scenario_hash(with_audits)
+
+
+def test_run_preparation_cache_includes_selected_scope(monkeypatch) -> None:
+    scenario = {
+        "meta": {"id": "scenario-cache"},
+        "scenario_overlay": {"dataset_id": "tokyu_full"},
+        "simulation_config": {"service_date": "2025-08-05", "planning_days": 1},
+        "dispatch_scope": {"serviceId": "WEEKDAY", "depotId": "dep1"},
+    }
+    scopes = [
+        SimpleNamespace(
+            depot_ids=["dep1"],
+            route_ids=["route-a"],
+            service_ids=["WEEKDAY"],
+            service_date="2025-08-05",
+            route_selectors=["route-a"],
+        ),
+        SimpleNamespace(
+            depot_ids=["dep1"],
+            route_ids=["route-b"],
+            service_ids=["WEEKDAY"],
+            service_date="2025-08-05",
+            route_selectors=["route-b"],
+        ),
+    ]
+    build_calls: list[str] = []
+
+    def fake_build_run_preparation(
+        _scenario,
+        _built_dir,
+        _scenarios_dir,
+        _routes_df,
+        scenario_hash,
+        *,
+        scope,
+        scope_payload,
+        scope_hash,
+    ):
+        build_calls.append(scope_hash)
+        return RunPreparation(
+            scenario_id="scenario-cache",
+            dataset_version="dataset-v1",
+            scenario_hash=scenario_hash,
+            scope_hash=scope_hash,
+            solver_input_path=Path("C:/tmp/prepared.json"),
+            prepared_input_id=f"prepared-{scope_hash}",
+            scope_summary={"prepared_input_id": f"prepared-{scope_hash}"},
+        )
+
+    invalidate_scenario("scenario-cache")
+    monkeypatch.setattr("src.runtime_scope.resolve_scope", lambda *_args, **_kwargs: scopes.pop(0))
+    monkeypatch.setattr("bff.services.run_preparation._build_run_preparation", fake_build_run_preparation)
+
+    first = get_or_build_run_preparation(scenario, Path("C:/tmp"), Path("C:/tmp"), None)
+    second = get_or_build_run_preparation(scenario, Path("C:/tmp"), Path("C:/tmp"), None)
+
+    assert first.prepared_input_id != second.prepared_input_id
+    assert build_calls == [first.scope_hash, second.scope_hash]

@@ -3840,11 +3840,14 @@ def run_optimization(
         force_rebuild=bool(request.force_reprepare),
     )
     if not prep.is_valid:
+        error_code = AppErrorCode(prep.error_code) if prep.error_code else AppErrorCode.SCENARIO_INCOMPLETE
         raise HTTPException(
-            status_code=500,
+            status_code=422 if prep.error_code else 500,
             detail=make_error(
-                AppErrorCode.SCENARIO_INCOMPLETE,
+                error_code,
                 f"Run preparation failed: {prep.error}",
+                preparedInputId=prep.prepared_input_id,
+                scopeSummary=prep.scope_summary,
             ),
         )
     _require_nonempty_prepared_scope(prep, action="Optimization preflight")
@@ -3935,11 +3938,14 @@ def reoptimize(
         routes_df=_app_state.get("routes_df"),
     )
     if not prep.is_valid:
+        error_code = AppErrorCode(prep.error_code) if prep.error_code else AppErrorCode.SCENARIO_INCOMPLETE
         raise HTTPException(
-            status_code=500,
+            status_code=422 if prep.error_code else 500,
             detail=make_error(
-                AppErrorCode.SCENARIO_INCOMPLETE,
+                error_code,
                 f"Run preparation failed: {prep.error}",
+                preparedInputId=prep.prepared_input_id,
+                scopeSummary=prep.scope_summary,
             ),
         )
     _require_nonempty_prepared_scope(prep, action="Re-optimization preflight")
