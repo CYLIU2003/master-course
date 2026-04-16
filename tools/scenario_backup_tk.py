@@ -2438,6 +2438,42 @@ class App:
             and self._widget_exists(self.vehicle_tree)
         )
 
+    @staticmethod
+    def _vehicle_refresh_context(resp: dict[str, Any], fallback_depot_id: str = "") -> tuple[str, list[str]]:
+        depot_id = fallback_depot_id.strip()
+        vehicle_ids: list[str] = []
+        if not isinstance(resp, dict):
+            return depot_id, vehicle_ids
+
+        direct_depot_id = str(resp.get("depotId") or "").strip()
+        if direct_depot_id:
+            depot_id = direct_depot_id
+
+        direct_vehicle_id = str(resp.get("id") or "").strip()
+        if direct_vehicle_id:
+            vehicle_ids.append(direct_vehicle_id)
+
+        for item in resp.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            item_depot_id = str(item.get("depotId") or "").strip()
+            if item_depot_id:
+                depot_id = item_depot_id
+            item_id = str(item.get("id") or "").strip()
+            if item_id and item_id not in vehicle_ids:
+                vehicle_ids.append(item_id)
+
+        item = resp.get("item")
+        if isinstance(item, dict):
+            item_depot_id = str(item.get("depotId") or "").strip()
+            if item_depot_id:
+                depot_id = item_depot_id
+            item_id = str(item.get("id") or "").strip()
+            if item_id and item_id not in vehicle_ids:
+                vehicle_ids.append(item_id)
+
+        return depot_id, vehicle_ids
+
     def _template_panel_ready(self) -> bool:
         return self._fleet_window_ready() and self._widget_exists(self.template_tree)
 
@@ -4585,25 +4621,38 @@ class App:
 
         self.run_bg(lambda: self.client.put_quick_setup(scenario_id, payload), _on_save_done)
 
-    def refresh_vehicles(self) -> None:
+    def refresh_vehicles(self, depot_id: str | None = None, focus_vehicle_id: str | None = None) -> None:
         scenario_id = self._selected_scenario_id()
         if not scenario_id:
             return
         if not self._vehicle_panel_ready():
             return
-        depot_id = self.fleet_depot_var.get().strip() or None
+
+        if depot_id is not None and self.fleet_depot_var is not None:
+            self.fleet_depot_var.set(depot_id)
+        active_depot_id = depot_id if depot_id is not None else (self.fleet_depot_var.get().strip() if self.fleet_depot_var is not None else "")
+        active_depot_id = active_depot_id.strip() or None
 
         def done(resp: dict[str, Any]) -> None:
             self.vehicle_rows = list(resp.get("items") or [])
             try:
                 if not self._widget_exists(self.vehicle_tree):
                     return
+                previous_selection = ""
+                selected = self.vehicle_tree.selection()
+                if selected:
+                    previous_selection = str(selected[0])
                 self.vehicle_tree.delete(*self.vehicle_tree.get_children())
+                inserted_ids: list[str] = []
                 for row in self.vehicle_rows:
+                    row_id = str(row.get("id") or "")
+                    if not row_id:
+                        continue
+                    inserted_ids.append(row_id)
                     self.vehicle_tree.insert(
                         "",
                         tk.END,
-                        iid=str(row.get("id") or ""),
+                        iid=row_id,
                         values=(
                             row.get("id"),
                             row.get("depotId"),
@@ -4615,11 +4664,17 @@ class App:
                             row.get("enabled"),
                         ),
                     )
+                target_vehicle_id = str(focus_vehicle_id or previous_selection or "").strip()
+                if target_vehicle_id and target_vehicle_id in inserted_ids:
+                    self.vehicle_tree.selection_set(target_vehicle_id)
+                    self.vehicle_tree.focus(target_vehicle_id)
+                    self.vehicle_tree.see(target_vehicle_id)
+                    self.on_vehicle_select()
             except tk.TclError:
                 return
             self.log_line(f"車両一覧取得: {len(self.vehicle_rows)} 件")
 
-        self.run_bg(lambda: self.client.list_vehicles(scenario_id, depot_id), done)
+        self.run_bg(lambda: self.client.list_vehicles(scenario_id, active_depot_id), done)
 
     def on_vehicle_select(self, _event=None) -> None:
         scenario_id = self._selected_scenario_id()
@@ -4665,10 +4720,13 @@ class App:
         if not payload.get("depotId"):
             messagebox.showwarning("入力不足", "depotId を入力してください")
             return
-        self.run_bg(
-            lambda: self.client.create_vehicle(scenario_id, payload),
-            lambda _resp: (self.log_line("車両を新規作成しました"), self.refresh_vehicles()),
-        )
+
+        def done(resp: dict[str, Any]) -> None:
+            refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, payload.get("depotId") or "")
+            self.log_line("車両を新規作成しました")
+            self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
+
+        self.run_bg(lambda: self.client.create_vehicle(scenario_id, payload), done)
 
     def update_vehicle_from_form(self) -> None:
         scenario_id = self._selected_scenario_id()
@@ -4677,10 +4735,19 @@ class App:
             messagebox.showwarning("入力不足", "更新対象車両を選択してください")
             return
         payload = self._build_vehicle_payload_from_form()
-        self.run_bg(
-            lambda: self.client.update_vehicle(scenario_id, vehicle_id, payload),
-            lambda _resp: (self.log_line(f"車両を更新しました: {vehicle_id}"), self.refresh_vehicles()),
-        )
+
+        def done(resp: dict[str, Any]) -> None:
+            refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(
+                resp,
+                payload.get("depotId") or self.v_depot_var.get().strip(),
+            )
+            self.log_line(f"車両を更新しました: {vehicle_id}")
+            self.refresh_vehicles(
+                refresh_depot_id or None,
+                vehicle_ids[0] if vehicle_ids else vehicle_id,
+            )
+
+        self.run_bg(lambda: self.client.update_vehicle(scenario_id, vehicle_id, payload), done)
 
     def delete_selected_vehicle(self) -> None:
         scenario_id = self._selected_scenario_id()
@@ -4707,18 +4774,31 @@ class App:
         target_depot_id = self.dup_target_depot_var.get().strip() or None
 
         if quantity == 1:
+            def done(resp: dict[str, Any]) -> None:
+                refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(
+                    resp,
+                    target_depot_id or self.v_depot_var.get().strip(),
+                )
+                self.log_line(f"車両複製: {vehicle_id}")
+                self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
+
             self.run_bg(
                 lambda: self.client.duplicate_vehicle(scenario_id, vehicle_id, target_depot_id),
-                lambda _resp: (self.log_line(f"車両複製: {vehicle_id}"), self.refresh_vehicles()),
+                done,
             )
             return
 
+        def bulk_done(resp: dict[str, Any]) -> None:
+            refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(
+                resp,
+                target_depot_id or self.v_depot_var.get().strip(),
+            )
+            self.log_line(f"車両一括複製: {vehicle_id} x {resp.get('total') or quantity}")
+            self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
+
         self.run_bg(
             lambda: self.client.duplicate_vehicle_bulk(scenario_id, vehicle_id, quantity, target_depot_id),
-            lambda resp: (
-                self.log_line(f"車両一括複製: {vehicle_id} x {resp.get('total') or quantity}"),
-                self.refresh_vehicles(),
-            ),
+            bulk_done,
         )
 
     def apply_template_to_depot(self) -> None:
@@ -4761,12 +4841,14 @@ class App:
             "enabled": bool(template.get("enabled", True)),
             "quantity": qty,
         }
+        def done(resp: dict[str, Any]) -> None:
+            refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
+            self.log_line(f"テンプレート導入: {template_id} -> {depot_id} x {resp.get('total') or qty}")
+            self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
+
         self.run_bg(
             lambda: self.client.create_vehicle_batch(scenario_id, payload),
-            lambda resp: (
-                self.log_line(f"テンプレート導入: {template_id} -> {depot_id} x {resp.get('total') or qty}"),
-                self.refresh_vehicles(),
-            ),
+            done,
         )
 
     def _current_depot_choices(self) -> list[str]:
@@ -4882,16 +4964,16 @@ class App:
 
             def action() -> dict[str, Any]:
                 if qty == 1:
-                    self.client.create_vehicle(scenario_id, payload)
-                    return {"total": 1}
+                    created = self.client.create_vehicle(scenario_id, payload)
+                    return {"item": created, "total": 1, "depotId": depot_id}
                 batch = dict(payload)
                 batch["quantity"] = qty
                 return self.client.create_vehicle_batch(scenario_id, batch)
 
             def done(resp: dict[str, Any]) -> None:
-                self.log_line(f"車両を追加: {depot_id} x {resp.get('total') or qty}")
-                self.fleet_depot_var.set(depot_id)
-                self.refresh_vehicles()
+                refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
+                self.log_line(f"車両を追加: {refresh_depot_id or depot_id} x {resp.get('total') or len(vehicle_ids) or qty}")
+                self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
                 win.destroy()
 
             self.run_bg(action, done)
@@ -5019,20 +5101,30 @@ class App:
             def action() -> dict[str, Any]:
                 created = self.client.create_vehicle_template(scenario_id, template_payload)
                 created_id = str(created.get("id") or created.get("templateId") or "")
+                applied_response: dict[str, Any] | None = None
                 if apply_now:
                     vehicle_payload = dict(template_payload)
                     vehicle_payload.pop("name", None)
                     vehicle_payload["depotId"] = apply_depot
                     vehicle_payload["quantity"] = apply_qty
-                    self.client.create_vehicle_batch(scenario_id, vehicle_payload)
-                return {"templateId": created_id, "applied": apply_now, "depotId": apply_depot, "qty": apply_qty}
+                    applied_response = self.client.create_vehicle_batch(scenario_id, vehicle_payload)
+                return {
+                    "templateId": created_id,
+                    "applied": apply_now,
+                    "depotId": apply_depot,
+                    "qty": apply_qty,
+                    "appliedResponse": applied_response,
+                }
 
             def done(resp: dict[str, Any]) -> None:
                 self.log_line(f"テンプレートを作成: {resp.get('templateId') or '(id不明)'}")
                 if resp.get("applied"):
-                    self.log_line(f"テンプレート由来で車両追加: {resp.get('depotId')} x {resp.get('qty')}")
-                    self.fleet_depot_var.set(str(resp.get("depotId") or ""))
-                    self.refresh_vehicles()
+                    refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(
+                        resp.get("appliedResponse") or {},
+                        str(resp.get("depotId") or ""),
+                    )
+                    self.log_line(f"テンプレート由来で車両追加: {refresh_depot_id or resp.get('depotId')} x {resp.get('qty')}")
+                    self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
                 self.refresh_templates()
                 win.destroy()
 
@@ -5117,14 +5209,15 @@ class App:
             )
             payload["quantity"] = qty
 
+            def done(resp: dict[str, Any]) -> None:
+                refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
+                self.log_line(f"テンプレート導入: {template_id} -> {depot_id} x {resp.get('total') or len(vehicle_ids) or qty}")
+                self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
+                win.destroy()
+
             self.run_bg(
                 lambda: self.client.create_vehicle_batch(scenario_id, payload),
-                lambda resp: (
-                    self.log_line(f"テンプレート導入: {template_id} -> {depot_id} x {resp.get('total') or qty}"),
-                    self.fleet_depot_var.set(depot_id),
-                    self.refresh_vehicles(),
-                    win.destroy(),
-                ),
+                done,
             )
 
         ttk.Button(btns, text="追加", command=submit).pack(side=tk.RIGHT)
@@ -5255,8 +5348,9 @@ class App:
             vehicles = list(resp.get("items") or [])
             bevs = [v for v in vehicles if str(v.get("type") or "").upper() == "BEV"]
             diff = target - len(bevs)
+            created_response: dict[str, Any] | None = None
             if diff > 0:
-                self.client.create_vehicle_batch(
+                created_response = self.client.create_vehicle_batch(
                     scenario_id,
                     {
                         "depotId": depot_id,
@@ -5276,15 +5370,14 @@ class App:
                     vid = str(v.get("id") or "").strip()
                     if vid:
                         self.client.delete_vehicle(scenario_id, vid)
-            return {"before": len(bevs), "after": target}
+            return {"before": len(bevs), "after": target, "created": created_response}
 
-        self.run_bg(
-            action,
-            lambda info: (
-                self.log_line(f"BEV台数調整: {info['before']} -> {info['after']} (営業所: {depot_id})"),
-                self.refresh_vehicles(),
-            ),
-        )
+        def done(info: dict[str, Any]) -> None:
+            refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(info.get("created") or {}, depot_id)
+            self.log_line(f"BEV台数調整: {info['before']} -> {info['after']} (営業所: {depot_id})")
+            self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
+
+        self.run_bg(action, done)
 
     def _prepare_payload(self) -> dict[str, Any]:
         objective_weights = _compose_saved_objective_weights(

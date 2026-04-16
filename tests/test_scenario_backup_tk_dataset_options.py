@@ -59,6 +59,112 @@ def test_refresh_methods_are_noop_before_fleet_window_build() -> None:
     App.refresh_templates(app)
 
 
+def test_vehicle_refresh_context_extracts_ids_and_depot() -> None:
+    depot_id, vehicle_ids = App._vehicle_refresh_context(
+        {"item": {"id": "veh-1", "depotId": "dep-1"}},
+        "",
+    )
+
+    assert depot_id == "dep-1"
+    assert vehicle_ids == ["veh-1"]
+
+    depot_id, vehicle_ids = App._vehicle_refresh_context(
+        {
+            "items": [
+                {"id": "veh-a", "depotId": "dep-2"},
+                {"id": "veh-b", "depotId": "dep-2"},
+            ]
+        },
+        "dep-1",
+    )
+
+    assert depot_id == "dep-2"
+    assert vehicle_ids == ["veh-a", "veh-b"]
+
+
+def test_refresh_vehicles_focuses_new_row_and_syncs_depot() -> None:
+    class DummyVar:
+        def __init__(self, value: str = "") -> None:
+            self._value = value
+
+        def get(self) -> str:
+            return self._value
+
+        def set(self, value: str) -> None:
+            self._value = value
+
+    class DummyTree:
+        def __init__(self) -> None:
+            self.rows: list[tuple[str, tuple[object, ...]]] = []
+            self.selected: list[str] = []
+            self.focused: str | None = None
+            self.seen: str | None = None
+
+        def winfo_exists(self) -> bool:
+            return True
+
+        def selection(self) -> tuple[str, ...]:
+            return tuple(self.selected)
+
+        def delete(self, *items: str) -> None:
+            self.rows = [row for row in self.rows if row[0] not in items]
+            self.selected = [item for item in self.selected if item not in items]
+
+        def get_children(self) -> tuple[str, ...]:
+            return tuple(row[0] for row in self.rows)
+
+        def insert(self, _parent: str, _index: str, *, iid: str, values: tuple[object, ...]) -> None:
+            self.rows.append((iid, values))
+
+        def selection_set(self, iid: str) -> None:
+            self.selected = [iid]
+
+        def focus(self, iid: str) -> None:
+            self.focused = iid
+
+        def see(self, iid: str) -> None:
+            self.seen = iid
+
+    class DummyClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str | None]] = []
+
+        def list_vehicles(self, scenario_id: str, depot_id: str | None = None) -> dict[str, object]:
+            self.calls.append((scenario_id, depot_id))
+            return {
+                "items": [
+                    {"id": "veh-1", "depotId": depot_id, "type": "BEV", "modelName": "A", "acquisitionCost": 0, "energyConsumption": 1.2, "chargePowerKw": 90, "enabled": True},
+                    {"id": "veh-2", "depotId": depot_id, "type": "BEV", "modelName": "B", "acquisitionCost": 0, "energyConsumption": 1.2, "chargePowerKw": 90, "enabled": True},
+                ],
+                "total": 2,
+            }
+
+    app = App.__new__(App)
+    app._selected_scenario_id = lambda: "scenario-1"
+    app._vehicle_panel_ready = lambda: True
+    app.fleet_depot_var = DummyVar("")
+    app.vehicle_tree = DummyTree()
+    app.client = DummyClient()
+    app.log_line = lambda _msg: None
+    app.run_bg = lambda action, done=None: done(action()) if done else action()
+    app.on_vehicle_select_called = 0
+    app.on_vehicle_select = lambda _event=None: setattr(
+        app,
+        "on_vehicle_select_called",
+        app.on_vehicle_select_called + 1,
+    )
+
+    App.refresh_vehicles(app, depot_id="dep-1", focus_vehicle_id="veh-2")
+
+    assert app.client.calls == [("scenario-1", "dep-1")]
+    assert app.fleet_depot_var.get() == "dep-1"
+    assert [row[0] for row in app.vehicle_tree.rows] == ["veh-1", "veh-2"]
+    assert app.vehicle_tree.selected == ["veh-2"]
+    assert app.vehicle_tree.focused == "veh-2"
+    assert app.vehicle_tree.seen == "veh-2"
+    assert app.on_vehicle_select_called == 1
+
+
 def test_open_fleet_window_syncs_existing_scope_depots(monkeypatch) -> None:
     class DummyWidget:
         def __init__(self, *args, **kwargs) -> None:
