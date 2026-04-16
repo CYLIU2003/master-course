@@ -65,7 +65,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock, RLock
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 from bff.services.service_ids import canonical_service_id
 from bff.store import master_data_store, output_paths, scenario_meta_store, trip_store
@@ -129,6 +129,7 @@ _PARQUET_ROW_ARTIFACT_FIELDS = {"trips", "blocks", "duties"}
 _UNLOADED_ARTIFACT_FIELDS_KEY = "__unloaded_artifact_fields__"
 _SCENARIO_LOCKS: dict[str, RLock] = {}
 _SCENARIO_LOCKS_GUARD = Lock()
+_MutationResult = TypeVar("_MutationResult")
 
 
 def _scenario_lock(scenario_id: str) -> RLock:
@@ -645,6 +646,28 @@ def _save_master_subset(
         scenario_meta_store.save_meta(_STORE_DIR, scenario_id, slim_doc)
 
         return
+
+
+def _mutate_shallow_doc(
+    scenario_id: str,
+    mutate_fn: Callable[[Dict[str, Any]], _MutationResult],
+) -> _MutationResult:
+    """Run a shallow read-modify-write sequence under the scenario lock."""
+    with _scenario_lock(scenario_id):
+        doc = _load_shallow(scenario_id)
+        return mutate_fn(doc)
+
+
+def _mutate_full_doc(
+    scenario_id: str,
+    mutate_fn: Callable[[Dict[str, Any]], _MutationResult],
+    *,
+    skip_graph_arcs: bool = True,
+) -> _MutationResult:
+    """Run a full-doc read-modify-write sequence under the scenario lock."""
+    with _scenario_lock(scenario_id):
+        doc = _load(scenario_id, skip_graph_arcs=skip_graph_arcs)
+        return mutate_fn(doc)
 
 
 def _scope_summary(scope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -2118,26 +2141,28 @@ def update_scenario(
     status: Optional[str] = None,
     simulation_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    doc = _load_shallow(scenario_id)
-    if name is not None:
-        doc["meta"]["name"] = name
-    if description is not None:
-        doc["meta"]["description"] = description
-    if mode is not None:
-        doc["meta"]["mode"] = mode
-    if operator_id is not None:
-        normalized_operator_id = _normalize_operator_id(operator_id)
-        doc["meta"]["operatorId"] = normalized_operator_id
-        scope = doc.get("dispatch_scope") or _default_dispatch_scope()
-        scope["operatorId"] = normalized_operator_id
-        doc["dispatch_scope"] = scope
-    if status is not None:
-        doc["meta"]["status"] = status
-    if simulation_config is not None:
-        doc["simulation_config"] = dict(simulation_config)
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save_master_only(doc, invalidate_dispatch=False)
-    return _meta_payload(doc)
+    def _apply(doc: Dict[str, Any]) -> Dict[str, Any]:
+        if name is not None:
+            doc["meta"]["name"] = name
+        if description is not None:
+            doc["meta"]["description"] = description
+        if mode is not None:
+            doc["meta"]["mode"] = mode
+        if operator_id is not None:
+            normalized_operator_id = _normalize_operator_id(operator_id)
+            doc["meta"]["operatorId"] = normalized_operator_id
+            scope = doc.get("dispatch_scope") or _default_dispatch_scope()
+            scope["operatorId"] = normalized_operator_id
+            doc["dispatch_scope"] = scope
+        if status is not None:
+            doc["meta"]["status"] = status
+        if simulation_config is not None:
+            doc["simulation_config"] = dict(simulation_config)
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save_master_only(doc, invalidate_dispatch=False)
+        return _meta_payload(doc)
+
+    return _mutate_shallow_doc(scenario_id, _apply)
 
 
 def delete_scenario(scenario_id: str) -> None:
@@ -2531,8 +2556,9 @@ def set_field(
     def _refresh_meta_for_direct_artifact_update(
         *,
         reset_dispatch_state: bool,
+        meta_doc: Optional[Dict[str, Any]] = None,
     ) -> None:
-        refreshed_meta = dict(meta)
+        refreshed_meta = dict(meta_doc or scenario_meta_store.load_meta(_STORE_DIR, scenario_id))
         refreshed_meta_payload = dict(refreshed_meta.get("meta") or {})
         refreshed_meta_payload["updatedAt"] = _now_iso()
         if reset_dispatch_state:
@@ -2592,20 +2618,24 @@ def set_field(
         return
 
     if field in ("optimization_audit", "simulation_audit", "problemdata_build_audit"):
-        doc = _load_shallow(scenario_id)
+        def _apply_shallow(doc: Dict[str, Any]) -> None:
+            doc[field] = value
+            if invalidate_dispatch:
+                _invalidate_dispatch_artifacts(doc)
+            doc["meta"]["updatedAt"] = _now_iso()
+            _save_master_only(doc, invalidate_dispatch=invalidate_dispatch)
+
+        _mutate_shallow_doc(scenario_id, _apply_shallow)
+        return
+
+    def _apply_full(doc: Dict[str, Any]) -> None:
         doc[field] = value
         if invalidate_dispatch:
             _invalidate_dispatch_artifacts(doc)
         doc["meta"]["updatedAt"] = _now_iso()
-        _save_master_only(doc, invalidate_dispatch=invalidate_dispatch)
-        return
+        _save(doc)
 
-    doc = _load(scenario_id, skip_graph_arcs=True)
-    doc[field] = value
-    if invalidate_dispatch:
-        _invalidate_dispatch_artifacts(doc)
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    _mutate_full_doc(scenario_id, _apply_full, skip_graph_arcs=True)
 
 
 def get_feed_context(scenario_id: str) -> Optional[Dict[str, Any]]:
@@ -2727,99 +2757,105 @@ def _get_item(
 
 
 def _create_item(scenario_id: str, field: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load_shallow(scenario_id)
-    item = dict(data)
-    if field == "vehicles":
-        item["depotId"] = _normalize_vehicle_depot_id(doc, item.get("depotId"))
-    item["id"] = item.get("id") or _new_id()
-    doc[field].append(item)
-    invalidate_dispatch = field in {"depots", "vehicles", "routes"}
-    if field in {"depots", "vehicles", "routes"}:
-        _invalidate_dispatch_artifacts(doc)
-    if field in {"depots", "routes"}:
-        _sync_depot_route_permissions(doc)
-        _normalize_dispatch_scope(doc)
-    if field in {"vehicles", "routes"}:
-        _sync_vehicle_route_permissions(doc)
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save_master_subset(
-        scenario_id,
-        updates={
-            field: list(doc[field]),
-            "dispatch_scope": doc.get("dispatch_scope"),
-            "depot_route_permissions": doc.get("depot_route_permissions"),
-            "vehicle_route_permissions": doc.get("vehicle_route_permissions"),
-        },
-        invalidate_dispatch=invalidate_dispatch,
-    )
-    return item
+    def _apply(doc: Dict[str, Any]) -> Dict[str, Any]:
+        item = dict(data)
+        if field == "vehicles":
+            item["depotId"] = _normalize_vehicle_depot_id(doc, item.get("depotId"))
+        item["id"] = item.get("id") or _new_id()
+        doc[field].append(item)
+        invalidate_dispatch = field in {"depots", "vehicles", "routes"}
+        if field in {"depots", "vehicles", "routes"}:
+            _invalidate_dispatch_artifacts(doc)
+        if field in {"depots", "routes"}:
+            _sync_depot_route_permissions(doc)
+            _normalize_dispatch_scope(doc)
+        if field in {"vehicles", "routes"}:
+            _sync_vehicle_route_permissions(doc)
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save_master_subset(
+            scenario_id,
+            updates={
+                field: list(doc[field]),
+                "dispatch_scope": doc.get("dispatch_scope"),
+                "depot_route_permissions": doc.get("depot_route_permissions"),
+                "vehicle_route_permissions": doc.get("vehicle_route_permissions"),
+            },
+            invalidate_dispatch=invalidate_dispatch,
+        )
+        return item
+
+    return _mutate_shallow_doc(scenario_id, _apply)
 
 
 def _update_item(
     scenario_id: str, field: str, item_id_key: str, item_id: str, patch: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load_shallow(scenario_id)
-    normalized_patch = dict(patch)
-    if (
-        field == "vehicles"
-        and "depotId" in normalized_patch
-        and normalized_patch.get("depotId") is not None
-    ):
-        normalized_patch["depotId"] = _normalize_vehicle_depot_id(
-            doc,
-            normalized_patch.get("depotId"),
-        )
-    for item in doc[field]:
-        if item.get(item_id_key) == item_id:
-            item.update({k: v for k, v in normalized_patch.items() if v is not None})
-            invalidate_dispatch = field in {"depots", "vehicles", "routes"}
-            if field in {"depots", "vehicles", "routes"}:
-                _invalidate_dispatch_artifacts(doc)
-            if field in {"depots", "routes"}:
-                _sync_depot_route_permissions(doc)
-                _normalize_dispatch_scope(doc)
-            if field in {"vehicles", "routes"}:
-                _sync_vehicle_route_permissions(doc)
-            doc["meta"]["updatedAt"] = _now_iso()
-            _save_master_subset(
-                scenario_id,
-                updates={
-                    field: list(doc[field]),
-                    "dispatch_scope": doc.get("dispatch_scope"),
-                    "depot_route_permissions": doc.get("depot_route_permissions"),
-                    "vehicle_route_permissions": doc.get("vehicle_route_permissions"),
-                },
-                invalidate_dispatch=invalidate_dispatch,
+    def _apply(doc: Dict[str, Any]) -> Dict[str, Any]:
+        normalized_patch = dict(patch)
+        if (
+            field == "vehicles"
+            and "depotId" in normalized_patch
+            and normalized_patch.get("depotId") is not None
+        ):
+            normalized_patch["depotId"] = _normalize_vehicle_depot_id(
+                doc,
+                normalized_patch.get("depotId"),
             )
-            return item
-    raise KeyError(item_id)
+        for item in doc[field]:
+            if item.get(item_id_key) == item_id:
+                item.update({k: v for k, v in normalized_patch.items() if v is not None})
+                invalidate_dispatch = field in {"depots", "vehicles", "routes"}
+                if field in {"depots", "vehicles", "routes"}:
+                    _invalidate_dispatch_artifacts(doc)
+                if field in {"depots", "routes"}:
+                    _sync_depot_route_permissions(doc)
+                    _normalize_dispatch_scope(doc)
+                if field in {"vehicles", "routes"}:
+                    _sync_vehicle_route_permissions(doc)
+                doc["meta"]["updatedAt"] = _now_iso()
+                _save_master_subset(
+                    scenario_id,
+                    updates={
+                        field: list(doc[field]),
+                        "dispatch_scope": doc.get("dispatch_scope"),
+                        "depot_route_permissions": doc.get("depot_route_permissions"),
+                        "vehicle_route_permissions": doc.get("vehicle_route_permissions"),
+                    },
+                    invalidate_dispatch=invalidate_dispatch,
+                )
+                return item
+        raise KeyError(item_id)
+
+    return _mutate_shallow_doc(scenario_id, _apply)
 
 
 def _delete_item(scenario_id: str, field: str, item_id_key: str, item_id: str) -> None:
-    doc = _load_shallow(scenario_id)
-    before = len(doc[field])
-    doc[field] = [i for i in doc[field] if i.get(item_id_key) != item_id]
-    if len(doc[field]) == before:
-        raise KeyError(item_id)
-    invalidate_dispatch = field in {"depots", "vehicles", "routes"}
-    if field in {"depots", "vehicles", "routes"}:
-        _invalidate_dispatch_artifacts(doc)
-    if field in {"depots", "routes"}:
-        _sync_depot_route_permissions(doc)
-        _normalize_dispatch_scope(doc)
-    if field in {"vehicles", "routes"}:
-        _sync_vehicle_route_permissions(doc)
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save_master_subset(
-        scenario_id,
-        updates={
-            field: list(doc[field]),
-            "dispatch_scope": doc.get("dispatch_scope"),
-            "depot_route_permissions": doc.get("depot_route_permissions"),
-            "vehicle_route_permissions": doc.get("vehicle_route_permissions"),
-        },
-        invalidate_dispatch=invalidate_dispatch,
-    )
+    def _apply(doc: Dict[str, Any]) -> None:
+        before = len(doc[field])
+        doc[field] = [i for i in doc[field] if i.get(item_id_key) != item_id]
+        if len(doc[field]) == before:
+            raise KeyError(item_id)
+        invalidate_dispatch = field in {"depots", "vehicles", "routes"}
+        if field in {"depots", "vehicles", "routes"}:
+            _invalidate_dispatch_artifacts(doc)
+        if field in {"depots", "routes"}:
+            _sync_depot_route_permissions(doc)
+            _normalize_dispatch_scope(doc)
+        if field in {"vehicles", "routes"}:
+            _sync_vehicle_route_permissions(doc)
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save_master_subset(
+            scenario_id,
+            updates={
+                field: list(doc[field]),
+                "dispatch_scope": doc.get("dispatch_scope"),
+                "depot_route_permissions": doc.get("depot_route_permissions"),
+                "vehicle_route_permissions": doc.get("vehicle_route_permissions"),
+            },
+            invalidate_dispatch=invalidate_dispatch,
+        )
+
+    _mutate_shallow_doc(scenario_id, _apply)
 
 
 # ── Depot helpers ──────────────────────────────────────────────
@@ -2873,13 +2909,15 @@ def get_public_data_state(scenario_id: str) -> Dict[str, Any]:
 
 
 def set_public_data_state(scenario_id: str, state: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load_shallow(scenario_id)
-    normalized = _default_public_data_state()
-    normalized.update(state)
-    doc["public_data"] = normalized
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
-    return dict(normalized)
+    def _apply(doc: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = _default_public_data_state()
+        normalized.update(state)
+        doc["public_data"] = normalized
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save(doc)
+        return dict(normalized)
+
+    return _mutate_shallow_doc(scenario_id, _apply)
 
 
 def get_app_context() -> Dict[str, Any]:
@@ -2979,22 +3017,24 @@ def create_vehicle_batch(
     if quantity == 1:
         return [create_vehicle(scenario_id, data)]
 
-    doc = _load(scenario_id, skip_graph_arcs=True)
-    normalized_depot_id = _normalize_vehicle_depot_id(doc, data.get("depotId"))
-    base_name = (data.get("modelName") or "New vehicle").strip() or "New vehicle"
-    created: List[Dict[str, Any]] = []
+    def _apply(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+        normalized_depot_id = _normalize_vehicle_depot_id(doc, data.get("depotId"))
+        base_name = (data.get("modelName") or "New vehicle").strip() or "New vehicle"
+        created: List[Dict[str, Any]] = []
 
-    for idx in range(quantity):
-        item = dict(data)
-        item["id"] = _new_id()
-        item["depotId"] = normalized_depot_id
-        item["modelName"] = f"{base_name} #{idx + 1}"
-        doc["vehicles"].append(item)
-        created.append(item)
+        for idx in range(quantity):
+            item = dict(data)
+            item["id"] = _new_id()
+            item["depotId"] = normalized_depot_id
+            item["modelName"] = f"{base_name} #{idx + 1}"
+            doc["vehicles"].append(item)
+            created.append(item)
 
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
-    return created
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save(doc)
+        return created
+
+    return _mutate_full_doc(scenario_id, _apply, skip_graph_arcs=True)
 
 
 def _allowed_route_ids_for_depot(
@@ -3023,58 +3063,60 @@ def duplicate_vehicle_batch(
     if quantity < 1:
         raise ValueError("quantity must be >= 1")
 
-    doc = _load(scenario_id, skip_graph_arcs=True)
-    source = next((v for v in doc["vehicles"] if v.get("id") == vehicle_id), None)
-    if source is None:
-        raise KeyError(vehicle_id)
-    effective_target_depot_id = target_depot_id or source.get("depotId")
-    if effective_target_depot_id:
-        effective_target_depot_id = _normalize_vehicle_depot_id(
-            doc,
-            effective_target_depot_id,
-        )
-
-    existing_names = {
-        (item.get("modelName") or "").strip()
-        for item in doc["vehicles"]
-        if isinstance(item.get("modelName"), str)
-    }
-    base_name = (source.get("modelName") or "Vehicle").strip() or "Vehicle"
-    source_permissions = [
-        perm
-        for perm in doc.get("vehicle_route_permissions", [])
-        if perm.get("vehicleId") == vehicle_id
-    ]
-    allowed_route_ids = (
-        _allowed_route_ids_for_depot(doc, str(effective_target_depot_id))
-        if effective_target_depot_id
-        else set()
-    )
-    created_items: List[Dict[str, Any]] = []
-
-    for _ in range(quantity):
-        created = {k: v for k, v in source.items() if k != "id"}
-        created["id"] = _new_id()
+    def _apply(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+        source = next((v for v in doc["vehicles"] if v.get("id") == vehicle_id), None)
+        if source is None:
+            raise KeyError(vehicle_id)
+        effective_target_depot_id = target_depot_id or source.get("depotId")
         if effective_target_depot_id:
-            created["depotId"] = effective_target_depot_id
-        created["modelName"] = _next_vehicle_copy_name(existing_names, base_name)
-        doc["vehicles"].append(created)
-        created_items.append(created)
-
-        for perm in source_permissions:
-            route_id = perm.get("routeId")
-            if allowed_route_ids is not None and route_id not in allowed_route_ids:
-                continue
-            doc["vehicle_route_permissions"].append(
-                {
-                    **perm,
-                    "vehicleId": created["id"],
-                }
+            effective_target_depot_id = _normalize_vehicle_depot_id(
+                doc,
+                effective_target_depot_id,
             )
 
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
-    return created_items
+        existing_names = {
+            (item.get("modelName") or "").strip()
+            for item in doc["vehicles"]
+            if isinstance(item.get("modelName"), str)
+        }
+        base_name = (source.get("modelName") or "Vehicle").strip() or "Vehicle"
+        source_permissions = [
+            perm
+            for perm in doc.get("vehicle_route_permissions", [])
+            if perm.get("vehicleId") == vehicle_id
+        ]
+        allowed_route_ids = (
+            _allowed_route_ids_for_depot(doc, str(effective_target_depot_id))
+            if effective_target_depot_id
+            else set()
+        )
+        created_items: List[Dict[str, Any]] = []
+
+        for _ in range(quantity):
+            created = {k: v for k, v in source.items() if k != "id"}
+            created["id"] = _new_id()
+            if effective_target_depot_id:
+                created["depotId"] = effective_target_depot_id
+            created["modelName"] = _next_vehicle_copy_name(existing_names, base_name)
+            doc["vehicles"].append(created)
+            created_items.append(created)
+
+            for perm in source_permissions:
+                route_id = perm.get("routeId")
+                if allowed_route_ids is not None and route_id not in allowed_route_ids:
+                    continue
+                doc["vehicle_route_permissions"].append(
+                    {
+                        **perm,
+                        "vehicleId": created["id"],
+                    }
+                )
+
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save(doc)
+        return created_items
+
+    return _mutate_full_doc(scenario_id, _apply, skip_graph_arcs=True)
 
 
 def update_vehicle(
@@ -3084,16 +3126,18 @@ def update_vehicle(
 
 
 def delete_vehicle(scenario_id: str, vehicle_id: str) -> None:
-    doc = _load(scenario_id, skip_graph_arcs=True)
-    before = len(doc["vehicles"])
-    doc["vehicles"] = [v for v in doc["vehicles"] if v.get("id") != vehicle_id]
-    if len(doc["vehicles"]) == before:
-        raise KeyError(vehicle_id)
-    doc["vehicle_route_permissions"] = [
-        p for p in doc["vehicle_route_permissions"] if p.get("vehicleId") != vehicle_id
-    ]
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    def _apply(doc: Dict[str, Any]) -> None:
+        before = len(doc["vehicles"])
+        doc["vehicles"] = [v for v in doc["vehicles"] if v.get("id") != vehicle_id]
+        if len(doc["vehicles"]) == before:
+            raise KeyError(vehicle_id)
+        doc["vehicle_route_permissions"] = [
+            p for p in doc["vehicle_route_permissions"] if p.get("vehicleId") != vehicle_id
+        ]
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save(doc)
+
+    _mutate_full_doc(scenario_id, _apply, skip_graph_arcs=True)
 
 
 def duplicate_vehicle(scenario_id: str, vehicle_id: str) -> Dict[str, Any]:
@@ -3128,38 +3172,44 @@ def get_vehicle_template(scenario_id: str, template_id: str) -> Dict[str, Any]:
 
 
 def create_vehicle_template(scenario_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
-    item = dict(data)
-    item["id"] = _new_id()
-    doc.setdefault("vehicle_templates", []).append(item)
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
-    return item
+    def _apply(doc: Dict[str, Any]) -> Dict[str, Any]:
+        item = dict(data)
+        item["id"] = _new_id()
+        doc.setdefault("vehicle_templates", []).append(item)
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save(doc)
+        return item
+
+    return _mutate_full_doc(scenario_id, _apply, skip_graph_arcs=True)
 
 
 def update_vehicle_template(
     scenario_id: str, template_id: str, patch: Dict[str, Any]
 ) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
-    templates = doc.setdefault("vehicle_templates", [])
-    for item in templates:
-        if item.get("id") == template_id:
-            item.update({k: v for k, v in patch.items() if v is not None})
-            doc["meta"]["updatedAt"] = _now_iso()
-            _save(doc)
-            return item
-    raise KeyError(template_id)
+    def _apply(doc: Dict[str, Any]) -> Dict[str, Any]:
+        templates = doc.setdefault("vehicle_templates", [])
+        for item in templates:
+            if item.get("id") == template_id:
+                item.update({k: v for k, v in patch.items() if v is not None})
+                doc["meta"]["updatedAt"] = _now_iso()
+                _save(doc)
+                return item
+        raise KeyError(template_id)
+
+    return _mutate_full_doc(scenario_id, _apply, skip_graph_arcs=True)
 
 
 def delete_vehicle_template(scenario_id: str, template_id: str) -> None:
-    doc = _load(scenario_id, skip_graph_arcs=True)
-    templates = doc.setdefault("vehicle_templates", [])
-    before = len(templates)
-    doc["vehicle_templates"] = [i for i in templates if i.get("id") != template_id]
-    if len(doc["vehicle_templates"]) == before:
-        raise KeyError(template_id)
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
+    def _apply(doc: Dict[str, Any]) -> None:
+        templates = doc.setdefault("vehicle_templates", [])
+        before = len(templates)
+        doc["vehicle_templates"] = [i for i in templates if i.get("id") != template_id]
+        if len(doc["vehicle_templates"]) == before:
+            raise KeyError(template_id)
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save(doc)
+
+    _mutate_full_doc(scenario_id, _apply, skip_graph_arcs=True)
 
 
 # ── Route helpers ──────────────────────────────────────────────
@@ -3756,80 +3806,82 @@ def get_dispatch_scope(scenario_id: str) -> Dict[str, Any]:
 
 
 def set_dispatch_scope(scenario_id: str, scope: Dict[str, Any]) -> Dict[str, Any]:
-    doc = _load(scenario_id, skip_graph_arcs=True)
-    current = _normalize_dispatch_scope(doc)
-    depot_selection = dict(current.get("depotSelection") or {})
-    route_selection = dict(current.get("routeSelection") or {})
-    service_selection = dict(current.get("serviceSelection") or {})
-    trip_selection = dict(current.get("tripSelection") or {})
+    def _apply(doc: Dict[str, Any]) -> Dict[str, Any]:
+        current = _normalize_dispatch_scope(doc)
+        depot_selection = dict(current.get("depotSelection") or {})
+        route_selection = dict(current.get("routeSelection") or {})
+        service_selection = dict(current.get("serviceSelection") or {})
+        trip_selection = dict(current.get("tripSelection") or {})
 
-    incoming_depot_selection = scope.get("depotSelection")
-    if isinstance(incoming_depot_selection, dict):
-        depot_selection.update(incoming_depot_selection)
-    if "depotId" in scope:
-        depot_selection["primaryDepotId"] = scope.get("depotId")
-        if scope.get("depotId") is None:
-            depot_selection["depotIds"] = []
-        else:
-            depot_selection["depotIds"] = [scope.get("depotId")]
+        incoming_depot_selection = scope.get("depotSelection")
+        if isinstance(incoming_depot_selection, dict):
+            depot_selection.update(incoming_depot_selection)
+        if "depotId" in scope:
+            depot_selection["primaryDepotId"] = scope.get("depotId")
+            if scope.get("depotId") is None:
+                depot_selection["depotIds"] = []
+            else:
+                depot_selection["depotIds"] = [scope.get("depotId")]
 
-    incoming_route_selection = scope.get("routeSelection")
-    if isinstance(incoming_route_selection, dict):
-        route_selection.update(incoming_route_selection)
+        incoming_route_selection = scope.get("routeSelection")
+        if isinstance(incoming_route_selection, dict):
+            route_selection.update(incoming_route_selection)
 
-    incoming_service_selection = scope.get("serviceSelection")
-    if isinstance(incoming_service_selection, dict):
-        service_selection.update(incoming_service_selection)
-    if "serviceId" in scope:
-        service_selection["serviceIds"] = [scope.get("serviceId")]
+        incoming_service_selection = scope.get("serviceSelection")
+        if isinstance(incoming_service_selection, dict):
+            service_selection.update(incoming_service_selection)
+        if "serviceId" in scope:
+            service_selection["serviceIds"] = [scope.get("serviceId")]
 
-    incoming_trip_selection = scope.get("tripSelection")
-    if isinstance(incoming_trip_selection, dict):
-        trip_selection.update(incoming_trip_selection)
+        incoming_trip_selection = scope.get("tripSelection")
+        if isinstance(incoming_trip_selection, dict):
+            trip_selection.update(incoming_trip_selection)
 
-    next_scope = {
-        "scopeId": scope.get("scopeId", current.get("scopeId")),
-        "operatorId": scope.get("operatorId", current.get("operatorId")),
-        "datasetVersion": scope.get("datasetVersion", current.get("datasetVersion")),
-        "depotSelection": depot_selection,
-        "routeSelection": route_selection,
-        "serviceSelection": service_selection,
-        "tripSelection": trip_selection,
-        "allowIntraDepotRouteSwap": scope.get(
-            "allowIntraDepotRouteSwap",
-            current.get("allowIntraDepotRouteSwap", False),
-        ),
-        "allowInterDepotSwap": scope.get(
-            "allowInterDepotSwap",
-            current.get("allowInterDepotSwap", False),
-        ),
-        "fixedRouteBandMode": scope.get(
-            "fixedRouteBandMode",
-            current.get("fixedRouteBandMode", True),
-        ),
-        "depotId": depot_selection.get("primaryDepotId"),
-        "serviceId": (
-            (service_selection.get("serviceIds") or [current.get("serviceId") or "WEEKDAY"])[0]
-        ),
-    }
-    doc["dispatch_scope"] = next_scope
-    normalized = _normalize_dispatch_scope(doc)
-    overlay = doc.get("scenario_overlay")
-    if isinstance(overlay, dict):
-        updated_overlay = dict(overlay)
-        updated_overlay["depot_ids"] = list(
-            (normalized.get("depotSelection") or {}).get("depotIds") or []
-        )
-        updated_overlay["route_ids"] = list(normalized.get("effectiveRouteIds") or [])
-        dataset_version = str(normalized.get("datasetVersion") or "").strip()
-        if dataset_version:
-            updated_overlay["dataset_version"] = dataset_version
-        doc["scenario_overlay"] = updated_overlay
-    if normalized != current:
-        _invalidate_dispatch_artifacts(doc)
-    doc["meta"]["updatedAt"] = _now_iso()
-    _save(doc)
-    return normalized
+        next_scope = {
+            "scopeId": scope.get("scopeId", current.get("scopeId")),
+            "operatorId": scope.get("operatorId", current.get("operatorId")),
+            "datasetVersion": scope.get("datasetVersion", current.get("datasetVersion")),
+            "depotSelection": depot_selection,
+            "routeSelection": route_selection,
+            "serviceSelection": service_selection,
+            "tripSelection": trip_selection,
+            "allowIntraDepotRouteSwap": scope.get(
+                "allowIntraDepotRouteSwap",
+                current.get("allowIntraDepotRouteSwap", False),
+            ),
+            "allowInterDepotSwap": scope.get(
+                "allowInterDepotSwap",
+                current.get("allowInterDepotSwap", False),
+            ),
+            "fixedRouteBandMode": scope.get(
+                "fixedRouteBandMode",
+                current.get("fixedRouteBandMode", True),
+            ),
+            "depotId": depot_selection.get("primaryDepotId"),
+            "serviceId": (
+                (service_selection.get("serviceIds") or [current.get("serviceId") or "WEEKDAY"])[0]
+            ),
+        }
+        doc["dispatch_scope"] = next_scope
+        normalized = _normalize_dispatch_scope(doc)
+        overlay = doc.get("scenario_overlay")
+        if isinstance(overlay, dict):
+            updated_overlay = dict(overlay)
+            updated_overlay["depot_ids"] = list(
+                (normalized.get("depotSelection") or {}).get("depotIds") or []
+            )
+            updated_overlay["route_ids"] = list(normalized.get("effectiveRouteIds") or [])
+            dataset_version = str(normalized.get("datasetVersion") or "").strip()
+            if dataset_version:
+                updated_overlay["dataset_version"] = dataset_version
+            doc["scenario_overlay"] = updated_overlay
+        if normalized != current:
+            _invalidate_dispatch_artifacts(doc)
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save(doc)
+        return normalized
+
+    return _mutate_full_doc(scenario_id, _apply, skip_graph_arcs=True)
 
 
 def effective_route_ids_for_scope(

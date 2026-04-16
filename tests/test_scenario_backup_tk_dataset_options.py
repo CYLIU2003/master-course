@@ -89,6 +89,52 @@ def test_normalize_depot_choice_extracts_canonical_id() -> None:
     assert App._normalize_depot_choice("  ") == ""
 
 
+def test_mutation_guard_disables_quick_setup_save_while_vehicle_add_runs() -> None:
+    class DummyButton:
+        def __init__(self) -> None:
+            self.state = "normal"
+
+        def winfo_exists(self) -> bool:
+            return True
+
+        def configure(self, *, state: str) -> None:
+            self.state = state
+
+    app = App.__new__(App)
+    app._quick_setup_save_buttons = [DummyButton()]
+    app._vehicle_add_buttons = [DummyButton()]
+    app._quick_setup_save_inflight = 0
+    app._vehicle_add_inflight = 1
+
+    App._update_mutation_guard_button_states(app)
+
+    assert app._quick_setup_save_buttons[0].state == "disabled"
+    assert app._vehicle_add_buttons[0].state == "normal"
+
+
+def test_mutation_guard_disables_vehicle_add_while_quick_setup_save_runs() -> None:
+    class DummyButton:
+        def __init__(self) -> None:
+            self.state = "normal"
+
+        def winfo_exists(self) -> bool:
+            return True
+
+        def configure(self, *, state: str) -> None:
+            self.state = state
+
+    app = App.__new__(App)
+    app._quick_setup_save_buttons = [DummyButton()]
+    app._vehicle_add_buttons = [DummyButton()]
+    app._quick_setup_save_inflight = 1
+    app._vehicle_add_inflight = 0
+
+    App._update_mutation_guard_button_states(app)
+
+    assert app._quick_setup_save_buttons[0].state == "normal"
+    assert app._vehicle_add_buttons[0].state == "disabled"
+
+
 def test_refresh_vehicles_focuses_new_row_and_syncs_depot() -> None:
     class DummyVar:
         def __init__(self, value: str = "") -> None:

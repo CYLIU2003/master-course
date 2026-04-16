@@ -1346,6 +1346,10 @@ class App:
         self.compare_scenario_b_var = tk.StringVar(value="")
         self._busy_count: int = 0
         self._busy_var = tk.StringVar(value="")
+        self._quick_setup_save_inflight: int = 0
+        self._vehicle_add_inflight: int = 0
+        self._quick_setup_save_buttons: list[ttk.Button] = []
+        self._vehicle_add_buttons: list[ttk.Button] = []
         self._scope_filter_debounce_id: str | None = None
         self.run_transport_var = tk.StringVar(value="直結" if self.client.direct_mode else "HTTP互換")
         self.base_url_entry: ttk.Entry | None = None
@@ -1486,7 +1490,9 @@ class App:
         top = ttk.Frame(scope)
         top.pack(fill=tk.X, pady=(0, 4))
         ttk.Button(top, text="Quick Setup 読込", command=self.load_quick_setup).pack(side=tk.LEFT)
-        ttk.Button(top, text="Quick Setup 保存", command=self.save_quick_setup).pack(side=tk.LEFT, padx=6)
+        quick_setup_save_btn = ttk.Button(top, text="Quick Setup 保存", command=self.save_quick_setup)
+        quick_setup_save_btn.pack(side=tk.LEFT, padx=6)
+        self._register_quick_setup_save_button(quick_setup_save_btn)
 
         # ── 運行設定（常時表示）── canvas より上に置くことで常に見える
         self.day_type_var = tk.StringVar(value="WEEKDAY")
@@ -1632,9 +1638,11 @@ class App:
 
         btn_row = ttk.Frame(action_bar)
         btn_row.pack(fill=tk.X)
-        ttk.Button(
+        quick_setup_save_main_btn = ttk.Button(
             btn_row, text="① シナリオ保存", command=self.save_quick_setup,
-        ).pack(side=tk.LEFT, padx=(0, 8))
+        )
+        quick_setup_save_main_btn.pack(side=tk.LEFT, padx=(0, 8))
+        self._register_quick_setup_save_button(quick_setup_save_main_btn)
         ttk.Button(btn_row, text="② ソルバー設定", command=self.open_solver_settings_window).pack(side=tk.LEFT, padx=(0, 4))
         ttk.Button(btn_row, text="③ Solver対応 Prepare", command=self.prepare).pack(side=tk.LEFT, padx=4)
         self.execution_mode_var = tk.StringVar(value="最適化計算")
@@ -2010,8 +2018,12 @@ class App:
         self.fleet_depot_combo = ttk.Combobox(top, textvariable=self.fleet_depot_var, state="readonly", width=20)
         self.fleet_depot_combo.pack(side=tk.LEFT, padx=4)
         ttk.Button(top, text="車両一覧更新", command=self.refresh_vehicles).pack(side=tk.LEFT, padx=4)
-        ttk.Button(top, text="車両を追加...", command=self.open_vehicle_create_window).pack(side=tk.LEFT, padx=(12, 4))
-        ttk.Button(top, text="テンプレートから営業所へ追加...", command=self.open_template_apply_window).pack(side=tk.LEFT, padx=4)
+        vehicle_add_btn = ttk.Button(top, text="車両を追加...", command=self.open_vehicle_create_window)
+        vehicle_add_btn.pack(side=tk.LEFT, padx=(12, 4))
+        self._register_vehicle_add_button(vehicle_add_btn)
+        template_apply_btn = ttk.Button(top, text="テンプレートから営業所へ追加...", command=self.open_template_apply_window)
+        template_apply_btn.pack(side=tk.LEFT, padx=4)
+        self._register_vehicle_add_button(template_apply_btn)
 
         self.target_bev_count_var = tk.StringVar(value="10")
         self.default_energy_var = tk.StringVar(value="1.2")
@@ -2358,6 +2370,46 @@ class App:
         if not self._widget_exists(self.root):
             return
         self._busy_var.set("⏳ 処理中..." if self._busy_count > 0 else "")
+
+    def _register_quick_setup_save_button(self, button: ttk.Button) -> None:
+        self._quick_setup_save_buttons.append(button)
+        self._update_mutation_guard_button_states()
+
+    def _register_vehicle_add_button(self, button: ttk.Button) -> None:
+        self._vehicle_add_buttons.append(button)
+        self._update_mutation_guard_button_states()
+
+    def _set_button_enabled(self, button: Any, enabled: bool) -> None:
+        if not self._widget_exists(button):
+            return
+        try:
+            button.configure(state="normal" if enabled else "disabled")
+        except (tk.TclError, RuntimeError):
+            return
+
+    def _update_mutation_guard_button_states(self) -> None:
+        disable_quick_setup_save = self._vehicle_add_inflight > 0
+        disable_vehicle_add = self._quick_setup_save_inflight > 0
+        for button in self._quick_setup_save_buttons:
+            self._set_button_enabled(button, not disable_quick_setup_save)
+        for button in self._vehicle_add_buttons:
+            self._set_button_enabled(button, not disable_vehicle_add)
+
+    def _begin_quick_setup_save_guard(self) -> None:
+        self._quick_setup_save_inflight += 1
+        self._update_mutation_guard_button_states()
+
+    def _end_quick_setup_save_guard(self) -> None:
+        self._quick_setup_save_inflight = max(0, self._quick_setup_save_inflight - 1)
+        self._update_mutation_guard_button_states()
+
+    def _begin_vehicle_add_guard(self) -> None:
+        self._vehicle_add_inflight += 1
+        self._update_mutation_guard_button_states()
+
+    def _end_vehicle_add_guard(self) -> None:
+        self._vehicle_add_inflight = max(0, self._vehicle_add_inflight - 1)
+        self._update_mutation_guard_button_states()
 
     def run_bg(self, action, done=None) -> None:
         self._busy_count += 1
@@ -4624,12 +4676,25 @@ class App:
             "planningHorizonHours": self._planning_horizon_hours_value(planning_days),
         }
         payload["depotEnergyAssets"] = synced_assets
-        def _on_save_done(_resp: dict[str, Any]) -> None:
-            self.log_line("Quick Setup を保存しました")
-            self._mark_prepared_stale("Quick Setup 保存後のため再Prepareが必要です", announce=True)
-            self.load_quick_setup()
 
-        self.run_bg(lambda: self.client.put_quick_setup(scenario_id, payload), _on_save_done)
+        self._begin_quick_setup_save_guard()
+
+        def _on_save_done(_resp: dict[str, Any]) -> None:
+            try:
+                self.log_line("Quick Setup を保存しました")
+                self._mark_prepared_stale("Quick Setup 保存後のため再Prepareが必要です", announce=True)
+                self.load_quick_setup()
+            finally:
+                self._end_quick_setup_save_guard()
+
+        def _action() -> dict[str, Any]:
+            try:
+                return self.client.put_quick_setup(scenario_id, payload)
+            except Exception:
+                self._queue_on_ui_thread(self._end_quick_setup_save_guard)
+                raise
+
+        self.run_bg(_action, _on_save_done)
 
     def refresh_vehicles(self, depot_id: str | None = None, focus_vehicle_id: str | None = None) -> None:
         scenario_id = self._selected_scenario_id()
@@ -4734,12 +4799,24 @@ class App:
             messagebox.showwarning("入力不足", "depotId を入力してください")
             return
 
-        def done(resp: dict[str, Any]) -> None:
-            refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, payload.get("depotId") or "")
-            self.log_line("車両を新規作成しました")
-            self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
+        self._begin_vehicle_add_guard()
 
-        self.run_bg(lambda: self.client.create_vehicle(scenario_id, payload), done)
+        def done(resp: dict[str, Any]) -> None:
+            try:
+                refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, payload.get("depotId") or "")
+                self.log_line("車両を新規作成しました")
+                self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
+            finally:
+                self._end_vehicle_add_guard()
+
+        def action() -> dict[str, Any]:
+            try:
+                return self.client.create_vehicle(scenario_id, payload)
+            except Exception:
+                self._queue_on_ui_thread(self._end_vehicle_add_guard)
+                raise
+
+        self.run_bg(action, done)
 
     def update_vehicle_from_form(self) -> None:
         scenario_id = self._selected_scenario_id()
@@ -4855,15 +4932,25 @@ class App:
             "enabled": bool(template.get("enabled", True)),
             "quantity": qty,
         }
-        def done(resp: dict[str, Any]) -> None:
-            refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
-            self.log_line(f"テンプレート導入: {template_id} -> {depot_id} x {resp.get('total') or qty}")
-            self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
 
-        self.run_bg(
-            lambda: self.client.create_vehicle_batch(scenario_id, payload),
-            done,
-        )
+        self._begin_vehicle_add_guard()
+
+        def done(resp: dict[str, Any]) -> None:
+            try:
+                refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
+                self.log_line(f"テンプレート導入: {template_id} -> {depot_id} x {resp.get('total') or qty}")
+                self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
+            finally:
+                self._end_vehicle_add_guard()
+
+        def action() -> dict[str, Any]:
+            try:
+                return self.client.create_vehicle_batch(scenario_id, payload)
+            except Exception:
+                self._queue_on_ui_thread(self._end_vehicle_add_guard)
+                raise
+
+        self.run_bg(action, done)
 
     def _current_depot_choices(self) -> list[str]:
         from_scope = [str(d.get("id") or "").strip() for d in self.scope_depots if str(d.get("id") or "").strip()]
@@ -4976,20 +5063,29 @@ class App:
                 }
             )
 
+            self._begin_vehicle_add_guard()
+
             def action() -> dict[str, Any]:
-                if qty == 1:
-                    created = self.client.create_vehicle(scenario_id, payload)
-                    return {"item": created, "total": 1, "depotId": depot_id}
-                batch = dict(payload)
-                batch["quantity"] = qty
-                return self.client.create_vehicle_batch(scenario_id, batch)
+                try:
+                    if qty == 1:
+                        created = self.client.create_vehicle(scenario_id, payload)
+                        return {"item": created, "total": 1, "depotId": depot_id}
+                    batch = dict(payload)
+                    batch["quantity"] = qty
+                    return self.client.create_vehicle_batch(scenario_id, batch)
+                except Exception:
+                    self._queue_on_ui_thread(self._end_vehicle_add_guard)
+                    raise
 
             def done(resp: dict[str, Any]) -> None:
-                refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
-                refresh_depot_id = self._normalize_depot_choice(refresh_depot_id or depot_id)
-                self.log_line(f"車両を追加: {refresh_depot_id or depot_id} x {resp.get('total') or len(vehicle_ids) or qty}")
-                self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
-                win.destroy()
+                try:
+                    refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
+                    refresh_depot_id = self._normalize_depot_choice(refresh_depot_id or depot_id)
+                    self.log_line(f"車両を追加: {refresh_depot_id or depot_id} x {resp.get('total') or len(vehicle_ids) or qty}")
+                    self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
+                    win.destroy()
+                finally:
+                    self._end_vehicle_add_guard()
 
             self.run_bg(action, done)
 
