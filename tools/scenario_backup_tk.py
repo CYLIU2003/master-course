@@ -2439,6 +2439,16 @@ class App:
         )
 
     @staticmethod
+    def _normalize_depot_choice(value: str) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        parts = re.split(r"\s*(?:\||｜)\s*", raw, maxsplit=1)
+        if len(parts) == 1:
+            parts = re.split(r"\s+(?:-|–|—)\s+", raw, maxsplit=1)
+        return parts[0].strip()
+
+    @staticmethod
     def _vehicle_refresh_context(resp: dict[str, Any], fallback_depot_id: str = "") -> tuple[str, list[str]]:
         depot_id = fallback_depot_id.strip()
         vehicle_ids: list[str] = []
@@ -4628,10 +4638,12 @@ class App:
         if not self._vehicle_panel_ready():
             return
 
-        if depot_id is not None and self.fleet_depot_var is not None:
-            self.fleet_depot_var.set(depot_id)
-        active_depot_id = depot_id if depot_id is not None else (self.fleet_depot_var.get().strip() if self.fleet_depot_var is not None else "")
-        active_depot_id = active_depot_id.strip() or None
+        active_choice = depot_id if depot_id is not None else (
+            self.fleet_depot_var.get().strip() if self.fleet_depot_var is not None else ""
+        )
+        active_depot_id = self._normalize_depot_choice(active_choice) or None
+        if self.fleet_depot_var is not None:
+            self.fleet_depot_var.set(active_depot_id or "")
 
         def done(resp: dict[str, Any]) -> None:
             self.vehicle_rows = list(resp.get("items") or [])
@@ -4717,6 +4729,7 @@ class App:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
         payload = self._build_vehicle_payload_from_form()
+        payload["depotId"] = self._normalize_depot_choice(payload.get("depotId") or "")
         if not payload.get("depotId"):
             messagebox.showwarning("入力不足", "depotId を入力してください")
             return
@@ -4735,6 +4748,7 @@ class App:
             messagebox.showwarning("入力不足", "更新対象車両を選択してください")
             return
         payload = self._build_vehicle_payload_from_form()
+        payload["depotId"] = self._normalize_depot_choice(payload.get("depotId") or "")
 
         def done(resp: dict[str, Any]) -> None:
             refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(
@@ -4771,7 +4785,7 @@ class App:
             messagebox.showwarning("入力不足", "複製対象車両を選択してください")
             return
         quantity = max(1, self._parse_int(self.dup_count_var.get(), 1))
-        target_depot_id = self.dup_target_depot_var.get().strip() or None
+        target_depot_id = self._normalize_depot_choice(self.dup_target_depot_var.get()) or None
 
         if quantity == 1:
             def done(resp: dict[str, Any]) -> None:
@@ -4806,7 +4820,7 @@ class App:
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
             return
-        depot_id = self.fleet_depot_var.get().strip()
+        depot_id = self._normalize_depot_choice(self.fleet_depot_var.get())
         template_id = self.apply_template_id_var.get().strip()
         qty = max(1, self._parse_int(self.apply_template_qty_var.get(), 1))
         if not depot_id or not template_id:
@@ -4936,9 +4950,9 @@ class App:
         btns.pack(fill=tk.X, padx=10, pady=10)
 
         def submit() -> None:
-            depot_id = depot_var.get().strip()
+            depot_id = self._normalize_depot_choice(depot_var.get())
             if not depot_id:
-                messagebox.showwarning("入力不足", "営業所を選択してください")
+                messagebox.showerror("入力エラー", "営業所IDを選択してください")
                 return
             qty = max(1, self._parse_int(qty_var.get(), 1))
             payload = self._normalize_powertrain_payload(
@@ -4972,6 +4986,7 @@ class App:
 
             def done(resp: dict[str, Any]) -> None:
                 refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
+                refresh_depot_id = self._normalize_depot_choice(refresh_depot_id or depot_id)
                 self.log_line(f"車両を追加: {refresh_depot_id or depot_id} x {resp.get('total') or len(vehicle_ids) or qty}")
                 self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
                 win.destroy()
@@ -5092,7 +5107,7 @@ class App:
             )
 
             apply_now = bool(apply_now_var.get())
-            apply_depot = apply_depot_var.get().strip()
+            apply_depot = self._normalize_depot_choice(apply_depot_var.get())
             apply_qty = max(1, self._parse_int(apply_qty_var.get(), 1))
             if apply_now and not apply_depot:
                 messagebox.showwarning("入力不足", "営業所を選択してください")
@@ -5176,7 +5191,7 @@ class App:
         def submit() -> None:
             template_text = template_var.get().strip()
             template_id = template_text.split("|", 1)[0].strip()
-            depot_id = depot_var.get().strip()
+            depot_id = self._normalize_depot_choice(depot_var.get())
             qty = max(1, self._parse_int(qty_var.get(), 1))
             if not template_id or not depot_id:
                 messagebox.showwarning("入力不足", "テンプレートと営業所を選択してください")
@@ -5329,7 +5344,7 @@ class App:
 
     def apply_fleet_count(self) -> None:
         scenario_id = self._selected_scenario_id()
-        depot_id = self.fleet_depot_var.get().strip()
+        depot_id = self._normalize_depot_choice(self.fleet_depot_var.get())
         if not scenario_id or not depot_id:
             messagebox.showwarning("入力不足", "シナリオと営業所IDを入力してください")
             return

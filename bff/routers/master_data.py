@@ -534,7 +534,10 @@ def list_vehicles(
 def create_vehicle(scenario_id: str, body: CreateVehicleBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     payload = apply_ice_reference_defaults(body.model_dump())
-    return store.create_vehicle(scenario_id, payload)
+    try:
+        return store.create_vehicle(scenario_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.post("/scenarios/{scenario_id}/vehicles/bulk", status_code=201)
@@ -544,7 +547,10 @@ def create_vehicle_batch(
     _check_scenario(scenario_id)
     payload = apply_ice_reference_defaults(body.model_dump())
     quantity = payload.pop("quantity", 1)
-    items = store.create_vehicle_batch(scenario_id, payload, quantity)
+    try:
+        items = store.create_vehicle_batch(scenario_id, payload, quantity)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return {"items": items, "total": len(items)}
 
 
@@ -591,6 +597,8 @@ def update_vehicle(
         return store.update_vehicle(scenario_id, vehicle_id, patch)
     except KeyError:
         raise _not_found("Vehicle", vehicle_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.post(
@@ -610,6 +618,8 @@ def duplicate_vehicle(
         )
     except KeyError:
         raise _not_found("Vehicle", vehicle_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.post(
@@ -629,6 +639,8 @@ def duplicate_vehicle_batch(
         return {"items": items, "total": len(items)}
     except KeyError:
         raise _not_found("Vehicle", vehicle_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.delete("/scenarios/{scenario_id}/vehicles/{vehicle_id}", status_code=204)

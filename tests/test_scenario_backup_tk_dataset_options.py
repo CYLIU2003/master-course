@@ -82,6 +82,13 @@ def test_vehicle_refresh_context_extracts_ids_and_depot() -> None:
     assert vehicle_ids == ["veh-a", "veh-b"]
 
 
+def test_normalize_depot_choice_extracts_canonical_id() -> None:
+    assert App._normalize_depot_choice("tsurumaki | 鶴巻営業所") == "tsurumaki"
+    assert App._normalize_depot_choice("dep-1") == "dep-1"
+    assert App._normalize_depot_choice("seta") == "seta"
+    assert App._normalize_depot_choice("  ") == ""
+
+
 def test_refresh_vehicles_focuses_new_row_and_syncs_depot() -> None:
     class DummyVar:
         def __init__(self, value: str = "") -> None:
@@ -163,6 +170,59 @@ def test_refresh_vehicles_focuses_new_row_and_syncs_depot() -> None:
     assert app.vehicle_tree.focused == "veh-2"
     assert app.vehicle_tree.seen == "veh-2"
     assert app.on_vehicle_select_called == 1
+
+
+def test_refresh_vehicles_normalizes_labeled_depot_before_fetch() -> None:
+    class DummyVar:
+        def __init__(self, value: str = "") -> None:
+            self._value = value
+
+        def get(self) -> str:
+            return self._value
+
+        def set(self, value: str) -> None:
+            self._value = value
+
+    class DummyTree:
+        def __init__(self) -> None:
+            self.rows: list[tuple[str, tuple[object, ...]]] = []
+
+        def winfo_exists(self) -> bool:
+            return True
+
+        def selection(self) -> tuple[str, ...]:
+            return ()
+
+        def delete(self, *items: str) -> None:
+            self.rows = [row for row in self.rows if row[0] not in items]
+
+        def get_children(self) -> tuple[str, ...]:
+            return tuple(row[0] for row in self.rows)
+
+        def insert(self, _parent: str, _index: str, *, iid: str, values: tuple[object, ...]) -> None:
+            self.rows.append((iid, values))
+
+    class DummyClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str | None]] = []
+
+        def list_vehicles(self, scenario_id: str, depot_id: str | None = None) -> dict[str, object]:
+            self.calls.append((scenario_id, depot_id))
+            return {"items": [], "total": 0}
+
+    app = App.__new__(App)
+    app._selected_scenario_id = lambda: "scenario-1"
+    app._vehicle_panel_ready = lambda: True
+    app.fleet_depot_var = DummyVar("dep-1 | 営業所A")
+    app.vehicle_tree = DummyTree()
+    app.client = DummyClient()
+    app.log_line = lambda _msg: None
+    app.run_bg = lambda action, done=None: done(action()) if done else action()
+
+    App.refresh_vehicles(app)
+
+    assert app.client.calls == [("scenario-1", "dep-1")]
+    assert app.fleet_depot_var.get() == "dep-1"
 
 
 def test_open_fleet_window_syncs_existing_scope_depots(monkeypatch) -> None:

@@ -2729,6 +2729,8 @@ def _get_item(
 def _create_item(scenario_id: str, field: str, data: Dict[str, Any]) -> Dict[str, Any]:
     doc = _load_shallow(scenario_id)
     item = dict(data)
+    if field == "vehicles":
+        item["depotId"] = _normalize_vehicle_depot_id(doc, item.get("depotId"))
     item["id"] = item.get("id") or _new_id()
     doc[field].append(item)
     invalidate_dispatch = field in {"depots", "vehicles", "routes"}
@@ -2757,9 +2759,19 @@ def _update_item(
     scenario_id: str, field: str, item_id_key: str, item_id: str, patch: Dict[str, Any]
 ) -> Dict[str, Any]:
     doc = _load_shallow(scenario_id)
+    normalized_patch = dict(patch)
+    if (
+        field == "vehicles"
+        and "depotId" in normalized_patch
+        and normalized_patch.get("depotId") is not None
+    ):
+        normalized_patch["depotId"] = _normalize_vehicle_depot_id(
+            doc,
+            normalized_patch.get("depotId"),
+        )
     for item in doc[field]:
         if item.get(item_id_key) == item_id:
-            item.update({k: v for k, v in patch.items() if v is not None})
+            item.update({k: v for k, v in normalized_patch.items() if v is not None})
             invalidate_dispatch = field in {"depots", "vehicles", "routes"}
             if field in {"depots", "vehicles", "routes"}:
                 _invalidate_dispatch_artifacts(doc)
@@ -2897,6 +2909,35 @@ def set_active_scenario(
 # ── Vehicle helpers ────────────────────────────────────────────
 
 
+def _valid_depot_ids(doc: Dict[str, Any]) -> set[str]:
+    return {
+        str(depot.get("id") or "").strip()
+        for depot in doc.get("depots") or []
+        if str(depot.get("id") or "").strip()
+    }
+
+
+def _normalize_vehicle_depot_id(doc: Dict[str, Any], depot_id: Any) -> str:
+    raw = str(depot_id or "").strip()
+    if not raw:
+        raise ValueError("depotId is required")
+
+    valid_ids = _valid_depot_ids(doc)
+    if raw in valid_ids:
+        return raw
+
+    # Accept UI labels like "tsurumaki | 鶴巻営業所" or "tsurumaki - 鶴巻営業所".
+    # Keep canonical IDs that contain hyphens (e.g., "dep-1") intact.
+    parts = re.split(r"\s*(?:\||｜)\s*", raw, maxsplit=1)
+    if len(parts) == 1:
+        parts = re.split(r"\s+(?:-|–|—)\s+", raw, maxsplit=1)
+    head = parts[0].strip()
+    if head in valid_ids:
+        return head
+
+    raise ValueError(f"Unknown depotId '{raw}'")
+
+
 def list_vehicles(
     scenario_id: str, depot_id: Optional[str] = None
 ) -> List[Dict[str, Any]]:
@@ -2939,12 +2980,14 @@ def create_vehicle_batch(
         return [create_vehicle(scenario_id, data)]
 
     doc = _load(scenario_id, skip_graph_arcs=True)
+    normalized_depot_id = _normalize_vehicle_depot_id(doc, data.get("depotId"))
     base_name = (data.get("modelName") or "New vehicle").strip() or "New vehicle"
     created: List[Dict[str, Any]] = []
 
     for idx in range(quantity):
         item = dict(data)
         item["id"] = _new_id()
+        item["depotId"] = normalized_depot_id
         item["modelName"] = f"{base_name} #{idx + 1}"
         doc["vehicles"].append(item)
         created.append(item)
@@ -2985,6 +3028,11 @@ def duplicate_vehicle_batch(
     if source is None:
         raise KeyError(vehicle_id)
     effective_target_depot_id = target_depot_id or source.get("depotId")
+    if effective_target_depot_id:
+        effective_target_depot_id = _normalize_vehicle_depot_id(
+            doc,
+            effective_target_depot_id,
+        )
 
     existing_names = {
         (item.get("modelName") or "").strip()
