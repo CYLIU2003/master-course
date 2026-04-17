@@ -138,6 +138,24 @@ def _normalize_variant_type(value: Any) -> str:
     return normalize_variant_type(value, direction="unknown")
 
 
+def _normalize_vehicle_payload_by_type(payload: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(payload)
+    vehicle_type = str(normalized.get("type") or "BEV").upper()
+    normalized["type"] = vehicle_type
+    if vehicle_type == "BEV":
+        normalized["fuelTankL"] = None
+        normalized["fuelEfficiencyKmPerL"] = None
+        normalized["co2EmissionGPerKm"] = None
+        normalized["engineDisplacementL"] = None
+    else:
+        normalized["batteryKwh"] = None
+        normalized["chargePowerKw"] = None
+        normalized["minSoc"] = None
+        normalized["maxSoc"] = None
+        normalized["initialSoc"] = None
+    return normalized
+
+
 # ── Depot Pydantic models ──────────────────────────────────────
 
 
@@ -399,6 +417,7 @@ class CreateVehicleBody(BaseModel):
     maxTorqueNm: Optional[float] = Field(default=None, ge=0.0)
     maxPowerKw: Optional[float] = Field(default=None, ge=0.0)
     chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
+    initialSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     acquisitionCost: float = Field(default=0.0, ge=0.0)
@@ -442,6 +461,7 @@ class UpdateVehicleBody(BaseModel):
     maxTorqueNm: Optional[float] = Field(default=None, ge=0.0)
     maxPowerKw: Optional[float] = Field(default=None, ge=0.0)
     chargePowerKw: Optional[float] = Field(default=None, ge=0.0)
+    initialSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     minSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     maxSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     acquisitionCost: Optional[float] = Field(default=None, ge=0.0)
@@ -533,7 +553,9 @@ def list_vehicles(
 @router.post("/scenarios/{scenario_id}/vehicles", status_code=201)
 def create_vehicle(scenario_id: str, body: CreateVehicleBody) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    payload = apply_ice_reference_defaults(body.model_dump())
+    payload = _normalize_vehicle_payload_by_type(
+        apply_ice_reference_defaults(body.model_dump())
+    )
     try:
         return store.create_vehicle(scenario_id, payload)
     except ValueError as exc:
@@ -545,7 +567,9 @@ def create_vehicle_batch(
     scenario_id: str, body: CreateVehicleBatchBody
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
-    payload = apply_ice_reference_defaults(body.model_dump())
+    payload = _normalize_vehicle_payload_by_type(
+        apply_ice_reference_defaults(body.model_dump())
+    )
     quantity = payload.pop("quantity", 1)
     try:
         items = store.create_vehicle_batch(scenario_id, payload, quantity)
@@ -569,11 +593,13 @@ def update_vehicle(
 ) -> Dict[str, Any]:
     _check_scenario(scenario_id)
     try:
-        patch = {k: v for k, v in body.model_dump().items() if v is not None}
+        patch = body.model_dump(exclude_unset=True)
         existing = store.get_vehicle(scenario_id, vehicle_id)
         patch_for_defaults = dict(patch)
         patch_for_defaults.setdefault("type", existing.get("type"))
-        normalized = apply_ice_reference_defaults(patch_for_defaults)
+        normalized = _normalize_vehicle_payload_by_type(
+            apply_ice_reference_defaults(patch_for_defaults)
+        )
         if "type" not in patch:
             normalized.pop("type", None)
         derived_fields = {
@@ -589,10 +615,21 @@ def update_vehicle(
             "energyConsumption",
             "capacityPassengers",
         }
+        type_specific_fields = {
+            "fuelTankL",
+            "fuelEfficiencyKmPerL",
+            "co2EmissionGPerKm",
+            "engineDisplacementL",
+            "batteryKwh",
+            "chargePowerKw",
+            "initialSoc",
+            "minSoc",
+            "maxSoc",
+        }
         patch = {
             key: value
             for key, value in normalized.items()
-            if key in patch or key in derived_fields
+            if key in patch or key in derived_fields or key in type_specific_fields
         }
         return store.update_vehicle(scenario_id, vehicle_id, patch)
     except KeyError:

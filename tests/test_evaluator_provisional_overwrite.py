@@ -336,3 +336,185 @@ def test_evaluator_overwrites_ice_provisional_with_refuel_event_cost() -> None:
     assert breakdown.provisional_ice_drive_cost == 800.0
     assert breakdown.realized_ice_refuel_cost == 400.0
     assert breakdown.leftover_ice_provisional_cost == 480.0
+
+
+def test_evaluator_separates_accounting_total_cost_from_return_leg_bonus() -> None:
+    trips = (
+        ProblemTrip(
+            trip_id="trip-1",
+            route_id="route-1",
+            route_family_code="FAM-1",
+            origin="Depot",
+            destination="Terminal",
+            departure_min=480,
+            arrival_min=485,
+            distance_km=0.0,
+            allowed_vehicle_types=("BEV",),
+            energy_kwh=0.0,
+        ),
+        ProblemTrip(
+            trip_id="trip-2",
+            route_id="route-1",
+            route_family_code="FAM-1",
+            origin="Terminal",
+            destination="Depot",
+            departure_min=486,
+            arrival_min=491,
+            distance_km=0.0,
+            allowed_vehicle_types=("BEV",),
+            energy_kwh=0.0,
+        ),
+        ProblemTrip(
+            trip_id="trip-3",
+            route_id="route-1",
+            route_family_code="FAM-1",
+            origin="Depot",
+            destination="Terminal",
+            departure_min=492,
+            arrival_min=497,
+            distance_km=0.0,
+            allowed_vehicle_types=("BEV",),
+            energy_kwh=0.0,
+        ),
+    )
+    dispatch_trips = (
+        Trip(
+            trip_id="trip-1",
+            route_id="route-1",
+            route_family_code="FAM-1",
+            origin="Depot",
+            destination="Terminal",
+            departure_time="08:00",
+            arrival_time="08:05",
+            distance_km=0.0,
+            allowed_vehicle_types=("BEV",),
+        ),
+        Trip(
+            trip_id="trip-2",
+            route_id="route-1",
+            route_family_code="FAM-1",
+            origin="Terminal",
+            destination="Depot",
+            departure_time="08:06",
+            arrival_time="08:11",
+            distance_km=0.0,
+            allowed_vehicle_types=("BEV",),
+        ),
+        Trip(
+            trip_id="trip-3",
+            route_id="route-1",
+            route_family_code="FAM-1",
+            origin="Depot",
+            destination="Terminal",
+            departure_time="08:12",
+            arrival_time="08:17",
+            distance_km=0.0,
+            allowed_vehicle_types=("BEV",),
+        ),
+    )
+    duty = VehicleDuty(
+        duty_id="veh-1",
+        vehicle_type="BEV",
+        legs=tuple(DutyLeg(trip=trip) for trip in dispatch_trips),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="scenario-bonus-1",
+            horizon_start="08:00",
+            timestep_min=60,
+            objective_mode="total_cost",
+        ),
+        dispatch_context=None,
+        trips=trips,
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="veh-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                battery_capacity_kwh=200.0,
+            ),
+        ),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=200.0,
+            ),
+        ),
+        price_slots=(EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),),
+        objective_weights=OptimizationObjectiveWeights(return_leg_bonus=10.0),
+    )
+    plan = AssignmentPlan(duties=(duty,), served_trip_ids=("trip-1", "trip-2", "trip-3"))
+
+    breakdown = CostEvaluator().evaluate(problem, plan)
+
+    assert breakdown.total_cost > 0.0
+    assert breakdown.return_leg_bonus == 10000.0
+    assert breakdown.objective_value < 0.0
+
+
+def test_evaluator_total_cost_matches_objective_when_return_leg_bonus_disabled() -> None:
+    trip = Trip(
+        trip_id="trip-no-bonus-1",
+        route_id="route-1",
+        route_family_code="FAM-1",
+        origin="Depot",
+        destination="Terminal",
+        departure_time="08:00",
+        arrival_time="08:10",
+        distance_km=0.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    duty = VehicleDuty(
+        duty_id="veh-1",
+        vehicle_type="BEV",
+        legs=(DutyLeg(trip=trip),),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="scenario-bonus-2",
+            horizon_start="08:00",
+            timestep_min=60,
+            objective_mode="total_cost",
+        ),
+        dispatch_context=None,
+        trips=(
+            ProblemTrip(
+                trip_id="trip-no-bonus-1",
+                route_id="route-1",
+                route_family_code="FAM-1",
+                origin="Depot",
+                destination="Terminal",
+                departure_min=480,
+                arrival_min=490,
+                distance_km=0.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=0.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="veh-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                battery_capacity_kwh=200.0,
+            ),
+        ),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=200.0,
+            ),
+        ),
+        price_slots=(EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),),
+        objective_weights=OptimizationObjectiveWeights(return_leg_bonus=0.0),
+    )
+    plan = AssignmentPlan(duties=(duty,), served_trip_ids=("trip-no-bonus-1",))
+
+    breakdown = CostEvaluator().evaluate(problem, plan)
+
+    assert breakdown.return_leg_bonus == 0.0
+    assert breakdown.total_cost == breakdown.objective_value

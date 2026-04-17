@@ -957,6 +957,7 @@ def _persist_rich_run_outputs(
         "driver_cost": "JPY",
         "fuel_cost": "JPY",
         "penalty_unserved": "JPY",
+        "return_leg_bonus": "JPY",
         "total_cost": "JPY",
         "co2_cost": "JPY",
         "total_co2_kg": "kg-CO2",
@@ -2248,17 +2249,25 @@ def _canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) 
     return {
         "scenario_id": scenario_id,
         "currency": "JPY",
-        "total_cost": float(breakdown.get("total_cost", engine_result.objective_value) or engine_result.objective_value or 0.0),
+        "total_cost": float(
+            breakdown.get("total_cost")
+            if breakdown.get("total_cost") is not None
+            else engine_result.objective_value
+            or 0.0
+        ),
         "components": {
             "electricity_energy_cost": float(breakdown.get("energy_cost", 0.0) or 0.0),
             "demand_charge_cost": float(breakdown.get("demand_cost", 0.0) or 0.0),
             "diesel_cost": float(breakdown.get("fuel_cost", 0.0) or 0.0),
+            "vehicle_fixed_cost": float(breakdown.get("vehicle_cost", 0.0) or 0.0),
+            "driver_cost": float(breakdown.get("driver_cost", 0.0) or 0.0),
             "co2_cost": float(breakdown.get("co2_cost", 0.0) or 0.0),
             "battery_degradation_cost": float(breakdown.get("degradation_cost", 0.0) or 0.0),
             "charger_operation_cost": 0.0,
             "pv_capex_daily_equivalent": float(breakdown.get("pv_asset_cost", 0.0) or 0.0),
             "ess_cost": float(breakdown.get("bess_asset_cost", 0.0) or 0.0),
             "unserved_trip_penalty": float(breakdown.get("unserved_penalty", 0.0) or 0.0),
+            "return_leg_bonus": float(breakdown.get("return_leg_bonus", 0.0) or 0.0),
         },
         "meta": {
             "objective_mode": str((engine_result.solver_metadata or {}).get("objective_mode") or problem.scenario.objective_mode or "total_cost"),
@@ -2372,7 +2381,12 @@ def _canonical_kpi_summary_json(
         "average_soc_pct": (sum(soc_pct_values) / len(soc_pct_values)) if soc_pct_values else 0.0,
         "charger_utilization_avg": (sum(utilization_values) / len(utilization_values)) if utilization_values else 0.0,
         "charger_utilization_max": max(utilization_values) if utilization_values else 0.0,
-        "total_cost_jpy": float(breakdown.get("total_cost", engine_result.objective_value) or engine_result.objective_value or 0.0),
+        "total_cost_jpy": float(
+            breakdown.get("total_cost")
+            if breakdown.get("total_cost") is not None
+            else engine_result.objective_value
+            or 0.0
+        ),
         "electricity_cost_jpy": float(breakdown.get("energy_cost", 0.0) or 0.0),
         "electricity_cost_basis": "canonical_plan",
         "electricity_cost_provisional_jpy": float(breakdown.get("operating_cost_provisional_total", 0.0) or 0.0),
@@ -2660,6 +2674,11 @@ def _cost_breakdown(
     result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None
 ) -> Dict[str, float]:
     obj_breakdown = dict(result_payload.get("obj_breakdown") or {})
+    total_cost_value = (
+        (sim_payload or {}).get("total_operating_cost")
+        if (sim_payload or {}).get("total_operating_cost") is not None
+        else obj_breakdown.get("total_cost")
+    )
     provisional_energy = float(
         (sim_payload or {}).get("electricity_cost_provisional_jpy", 0.0)
         or 0.0
@@ -2752,13 +2771,15 @@ def _cost_breakdown(
         "total_cost_with_assets": float(obj_breakdown.get("total_cost_with_assets", 0.0) or 0.0),
         "co2_cost": float(obj_breakdown.get("emission_cost", 0.0) or obj_breakdown.get("co2_cost", 0.0) or 0.0),
         "penalty_unserved": float(obj_breakdown.get("unserved_penalty", 0.0) or 0.0),
+        "return_leg_bonus": float(obj_breakdown.get("return_leg_bonus", 0.0) or 0.0),
         "total_co2_kg": float(
             (sim_payload or {}).get("total_co2_kg", obj_breakdown.get("total_co2_kg", 0.0))
             or 0.0
         ),
         "total_cost": float(
-            (sim_payload or {}).get("total_operating_cost", result_payload.get("objective_value", 0.0))
-            or obj_breakdown.get("total_cost", 0.0)
+            total_cost_value
+            if total_cost_value is not None
+            else result_payload.get("objective_value", 0.0)
             or 0.0
         ),
     }

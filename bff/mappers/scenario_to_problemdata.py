@@ -35,6 +35,7 @@ from src.route_family_runtime import (
     normalize_variant_type,
     route_variant_bucket,
 )
+from src.optimization.common.soc_utils import resolve_soc_kwh
 from src.schemas.duty_entities import DutyLeg, VehicleDuty
 from src.route_code_utils import extract_route_series_from_candidates
 from src.value_normalization import coerce_list
@@ -140,22 +141,15 @@ def _normalize_soc_value(
     raw_value: Any,
     battery_kwh: Optional[float],
     default_ratio: Optional[float] = None,
+    *,
+    fallback_full_when_missing: bool = False,
 ) -> Optional[float]:
-    if battery_kwh is None:
-        return None
-    if raw_value is None:
-        return battery_kwh * default_ratio if default_ratio is not None else None
-    value = _safe_float(raw_value, 0.0)
-    
-    # P0: SOC正規化のルール統一 (常に比率として解釈)
-    if value > 1.0:
-        logger.warning(f"SOC value {value} > 1.0. Assuming it is a percentage. Dividing by 100.")
-        value = value / 100.0
-        
-    # 比率が 0~1 に収まるようにクリップ
-    value = max(0.0, min(1.0, value))
-    
-    return battery_kwh * value
+    return resolve_soc_kwh(
+        raw_value,
+        battery_kwh,
+        default_ratio=default_ratio,
+        fallback_full_when_missing=fallback_full_when_missing,
+    )
 
 
 def _scenario_overlay_costs(scenario: Dict[str, Any]) -> Dict[str, Any]:
@@ -876,10 +870,10 @@ def _build_vehicle(
     battery_kwh = _safe_float(vehicle_like.get("batteryKwh"), 0.0) or None
     fuel_cost_coeff = _safe_float(vehicle_like.get("fuelCostPerL"), 145.0)
     co2_emission_coeff = _safe_float(vehicle_like.get("co2EmissionKgPerL"), 2.58)
-    initial_soc_raw = _first_defined(
+    initial_soc_raw = vehicle_like.get("initialSoc")
+    initial_soc_default_raw = _first_defined(
         simulation_cfg.get("initial_soc_percent"),
         simulation_cfg.get("initial_soc"),
-        vehicle_like.get("initialSoc"),
     )
     soc_min_raw = _first_defined(
         simulation_cfg.get("soc_min"),
@@ -899,7 +893,12 @@ def _build_vehicle(
         vehicle_type=vehicle_type,
         home_depot=str(vehicle_like.get("depotId") or ""),
         battery_capacity=battery_kwh,
-        soc_init=_normalize_soc_value(initial_soc_raw, battery_kwh, 0.8),
+        soc_init=_normalize_soc_value(
+            initial_soc_raw,
+            battery_kwh,
+            initial_soc_default_raw,
+            fallback_full_when_missing=True,
+        ),
         soc_min=_normalize_soc_value(soc_min_raw, battery_kwh, 0.15),
         soc_max=_normalize_soc_value(soc_max_raw, battery_kwh, 0.9),
         soc_target_end=_normalize_soc_value(soc_target_end_raw, battery_kwh, 0.6),

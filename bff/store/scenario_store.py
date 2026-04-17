@@ -350,20 +350,33 @@ def _legacy_stop_timetables_path(scenario_id: str) -> Path:
 
 def _refs_for_scenario(scenario_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     refs = scenario_meta_store.default_refs(_STORE_DIR, scenario_id)
+
+    def _normalize_ref_value(raw_value: Any) -> Optional[str]:
+        text = str(raw_value or "").strip()
+        if not text:
+            return None
+
+        candidate = Path(text)
+        if not candidate.is_absolute():
+            # Legacy docs can store refs like "scenarios/<id>/master_data.sqlite".
+            # Resolve them against outputs root so load/save consistently target _STORE_DIR.
+            candidate = (output_paths.outputs_root() / candidate).resolve(strict=False)
+
+        try:
+            if candidate.parent.name != scenario_id:
+                return None
+        except Exception:
+            return None
+        return str(candidate)
+
     if isinstance(payload, dict):
         candidate_refs = payload.get("refs") or {}
         safe_refs: Dict[str, str] = {}
         for key, value in candidate_refs.items():
-            if not value:
+            normalized = _normalize_ref_value(value)
+            if normalized is None:
                 continue
-            text = str(value)
-            # Prevent stale refs from other scenarios (e.g., duplicated docs carrying old refs).
-            try:
-                if Path(text).parent.name != scenario_id:
-                    continue
-            except Exception:
-                continue
-            safe_refs[str(key)] = text
+            safe_refs[str(key)] = normalized
         refs.update(safe_refs)
     return refs
 
@@ -2803,7 +2816,10 @@ def _update_item(
             )
         for item in doc[field]:
             if item.get(item_id_key) == item_id:
-                item.update({k: v for k, v in normalized_patch.items() if v is not None})
+                if field == "vehicles":
+                    item.update(normalized_patch)
+                else:
+                    item.update({k: v for k, v in normalized_patch.items() if v is not None})
                 invalidate_dispatch = field in {"depots", "vehicles", "routes"}
                 if field in {"depots", "vehicles", "routes"}:
                     _invalidate_dispatch_artifacts(doc)

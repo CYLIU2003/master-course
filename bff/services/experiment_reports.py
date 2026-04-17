@@ -295,8 +295,13 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
         "electricity_cost_final_jpy": electricity_cost_final,
         "electricity_cost_provisional_leftover_jpy": electricity_cost_leftover,
         "diesel_cost_jpy": cost_breakdown.get("fuel_cost"),
-        "demand_charge_jpy": cost_breakdown.get("peak_demand_cost"),
+        "demand_charge_jpy": (
+            cost_breakdown.get("demand_charge")
+            if cost_breakdown.get("demand_charge") is not None
+            else cost_breakdown.get("demand_cost")
+        ),
         "vehicle_fixed_cost_jpy": cost_breakdown.get("vehicle_cost"),
+        "return_leg_bonus_jpy": cost_breakdown.get("return_leg_bonus"),
         "grid_to_bus_kwh": cost_breakdown.get("grid_to_bus_kwh"),
         "bess_to_bus_kwh": cost_breakdown.get("bess_to_bus_kwh"),
         "pv_to_bess_kwh": cost_breakdown.get("pv_to_bess_kwh"),

@@ -266,6 +266,7 @@ class GAOptimizer:
                     "deviation_cost": float(problem.objective_weights.deviation),
                     "degradation": float(problem.objective_weights.degradation),
                     "utilization": float(problem.objective_weights.utilization),
+                    "return_leg_bonus": float(problem.objective_weights.return_leg_bonus),
                 },
                 "termination_reason": stop_reason,
             },

@@ -204,23 +204,27 @@ class ResultSerializer:
             "energy_cost": float(cost_breakdown.get("energy_cost", 0.0) or 0.0),
             "demand_cost": float(cost_breakdown.get("demand_cost", 0.0) or 0.0),
             "vehicle_cost": float(cost_breakdown.get("vehicle_cost", 0.0) or 0.0),
+            "driver_cost": float(cost_breakdown.get("driver_cost", 0.0) or 0.0),
             "unserved_penalty": float(cost_breakdown.get("unserved_penalty", 0.0) or 0.0),
             "switch_cost": float(cost_breakdown.get("switch_cost", 0.0) or 0.0),
             "deviation_cost": float(cost_breakdown.get("deviation_cost", 0.0) or 0.0),
             "degradation_cost": float(cost_breakdown.get("degradation_cost", 0.0) or 0.0),
             "co2_cost": float(cost_breakdown.get("co2_cost", 0.0) or 0.0),
             "contract_overage_cost": float(cost_breakdown.get("contract_overage_cost", 0.0) or 0.0),
+            "return_leg_bonus": float(cost_breakdown.get("return_leg_bonus", 0.0) or 0.0),
         }
         weighted_components = {
             "energy_cost": raw_components["energy_cost"] * float(objective_weights.get("electricity_cost", 1.0) or 1.0),
             "demand_cost": raw_components["demand_cost"] * float(objective_weights.get("demand_charge_cost", 1.0) or 1.0),
             "vehicle_cost": raw_components["vehicle_cost"] * float(objective_weights.get("vehicle_fixed_cost", 1.0) or 1.0),
+            "driver_cost": raw_components["driver_cost"],
             "unserved_penalty": raw_components["unserved_penalty"] * float(objective_weights.get("unserved_penalty", 1.0) or 1.0),
             "switch_cost": raw_components["switch_cost"] * float(objective_weights.get("switch_cost", 1.0) or 1.0),
             "deviation_cost": raw_components["deviation_cost"] * float(objective_weights.get("deviation_cost", 1.0) or 1.0),
             "degradation_cost": raw_components["degradation_cost"] * float(objective_weights.get("degradation", 1.0) or 1.0),
             "co2_cost": raw_components["co2_cost"] * float(objective_weights.get("emission_cost", 1.0) or 1.0),
             "contract_overage_cost": raw_components["contract_overage_cost"],
+            "return_leg_bonus": raw_components["return_leg_bonus"] * float(objective_weights.get("return_leg_bonus", 1.0) or 1.0),
         }
         fleet_size = len(result.plan.vehicle_paths())
         used_vehicle_count = sum(1 for trip_ids in result.plan.vehicle_paths().values() if trip_ids)

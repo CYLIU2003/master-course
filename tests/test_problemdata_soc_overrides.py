@@ -4,8 +4,13 @@ from bff.mappers.scenario_to_problemdata import build_problem_data_from_scenario
 from src.optimization.common.builder import ProblemBuilder
 
 
-def _scenario() -> dict:
-    return {
+def _scenario(
+    *,
+    vehicle_initial_soc: float | None = 0.9,
+    initial_soc_percent: float | None = 50.0,
+    initial_soc: float | None = 0.7,
+) -> dict:
+    scenario = {
         "meta": {
             "id": "scenario-soc-overrides",
             "updatedAt": "2026-03-27T00:00:00+09:00",
@@ -15,7 +20,8 @@ def _scenario() -> dict:
             "time_step_min": 15,
             "planning_horizon_hours": 20,
             "default_turnaround_min": 5,
-            "initial_soc_percent": 50.0,
+            "initial_soc_percent": initial_soc_percent,
+            "initial_soc": initial_soc,
             "final_soc_floor_percent": 20.0,
             "final_soc_target_percent": 35.0,
             "objective_mode": "total_cost",
@@ -55,7 +61,6 @@ def _scenario() -> dict:
                 "batteryKwh": 300.0,
                 "energyConsumption": 1.2,
                 "chargePowerKw": 90.0,
-                "initialSoc": 0.9,
                 "minSoc": 0.1,
                 "maxSoc": 0.9,
                 "targetEndSoc": 0.6,
@@ -94,9 +99,14 @@ def _scenario() -> dict:
         "route_depot_assignments": [{"routeId": "route-1", "depotId": "dep1"}],
         "depot_route_permissions": [{"depotId": "dep1", "routeId": "route-1", "allowed": True}],
     }
+    if vehicle_initial_soc is None:
+        scenario["vehicles"][0].pop("initialSoc", None)
+    else:
+        scenario["vehicles"][0]["initialSoc"] = vehicle_initial_soc
+    return scenario
 
 
-def test_problemdata_vehicle_soc_targets_follow_simulation_overrides() -> None:
+def test_problemdata_vehicle_explicit_initial_soc_wins_over_global_defaults() -> None:
     data, _report = build_problem_data_from_scenario(
         _scenario(),
         depot_id="dep1",
@@ -106,9 +116,35 @@ def test_problemdata_vehicle_soc_targets_follow_simulation_overrides() -> None:
 
     vehicle = next(item for item in data.vehicles if item.vehicle_id == "bev-1")
 
-    assert abs(float(vehicle.soc_init or 0.0) - 150.0) < 1.0e-9
+    assert abs(float(vehicle.soc_init or 0.0) - 270.0) < 1.0e-9
     assert abs(float(vehicle.soc_min or 0.0) - 60.0) < 1.0e-9
     assert abs(float(vehicle.soc_target_end or 0.0) - 105.0) < 1.0e-9
+
+
+def test_problemdata_vehicle_uses_initial_soc_percent_when_explicit_value_is_missing() -> None:
+    data, _report = build_problem_data_from_scenario(
+        _scenario(vehicle_initial_soc=None),
+        depot_id="dep1",
+        service_id="WEEKDAY",
+        mode="mode_ga_only",
+    )
+
+    vehicle = next(item for item in data.vehicles if item.vehicle_id == "bev-1")
+
+    assert abs(float(vehicle.soc_init or 0.0) - 150.0) < 1.0e-9
+
+
+def test_problemdata_vehicle_uses_initial_soc_when_percent_is_missing() -> None:
+    data, _report = build_problem_data_from_scenario(
+        _scenario(vehicle_initial_soc=None, initial_soc_percent=None, initial_soc=0.7),
+        depot_id="dep1",
+        service_id="WEEKDAY",
+        mode="mode_ga_only",
+    )
+
+    vehicle = next(item for item in data.vehicles if item.vehicle_id == "bev-1")
+
+    assert abs(float(vehicle.soc_init or 0.0) - 210.0) < 1.0e-9
 
 
 def test_canonical_problem_builder_uses_saved_soc_overrides_for_vehicle_state() -> None:
@@ -120,6 +156,6 @@ def test_canonical_problem_builder_uses_saved_soc_overrides_for_vehicle_state() 
 
     vehicle = next(item for item in problem.vehicles if item.vehicle_id == "bev-1")
 
-    assert abs(float(vehicle.initial_soc or 0.0) - 150.0) < 1.0e-9
+    assert abs(float(vehicle.initial_soc or 0.0) - 270.0) < 1.0e-9
     assert abs(float(vehicle.reserve_soc or 0.0) - 60.0) < 1.0e-9
     assert problem.metadata.get("final_soc_target_percent") == 35.0

@@ -25,6 +25,7 @@ from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
 )
+from .soc_utils import normalize_soc_ratio_like, resolve_soc_kwh
 from src.preprocess.tariff_loader import build_electricity_prices_from_tariff, load_tariff_csv
 from src.objective_modes import (
     canonical_objective_weights_for_mode,
@@ -193,10 +194,12 @@ class ProblemBuilder:
         allow_partial_service = service_coverage_allows_partial_service(
             service_coverage_mode
         )
-        initial_soc_percent = self._safe_float(
-            simulation_cfg.get("initial_soc_percent")
-            or charging_cfg.get("initial_soc_percent")
-        )
+        initial_soc_percent = self._safe_float(simulation_cfg.get("initial_soc_percent"))
+        if initial_soc_percent is None:
+            initial_soc_percent = self._safe_float(charging_cfg.get("initial_soc_percent"))
+        initial_soc = self._safe_float(simulation_cfg.get("initial_soc"))
+        if initial_soc is None:
+            initial_soc = self._safe_float(charging_cfg.get("initial_soc"))
         final_soc_floor_percent = self._safe_float(
             simulation_cfg.get("final_soc_floor_percent")
             or charging_cfg.get("final_soc_floor_percent")
@@ -404,6 +407,7 @@ class ProblemBuilder:
         allow_partial_service: bool = False,
         service_coverage_mode: Optional[str] = None,
         initial_soc_percent: Optional[float] = None,
+        initial_soc: Optional[float] = None,
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
         final_soc_target_tolerance_percent: Optional[float] = None,
@@ -535,6 +539,7 @@ class ProblemBuilder:
                 default_home_depot_id=canonical_depot_id,
                 disable_vehicle_acquisition_cost=disable_vehicle_acquisition_cost,
                 initial_soc_percent=initial_soc_percent,
+                initial_soc=initial_soc,
                 final_soc_floor_percent=final_soc_floor_percent,
                 initial_ice_fuel_percent=initial_ice_fuel_percent,
                 min_ice_fuel_percent=min_ice_fuel_percent,
@@ -738,6 +743,7 @@ class ProblemBuilder:
                 ),
                 "allow_partial_service": bool(allow_partial_service),
                 "initial_soc_percent": initial_soc_percent,
+                "initial_soc": initial_soc,
                 "final_soc_floor_percent": final_soc_floor_percent,
                 "final_soc_target_percent": final_soc_target_percent,
                 "final_soc_target_tolerance_percent": final_soc_target_tolerance_percent,
@@ -1487,16 +1493,29 @@ class ProblemBuilder:
                 continue
             _register(stop_id, stop_id)
             if stop_name:
+                _register(stop_id, stop_name)
                 _register(stop_name, stop_id)
-                stop_ids_by_name.setdefault(stop_name, set()).add(stop_id)
+                stop_ids_by_name.setdefault(stop_name.casefold(), set()).add(stop_id)
 
         for trip in trips:
             _register(trip.origin, trip.origin_stop_id or trip.origin)
             _register(trip.destination, trip.destination_stop_id or trip.destination)
             if trip.origin_stop_id:
                 _register(trip.origin_stop_id, trip.origin_stop_id)
+                _register(trip.origin_stop_id, trip.origin)
             if trip.destination_stop_id:
                 _register(trip.destination_stop_id, trip.destination_stop_id)
+                _register(trip.destination_stop_id, trip.destination)
+
+        for sibling_ids in stop_ids_by_name.values():
+            if len(sibling_ids) < 2:
+                continue
+            ordered_ids = sorted(str(item).strip() for item in sibling_ids if str(item).strip())
+            for from_stop_id in ordered_ids:
+                for to_stop_id in ordered_ids:
+                    if from_stop_id == to_stop_id:
+                        continue
+                    _register(from_stop_id, to_stop_id)
 
         for depot in scenario.get("depots") or []:
             if not isinstance(depot, dict):
@@ -1507,11 +1526,11 @@ class ProblemBuilder:
                 _register(depot_id, depot_id)
                 if depot_name:
                     _register(depot_id, depot_name)
-                    for stop_id in stop_ids_by_name.get(depot_name, set()):
+                    for stop_id in stop_ids_by_name.get(depot_name.casefold(), set()):
                         _register(depot_id, stop_id)
             if depot_name:
                 _register(depot_name, depot_name)
-                for stop_id in stop_ids_by_name.get(depot_name, set()):
+                for stop_id in stop_ids_by_name.get(depot_name.casefold(), set()):
                     _register(depot_name, stop_id)
 
         return {
@@ -1557,12 +1576,15 @@ class ProblemBuilder:
         default_home_depot_id: str,
         disable_vehicle_acquisition_cost: bool,
         initial_soc_percent: Optional[float] = None,
+        initial_soc: Optional[float] = None,
         final_soc_floor_percent: Optional[float] = None,
         initial_ice_fuel_percent: Optional[float] = None,
         min_ice_fuel_percent: Optional[float] = None,
         max_ice_fuel_percent: Optional[float] = None,
     ) -> Iterable[ProblemVehicle]:
-        initial_soc_ratio_override = self._normalize_percent_like_to_ratio(initial_soc_percent)
+        initial_soc_ratio_override = normalize_soc_ratio_like(
+            initial_soc_percent if initial_soc_percent is not None else initial_soc
+        )
         reserve_soc_ratio_override = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
         initial_fuel_ratio_override = self._normalize_percent_like_to_ratio(initial_ice_fuel_percent)
         min_fuel_ratio_override = self._normalize_percent_like_to_ratio(min_ice_fuel_percent)
@@ -1577,11 +1599,12 @@ class ProblemBuilder:
             battery_capacity_kwh = self._safe_float(vehicle.get("batteryKwh"))
             if battery_capacity_kwh is None and profile is not None:
                 battery_capacity_kwh = profile.battery_capacity_kwh
-            initial_soc = self._safe_float(vehicle.get("initialSoc"))
-            if initial_soc_ratio_override is not None and battery_capacity_kwh is not None:
-                initial_soc = initial_soc_ratio_override * battery_capacity_kwh
-            if initial_soc is None:
-                initial_soc = battery_capacity_kwh
+            initial_soc_kwh = resolve_soc_kwh(
+                vehicle.get("initialSoc"),
+                battery_capacity_kwh,
+                initial_soc_ratio_override,
+                fallback_full_when_missing=True,
+            )
             reserve_soc = self._safe_float(vehicle.get("reserveSoc"))
             if reserve_soc_ratio_override is not None and battery_capacity_kwh is not None:
                 reserve_soc = reserve_soc_ratio_override * battery_capacity_kwh
@@ -1646,7 +1669,7 @@ class ProblemBuilder:
                 vehicle_id=vehicle_id,
                 vehicle_type=vehicle_type,
                 home_depot_id=home_depot_id,
-                initial_soc=initial_soc,
+                initial_soc=initial_soc_kwh,
                 battery_capacity_kwh=battery_capacity_kwh,
                 reserve_soc=reserve_soc,
                 available=bool(raw_available),

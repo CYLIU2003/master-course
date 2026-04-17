@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta
 import csv
 import json
 import os
+import random
 import re
 import threading
 import tkinter as tk
@@ -58,9 +59,11 @@ _WEATHER_MODE_OPTIONS = (
 _RESULT_METRIC_LABELS = {
     "status": "状態",
     "mode": "実行モード",
-    "objective": "目的値",
+    "objective": "目的関数値",
+    "solution_validity_badge": "解の妥当性",
     "total_cost": "総コスト",
     "total_cost_with_assets": "総コスト(資産込み)",
+    "return_leg_bonus": "復路ボーナス",
     "served_trips": "担当便数",
     "unserved_trips": "未担当便数",
     "vehicle_count_used": "使用車両数",
@@ -80,6 +83,7 @@ _RESULT_METRIC_LABELS = {
 _PRIMARY_COST_BREAKDOWN_KEYS = (
     "total_cost",
     "total_cost_with_assets",
+    "return_leg_bonus",
     "energy_cost",
     "electricity_cost_final",
     "vehicle_cost",
@@ -92,9 +96,11 @@ _PRIMARY_COST_BREAKDOWN_KEYS = (
 )
 _RESULT_COMPARE_KEYS = (
     "status",
+    "solution_validity_badge",
     "mode",
     "total_cost",
     "objective",
+    "return_leg_bonus",
     "served_trips",
     "unserved_trips",
     "vehicle_count_used",
@@ -153,6 +159,7 @@ def _ordered_cost_breakdown_items(costs: Any) -> list[dict[str, Any]]:
     seen: set[str] = set()
     ordered_keys = [*list(_PRIMARY_COST_BREAKDOWN_KEYS), *[str(key) for key in costs.keys()]]
     total_keys = {"total_cost", "total_cost_with_assets"}
+    non_share_keys = {"return_leg_bonus"}
     for order, key in enumerate(ordered_keys):
         if key in seen:
             continue
@@ -168,6 +175,7 @@ def _ordered_cost_breakdown_items(costs: Any) -> list[dict[str, Any]]:
             and total_cost is not None
             and abs(total_cost) > 1e-9
             and key not in total_keys
+            and key not in non_share_keys
         ):
             share = numeric / total_cost
         items.append(
@@ -2032,6 +2040,7 @@ class App:
         ttk.Label(top, text="BEV目標台数").pack(side=tk.LEFT, padx=(12, 2))
         ttk.Entry(top, textvariable=self.target_bev_count_var, width=6).pack(side=tk.LEFT)
         ttk.Button(top, text="BEV台数を反映", command=self.apply_fleet_count).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top, text="初期SOC一括設定...", command=self.open_vehicle_initial_soc_batch_window).pack(side=tk.LEFT, padx=4)
 
         tree_wrap = ttk.Frame(tab)
         tree_wrap.pack(fill=tk.BOTH, expand=True, pady=6)
@@ -2044,6 +2053,7 @@ class App:
             "acquisitionCost",
             "energyConsumption",
             "chargePowerKw",
+            "initialSoc",
             "enabled",
         )
         self.vehicle_tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=12)
@@ -2055,6 +2065,7 @@ class App:
             "acquisitionCost": "導入費(円)",
             "energyConsumption": "電費/燃費係数",
             "chargePowerKw": "充電出力(kW)",
+            "initialSoc": "初期SOC",
             "enabled": "有効",
         }
         for c in cols:
@@ -2114,6 +2125,7 @@ class App:
         self.v_max_torque_var = tk.StringVar(value="")
         self.v_max_power_var = tk.StringVar(value="")
         self.v_charge_kw_var = tk.StringVar(value="90")
+        self.v_initial_soc_var = tk.StringVar(value="")
         self.v_min_soc_var = tk.StringVar(value="")
         self.v_max_soc_var = tk.StringVar(value="")
         self.v_acq_cost_var = tk.StringVar(value="0")
@@ -2138,6 +2150,7 @@ class App:
 
         self.vehicle_ev_box = ttk.LabelFrame(form, text="EV専用パラメータ", padding=4)
         self.vehicle_ev_box.pack(fill=tk.X, pady=(4, 2))
+        self._labeled_entry(self.vehicle_ev_box, "初期SOC(0-1)", self.v_initial_soc_var)
         self._labeled_entry(self.vehicle_ev_box, "電池容量(kWh)", self.v_battery_var)
         self._labeled_entry(self.vehicle_ev_box, "充電出力(kW)", self.v_charge_kw_var)
         self._labeled_entry(self.vehicle_ev_box, "最小SOC(0-1)", self.v_min_soc_var)
@@ -2892,9 +2905,13 @@ class App:
         else:
             payload["batteryKwh"] = None
             payload["chargePowerKw"] = None
+            payload["initialSoc"] = None
             payload["minSoc"] = None
             payload["maxSoc"] = None
         return payload
+
+    def _mark_vehicle_change_stale(self) -> None:
+        self._mark_prepared_stale("車両データを変更したため再Prepareが必要です", announce=True)
 
     def _update_vehicle_form_visibility(self, _event=None) -> None:
         vtype = self.v_type_var.get().strip().upper() or "BEV"
@@ -2932,6 +2949,7 @@ class App:
             "maxTorqueNm": self._parse_optional_float(self.v_max_torque_var.get()),
             "maxPowerKw": self._parse_optional_float(self.v_max_power_var.get()),
             "chargePowerKw": self._parse_optional_float(self.v_charge_kw_var.get()),
+            "initialSoc": self._parse_optional_float(self.v_initial_soc_var.get()),
             "minSoc": self._parse_optional_float(self.v_min_soc_var.get()),
             "maxSoc": self._parse_optional_float(self.v_max_soc_var.get()),
             "acquisitionCost": self._parse_float(self.v_acq_cost_var.get(), 0.0),
@@ -4050,8 +4068,25 @@ class App:
         run_summary = dict(resp.get("summary") or {})
         costs = dict(resp.get("cost_breakdown") or {})
         simulation_summary = dict(resp.get("simulation_summary") or {})
+        solution_validity = dict(
+            resp.get("solution_validity")
+            or (resp.get("summary") or {}).get("solution_validity")
+            or {}
+        )
+        validity_badge = None
+        if solution_validity:
+            if bool(solution_validity.get("validated_feasible")):
+                validity_badge = "検証済み"
+            else:
+                status_reason = str(solution_validity.get("status_reason") or "").strip()
+                validity_badge = (
+                    f"暫定/無効 ({status_reason})"
+                    if status_reason
+                    else "暫定/無効"
+                )
         summary = {
             "status": self._pick_text(resp.get("status"), solver_result.get("status"), "unknown"),
+            "solution_validity_badge": validity_badge,
             "mode": self._pick_text(resp.get("mode"), resp.get("solver_mode"), solver_result.get("mode")),
             "total_cost": self._pick_number(
                 costs.get("total_cost"),
@@ -4096,6 +4131,7 @@ class App:
             ),
             "driver_cost": self._pick_number(costs.get("driver_cost")),
             "penalty_unserved": self._pick_number(costs.get("penalty_unserved")),
+            "return_leg_bonus": self._pick_number(costs.get("return_leg_bonus")),
             "electricity_cost_provisional_leftover": self._pick_number(
                 costs.get("electricity_cost_provisional_leftover"),
                 simulation_summary.get("electricity_cost_provisional_leftover_jpy"),
@@ -4183,6 +4219,7 @@ class App:
         summary_tree.column("item", width=320, anchor="w")
         summary_tree.column("value", width=580, anchor="w")
         summary_tree.tag_configure("nonzero", background="#fff4cf")
+        summary_tree.tag_configure("invalid", background="#ffd9d9")
         summary_tree.pack(fill=tk.BOTH, expand=True)
 
         for key, value in summary.items():
@@ -4190,8 +4227,10 @@ class App:
                 continue
             tags = ()
             numeric = _result_numeric(value)
-            if key in {"total_cost", "energy_cost", "vehicle_cost", "driver_cost", "penalty_unserved"} and numeric is not None and abs(numeric) > 1e-9:
+            if key in {"total_cost", "energy_cost", "vehicle_cost", "driver_cost", "penalty_unserved", "return_leg_bonus"} and numeric is not None and abs(numeric) > 1e-9:
                 tags = ("nonzero",)
+            if key == "solution_validity_badge" and str(value).startswith("暫定/無効"):
+                tags = ("invalid",)
             summary_tree.insert(
                 "",
                 tk.END,
@@ -4738,6 +4777,7 @@ class App:
                             row.get("acquisitionCost"),
                             row.get("energyConsumption"),
                             row.get("chargePowerKw"),
+                            row.get("initialSoc"),
                             row.get("enabled"),
                         ),
                     )
@@ -4780,6 +4820,7 @@ class App:
             self.v_max_torque_var.set("" if v.get("maxTorqueNm") is None else str(v.get("maxTorqueNm")))
             self.v_max_power_var.set("" if v.get("maxPowerKw") is None else str(v.get("maxPowerKw")))
             self.v_charge_kw_var.set("" if v.get("chargePowerKw") is None else str(v.get("chargePowerKw")))
+            self.v_initial_soc_var.set("" if v.get("initialSoc") is None else str(v.get("initialSoc")))
             self.v_min_soc_var.set("" if v.get("minSoc") is None else str(v.get("minSoc")))
             self.v_max_soc_var.set("" if v.get("maxSoc") is None else str(v.get("maxSoc")))
             self.v_acq_cost_var.set(str(v.get("acquisitionCost") or 0.0))
@@ -4805,6 +4846,7 @@ class App:
             try:
                 refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, payload.get("depotId") or "")
                 self.log_line("車両を新規作成しました")
+                self._mark_vehicle_change_stale()
                 self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
             finally:
                 self._end_vehicle_add_guard()
@@ -4833,6 +4875,7 @@ class App:
                 payload.get("depotId") or self.v_depot_var.get().strip(),
             )
             self.log_line(f"車両を更新しました: {vehicle_id}")
+            self._mark_vehicle_change_stale()
             self.refresh_vehicles(
                 refresh_depot_id or None,
                 vehicle_ids[0] if vehicle_ids else vehicle_id,
@@ -4853,7 +4896,14 @@ class App:
             self.client.delete_vehicle(scenario_id, vehicle_id)
             return {}
 
-        self.run_bg(action, lambda _resp: (self.log_line(f"車両削除: {vehicle_id}"), self.refresh_vehicles()))
+        self.run_bg(
+            action,
+            lambda _resp: (
+                self.log_line(f"車両削除: {vehicle_id}"),
+                self._mark_vehicle_change_stale(),
+                self.refresh_vehicles(),
+            ),
+        )
 
     def duplicate_selected_vehicle(self) -> None:
         scenario_id = self._selected_scenario_id()
@@ -4871,6 +4921,7 @@ class App:
                     target_depot_id or self.v_depot_var.get().strip(),
                 )
                 self.log_line(f"車両複製: {vehicle_id}")
+                self._mark_vehicle_change_stale()
                 self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
 
             self.run_bg(
@@ -4885,6 +4936,7 @@ class App:
                 target_depot_id or self.v_depot_var.get().strip(),
             )
             self.log_line(f"車両一括複製: {vehicle_id} x {resp.get('total') or quantity}")
+            self._mark_vehicle_change_stale()
             self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
 
         self.run_bg(
@@ -4926,6 +4978,7 @@ class App:
             "maxTorqueNm": template.get("maxTorqueNm"),
             "maxPowerKw": template.get("maxPowerKw"),
             "chargePowerKw": template.get("chargePowerKw"),
+            "initialSoc": self._parse_optional_float(self.initial_soc_var.get()),
             "minSoc": template.get("minSoc"),
             "maxSoc": template.get("maxSoc"),
             "acquisitionCost": float(template.get("acquisitionCost") or 0.0),
@@ -4939,6 +4992,7 @@ class App:
             try:
                 refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
                 self.log_line(f"テンプレート導入: {template_id} -> {depot_id} x {resp.get('total') or qty}")
+                self._mark_vehicle_change_stale()
                 self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
             finally:
                 self._end_vehicle_add_guard()
@@ -4981,6 +5035,7 @@ class App:
         enabled_var = tk.BooleanVar(value=True)
         battery_var = tk.StringVar(value="300")
         charge_var = tk.StringVar(value="90")
+        initial_soc_var = tk.StringVar(value="")
         min_soc_var = tk.StringVar(value="")
         max_soc_var = tk.StringVar(value="")
         fuel_tank_var = tk.StringVar(value="")
@@ -5010,6 +5065,7 @@ class App:
 
         ev_box = ttk.LabelFrame(win, text="EV専用", padding=8)
         ev_box.pack(fill=tk.X, padx=10, pady=4)
+        self._labeled_entry(ev_box, "初期SOC(0-1)", initial_soc_var)
         self._labeled_entry(ev_box, "電池容量(kWh)", battery_var)
         self._labeled_entry(ev_box, "充電出力(kW)", charge_var)
         self._labeled_entry(ev_box, "最小SOC(0-1)", min_soc_var)
@@ -5056,6 +5112,7 @@ class App:
                     "co2EmissionGPerKm": self._parse_optional_float(co2_var.get()),
                     "engineDisplacementL": self._parse_optional_float(engine_var.get()),
                     "chargePowerKw": self._parse_optional_float(charge_var.get()),
+                    "initialSoc": self._parse_optional_float(initial_soc_var.get()),
                     "minSoc": self._parse_optional_float(min_soc_var.get()),
                     "maxSoc": self._parse_optional_float(max_soc_var.get()),
                     "acquisitionCost": self._parse_float(acq_var.get(), 0.0),
@@ -5082,6 +5139,7 @@ class App:
                     refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
                     refresh_depot_id = self._normalize_depot_choice(refresh_depot_id or depot_id)
                     self.log_line(f"車両を追加: {refresh_depot_id or depot_id} x {resp.get('total') or len(vehicle_ids) or qty}")
+                    self._mark_vehicle_change_stale()
                     self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
                     win.destroy()
                 finally:
@@ -5090,6 +5148,129 @@ class App:
             self.run_bg(action, done)
 
         ttk.Button(btns, text="追加", command=submit).pack(side=tk.RIGHT)
+        ttk.Button(btns, text="キャンセル", command=win.destroy).pack(side=tk.RIGHT, padx=6)
+
+    def open_vehicle_initial_soc_batch_window(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        depot_id = self._normalize_depot_choice(self.fleet_depot_var.get())
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+        if not depot_id:
+            messagebox.showwarning("入力不足", "営業所IDを選択してください")
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("初期SOC一括設定")
+        win.geometry("420x280")
+
+        mode_var = tk.StringVar(value="固定値")
+        fixed_soc_var = tk.StringVar(value=self.initial_soc_var.get().strip() or "0.8")
+        random_min_var = tk.StringVar(value="0.5")
+        random_max_var = tk.StringVar(value="0.9")
+
+        form = ttk.LabelFrame(win, text=f"営業所 {depot_id} の BEV 車両", padding=10)
+        form.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        depot_row = ttk.Frame(form)
+        depot_row.pack(fill=tk.X, pady=2)
+        ttk.Label(depot_row, text="営業所", width=18).pack(side=tk.LEFT)
+        ttk.Label(depot_row, text=depot_id).pack(side=tk.LEFT)
+
+        mode_row = ttk.Frame(form)
+        mode_row.pack(fill=tk.X, pady=2)
+        ttk.Label(mode_row, text="設定方法", width=18).pack(side=tk.LEFT)
+        mode_combo = ttk.Combobox(mode_row, textvariable=mode_var, state="readonly", values=["固定値", "ランダム"])
+        mode_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        fixed_box = ttk.Frame(form)
+        fixed_box.pack(fill=tk.X, pady=2)
+        self._labeled_entry(fixed_box, "固定値(0-1)", fixed_soc_var)
+
+        random_box = ttk.LabelFrame(form, text="ランダム範囲", padding=4)
+        random_box.pack(fill=tk.X, pady=2)
+        self._labeled_entry(random_box, "下限(0-1)", random_min_var)
+        self._labeled_entry(random_box, "上限(0-1)", random_max_var)
+
+        info = ttk.Label(
+            form,
+            text="BEV 車両だけを対象に initialSoc を更新します。ICE 車両は変更しません。",
+            foreground="#555",
+            wraplength=360,
+            justify=tk.LEFT,
+        )
+        info.pack(fill=tk.X, pady=(4, 2))
+
+        def refresh_mode(_event=None) -> None:
+            mode = mode_var.get().strip()
+            if mode == "ランダム":
+                random_box.pack(fill=tk.X, pady=2)
+            else:
+                random_box.pack_forget()
+
+        mode_combo.bind("<<ComboboxSelected>>", refresh_mode)
+        refresh_mode()
+
+        btns = ttk.Frame(form)
+        btns.pack(fill=tk.X, pady=(8, 0))
+
+        def submit() -> None:
+            mode = mode_var.get().strip() or "固定値"
+            fixed_soc = self._parse_optional_float(fixed_soc_var.get())
+            if mode != "ランダム":
+                if fixed_soc is None or fixed_soc < 0.0 or fixed_soc > 1.0:
+                    messagebox.showwarning("入力エラー", "固定値は 0〜1 の範囲で入力してください")
+                    return
+            else:
+                random_min = self._parse_optional_float(random_min_var.get())
+                random_max = self._parse_optional_float(random_max_var.get())
+                if (
+                    random_min is None
+                    or random_max is None
+                    or random_min < 0.0
+                    or random_max > 1.0
+                    or random_min > random_max
+                ):
+                    messagebox.showwarning("入力エラー", "ランダム範囲は 0〜1 かつ 下限 <= 上限 で入力してください")
+                    return
+
+            def action() -> dict[str, Any]:
+                resp = self.client.list_vehicles(scenario_id, depot_id)
+                updated_items: list[dict[str, Any]] = []
+                for item in list(resp.get("items") or []):
+                    if str(item.get("type") or "").upper() != "BEV":
+                        continue
+                    vehicle_id = str(item.get("id") or "").strip()
+                    if not vehicle_id:
+                        continue
+                    if mode != "ランダム":
+                        initial_soc = fixed_soc
+                    else:
+                        initial_soc = round(random.uniform(random_min, random_max), 6)
+                    updated_items.append(
+                        self.client.update_vehicle(
+                            scenario_id,
+                            vehicle_id,
+                            {"initialSoc": initial_soc},
+                        )
+                    )
+                return {"depotId": depot_id, "items": updated_items, "mode": mode}
+
+            def done(resp: dict[str, Any]) -> None:
+                refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
+                mode = str(resp.get("mode") or mode_var.get() or "固定値")
+                count = len(list(resp.get("items") or []))
+                if mode == "ランダム":
+                    self.log_line(f"初期SOC一括設定: {depot_id} の BEV {count} 台をランダム更新")
+                else:
+                    self.log_line(f"初期SOC一括設定: {depot_id} の BEV {count} 台を固定値へ更新")
+                self._mark_vehicle_change_stale()
+                self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
+                win.destroy()
+
+            self.run_bg(action, done)
+
+        ttk.Button(btns, text="適用", command=submit).pack(side=tk.RIGHT)
         ttk.Button(btns, text="キャンセル", command=win.destroy).pack(side=tk.RIGHT, padx=6)
 
     def open_template_create_window(self) -> None:
@@ -5217,6 +5398,7 @@ class App:
                     vehicle_payload = dict(template_payload)
                     vehicle_payload.pop("name", None)
                     vehicle_payload["depotId"] = apply_depot
+                    vehicle_payload["initialSoc"] = self._parse_optional_float(self.initial_soc_var.get())
                     vehicle_payload["quantity"] = apply_qty
                     applied_response = self.client.create_vehicle_batch(scenario_id, vehicle_payload)
                 return {
@@ -5235,6 +5417,7 @@ class App:
                         str(resp.get("depotId") or ""),
                     )
                     self.log_line(f"テンプレート由来で車両追加: {refresh_depot_id or resp.get('depotId')} x {resp.get('qty')}")
+                    self._mark_vehicle_change_stale()
                     self.refresh_vehicles(refresh_depot_id or None, vehicle_ids[0] if vehicle_ids else None)
                 self.refresh_templates()
                 win.destroy()
@@ -5318,11 +5501,13 @@ class App:
                     "quantity": qty,
                 }
             )
+            payload["initialSoc"] = self._parse_optional_float(self.initial_soc_var.get())
             payload["quantity"] = qty
 
             def done(resp: dict[str, Any]) -> None:
                 refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(resp, depot_id)
                 self.log_line(f"テンプレート導入: {template_id} -> {depot_id} x {resp.get('total') or len(vehicle_ids) or qty}")
+                self._mark_vehicle_change_stale()
                 self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
                 win.destroy()
 
@@ -5471,6 +5656,7 @@ class App:
                         "batteryKwh": battery,
                         "energyConsumption": energy,
                         "chargePowerKw": charge_kw,
+                        "initialSoc": self._parse_optional_float(self.initial_soc_var.get()),
                         "acquisitionCost": 0.0,
                         "enabled": True,
                         "quantity": diff,
@@ -5486,6 +5672,7 @@ class App:
         def done(info: dict[str, Any]) -> None:
             refresh_depot_id, vehicle_ids = self._vehicle_refresh_context(info.get("created") or {}, depot_id)
             self.log_line(f"BEV台数調整: {info['before']} -> {info['after']} (営業所: {depot_id})")
+            self._mark_vehicle_change_stale()
             self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
 
         self.run_bg(action, done)

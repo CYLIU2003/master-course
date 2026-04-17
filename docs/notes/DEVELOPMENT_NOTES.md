@@ -39,6 +39,27 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### 2026-04-17 Per-vehicle Initial SOC Editing
+
+- `vehicles[].initialSoc` を BEV 車両ごとの開始 SOC の正本に切り替えた。canonical builder と problemdata mapper の両方で、車両に明示値がある場合はそれを最優先し、未設定時のみ `initial_soc_percent` → `initial_soc` → full-battery fallback の順で補完する。
+- `bff/routers/master_data.py` / `bff/store/scenario_store.py` は車両 create/update/bulk-create で `initialSoc` を受け取り、ICE への型切替時は `initialSoc` を明示的にクリアできるようにした。
+- `tools/scenario_backup_tk.py` の車両管理 UI に `initialSoc` 入力欄、一覧列、営業所単位の固定値 / ランダム一括設定を追加した。車両変更後は prepared input を stale 扱いに戻す。
+- 回帰テスト: `tests/test_problemdata_soc_overrides.py`, `tests/test_master_data_vehicle_initial_soc.py`, `tests/test_scenario_backup_tk_vehicle_soc.py`, `tests/test_scenario_store_atomic_mutations.py`
+
+### 2026-04-17 Negative Total Cost Semantics Fix
+
+- 問題: `CostEvaluator` が `return_leg_bonus` を `total_cost` から直接差し引いていたため、UI / API / experiment report 上の `総コスト` が実費ではなく「報酬込みの目的関数値」になっていた。`BASELINE_FALLBACK` の不正解でも `objective_value=-49,718円` のような表示が出て、会計値と solver score の意味が混ざっていた。
+- 対応: `src/optimization/common/evaluator.py` で `accounting_total_cost` と `objective_cost_term` を分離した。`cost_breakdown.total_cost` / `total_cost_with_assets` は純粋な会計コスト、`objective_value` は `accounting_total_cost - return_leg_bonus` をベースに各 objective mode へ渡すよう変更した。`return_leg_bonus` 自体は cost breakdown の独立キーとして残す。
+- 付随修正:
+  - `bff/routers/optimization.py` は top-level `cost_breakdown.total_cost` 生成時に `objective_value` を優先しないよう修正し、`return_leg_bonus` と canonical `cost_breakdown.json` の component 出力を追加した。
+  - `bff/services/experiment_reports.py` は `return_leg_bonus_jpy` を report payload に追加し、`demand_charge_jpy` が存在しない `peak_demand_cost` を見ていた不整合も修正した。
+  - `tools/scenario_backup_tk.py` / `tools/bus_operation_visualizer_tk.py` は `総コスト` と `目的関数値` を分離表示し、`solution_validity.validated_feasible=false` の結果を `暫定/無効` として明示するようにした。
+- 自分で上げて潰した追加問題: canonical result payload の `objective_components_raw/weighted` に `driver_cost` と `return_leg_bonus` が載っておらず、目的関数の分解が不完全だったため追加した。`solver_metadata.objective_weights` にも `return_leg_bonus` を通した。
+- 検証:
+  - `python -m pytest tests/test_evaluator_provisional_overwrite.py tests/test_scenario_backup_tk_dataset_options.py tests/test_negative_total_cost_semantics.py tests/test_solution_validity.py -q` → `33 passed`
+  - `python -m pytest tests/test_visualizer_report_utils.py tests/test_optimization_canonical_metaheuristics.py tests/test_optimization_result_serializer.py tests/test_solver_identity_metadata.py -q` → `16 passed`
+  - `python -m py_compile src/optimization/common/evaluator.py src/optimization/common/result.py src/optimization/engine.py src/optimization/milp/engine.py src/optimization/alns/engine.py src/optimization/ga/engine.py src/optimization/abc/engine.py bff/routers/optimization.py bff/services/experiment_reports.py tools/scenario_backup_tk.py tools/bus_operation_visualizer_tk.py` → pass
+
 ### [DEV-2026-04-11] dated run output layout and mandatory route-band manifest
 
 - 背景:

@@ -86,6 +86,15 @@ def _build_summary_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
     canonical = bundle.canonical_solver_result_json or {}
     summary = optimization.get("summary") if isinstance(optimization.get("summary"), dict) else {}
     cost_breakdown = optimization.get("cost_breakdown") if isinstance(optimization.get("cost_breakdown"), dict) else {}
+    solution_validity = (
+        optimization.get("solution_validity")
+        if isinstance(optimization.get("solution_validity"), dict)
+        else (
+            summary.get("solution_validity")
+            if isinstance(summary.get("solution_validity"), dict)
+            else {}
+        )
+    )
     simulation_summary = (
         bundle.simulation_result_json.get("simulation_summary")
         if isinstance(bundle.simulation_result_json.get("simulation_summary"), dict)
@@ -102,6 +111,15 @@ def _build_summary_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
     if not bundle.refuel_events.empty:
         refuel_count = len(bundle.refuel_events)
         refuel_total_l = float(pd.to_numeric(bundle.refuel_events["refuel_liters"], errors="coerce").fillna(0.0).sum())
+    validity_badge = (
+        "検証済み"
+        if bool(solution_validity.get("validated_feasible"))
+        else (
+            f"暫定/無効 ({solution_validity.get('status_reason')})"
+            if solution_validity
+            else "未判定"
+        )
+    )
 
     rows = [
         ("入力種別", str(bundle.input_metadata.get("input_kind") or "run_dir")),
@@ -119,6 +137,7 @@ def _build_summary_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
         ("営業所", str(run_meta.depot or ((optimization.get("scope") or {}).get("depotId")) or "")),
         ("運行種別", str(run_meta.service or ((optimization.get("scope") or {}).get("serviceId")) or "")),
         ("service_date", str(((optimization.get("prepared_scope_summary") or {}).get("service_date")) or "")),
+        ("解の妥当性", validity_badge),
         ("目的関数値 [モデル単位]", f"{objective:.6f}"),
         ("求解時間 [秒]", f"{solve_time_sec:.6f}"),
         ("未割当便数 [便]", str(unmet_trips)),
@@ -127,6 +146,7 @@ def _build_summary_rows(bundle: TimelineBundle) -> List[Tuple[str, str]]:
         ("補給イベント数 [件]", str(refuel_count)),
         ("補給総量 [L]", f"{refuel_total_l:.6f}"),
         ("総コスト [円]", f"{_safe_float(cost_breakdown.get('total_cost'), 0.0):.6f}"),
+        ("復路ボーナス [円]", f"{_safe_float(cost_breakdown.get('return_leg_bonus'), 0.0):.6f}"),
         ("電力コスト [円]", f"{_safe_float(cost_breakdown.get('energy_cost'), 0.0):.6f}"),
         ("電力コスト基準", str(optimization.get("electricity_cost_basis") or "provisional_drive")),
         ("電力コスト(仮) [円]", f"{_safe_float(cost_breakdown.get('electricity_cost_provisional'), 0.0):.6f}"),

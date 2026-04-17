@@ -224,7 +224,8 @@ def _selected_vehicle_inventory(
         if type_filter is not None and vehicle_type not in type_filter:
             continue
         if vehicle_type == "BEV":
-            vehicle["initialSoc"] = initial_soc
+            if vehicle.get("initialSoc") is None:
+                vehicle["initialSoc"] = initial_soc
             if soc_min is not None:
                 vehicle["minSoc"] = soc_min
             if soc_max is not None:

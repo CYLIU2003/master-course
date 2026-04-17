@@ -141,3 +141,65 @@ def test_weighted_path_cover_prefers_lower_deadhead_matching() -> None:
     )
 
     assert pair_left["a"] == "c"
+
+
+def test_builder_aliases_same_named_stop_ids_for_direct_waits() -> None:
+    scenario = _scenario()
+    scenario["routes"] = [
+        {"id": "r-out", "route_id": "r-out", "routeFamilyCode": "FAM1"},
+        {"id": "r-in", "route_id": "r-in", "routeFamilyCode": "FAM1"},
+    ]
+    scenario["timetable_rows"] = [
+        {
+            "trip_id": "t1",
+            "route_id": "r-out",
+            "origin": "Depot",
+            "destination": "Terminal",
+            "origin_stop_id": "stop-depot",
+            "destination_stop_id": "stop-term-out",
+            "departure": "08:00",
+            "arrival": "08:30",
+            "distance_km": 10.0,
+            "service_id": "WEEKDAY",
+            "allowed_vehicle_types": ["ICE"],
+            "routeFamilyCode": "FAM1",
+            "direction": "outbound",
+            "routeVariantType": "main_outbound",
+        },
+        {
+            "trip_id": "t2",
+            "route_id": "r-in",
+            "origin": "Terminal",
+            "destination": "Depot",
+            "origin_stop_id": "stop-term-in",
+            "destination_stop_id": "stop-depot",
+            "departure": "08:40",
+            "arrival": "09:10",
+            "distance_km": 10.0,
+            "service_id": "WEEKDAY",
+            "allowed_vehicle_types": ["ICE"],
+            "routeFamilyCode": "FAM1",
+            "direction": "inbound",
+            "routeVariantType": "main_inbound",
+        },
+    ]
+    scenario["stops"] = [
+        {"id": "stop-depot", "name": "Depot"},
+        {"id": "stop-term-out", "name": "Terminal"},
+        {"id": "stop-term-in", "name": "Terminal"},
+    ]
+    scenario["turnaround_rules"] = [
+        {"stop_id": "stop-term-out", "min_turnaround_min": 5},
+        {"stop_id": "stop-term-in", "min_turnaround_min": 5},
+        {"stop_id": "stop-depot", "min_turnaround_min": 5},
+    ]
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+        planning_days=1,
+    )
+
+    assert problem.dispatch_context.locations_equivalent("stop-term-out", "stop-term-in") is True
+    assert problem.dispatch_context.get_deadhead_min("stop-term-out", "stop-term-in") == 0

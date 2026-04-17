@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 
 import pytest
 
@@ -78,6 +79,25 @@ def test_item_mutations_load_shallow_doc_under_scenario_lock(monkeypatch) -> Non
     scenario_store._delete_item(scenario_id, "vehicles", "id", "veh-1")
 
     assert observed_lock_state == [True, True, True]
+
+
+def test_update_vehicle_preserves_explicit_none_for_initial_soc(monkeypatch) -> None:
+    scenario_id = "scenario-1"
+    doc = _base_doc()
+    doc["vehicles"][0]["initialSoc"] = 0.8
+
+    monkeypatch.setattr(scenario_store, "_load_shallow", lambda sid, **kwargs: doc)
+    monkeypatch.setattr(scenario_store, "_save_master_subset", lambda *args, **kwargs: None)
+
+    updated = scenario_store.update_vehicle(
+        scenario_id,
+        "veh-1",
+        {"initialSoc": None, "modelName": "Vehicle-1-updated"},
+    )
+
+    assert updated["initialSoc"] is None
+    assert doc["vehicles"][0]["initialSoc"] is None
+    assert doc["vehicles"][0]["modelName"] == "Vehicle-1-updated"
 
 
 @pytest.mark.parametrize(
@@ -197,3 +217,62 @@ def test_set_field_simulation_config_loads_full_doc_under_lock(tmp_path, monkeyp
     assert observed_lock_state and all(observed_lock_state)
     shallow = scenario_store.get_scenario_document_shallow(scenario_id)
     assert shallow.get("simulation_config") == {"objectiveMode": "total_cost"}
+
+
+def test_refs_for_scenario_normalizes_relative_master_ref(tmp_path, monkeypatch) -> None:
+    store_dir = tmp_path / "output" / "scenarios"
+    outputs_root = store_dir.parent
+    monkeypatch.setattr(scenario_store, "_STORE_DIR", store_dir)
+    monkeypatch.setattr(scenario_store.output_paths, "outputs_root", lambda: outputs_root)
+
+    scenario_id = "scenario-relative-ref"
+    refs = scenario_store._refs_for_scenario(
+        scenario_id,
+        {
+            "refs": {
+                "masterData": f"scenarios/{scenario_id}/master_data.sqlite",
+            }
+        },
+    )
+
+    expected = (store_dir / scenario_id / "master_data.sqlite").resolve(strict=False)
+    assert Path(refs["masterData"]).resolve(strict=False) == expected
+
+
+def test_set_dispatch_scope_uses_normalized_master_ref(tmp_path, monkeypatch) -> None:
+    store_dir = tmp_path / "output" / "scenarios"
+    outputs_root = store_dir.parent
+    monkeypatch.setattr(scenario_store, "_STORE_DIR", store_dir)
+    monkeypatch.setattr(scenario_store.output_paths, "outputs_root", lambda: outputs_root)
+
+    scenario = scenario_store.create_scenario(
+        name="Relative Ref Scope",
+        description="masterData ref normalization",
+        mode="thesis_mode",
+    )
+    scenario_id = str(scenario["id"])
+
+    meta = scenario_store.scenario_meta_store.load_meta(store_dir, scenario_id)
+    refs = dict(meta.get("refs") or {})
+    refs["masterData"] = f"scenarios/{scenario_id}/master_data.sqlite"
+    meta["refs"] = refs
+    scenario_store.scenario_meta_store.save_meta(store_dir, scenario_id, meta)
+
+    observed_master_paths: list[Path] = []
+    original_load_master_data = scenario_store.master_data_store.load_master_data
+
+    def _record_master_path(path: Path):
+        observed_master_paths.append(Path(path))
+        return original_load_master_data(path)
+
+    monkeypatch.setattr(
+        scenario_store.master_data_store,
+        "load_master_data",
+        _record_master_path,
+    )
+
+    scenario_store.set_dispatch_scope(scenario_id, {})
+
+    assert observed_master_paths
+    expected = (store_dir / scenario_id / "master_data.sqlite").resolve(strict=False)
+    assert all(path.resolve(strict=False) == expected for path in observed_master_paths)

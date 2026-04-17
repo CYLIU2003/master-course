@@ -129,6 +129,73 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     ]
 
 
+def test_apply_builder_configuration_preserves_explicit_vehicle_initial_soc() -> None:
+    scenario_doc = {
+        "meta": {},
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [{"id": "route-a", "depotId": "dep1", "routeCode": "黒01"}],
+        "vehicles": [
+            {
+                "id": "veh-1",
+                "depotId": "dep1",
+                "type": "BEV",
+                "enabled": True,
+                "initialSoc": 0.55,
+            }
+        ],
+        "chargers": [{"id": "chg-1", "siteId": "dep1", "powerKw": 90}],
+        "vehicle_templates": [],
+        "scenario_overlay": {},
+        "simulation_config": {"initial_soc": 0.8},
+        "dispatch_scope": {},
+        "calendar": [{"service_id": "WEEKDAY"}],
+    }
+    scenario_meta = {
+        "datasetId": "tokyu_full",
+        "datasetVersion": "v1",
+        "operatorId": "tokyu",
+        "randomSeed": 42,
+    }
+    body = PrepareSimulationBody(
+        selected_depot_ids=["dep1"],
+        selected_route_ids=["route-a"],
+        day_type="WEEKDAY",
+        simulation_settings=PrepareSimulationSettingsBody(
+            use_selected_depot_vehicle_inventory=True,
+            use_selected_depot_charger_inventory=True,
+        ),
+    )
+
+    with (
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario_document_shallow",
+            return_value=copy.deepcopy(scenario_doc),
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario",
+            return_value=scenario_meta,
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "route_ids_for_selected_depots",
+            return_value=["route-a"],
+        ),
+        mock.patch.object(simulation_builder.store, "_invalidate_dispatch_artifacts"),
+        mock.patch.object(simulation_builder.store, "_save"),
+        mock.patch.object(
+            simulation_builder.store,
+            "_now_iso",
+            return_value="2026-03-22T00:00:00Z",
+        ),
+    ):
+        updated = simulation_builder.apply_builder_configuration("scenario-1", body)
+
+    assert updated["vehicles"][0]["initialSoc"] == 0.55
+    assert updated["simulation_config"]["initial_soc"] == 0.8
+
+
 def test_apply_builder_configuration_forces_fixed_route_band_when_intra_swap_is_disabled() -> None:
     scenario_doc = {
         "meta": {},

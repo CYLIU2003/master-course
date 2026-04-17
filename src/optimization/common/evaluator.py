@@ -359,7 +359,7 @@ class CostEvaluator:
             problem, plan, weights.return_leg_bonus
         )
 
-        total_cost = (
+        accounting_total_cost = (
             energy_cost
             + demand_cost
             + vehicle_cost
@@ -369,9 +369,9 @@ class CostEvaluator:
             + degradation_cost
             + deviation_cost
             + co2_cost
-            - return_leg_bonus
         )
-        total_cost_with_assets = total_cost + pv_asset_cost + bess_asset_cost
+        objective_cost_term = accounting_total_cost - return_leg_bonus
+        total_cost_with_assets = accounting_total_cost + pv_asset_cost + bess_asset_cost
         if service_coverage_mode == "strict" and plan.unserved_trip_ids:
             return CostBreakdown(
                 energy_cost=energy_cost,
@@ -414,14 +414,14 @@ class CostEvaluator:
                 pv_asset_cost=pv_asset_cost,
                 bess_asset_cost=bess_asset_cost,
                 total_cost_with_assets=total_cost_with_assets,
-                total_cost=total_cost,
+                total_cost=accounting_total_cost,
                 objective_value=float("inf"),
                 evaluation_feasible=False,
                 return_leg_bonus=return_leg_bonus,
             )
         objective_value = objective_value_for_mode(
             objective_mode=problem.scenario.objective_mode,
-            total_cost=total_cost,
+            total_cost=objective_cost_term,
             total_co2_kg=total_co2_kg,
             unserved_penalty=unserved_penalty,
             switch_cost=switch_cost,
@@ -471,7 +471,7 @@ class CostEvaluator:
             pv_asset_cost=pv_asset_cost,
             bess_asset_cost=bess_asset_cost,
             total_cost_with_assets=total_cost_with_assets,
-            total_cost=total_cost,
+            total_cost=accounting_total_cost,
             objective_value=objective_value,
             return_leg_bonus=return_leg_bonus,
         )
@@ -1062,7 +1062,7 @@ class CostEvaluator:
         cap = float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0)
         initial_soc = getattr(vehicle, "initial_soc", None)
         if initial_soc is None:
-            return None if cap <= 0.0 else 0.8 * cap
+            return None if cap <= 0.0 else cap
         value = float(initial_soc)
         if cap > 0.0 and 0.0 <= value <= 1.0:
             value = value * cap

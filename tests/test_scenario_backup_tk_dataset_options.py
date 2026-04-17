@@ -547,6 +547,41 @@ def test_extract_result_summary_includes_non_zero_cost_breakdown_and_served_coun
     assert summary["penalty_unserved"] == 3360000.0
 
 
+def test_extract_result_summary_separates_total_cost_objective_and_validity_badge() -> None:
+    app = App.__new__(App)
+
+    summary = App._extract_result_summary(
+        app,
+        {
+            "mode": "mode_milp_only",
+            "objective_value": -49718.03699606294,
+            "summary": {
+                "vehicle_count_used": 32,
+                "trip_count_served": 264,
+                "trip_count_unserved": 0,
+                "solution_validity": {
+                    "validated_feasible": False,
+                    "status_reason": "baseline_fallback_or_postsolve_infeasible",
+                },
+            },
+            "solver_result": {
+                "status": "BASELINE_FALLBACK",
+                "objective_value": -49718.03699606294,
+            },
+            "cost_breakdown": {
+                "total_cost": 61781.96300393706,
+                "return_leg_bonus": 111500.0,
+            },
+        },
+    )
+
+    assert summary["status"] == "BASELINE_FALLBACK"
+    assert summary["solution_validity_badge"] == "暫定/無効 (baseline_fallback_or_postsolve_infeasible)"
+    assert summary["total_cost"] == 61781.96300393706
+    assert summary["objective"] == -49718.03699606294
+    assert summary["return_leg_bonus"] == 111500.0
+
+
 def test_ordered_cost_breakdown_items_prioritizes_total_and_non_zero_costs() -> None:
     rows = _ordered_cost_breakdown_items(
         {
@@ -555,16 +590,19 @@ def test_ordered_cost_breakdown_items_prioritizes_total_and_non_zero_costs() -> 
             "vehicle_cost": 483447.4885844756,
             "energy_cost": 202796.50054309692,
             "penalty_unserved": 3360000.0,
+            "return_leg_bonus": 111500.0,
             "total_cost": 6052927.3224609075,
         }
     )
 
-    assert [row["key"] for row in rows[:5]] == [
+    assert [row["key"] for row in rows[:6]] == [
         "total_cost",
+        "return_leg_bonus",
         "energy_cost",
         "vehicle_cost",
         "driver_cost",
         "penalty_unserved",
     ]
+    assert next(row for row in rows if row["key"] == "return_leg_bonus")["share"] is None
     assert rows[-1]["key"] == "fuel_cost"
     assert rows[-1]["non_zero"] is False
