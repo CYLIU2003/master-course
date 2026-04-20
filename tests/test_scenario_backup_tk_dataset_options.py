@@ -1,3 +1,5 @@
+import random
+
 from tools.scenario_backup_tk import (
     App,
     _choose_dataset_options,
@@ -89,6 +91,130 @@ def test_normalize_depot_choice_extracts_canonical_id() -> None:
     assert App._normalize_depot_choice("  ") == ""
 
 
+def test_main_initial_soc_ratio_prefers_percent_field() -> None:
+    class DummyVar:
+        def __init__(self, value: str) -> None:
+            self._value = value
+
+        def get(self) -> str:
+            return self._value
+
+        def set(self, value: str) -> None:
+            self._value = value
+
+    app = App.__new__(App)
+    app.initial_soc_var = DummyVar("0.25")
+    app.initial_soc_percent_var = DummyVar("0.75")
+
+    assert App._main_initial_soc_ratio(app) == 0.75
+
+    app.initial_soc_percent_var.set("")
+    assert App._main_initial_soc_ratio(app) == 0.25
+
+
+def test_initial_soc_values_for_mode_supports_fixed_and_random() -> None:
+    fixed = App._initial_soc_values_for_mode(
+        mode="固定値",
+        quantity=3,
+        fixed_soc=0.8,
+        random_min=None,
+        random_max=None,
+    )
+    assert fixed == [0.8, 0.8, 0.8]
+
+    randomized = App._initial_soc_values_for_mode(
+        mode="ランダム",
+        quantity=4,
+        fixed_soc=None,
+        random_min=0.5,
+        random_max=0.6,
+        rng=random.Random(42),
+    )
+    assert len(randomized) == 4
+    assert all(0.5 <= value <= 0.6 for value in randomized)
+    assert randomized == [0.563943, 0.502501, 0.527503, 0.522321]
+
+
+def test_apply_initial_soc_to_bev_vehicles_updates_only_selected_depot_bevs() -> None:
+    class DummyClient:
+        def __init__(self) -> None:
+            self.list_calls: list[tuple[str, str]] = []
+            self.update_calls: list[tuple[str, str, dict[str, float]]] = []
+
+        def list_vehicles(self, scenario_id: str, depot_id: str | None = None) -> dict[str, object]:
+            self.list_calls.append((scenario_id, str(depot_id)))
+            items_by_depot = {
+                "dep-1": [
+                    {"id": "bev-1", "type": "BEV", "depotId": "dep-1"},
+                    {"id": "ice-1", "type": "ICE", "depotId": "dep-1"},
+                ],
+                "dep-2": [
+                    {"id": "bev-2", "type": "BEV", "depotId": "dep-2"},
+                ],
+            }
+            return {"items": list(items_by_depot.get(str(depot_id), []))}
+
+        def update_vehicle(self, scenario_id: str, vehicle_id: str, payload: dict[str, float]) -> dict[str, object]:
+            self.update_calls.append((scenario_id, vehicle_id, payload))
+            return {"id": vehicle_id, "initialSoc": payload["initialSoc"]}
+
+    app = App.__new__(App)
+    app.client = DummyClient()
+
+    result = App._apply_initial_soc_to_bev_vehicles(
+        app,
+        "scenario-1",
+        ["dep-1", "dep-2"],
+        0.66,
+    )
+
+    assert app.client.list_calls == [("scenario-1", "dep-1"), ("scenario-1", "dep-2")]
+    assert app.client.update_calls == [
+        ("scenario-1", "bev-1", {"initialSoc": 0.66}),
+        ("scenario-1", "bev-2", {"initialSoc": 0.66}),
+    ]
+    assert result["depotIds"] == ["dep-1", "dep-2"]
+    assert len(result["items"]) == 2
+
+
+def test_finalize_main_initial_soc_bulk_apply_clears_checkbox_and_refreshes_visible_depot() -> None:
+    class DummyVar:
+        def __init__(self, value):
+            self._value = value
+
+        def get(self):
+            return self._value
+
+        def set(self, value) -> None:
+            self._value = value
+
+    app = App.__new__(App)
+    app.apply_initial_soc_percent_to_selected_bevs_var = DummyVar(True)
+    app.fleet_depot_var = DummyVar("dep-2")
+    logs: list[str] = []
+    refreshes: list[str | None] = []
+    stale_flags: list[bool] = []
+    app.log_line = logs.append
+    app.refresh_vehicles = lambda depot_id=None, focus_vehicle_id=None: refreshes.append(depot_id)
+    app._mark_vehicle_change_stale = lambda: stale_flags.append(True)
+    app._vehicle_panel_ready = lambda: True
+
+    App._finalize_main_initial_soc_bulk_apply(
+        app,
+        {
+            "applied": True,
+            "depotIds": ["dep-1", "dep-2"],
+            "items": [{"id": "bev-1"}, {"id": "bev-2"}],
+            "initialSoc": 0.7,
+        },
+    )
+
+    assert app.apply_initial_soc_percent_to_selected_bevs_var.get() is False
+    assert stale_flags == [True]
+    assert refreshes == ["dep-2"]
+    assert logs and "初期SOC比一斉反映" in logs[0]
+
+
 def test_mutation_guard_disables_quick_setup_save_while_vehicle_add_runs() -> None:
     class DummyButton:
         def __init__(self) -> None:
@@ -169,6 +295,9 @@ def test_refresh_vehicles_focuses_new_row_and_syncs_depot() -> None:
         def insert(self, _parent: str, _index: str, *, iid: str, values: tuple[object, ...]) -> None:
             self.rows.append((iid, values))
 
+        def set(self, _iid: str, _column: str, _value: object) -> None:
+            return None
+
         def selection_set(self, iid: str) -> None:
             self.selected = [iid]
 
@@ -197,6 +326,11 @@ def test_refresh_vehicles_focuses_new_row_and_syncs_depot() -> None:
     app._vehicle_panel_ready = lambda: True
     app.fleet_depot_var = DummyVar("")
     app.vehicle_tree = DummyTree()
+    app.vehicle_checked_ids = set()
+    app.vehicle_batch_summary_var = DummyVar("")
+    app.vehicle_select_all_var = DummyVar(False)
+    app._vehicle_refresh_token = 0
+    app.vehicle_row_by_id = {}
     app.client = DummyClient()
     app.log_line = lambda _msg: None
     app.run_bg = lambda action, done=None: done(action()) if done else action()
@@ -248,6 +382,9 @@ def test_refresh_vehicles_normalizes_labeled_depot_before_fetch() -> None:
         def insert(self, _parent: str, _index: str, *, iid: str, values: tuple[object, ...]) -> None:
             self.rows.append((iid, values))
 
+        def set(self, _iid: str, _column: str, _value: object) -> None:
+            return None
+
     class DummyClient:
         def __init__(self) -> None:
             self.calls: list[tuple[str, str | None]] = []
@@ -261,6 +398,11 @@ def test_refresh_vehicles_normalizes_labeled_depot_before_fetch() -> None:
     app._vehicle_panel_ready = lambda: True
     app.fleet_depot_var = DummyVar("dep-1 | 営業所A")
     app.vehicle_tree = DummyTree()
+    app.vehicle_checked_ids = set()
+    app.vehicle_batch_summary_var = DummyVar("")
+    app.vehicle_select_all_var = DummyVar(False)
+    app._vehicle_refresh_token = 0
+    app.vehicle_row_by_id = {}
     app.client = DummyClient()
     app.log_line = lambda _msg: None
     app.run_bg = lambda action, done=None: done(action()) if done else action()
@@ -269,6 +411,128 @@ def test_refresh_vehicles_normalizes_labeled_depot_before_fetch() -> None:
 
     assert app.client.calls == [("scenario-1", "dep-1")]
     assert app.fleet_depot_var.get() == "dep-1"
+
+
+def test_on_vehicle_select_prefers_cached_vehicle_row() -> None:
+    class DummyTree:
+        def selection(self) -> tuple[str, ...]:
+            return ("veh-1",)
+
+    app = App.__new__(App)
+    app._selected_scenario_id = lambda: "scenario-1"
+    app.vehicle_tree = DummyTree()
+    app.vehicle_row_by_id = {"veh-1": {"id": "veh-1", "modelName": "Cached"}}
+    populated: list[dict[str, object]] = []
+    app._populate_vehicle_form = lambda row: populated.append(dict(row))
+
+    class DummyClient:
+        def get_vehicle(self, scenario_id: str, vehicle_id: str) -> dict[str, object]:
+            raise AssertionError("cached row should avoid get_vehicle call")
+
+    app.client = DummyClient()
+    app.run_bg = lambda action, done=None: done(action()) if done else action()
+
+    App.on_vehicle_select(app)
+
+    assert populated == [{"id": "veh-1", "modelName": "Cached"}]
+
+
+def test_set_all_visible_vehicle_checked_updates_summary_and_all_toggle() -> None:
+    class DummyVar:
+        def __init__(self, value):
+            self._value = value
+
+        def get(self):
+            return self._value
+
+        def set(self, value) -> None:
+            self._value = value
+
+    class DummyTree:
+        def winfo_exists(self) -> bool:
+            return True
+
+        def set(self, _iid: str, _column: str, _value: object) -> None:
+            return None
+
+    app = App.__new__(App)
+    app.vehicle_rows = [
+        {"id": "veh-1"},
+        {"id": "veh-2"},
+    ]
+    app.vehicle_checked_ids = set()
+    app.vehicle_tree = DummyTree()
+    app.vehicle_batch_summary_var = DummyVar("")
+    app.vehicle_select_all_var = DummyVar(False)
+
+    App._set_all_visible_vehicle_checked(app, True)
+
+    assert app.vehicle_checked_ids == {"veh-1", "veh-2"}
+    assert app.vehicle_batch_summary_var.get() == "選択: 2/2件"
+    assert app.vehicle_select_all_var.get() is True
+
+
+def test_batch_target_vehicle_rows_falls_back_to_visible_bevs_when_nothing_checked() -> None:
+    app = App.__new__(App)
+    app.vehicle_rows = [
+        {"id": "bev-1", "type": "BEV"},
+        {"id": "ice-1", "type": "ICE"},
+        {"id": "bev-2", "type": "BEV"},
+    ]
+    app.vehicle_checked_ids = set()
+
+    rows = App._batch_target_vehicle_rows(
+        app,
+        bev_only=True,
+        fallback_to_visible=True,
+    )
+
+    assert [row["id"] for row in rows] == ["bev-1", "bev-2"]
+
+
+def test_on_vehicle_tree_click_heading_toggles_all_visible() -> None:
+    class DummyVar:
+        def __init__(self, value):
+            self._value = value
+
+        def get(self):
+            return self._value
+
+        def set(self, value) -> None:
+            self._value = value
+
+    class DummyTree:
+        def winfo_exists(self) -> bool:
+            return True
+
+        def identify_region(self, _x: int, _y: int) -> str:
+            return "heading"
+
+        def identify_column(self, _x: int) -> str:
+            return "#1"
+
+        def identify_row(self, _y: int) -> str:
+            return ""
+
+        def set(self, _iid: str, _column: str, _value: object) -> None:
+            return None
+
+    class Event:
+        x = 1
+        y = 1
+
+    app = App.__new__(App)
+    app.vehicle_rows = [{"id": "veh-1"}, {"id": "veh-2"}]
+    app.vehicle_checked_ids = set()
+    app.vehicle_tree = DummyTree()
+    app.vehicle_batch_summary_var = DummyVar("")
+    app.vehicle_select_all_var = DummyVar(False)
+
+    result = App._on_vehicle_tree_click(app, Event())
+
+    assert result == "break"
+    assert app.vehicle_checked_ids == {"veh-1", "veh-2"}
+    assert app.vehicle_select_all_var.get() is True
 
 
 def test_open_fleet_window_syncs_existing_scope_depots(monkeypatch) -> None:

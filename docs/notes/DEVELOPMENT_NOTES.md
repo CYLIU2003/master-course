@@ -39,6 +39,37 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### 2026-04-17 Main SOC Bulk Apply and Template Randomization
+
+- 問題: `initialSoc` の個別編集と営業所単位ランダム化は車両管理タブに入っていたが、メイン設定画面の `初期SOC比` は詳細パラメータの奥に残っており、主操作として見つけにくかった。また template 経由の車両追加は `initialSoc` を main 画面の固定値でしか渡せず、template workflow 内でランダム化できなかった。
+- 対応:
+  - `tools/scenario_backup_tk.py` の `充電・SOC` セクションへ `初期SOC比` を移し、`選択営業所の全BEVへ Save/Prepare 時に一斉反映` チェックボックスを追加した。
+  - Save/Prepare 前に、チェックが有効なら選択営業所の BEV `vehicles[].initialSoc` を一括更新してから処理を続ける helper を追加した。適用成功後は checkbox を自動で OFF に戻す。
+  - `SOC詳細` から重複していた `初期SOC比` 入力は外し、見える start SOC 入力を一本化した。
+  - `テンプレートから営業所へ車両追加` と `テンプレート追加 -> 作成後に営業所へ追加` に `固定値/ランダム` の初期SOC設定を追加した。random mode は batch create 後に各 BEV を `update_vehicle(initialSoc=...)` で振り直す形にし、ICE は対象外にした。
+- 自分で上げて潰した追加問題:
+  - `create_vehicle_batch` は単一 payload の複製なので per-vehicle random SOC をそのまま渡せない。作成後 update に切り替えて解消した。
+  - Save/Prepare 本体が失敗した場合でも、先に成功した SOC 一括反映が UI 上で分からなくなる恐れがあったため、exception path でも checkbox clear / stale mark / log を走らせるようにした。
+- 検証:
+  - `python -m pytest tests/test_scenario_backup_tk_dataset_options.py -q`
+  - 既存の UI helper 回帰に加え、`_main_initial_soc_ratio`, `_initial_soc_values_for_mode`, `_apply_initial_soc_to_bev_vehicles`, `_finalize_main_initial_soc_bulk_apply` をテストした。
+
+### 2026-04-18 Vehicle Batch Selection and Frontend Cleanup
+
+- 問題: 車両管理は単一選択前提で、複数車両をまとめて扱うには営業所全件 batch しかなく、対象を絞れなかった。また `on_vehicle_select()` は一覧取得済み row があるのに毎回 `get_vehicle()` を叩いており、車両一覧 refresh が重なったとき stale response が UI を巻き戻す余地もあった。
+- 対応:
+  - `tools/scenario_backup_tk.py` の車両一覧に checkbox 列を追加し、表示中の全選択/選択数表示/選択車両の有効化・無効化・削除を追加した。
+  - `初期SOC一括設定...` は営業所全件 BEV ではなく、checkbox で選んだ BEV だけへ固定値/ランダム値を適用するよう変更した。checkbox が空のときは表示中の BEV 全件へフォールバックする。
+  - `on_vehicle_select()` は `vehicle_row_by_id` cache から form を埋めるようにし、一覧 row に既にある情報では追加 API を呼ばないようにした。
+  - `refresh_vehicles()` には request token を入れ、遅れて返った古いレスポンスを捨てるようにした。checkbox 列は rowheight/font/幅を上げ、ヘッダクリックで全選択/全解除できるようにした。
+  - `_submit_execution_job()` と job polling は payload/start_response/job snapshot のログを圧縮し、成功ポップアップを抑え、poll interval を緩めて最適化実行中の UI ノイズと負荷を下げた。
+- 自分で上げて潰した追加問題:
+  - row checkbox と form selection が同じ click に乗ると編集対象が意図せず変わるので、checkbox 列クリック時は `TreeviewSelect` を止めるようにした。
+  - batch action 後に checked state が残ったまま別営業所へ切り替わると誤操作につながるため、visible rows と checked ids を都度 intersection して summary を更新するようにした。
+- 検証:
+  - `python -m pytest tests/test_scenario_backup_tk_dataset_options.py tests/test_problemdata_soc_overrides.py tests/test_scenario_update_simulation_settings.py tests/test_run_preparation_scope_audit.py -q` → pass
+  - `python -m py_compile C:\\master-course\\tools\\scenario_backup_tk.py` → pass
+
 ### 2026-04-17 Per-vehicle Initial SOC Editing
 
 - `vehicles[].initialSoc` を BEV 車両ごとの開始 SOC の正本に切り替えた。canonical builder と problemdata mapper の両方で、車両に明示値がある場合はそれを最優先し、未設定時のみ `initial_soc_percent` → `initial_soc` → full-battery fallback の順で補完する。

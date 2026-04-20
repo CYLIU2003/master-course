@@ -1304,6 +1304,11 @@ class App:
         self.prepared_profile_name = ""
         self.last_job_id = ""
         self.vehicle_rows: list[dict[str, Any]] = []
+        self.vehicle_row_by_id: dict[str, dict[str, Any]] = {}
+        self.vehicle_checked_ids: set[str] = set()
+        self.vehicle_select_all_var = tk.BooleanVar(value=False)
+        self.vehicle_batch_summary_var = tk.StringVar(value="選択: 0件")
+        self._vehicle_refresh_token = 0
         self.template_rows: list[dict[str, Any]] = []
         self.route_label_file_var = tk.StringVar(value="")
         self.scope_filter_var = tk.StringVar(value="")
@@ -1722,6 +1727,7 @@ class App:
         self.max_start_fragments_var = tk.StringVar(value="100")
         self.max_end_fragments_var = tk.StringVar(value="100")
         self.initial_soc_percent_var = tk.StringVar(value="0.8")
+        self.apply_initial_soc_percent_to_selected_bevs_var = tk.BooleanVar(value=False)
         self.final_soc_floor_percent_var = tk.StringVar(value="0.2")
         self.final_soc_target_percent_var = tk.StringVar(value="0.8")
         self.final_soc_target_tolerance_percent_var = tk.StringVar(value="0.0")
@@ -1790,12 +1796,38 @@ class App:
         # ── 充電・SOC ──
         soc_grp = ttk.LabelFrame(basic, text="充電・SOC", padding=4)
         soc_grp.pack(fill=tk.X, pady=(0, 4))
-        self._param_row2(
+        soc_row = ttk.Frame(soc_grp)
+        soc_row.pack(fill=tk.X, pady=1)
+        soc_row.columnconfigure(1, weight=1)
+        soc_row.columnconfigure(3, weight=1)
+        soc_label = ttk.Label(soc_row, text="初期SOC比", width=18, anchor="w")
+        soc_label.grid(row=0, column=0, sticky="w")
+        _Tooltip(
+            soc_label,
+            "運行開始時の電池残量比率（0〜1）。1.0 = 満充電。例: 0.8\n"
+            "Save/Prepare 時の一斉反映を有効にすると、選択営業所の BEV にこの値を書き込みます。",
+        )
+        ttk.Entry(soc_row, textvariable=self.initial_soc_percent_var).grid(
+            row=0, column=1, sticky="ew", padx=(2, 4)
+        )
+        soc_min_label = ttk.Label(soc_row, text="SOC下限 (バッファ)", width=18, anchor="w")
+        soc_min_label.grid(row=0, column=2, sticky="w", padx=(4, 0))
+        _Tooltip(
+            soc_min_label,
+            "走行中に下回れない SOC 下限（0〜1）。小さいほど柔軟だが電欠リスクが上がる。例: 0.2",
+        )
+        ttk.Entry(soc_row, textvariable=self.soc_min_var).grid(
+            row=0, column=3, sticky="ew", padx=(2, 0)
+        )
+        soc_apply_check = ttk.Checkbutton(
             soc_grp,
-            "初期SOC", self.initial_soc_var,
-            tip0="運行開始時の電池残量比率（0〜1）。1.0 = 満充電。例: 0.8",
-            label1="SOC下限 (バッファ)", var1=self.soc_min_var,
-            tip1="走行中に下回れない SOC 下限（0〜1）。小さいほど柔軟だが電欠リスクが上がる。例: 0.2",
+            text="選択営業所の全BEVへ Save/Prepare 時に一斉反映",
+            variable=self.apply_initial_soc_percent_to_selected_bevs_var,
+        )
+        soc_apply_check.pack(anchor="w", pady=(0, 2))
+        _Tooltip(
+            soc_apply_check,
+            "有効時、現在選択している営業所の全 BEV に `初期SOC比` の値を保存してから Save/Prepare を実行します。",
         )
         self._param_row2(
             soc_grp,
@@ -1908,13 +1940,12 @@ class App:
         soc_detail_grp.pack(fill=tk.X, pady=(0, 4))
         self._param_row2(
             soc_detail_grp,
-            "初期SOC比", self.initial_soc_percent_var,
-            label1="終了SOC目標", var1=self.final_soc_target_percent_var,
+            "終了SOC目標", self.final_soc_target_percent_var,
+            label1="終了SOC床", var1=self.final_soc_floor_percent_var,
         )
         self._param_row2(
             soc_detail_grp,
-            "終了SOC床", self.final_soc_floor_percent_var,
-            label1="目標許容±", var1=self.final_soc_target_tolerance_percent_var,
+            "目標許容±", self.final_soc_target_tolerance_percent_var,
         )
 
         # ── PV・天候 ──
@@ -2040,12 +2071,25 @@ class App:
         ttk.Label(top, text="BEV目標台数").pack(side=tk.LEFT, padx=(12, 2))
         ttk.Entry(top, textvariable=self.target_bev_count_var, width=6).pack(side=tk.LEFT)
         ttk.Button(top, text="BEV台数を反映", command=self.apply_fleet_count).pack(side=tk.LEFT, padx=4)
-        ttk.Button(top, text="初期SOC一括設定...", command=self.open_vehicle_initial_soc_batch_window).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top, text="選択車両の初期SOC...", command=self.open_vehicle_initial_soc_batch_window).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top, text="選択を有効化", command=lambda: self.apply_checked_vehicle_enabled_state(True)).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top, text="選択を無効化", command=lambda: self.apply_checked_vehicle_enabled_state(False)).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top, text="選択車両を削除", command=self.delete_checked_vehicles).pack(side=tk.LEFT, padx=4)
+        select_all_check = ttk.Checkbutton(
+            top,
+            text="表示中を全選択",
+            variable=self.vehicle_select_all_var,
+            command=self._on_toggle_all_visible_vehicles,
+            style="VehicleBatch.TCheckbutton",
+        )
+        select_all_check.pack(side=tk.LEFT, padx=(12, 4))
+        ttk.Label(top, textvariable=self.vehicle_batch_summary_var, foreground="#555").pack(side=tk.LEFT, padx=4)
 
         tree_wrap = ttk.Frame(tab)
         tree_wrap.pack(fill=tk.BOTH, expand=True, pady=6)
 
         cols = (
+            "selected",
             "id",
             "depotId",
             "type",
@@ -2056,8 +2100,29 @@ class App:
             "initialSoc",
             "enabled",
         )
-        self.vehicle_tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=12)
+        vehicle_tree_style = ttk.Style(tab)
+        vehicle_tree_style.configure(
+            "VehicleTreeview.Treeview",
+            rowheight=32,
+            font=("TkDefaultFont", 11),
+        )
+        vehicle_tree_style.configure(
+            "VehicleTreeview.Treeview.Heading",
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        vehicle_tree_style.configure(
+            "VehicleBatch.TCheckbutton",
+            font=("TkDefaultFont", 10),
+        )
+        self.vehicle_tree = ttk.Treeview(
+            tree_wrap,
+            columns=cols,
+            show="headings",
+            height=12,
+            style="VehicleTreeview.Treeview",
+        )
         heading_map = {
+            "selected": "選択",
             "id": "車両ID",
             "depotId": "営業所",
             "type": "車種",
@@ -2071,12 +2136,14 @@ class App:
         for c in cols:
             self.vehicle_tree.heading(c, text=heading_map.get(c, c))
             self.vehicle_tree.column(c, width=120, anchor="w")
+        self.vehicle_tree.column("selected", width=96, anchor="center")
         self.vehicle_tree.column("modelName", width=180, anchor="w")
         self.vehicle_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         ysb = ttk.Scrollbar(tree_wrap, orient=tk.VERTICAL, command=self.vehicle_tree.yview)
         ysb.pack(side=tk.RIGHT, fill=tk.Y)
         self.vehicle_tree.configure(yscrollcommand=ysb.set)
         self.vehicle_tree.bind("<<TreeviewSelect>>", self.on_vehicle_select)
+        self.vehicle_tree.bind("<Button-1>", self._on_vehicle_tree_click, add="+")
 
         # ── Scrollable form area ──
         _vform_wrap = ttk.Frame(tab)
@@ -2981,6 +3048,293 @@ class App:
             "enabled": bool(self.t_enabled_var.get()),
         }
         return self._normalize_powertrain_payload(payload)
+
+    def _main_initial_soc_ratio(self) -> float:
+        fallback = self._parse_float(self.initial_soc_var.get(), 0.8)
+        return self._parse_float(self.initial_soc_percent_var.get(), fallback)
+
+    @staticmethod
+    def _initial_soc_values_for_mode(
+        *,
+        mode: str,
+        quantity: int,
+        fixed_soc: float | None,
+        random_min: float | None,
+        random_max: float | None,
+        rng: random.Random | None = None,
+    ) -> list[float]:
+        total = max(int(quantity), 0)
+        if total <= 0:
+            return []
+        if mode != "ランダム":
+            if fixed_soc is None:
+                raise ValueError("fixed_soc is required for fixed mode")
+            return [float(fixed_soc)] * total
+        if random_min is None or random_max is None:
+            raise ValueError("random range is required for random mode")
+        sampler = rng or random
+        return [round(float(sampler.uniform(random_min, random_max)), 6) for _ in range(total)]
+
+    def _apply_initial_soc_to_bev_vehicles(
+        self,
+        scenario_id: str,
+        depot_ids: list[str],
+        initial_soc: float,
+    ) -> dict[str, Any]:
+        updated_items: list[dict[str, Any]] = []
+        normalized_depot_ids = [self._normalize_depot_choice(item) for item in depot_ids if self._normalize_depot_choice(item)]
+        for depot_id in normalized_depot_ids:
+            resp = self.client.list_vehicles(scenario_id, depot_id)
+            for item in list(resp.get("items") or []):
+                if str(item.get("type") or "").upper() != "BEV":
+                    continue
+                vehicle_id = str(item.get("id") or "").strip()
+                if not vehicle_id:
+                    continue
+                updated_items.append(
+                    self.client.update_vehicle(
+                        scenario_id,
+                        vehicle_id,
+                        {"initialSoc": float(initial_soc)},
+                    )
+                )
+        return {
+            "depotIds": normalized_depot_ids,
+            "items": updated_items,
+            "initialSoc": float(initial_soc),
+        }
+
+    def _maybe_apply_main_initial_soc_to_selected_bevs(
+        self,
+        scenario_id: str,
+    ) -> dict[str, Any]:
+        if not bool(self.apply_initial_soc_percent_to_selected_bevs_var.get()):
+            return {"applied": False, "depotIds": [], "items": [], "initialSoc": None}
+        depot_ids = self._selected_depot_ids()
+        if not depot_ids:
+            raise ValueError("初期SOC一斉反映には営業所選択が必要です")
+        initial_soc = self._main_initial_soc_ratio()
+        result = self._apply_initial_soc_to_bev_vehicles(scenario_id, depot_ids, initial_soc)
+        result["applied"] = True
+        return result
+
+    def _finalize_main_initial_soc_bulk_apply(self, result: dict[str, Any]) -> None:
+        if not isinstance(result, dict) or not bool(result.get("applied")):
+            return
+        count = len(list(result.get("items") or []))
+        depot_ids = [str(item) for item in list(result.get("depotIds") or []) if str(item).strip()]
+        initial_soc = result.get("initialSoc")
+        self.apply_initial_soc_percent_to_selected_bevs_var.set(False)
+        self.log_line(
+            "初期SOC比一斉反映: "
+            f"depots={','.join(depot_ids) or '-'} / "
+            f"BEV={count}台 / initialSoc={initial_soc}"
+        )
+        self._mark_vehicle_change_stale()
+        if self._vehicle_panel_ready():
+            refresh_depot_id = self._normalize_depot_choice(self.fleet_depot_var.get())
+            if refresh_depot_id and refresh_depot_id in depot_ids:
+                self.refresh_vehicles(refresh_depot_id)
+            elif depot_ids:
+                self.refresh_vehicles(depot_ids[0])
+
+    def _update_created_vehicle_initial_soc_values(
+        self,
+        scenario_id: str,
+        response: dict[str, Any],
+        initial_soc_values: list[float],
+    ) -> dict[str, Any]:
+        items = list(response.get("items") or [])
+        updated_items: list[dict[str, Any]] = []
+        for item, initial_soc in zip(items, initial_soc_values):
+            if str(item.get("type") or "").upper() != "BEV":
+                continue
+            vehicle_id = str(item.get("id") or "").strip()
+            if not vehicle_id:
+                continue
+            updated_items.append(
+                self.client.update_vehicle(
+                    scenario_id,
+                    vehicle_id,
+                    {"initialSoc": float(initial_soc)},
+                )
+            )
+        result = dict(response)
+        result["items"] = updated_items
+        result["total"] = len(updated_items)
+        result["randomizedInitialSoc"] = True
+        return result
+
+    def _visible_vehicle_ids(self) -> list[str]:
+        return [
+            str(row.get("id") or "").strip()
+            for row in self.vehicle_rows
+            if str(row.get("id") or "").strip()
+        ]
+
+    def _checked_vehicle_ids_for_current_view(self) -> list[str]:
+        visible_ids = set(self._visible_vehicle_ids())
+        return sorted(
+            vehicle_id
+            for vehicle_id in self.vehicle_checked_ids
+            if vehicle_id in visible_ids
+        )
+
+    def _visible_vehicle_rows(self, *, bev_only: bool = False) -> list[dict[str, Any]]:
+        rows = [
+            dict(row)
+            for row in self.vehicle_rows
+            if str(row.get("id") or "").strip()
+        ]
+        if bev_only:
+            rows = [row for row in rows if str(row.get("type") or "").upper() == "BEV"]
+        return rows
+
+    def _checked_vehicle_rows_for_current_view(
+        self,
+        *,
+        bev_only: bool = False,
+    ) -> list[dict[str, Any]]:
+        checked_ids = set(self._checked_vehicle_ids_for_current_view())
+        rows = [
+            dict(row)
+            for row in self.vehicle_rows
+            if str(row.get("id") or "").strip() in checked_ids
+        ]
+        if bev_only:
+            rows = [row for row in rows if str(row.get("type") or "").upper() == "BEV"]
+        return rows
+
+    def _batch_target_vehicle_rows(
+        self,
+        *,
+        bev_only: bool = False,
+        fallback_to_visible: bool = False,
+    ) -> list[dict[str, Any]] | None:
+        rows = self._checked_vehicle_rows_for_current_view(bev_only=bev_only)
+        if rows:
+            return rows
+        if fallback_to_visible:
+            rows = self._visible_vehicle_rows(bev_only=bev_only)
+            if rows:
+                return rows
+        if bev_only:
+            messagebox.showwarning("入力不足", "対象となる BEV 車両がありません")
+        else:
+            messagebox.showwarning("入力不足", "対象車両にチェックを入れてください")
+        return None
+
+    @staticmethod
+    def _vehicle_checkbox_marker(is_checked: bool) -> str:
+        return "☑" if is_checked else "☐"
+
+    def _is_vehicle_checked(self, vehicle_id: str) -> bool:
+        return str(vehicle_id or "").strip() in self.vehicle_checked_ids
+
+    def _refresh_vehicle_batch_selection_ui(self) -> None:
+        visible_ids = self._visible_vehicle_ids()
+        visible_set = set(visible_ids)
+        self.vehicle_checked_ids = {
+            vehicle_id for vehicle_id in self.vehicle_checked_ids if vehicle_id in visible_set
+        }
+        checked_count = len(self.vehicle_checked_ids)
+        total_count = len(visible_ids)
+        self.vehicle_batch_summary_var.set(f"選択: {checked_count}/{total_count}件")
+        self.vehicle_select_all_var.set(bool(total_count > 0 and checked_count == total_count))
+
+    def _set_vehicle_checked(self, vehicle_id: str, checked: bool) -> None:
+        normalized_id = str(vehicle_id or "").strip()
+        if not normalized_id:
+            return
+        if checked:
+            self.vehicle_checked_ids.add(normalized_id)
+        else:
+            self.vehicle_checked_ids.discard(normalized_id)
+        if self._widget_exists(self.vehicle_tree):
+            try:
+                self.vehicle_tree.set(
+                    normalized_id,
+                    "selected",
+                    self._vehicle_checkbox_marker(checked),
+                )
+            except tk.TclError:
+                pass
+        self._refresh_vehicle_batch_selection_ui()
+
+    def _set_all_visible_vehicle_checked(self, checked: bool) -> None:
+        for vehicle_id in self._visible_vehicle_ids():
+            if checked:
+                self.vehicle_checked_ids.add(vehicle_id)
+            else:
+                self.vehicle_checked_ids.discard(vehicle_id)
+            if self._widget_exists(self.vehicle_tree):
+                try:
+                    self.vehicle_tree.set(
+                        vehicle_id,
+                        "selected",
+                        self._vehicle_checkbox_marker(checked),
+                    )
+                except tk.TclError:
+                    pass
+        self._refresh_vehicle_batch_selection_ui()
+
+    def _on_toggle_all_visible_vehicles(self) -> None:
+        self._set_all_visible_vehicle_checked(bool(self.vehicle_select_all_var.get()))
+
+    def _on_vehicle_tree_click(self, event=None):
+        if not self._widget_exists(self.vehicle_tree):
+            return None
+        try:
+            region = self.vehicle_tree.identify_region(event.x, event.y)
+            column = self.vehicle_tree.identify_column(event.x)
+            row_id = self.vehicle_tree.identify_row(event.y)
+        except (tk.TclError, AttributeError):
+            return None
+        if region == "heading" and column == "#1":
+            should_check_all = len(self.vehicle_checked_ids) < len(self._visible_vehicle_ids())
+            self._set_all_visible_vehicle_checked(should_check_all)
+            return "break"
+        if region != "cell":
+            return None
+        if column != "#1":
+            return None
+        if not row_id:
+            return None
+        self._set_vehicle_checked(row_id, not self._is_vehicle_checked(row_id))
+        return "break"
+
+    def _require_checked_vehicle_rows(self, *, bev_only: bool = False) -> list[dict[str, Any]] | None:
+        rows = self._checked_vehicle_rows_for_current_view(bev_only=bev_only)
+        if not rows:
+            messagebox.showwarning("入力不足", "対象車両にチェックを入れてください")
+            return None
+        return rows
+
+    def _populate_vehicle_form(self, vehicle: dict[str, Any]) -> None:
+        v = dict(vehicle or {})
+        self.v_id_var.set(str(v.get("id") or ""))
+        self.v_depot_var.set(str(v.get("depotId") or ""))
+        self.v_type_var.set(str(v.get("type") or "BEV"))
+        self.v_model_code_var.set(str(v.get("modelCode") or ""))
+        self.v_model_var.set(str(v.get("modelName") or ""))
+        self.v_cap_var.set(str(v.get("capacityPassengers") or 0))
+        self.v_battery_var.set("" if v.get("batteryKwh") is None else str(v.get("batteryKwh")))
+        self.v_fuel_tank_var.set("" if v.get("fuelTankL") is None else str(v.get("fuelTankL")))
+        self.v_energy_var.set(str(v.get("energyConsumption") or 0.0))
+        self.v_km_per_l_var.set("" if v.get("fuelEfficiencyKmPerL") is None else str(v.get("fuelEfficiencyKmPerL")))
+        self.v_co2_gpkm_var.set("" if v.get("co2EmissionGPerKm") is None else str(v.get("co2EmissionGPerKm")))
+        self.v_curb_weight_var.set("" if v.get("curbWeightKg") is None else str(v.get("curbWeightKg")))
+        self.v_gross_weight_var.set("" if v.get("grossVehicleWeightKg") is None else str(v.get("grossVehicleWeightKg")))
+        self.v_engine_disp_var.set("" if v.get("engineDisplacementL") is None else str(v.get("engineDisplacementL")))
+        self.v_max_torque_var.set("" if v.get("maxTorqueNm") is None else str(v.get("maxTorqueNm")))
+        self.v_max_power_var.set("" if v.get("maxPowerKw") is None else str(v.get("maxPowerKw")))
+        self.v_charge_kw_var.set("" if v.get("chargePowerKw") is None else str(v.get("chargePowerKw")))
+        self.v_initial_soc_var.set("" if v.get("initialSoc") is None else str(v.get("initialSoc")))
+        self.v_min_soc_var.set("" if v.get("minSoc") is None else str(v.get("minSoc")))
+        self.v_max_soc_var.set("" if v.get("maxSoc") is None else str(v.get("maxSoc")))
+        self.v_acq_cost_var.set(str(v.get("acquisitionCost") or 0.0))
+        self.v_enabled_var.set(bool(v.get("enabled", True)))
+        self._update_vehicle_form_visibility()
 
     def _parse_tou_text(self) -> list[dict[str, Any]]:
         text = self.tou_text_var.get().strip()
@@ -4534,11 +4888,17 @@ class App:
             self.ice_co2_kg_per_l_var.set(str(sim.get("iceCo2KgPerL") or 2.64))
             self.degradation_weight_var.set(str(sim.get("degradationWeight") or 0))
             self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
-            self.initial_soc_var.set(str(sim.get("initialSoc") or 0.8))
+            initial_soc_default = (
+                sim.get("initialSocPercent")
+                if sim.get("initialSocPercent") is not None
+                else sim.get("initialSoc")
+            )
+            self.apply_initial_soc_percent_to_selected_bevs_var.set(False)
+            self.initial_soc_var.set(str(initial_soc_default or 0.8))
             self.soc_min_var.set(str(sim.get("socMin") or 0.2))
             self.soc_max_var.set(str(sim.get("socMax") or 0.9))
             self._set_cost_component_flags_from_payload(sim)
-            self.initial_soc_percent_var.set(str(sim.get("initialSocPercent") or 0.8))
+            self.initial_soc_percent_var.set(str(initial_soc_default or 0.8))
             self.final_soc_floor_percent_var.set(str(sim.get("finalSocFloorPercent") or 0.2))
             self.final_soc_target_percent_var.set(
                 str(sim.get("finalSocTargetPercent") or sim.get("finalSocFloorPercent") or 0.8)
@@ -4647,6 +5007,15 @@ class App:
             messagebox.showwarning("入力不足", "Quick Setup 保存前に運行日を入力してください")
             return
         planning_days = self._planning_days_value()
+        if (
+            self.apply_initial_soc_percent_to_selected_bevs_var.get()
+            and not self._selected_depot_ids()
+        ):
+            messagebox.showwarning(
+                "入力不足",
+                "初期SOC比を一斉反映するには営業所を選択してください",
+            )
+            return
 
         payload = {
             "selectedDepotIds": self._selected_depot_ids(),
@@ -4674,7 +5043,7 @@ class App:
             "enableVehicleDiagramOutput": self.enable_vehicle_diagram_output_var.get(),
             "allowPartialService": self.allow_partial_service_var.get(),
             "unservedPenalty": self._parse_float(self.unserved_penalty_var.get(), 10000.0),
-            "initialSoc": self._parse_float(self.initial_soc_var.get(), 0.8),
+            "initialSoc": self._main_initial_soc_ratio(),
             "socMin": self._parse_float(self.soc_min_var.get(), 0.2),
             "socMax": self._parse_float(self.soc_max_var.get(), 0.9),
             "costComponentFlags": self._cost_component_flags_payload(),
@@ -4690,7 +5059,7 @@ class App:
             "iceCo2KgPerL": self._parse_float(self.ice_co2_kg_per_l_var.get(), 2.64),
             "depotPowerLimitKw": self._parse_float(self.depot_power_limit_var.get(), 500.0),
             "degradationWeight": self._parse_float(self.degradation_weight_var.get(), 0.0),
-            "initialSocPercent": self._parse_float(self.initial_soc_percent_var.get(), 0.8),
+            "initialSocPercent": self._main_initial_soc_ratio(),
             "finalSocFloorPercent": self._parse_float(self.final_soc_floor_percent_var.get(), 0.2),
             "finalSocTargetPercent": self._parse_float(self.final_soc_target_percent_var.get(), 0.8),
             "finalSocTargetTolerancePercent": self._parse_float(
@@ -4720,6 +5089,9 @@ class App:
 
         def _on_save_done(_resp: dict[str, Any]) -> None:
             try:
+                self._finalize_main_initial_soc_bulk_apply(
+                    dict(_resp.get("_mainInitialSocApply") or {})
+                )
                 self.log_line("Quick Setup を保存しました")
                 self._mark_prepared_stale("Quick Setup 保存後のため再Prepareが必要です", announce=True)
                 self.load_quick_setup()
@@ -4728,7 +5100,18 @@ class App:
 
         def _action() -> dict[str, Any]:
             try:
-                return self.client.put_quick_setup(scenario_id, payload)
+                apply_info = self._maybe_apply_main_initial_soc_to_selected_bevs(
+                    scenario_id
+                )
+                try:
+                    resp = self.client.put_quick_setup(scenario_id, payload)
+                except Exception:
+                    self._queue_on_ui_thread(
+                        lambda: self._finalize_main_initial_soc_bulk_apply(apply_info)
+                    )
+                    raise
+                resp["_mainInitialSocApply"] = apply_info
+                return resp
             except Exception:
                 self._queue_on_ui_thread(self._end_quick_setup_save_guard)
                 raise
@@ -4741,6 +5124,8 @@ class App:
             return
         if not self._vehicle_panel_ready():
             return
+        self._vehicle_refresh_token += 1
+        request_token = self._vehicle_refresh_token
 
         active_choice = depot_id if depot_id is not None else (
             self.fleet_depot_var.get().strip() if self.fleet_depot_var is not None else ""
@@ -4750,7 +5135,14 @@ class App:
             self.fleet_depot_var.set(active_depot_id or "")
 
         def done(resp: dict[str, Any]) -> None:
+            if request_token != self._vehicle_refresh_token:
+                return
             self.vehicle_rows = list(resp.get("items") or [])
+            self.vehicle_row_by_id = {
+                str(row.get("id") or "").strip(): dict(row)
+                for row in self.vehicle_rows
+                if str(row.get("id") or "").strip()
+            }
             try:
                 if not self._widget_exists(self.vehicle_tree):
                     return
@@ -4770,6 +5162,7 @@ class App:
                         tk.END,
                         iid=row_id,
                         values=(
+                            self._vehicle_checkbox_marker(self._is_vehicle_checked(row_id)),
                             row.get("id"),
                             row.get("depotId"),
                             row.get("type"),
@@ -4781,6 +5174,7 @@ class App:
                             row.get("enabled"),
                         ),
                     )
+                self._refresh_vehicle_batch_selection_ui()
                 target_vehicle_id = str(focus_vehicle_id or previous_selection or "").strip()
                 if target_vehicle_id and target_vehicle_id in inserted_ids:
                     self.vehicle_tree.selection_set(target_vehicle_id)
@@ -4801,33 +5195,15 @@ class App:
         if not selected:
             return
         vehicle_id = selected[0]
+        cached = self.vehicle_row_by_id.get(vehicle_id)
+        if cached is not None:
+            self._populate_vehicle_form(cached)
+            return
 
-        def done(v: dict[str, Any]) -> None:
-            self.v_id_var.set(str(v.get("id") or ""))
-            self.v_depot_var.set(str(v.get("depotId") or ""))
-            self.v_type_var.set(str(v.get("type") or "BEV"))
-            self.v_model_code_var.set(str(v.get("modelCode") or ""))
-            self.v_model_var.set(str(v.get("modelName") or ""))
-            self.v_cap_var.set(str(v.get("capacityPassengers") or 0))
-            self.v_battery_var.set("" if v.get("batteryKwh") is None else str(v.get("batteryKwh")))
-            self.v_fuel_tank_var.set("" if v.get("fuelTankL") is None else str(v.get("fuelTankL")))
-            self.v_energy_var.set(str(v.get("energyConsumption") or 0.0))
-            self.v_km_per_l_var.set("" if v.get("fuelEfficiencyKmPerL") is None else str(v.get("fuelEfficiencyKmPerL")))
-            self.v_co2_gpkm_var.set("" if v.get("co2EmissionGPerKm") is None else str(v.get("co2EmissionGPerKm")))
-            self.v_curb_weight_var.set("" if v.get("curbWeightKg") is None else str(v.get("curbWeightKg")))
-            self.v_gross_weight_var.set("" if v.get("grossVehicleWeightKg") is None else str(v.get("grossVehicleWeightKg")))
-            self.v_engine_disp_var.set("" if v.get("engineDisplacementL") is None else str(v.get("engineDisplacementL")))
-            self.v_max_torque_var.set("" if v.get("maxTorqueNm") is None else str(v.get("maxTorqueNm")))
-            self.v_max_power_var.set("" if v.get("maxPowerKw") is None else str(v.get("maxPowerKw")))
-            self.v_charge_kw_var.set("" if v.get("chargePowerKw") is None else str(v.get("chargePowerKw")))
-            self.v_initial_soc_var.set("" if v.get("initialSoc") is None else str(v.get("initialSoc")))
-            self.v_min_soc_var.set("" if v.get("minSoc") is None else str(v.get("minSoc")))
-            self.v_max_soc_var.set("" if v.get("maxSoc") is None else str(v.get("maxSoc")))
-            self.v_acq_cost_var.set(str(v.get("acquisitionCost") or 0.0))
-            self.v_enabled_var.set(bool(v.get("enabled", True)))
-            self._update_vehicle_form_visibility()
-
-        self.run_bg(lambda: self.client.get_vehicle(scenario_id, vehicle_id), done)
+        self.run_bg(
+            lambda: self.client.get_vehicle(scenario_id, vehicle_id),
+            lambda v: self._populate_vehicle_form(v),
+        )
 
     def create_vehicle_from_form(self) -> None:
         scenario_id = self._selected_scenario_id()
@@ -4882,6 +5258,100 @@ class App:
             )
 
         self.run_bg(lambda: self.client.update_vehicle(scenario_id, vehicle_id, payload), done)
+
+    def apply_checked_vehicle_enabled_state(self, enabled: bool) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+        target_rows = self._require_checked_vehicle_rows()
+        if target_rows is None:
+            return
+        target_ids = [
+            str(row.get("id") or "").strip()
+            for row in target_rows
+            if str(row.get("id") or "").strip()
+        ]
+        if not target_ids:
+            messagebox.showwarning("入力不足", "対象車両にチェックを入れてください")
+            return
+
+        self._begin_vehicle_add_guard()
+
+        def done(resp: dict[str, Any]) -> None:
+            try:
+                count = len(list(resp.get("items") or []))
+                self.log_line(
+                    f"選択車両を{'有効化' if enabled else '無効化'}: {count} 台"
+                )
+                self._mark_vehicle_change_stale()
+                refresh_depot_id = self._normalize_depot_choice(self.fleet_depot_var.get())
+                self.refresh_vehicles(refresh_depot_id or None)
+            finally:
+                self._end_vehicle_add_guard()
+
+        def action() -> dict[str, Any]:
+            try:
+                updated = [
+                    self.client.update_vehicle(
+                        scenario_id,
+                        vehicle_id,
+                        {"enabled": bool(enabled)},
+                    )
+                    for vehicle_id in target_ids
+                ]
+                return {"items": updated}
+            except Exception:
+                self._queue_on_ui_thread(self._end_vehicle_add_guard)
+                raise
+
+        self.run_bg(action, done)
+
+    def delete_checked_vehicles(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+        target_rows = self._require_checked_vehicle_rows()
+        if target_rows is None:
+            return
+        target_ids = [
+            str(row.get("id") or "").strip()
+            for row in target_rows
+            if str(row.get("id") or "").strip()
+        ]
+        if not target_ids:
+            messagebox.showwarning("入力不足", "対象車両にチェックを入れてください")
+            return
+        if not messagebox.askyesno(
+            "確認",
+            f"選択車両 {len(target_ids)} 台を削除しますか？",
+        ):
+            return
+
+        self._begin_vehicle_add_guard()
+
+        def done(_resp: dict[str, Any]) -> None:
+            try:
+                for vehicle_id in target_ids:
+                    self.vehicle_checked_ids.discard(vehicle_id)
+                self.log_line(f"選択車両を削除: {len(target_ids)} 台")
+                self._mark_vehicle_change_stale()
+                refresh_depot_id = self._normalize_depot_choice(self.fleet_depot_var.get())
+                self.refresh_vehicles(refresh_depot_id or None)
+            finally:
+                self._end_vehicle_add_guard()
+
+        def action() -> dict[str, Any]:
+            try:
+                for vehicle_id in target_ids:
+                    self.client.delete_vehicle(scenario_id, vehicle_id)
+                return {"deleted_ids": target_ids}
+            except Exception:
+                self._queue_on_ui_thread(self._end_vehicle_add_guard)
+                raise
+
+        self.run_bg(action, done)
 
     def delete_selected_vehicle(self) -> None:
         scenario_id = self._selected_scenario_id()
@@ -4978,7 +5448,7 @@ class App:
             "maxTorqueNm": template.get("maxTorqueNm"),
             "maxPowerKw": template.get("maxPowerKw"),
             "chargePowerKw": template.get("chargePowerKw"),
-            "initialSoc": self._parse_optional_float(self.initial_soc_var.get()),
+            "initialSoc": self._main_initial_soc_ratio(),
             "minSoc": template.get("minSoc"),
             "maxSoc": template.get("maxSoc"),
             "acquisitionCost": float(template.get("acquisitionCost") or 0.0),
@@ -5159,17 +5629,42 @@ class App:
         if not depot_id:
             messagebox.showwarning("入力不足", "営業所IDを選択してください")
             return
+        target_rows = self._batch_target_vehicle_rows(
+            bev_only=True,
+            fallback_to_visible=True,
+        )
+        if target_rows is None:
+            return
+        checked_target_rows = self._checked_vehicle_rows_for_current_view(bev_only=True)
+        using_visible_fallback = not bool(checked_target_rows)
+
+        def resolve_target_ids() -> list[str]:
+            current_rows = self._batch_target_vehicle_rows(
+                bev_only=True,
+                fallback_to_visible=True,
+            )
+            if not current_rows:
+                return []
+            return [
+                str(row.get("id") or "").strip()
+                for row in current_rows
+                if str(row.get("id") or "").strip()
+            ]
 
         win = tk.Toplevel(self.root)
         win.title("初期SOC一括設定")
         win.geometry("420x280")
 
         mode_var = tk.StringVar(value="固定値")
-        fixed_soc_var = tk.StringVar(value=self.initial_soc_var.get().strip() or "0.8")
+        fixed_soc_var = tk.StringVar(value=str(self._main_initial_soc_ratio()))
         random_min_var = tk.StringVar(value="0.5")
         random_max_var = tk.StringVar(value="0.9")
 
-        form = ttk.LabelFrame(win, text=f"営業所 {depot_id} の BEV 車両", padding=10)
+        form = ttk.LabelFrame(
+            win,
+            text=f"営業所 {depot_id} の選択済み BEV 車両",
+            padding=10,
+        )
         form.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         depot_row = ttk.Frame(form)
@@ -5194,7 +5689,11 @@ class App:
 
         info = ttk.Label(
             form,
-            text="BEV 車両だけを対象に initialSoc を更新します。ICE 車両は変更しません。",
+            text=(
+                f"チェック済みの BEV {len(target_rows)} 台を対象に initialSoc を更新します。"
+                if not using_visible_fallback
+                else f"チェックが無いため、表示中の BEV {len(target_rows)} 台を対象に initialSoc を更新します。"
+            ),
             foreground="#555",
             wraplength=360,
             justify=tk.LEFT,
@@ -5235,14 +5734,11 @@ class App:
                     return
 
             def action() -> dict[str, Any]:
-                resp = self.client.list_vehicles(scenario_id, depot_id)
+                target_ids = resolve_target_ids()
+                if not target_ids:
+                    raise RuntimeError("対象となる BEV 車両がありません")
                 updated_items: list[dict[str, Any]] = []
-                for item in list(resp.get("items") or []):
-                    if str(item.get("type") or "").upper() != "BEV":
-                        continue
-                    vehicle_id = str(item.get("id") or "").strip()
-                    if not vehicle_id:
-                        continue
+                for vehicle_id in target_ids:
                     if mode != "ランダム":
                         initial_soc = fixed_soc
                     else:
@@ -5261,9 +5757,9 @@ class App:
                 mode = str(resp.get("mode") or mode_var.get() or "固定値")
                 count = len(list(resp.get("items") or []))
                 if mode == "ランダム":
-                    self.log_line(f"初期SOC一括設定: {depot_id} の BEV {count} 台をランダム更新")
+                    self.log_line(f"初期SOC一括設定: BEV {count} 台をランダム更新")
                 else:
-                    self.log_line(f"初期SOC一括設定: {depot_id} の BEV {count} 台を固定値へ更新")
+                    self.log_line(f"初期SOC一括設定: BEV {count} 台を固定値へ更新")
                 self._mark_vehicle_change_stale()
                 self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
                 win.destroy()
@@ -5301,6 +5797,10 @@ class App:
         co2_var = tk.StringVar(value="")
         engine_var = tk.StringVar(value="")
         apply_now_var = tk.BooleanVar(value=False)
+        apply_soc_mode_var = tk.StringVar(value="固定値")
+        apply_fixed_soc_var = tk.StringVar(value=str(self._main_initial_soc_ratio()))
+        apply_random_min_var = tk.StringVar(value="0.5")
+        apply_random_max_var = tk.StringVar(value="0.9")
         apply_depot_var = tk.StringVar(value=(self.fleet_depot_var.get().strip() or (depot_choices[0] if depot_choices else "")))
         apply_qty_var = tk.StringVar(value="1")
 
@@ -5342,6 +5842,23 @@ class App:
         dep_combo = ttk.Combobox(dep_row, textvariable=apply_depot_var, state="readonly", values=depot_choices)
         dep_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self._labeled_entry(apply_box, "追加台数", apply_qty_var)
+        apply_soc_mode_row = ttk.Frame(apply_box)
+        apply_soc_mode_row.pack(fill=tk.X, pady=2)
+        ttk.Label(apply_soc_mode_row, text="初期SOC設定", width=20).pack(side=tk.LEFT)
+        apply_soc_mode_combo = ttk.Combobox(
+            apply_soc_mode_row,
+            textvariable=apply_soc_mode_var,
+            state="readonly",
+            values=["固定値", "ランダム"],
+        )
+        apply_soc_mode_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        apply_fixed_box = ttk.Frame(apply_box)
+        apply_fixed_box.pack(fill=tk.X, pady=2)
+        self._labeled_entry(apply_fixed_box, "固定値(0-1)", apply_fixed_soc_var)
+        apply_random_box = ttk.LabelFrame(apply_box, text="ランダム範囲", padding=4)
+        apply_random_box.pack(fill=tk.X, pady=2)
+        self._labeled_entry(apply_random_box, "下限(0-1)", apply_random_min_var)
+        self._labeled_entry(apply_random_box, "上限(0-1)", apply_random_max_var)
 
         def refresh_type(_event=None) -> None:
             if type_var.get().strip().upper() == "BEV":
@@ -5351,8 +5868,16 @@ class App:
                 ice_box.pack(fill=tk.X, padx=10, pady=4)
                 ev_box.pack_forget()
 
+        def refresh_apply_soc_mode(_event=None) -> None:
+            if apply_soc_mode_var.get().strip() == "ランダム":
+                apply_random_box.pack(fill=tk.X, pady=2)
+            else:
+                apply_random_box.pack_forget()
+
         type_combo.bind("<<ComboboxSelected>>", refresh_type)
+        apply_soc_mode_combo.bind("<<ComboboxSelected>>", refresh_apply_soc_mode)
         refresh_type()
+        refresh_apply_soc_mode()
 
         btns = ttk.Frame(win)
         btns.pack(fill=tk.X, padx=10, pady=10)
@@ -5389,6 +5914,25 @@ class App:
             if apply_now and not apply_depot:
                 messagebox.showwarning("入力不足", "営業所を選択してください")
                 return
+            apply_soc_mode = apply_soc_mode_var.get().strip() or "固定値"
+            apply_fixed_soc = self._parse_optional_float(apply_fixed_soc_var.get())
+            apply_random_min = self._parse_optional_float(apply_random_min_var.get())
+            apply_random_max = self._parse_optional_float(apply_random_max_var.get())
+            if apply_now and type_var.get().strip().upper() == "BEV":
+                if apply_soc_mode != "ランダム":
+                    if apply_fixed_soc is None or apply_fixed_soc < 0.0 or apply_fixed_soc > 1.0:
+                        messagebox.showwarning("入力エラー", "固定値は 0〜1 の範囲で入力してください")
+                        return
+                else:
+                    if (
+                        apply_random_min is None
+                        or apply_random_max is None
+                        or apply_random_min < 0.0
+                        or apply_random_max > 1.0
+                        or apply_random_min > apply_random_max
+                    ):
+                        messagebox.showwarning("入力エラー", "ランダム範囲は 0〜1 かつ 下限 <= 上限 で入力してください")
+                        return
 
             def action() -> dict[str, Any]:
                 created = self.client.create_vehicle_template(scenario_id, template_payload)
@@ -5398,9 +5942,28 @@ class App:
                     vehicle_payload = dict(template_payload)
                     vehicle_payload.pop("name", None)
                     vehicle_payload["depotId"] = apply_depot
-                    vehicle_payload["initialSoc"] = self._parse_optional_float(self.initial_soc_var.get())
+                    if type_var.get().strip().upper() == "BEV" and apply_soc_mode != "ランダム":
+                        vehicle_payload["initialSoc"] = apply_fixed_soc
+                    else:
+                        vehicle_payload.pop("initialSoc", None)
                     vehicle_payload["quantity"] = apply_qty
                     applied_response = self.client.create_vehicle_batch(scenario_id, vehicle_payload)
+                    if (
+                        type_var.get().strip().upper() == "BEV"
+                        and apply_soc_mode == "ランダム"
+                    ):
+                        initial_soc_values = self._initial_soc_values_for_mode(
+                            mode=apply_soc_mode,
+                            quantity=len(list(applied_response.get("items") or [])),
+                            fixed_soc=None,
+                            random_min=apply_random_min,
+                            random_max=apply_random_max,
+                        )
+                        applied_response = self._update_created_vehicle_initial_soc_values(
+                            scenario_id,
+                            applied_response,
+                            initial_soc_values,
+                        )
                 return {
                     "templateId": created_id,
                     "applied": apply_now,
@@ -5438,13 +6001,17 @@ class App:
 
         win = tk.Toplevel(self.root)
         win.title("テンプレートから営業所へ車両追加")
-        win.geometry("560x260")
+        win.geometry("560x360")
 
         depot_choices = self._current_depot_choices()
         template_choices = [f"{str(t.get('id') or '')} | {str(t.get('name') or t.get('modelName') or '')}" for t in self.template_rows]
         template_var = tk.StringVar(value=(template_choices[0] if template_choices else ""))
         depot_var = tk.StringVar(value=(self.fleet_depot_var.get().strip() or (depot_choices[0] if depot_choices else "")))
         qty_var = tk.StringVar(value="1")
+        soc_mode_var = tk.StringVar(value="固定値")
+        fixed_soc_var = tk.StringVar(value=str(self._main_initial_soc_ratio()))
+        random_min_var = tk.StringVar(value="0.5")
+        random_max_var = tk.StringVar(value="0.9")
 
         form = ttk.Frame(win, padding=10)
         form.pack(fill=tk.BOTH, expand=True)
@@ -5463,6 +6030,32 @@ class App:
         row3.pack(fill=tk.X, pady=3)
         ttk.Label(row3, text="追加台数", width=18).pack(side=tk.LEFT)
         ttk.Entry(row3, textvariable=qty_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        row4 = ttk.Frame(form)
+        row4.pack(fill=tk.X, pady=3)
+        ttk.Label(row4, text="初期SOC設定", width=18).pack(side=tk.LEFT)
+        soc_mode_combo = ttk.Combobox(
+            row4,
+            textvariable=soc_mode_var,
+            state="readonly",
+            values=["固定値", "ランダム"],
+        )
+        soc_mode_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        fixed_box = ttk.Frame(form)
+        fixed_box.pack(fill=tk.X, pady=2)
+        self._labeled_entry(fixed_box, "固定値(0-1)", fixed_soc_var)
+        random_box = ttk.LabelFrame(form, text="ランダム範囲", padding=4)
+        random_box.pack(fill=tk.X, pady=2)
+        self._labeled_entry(random_box, "下限(0-1)", random_min_var)
+        self._labeled_entry(random_box, "上限(0-1)", random_max_var)
+
+        def refresh_soc_mode(_event=None) -> None:
+            if soc_mode_var.get().strip() == "ランダム":
+                random_box.pack(fill=tk.X, pady=2)
+            else:
+                random_box.pack_forget()
+
+        soc_mode_combo.bind("<<ComboboxSelected>>", refresh_soc_mode)
+        refresh_soc_mode()
 
         btns = ttk.Frame(form)
         btns.pack(fill=tk.X, pady=(10, 0))
@@ -5479,6 +6072,26 @@ class App:
             if template is None:
                 messagebox.showwarning("入力不足", "テンプレートが見つかりません。一覧更新してください")
                 return
+            template_type = str(template.get("type") or "BEV").strip().upper()
+            apply_soc_mode = soc_mode_var.get().strip() or "固定値"
+            fixed_soc = self._parse_optional_float(fixed_soc_var.get())
+            random_min = self._parse_optional_float(random_min_var.get())
+            random_max = self._parse_optional_float(random_max_var.get())
+            if template_type == "BEV":
+                if apply_soc_mode != "ランダム":
+                    if fixed_soc is None or fixed_soc < 0.0 or fixed_soc > 1.0:
+                        messagebox.showwarning("入力エラー", "固定値は 0〜1 の範囲で入力してください")
+                        return
+                else:
+                    if (
+                        random_min is None
+                        or random_max is None
+                        or random_min < 0.0
+                        or random_max > 1.0
+                        or random_min > random_max
+                    ):
+                        messagebox.showwarning("入力エラー", "ランダム範囲は 0〜1 かつ 下限 <= 上限 で入力してください")
+                        return
 
             payload = self._normalize_powertrain_payload(
                 {
@@ -5501,7 +6114,10 @@ class App:
                     "quantity": qty,
                 }
             )
-            payload["initialSoc"] = self._parse_optional_float(self.initial_soc_var.get())
+            if template_type == "BEV" and apply_soc_mode != "ランダム":
+                payload["initialSoc"] = fixed_soc
+            else:
+                payload.pop("initialSoc", None)
             payload["quantity"] = qty
 
             def done(resp: dict[str, Any]) -> None:
@@ -5511,10 +6127,24 @@ class App:
                 self.refresh_vehicles(refresh_depot_id or depot_id, vehicle_ids[0] if vehicle_ids else None)
                 win.destroy()
 
-            self.run_bg(
-                lambda: self.client.create_vehicle_batch(scenario_id, payload),
-                done,
-            )
+            def action() -> dict[str, Any]:
+                created = self.client.create_vehicle_batch(scenario_id, payload)
+                if template_type == "BEV" and apply_soc_mode == "ランダム":
+                    initial_soc_values = self._initial_soc_values_for_mode(
+                        mode=apply_soc_mode,
+                        quantity=len(list(created.get("items") or [])),
+                        fixed_soc=None,
+                        random_min=random_min,
+                        random_max=random_max,
+                    )
+                    return self._update_created_vehicle_initial_soc_values(
+                        scenario_id,
+                        created,
+                        initial_soc_values,
+                    )
+                return created
+
+            self.run_bg(action, done)
 
         ttk.Button(btns, text="追加", command=submit).pack(side=tk.RIGHT)
         ttk.Button(btns, text="キャンセル", command=win.destroy).pack(side=tk.RIGHT, padx=6)
@@ -5656,7 +6286,7 @@ class App:
                         "batteryKwh": battery,
                         "energyConsumption": energy,
                         "chargePowerKw": charge_kw,
-                        "initialSoc": self._parse_optional_float(self.initial_soc_var.get()),
+                        "initialSoc": self._main_initial_soc_ratio(),
                         "acquisitionCost": 0.0,
                         "enabled": True,
                         "quantity": diff,
@@ -5711,7 +6341,8 @@ class App:
             "allow_intra_depot_route_swap": allow_intra_depot_swap,
             "allow_inter_depot_swap": self.allow_inter_var.get(),
             "simulation_settings": {
-                "initial_soc": self._parse_float(self.initial_soc_var.get(), 0.8),
+                "initial_soc": self._main_initial_soc_ratio(),
+                "initial_soc_percent": self._main_initial_soc_ratio(),
                 "soc_min": self._parse_float(self.soc_min_var.get(), 0.2),
                 "soc_max": self._parse_float(self.soc_max_var.get(), 0.9),
                 "use_selected_depot_vehicle_inventory": True,
@@ -5765,6 +6396,9 @@ class App:
         messagebox.showinfo("実行開始", "入力データ作成(Prepare)を開始します")
 
         def done(resp: dict[str, Any]) -> None:
+            self._finalize_main_initial_soc_bulk_apply(
+                dict(resp.get("_mainInitialSocApply") or {})
+            )
             self._sync_prepared_state_from_response(resp)
             prepare_profile = dict(resp.get("prepareProfile") or {})
             self.log_line(
@@ -5791,7 +6425,7 @@ class App:
                 console=False,
             )
             if self.prepared_ready:
-                messagebox.showinfo("Prepare完了", f"prepared_input_id: {self.prepared_input_id or '-'}")
+                self.log_line(f"Prepare完了: prepared_input_id={self.prepared_input_id or '-'}")
             else:
                 route_count = int(resp.get("routeCount") or 0)
                 if route_count <= 0:
@@ -5807,7 +6441,30 @@ class App:
             payload = self._prepare_payload()
         except ValueError:
             return
-        self.run_bg(lambda: self.client.prepare_simulation(scenario_id, payload), done)
+        if (
+            self.apply_initial_soc_percent_to_selected_bevs_var.get()
+            and not self._selected_depot_ids()
+        ):
+            messagebox.showwarning(
+                "入力不足",
+                "初期SOC比を一斉反映するには営業所を選択してください",
+            )
+            return
+        def action() -> dict[str, Any]:
+            apply_info = self._maybe_apply_main_initial_soc_to_selected_bevs(
+                scenario_id
+            )
+            try:
+                resp = self.client.prepare_simulation(scenario_id, payload)
+            except Exception:
+                self._queue_on_ui_thread(
+                    lambda: self._finalize_main_initial_soc_bulk_apply(apply_info)
+                )
+                raise
+            resp["_mainInitialSocApply"] = apply_info
+            return resp
+
+        self.run_bg(action, done)
 
     def _set_job_from_resp(self, resp: dict[str, Any], label: str) -> None:
         self.last_job_id = str(resp.get("job_id") or resp.get("jobId") or "")
@@ -5986,7 +6643,9 @@ class App:
         self.optimization_last_snapshot_json = ""
         self._optimization_console_log(f"{action_label}を開始します")
         if payload is not None:
-            self._optimization_console_log("payload=" + json.dumps(payload, ensure_ascii=False, indent=2))
+            self._optimization_console_log(
+                "payload=" + self._compact_execution_payload(payload)
+            )
         self.log_line(f"{action_label}を開始します")
 
         def done(resp: dict[str, Any]) -> None:
@@ -5996,10 +6655,10 @@ class App:
             self._optimization_console_log(f"ジョブ開始: {self.optimization_job_id}")
             if payload is not None:
                 self._optimization_console_log(
-                    "payload_effective=" + json.dumps(payload, ensure_ascii=False, indent=2)
+                    "payload_effective=" + self._compact_execution_payload(payload)
                 )
             self._optimization_console_log(
-                "start_response=" + json.dumps(resp or {}, ensure_ascii=False, indent=2)
+                "start_response=" + self._compact_execution_response(resp or {})
             )
             self._start_optimization_polling(action_label)
 
@@ -6229,6 +6888,10 @@ class App:
             (self.max_start_fragments_var, "開始断片上限を変更"),
             (self.max_end_fragments_var, "終了断片上限を変更"),
             (self.initial_soc_percent_var, "初期SOC比を変更"),
+            (
+                self.apply_initial_soc_percent_to_selected_bevs_var,
+                "初期SOC比の一斉反映設定を変更",
+            ),
             (self.final_soc_floor_percent_var, "終了SOC床を変更"),
             (self.final_soc_target_percent_var, "終了SOC目標を変更"),
             (self.final_soc_target_tolerance_percent_var, "終了SOC目標許容幅を変更"),
@@ -6416,6 +7079,54 @@ class App:
         for line in self._prepared_scope_audit_lines(audit, prefix=prefix):
             logger(line)
 
+    @staticmethod
+    def _compact_execution_payload(payload: dict[str, Any] | None) -> str:
+        if not isinstance(payload, dict) or not payload:
+            return ""
+        preview_keys = (
+            "mode",
+            "prepared_input_id",
+            "service_id",
+            "depot_id",
+            "source",
+            "time_limit_seconds",
+            "mip_gap",
+            "alns_iterations",
+            "no_improvement_limit",
+            "destroy_fraction",
+            "rebuild_dispatch",
+            "current_time",
+        )
+        preview = {
+            key: payload.get(key)
+            for key in preview_keys
+            if key in payload and payload.get(key) not in (None, "", [], {})
+        }
+        if not preview:
+            preview = dict(payload)
+        return json.dumps(preview, ensure_ascii=False, sort_keys=True)
+
+    @staticmethod
+    def _compact_execution_response(response: dict[str, Any] | None) -> str:
+        if not isinstance(response, dict) or not response:
+            return ""
+        preview_keys = (
+            "job_id",
+            "jobId",
+            "status",
+            "message",
+            "result_key",
+            "resultKey",
+        )
+        preview = {
+            key: response.get(key)
+            for key in preview_keys
+            if key in response and response.get(key) not in (None, "", [], {})
+        }
+        if not preview:
+            preview = dict(response)
+        return json.dumps(preview, ensure_ascii=False, sort_keys=True)
+
     def _log_completed_optimization_result(self, result: dict[str, Any]) -> None:
         if not isinstance(result, dict) or not result:
             return
@@ -6551,12 +7262,14 @@ class App:
         if not force and encoded == self.optimization_last_snapshot_json:
             return
         self.optimization_last_snapshot_json = encoded
-        self._optimization_console_log("job_snapshot=" + json.dumps(snapshot, ensure_ascii=False, indent=2))
+        self._optimization_console_log("job_snapshot=" + encoded)
 
     def _start_optimization_polling(self, action_label: str) -> None:
         if not self.optimization_job_id:
             return
         self.optimization_polling = True
+        poll_interval_ms = 3000
+        snapshot_log_interval = 10
 
         def tick() -> None:
             if not self.optimization_polling:
@@ -6585,7 +7298,7 @@ class App:
                         f"poll#{self.optimization_poll_count} status={status or 'running'} progress={progress:.1f}% message={message or '-'}"
                     )
 
-                if status_changed or message_changed or (self.optimization_poll_count % 5 == 0):
+                if status_changed or message_changed or (self.optimization_poll_count % snapshot_log_interval == 0):
                     self._log_job_snapshot_if_changed(job, force=status_changed or message_changed)
 
                 self.optimization_last_status = status
@@ -6594,7 +7307,10 @@ class App:
                 shown = status or "running"
                 self.optimization_status_var.set(shown)
                 self.job_var.set(f"job: {job_id} ({shown})")
-                self.log_line(f"実行監視: action={action_label} status={shown} progress={progress:.1f}%")
+                if status_changed or message_changed or (self.optimization_poll_count % snapshot_log_interval == 0):
+                    self.log_line(
+                        f"実行監視: action={action_label} status={shown} progress={progress:.1f}%"
+                    )
 
                 finished = status in {"completed", "failed", "error", "cancelled", "canceled"}
                 if finished:
@@ -6623,10 +7339,10 @@ class App:
                             f"{action_label} が失敗しました。\n{first_line}\n\n詳細は最適化実行モニターのログを確認してください。",
                         )
                     else:
-                        messagebox.showinfo("実行ジョブ", f"{action_label} が完了しました。\nstatus={shown}")
+                        self.log_line(f"{action_label} が完了しました。status={shown}")
                     return
                 if self.optimization_window and self.optimization_window.winfo_exists():
-                    self.optimization_window.after(2000, tick)
+                    self.optimization_window.after(poll_interval_ms, tick)
 
             self.run_bg(lambda: self.client.get_job(job_id), done)
 
@@ -6813,12 +7529,13 @@ class App:
                           ※スロット 48 は 24:00。翌日 0:00 扱い。
 
 ■ SOC（State of Charge / バッテリー残量）
-  initial_soc             運行開始時の電池残量比率（0〜1、例: 0.8）
-                          1.0 = 満充電。Prepare 後は initial_soc_percent に引き継がれる
+  initial_soc             互換用の開始SOC設定。UI上は通常 `initial_soc_percent` を編集する
   soc_min                 走行中に下回れない SOC 下限（0〜1）
                           小さいほど柔軟だが電欠リスク上昇。例: 0.2
   soc_max                 充電を停止する SOC 上限（0〜1）。例: 0.9
-  initial_soc_percent     Prepare レベルで使用される開始 SOC（通常は initial_soc と同じ値）
+  initial_soc_percent     メイン画面で編集する開始SOC比（0〜1）
+                          「選択営業所の全BEVへ Save/Prepare 時に一斉反映」を ON にすると
+                          選択営業所の BEV `initialSoc` をこの値へ一括更新してから保存/Prepareする
   final_soc_floor_percent 帰庫後の SOC 最低保証（翌日分の確保）。例: 0.2
   final_soc_target_percent 帰庫後 SOC の目標値（可能な範囲で目指す）。例: 0.8
   final_soc_target_tolerance_percent
