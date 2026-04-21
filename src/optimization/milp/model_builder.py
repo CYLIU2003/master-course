@@ -63,7 +63,7 @@ class MILPModelBuilder:
         horizon_start_min = int(problem.metadata.get("horizon_start_min") or 0)
         max_successors_per_trip = self._safe_positive_int(
             problem.metadata.get("milp_max_successors_per_trip"),
-            default=999999,
+            default=8,
         )
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         route_band_by_trip_id = {

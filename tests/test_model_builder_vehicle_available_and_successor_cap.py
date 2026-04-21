@@ -57,3 +57,12 @@ def test_large_successor_cap_keeps_all_successors_for_benchmark_metadata() -> No
     pairs = MILPModelBuilder().enumerate_arc_pairs(problem, trip_by_id)
 
     assert len([pair for pair in pairs if pair[1] == "t0"]) == 11
+
+
+def test_default_successor_cap_limits_dense_graphs() -> None:
+    problem = _problem()
+    trip_by_id = problem.trip_by_id()
+
+    pairs = MILPModelBuilder().enumerate_arc_pairs(problem, trip_by_id)
+
+    assert len([pair for pair in pairs if pair[1] == "t0"]) == 8

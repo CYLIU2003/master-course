@@ -2047,28 +2047,40 @@ class ProblemBuilder:
                 item[0].trip_id if item else "",
             ),
         ):
-            vehicle = self._select_vehicle_for_shared_chain(
-                chain,
-                vehicles=available_vehicles,
-                context=context,
-                vehicle_type_counts=vehicle_type_counts,
-            )
-            if vehicle is None:
-                skipped_trip_ids.extend(trip.trip_id for trip in chain)
-                continue
-            available_vehicles = [
-                candidate
-                for candidate in available_vehicles
-                if str(candidate.vehicle_id) != str(vehicle.vehicle_id)
-            ]
-            duty = self._build_shared_chain_duty(
-                chain,
-                vehicle=vehicle,
-                context=context,
-            )
-            duties.append(duty)
-            duty_vehicle_map[str(duty.duty_id)] = str(vehicle.vehicle_id)
-            served_trip_ids.update(duty.trip_ids)
+            remaining_chain = list(chain)
+            while remaining_chain:
+                vehicle = self._select_vehicle_for_shared_chain(
+                    remaining_chain,
+                    vehicles=available_vehicles,
+                    context=context,
+                    vehicle_type_counts=vehicle_type_counts,
+                )
+                if vehicle is None:
+                    skipped_trip_ids.extend(trip.trip_id for trip in remaining_chain)
+                    break
+                prefix_len = self._energy_feasible_prefix_length(
+                    remaining_chain,
+                    vehicle=vehicle,
+                    context=context,
+                )
+                if prefix_len <= 0:
+                    skipped_trip_ids.extend(trip.trip_id for trip in remaining_chain)
+                    break
+                subchain = remaining_chain[:prefix_len]
+                available_vehicles = [
+                    candidate
+                    for candidate in available_vehicles
+                    if str(candidate.vehicle_id) != str(vehicle.vehicle_id)
+                ]
+                duty = self._build_shared_chain_duty(
+                    subchain,
+                    vehicle=vehicle,
+                    context=context,
+                )
+                duties.append(duty)
+                duty_vehicle_map[str(duty.duty_id)] = str(vehicle.vehicle_id)
+                served_trip_ids.update(duty.trip_ids)
+                remaining_chain = remaining_chain[prefix_len:]
 
         unserved_trip_ids = tuple(
             sorted((all_trip_ids - set(served_trip_ids)).union(set(skipped_trip_ids)))
@@ -2083,6 +2095,7 @@ class ProblemBuilder:
                 "source": "dispatch_pooled_shared_path_cover_baseline",
                 "duty_vehicle_map": merge_duty_vehicle_maps(duty_vehicle_map),
                 "path_cover_chain_count": len(chains),
+                "path_cover_segment_count": len(duties),
                 "path_cover_matching_cost": float(matching_cost),
                 "path_cover_matching_mode": "max_cardinality_min_deadhead_wait",
             },
@@ -2101,7 +2114,7 @@ class ProblemBuilder:
         first_trip = chain[0]
         origin_key = str(first_trip.origin_stop_id or first_trip.origin)
         best_vehicle: Optional[ProblemVehicle] = None
-        best_score: Optional[Tuple[int, int, float, str]] = None
+        best_score: Optional[Tuple[int, int, int, float, str]] = None
         for vehicle in vehicles:
             if str(vehicle.vehicle_type) not in first_trip.allowed_vehicle_types:
                 continue
@@ -2111,7 +2124,15 @@ class ProblemBuilder:
             deadhead_min = int(context.get_deadhead_min(home_depot_id, origin_key) or 0)
             if deadhead_min <= 0 and not context.locations_equivalent(home_depot_id, origin_key):
                 continue
+            feasible_prefix_len = self._energy_feasible_prefix_length(
+                chain,
+                vehicle=vehicle,
+                context=context,
+            )
+            if feasible_prefix_len <= 0:
+                continue
             score = (
+                feasible_prefix_len,
                 int(vehicle_type_counts.get(str(vehicle.vehicle_type), 0) or 0),
                 -deadhead_min,
                 -float(vehicle.fixed_use_cost_jpy or 0.0),
@@ -2121,6 +2142,77 @@ class ProblemBuilder:
                 best_score = score
                 best_vehicle = vehicle
         return best_vehicle
+
+    def _energy_feasible_prefix_length(
+        self,
+        chain: Sequence[Trip],
+        *,
+        vehicle: ProblemVehicle,
+        context: DispatchContext,
+    ) -> int:
+        if not chain:
+            return 0
+        powertrain = str(getattr(vehicle, "vehicle_type", "") or "").upper()
+        if powertrain not in {"BEV", "PHEV", "FCEV"}:
+            return len(chain)
+
+        profile = context.vehicle_profiles.get(str(getattr(vehicle, "vehicle_type", "") or ""))
+        capacity = max(
+            float(
+                getattr(vehicle, "battery_capacity_kwh", None)
+                or getattr(profile, "battery_capacity_kwh", 0.0)
+                or 0.0
+            ),
+            0.0,
+        )
+        if capacity <= 0.0:
+            return len(chain)
+        reserve = float(
+            getattr(vehicle, "reserve_soc", None)
+            or getattr(profile, "reserve_soc", None)
+            or (0.15 * capacity)
+        )
+        if reserve <= 1.0:
+            reserve = reserve * capacity
+        reserve = min(max(reserve, 0.0), capacity)
+        soc = getattr(vehicle, "initial_soc", None)
+        if soc is None:
+            soc_kwh = 0.8 * capacity
+        else:
+            soc_kwh = float(soc)
+            if soc_kwh <= 1.0:
+                soc_kwh = soc_kwh * capacity
+        soc_kwh = min(max(soc_kwh, 0.0), capacity)
+
+        energy_rate = max(
+            float(
+                getattr(vehicle, "energy_consumption_kwh_per_km", None)
+                or getattr(profile, "energy_consumption_kwh_per_km", 0.0)
+                or 0.0
+            ),
+            0.0,
+        )
+        if energy_rate <= 0.0:
+            energy_rate = 1.2
+        deadhead_speed_kmh = 18.0
+
+        prefix_len = 0
+        previous_trip: Optional[Trip] = None
+        for trip in chain:
+            trip_energy_kwh = max(float(trip.distance_km or 0.0), 0.0) * energy_rate
+            required_departure_kwh = reserve + trip_energy_kwh
+            if soc_kwh + 1.0e-6 < required_departure_kwh:
+                break
+            soc_kwh -= trip_energy_kwh
+            prefix_len += 1
+            if previous_trip is not None:
+                from_key = str(previous_trip.destination_stop_id or previous_trip.destination)
+                to_key = str(trip.origin_stop_id or trip.origin)
+                deadhead_min = max(int(context.get_deadhead_min(from_key, to_key) or 0), 0)
+                deadhead_kwh = max(float(deadhead_min), 0.0) * deadhead_speed_kmh / 60.0 * energy_rate
+                soc_kwh -= deadhead_kwh
+            previous_trip = trip
+        return prefix_len
 
     def _build_shared_chain_duty(
         self,
