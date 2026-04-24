@@ -342,7 +342,7 @@ tests/       回帰テスト
     - 同一日 fragment の `end_arc + start_arc <= 1` depot-reset incompatibility cut を追加。
   - `src/optimization/milp/model_builder.py`
     - assignment / arc pair の両方で unavailable vehicle を除外。
-    - successor cap 未指定時の default を `999999` にして 8 本剪定へ戻らないようにした。
+    - successor cap 未指定時の default は後続の 237d dense graph 対応で `8` に戻している。exact 比較が必要な場合は `milp_max_successors_per_trip` を明示的に大きくする。
   - `src/optimization/common/feasibility.py`
     - unavailable vehicle に duty が載った場合は hard error。
     - strict uncovered message を `strict coverage violated with N uncovered trips` に変更。

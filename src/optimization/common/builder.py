@@ -109,6 +109,28 @@ class ProblemBuilder:
             or solver_cfg.get("end_time")
             or "23:00"
         )
+        charging_cfg = ((scenario.get("scenario_overlay") or {}).get("charging_constraints") or {})
+        final_soc_floor_percent = self._safe_float(
+            self._first_present(
+                simulation_cfg.get("final_soc_floor_percent"),
+                charging_cfg.get("final_soc_floor_percent"),
+            )
+        )
+        final_soc_target_percent = self._safe_float(
+            self._first_present(
+                simulation_cfg.get("final_soc_target_percent"),
+                charging_cfg.get("final_soc_target_percent"),
+            )
+        )
+        final_soc_target_tolerance_percent = self._safe_float(
+            self._first_present(
+                simulation_cfg.get("final_soc_target_tolerance_percent"),
+                charging_cfg.get("final_soc_target_tolerance_percent"),
+            )
+        )
+        planning_days_effective = max(int(planning_days or 1), 1)
+        full_day_slots = (24 * 60) // max(timestep_min, 1)
+        force_full_day_power_horizon = final_soc_target_percent is not None
         chargers = self._build_chargers_from_scenario(scenario, depot_id)
         price_slots = self._build_price_slots_from_scenario(
             scenario,
@@ -116,15 +138,15 @@ class ProblemBuilder:
             depot_id,
             timestep_min=timestep_min,
             start_time=operation_start_time,
-            slots_per_day=(24 * 60) // max(timestep_min, 1)
-            if max(int(planning_days or 1), 1) > 1
+            slots_per_day=full_day_slots
+            if planning_days_effective > 1 or force_full_day_power_horizon
             else None,
+            align_explicit_slots=force_full_day_power_horizon,
         )
         pv_slots = self._build_pv_slots_from_scenario(scenario)
         vehicle_counts = self._vehicle_counts_from_scenario(scenario, depot_id)
         weights = self._objective_weights_from_scenario(scenario)
         baseline = self._build_baseline_plan_from_scenario(scenario, context)
-        charging_cfg = ((scenario.get("scenario_overlay") or {}).get("charging_constraints") or {})
         cost_cfg = ((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {})
         solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
         simulation_cfg = scenario.get("simulation_config") or {}
@@ -152,7 +174,6 @@ class ProblemBuilder:
         milp_max_successors_per_trip = solver_cfg.get("milp_max_successors_per_trip")
         if milp_max_successors_per_trip is None:
             milp_max_successors_per_trip = simulation_cfg.get("milp_max_successors_per_trip")
-        planning_days_effective = max(int(planning_days or 1), 1)
         allow_same_day_depot_cycles = bool(
             simulation_cfg.get(
                 "allow_same_day_depot_cycles",
@@ -200,18 +221,6 @@ class ProblemBuilder:
         initial_soc = self._safe_float(simulation_cfg.get("initial_soc"))
         if initial_soc is None:
             initial_soc = self._safe_float(charging_cfg.get("initial_soc"))
-        final_soc_floor_percent = self._safe_float(
-            simulation_cfg.get("final_soc_floor_percent")
-            or charging_cfg.get("final_soc_floor_percent")
-        )
-        final_soc_target_percent = self._safe_float(
-            simulation_cfg.get("final_soc_target_percent")
-            or charging_cfg.get("final_soc_target_percent")
-        )
-        final_soc_target_tolerance_percent = self._safe_float(
-            simulation_cfg.get("final_soc_target_tolerance_percent")
-            or charging_cfg.get("final_soc_target_tolerance_percent")
-        )
         initial_ice_fuel_percent = self._safe_float(
             simulation_cfg.get("initial_ice_fuel_percent")
         )
@@ -234,6 +243,30 @@ class ProblemBuilder:
         ).strip().lower()
         if charging_window_mode not in {"home_depot_proxy", "timetable_layover"}:
             charging_window_mode = "timetable_layover"
+        allow_overnight_depot_moves = str(
+            simulation_cfg.get("allow_overnight_depot_moves")
+            or solver_cfg.get("allow_overnight_depot_moves")
+            or charging_cfg.get("allow_overnight_depot_moves")
+            or "forbid"
+        ).strip().lower()
+        overnight_window_start = str(
+            simulation_cfg.get("overnight_window_start")
+            or solver_cfg.get("overnight_window_start")
+            or charging_cfg.get("overnight_window_start")
+            or "23:00"
+        )
+        overnight_window_end = str(
+            simulation_cfg.get("overnight_window_end")
+            or solver_cfg.get("overnight_window_end")
+            or charging_cfg.get("overnight_window_end")
+            or "05:00"
+        )
+        overnight_charge_target_mode = str(
+            simulation_cfg.get("overnight_charge_target_mode")
+            or solver_cfg.get("overnight_charge_target_mode")
+            or charging_cfg.get("overnight_charge_target_mode")
+            or "minimum_required"
+        ).strip().lower()
         home_depot_charge_pre_window_min = self._safe_float(
             simulation_cfg.get("home_depot_charge_pre_window_min")
         )
@@ -345,6 +378,7 @@ class ProblemBuilder:
             allow_partial_service=allow_partial_service,
             service_coverage_mode=service_coverage_mode,
             initial_soc_percent=initial_soc_percent,
+            initial_soc=initial_soc,
             final_soc_floor_percent=final_soc_floor_percent,
             final_soc_target_percent=final_soc_target_percent,
             final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
@@ -354,6 +388,10 @@ class ProblemBuilder:
             default_ice_tank_capacity_l=default_ice_tank_capacity_l,
             deadhead_speed_kmh=deadhead_speed_kmh,
             charging_window_mode=charging_window_mode,
+            allow_overnight_depot_moves=allow_overnight_depot_moves,
+            overnight_window_start=overnight_window_start,
+            overnight_window_end=overnight_window_end,
+            overnight_charge_target_mode=overnight_charge_target_mode,
             home_depot_charge_pre_window_min=home_depot_charge_pre_window_min,
             home_depot_charge_post_window_min=home_depot_charge_post_window_min,
             enable_contract_overage_penalty=bool(enable_contract_overage_penalty)
@@ -417,6 +455,10 @@ class ProblemBuilder:
         default_ice_tank_capacity_l: Optional[float] = None,
         deadhead_speed_kmh: Optional[float] = None,
         charging_window_mode: str = "timetable_layover",
+        allow_overnight_depot_moves: str = "forbid",
+        overnight_window_start: str = "23:00",
+        overnight_window_end: str = "05:00",
+        overnight_charge_target_mode: str = "minimum_required",
         home_depot_charge_pre_window_min: Optional[float] = None,
         home_depot_charge_post_window_min: Optional[float] = None,
         enable_contract_overage_penalty: bool = True,
@@ -464,6 +506,10 @@ class ProblemBuilder:
             home_depot_charge_post_window_min = float(timestep_min)
         normalized_start_time = self._normalize_hhmm(operation_start_time) or self._min_hhmm(context) or "05:00"
         normalized_end_time = self._normalize_hhmm(operation_end_time) or self._max_hhmm(context) or "23:00"
+        operation_end_clock_time = normalized_end_time
+        post_return_target_enabled = final_soc_target_percent is not None
+        if post_return_target_enabled and max(int(planning_days or 1), 1) == 1:
+            normalized_end_time = normalized_start_time
         canonical_depot_id = str(canonical_depot_id or "depot_default")
         bev_reference_capacity_kwh = self._reference_bev_capacity_kwh(context)
         final_soc_floor_ratio = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
@@ -576,7 +622,7 @@ class ProblemBuilder:
             ),
         )
         slots_per_day: Optional[int] = None
-        if planning_days > 1:
+        if planning_days > 1 or post_return_target_enabled:
             slots_per_day = max(1, (24 * 60) // max(timestep_min, 1))
         elif operation_start_time and operation_end_time:
             duration_min = self._daily_window_duration_min(normalized_start_time, normalized_end_time)
@@ -591,6 +637,13 @@ class ProblemBuilder:
                 slots_per_day=slots_per_day,
             )
         )
+        if slots_per_day is not None and post_return_target_enabled:
+            base_time_slots = list(
+                self._align_price_slots_to_count(
+                    tuple(base_time_slots),
+                    slots_per_day=slots_per_day,
+                )
+            )
         
         # ===== Multi-day price slot tiling =====
         # When planning_days > 1, tile price slots for each additional day
@@ -604,6 +657,7 @@ class ProblemBuilder:
                             slot_index=day_idx * slots_per_day + base_slot.slot_index,
                             grid_buy_yen_per_kwh=base_slot.grid_buy_yen_per_kwh,
                             grid_sell_yen_per_kwh=base_slot.grid_sell_yen_per_kwh,
+                            demand_charge_weight=base_slot.demand_charge_weight,
                             co2_factor=base_slot.co2_factor,
                         )
                     )
@@ -611,7 +665,14 @@ class ProblemBuilder:
         else:
             time_slots = tuple(base_time_slots)
         
-        pv_series = tuple(self._build_pv_slots(time_slots, pv_slots, planning_days=planning_days))
+        pv_series = tuple(
+            self._build_pv_slots(
+                time_slots,
+                pv_slots,
+                planning_days=planning_days,
+                align_to_time_slots=post_return_target_enabled,
+            )
+        )
         depot_energy_assets = self._build_depot_energy_assets_from_scenario(
             scenario_id=scenario_id,
             time_slots=time_slots,
@@ -666,6 +727,14 @@ class ProblemBuilder:
                 all_trip_ids=all_trip_ids,
                 feasible_connections=feasible_connections,
                 fixed_route_band_mode=bool(fixed_route_band_mode),
+                chargers=chargers,
+                timestep_min=timestep_min,
+                final_soc_floor_percent=final_soc_floor_percent,
+                final_soc_target_percent=final_soc_target_percent,
+                final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                allow_overnight_depot_moves=allow_overnight_depot_moves,
+                overnight_window_start=overnight_window_start,
+                overnight_window_end=overnight_window_end,
             )
         return CanonicalOptimizationProblem(
             scenario=OptimizationScenario(
@@ -686,6 +755,10 @@ class ProblemBuilder:
                 ice_co2_kg_per_l=float(ice_co2_kg_per_l),
                 allow_same_day_depot_cycles=bool(allow_same_day_depot_cycles),
                 max_depot_cycles_per_vehicle_per_day=max(1, int(max_depot_cycles_per_vehicle_per_day or 1)),
+                allow_overnight_depot_moves=str(allow_overnight_depot_moves or "forbid").strip().lower(),
+                overnight_window_start=str(overnight_window_start or "23:00"),
+                overnight_window_end=str(overnight_window_end or "05:00"),
+                overnight_charge_target_mode=str(overnight_charge_target_mode or "minimum_required").strip().lower(),
                 service_coverage_mode=service_coverage_mode,
             ),
             dispatch_context=context,
@@ -725,7 +798,11 @@ class ProblemBuilder:
                 "milp_max_successors_per_trip": milp_max_successors_per_trip,
                 "planning_days": planning_days,
                 "operation_start_time": normalized_start_time,
-                "operation_end_time": normalized_end_time,
+                "operation_end_time": operation_end_clock_time,
+                "post_return_soc_target_enabled": bool(post_return_target_enabled),
+                "post_return_target_horizon_extended": bool(
+                    post_return_target_enabled and planning_days == 1
+                ),
                 "horizon_start_min": int(horizon_start_min or 0),
                 "same_day_depot_cycles_enabled": bool(allow_same_day_depot_cycles),
                 "allow_same_day_depot_cycles": bool(allow_same_day_depot_cycles),
@@ -754,6 +831,10 @@ class ProblemBuilder:
                 "default_ice_tank_capacity_l": default_ice_tank_capacity_l,
                 "deadhead_speed_kmh": deadhead_speed_kmh,
                 "charging_window_mode": str(charging_window_mode or "timetable_layover").strip().lower(),
+                "allow_overnight_depot_moves": str(allow_overnight_depot_moves or "forbid").strip().lower(),
+                "overnight_window_start": str(overnight_window_start or "23:00"),
+                "overnight_window_end": str(overnight_window_end or "05:00"),
+                "overnight_charge_target_mode": str(overnight_charge_target_mode or "minimum_required").strip().lower(),
                 "home_depot_charge_pre_window_min": float(home_depot_charge_pre_window_min or 0.0),
                 "home_depot_charge_post_window_min": float(home_depot_charge_post_window_min or 0.0),
                 "enable_contract_overage_penalty": bool(enable_contract_overage_penalty)
@@ -1809,6 +1890,14 @@ class ProblemBuilder:
         all_trip_ids: Optional[set[str]] = None,
         feasible_connections: Optional[Mapping[str, Tuple[str, ...]]] = None,
         fixed_route_band_mode: bool = False,
+        chargers: Sequence[ChargerDefinition] = (),
+        timestep_min: int = 60,
+        final_soc_floor_percent: Optional[float] = None,
+        final_soc_target_percent: Optional[float] = None,
+        final_soc_target_tolerance_percent: Optional[float] = None,
+        allow_overnight_depot_moves: str = "forbid",
+        overnight_window_start: str = "23:00",
+        overnight_window_end: str = "05:00",
     ) -> AssignmentPlan:
         baseline_all_trip_ids = all_trip_ids or {trip.trip_id for trip in context.trips}
 
@@ -1820,6 +1909,15 @@ class ProblemBuilder:
                 all_trip_ids=baseline_all_trip_ids,
                 feasible_connections=feasible_connections,
                 fixed_route_band_mode=fixed_route_band_mode,
+                chargers=chargers,
+                timestep_min=timestep_min,
+                horizon_start_min=horizon_start_min,
+                final_soc_floor_percent=final_soc_floor_percent,
+                final_soc_target_percent=final_soc_target_percent,
+                final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                allow_overnight_depot_moves=allow_overnight_depot_moves,
+                overnight_window_start=overnight_window_start,
+                overnight_window_end=overnight_window_end,
             )
             if len(pooled_plan.unserved_trip_ids) == 0:
                 return pooled_plan
@@ -1948,6 +2046,15 @@ class ProblemBuilder:
         all_trip_ids: set[str],
         feasible_connections: Optional[Mapping[str, Tuple[str, ...]]] = None,
         fixed_route_band_mode: bool = False,
+        chargers: Sequence[ChargerDefinition] = (),
+        timestep_min: int = 60,
+        horizon_start_min: int = 0,
+        final_soc_floor_percent: Optional[float] = None,
+        final_soc_target_percent: Optional[float] = None,
+        final_soc_target_tolerance_percent: Optional[float] = None,
+        allow_overnight_depot_moves: str = "forbid",
+        overnight_window_start: str = "23:00",
+        overnight_window_end: str = "05:00",
     ) -> AssignmentPlan:
         trip_map = context.trips_by_id()
         trip_ids = {trip.trip_id for trip in context.trips}
@@ -2054,6 +2161,15 @@ class ProblemBuilder:
                     vehicles=available_vehicles,
                     context=context,
                     vehicle_type_counts=vehicle_type_counts,
+                    chargers=chargers,
+                    timestep_min=timestep_min,
+                    horizon_start_min=horizon_start_min,
+                    final_soc_floor_percent=final_soc_floor_percent,
+                    final_soc_target_percent=final_soc_target_percent,
+                    final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                    allow_overnight_depot_moves=allow_overnight_depot_moves,
+                    overnight_window_start=overnight_window_start,
+                    overnight_window_end=overnight_window_end,
                 )
                 if vehicle is None:
                     skipped_trip_ids.extend(trip.trip_id for trip in remaining_chain)
@@ -2062,6 +2178,15 @@ class ProblemBuilder:
                     remaining_chain,
                     vehicle=vehicle,
                     context=context,
+                    chargers=chargers,
+                    timestep_min=timestep_min,
+                    horizon_start_min=horizon_start_min,
+                    final_soc_floor_percent=final_soc_floor_percent,
+                    final_soc_target_percent=final_soc_target_percent,
+                    final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                    allow_overnight_depot_moves=allow_overnight_depot_moves,
+                    overnight_window_start=overnight_window_start,
+                    overnight_window_end=overnight_window_end,
                 )
                 if prefix_len <= 0:
                     skipped_trip_ids.extend(trip.trip_id for trip in remaining_chain)
@@ -2108,6 +2233,15 @@ class ProblemBuilder:
         vehicles: Sequence[ProblemVehicle],
         context: DispatchContext,
         vehicle_type_counts: Mapping[str, int],
+        chargers: Sequence[ChargerDefinition] = (),
+        timestep_min: int = 60,
+        horizon_start_min: int = 0,
+        final_soc_floor_percent: Optional[float] = None,
+        final_soc_target_percent: Optional[float] = None,
+        final_soc_target_tolerance_percent: Optional[float] = None,
+        allow_overnight_depot_moves: str = "forbid",
+        overnight_window_start: str = "23:00",
+        overnight_window_end: str = "05:00",
     ) -> Optional[ProblemVehicle]:
         if not chain or not vehicles:
             return None
@@ -2128,6 +2262,15 @@ class ProblemBuilder:
                 chain,
                 vehicle=vehicle,
                 context=context,
+                chargers=chargers,
+                timestep_min=timestep_min,
+                horizon_start_min=horizon_start_min,
+                final_soc_floor_percent=final_soc_floor_percent,
+                final_soc_target_percent=final_soc_target_percent,
+                final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                allow_overnight_depot_moves=allow_overnight_depot_moves,
+                overnight_window_start=overnight_window_start,
+                overnight_window_end=overnight_window_end,
             )
             if feasible_prefix_len <= 0:
                 continue
@@ -2149,6 +2292,15 @@ class ProblemBuilder:
         *,
         vehicle: ProblemVehicle,
         context: DispatchContext,
+        chargers: Sequence[ChargerDefinition] = (),
+        timestep_min: int = 60,
+        horizon_start_min: int = 0,
+        final_soc_floor_percent: Optional[float] = None,
+        final_soc_target_percent: Optional[float] = None,
+        final_soc_target_tolerance_percent: Optional[float] = None,
+        allow_overnight_depot_moves: str = "forbid",
+        overnight_window_start: str = "23:00",
+        overnight_window_end: str = "05:00",
     ) -> int:
         if not chain:
             return 0
@@ -2196,23 +2348,183 @@ class ProblemBuilder:
             energy_rate = 1.2
         deadhead_speed_kmh = 18.0
 
+        target_enabled = final_soc_target_percent is not None
+        final_floor_ratio = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
+        target_ratio = self._normalize_percent_like_to_ratio(final_soc_target_percent)
+        tolerance_ratio = self._normalize_percent_like_to_ratio(final_soc_target_tolerance_percent) or 0.0
+        final_floor_kwh = max(reserve, (final_floor_ratio or 0.0) * capacity)
+        target_lower_kwh = final_floor_kwh
+        if target_ratio is not None:
+            target_lower_kwh = min(
+                capacity,
+                max(final_floor_kwh, max(target_ratio - max(tolerance_ratio, 0.0), 0.0) * capacity),
+            )
+        max_charge_kw = self._max_vehicle_home_charger_kw(
+            vehicle,
+            chargers=chargers,
+        )
+
         prefix_len = 0
         previous_trip: Optional[Trip] = None
-        for trip in chain:
+        for trip_index, trip in enumerate(chain, start=1):
             trip_energy_kwh = max(float(trip.distance_km or 0.0), 0.0) * energy_rate
-            required_departure_kwh = reserve + trip_energy_kwh
+            inbound_deadhead_kwh = 0.0
+            if target_enabled:
+                if previous_trip is None:
+                    from_key = str(vehicle.home_depot_id or "").strip()
+                    to_key = str(trip.origin_stop_id or trip.origin)
+                else:
+                    from_key = str(previous_trip.destination_stop_id or previous_trip.destination)
+                    to_key = str(trip.origin_stop_id or trip.origin)
+                inbound_deadhead_min = self._required_deadhead_min(context, from_key, to_key)
+                if inbound_deadhead_min is None:
+                    break
+                inbound_deadhead_kwh = (
+                    max(float(inbound_deadhead_min), 0.0)
+                    * deadhead_speed_kmh
+                    / 60.0
+                    * energy_rate
+                )
+            required_departure_kwh = reserve + trip_energy_kwh + inbound_deadhead_kwh
             if soc_kwh + 1.0e-6 < required_departure_kwh:
                 break
+            soc_kwh -= inbound_deadhead_kwh
             soc_kwh -= trip_energy_kwh
-            prefix_len += 1
             if previous_trip is not None:
                 from_key = str(previous_trip.destination_stop_id or previous_trip.destination)
                 to_key = str(trip.origin_stop_id or trip.origin)
                 deadhead_min = max(int(context.get_deadhead_min(from_key, to_key) or 0), 0)
                 deadhead_kwh = max(float(deadhead_min), 0.0) * deadhead_speed_kmh / 60.0 * energy_rate
-                soc_kwh -= deadhead_kwh
+                if not target_enabled:
+                    soc_kwh -= deadhead_kwh
+            if target_enabled:
+                return_deadhead_min = self._required_deadhead_min(
+                    context,
+                    str(trip.destination_stop_id or trip.destination),
+                    str(vehicle.home_depot_id or ""),
+                )
+                if return_deadhead_min is None:
+                    previous_trip = trip
+                    continue
+                return_deadhead_kwh = (
+                    max(float(return_deadhead_min), 0.0)
+                    * deadhead_speed_kmh
+                    / 60.0
+                    * energy_rate
+                )
+                post_return_soc = soc_kwh - return_deadhead_kwh
+                if post_return_soc + 1.0e-6 < final_floor_kwh:
+                    previous_trip = trip
+                    continue
+                return_complete_min = int(trip.arrival_min) + int(return_deadhead_min)
+                available_charge_kwh = self._available_target_charge_kwh(
+                    return_complete_min=return_complete_min,
+                    target_min=self._next_service_start_min(
+                        int(trip.departure_min),
+                        horizon_start_min=horizon_start_min,
+                    ),
+                    charger_kw=max_charge_kw,
+                    timestep_min=timestep_min,
+                    horizon_start_min=horizon_start_min,
+                    allow_overnight_depot_moves=allow_overnight_depot_moves,
+                    overnight_window_start=overnight_window_start,
+                    overnight_window_end=overnight_window_end,
+                )
+                if post_return_soc + available_charge_kwh + 1.0e-6 < target_lower_kwh:
+                    previous_trip = trip
+                    continue
+            prefix_len = trip_index
             previous_trip = trip
         return prefix_len
+
+    def _max_vehicle_home_charger_kw(
+        self,
+        vehicle: ProblemVehicle,
+        *,
+        chargers: Sequence[ChargerDefinition],
+    ) -> float:
+        home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
+        candidates = [
+            max(float(charger.power_kw or 0.0), 0.0)
+            for charger in chargers
+            if not home_depot_id or str(charger.depot_id or "") == home_depot_id
+        ]
+        if not candidates:
+            candidates = [max(float(charger.power_kw or 0.0), 0.0) for charger in chargers]
+        return max(candidates, default=0.0)
+
+    def _required_deadhead_min(
+        self,
+        context: DispatchContext,
+        from_location: str,
+        to_location: str,
+    ) -> Optional[int]:
+        from_key = str(from_location or "").strip()
+        to_key = str(to_location or "").strip()
+        if not from_key or not to_key:
+            return None
+        if context.locations_equivalent(from_key, to_key):
+            return 0
+        deadhead_min = max(int(context.get_deadhead_min(from_key, to_key) or 0), 0)
+        if deadhead_min <= 0:
+            return None
+        return deadhead_min
+
+    def _next_service_start_min(
+        self,
+        minute: int,
+        *,
+        horizon_start_min: int,
+    ) -> int:
+        start = int(horizon_start_min or 0)
+        day_idx = max((int(minute) - start) // (24 * 60), 0)
+        return start + (day_idx + 1) * 24 * 60
+
+    def _available_target_charge_kwh(
+        self,
+        *,
+        return_complete_min: int,
+        target_min: int,
+        charger_kw: float,
+        timestep_min: int,
+        horizon_start_min: int,
+        allow_overnight_depot_moves: str = "forbid",
+        overnight_window_start: str = "23:00",
+        overnight_window_end: str = "05:00",
+    ) -> float:
+        if charger_kw <= 0.0 or target_min <= return_complete_min:
+            return 0.0
+        step = max(int(timestep_min or 60), 1)
+        start = int(horizon_start_min or 0)
+        offset = max(int(return_complete_min) - start, 0)
+        first_slot_start = start + ((offset + step - 1) // step) * step
+        allowed_slot_count = 0
+        overnight_mode = str(allow_overnight_depot_moves or "forbid").strip().lower()
+        for minute in range(first_slot_start, int(target_min), step):
+            if (
+                overnight_mode == "forbid"
+                and self._minute_is_in_overnight_window(
+                    minute % (24 * 60),
+                    overnight_window_start,
+                    overnight_window_end,
+                )
+            ):
+                continue
+            allowed_slot_count += 1
+        return allowed_slot_count * float(charger_kw) * (step / 60.0) * 0.95
+
+    def _minute_is_in_overnight_window(
+        self,
+        minute_of_day: int,
+        start_hhmm: str,
+        end_hhmm: str,
+    ) -> bool:
+        start = self._hhmm_to_min(start_hhmm) % (24 * 60)
+        end = self._hhmm_to_min(end_hhmm) % (24 * 60)
+        value = int(minute_of_day) % (24 * 60)
+        if start <= end:
+            return start <= value <= end
+        return value >= start or value <= end
 
     def _build_shared_chain_duty(
         self,
@@ -2604,6 +2916,7 @@ class ProblemBuilder:
         timestep_min: int,
         start_time: Optional[str] = None,
         slots_per_day: Optional[int] = None,
+        align_explicit_slots: bool = False,
     ) -> Tuple[EnergyPriceSlot, ...]:
         profile_rows = scenario.get("energy_price_profiles") or []
         if profile_rows:
@@ -2635,7 +2948,13 @@ class ProblemBuilder:
                         )
                     )
             if expanded:
-                return tuple(sorted(expanded, key=lambda slot: slot.slot_index))
+                ordered = tuple(sorted(expanded, key=lambda slot: slot.slot_index))
+                if align_explicit_slots:
+                    return self._align_price_slots_to_count(
+                        ordered,
+                        slots_per_day=slots_per_day,
+                    )
+                return ordered
 
         overlay_costs = ((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {})
         if isinstance(overlay_costs, dict):
@@ -2685,7 +3004,7 @@ class ProblemBuilder:
                             co2_factor=default_co2,
                         )
                     )
-                return tuple(expanded)
+                return self._align_price_slots_to_count(tuple(expanded), slots_per_day=slots_per_day)
 
         tariff_cfg = (
             (scenario.get("simulation_config") or {}).get("tariff")
@@ -2726,7 +3045,10 @@ class ProblemBuilder:
                         demand_charge_weight=price.base_load_kw,
                         co2_factor=0.0,
                     )
-                return tuple(grouped[idx] for idx in sorted(grouped))
+                return self._align_price_slots_to_count(
+                    tuple(grouped[idx] for idx in sorted(grouped)),
+                    slots_per_day=slots_per_day,
+                )
         return tuple(
             self._build_time_slot_prices(
                 context,
@@ -2736,6 +3058,32 @@ class ProblemBuilder:
                 slots_per_day=slots_per_day,
             )
         )
+
+    def _align_price_slots_to_count(
+        self,
+        slots: Sequence[EnergyPriceSlot],
+        *,
+        slots_per_day: Optional[int],
+    ) -> Tuple[EnergyPriceSlot, ...]:
+        if not slots or slots_per_day is None or slots_per_day <= 0:
+            return tuple(slots)
+        target_count = int(slots_per_day)
+        ordered = tuple(sorted(slots, key=lambda slot: int(slot.slot_index)))
+        if len(ordered) == target_count and all(int(slot.slot_index) == idx for idx, slot in enumerate(ordered)):
+            return ordered
+        aligned: List[EnergyPriceSlot] = []
+        for idx in range(target_count):
+            source = ordered[idx % len(ordered)]
+            aligned.append(
+                EnergyPriceSlot(
+                    slot_index=idx,
+                    grid_buy_yen_per_kwh=source.grid_buy_yen_per_kwh,
+                    grid_sell_yen_per_kwh=source.grid_sell_yen_per_kwh,
+                    demand_charge_weight=source.demand_charge_weight,
+                    co2_factor=source.co2_factor,
+                )
+            )
+        return tuple(aligned)
 
     def _build_pv_slots_from_scenario(
         self,
@@ -2909,6 +3257,12 @@ class ProblemBuilder:
         except (TypeError, ValueError):
             return None
 
+    def _first_present(self, *values: Any) -> Any:
+        for value in values:
+            if value is not None:
+                return value
+        return None
+
     def _build_time_slot_prices(
         self,
         context: DispatchContext,
@@ -2956,8 +3310,22 @@ class ProblemBuilder:
         time_slots: Sequence[EnergyPriceSlot],
         pv_slots: Sequence[PVSlot],
         planning_days: int = 1,
+        align_to_time_slots: bool = False,
     ) -> Iterable[PVSlot]:
         if pv_slots:
+            target_count = len(time_slots)
+            if align_to_time_slots and target_count > 0 and planning_days <= 1:
+                by_slot = {int(slot.slot_index): slot for slot in pv_slots}
+                return [
+                    PVSlot(
+                        slot_index=int(time_slot.slot_index),
+                        pv_available_kw=float(
+                            getattr(by_slot.get(int(time_slot.slot_index)), "pv_available_kw", 0.0)
+                            or 0.0
+                        ),
+                    )
+                    for time_slot in time_slots
+                ]
             # Tile provided pv_slots for multi-day scenarios
             if planning_days > 1:
                 base_slots = list(pv_slots)

@@ -11,7 +11,7 @@ from src.optimization.common.problem import (
 from src.optimization.milp.model_builder import MILPModelBuilder
 
 
-def test_model_builder_successor_cap_default_is_not_eight() -> None:
+def test_model_builder_successor_cap_default_is_eight() -> None:
     trips = tuple(
         ProblemTrip(
             trip_id=f"t{i}",
@@ -35,4 +35,4 @@ def test_model_builder_successor_cap_default_is_not_eight() -> None:
 
     pairs = MILPModelBuilder().enumerate_arc_pairs(problem, problem.trip_by_id())
 
-    assert len([pair for pair in pairs if pair[1] == "t0"]) == 11
+    assert len([pair for pair in pairs if pair[1] == "t0"]) == 8

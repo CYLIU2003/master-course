@@ -12,7 +12,12 @@ from .problem import (
     DailyCostLedgerEntry,
     VehicleCostLedgerEntry,
     classify_peak_slots,
+    day_index_for_minute,
     normalize_service_coverage_mode,
+)
+from .soc_helpers import (
+    return_deadhead_energy_kwh,
+    return_deadhead_min_to_home,
 )
 
 
@@ -683,12 +688,38 @@ class CostEvaluator:
     ) -> list[tuple[str, str, int, float]]:
         events: list[tuple[str, str, int, float]] = []
         trip_by_id = problem.trip_by_id()
+        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
         vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
         duty_vehicle_map = plan.duty_vehicle_map()
+        horizon_start_min = 0
+        if problem.scenario.horizon_start:
+            try:
+                hh, mm = str(problem.scenario.horizon_start).split(":", 1)
+                horizon_start_min = int(hh) * 60 + int(mm)
+            except ValueError:
+                horizon_start_min = 0
+        target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        last_duty_by_vehicle_day: Dict[tuple[str, int], str] = {}
+        if target_enabled:
+            for duty in plan.duties:
+                if not duty.legs:
+                    continue
+                vehicle_id = str(duty_vehicle_map.get(duty.duty_id, duty.duty_id))
+                day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+                key = (vehicle_id, day_idx)
+                incumbent_id = last_duty_by_vehicle_day.get(key)
+                if incumbent_id is None:
+                    last_duty_by_vehicle_day[key] = str(duty.duty_id)
+                    continue
+                incumbent = next((item for item in plan.duties if str(item.duty_id) == incumbent_id), None)
+                incumbent_end = int(incumbent.legs[-1].trip.arrival_min) if incumbent and incumbent.legs else -1
+                if int(duty.legs[-1].trip.arrival_min) >= incumbent_end:
+                    last_duty_by_vehicle_day[key] = str(duty.duty_id)
         for duty in plan.duties:
             if self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
                 continue
             vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
+            vehicle = vehicle_by_id.get(str(vehicle_id))
             depot_id = self._vehicle_to_depot(problem).get(vehicle_id, "depot_default")
             for leg in duty.legs:
                 trip = trip_by_id.get(leg.trip.trip_id)
@@ -704,6 +735,25 @@ class CostEvaluator:
                             max(float(self._estimated_deadhead_energy_kwh(problem, leg, trip) or 0.0), 0.0),
                         )
                     )
+            if target_enabled and duty.legs and vehicle is not None:
+                day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+                if last_duty_by_vehicle_day.get((str(vehicle_id), day_idx)) == str(duty.duty_id):
+                    last_trip = trip_by_id.get(duty.legs[-1].trip.trip_id)
+                    if last_trip is not None:
+                        return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                            problem,
+                            vehicle,
+                            last_trip,
+                        )
+                        if return_exists:
+                            events.append(
+                                (
+                                    str(vehicle_id),
+                                    depot_id,
+                                    int(duty.legs[-1].trip.arrival_min) + int(return_deadhead_min),
+                                    max(float(return_deadhead_energy_kwh(problem, vehicle, last_trip)), 0.0),
+                                )
+                            )
         events.sort(key=lambda item: item[2])
         return events
 
@@ -1092,6 +1142,29 @@ class CostEvaluator:
         dt_h = max(problem.scenario.timestep_min, 1) / 60.0
         soc = float(start_soc)
         duty_vehicle_map = plan.duty_vehicle_map()
+        vehicle = next((item for item in problem.vehicles if str(item.vehicle_id) == str(vehicle_id)), None)
+        target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        horizon_start_min = 0
+        if problem.scenario.horizon_start:
+            try:
+                hh, mm = str(problem.scenario.horizon_start).split(":", 1)
+                horizon_start_min = int(hh) * 60 + int(mm)
+            except ValueError:
+                horizon_start_min = 0
+        last_duty_by_day: Dict[int, str] = {}
+        if target_enabled:
+            for duty in plan.duties:
+                if duty_vehicle_map.get(duty.duty_id, duty.duty_id) != vehicle_id or not duty.legs:
+                    continue
+                day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+                incumbent_id = last_duty_by_day.get(day_idx)
+                if incumbent_id is None:
+                    last_duty_by_day[day_idx] = str(duty.duty_id)
+                    continue
+                incumbent = next((item for item in plan.duties if str(item.duty_id) == incumbent_id), None)
+                incumbent_end = int(incumbent.legs[-1].trip.arrival_min) if incumbent and incumbent.legs else -1
+                if int(duty.legs[-1].trip.arrival_min) >= incumbent_end:
+                    last_duty_by_day[day_idx] = str(duty.duty_id)
         for slot in plan.charging_slots:
             if str(slot.vehicle_id) != vehicle_id:
                 continue
@@ -1106,6 +1179,18 @@ class CostEvaluator:
                     continue
                 soc -= max(float(trip.energy_kwh or 0.0), 0.0)
                 soc -= self._estimated_deadhead_energy_kwh(problem, leg, trip)
+            if target_enabled and vehicle is not None and duty.legs:
+                day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+                if last_duty_by_day.get(day_idx) == str(duty.duty_id):
+                    last_trip = problem.trip_by_id().get(duty.legs[-1].trip.trip_id)
+                    if last_trip is not None:
+                        return_exists, _return_deadhead_min = return_deadhead_min_to_home(
+                            problem,
+                            vehicle,
+                            last_trip,
+                        )
+                        if return_exists:
+                            soc -= return_deadhead_energy_kwh(problem, vehicle, last_trip)
         return soc
 
     def _estimate_vehicle_end_fuel_l(
@@ -1297,11 +1382,39 @@ class CostEvaluator:
     ) -> Dict[int, float]:
         slot_totals_kwh: Dict[int, float] = {}
         vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
+        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+        duty_vehicle_map = plan.duty_vehicle_map()
+        horizon_start_min = 0
+        if problem.scenario.horizon_start:
+            try:
+                hh, mm = str(problem.scenario.horizon_start).split(":", 1)
+                horizon_start_min = int(hh) * 60 + int(mm)
+            except ValueError:
+                horizon_start_min = 0
+        target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        last_duty_by_vehicle_day: Dict[tuple[str, int], str] = {}
+        if target_enabled:
+            for duty in plan.duties:
+                if not duty.legs:
+                    continue
+                vehicle_id = str(duty_vehicle_map.get(duty.duty_id, duty.duty_id))
+                day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+                key = (vehicle_id, day_idx)
+                incumbent_id = last_duty_by_vehicle_day.get(key)
+                if incumbent_id is None:
+                    last_duty_by_vehicle_day[key] = str(duty.duty_id)
+                    continue
+                incumbent = next((item for item in plan.duties if str(item.duty_id) == incumbent_id), None)
+                incumbent_end = int(incumbent.legs[-1].trip.arrival_min) if incumbent and incumbent.legs else -1
+                if int(duty.legs[-1].trip.arrival_min) >= incumbent_end:
+                    last_duty_by_vehicle_day[key] = str(duty.duty_id)
         for duty in plan.duties:
             vt = vehicle_type_by_id.get(duty.vehicle_type)
             powertrain = str(getattr(vt, "powertrain_type", "") or duty.vehicle_type).upper()
             if powertrain not in {"BEV", "PHEV", "FCEV"}:
                 continue
+            vehicle_id = str(duty_vehicle_map.get(duty.duty_id, duty.duty_id))
+            vehicle = vehicle_by_id.get(vehicle_id)
             for leg in duty.legs:
                 trip_info = problem.trip_by_id().get(leg.trip.trip_id)
                 trip_energy_kwh = max(getattr(trip_info, "energy_kwh", 0.0) or 0.0, 0.0)
@@ -1319,6 +1432,23 @@ class CostEvaluator:
                         self._estimated_deadhead_energy_kwh(problem, leg, trip_info),
                         slot_totals_kwh,
                     )
+            if target_enabled and duty.legs and vehicle is not None:
+                day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+                if last_duty_by_vehicle_day.get((vehicle_id, day_idx)) == str(duty.duty_id):
+                    last_trip = problem.trip_by_id().get(duty.legs[-1].trip.trip_id)
+                    if last_trip is not None:
+                        return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                            problem,
+                            vehicle,
+                            last_trip,
+                        )
+                        if return_exists:
+                            self._distribute_energy_to_single_slot(
+                                problem,
+                                int(duty.legs[-1].trip.arrival_min) + int(return_deadhead_min),
+                                return_deadhead_energy_kwh(problem, vehicle, last_trip),
+                                slot_totals_kwh,
+                            )
         return slot_totals_kwh
 
     def _operating_electric_energy_cost(

@@ -25,6 +25,15 @@ from src.optimization.common.problem import (
     normalize_service_coverage_mode,
     normalize_required_soc_departure_ratio,
 )
+from src.optimization.common.soc_helpers import (
+    effective_final_soc_target_kwh,
+    final_soc_floor_kwh,
+    post_return_target_slot_index,
+    return_deadhead_energy_kwh,
+    return_deadhead_min_to_home,
+    slot_index_ceil,
+    slot_to_minute_of_day,
+)
 
 
 _DRIVER_PREP_TIME_MIN = 30.0
@@ -233,6 +242,22 @@ class GurobiMILPAdapter:
             (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
             for vehicle_id, trip_id in assignment_pairs
         }
+        final_target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        if final_target_enabled:
+            for (vehicle_id, trip_id), var in end_arc.items():
+                vehicle = vehicle_by_id.get(str(vehicle_id))
+                trip = trip_by_id.get(str(trip_id))
+                if vehicle is None or trip is None:
+                    continue
+                if str(getattr(vehicle, "vehicle_type", "") or "").upper() not in {"BEV", "PHEV", "FCEV"}:
+                    continue
+                return_exists, _return_deadhead_min = return_deadhead_min_to_home(
+                    problem,
+                    vehicle,
+                    trip,
+                )
+                if not return_exists:
+                    model.addConstr(var == 0)
 
         unserved: Dict[str, Any] = {
             trip.trip_id: model.addVar(vtype=GRB.BINARY)
@@ -400,6 +425,9 @@ class GurobiMILPAdapter:
         electric_deadhead_kwh_by_slot: Dict[int, List[Tuple[float, Tuple[str, str, str]]]] = {
             slot_idx: [] for slot_idx in slot_indices
         }
+        electric_return_deadhead_kwh_by_slot: Dict[int, List[Tuple[float, Tuple[str, str]]]] = {
+            slot_idx: [] for slot_idx in slot_indices
+        }
         for vehicle in problem.vehicles:
             if vehicle.vehicle_id not in electric_vehicle_ids:
                 continue
@@ -432,6 +460,26 @@ class GurobiMILPAdapter:
                 electric_deadhead_kwh_by_slot.setdefault(slot_idx, []).append(
                     (deadhead_kwh, (vehicle_id, from_trip_id, to_trip_id))
                 )
+            if final_target_enabled:
+                for trip in problem.trips:
+                    end_key = (vehicle.vehicle_id, trip.trip_id)
+                    if end_key not in end_arc:
+                        continue
+                    return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                        problem,
+                        vehicle,
+                        trip,
+                    )
+                    if not return_exists:
+                        continue
+                    return_kwh = return_deadhead_energy_kwh(problem, vehicle, trip)
+                    if return_kwh <= 0.0:
+                        continue
+                    return_complete_min = int(trip.arrival_min) + int(return_deadhead_min)
+                    slot_idx = slot_index_ceil(problem, return_complete_min)
+                    electric_return_deadhead_kwh_by_slot.setdefault(slot_idx, []).append(
+                        (return_kwh, end_key)
+                    )
 
         c_var: Dict[Tuple[str, int], Any] = {}
         d_var: Dict[Tuple[str, int], Any] = {}
@@ -550,6 +598,31 @@ class GurobiMILPAdapter:
                         home_depot_slot_proxy_terms.setdefault((vehicle_id, slot_idx), []).append(
                             day_use_var
                         )
+                if final_target_enabled:
+                    for trip in problem.trips:
+                        key = (vehicle_id, trip.trip_id)
+                        if key not in end_arc:
+                            continue
+                        return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                            problem,
+                            vehicle,
+                            trip,
+                        )
+                        if not return_exists:
+                            continue
+                        day_idx = int(trip_day_index_by_trip_id.get(trip.trip_id, 0))
+                        target_slots = self._collect_post_return_target_slots(
+                            problem,
+                            trip=trip,
+                            day_idx=day_idx,
+                            return_deadhead_min=return_deadhead_min,
+                        )
+                        for slot_idx in target_slots:
+                            if slot_idx < first_slot_idx or slot_idx > last_slot_idx:
+                                continue
+                            home_depot_slot_proxy_terms.setdefault((vehicle_id, slot_idx), []).append(
+                                end_arc[key]
+                            )
 
         if bev_ids and slot_indices:
             initial_soc_ratio_override = self._percent_to_ratio(problem.metadata.get("initial_soc_percent"))
@@ -640,25 +713,18 @@ class GurobiMILPAdapter:
                     )
 
                     if final_soc_target_ratio_override is not None:
-                        target_kwh = min(max(final_soc_target_ratio_override * cap, soc_min), cap)
-                        tolerance_ratio = 0.0
-                        if final_soc_target_tolerance_ratio_override is not None:
-                            tolerance_ratio = min(max(final_soc_target_tolerance_ratio_override, 0.0), 1.0)
-                        tolerance_kwh = tolerance_ratio * cap
-                        excess_dev = model.addVar(lb=0.0, ub=cap, vtype=GRB.CONTINUOUS)
-                        end_soc_excess_dev_var[f"{vehicle.vehicle_id}__d{day_idx}"] = excess_dev
-                        model.addConstr(
-                            excess_dev
-                            >= s_var[day_soc_key]
-                            - (target_kwh + tolerance_kwh)
-                            - cap * (1 - day_use_var)
+                        target_slot_idx = post_return_target_slot_index(problem, day_idx)
+                        target_soc_key = (vehicle.vehicle_id, target_slot_idx)
+                        hard_target_kwh = effective_final_soc_target_kwh(
+                            problem,
+                            vehicle,
+                            cap_kwh=cap,
                         )
-                        model.addConstr(
-                            excess_dev
-                            >= (target_kwh - tolerance_kwh)
-                            - s_var[day_soc_key]
-                            - cap * (1 - day_use_var)
-                        )
+                        if hard_target_kwh is not None and target_soc_key in s_var:
+                            model.addConstr(
+                                s_var[target_soc_key] >= hard_target_kwh * day_use_var
+                            )
+                        continue
 
                 upper_buffer_ratio = self._percent_to_ratio(
                     problem.metadata.get("charge_upper_buffer_ratio")
@@ -737,6 +803,11 @@ class GurobiMILPAdapter:
                         ]
                         if self._slot_index(problem, trip_by_id[to_trip_id].departure_min) == slot_idx
                     )
+                    return_deadhead_energy_expr = gp.quicksum(
+                        return_kwh * end_arc[end_key]
+                        for return_kwh, end_key in electric_return_deadhead_kwh_by_slot.get(slot_idx, [])
+                        if end_key[0] == vehicle.vehicle_id
+                    )
                     model.addConstr(
                         s_var[(vehicle.vehicle_id, next_slot_idx)]
                         == s_var[(vehicle.vehicle_id, slot_idx)]
@@ -744,6 +815,7 @@ class GurobiMILPAdapter:
                         - d_var[(vehicle.vehicle_id, slot_idx)] * timestep_h / 0.95
                         - trip_energy_expr
                         - deadhead_energy_expr
+                        - return_deadhead_energy_expr
                     )
 
                     # C12: no charging while vehicle is operating a trip in this slot.
@@ -755,7 +827,16 @@ class GurobiMILPAdapter:
                     )
                     model.addConstr(charge_on_var[(vehicle.vehicle_id, slot_idx)] <= 1 - running_expr)
                     proxy_terms = home_depot_slot_proxy_terms.get((vehicle.vehicle_id, slot_idx), [])
-                    if proxy_terms:
+                    if final_target_enabled:
+                        if not self._is_replenishment_slot_allowed(problem, slot_idx):
+                            model.addConstr(charge_on_var[(vehicle.vehicle_id, slot_idx)] == 0)
+                        elif proxy_terms:
+                            model.addConstr(
+                                charge_on_var[(vehicle.vehicle_id, slot_idx)] <= gp.quicksum(proxy_terms)
+                            )
+                        else:
+                            model.addConstr(charge_on_var[(vehicle.vehicle_id, slot_idx)] == 0)
+                    elif proxy_terms:
                         # Depot-stay approximation: allow charging only around assigned trips
                         # that touch the vehicle's home depot.
                         model.addConstr(
@@ -2160,6 +2241,58 @@ class GurobiMILPAdapter:
         if overnight_end <= overnight_start:
             return ()
         return self._slot_indices_for_interval(problem, overnight_start, overnight_end)
+
+    def _collect_post_return_target_slots(
+        self,
+        problem: CanonicalOptimizationProblem,
+        *,
+        trip: ProblemTrip,
+        day_idx: int,
+        return_deadhead_min: int,
+    ) -> Tuple[int, ...]:
+        return_complete_min = int(trip.arrival_min) + max(int(return_deadhead_min or 0), 0)
+        target_slot = post_return_target_slot_index(problem, day_idx)
+        first_slot = slot_index_ceil(problem, return_complete_min)
+        if target_slot < first_slot:
+            return ()
+        return tuple(range(first_slot, target_slot + 1))
+
+    def _is_replenishment_slot_allowed(
+        self,
+        problem: CanonicalOptimizationProblem,
+        slot_idx: int,
+    ) -> bool:
+        mode = str(problem.scenario.allow_overnight_depot_moves or "forbid").strip().lower()
+        if mode not in {"forbid", "allow_same_depot_only", "allow_with_penalty"}:
+            return True
+        if mode != "forbid":
+            return True
+        minute = slot_to_minute_of_day(problem, slot_idx)
+        return not self._is_in_overnight_window(
+            minute,
+            str(problem.scenario.overnight_window_start or "23:00"),
+            str(problem.scenario.overnight_window_end or "05:00"),
+        )
+
+    def _is_in_overnight_window(
+        self,
+        minute_of_day: int,
+        start_hhmm: str,
+        end_hhmm: str,
+    ) -> bool:
+        def _parse(text: str, fallback: int) -> int:
+            try:
+                hh, mm = str(text).split(":", 1)
+                return (int(hh) * 60 + int(mm)) % (24 * 60)
+            except ValueError:
+                return fallback
+
+        start = _parse(start_hhmm, 23 * 60)
+        end = _parse(end_hhmm, 5 * 60)
+        value = int(minute_of_day) % (24 * 60)
+        if start <= end:
+            return start <= value <= end
+        return value >= start or value <= end
 
     def _trip_day_index(self, problem: CanonicalOptimizationProblem, departure_min: int) -> int:
         horizon_start_min = self._horizon_start_min(problem)

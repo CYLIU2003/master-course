@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.dispatch.models import DeadheadRule, DispatchContext, Trip, TurnaroundRule, VehicleProfile
 from src.optimization.common.builder import ProblemBuilder
-from src.optimization.common.problem import ProblemVehicle
+from src.optimization.common.problem import ChargerDefinition, ProblemVehicle
 
 
 def _linear_bev_context() -> DispatchContext:
@@ -123,3 +123,52 @@ def test_pooled_shared_baseline_splits_chain_when_vehicle_energy_is_insufficient
     assert [duty.trip_ids for duty in plan.duties] == [["t1", "t2"], ["t3", "t4"]]
     assert plan.metadata["path_cover_chain_count"] == 1
     assert plan.metadata["path_cover_segment_count"] == 2
+
+
+def test_pooled_shared_baseline_splits_chain_for_post_return_target_feasibility() -> None:
+    context = _linear_bev_context()
+    context.deadhead_rules[("b", "bev-1")] = DeadheadRule(from_stop="b", to_stop="bev-1", travel_time_min=10)
+    context.deadhead_rules[("b", "bev-2")] = DeadheadRule(from_stop="b", to_stop="bev-2", travel_time_min=10)
+    context.__post_init__()
+    vehicles = (
+        ProblemVehicle(
+            vehicle_id="bev-1",
+            vehicle_type="BEV",
+            home_depot_id="bev-1",
+            initial_soc=35.0,
+            reserve_soc=5.0,
+            battery_capacity_kwh=50.0,
+            energy_consumption_kwh_per_km=1.0,
+        ),
+        ProblemVehicle(
+            vehicle_id="bev-2",
+            vehicle_type="BEV",
+            home_depot_id="bev-2",
+            initial_soc=35.0,
+            reserve_soc=5.0,
+            battery_capacity_kwh=50.0,
+            energy_consumption_kwh_per_km=1.0,
+        ),
+    )
+    feasible_connections = {
+        "t1": ("t2",),
+        "t2": ("t3",),
+        "t3": ("t4",),
+        "t4": (),
+    }
+
+    plan = ProblemBuilder()._build_pooled_shared_baseline(
+        context,
+        vehicles=vehicles,
+        all_trip_ids={"t1", "t2", "t3", "t4"},
+        feasible_connections=feasible_connections,
+        chargers=(ChargerDefinition("chg-1", "bev-1", 20.0), ChargerDefinition("chg-2", "bev-2", 20.0)),
+        timestep_min=60,
+        final_soc_floor_percent=10.0,
+        final_soc_target_percent=60.0,
+        final_soc_target_tolerance_percent=0.0,
+    )
+
+    assert plan.unserved_trip_ids == ()
+    assert len(plan.duties) == 2
+    assert [duty.trip_ids for duty in plan.duties] == [["t1", "t2"], ["t3", "t4"]]

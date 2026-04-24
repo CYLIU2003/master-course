@@ -20,7 +20,13 @@ from .problem import (
 )
 from .soc_helpers import (
     deadhead_energy_kwh,
+    effective_final_soc_target_kwh,
+    final_soc_floor_kwh,
+    post_return_target_slot_index,
+    return_deadhead_energy_kwh,
+    return_deadhead_min_to_home,
     required_departure_soc_kwh,
+    slot_index_ceil,
     trip_active_in_slot,
     trip_active_slot_indices,
     trip_energy_kwh,
@@ -129,12 +135,31 @@ class FeasibilityChecker:
         type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
         dt_h = max(problem.scenario.timestep_min, 1) / 60.0
         duty_vehicle_map = plan.duty_vehicle_map()
+        target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        horizon_start_min = self._horizon_start_min(problem)
 
         charge_by_vehicle: Dict[str, Dict[int, float]] = {}
         for slot in plan.charging_slots:
             vid = str(slot.vehicle_id)
             by_slot = charge_by_vehicle.setdefault(vid, {})
             by_slot[int(slot.slot_index)] = by_slot.get(int(slot.slot_index), 0.0) + max(float(slot.charge_kw or 0.0), 0.0)
+
+        last_duty_by_vehicle_day: Dict[tuple[str, int], str] = {}
+        if target_enabled:
+            for duty in plan.duties:
+                if not duty.legs:
+                    continue
+                vehicle_id = str(duty_vehicle_map.get(duty.duty_id, duty.duty_id))
+                day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+                key = (vehicle_id, day_idx)
+                incumbent_id = last_duty_by_vehicle_day.get(key)
+                if incumbent_id is None:
+                    last_duty_by_vehicle_day[key] = str(duty.duty_id)
+                    continue
+                incumbent = next((item for item in plan.duties if str(item.duty_id) == incumbent_id), None)
+                incumbent_end = int(incumbent.legs[-1].trip.arrival_min) if incumbent and incumbent.legs else -1
+                if int(duty.legs[-1].trip.arrival_min) >= incumbent_end:
+                    last_duty_by_vehicle_day[key] = str(duty.duty_id)
 
         for duty in plan.duties:
             vehicle_id = str(duty_vehicle_map.get(duty.duty_id, duty.duty_id))
@@ -182,11 +207,71 @@ class FeasibilityChecker:
                 first_slot = min(first_slot, min(vehicle_charges.keys()))
                 last_slot = max(last_slot, max(vehicle_charges.keys()))
 
+            target_kwh = None
+            target_slot_idx = None
+            return_event_slot_idx = None
+            return_event_energy_kwh = 0.0
+            return_event_applied = False
+            day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+            if (
+                target_enabled
+                and last_duty_by_vehicle_day.get((vehicle_id, day_idx)) == str(duty.duty_id)
+            ):
+                target_kwh = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
+                last_problem_trip = trip_by_id.get(duty.legs[-1].trip.trip_id)
+                if target_kwh is not None and last_problem_trip is not None:
+                    return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                        problem,
+                        vehicle,
+                        last_problem_trip,
+                    )
+                    if not return_exists:
+                        errors.append(
+                            f"[SOC_TARGET] duty={duty.duty_id} vehicle={vehicle_id} final trip={last_problem_trip.trip_id} cannot return to home depot"
+                        )
+                    else:
+                        return_complete_min = int(duty.legs[-1].trip.arrival_min) + int(return_deadhead_min)
+                        return_event_slot_idx = slot_index_ceil(problem, return_complete_min)
+                        return_event_energy_kwh = return_deadhead_energy_kwh(
+                            problem,
+                            vehicle,
+                            last_problem_trip,
+                        )
+                        target_slot_idx = post_return_target_slot_index(problem, day_idx)
+                        first_slot = min(first_slot, return_event_slot_idx)
+                        last_slot = max(last_slot, target_slot_idx)
+                else:
+                    target_kwh = None
+
+            soc_at_target_slot = None
             for slot_idx in range(first_slot, last_slot + 1):
+                if (
+                    return_event_slot_idx is not None
+                    and not return_event_applied
+                    and slot_idx >= return_event_slot_idx
+                ):
+                    soc -= return_event_energy_kwh
+                    return_event_applied = True
+                    floor_kwh = final_soc_floor_kwh(problem, vehicle, cap_kwh=capacity)
+                    if soc + 1.0e-6 < floor_kwh:
+                        errors.append(
+                            f"[SOC_TARGET] duty={duty.duty_id} vehicle={vehicle_id} post-return SOC {soc:.2f} < floor {floor_kwh:.2f}"
+                        )
                 charge_kwh = max(float(vehicle_charges.get(slot_idx, 0.0) or 0.0), 0.0) * dt_h * 0.95
                 if charge_kwh > 0.0 and any(trip_active_in_slot(problem, leg.trip.departure_min, leg.trip.arrival_min, slot_idx) for leg, _trip, _slots in active_legs):
                     errors.append(
                         f"[SOC] duty={duty.duty_id} vehicle={vehicle_id} charging occurs during active trip slot {slot_idx}"
+                    )
+                if (
+                    charge_kwh > 0.0
+                    and target_slot_idx is not None
+                    and return_event_slot_idx is not None
+                    and self._slot_index(problem, int(duty.legs[-1].trip.arrival_min))
+                    <= slot_idx
+                    < return_event_slot_idx
+                ):
+                    errors.append(
+                        f"[SOC_TARGET] duty={duty.duty_id} vehicle={vehicle_id} charges before return deadhead completion at slot {slot_idx}"
                     )
                 soc = min(capacity, soc + charge_kwh)
 
@@ -225,6 +310,15 @@ class FeasibilityChecker:
                         errors.append(
                             f"[SOC] duty={duty.duty_id} trip={trip.trip_id} post-slot SOC {soc:.2f} < 0"
                         )
+                if target_slot_idx is not None and slot_idx == target_slot_idx:
+                    soc_at_target_slot = soc
+
+            if target_kwh is not None:
+                checked_soc = soc if soc_at_target_slot is None else soc_at_target_slot
+                if checked_soc + 1.0e-6 < target_kwh:
+                    errors.append(
+                        f"[SOC_TARGET] duty={duty.duty_id} vehicle={vehicle_id} post-return target SOC {checked_soc:.2f} < required {target_kwh:.2f}"
+                    )
 
         return errors
 

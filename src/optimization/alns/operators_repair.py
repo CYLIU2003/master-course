@@ -6,7 +6,22 @@ from typing import Dict, List, Tuple
 
 from src.dispatch.dispatcher import DispatchGenerator
 from src.dispatch.models import DispatchContext, DutyLeg, VehicleDuty
-from src.optimization.common.problem import AssignmentPlan, CanonicalOptimizationProblem, ChargingSlot, OptimizationConfig, OptimizationMode, RefuelSlot
+from src.optimization.common.problem import (
+    AssignmentPlan,
+    CanonicalOptimizationProblem,
+    ChargingSlot,
+    OptimizationConfig,
+    OptimizationMode,
+    RefuelSlot,
+    day_index_for_minute,
+)
+from src.optimization.common.soc_helpers import (
+    effective_final_soc_target_kwh,
+    post_return_target_slot_index,
+    return_deadhead_energy_kwh,
+    return_deadhead_min_to_home,
+    slot_index_ceil,
+)
 from src.optimization.common.vehicle_assignment import (
     assign_duty_fragments_to_vehicles,
     merge_duty_vehicle_maps,
@@ -468,6 +483,30 @@ def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: Assig
     slot_port_usage: Dict[Tuple[str, int], int] = {}
     slot_power_usage: Dict[Tuple[str, int], float] = {}
     out: List[ChargingSlot] = []
+    target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+    horizon_start_min = 0
+    if problem.scenario.horizon_start:
+        try:
+            hh, mm = str(problem.scenario.horizon_start).split(":", 1)
+            horizon_start_min = int(hh) * 60 + int(mm)
+        except ValueError:
+            horizon_start_min = 0
+    last_duty_by_vehicle_day: Dict[Tuple[str, int], str] = {}
+    if target_enabled:
+        for duty in plan.duties:
+            if not duty.legs:
+                continue
+            vehicle_id = plan.vehicle_id_for_duty(duty.duty_id)
+            day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+            key = (str(vehicle_id), int(day_idx))
+            incumbent_id = last_duty_by_vehicle_day.get(key)
+            if incumbent_id is None:
+                last_duty_by_vehicle_day[key] = str(duty.duty_id)
+                continue
+            incumbent = next((item for item in plan.duties if str(item.duty_id) == incumbent_id), None)
+            incumbent_end = int(incumbent.legs[-1].trip.arrival_min) if incumbent and incumbent.legs else -1
+            if int(duty.legs[-1].trip.arrival_min) >= incumbent_end:
+                last_duty_by_vehicle_day[key] = str(duty.duty_id)
 
     for duty in plan.duties:
         vehicle_id = plan.vehicle_id_for_duty(duty.duty_id)
@@ -553,6 +592,60 @@ def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: Assig
 
             soc -= (trip_energy + deadhead_energy)
             prev_arrival = leg.trip.arrival_min
+
+        if duty.legs and target_enabled:
+            day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
+            if last_duty_by_vehicle_day.get((str(vehicle_id), int(day_idx))) == str(duty.duty_id):
+                target_kwh = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
+                last_problem_trip = trip_map.get(duty.legs[-1].trip.trip_id)
+                if target_kwh is not None and last_problem_trip is not None:
+                    return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                        problem,
+                        vehicle,
+                        last_problem_trip,
+                    )
+                    if return_exists:
+                        soc -= return_deadhead_energy_kwh(problem, vehicle, last_problem_trip)
+                        return_complete_min = int(duty.legs[-1].trip.arrival_min) + int(return_deadhead_min)
+                        first_slot = slot_index_ceil(problem, return_complete_min)
+                        target_slot = post_return_target_slot_index(problem, day_idx)
+                        candidate_slots = [
+                            idx
+                            for idx in range(first_slot, target_slot + 1)
+                            if _is_replenishment_slot_allowed(problem, idx, overnight_mode, overnight_start, overnight_end)
+                            and idx not in active_slots
+                        ]
+                        for slot_idx in reversed(candidate_slots):
+                            if soc + 1.0e-9 >= target_kwh:
+                                break
+                            charger = depot_chargers[(slot_idx + len(out)) % len(depot_chargers)]
+                            power_kw = max(float(charger.power_kw or 0.0), 0.0)
+                            if power_kw <= 0.0:
+                                continue
+                            usage_key = (home_depot, int(slot_idx))
+                            used_ports = slot_port_usage.get(usage_key, 0)
+                            used_kw = slot_power_usage.get(usage_key, 0.0)
+                            if used_ports >= port_limit or used_kw >= kw_limit:
+                                continue
+                            allowed_kw = max(min(power_kw, kw_limit - used_kw), 0.0)
+                            if allowed_kw <= 1.0e-9:
+                                continue
+                            need_to_battery_kwh = max(target_kwh - soc, 0.0)
+                            charge_kwh = min(allowed_kw * dt_h, need_to_battery_kwh / 0.95)
+                            if charge_kwh <= 1.0e-9:
+                                continue
+                            out.append(
+                                ChargingSlot(
+                                    vehicle_id=vehicle_id,
+                                    slot_index=int(slot_idx),
+                                    charger_id=charger.charger_id,
+                                    charge_kw=charge_kwh / dt_h,
+                                    discharge_kw=0.0,
+                                )
+                            )
+                            slot_port_usage[usage_key] = used_ports + 1
+                            slot_power_usage[usage_key] = used_kw + (charge_kwh / dt_h)
+                            soc = min(capacity, soc + charge_kwh * 0.95)
 
     out.sort(key=lambda s: (str(s.vehicle_id), int(s.slot_index), str(s.charger_id or "")))
     return tuple(out)
