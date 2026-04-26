@@ -39,6 +39,30 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### 2026-04-24 Historical Analog Weather Proxy v1
+
+- 問題: 既存の `weather_mode` は天気カテゴリや PV プロファイル選択の周辺情報に留まり、過去実気象を「当日朝に得られた擬似予報」として最適化入力へ再現可能に渡す構造がなかった。天気ラベルを BEV/ICE 台数へ直接 hard 変換すると研究上の説明が弱く、対象日当日の実績を見てしまうと未来情報リークになる。
+- 対応:
+  - `src/preprocess/weather/` を追加し、`DailyWeatherObservation`、Kishojin diary HTML parser、JMA/標準日別CSV loader、historical analog selector、operation policy mapper、forecast builder を分離した。
+  - `schema/weather_daily_observation.schema.json`、`schema/weather_proxy_forecast.schema.json`、`schema/weather_operation_policy.schema.json` を追加し、forecast JSON は `version/source/station/analog_date/selection_score/no_future_leakage` を保持する。
+  - `scripts/weather/build_weather_daily_csv.py`、`build_weather_proxy_forecast.py`、`inspect_weather_proxy.py` を追加した。parser/loader はローカル HTML/CSV だけを読み、optimizer 実行中の Web アクセスは行わない。
+  - BFF canonical optimization は `weatherProxyForecastPath` と `enableWeatherOperationPolicy=true` を受けた場合、forecast JSON を検証し、`ProblemBuilder` の前に `final_soc_floor_percent` / `final_soc_target_percent` を scenario へ注入する。これにより SOC target が必要な場合の horizon contract を builder が正しく見られる。
+  - `apply_weather_policy_to_problem()` は frozen `CanonicalOptimizationProblem` を破壊せず、BEV/PHEV/FCEV の `initial_soc` を seed 固定の ratio でランダム化し、`weather_proxy` / `weather_operation_profile` / `weather_initial_soc_policy` / soft bias metadata を追加する。ICE の SOC は変更しない。
+  - run 出力に `weather_proxy_forecast.json`、`weather_operation_policy.json`、`weather_policy_audit.json` を追加し、`run_manifest.json` に `weather_proxy_enabled`、`weather_proxy_version`、`weather_operation_mode`、`weather_analog_date` を追加した。
+- 自分で上げて潰した追加問題:
+  - 最初に `ProblemBuilder` 後の metadata 注入だけで済ませると、weather policy が設定する `final_soc_target_percent` を builder が見られず、単日 24h horizon 拡張が発火しない。forecast/profile を builder 前に読み込み、scenario `simulation_config` に SOC target を注入してから canonical problem を作る形に修正した。
+  - analog selector で target 前日が存在するのに candidate 前日が欠ける候補が calendar-only と同じ扱いになり、前日特徴を使う候補より不自然に有利になり得た。candidate 前日または比較可能特徴が欠ける場合は penalty を入れ、D-1 が存在しないときだけ `analog_fallback_reason=missing_previous_day_actual` の calendar-only mode に落とすようにした。
+  - `pytest` 直接実行ではこの環境の import path が root を含まず `src` / `bff` import で collection error になるため、検証コマンドは既存運用どおり `python -m pytest ...` を正とした。
+- 研究上の影響:
+  - weather proxy v1 は天気ラベルを hard constraint に変換しない。`operation_mode` は SOC 余裕、初期SOC分布、昼充電優先度、BEV/ICE soft bias 用 metadata へ変換する。
+  - 対象日当日の実績値は類似日選択に使わない。`analog_date >= service_date` または `no_future_leakage=false` は schema/BFF/apply helper で拒否する。
+  - PV の運用限界費用は `pv_marginal_charge_cost_yen_per_kwh=0.0` と明示するが、PV 設備費・保守費・減価償却費を会計 KPI から消す変更ではない。資産費は `total_cost_with_assets` など別 KPI で扱う。
+  - 予報誤差分布、午後の天候急変、確率的/ロバスト最適化、rolling horizon 再最適化は v1 では未実装で、今後の展望として残す。
+- 検証:
+  - `python -m py_compile src\preprocess\weather\daily_weather_schema.py src\preprocess\weather\jma_daily_csv_loader.py src\preprocess\weather\kishojin_diary_parser.py src\preprocess\weather\historical_analog.py src\preprocess\weather\operation_policy.py src\preprocess\weather\weather_proxy_builder.py scripts\weather\build_weather_daily_csv.py scripts\weather\build_weather_proxy_forecast.py scripts\weather\inspect_weather_proxy.py bff\routers\optimization.py`
+  - `python -m pytest tests\preprocess tests\optimization\test_weather_policy_problem_integration.py -q`
+  - `python -m pytest tests -q` → `472 passed`
+
 ### 2026-04-17 Main SOC Bulk Apply and Template Randomization
 
 - 問題: `initialSoc` の個別編集と営業所単位ランダム化は車両管理タブに入っていたが、メイン設定画面の `初期SOC比` は詳細パラメータの奥に残っており、主操作として見つけにくかった。また template 経由の車両追加は `initialSoc` を main 画面の固定値でしか渡せず、template workflow 内でランダム化できなかった。

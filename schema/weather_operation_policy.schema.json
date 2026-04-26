@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "weather_operation_policy.schema.json",
+  "title": "WeatherOperationProfile",
+  "type": "object",
+  "required": [
+    "operation_mode",
+    "final_soc_floor_percent",
+    "final_soc_target_percent",
+    "initial_soc_mode",
+    "initial_soc_min_percent",
+    "initial_soc_max_percent",
+    "midday_charge_priority",
+    "bev_duty_bias",
+    "ice_backup_bias",
+    "grid_risk_penalty_multiplier",
+    "pv_marginal_charge_cost_yen_per_kwh"
+  ],
+  "properties": {
+    "operation_mode": { "enum": ["aggressive", "normal", "conservative"] },
+    "final_soc_floor_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+    "final_soc_target_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+    "initial_soc_mode": { "enum": ["random_uniform"] },
+    "initial_soc_min_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+    "initial_soc_max_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+    "midday_charge_priority": { "type": "number" },
+    "bev_duty_bias": { "type": "number" },
+    "ice_backup_bias": { "type": "number" },
+    "grid_risk_penalty_multiplier": { "type": "number" },
+    "pv_marginal_charge_cost_yen_per_kwh": { "const": 0.0 }
+  },
+  "additionalProperties": false
+}

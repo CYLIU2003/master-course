@@ -1713,6 +1713,10 @@ def materialize_scenario_from_prepared_input(
         "enable_vehicle_cost",
         "enable_driver_cost",
         "enable_other_cost",
+        "enable_weather_operation_policy",
+        "enableWeatherOperationPolicy",
+        "weather_proxy_forecast_path",
+        "weatherProxyForecastPath",
     ):
         if key in current_simulation_cfg:
             hydrated_simulation_cfg[key] = current_simulation_cfg.get(key)

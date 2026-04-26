@@ -60,6 +60,16 @@ from src.optimization import (
     ResultSerializer,
 )
 from src.optimization.rolling.reoptimizer import RollingReoptimizer
+from src.preprocess.weather.daily_weather_schema import (
+    WeatherProxyForecast,
+    WeatherSchemaError,
+)
+from src.preprocess.weather.operation_policy import (
+    WeatherOperationProfile,
+    apply_weather_policy_to_problem,
+    build_operation_profile,
+)
+from src.preprocess.weather.weather_proxy_builder import load_weather_proxy_forecast_json
 from src.run_output_layout import allocate_run_dir
 from src.pipeline.solve import solve_problem_data
 
@@ -96,6 +106,8 @@ class RunOptimizationBody(BaseModel):
     alns_iterations: int = 500
     no_improvement_limit: int = 100
     destroy_fraction: float = 0.25
+    weatherProxyForecastPath: Optional[str] = None
+    enableWeatherOperationPolicy: Optional[bool] = None
 
 
 class DelayEventBody(BaseModel):
@@ -522,6 +534,215 @@ def _service_date_for_output(scenario: Dict[str, Any]) -> str:
     if dates:
         return dates[0][:10]
     return datetime.now().strftime("%Y-%m-%d")
+
+
+def _configured_service_date(scenario: Dict[str, Any]) -> Optional[str]:
+    sim = dict(scenario.get("simulation_config") or {})
+    primary = str(sim.get("service_date") or "").strip()
+    if primary:
+        return primary[:10]
+    dates = [str(v).strip() for v in list(sim.get("service_dates") or []) if str(v).strip()]
+    if dates:
+        return dates[0][:10]
+    prepared = dict(scenario.get("prepared_scope_summary") or {})
+    prepared_date = str(prepared.get("service_date") or "").strip()
+    return prepared_date[:10] if prepared_date else None
+
+
+def _weather_proxy_http_error(
+    status_code: int,
+    code: str,
+    message: str,
+    **extra: Any,
+) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": message, **extra},
+    )
+
+
+def _resolve_weather_proxy_path(raw_path: str) -> Path:
+    text = str(raw_path or "").strip()
+    if not text:
+        raise FileNotFoundError("weather proxy forecast path is empty")
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    return candidate
+
+
+def _load_weather_proxy_for_bff(raw_path: str) -> WeatherProxyForecast:
+    forecast_path = _resolve_weather_proxy_path(raw_path)
+    if not forecast_path.exists():
+        raise FileNotFoundError(str(forecast_path))
+    try:
+        return load_weather_proxy_forecast_json(forecast_path)
+    except WeatherSchemaError:
+        raise
+    except Exception as exc:
+        raise WeatherSchemaError(str(exc)) from exc
+
+
+def _preflight_weather_proxy_request(
+    *,
+    scenario: Dict[str, Any],
+    enable_weather_operation_policy: Optional[bool] = None,
+    weather_proxy_forecast_path: Optional[str] = None,
+) -> None:
+    enabled, effective_path = _weather_policy_requested(
+        scenario,
+        enable_weather_operation_policy,
+        weather_proxy_forecast_path,
+    )
+    if not enabled:
+        return
+    if enabled and not effective_path:
+        raise _weather_proxy_http_error(
+            400,
+            "WEATHER_PROXY_NOT_FOUND",
+            "enableWeatherOperationPolicy is true but weatherProxyForecastPath is not set.",
+        )
+    if not effective_path:
+        return
+    try:
+        forecast = _load_weather_proxy_for_bff(effective_path)
+    except FileNotFoundError as exc:
+        raise _weather_proxy_http_error(
+            400,
+            "WEATHER_PROXY_NOT_FOUND",
+            f"Weather proxy forecast JSON was not found: {exc}",
+        ) from exc
+    except WeatherSchemaError as exc:
+        raise _weather_proxy_http_error(
+            400,
+            "WEATHER_PROXY_SCHEMA_INVALID",
+            f"Weather proxy forecast JSON is invalid: {exc}",
+        ) from exc
+    configured_date = _configured_service_date(scenario)
+    if configured_date and configured_date != forecast.service_date:
+        raise _weather_proxy_http_error(
+            409,
+            "WEATHER_PROXY_SERVICE_DATE_MISMATCH",
+            "Weather proxy service_date does not match scenario service_date.",
+            scenario_service_date=configured_date,
+            forecast_service_date=forecast.service_date,
+        )
+    if forecast.analog_date >= forecast.service_date or not forecast.no_future_leakage:
+        raise _weather_proxy_http_error(
+            409,
+            "WEATHER_PROXY_FUTURE_LEAKAGE",
+            "Weather proxy analog_date must be earlier than service_date.",
+            service_date=forecast.service_date,
+            analog_date=forecast.analog_date,
+        )
+
+
+def _weather_policy_requested(
+    scenario: Dict[str, Any],
+    enable_weather_operation_policy: Optional[bool],
+    weather_proxy_forecast_path: Optional[str],
+) -> tuple[bool, Optional[str]]:
+    sim_cfg = dict(scenario.get("simulation_config") or {})
+    enabled_raw = (
+        enable_weather_operation_policy
+        if enable_weather_operation_policy is not None
+        else sim_cfg.get("enable_weather_operation_policy", sim_cfg.get("enableWeatherOperationPolicy"))
+    )
+    path_raw = (
+        weather_proxy_forecast_path
+        or sim_cfg.get("weather_proxy_forecast_path")
+        or sim_cfg.get("weatherProxyForecastPath")
+    )
+    return bool(enabled_raw), (str(path_raw).strip() if path_raw else None)
+
+
+def _prepare_weather_policy_for_scenario(
+    scenario: Dict[str, Any],
+    *,
+    enable_weather_operation_policy: Optional[bool],
+    weather_proxy_forecast_path: Optional[str],
+) -> tuple[Dict[str, Any], Optional[WeatherProxyForecast], Optional[WeatherOperationProfile]]:
+    enabled, path_raw = _weather_policy_requested(
+        scenario,
+        enable_weather_operation_policy,
+        weather_proxy_forecast_path,
+    )
+    if not enabled:
+        return scenario, None, None
+    if not path_raw:
+        raise ValueError(
+            "WEATHER_PROXY_NOT_FOUND: enableWeatherOperationPolicy is true but forecast path is not set"
+        )
+    try:
+        forecast = _load_weather_proxy_for_bff(path_raw)
+    except FileNotFoundError as exc:
+        raise ValueError(f"WEATHER_PROXY_NOT_FOUND: {exc}") from exc
+    except WeatherSchemaError as exc:
+        raise ValueError(f"WEATHER_PROXY_SCHEMA_INVALID: {exc}") from exc
+    configured_date = _configured_service_date(scenario)
+    if configured_date and configured_date != forecast.service_date:
+        raise ValueError(
+            "WEATHER_PROXY_SERVICE_DATE_MISMATCH: "
+            f"scenario={configured_date} forecast={forecast.service_date}"
+        )
+    if forecast.analog_date >= forecast.service_date or not forecast.no_future_leakage:
+        raise ValueError(
+            "WEATHER_PROXY_FUTURE_LEAKAGE: analog_date must be before service_date"
+        )
+    profile = build_operation_profile(forecast)
+    updated = dict(scenario)
+    sim_cfg = dict(updated.get("simulation_config") or {})
+    sim_cfg.update(
+        {
+            "enable_weather_operation_policy": True,
+            "weather_proxy_forecast_path": path_raw,
+            "final_soc_floor_percent": float(profile.final_soc_floor_percent),
+            "final_soc_target_percent": float(profile.final_soc_target_percent),
+            "weather_operation_mode": profile.operation_mode,
+        }
+    )
+    updated["simulation_config"] = sim_cfg
+    return updated, forecast, profile
+
+
+def _weather_policy_payload_from_problem_metadata(
+    metadata: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    forecast = dict(metadata.get("weather_proxy") or {})
+    if not forecast:
+        return None
+    profile = dict(metadata.get("weather_operation_profile") or {})
+    initial_soc_policy = dict(metadata.get("weather_initial_soc_policy") or {})
+    audit = {
+        "enabled": True,
+        "forecast_type": forecast.get("forecast_type"),
+        "service_date": forecast.get("service_date"),
+        "analog_date": forecast.get("analog_date"),
+        "no_future_leakage": bool(forecast.get("no_future_leakage")),
+        "operation_mode": forecast.get("operation_mode"),
+        "initial_soc_randomized": bool(initial_soc_policy.get("initial_soc_randomized")),
+        "vehicle_initial_soc_ratio": dict(
+            initial_soc_policy.get("vehicle_initial_soc_ratio") or {}
+        ),
+        "optimizer_metadata_keys": [
+            key
+            for key in (
+                "weather_proxy",
+                "weather_operation_profile",
+                "final_soc_floor_percent",
+                "final_soc_target_percent",
+            )
+            if key in metadata
+        ],
+        "pv_marginal_charge_cost_policy": metadata.get("pv_marginal_charge_cost_policy"),
+    }
+    return {
+        "enabled": True,
+        "forecast": forecast,
+        "operation_profile": profile,
+        "initial_soc_policy": initial_soc_policy,
+        "audit": audit,
+    }
 
 
 def _dated_scenario_run_dir(
@@ -1110,6 +1331,23 @@ def _persist_rich_run_outputs(
     (run_dir / "simulation_conditions.json").write_text(
         json.dumps(sim_cfg, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    weather_policy = dict(optimization_result.get("weather_policy") or {})
+    if weather_policy.get("enabled"):
+        forecast_payload = dict(weather_policy.get("forecast") or {})
+        profile_payload = dict(weather_policy.get("operation_profile") or {})
+        audit_payload = dict(weather_policy.get("audit") or {})
+        (run_dir / "weather_proxy_forecast.json").write_text(
+            json.dumps(forecast_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        (run_dir / "weather_operation_policy.json").write_text(
+            json.dumps(profile_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        (run_dir / "weather_policy_audit.json").write_text(
+            json.dumps(audit_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     # Legacy-compatible simulation condition tables.
     vehicles = list(scenario.get("vehicles") or [])
@@ -1536,6 +1774,22 @@ def _persist_rich_run_outputs(
             [p.relative_to(run_dir).as_posix() for p in run_dir.rglob("*") if p.is_file()]
         ),
         "units": unit_map,
+        "weather_proxy_enabled": bool(weather_policy.get("enabled")),
+        "weather_proxy_version": (
+            (weather_policy.get("forecast") or {}).get("version")
+            if weather_policy.get("enabled")
+            else None
+        ),
+        "weather_operation_mode": (
+            (weather_policy.get("operation_profile") or {}).get("operation_mode")
+            if weather_policy.get("enabled")
+            else None
+        ),
+        "weather_analog_date": (
+            (weather_policy.get("forecast") or {}).get("analog_date")
+            if weather_policy.get("enabled")
+            else None
+        ),
         "graph": {
             "manifest_path": "graph/manifest.json",
             "route_band_diagrams_manifest": str(
@@ -2847,6 +3101,8 @@ def _run_optimization(
     alns_iterations: int,
     no_improvement_limit: int,
     destroy_fraction: float,
+    enable_weather_operation_policy: Optional[bool] = None,
+    weather_proxy_forecast_path: Optional[str] = None,
 ) -> None:
     try:
         solver_mode = _normalize_solver_mode(mode)
@@ -2877,6 +3133,11 @@ def _run_optimization(
         scenario = materialize_scenario_from_prepared_input(
             base_scenario,
             prepared_payload,
+        )
+        scenario, weather_forecast, weather_profile = _prepare_weather_policy_for_scenario(
+            scenario,
+            enable_weather_operation_policy=enable_weather_operation_policy,
+            weather_proxy_forecast_path=weather_proxy_forecast_path,
         )
 
         if rebuild_dispatch:
@@ -2979,6 +3240,13 @@ def _run_optimization(
                     1,
                 ),
             )
+            if weather_forecast is not None and weather_profile is not None:
+                problem = apply_weather_policy_to_problem(
+                    problem,
+                    weather_forecast,
+                    weather_profile,
+                    random_seed=random_seed,
+                )
             feasible_arc_count = sum(
                 len(v) for v in (problem.feasible_connections or {}).values()
             )
@@ -3310,6 +3578,9 @@ def _run_optimization(
         if isinstance(_full_new_result, dict):
             _full_new_result["solution_validity"] = solution_validity
         result_payload["solution_validity"] = solution_validity
+        weather_policy_payload = _weather_policy_payload_from_problem_metadata(
+            dict(problem.metadata or {})
+        )
 
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
@@ -3414,6 +3685,8 @@ def _run_optimization(
             },
             "graph_artifacts": graph_artifacts,
         }
+        if weather_policy_payload is not None:
+            optimization_result["weather_policy"] = weather_policy_payload
         if charging_summary_payload is not None:
             optimization_result["charging_summary"] = charging_summary_payload
         if charging_payload_warning:
@@ -3497,6 +3770,8 @@ def _run_optimization(
             "output_dir": output_dir,
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }
+        if weather_policy_payload is not None:
+            optimization_audit["weather_policy"] = weather_policy_payload.get("audit") or {}
         try:
             experiment_report = log_optimization_experiment(
                 scenario_id=scenario_id,
@@ -3876,6 +4151,11 @@ def run_optimization(
             ),
         )
     _require_nonempty_prepared_scope(prep, action="Optimization preflight")
+    _preflight_weather_proxy_request(
+        scenario=scenario,
+        enable_weather_operation_policy=request.enableWeatherOperationPolicy,
+        weather_proxy_forecast_path=request.weatherProxyForecastPath,
+    )
     if request.prepared_input_id and prep.prepared_input_id != request.prepared_input_id:
         raise HTTPException(
             status_code=409,
@@ -3922,6 +4202,8 @@ def run_optimization(
             request.alns_iterations,
             request.no_improvement_limit,
             request.destroy_fraction,
+            request.enableWeatherOperationPolicy,
+            request.weatherProxyForecastPath,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,
