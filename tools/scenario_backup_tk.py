@@ -40,6 +40,12 @@ from src.optimization.common.pv_area import (
     estimate_depot_pv_from_area,
     positive_or_none,
 )
+from src.preprocess.weather.operation_policy import build_operation_profile
+from src.preprocess.weather.weather_proxy_builder import (
+    build_weather_proxy_forecast,
+    load_weather_proxy_forecast_json,
+    write_weather_proxy_forecast_json,
+)
 from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
@@ -55,6 +61,13 @@ _WEATHER_MODE_OPTIONS = (
     "sunny",
     "cloudy",
     "rainy",
+)
+_RUN_PARAMETER_TAB_LABELS = (
+    "よく使う",
+    "SOC/燃料",
+    "料金/CO2",
+    "PV/予報",
+    "目的/詳細",
 )
 _RESULT_METRIC_LABELS = {
     "status": "状態",
@@ -1738,19 +1751,46 @@ class App:
         self.pv_profile_id_var = tk.StringVar(value="")
         self.weather_mode_var = tk.StringVar(value=_ACTUAL_DATE_PV_PROFILE_ID)
         self.weather_factor_scalar_var = tk.StringVar(value="1.0")
+        self.enable_weather_operation_policy_var = tk.BooleanVar(value=False)
+        self.weather_proxy_forecast_path_var = tk.StringVar(value="")
+        self.weather_daily_csv_path_var = tk.StringVar(value="")
+        self.weather_proxy_station_id_var = tk.StringVar(value="44132")
+        self.weather_proxy_station_name_var = tk.StringVar(value="東京")
+        self.weather_proxy_summary_var = tk.StringVar(value="Historical analog予報: disabled")
         self.depot_energy_assets_json_var = tk.StringVar(value="")
         self.co2_price_source_var = tk.StringVar(value="manual")
         self.co2_reference_date_var = tk.StringVar(value="")
         self.enable_vehicle_diagram_output_var = tk.BooleanVar(value=True)
 
         # ════════════════════════════════
-        # 基本パラメータ
+        # パラメータ導線
         # ════════════════════════════════
-        basic = ttk.LabelFrame(ops, text="基本パラメータ", padding=6)
-        basic.pack(fill=tk.X, pady=(0, 4))
+        tab_hint = ttk.Frame(ops)
+        tab_hint.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(
+            tab_hint,
+            text=(
+                "編集はタブ別です。よく使う設定 → SOC/燃料 → 料金/CO2 → PV/予報 → 目的/詳細 の順に確認してください。"
+            ),
+            foreground="#1a5276",
+            font=("TkDefaultFont", 9, "bold"),
+        ).pack(anchor="w")
+
+        self.run_parameter_notebook = ttk.Notebook(ops)
+        self.run_parameter_notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 4))
+        quick_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
+        soc_fuel_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
+        price_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
+        weather_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
+        objective_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
+        for tab, label in zip(
+            (quick_tab, soc_fuel_tab, price_tab, weather_tab, objective_tab),
+            _RUN_PARAMETER_TAB_LABELS,
+        ):
+            self.run_parameter_notebook.add(tab, text=label)
 
         # ── エネルギー単価 ──
-        energy_grp = ttk.LabelFrame(basic, text="エネルギー単価", padding=4)
+        energy_grp = ttk.LabelFrame(quick_tab, text="よく使う料金・電力", padding=4)
         energy_grp.pack(fill=tk.X, pady=(0, 4))
         self._param_row2(
             energy_grp,
@@ -1794,7 +1834,7 @@ class App:
         )
 
         # ── 充電・SOC ──
-        soc_grp = ttk.LabelFrame(basic, text="充電・SOC", padding=4)
+        soc_grp = ttk.LabelFrame(quick_tab, text="よく使う充電・SOC", padding=4)
         soc_grp.pack(fill=tk.X, pady=(0, 4))
         soc_row = ttk.Frame(soc_grp)
         soc_row.pack(fill=tk.X, pady=1)
@@ -1835,9 +1875,55 @@ class App:
             tip0="充電を停止する SOC 上限（0〜1）。過充電防止。例: 0.9",
         )
 
+        # ── ペナルティ ──
+        penalty_grp = ttk.LabelFrame(quick_tab, text="よく使う欠便・契約超過ペナルティ", padding=4)
+        penalty_grp.pack(fill=tk.X, pady=(0, 4))
+        self._param_row2(
+            penalty_grp,
+            "未配車罰金 [円/便]", self.unserved_penalty_var,
+            tip0=(
+                "便が未配車になった場合のペナルティ [円/便]。\n"
+                "大きいほど欠便を嫌う。通常は 100,000 以上推奨。"
+            ),
+            label1="契約超過係数", var1=self.contract_penalty_coeff_var,
+            tip1="系統受電が契約上限を超えた際の罰則係数。大きいほど厳しく守る。例: 1000000",
+        )
+
+        # ── CO₂・環境 ──
+        co2_grp = ttk.LabelFrame(price_tab, text="CO₂・環境", padding=4)
+        co2_grp.pack(fill=tk.X, pady=(0, 4))
+        self._param_row2(
+            co2_grp,
+            "CO2原単位 [kg/kWh]", self.grid_co2_var,
+            tip0="系統電力の CO₂排出係数 [kg/kWh]。co2 モードの排出量計算に使用。例: 0.5",
+            label1="CO2単価 [円/kg]", var1=self.co2_price_var,
+            tip1=(
+                "CO₂排出 1kg あたりのコスト [円/kg]（total_cost モード用）。\n"
+                "0 = CO₂費は目的関数に加算しない。"
+            ),
+        )
+        self._param_row2(
+            co2_grp,
+            "CO2価格ソース", self.co2_price_source_var,
+            tip0="CO₂価格の参照元。manual = 手動入力、jets = JETS 市場価格（参照日要設定）",
+            label1="CO2参照日 (JETS)", var1=self.co2_reference_date_var,
+            tip1="co2_price_source=jets の場合の参照日（YYYY-MM-DD）。manual の場合は不要。",
+        )
+        self._param_row2(
+            co2_grp,
+            "軽油CO2係数 [kg/L]", self.ice_co2_kg_per_l_var,
+            tip0="軽油 1L 燃焼時の CO₂排出量 [kg/L]。デフォルト 2.64（環境省係数）。",
+            label1="劣化重み", var1=self.degradation_weight_var,
+            tip1=(
+                "電池劣化コストの重み係数。\n"
+                "充電量/容量 × 50円/cycle × この重みが目的関数に加算される。\n"
+                "0 = 劣化費用を含まない。"
+            ),
+        )
+
         # ── 目的関数コスト項目 ──
-        cost_toggle_frame = ttk.LabelFrame(basic, text="目的関数に含めるコスト項目", padding=6)
-        cost_toggle_frame.pack(fill=tk.X, pady=(0, 0))
+        cost_toggle_frame = ttk.LabelFrame(price_tab, text="目的関数に含めるコスト項目", padding=6)
+        cost_toggle_frame.pack(fill=tk.X, pady=(0, 4))
         ttk.Label(cost_toggle_frame, text="項目").grid(row=0, column=0, sticky="w", padx=(0, 8))
         ttk.Label(cost_toggle_frame, text="目的関数に含める").grid(row=0, column=1, sticky="w", padx=(0, 8))
         ttk.Label(cost_toggle_frame, text="内容").grid(row=0, column=2, sticky="w")
@@ -1869,60 +1955,8 @@ class App:
                 row_idx += 1
         cost_toggle_frame.columnconfigure(2, weight=1)
 
-        # ════════════════════════════════
-        # 詳細パラメータ
-        # ════════════════════════════════
-        advanced = ttk.LabelFrame(ops, text="詳細パラメータ", padding=6)
-        advanced.pack(fill=tk.X, pady=(0, 4))
-
-        # ── ペナルティ ──
-        penalty_grp = ttk.LabelFrame(advanced, text="ペナルティ", padding=4)
-        penalty_grp.pack(fill=tk.X, pady=(0, 4))
-        self._param_row2(
-            penalty_grp,
-            "未配車罰金 [円/便]", self.unserved_penalty_var,
-            tip0=(
-                "便が未配車になった場合のペナルティ [円/便]。\n"
-                "大きいほど欠便を嫌う。通常は 100,000 以上推奨。"
-            ),
-            label1="契約超過係数", var1=self.contract_penalty_coeff_var,
-            tip1="系統受電が契約上限を超えた際の罰則係数。大きいほど厳しく守る。例: 1000000",
-        )
-
-        # ── CO₂・環境 ──
-        co2_grp = ttk.LabelFrame(advanced, text="CO₂・環境", padding=4)
-        co2_grp.pack(fill=tk.X, pady=(0, 4))
-        self._param_row2(
-            co2_grp,
-            "CO2原単位 [kg/kWh]", self.grid_co2_var,
-            tip0="系統電力の CO₂排出係数 [kg/kWh]。co2 モードの排出量計算に使用。例: 0.5",
-            label1="CO2単価 [円/kg]", var1=self.co2_price_var,
-            tip1=(
-                "CO₂排出 1kg あたりのコスト [円/kg]（total_cost モード用）。\n"
-                "0 = CO₂費は目的関数に加算しない。"
-            ),
-        )
-        self._param_row2(
-            co2_grp,
-            "CO2価格ソース", self.co2_price_source_var,
-            tip0="CO₂価格の参照元。manual = 手動入力、jets = JETS 市場価格（参照日要設定）",
-            label1="CO2参照日 (JETS)", var1=self.co2_reference_date_var,
-            tip1="co2_price_source=jets の場合の参照日（YYYY-MM-DD）。manual の場合は不要。",
-        )
-        self._param_row2(
-            co2_grp,
-            "軽油CO2係数 [kg/L]", self.ice_co2_kg_per_l_var,
-            tip0="軽油 1L 燃焼時の CO₂排出量 [kg/L]。デフォルト 2.64（環境省係数）。",
-            label1="劣化重み", var1=self.degradation_weight_var,
-            tip1=(
-                "電池劣化コストの重み係数。\n"
-                "充電量/容量 × 50円/cycle × この重みが目的関数に加算される。\n"
-                "0 = 劣化費用を含まない。"
-            ),
-        )
-
         # ── ICE燃料 ──
-        ice_grp = ttk.LabelFrame(advanced, text="ICE燃料", padding=4)
+        ice_grp = ttk.LabelFrame(soc_fuel_tab, text="ICE燃料", padding=4)
         ice_grp.pack(fill=tk.X, pady=(0, 4))
         self._param_row2(
             ice_grp,
@@ -1936,7 +1970,7 @@ class App:
         )
 
         # ── SOC詳細 ──
-        soc_detail_grp = ttk.LabelFrame(advanced, text="SOC詳細", padding=4)
+        soc_detail_grp = ttk.LabelFrame(soc_fuel_tab, text="帰庫後SOC詳細", padding=4)
         soc_detail_grp.pack(fill=tk.X, pady=(0, 4))
         self._param_row2(
             soc_detail_grp,
@@ -1949,7 +1983,7 @@ class App:
         )
 
         # ── PV・天候 ──
-        pv_grp = ttk.LabelFrame(advanced, text="PV・天候", padding=4)
+        pv_grp = ttk.LabelFrame(weather_tab, text="PV・天候・擬似予報", padding=4)
         pv_grp.pack(fill=tk.X, pady=(0, 4))
         self._param_row2(
             pv_grp,
@@ -1958,11 +1992,12 @@ class App:
         )
         weather_row = ttk.Frame(pv_grp)
         weather_row.pack(fill=tk.X, pady=1)
-        weather_label = ttk.Label(weather_row, text="天気モード", width=18)
+        weather_label = ttk.Label(weather_row, text="PV天気モード", width=18)
         weather_label.pack(side=tk.LEFT)
         _Tooltip(
             weather_label,
-            "actual_date_profile は運行日と計画日数で選ばれた実日のPVを使います。sunny/cloudy/rainy は手動係数に寄せたい場合の補助です。",
+            "PV発電形状/係数用の天気指定です。Historical analog予報による運用ポリシーとは別です。\n"
+            "actual_date_profile は運行日と計画日数で選ばれた実日のPVを使います。",
         )
         self.weather_mode_combo = ttk.Combobox(
             weather_row,
@@ -1988,8 +2023,70 @@ class App:
             command=self.sync_selected_depot_pv_assets,
         ).pack(side=tk.LEFT, padx=(6, 0))
 
+        proxy_grp = ttk.LabelFrame(pv_grp, text="Historical analog予報 → 最適化ポリシー", padding=4)
+        proxy_grp.pack(fill=tk.X, pady=(6, 0))
+        proxy_enable = ttk.Checkbutton(
+            proxy_grp,
+            text="擬似予報をSOC/初期SOC/運用ポリシーとして最適化へ反映",
+            variable=self.enable_weather_operation_policy_var,
+        )
+        proxy_enable.pack(anchor="w", pady=(0, 2))
+        _Tooltip(
+            proxy_enable,
+            "有効時、ローカルの WeatherProxyForecast JSON をBFFへ渡します。\n"
+            "最適化中にWebアクセスは行わず、analog_date < service_date を検証します。",
+        )
+        forecast_row = self._labeled_entry(
+            proxy_grp,
+            "予報JSON",
+            self.weather_proxy_forecast_path_var,
+            tooltip="scripts/weather/build_weather_proxy_forecast.py または下のCSV生成ボタンで作ったJSONを指定します。",
+        )
+        ttk.Button(
+            forecast_row,
+            text="選択...",
+            command=self.browse_weather_proxy_forecast_path,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(
+            forecast_row,
+            text="確認/反映",
+            command=self.inspect_weather_proxy_forecast,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        csv_row = self._labeled_entry(
+            proxy_grp,
+            "日別気象CSV",
+            self.weather_daily_csv_path_var,
+            tooltip="data/weather/processed/*.csv の内部標準CSV。Web取得ではなくローカルファイルだけを読みます。",
+        )
+        ttk.Button(
+            csv_row,
+            text="CSV選択...",
+            command=self.browse_weather_daily_csv_path,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        station_row = ttk.Frame(proxy_grp)
+        station_row.pack(fill=tk.X, pady=1)
+        ttk.Label(station_row, text="地点ID/地点名", width=18).pack(side=tk.LEFT)
+        ttk.Entry(station_row, textvariable=self.weather_proxy_station_id_var, width=10).pack(
+            side=tk.LEFT, padx=(2, 4)
+        )
+        ttk.Entry(station_row, textvariable=self.weather_proxy_station_name_var, width=16).pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+        ttk.Button(
+            station_row,
+            text="CSVから予報JSON生成",
+            command=self.build_weather_proxy_forecast_from_csv,
+        ).pack(side=tk.LEFT)
+        ttk.Label(
+            proxy_grp,
+            textvariable=self.weather_proxy_summary_var,
+            foreground="#555",
+            wraplength=460,
+            justify=tk.LEFT,
+        ).pack(anchor="w", fill=tk.X, pady=(3, 0))
+
         # ── 最適化・その他 ──
-        optim_grp = ttk.LabelFrame(advanced, text="最適化・その他", padding=4)
+        optim_grp = ttk.LabelFrame(objective_tab, text="最適化・その他", padding=4)
         optim_grp.pack(fill=tk.X, pady=(0, 0))
         self._param_row2(
             optim_grp,
@@ -2021,19 +2118,21 @@ class App:
         self.milp_max_successors_var = tk.StringVar(value="")  # 空 = 無制限
         self.allow_partial_service_var = tk.BooleanVar(value=False)
 
-        settings_box = ttk.LabelFrame(ops, text="ソルバー詳細設定", padding=6)
+        settings_box = ttk.LabelFrame(objective_tab, text="ソルバー詳細設定", padding=6)
         settings_box.pack(fill=tk.X, pady=(0, 4))
         ttk.Label(settings_box, text="手順②でソルバー種別・時間上限・反復回数を先に確定してください。", foreground="#444").pack(anchor="w")
         ttk.Button(settings_box, text="② ソルバー設定を開く", command=self.open_solver_settings_window).pack(anchor="w", pady=(4, 0))
 
         # ── ジョブ監視 ──
-        job_row = ttk.Frame(ops)
+        job_row = ttk.Frame(objective_tab)
         job_row.pack(fill=tk.X, pady=4)
         ttk.Label(job_row, text="詳細操作", foreground="#555").pack(side=tk.LEFT, padx=(0, 8))
         ttk.Label(job_row, text="手動 job_id", width=20).pack(side=tk.LEFT)
         self.manual_job_id_var = tk.StringVar(value="")
         ttk.Entry(job_row, textvariable=self.manual_job_id_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(job_row, text="ジョブ監視", command=self.poll_last_job).pack(side=tk.LEFT, padx=4)
+
+        self._bind_canvas_mousewheel(_run_canvas, _run_inner)
 
         # Scenario Compare はシナリオバーの「比較実行」ボタンから行います
 
@@ -2959,6 +3058,209 @@ class App:
         if not v:
             return None
         return self._parse_float(v)
+
+    @staticmethod
+    def _first_present_value(*values: Any, default: Any = None) -> Any:
+        for value in values:
+            if value is not None:
+                return value
+        return default
+
+    @staticmethod
+    def _repo_relative_path(path: Path) -> str:
+        try:
+            return path.resolve().relative_to(_REPO_ROOT).as_posix()
+        except Exception:
+            return str(path)
+
+    def _resolve_local_path(self, raw_path: str) -> Path:
+        path = Path(str(raw_path or "").strip())
+        if not path.is_absolute():
+            path = _REPO_ROOT / path
+        return path
+
+    def browse_weather_proxy_forecast_path(self) -> None:
+        path = filedialog.askopenfilename(
+            title="WeatherProxyForecast JSONを選択",
+            filetypes=[("JSON", "*.json"), ("All files", "*.*")],
+            initialdir=str(_REPO_ROOT / "data" / "weather" / "proxy_forecasts"),
+        )
+        if path:
+            self.weather_proxy_forecast_path_var.set(self._repo_relative_path(Path(path)))
+
+    def browse_weather_daily_csv_path(self) -> None:
+        path = filedialog.askopenfilename(
+            title="日別気象CSVを選択",
+            filetypes=[("CSV", "*.csv"), ("All files", "*.*")],
+            initialdir=str(_REPO_ROOT / "data" / "weather" / "processed"),
+        )
+        if path:
+            self.weather_daily_csv_path_var.set(self._repo_relative_path(Path(path)))
+
+    def _selected_service_date_for_weather_proxy(self) -> str:
+        service_date = str(self.service_date_var.get() or "").strip()
+        if service_date:
+            return service_date[:10]
+        service_dates = self._selected_service_dates(announce=False)
+        if service_dates:
+            return str(service_dates[0])[:10]
+        return ""
+
+    def _default_weather_proxy_out_path(self, service_date: str) -> Path:
+        station_id = re.sub(r"[^0-9A-Za-z_-]+", "_", self.weather_proxy_station_id_var.get().strip())
+        station_key = station_id or "station"
+        return (
+            _REPO_ROOT
+            / "data"
+            / "weather"
+            / "proxy_forecasts"
+            / f"{station_key}_{service_date}_historical_analog_v1.json"
+        )
+
+    def _weather_proxy_quick_setup_payload(self) -> dict[str, Any]:
+        return {
+            "enableWeatherOperationPolicy": bool(self.enable_weather_operation_policy_var.get()),
+            "weatherProxyForecastPath": self.weather_proxy_forecast_path_var.get().strip(),
+            "weatherProxyDailyCsvPath": self.weather_daily_csv_path_var.get().strip(),
+            "weatherProxyStationId": self.weather_proxy_station_id_var.get().strip(),
+            "weatherProxyStationName": self.weather_proxy_station_name_var.get().strip(),
+        }
+
+    def _weather_proxy_prepare_payload(self) -> dict[str, Any]:
+        return {
+            "enable_weather_operation_policy": bool(self.enable_weather_operation_policy_var.get()),
+            "weather_proxy_forecast_path": (
+                self.weather_proxy_forecast_path_var.get().strip() or None
+            ),
+            "weather_proxy_daily_csv_path": self.weather_daily_csv_path_var.get().strip() or None,
+            "weather_proxy_station_id": self.weather_proxy_station_id_var.get().strip() or None,
+            "weather_proxy_station_name": self.weather_proxy_station_name_var.get().strip() or None,
+        }
+
+    def _weather_proxy_optimization_payload(self) -> dict[str, Any]:
+        enabled = bool(self.enable_weather_operation_policy_var.get())
+        payload = {"enableWeatherOperationPolicy": enabled}
+        path = self.weather_proxy_forecast_path_var.get().strip()
+        if enabled and path:
+            payload["weatherProxyForecastPath"] = path
+        return payload
+
+    def _load_weather_proxy_forecast_from_ui(self):
+        raw_path = self.weather_proxy_forecast_path_var.get().strip()
+        if not raw_path:
+            raise ValueError("weather proxy forecast path is empty")
+        forecast_path = self._resolve_local_path(raw_path)
+        if not forecast_path.exists():
+            raise FileNotFoundError(str(forecast_path))
+        forecast = load_weather_proxy_forecast_json(forecast_path)
+        service_date = self._selected_service_date_for_weather_proxy()
+        if service_date and forecast.service_date != service_date:
+            raise ValueError(
+                "WEATHER_PROXY_SERVICE_DATE_MISMATCH: "
+                f"UI={service_date} forecast={forecast.service_date}"
+            )
+        if forecast.analog_date >= forecast.service_date or not forecast.no_future_leakage:
+            raise ValueError(
+                "WEATHER_PROXY_FUTURE_LEAKAGE: analog_date must be before service_date"
+            )
+        return forecast
+
+    def _apply_weather_proxy_forecast_to_ui(
+        self,
+        forecast,
+        *,
+        update_soc_fields: bool,
+        mark_stale: bool = True,
+    ) -> Any:
+        profile = build_operation_profile(forecast)
+        if update_soc_fields:
+            previous_suspend = getattr(self, "_suspend_prepare_watchers", False)
+            if not mark_stale:
+                self._suspend_prepare_watchers = True
+            try:
+                floor_text = str(profile.final_soc_floor_percent)
+                target_text = str(profile.final_soc_target_percent)
+                if self.final_soc_floor_percent_var.get() != floor_text:
+                    self.final_soc_floor_percent_var.set(floor_text)
+                if self.final_soc_target_percent_var.get() != target_text:
+                    self.final_soc_target_percent_var.set(target_text)
+            finally:
+                if not mark_stale:
+                    self._suspend_prepare_watchers = previous_suspend
+        summary = (
+            "Historical analog予報: "
+            f"mode={forecast.operation_mode} analog={forecast.analog_date} "
+            f"sun={forecast.sun_score:.2f} rain={forecast.rain_risk:.2f} "
+            f"SOC floor/target={profile.final_soc_floor_percent:g}/{profile.final_soc_target_percent:g}%"
+        )
+        if hasattr(self, "weather_proxy_summary_var"):
+            self.weather_proxy_summary_var.set(summary)
+        return profile
+
+    def inspect_weather_proxy_forecast(self) -> None:
+        try:
+            forecast = self._load_weather_proxy_forecast_from_ui()
+            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=True)
+            self.enable_weather_operation_policy_var.set(True)
+            self.log_line(
+                "Historical analog予報を反映: "
+                f"service_date={forecast.service_date} analog_date={forecast.analog_date} "
+                f"mode={forecast.operation_mode}"
+            )
+        except Exception as exc:
+            messagebox.showwarning("Weather proxy不正", str(exc))
+
+    def build_weather_proxy_forecast_from_csv(self) -> None:
+        service_date = self._selected_service_date_for_weather_proxy()
+        if not service_date:
+            messagebox.showwarning("入力不足", "予報生成前に運行日を入力してください")
+            return
+        csv_path = self.weather_daily_csv_path_var.get().strip()
+        if not csv_path:
+            messagebox.showwarning("入力不足", "日別気象CSVを指定してください")
+            return
+        station_id = self.weather_proxy_station_id_var.get().strip()
+        station_name = self.weather_proxy_station_name_var.get().strip()
+        if not station_id or not station_name:
+            messagebox.showwarning("入力不足", "地点IDと地点名を入力してください")
+            return
+        try:
+            forecast = build_weather_proxy_forecast(
+                service_date=service_date,
+                station_id=station_id,
+                station_name=station_name,
+                daily_weather_csv_path=str(self._resolve_local_path(csv_path)),
+                random_seed=self._parse_int(self.random_seed_var.get(), 42),
+            )
+            out_path = self._default_weather_proxy_out_path(service_date)
+            write_weather_proxy_forecast_json(out_path, forecast)
+            self.weather_proxy_forecast_path_var.set(self._repo_relative_path(out_path))
+            self.enable_weather_operation_policy_var.set(True)
+            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=True)
+            self.log_line(
+                "Historical analog予報JSONを生成: "
+                f"{self.weather_proxy_forecast_path_var.get()} "
+                f"(analog_date={forecast.analog_date}, mode={forecast.operation_mode})"
+            )
+        except Exception as exc:
+            messagebox.showwarning("Weather proxy生成失敗", str(exc))
+
+    def _ensure_weather_proxy_ready_for_optimization(self) -> bool:
+        if not bool(self.enable_weather_operation_policy_var.get()):
+            if hasattr(self, "weather_proxy_summary_var"):
+                self.weather_proxy_summary_var.set("Historical analog予報: disabled")
+            return True
+        try:
+            forecast = self._load_weather_proxy_forecast_from_ui()
+            self._apply_weather_proxy_forecast_to_ui(
+                forecast,
+                update_soc_fields=True,
+                mark_stale=False,
+            )
+            return True
+        except Exception as exc:
+            messagebox.showwarning("Weather proxy不正", str(exc))
+            return False
 
     @staticmethod
     def _normalize_powertrain_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -4889,22 +5191,37 @@ class App:
             self.degradation_weight_var.set(str(sim.get("degradationWeight") or 0))
             self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
             initial_soc_default = (
-                sim.get("initialSocPercent")
-                if sim.get("initialSocPercent") is not None
-                else sim.get("initialSoc")
+                self._first_present_value(
+                    sim.get("initialSocPercent"),
+                    sim.get("initialSoc"),
+                    default=0.8,
+                )
             )
             self.apply_initial_soc_percent_to_selected_bevs_var.set(False)
-            self.initial_soc_var.set(str(initial_soc_default or 0.8))
-            self.soc_min_var.set(str(sim.get("socMin") or 0.2))
-            self.soc_max_var.set(str(sim.get("socMax") or 0.9))
+            self.initial_soc_var.set(str(initial_soc_default))
+            self.soc_min_var.set(str(self._first_present_value(sim.get("socMin"), default=0.2)))
+            self.soc_max_var.set(str(self._first_present_value(sim.get("socMax"), default=0.9)))
             self._set_cost_component_flags_from_payload(sim)
-            self.initial_soc_percent_var.set(str(initial_soc_default or 0.8))
-            self.final_soc_floor_percent_var.set(str(sim.get("finalSocFloorPercent") or 0.2))
+            self.initial_soc_percent_var.set(str(initial_soc_default))
+            self.final_soc_floor_percent_var.set(
+                str(self._first_present_value(sim.get("finalSocFloorPercent"), default=0.2))
+            )
             self.final_soc_target_percent_var.set(
-                str(sim.get("finalSocTargetPercent") or sim.get("finalSocFloorPercent") or 0.8)
+                str(
+                    self._first_present_value(
+                        sim.get("finalSocTargetPercent"),
+                        sim.get("finalSocFloorPercent"),
+                        default=0.8,
+                    )
+                )
             )
             self.final_soc_target_tolerance_percent_var.set(
-                str(sim.get("finalSocTargetTolerancePercent") or 0.0)
+                str(
+                    self._first_present_value(
+                        sim.get("finalSocTargetTolerancePercent"),
+                        default=0.0,
+                    )
+                )
             )
             self.initial_ice_fuel_percent_var.set(str(sim.get("initialIceFuelPercent") or 100.0))
             self.min_ice_fuel_percent_var.set(str(sim.get("minIceFuelPercent") or 10.0))
@@ -4918,7 +5235,22 @@ class App:
                 if self._widget_exists(getattr(self, "weather_mode_combo", None)):
                     self.weather_mode_combo.configure(values=self.weather_mode_options)
             self.weather_mode_var.set(weather_mode)
-            self.weather_factor_scalar_var.set(str(sim.get("weatherFactorScalar") or 1.0))
+            self.weather_factor_scalar_var.set(
+                str(self._first_present_value(sim.get("weatherFactorScalar"), default=1.0))
+            )
+            self.enable_weather_operation_policy_var.set(
+                bool(sim.get("enableWeatherOperationPolicy", False))
+            )
+            self.weather_proxy_forecast_path_var.set(str(sim.get("weatherProxyForecastPath") or ""))
+            self.weather_daily_csv_path_var.set(str(sim.get("weatherProxyDailyCsvPath") or ""))
+            self.weather_proxy_station_id_var.set(str(sim.get("weatherProxyStationId") or "44132"))
+            self.weather_proxy_station_name_var.set(str(sim.get("weatherProxyStationName") or "東京"))
+            if self.enable_weather_operation_policy_var.get() and self.weather_proxy_forecast_path_var.get().strip():
+                try:
+                    forecast = self._load_weather_proxy_forecast_from_ui()
+                    self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=False)
+                except Exception as exc:
+                    self.weather_proxy_summary_var.set(f"Historical analog予報: invalid ({exc})")
             self.tou_text_var.set(self._format_tou_text(sim.get("touPricing") or []))
             depot_energy_assets = sim.get("depotEnergyAssets")
             if isinstance(depot_energy_assets, list):
@@ -5016,6 +5348,8 @@ class App:
                 "初期SOC比を一斉反映するには営業所を選択してください",
             )
             return
+        if not self._ensure_weather_proxy_ready_for_optimization():
+            return
 
         payload = {
             "selectedDepotIds": self._selected_depot_ids(),
@@ -5083,6 +5417,7 @@ class App:
             "endTime": self._normalize_hhmm_text(self.operation_end_time_var.get(), default="23:00"),
             "planningHorizonHours": self._planning_horizon_hours_value(planning_days),
         }
+        payload.update(self._weather_proxy_quick_setup_payload())
         payload["depotEnergyAssets"] = synced_assets
 
         self._begin_quick_setup_save_guard()
@@ -6328,6 +6663,9 @@ class App:
         allow_intra_depot_swap = (
             False if fixed_route_band_mode else self.allow_intra_var.get()
         )
+        if not self._ensure_weather_proxy_ready_for_optimization():
+            raise ValueError("invalid_weather_proxy")
+        weather_proxy_payload = self._weather_proxy_prepare_payload()
 
         return {
             "selected_depot_ids": self._selected_depot_ids(),
@@ -6383,6 +6721,7 @@ class App:
                 "weather_factor_scalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
                 "planning_horizon_hours": minimum_horizon_hours,
                 "random_seed": self._parse_int(self.random_seed_var.get(), 42),
+                **weather_proxy_payload,
             },
         }
 
@@ -6390,6 +6729,19 @@ class App:
         scenario_id = self._selected_scenario_id()
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+        try:
+            payload = self._prepare_payload()
+        except ValueError:
+            return
+        if (
+            self.apply_initial_soc_percent_to_selected_bevs_var.get()
+            and not self._selected_depot_ids()
+        ):
+            messagebox.showwarning(
+                "入力不足",
+                "初期SOC比を一斉反映するには営業所を選択してください",
+            )
             return
         self.log_line("入力データ作成(Prepare)を開始します")
         self.log_line("Prepare は現在選択している営業所・路線だけを対象に入力データを作成します")
@@ -6437,19 +6789,6 @@ class App:
                     f"tripCount={self.prepared_trip_count} のため実行対象がありません。{reason}",
                 )
 
-        try:
-            payload = self._prepare_payload()
-        except ValueError:
-            return
-        if (
-            self.apply_initial_soc_percent_to_selected_bevs_var.get()
-            and not self._selected_depot_ids()
-        ):
-            messagebox.showwarning(
-                "入力不足",
-                "初期SOC比を一斉反映するには営業所を選択してください",
-            )
-            return
         def action() -> dict[str, Any]:
             apply_info = self._maybe_apply_main_initial_soc_to_selected_bevs(
                 scenario_id
@@ -6754,6 +7093,7 @@ class App:
             "depot_id": depots[0] if depots else None,
             "rebuild_dispatch": bool(self.rebuild_dispatch_before_opt_var.get()),
         }
+        payload.update(self._weather_proxy_optimization_payload())
         request_action = self._wrap_execution_with_prepare_retry(
             scenario_id=scenario_id,
             action_label="最適化計算",
@@ -6900,8 +7240,13 @@ class App:
             (self.max_ice_fuel_percent_var, "ICE燃料バッファ上限を変更"),
             (self.default_ice_tank_capacity_l_var, "ICE既定タンク容量を変更"),
             (self.pv_profile_id_var, "PVプロファイルを変更"),
-            (self.weather_mode_var, "天気モードを変更"),
-            (self.weather_factor_scalar_var, "天気係数を変更"),
+            (self.weather_mode_var, "PV天気モードを変更"),
+            (self.weather_factor_scalar_var, "PV天気係数を変更"),
+            (self.enable_weather_operation_policy_var, "Weather proxy有効設定を変更"),
+            (self.weather_proxy_forecast_path_var, "Weather proxy予報JSONを変更"),
+            (self.weather_daily_csv_path_var, "Weather proxy日別CSVを変更"),
+            (self.weather_proxy_station_id_var, "Weather proxy地点IDを変更"),
+            (self.weather_proxy_station_name_var, "Weather proxy地点名を変更"),
             (self.depot_energy_assets_json_var, "営業所エネルギー資産設定を変更"),
             (self.co2_price_source_var, "CO2価格ソースを変更"),
             (self.co2_reference_date_var, "CO2参照日を変更"),
@@ -7146,6 +7491,17 @@ class App:
                 f"validated_feasible={solution_validity.get('validated_feasible')} "
                 f"reason={solution_validity.get('status_reason')} "
                 f"blocking={solution_validity.get('blocking_reasons')}"
+            )
+        weather_policy = dict(result.get("weather_policy") or {})
+        if weather_policy.get("enabled"):
+            forecast = dict(weather_policy.get("forecast") or {})
+            audit = dict(weather_policy.get("audit") or {})
+            self._optimization_console_log(
+                "optimization_result.weather_proxy: "
+                f"mode={forecast.get('operation_mode') or audit.get('operation_mode')} "
+                f"analog_date={forecast.get('analog_date') or audit.get('analog_date')} "
+                f"no_future_leakage={forecast.get('no_future_leakage') or audit.get('no_future_leakage')} "
+                f"initial_soc_randomized={audit.get('initial_soc_randomized')}"
             )
         for warning in list(result.get("warnings") or []):
             self._optimization_console_log(f"optimization_result.warning: {warning}")
@@ -7499,6 +7855,8 @@ class App:
 ③ ソルバー設定（中パネル）
   - 燃料単価・電気代・SOC上下限などを確認・変更
   - 詳細パラメータ（CO₂・劣化費）は下へスクロール
+  - Historical analog予報を使う場合は、ローカルJSONを選択または日別気象CSVから生成し、
+    「確認/反映」でSOC floor/targetへ反映してから Quick Setup 保存
   - 「② ソルバー設定」を押してソルバー種別・時間上限・反復回数を設定
   - ソルバー設定を変えたら Prepare は stale になるため、次の手順で再作成します
 
@@ -7540,6 +7898,15 @@ class App:
   final_soc_target_percent 帰庫後 SOC の目標値（可能な範囲で目指す）。例: 0.8
   final_soc_target_tolerance_percent
                           目標 SOC の許容誤差（例: 0.05）。0 = 厳密な等式制約
+
+■ Historical analog weather proxy
+  enable_weather_operation_policy
+                          ローカル WeatherProxyForecast JSON を最適化へ反映するスイッチ
+  weather_proxy_forecast_path
+                          擬似予報JSONのパス。最適化中にWebアクセスは行わない
+  反映内容                  operation_mode から終了SOC floor/target、初期SOCランダム化、
+                          BEV duty bias、ICE backup bias 等を metadata として渡す
+  禁止条件                  analog_date >= service_date は未来情報リークとして拒否する
 
 ■ 充電器・電力
   depot_power_limit_kw    営業所の系統受電契約電力上限 [kW]（例: 500）

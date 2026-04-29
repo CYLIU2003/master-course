@@ -39,6 +39,40 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### 2026-04-28 Weather Proxy Frontend Integration
+
+- 問題: backend / BFF には Historical Analog Weather Proxy v1 が入ったが、Tk フロントでは既存の `weather_mode` が PV 形状/係数用の「天気モード」に見え、擬似予報を運用ポリシーとして最適化へ渡す導線がなかった。ユーザーは予報JSONを生成・選択しても、SOC floor/target へどう反映されるかを画面上で確認できなかった。
+- 対応:
+  - `tools/scenario_backup_tk.py` の `PV・天候` セクションで既存項目を `PV天気モード` と明示し、`Historical analog予報 → 最適化ポリシー` を別枠に分離した。
+  - ローカル `WeatherProxyForecast` JSON の選択、検証、`operation_mode` からの `final_soc_floor_percent` / `final_soc_target_percent` 画面反映、日別気象CSVからの forecast JSON 生成を追加した。optimizer 実行中の Web アクセスは行わない。
+  - Quick Setup 保存、Solver対応 Prepare、run-optimization payload へ `enableWeatherOperationPolicy` / `weatherProxyForecastPath` を伝播する。prepare 側には監査用に `weather_proxy_daily_csv_path` / station 情報も保存する。
+  - BFF の scenario / quick-setup / prepare モデルに weather proxy UI フィールドを追加し、prepared input materialize でも current scenario 側の weather proxy 設定を保持する。
+- 自分で上げて潰した追加問題:
+  - `weather_mode` という既存ラベルはPVプロファイル補助と運用ポリシーを混同させるため、UI表示と stale reason を `PV天気モード` / `PV天気係数` に変更した。
+  - Quick Setup 読込で `finalSocFloorPercent=0`、`finalSocTargetPercent=0`、`weatherFactorScalar=0` など明示ゼロが `or default` で潰れる箇所があった。`None` のみ fallback する helper に置き換えた。
+  - Prepare ボタンが入力検証前に「開始」ログ/ダイアログを出していた。weather proxy 不正や運行日未入力では開始表示を出さず止まるよう、payload 構築を先に移した。
+  - 実行直前の自動 weather policy 反映で `StringVar` trace が prepared state を消す可能性があったため、内部検証時のSOC表示同期は prepare watcher を一時停止する。
+- 検証:
+  - `python -m py_compile tools\scenario_backup_tk.py bff\routers\scenarios.py bff\routers\simulation.py bff\services\simulation_builder.py bff\services\run_preparation.py`
+  - `python -m pytest tests\test_scenario_backup_tk_dataset_options.py tests\test_scenario_update_simulation_settings.py tests\test_simulation_builder_prepare_scope.py tests\optimization\test_weather_policy_problem_integration.py -q`
+
+### 2026-04-28 Run Parameter UI/UX Redesign
+
+- 問題: Tk の実行パラメータ欄は `基本パラメータ` と `詳細パラメータ` の縦積みで、料金、SOC、ICE燃料、CO2、PV、weather proxy、目的関数 cost flags、ソルバー詳細が長い一画面に混在していた。最適化前に何を順番に確認すべきかが分かりにくく、編集対象を探すためのスクロール量も大きかった。
+- 対応:
+  - `tools/scenario_backup_tk.py` の実行パラメータ欄を `よく使う` / `SOC/燃料` / `料金/CO2` / `PV/予報` / `目的/詳細` の Notebook タブへ再配置した。
+  - 既存の `StringVar` / `BooleanVar`、Quick Setup 保存、Prepare payload、run-optimization payload は変更せず、同じ編集欄を見つけやすい単位に移動した。編集可能なパラメータの削除や意味変更は行っていない。
+  - `PV天気モード` と `Historical analog予報` は `PV/予報` タブへ集約し、PV発電形状用の天気指定と最適化ポリシー用の擬似予報を同じ文脈で確認できるようにした。
+  - 長い設定画面でも mouse wheel が子ウィジェット上で効くよう、実行パネルの canvas scroll binding を再帰的に張った。
+- 自分で上げて潰した追加問題:
+  - タブラベルを UI 内の散在文字列にすると将来の回帰検知が難しいため、`_RUN_PARAMETER_TAB_LABELS` として定数化し、テストから主要カテゴリを固定確認できるようにした。
+  - cost flags は「目的関数に含める」編集項目なので、料金/CO2タブへ移して、費用評価とCO2評価をまとめて確認できるようにした。
+  - `enableWeatherOperationPolicy=false` でも run-optimization payload に stale な `weatherProxyForecastPath` を残せていたため、無効時は実行 payload から予報パスを落とすよう修正した。
+- 検証:
+  - `python -m py_compile tools\scenario_backup_tk.py` → pass
+  - `python -m pytest tests\test_scenario_backup_tk_dataset_options.py tests\test_scenario_update_simulation_settings.py tests\test_simulation_builder_prepare_scope.py tests\optimization\test_weather_policy_problem_integration.py -q` → `42 passed`
+  - `python -m pytest tests -q` → `477 passed`
+
 ### 2026-04-24 Historical Analog Weather Proxy v1
 
 - 問題: 既存の `weather_mode` は天気カテゴリや PV プロファイル選択の周辺情報に留まり、過去実気象を「当日朝に得られた擬似予報」として最適化入力へ再現可能に渡す構造がなかった。天気ラベルを BEV/ICE 台数へ直接 hard 変換すると研究上の説明が弱く、対象日当日の実績を見てしまうと未来情報リークになる。

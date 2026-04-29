@@ -1,7 +1,11 @@
 import random
+from pathlib import Path
+
+import pytest
 
 from tools.scenario_backup_tk import (
     App,
+    _RUN_PARAMETER_TAB_LABELS,
     _choose_dataset_options,
     _ordered_cost_breakdown_items,
     _expand_selected_routes_to_family_members,
@@ -10,6 +14,55 @@ from tools.scenario_backup_tk import (
     _scope_summarize_routes,
     _scope_variant_mix_text,
 )
+from src.preprocess.weather.daily_weather_schema import WeatherProxyForecast
+from src.preprocess.weather.weather_proxy_builder import write_weather_proxy_forecast_json
+
+
+class DummyVar:
+    def __init__(self, value) -> None:
+        self._value = value
+
+    def get(self):
+        return self._value
+
+    def set(self, value) -> None:
+        self._value = value
+
+
+def _weather_forecast() -> WeatherProxyForecast:
+    return WeatherProxyForecast(
+        version="historical_analog_v1",
+        forecast_type="historical_analog_v1",
+        service_date="2025-08-21",
+        station_id="44132",
+        station_name="東京",
+        analog_date="2024-08-22",
+        analog_selection_score=0.183,
+        analog_selection_method="calendar_plus_previous_day_weather_v1",
+        weather_label="曇り時々晴れ",
+        tmax_c=33.2,
+        tmin_c=25.1,
+        mean_temp_c=28.4,
+        sunshine_hours=5.8,
+        precipitation_mm=0.0,
+        sun_score=0.725,
+        rain_risk=0.0,
+        heat_load_score=0.82,
+        midday_recovery_expectation="high",
+        operation_mode="aggressive",
+        no_future_leakage=True,
+        metadata={"candidate_count": 3, "features_used": ["month_distance"]},
+    )
+
+
+def test_run_parameter_tab_labels_keep_optimization_inputs_grouped() -> None:
+    assert _RUN_PARAMETER_TAB_LABELS == (
+        "よく使う",
+        "SOC/燃料",
+        "料金/CO2",
+        "PV/予報",
+        "目的/詳細",
+    )
 
 
 def test_choose_dataset_options_prefers_runtime_ready_candidates() -> None:
@@ -110,6 +163,61 @@ def test_main_initial_soc_ratio_prefers_percent_field() -> None:
 
     app.initial_soc_percent_var.set("")
     assert App._main_initial_soc_ratio(app) == 0.25
+
+
+def test_weather_proxy_forecast_application_updates_visible_soc_policy() -> None:
+    app = App.__new__(App)
+    app.final_soc_floor_percent_var = DummyVar("0.2")
+    app.final_soc_target_percent_var = DummyVar("0.8")
+    app.weather_proxy_summary_var = DummyVar("")
+    app._suspend_prepare_watchers = False
+
+    profile = App._apply_weather_proxy_forecast_to_ui(
+        app,
+        _weather_forecast(),
+        update_soc_fields=True,
+        mark_stale=False,
+    )
+
+    assert profile.operation_mode == "aggressive"
+    assert app.final_soc_floor_percent_var.get() == "20.0"
+    assert app.final_soc_target_percent_var.get() == "35.0"
+    assert "analog=2024-08-22" in app.weather_proxy_summary_var.get()
+
+
+def test_weather_proxy_optimization_payload_disables_stale_path_when_unchecked() -> None:
+    app = App.__new__(App)
+    app.enable_weather_operation_policy_var = DummyVar(False)
+    app.weather_proxy_forecast_path_var = DummyVar("missing/path.json")
+
+    payload = App._weather_proxy_optimization_payload(app)
+
+    assert payload == {"enableWeatherOperationPolicy": False}
+
+
+def test_weather_proxy_optimization_payload_includes_path_only_when_enabled() -> None:
+    app = App.__new__(App)
+    app.enable_weather_operation_policy_var = DummyVar(True)
+    app.weather_proxy_forecast_path_var = DummyVar("data/weather/proxy_forecasts/sample.json")
+
+    payload = App._weather_proxy_optimization_payload(app)
+
+    assert payload == {
+        "enableWeatherOperationPolicy": True,
+        "weatherProxyForecastPath": "data/weather/proxy_forecasts/sample.json",
+    }
+
+
+def test_weather_proxy_json_loader_rejects_service_date_mismatch(tmp_path: Path) -> None:
+    forecast_path = tmp_path / "forecast.json"
+    write_weather_proxy_forecast_json(forecast_path, _weather_forecast())
+    app = App.__new__(App)
+    app.weather_proxy_forecast_path_var = DummyVar(str(forecast_path))
+    app.service_date_var = DummyVar("2025-08-22")
+    app._selected_service_dates = lambda announce=False: ["2025-08-22"]
+
+    with pytest.raises(ValueError, match="WEATHER_PROXY_SERVICE_DATE_MISMATCH"):
+        App._load_weather_proxy_forecast_from_ui(app)
 
 
 def test_initial_soc_values_for_mode_supports_fixed_and_random() -> None:

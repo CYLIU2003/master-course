@@ -135,6 +135,11 @@ class PrepareSimulationSettingsBody(BaseModel):
     pv_profile_id: Optional[str] = None
     weather_mode: Optional[str] = None
     weather_factor_scalar: Optional[float] = None
+    enable_weather_operation_policy: bool = False
+    weather_proxy_forecast_path: Optional[str] = None
+    weather_proxy_daily_csv_path: Optional[str] = None
+    weather_proxy_station_id: Optional[str] = None
+    weather_proxy_station_name: Optional[str] = None
     alns_iterations: int = 500
     no_improvement_limit: int = 100
     destroy_fraction: float = 0.25

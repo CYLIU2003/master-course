@@ -63,6 +63,11 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             pv_profile_id="meguro_solcast_avg_2025_08_60min",
             weather_mode="solcast_avg_2025_08_60min",
             weather_factor_scalar=1.0,
+            enable_weather_operation_policy=True,
+            weather_proxy_forecast_path="data/weather/proxy_forecasts/tokyo.json",
+            weather_proxy_daily_csv_path="data/weather/processed/tokyo.csv",
+            weather_proxy_station_id="44132",
+            weather_proxy_station_name="東京",
             depot_energy_assets=[
                 {
                     "depot_id": "dep1",
@@ -120,6 +125,11 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["simulation_config"]["planning_horizon_hours"] == 48.0
     assert updated["simulation_config"]["weather_mode"] == "solcast_avg_2025_08_60min"
     assert updated["simulation_config"]["pv_profile_id"] == "meguro_solcast_avg_2025_08_60min"
+    assert updated["simulation_config"]["enable_weather_operation_policy"] is True
+    assert updated["simulation_config"]["weather_proxy_forecast_path"] == "data/weather/proxy_forecasts/tokyo.json"
+    assert updated["simulation_config"]["weather_proxy_daily_csv_path"] == "data/weather/processed/tokyo.csv"
+    assert updated["simulation_config"]["weather_proxy_station_id"] == "44132"
+    assert updated["simulation_config"]["weather_proxy_station_name"] == "東京"
     assert updated["simulation_config"]["depot_energy_assets"] == [
         {
             "depot_id": "dep1",

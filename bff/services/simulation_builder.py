@@ -710,6 +710,13 @@ def apply_builder_configuration(
         "pv_profile_id": overlay.cost_coefficients.pv_profile_id,
         "weather_mode": overlay.cost_coefficients.weather_mode,
         "weather_factor_scalar": overlay.cost_coefficients.weather_factor_scalar,
+        "enable_weather_operation_policy": bool(
+            body.simulation_settings.enable_weather_operation_policy
+        ),
+        "weather_proxy_forecast_path": body.simulation_settings.weather_proxy_forecast_path,
+        "weather_proxy_daily_csv_path": body.simulation_settings.weather_proxy_daily_csv_path,
+        "weather_proxy_station_id": body.simulation_settings.weather_proxy_station_id,
+        "weather_proxy_station_name": body.simulation_settings.weather_proxy_station_name,
         "random_seed": overlay.random_seed,
         "experiment_method": body.simulation_settings.experiment_method,
         "experiment_notes": body.simulation_settings.experiment_notes,

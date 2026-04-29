@@ -385,6 +385,11 @@ class UpdateScenarioBody(BaseModel):
     pvProfileId: Optional[str] = None
     weatherMode: Optional[str] = None
     weatherFactorScalar: Optional[float] = None
+    enableWeatherOperationPolicy: Optional[bool] = None
+    weatherProxyForecastPath: Optional[str] = None
+    weatherProxyDailyCsvPath: Optional[str] = None
+    weatherProxyStationId: Optional[str] = None
+    weatherProxyStationName: Optional[str] = None
     depotEnergyAssets: Optional[List[Dict[str, Any]]] = None
     co2PriceSource: Optional[str] = None
     co2ReferenceDate: Optional[str] = None
@@ -465,6 +470,11 @@ class UpdateQuickSetupBody(BaseModel):
     pvProfileId: Optional[str] = None
     weatherMode: Optional[str] = None
     weatherFactorScalar: Optional[float] = None
+    enableWeatherOperationPolicy: Optional[bool] = None
+    weatherProxyForecastPath: Optional[str] = None
+    weatherProxyDailyCsvPath: Optional[str] = None
+    weatherProxyStationId: Optional[str] = None
+    weatherProxyStationName: Optional[str] = None
     depotEnergyAssets: Optional[List[Dict[str, Any]]] = None
     co2PriceSource: Optional[str] = None
     co2ReferenceDate: Optional[str] = None
@@ -558,6 +568,26 @@ def _apply_scenario_simulation_settings(
         simulation_config["weather_mode"] = str(body.weatherMode)
     if body.weatherFactorScalar is not None:
         simulation_config["weather_factor_scalar"] = float(body.weatherFactorScalar)
+    if body.enableWeatherOperationPolicy is not None:
+        simulation_config["enable_weather_operation_policy"] = bool(
+            body.enableWeatherOperationPolicy
+        )
+    if body.weatherProxyForecastPath is not None:
+        simulation_config["weather_proxy_forecast_path"] = str(
+            body.weatherProxyForecastPath
+        ).strip()
+    if body.weatherProxyDailyCsvPath is not None:
+        simulation_config["weather_proxy_daily_csv_path"] = str(
+            body.weatherProxyDailyCsvPath
+        ).strip()
+    if body.weatherProxyStationId is not None:
+        simulation_config["weather_proxy_station_id"] = str(
+            body.weatherProxyStationId
+        ).strip()
+    if body.weatherProxyStationName is not None:
+        simulation_config["weather_proxy_station_name"] = str(
+            body.weatherProxyStationName
+        ).strip()
     if body.depotEnergyAssets is not None:
         simulation_config["depot_energy_assets"] = [
             dict(item) for item in body.depotEnergyAssets if isinstance(item, dict)
@@ -1372,6 +1402,32 @@ def _builder_defaults(
         "pvProfileId": simulation_config.get("pv_profile_id"),
         "weatherMode": simulation_config.get("weather_mode") or "actual_date_profile",
         "weatherFactorScalar": simulation_config.get("weather_factor_scalar"),
+        "enableWeatherOperationPolicy": bool(
+            simulation_config.get(
+                "enable_weather_operation_policy",
+                simulation_config.get("enableWeatherOperationPolicy", False),
+            )
+        ),
+        "weatherProxyForecastPath": (
+            simulation_config.get("weather_proxy_forecast_path")
+            or simulation_config.get("weatherProxyForecastPath")
+            or ""
+        ),
+        "weatherProxyDailyCsvPath": (
+            simulation_config.get("weather_proxy_daily_csv_path")
+            or simulation_config.get("weatherProxyDailyCsvPath")
+            or ""
+        ),
+        "weatherProxyStationId": (
+            simulation_config.get("weather_proxy_station_id")
+            or simulation_config.get("weatherProxyStationId")
+            or "44132"
+        ),
+        "weatherProxyStationName": (
+            simulation_config.get("weather_proxy_station_name")
+            or simulation_config.get("weatherProxyStationName")
+            or "東京"
+        ),
         "depotEnergyAssets": list(simulation_config.get("depot_energy_assets") or []),
         "objectiveWeights": raw_objective_weights,
         "degradationWeight": (
@@ -1832,6 +1888,13 @@ def _build_quick_setup_payload(
             "pvProfileId": builder_defaults.get("pvProfileId"),
             "weatherMode": builder_defaults.get("weatherMode") or "actual_date_profile",
             "weatherFactorScalar": builder_defaults.get("weatherFactorScalar"),
+            "enableWeatherOperationPolicy": bool(
+                builder_defaults.get("enableWeatherOperationPolicy", False)
+            ),
+            "weatherProxyForecastPath": builder_defaults.get("weatherProxyForecastPath") or "",
+            "weatherProxyDailyCsvPath": builder_defaults.get("weatherProxyDailyCsvPath") or "",
+            "weatherProxyStationId": builder_defaults.get("weatherProxyStationId") or "44132",
+            "weatherProxyStationName": builder_defaults.get("weatherProxyStationName") or "東京",
             "depotEnergyAssets": list(builder_defaults.get("depotEnergyAssets") or []),
             "objectiveWeights": dict(builder_defaults.get("objectiveWeights") or {}),
             "touPricing": list(builder_defaults.get("touPricing") or []),
@@ -2390,6 +2453,26 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["weather_mode"] = str(body.weatherMode)
         if body.weatherFactorScalar is not None:
             simulation_config["weather_factor_scalar"] = float(body.weatherFactorScalar)
+        if body.enableWeatherOperationPolicy is not None:
+            simulation_config["enable_weather_operation_policy"] = bool(
+                body.enableWeatherOperationPolicy
+            )
+        if body.weatherProxyForecastPath is not None:
+            simulation_config["weather_proxy_forecast_path"] = str(
+                body.weatherProxyForecastPath
+            ).strip()
+        if body.weatherProxyDailyCsvPath is not None:
+            simulation_config["weather_proxy_daily_csv_path"] = str(
+                body.weatherProxyDailyCsvPath
+            ).strip()
+        if body.weatherProxyStationId is not None:
+            simulation_config["weather_proxy_station_id"] = str(
+                body.weatherProxyStationId
+            ).strip()
+        if body.weatherProxyStationName is not None:
+            simulation_config["weather_proxy_station_name"] = str(
+                body.weatherProxyStationName
+            ).strip()
         if body.depotEnergyAssets is not None:
             simulation_config["depot_energy_assets"] = [
                 dict(item) for item in body.depotEnergyAssets if isinstance(item, dict)

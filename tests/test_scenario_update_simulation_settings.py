@@ -18,6 +18,11 @@ def test_update_scenario_persists_simulation_settings() -> None:
         pvProfileId="meguro_2026-04-13_60min",
         weatherMode="actual_date_profile",
         weatherFactorScalar=0.85,
+        enableWeatherOperationPolicy=True,
+        weatherProxyForecastPath="data/weather/proxy_forecasts/tokyo.json",
+        weatherProxyDailyCsvPath="data/weather/processed/tokyo.csv",
+        weatherProxyStationId="44132",
+        weatherProxyStationName="東京",
         depotEnergyAssets=[
             {
                 "depot_id": "tsurumaki",
@@ -67,6 +72,11 @@ def test_update_scenario_persists_simulation_settings() -> None:
     assert simulation_config["pv_profile_id"] == "meguro_2026-04-13_60min"
     assert simulation_config["weather_mode"] == "actual_date_profile"
     assert simulation_config["weather_factor_scalar"] == 0.85
+    assert simulation_config["enable_weather_operation_policy"] is True
+    assert simulation_config["weather_proxy_forecast_path"] == "data/weather/proxy_forecasts/tokyo.json"
+    assert simulation_config["weather_proxy_daily_csv_path"] == "data/weather/processed/tokyo.csv"
+    assert simulation_config["weather_proxy_station_id"] == "44132"
+    assert simulation_config["weather_proxy_station_name"] == "東京"
     assert simulation_config["depot_energy_assets"] == [
         {
             "depot_id": "tsurumaki",

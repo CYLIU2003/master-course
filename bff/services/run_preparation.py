@@ -1717,6 +1717,12 @@ def materialize_scenario_from_prepared_input(
         "enableWeatherOperationPolicy",
         "weather_proxy_forecast_path",
         "weatherProxyForecastPath",
+        "weather_proxy_daily_csv_path",
+        "weatherProxyDailyCsvPath",
+        "weather_proxy_station_id",
+        "weatherProxyStationId",
+        "weather_proxy_station_name",
+        "weatherProxyStationName",
     ):
         if key in current_simulation_cfg:
             hydrated_simulation_cfg[key] = current_simulation_cfg.get(key)
