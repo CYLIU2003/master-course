@@ -18,6 +18,7 @@ _LEGACY_PRESERVED_WEIGHT_KEYS = {
     "charger_daily_fixed_cost",
 }
 _CANONICAL_PRESERVED_WEIGHT_KEYS = {
+    "fuel_cost",
     "deviation_cost",
     "switch_cost",
     "degradation",
@@ -145,6 +146,7 @@ def canonical_objective_weights_for_mode(
     if normalized == "co2":
         weights = {
             "electricity_cost": 0.0,
+            "fuel_cost": 0.0,
             "demand_charge_cost": 0.0,
             "vehicle_fixed_cost": 0.0,
             "unserved_penalty": float(unserved_penalty),
@@ -156,6 +158,7 @@ def canonical_objective_weights_for_mode(
     elif normalized == "utilization":
         weights = {
             "electricity_cost": 0.7,
+            "fuel_cost": 0.7,
             "demand_charge_cost": 0.5,
             "vehicle_fixed_cost": 0.3,
             "unserved_penalty": float(unserved_penalty),
@@ -167,6 +170,7 @@ def canonical_objective_weights_for_mode(
     elif normalized == "balanced":
         weights = {
             "electricity_cost": 1.0,
+            "fuel_cost": 1.0,
             "demand_charge_cost": 1.0,
             "vehicle_fixed_cost": 0.5,
             "unserved_penalty": float(unserved_penalty),
@@ -178,6 +182,7 @@ def canonical_objective_weights_for_mode(
     else:
         weights = {
             "electricity_cost": 1.0,
+            "fuel_cost": 1.0,
             "demand_charge_cost": 1.0,
             "vehicle_fixed_cost": 1.0,
             "unserved_penalty": float(unserved_penalty),

@@ -26,6 +26,7 @@ from src.optimization.common.vehicle_assignment import (
     assign_duty_fragments_to_vehicles,
     merge_duty_vehicle_maps,
 )
+from src.optimization.common.weather_strategy import weather_vehicle_type_sort_key
 from src.optimization.milp.engine import MILPOptimizer
 
 
@@ -871,6 +872,7 @@ def _ordered_vehicle_types_for_repair(
         sorted(
             problem.dispatch_context.vehicle_profiles.keys(),
             key=lambda vehicle_type: (
+                weather_vehicle_type_sort_key(problem.metadata, vehicle_type),
                 -max(int(vehicle_counts.get(str(vehicle_type), 0) or 0), 0),
                 str(vehicle_type),
             ),

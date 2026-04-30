@@ -208,6 +208,42 @@ def test_weather_proxy_optimization_payload_includes_path_only_when_enabled() ->
     }
 
 
+def test_weather_proxy_milp_caps_long_time_limit_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("MC_ALLOW_LONG_WEATHER_MILP", raising=False)
+    app = App.__new__(App)
+    app.time_limit_var = DummyVar("3000")
+    app.solver_mode_var = DummyVar("mode_milp_only")
+    app.enable_weather_operation_policy_var = DummyVar(True)
+    logs: list[str] = []
+    app.log_line = logs.append
+
+    assert App._effective_optimization_time_limit_seconds(app) == 300
+    assert "Weather proxy" in logs[0]
+    assert "3000s" in logs[0]
+
+
+def test_weather_proxy_milp_long_time_limit_can_be_explicitly_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("MC_ALLOW_LONG_WEATHER_MILP", "1")
+    app = App.__new__(App)
+    app.time_limit_var = DummyVar("3000")
+    app.solver_mode_var = DummyVar("mode_milp_only")
+    app.enable_weather_operation_policy_var = DummyVar(True)
+    app.log_line = lambda message: None
+
+    assert App._effective_optimization_time_limit_seconds(app) == 3000
+
+
+def test_weather_proxy_time_limit_guard_does_not_affect_alns(monkeypatch) -> None:
+    monkeypatch.delenv("MC_ALLOW_LONG_WEATHER_MILP", raising=False)
+    app = App.__new__(App)
+    app.time_limit_var = DummyVar("3000")
+    app.solver_mode_var = DummyVar("mode_alns_only")
+    app.enable_weather_operation_policy_var = DummyVar(True)
+    app.log_line = lambda message: None
+
+    assert App._effective_optimization_time_limit_seconds(app) == 3000
+
+
 def test_weather_proxy_json_loader_rejects_service_date_mismatch(tmp_path: Path) -> None:
     forecast_path = tmp_path / "forecast.json"
     write_weather_proxy_forecast_json(forecast_path, _weather_forecast())

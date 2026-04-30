@@ -51,6 +51,32 @@ def test_weather_proxy_forecast_rejects_future_leakage():
         )
 
 
+def test_weather_proxy_forecast_rejects_version_type_mismatch():
+    with pytest.raises(WeatherSchemaError, match="version must match forecast_type"):
+        WeatherProxyForecast(
+            version="historical_analog_v1",
+            forecast_type="solcast_pv_proxy_v1",
+            service_date="2025-08-21",
+            station_id="44132",
+            station_name="東京",
+            analog_date="2025-08-20",
+            analog_selection_score=0.1,
+            analog_selection_method="solcast_pv_capacity_factor_proxy_v1",
+            weather_label="PV発電見込み高",
+            tmax_c=None,
+            tmin_c=None,
+            mean_temp_c=None,
+            sunshine_hours=7.2,
+            precipitation_mm=None,
+            sun_score=0.9,
+            rain_risk=0.1,
+            heat_load_score=0.0,
+            midday_recovery_expectation="high",
+            operation_mode="aggressive",
+            no_future_leakage=True,
+        )
+
+
 def test_weather_proxy_forecast_dict_contains_required_reproducibility_fields():
     forecast = WeatherProxyForecast(
         version="historical_analog_v1",

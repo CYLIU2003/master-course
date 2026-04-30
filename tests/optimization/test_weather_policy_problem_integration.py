@@ -1,16 +1,32 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from bff.routers.optimization import (
+    _canonical_vehicle_timeline_rows,
     _persist_rich_run_outputs,
     _prepare_weather_policy_for_scenario,
 )
+from bff.services.optimization_run.vehicle_timeline import vehicle_ids_with_timeline_activity
+from src.dispatch.models import DutyLeg, Trip, VehicleDuty
+from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.problem import (
+    AssignmentPlan,
     CanonicalOptimizationProblem,
+    ChargingSlot,
+    DepotEnergyAsset,
+    EnergyPriceSlot,
     OptimizationScenario,
+    PVSlot,
+    ProblemDepot,
+    ProblemTrip,
     ProblemVehicle,
+    RefuelSlot,
 )
-from src.preprocess.weather.daily_weather_schema import WeatherProxyForecast
+from src.preprocess.weather.daily_weather_schema import (
+    FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
+    WeatherProxyForecast,
+)
 from src.preprocess.weather.operation_policy import (
     apply_weather_policy_to_problem,
     build_operation_profile,
@@ -43,6 +59,49 @@ def _forecast() -> WeatherProxyForecast:
     )
 
 
+def _typical_forecast() -> WeatherProxyForecast:
+    factors = [0.0] * 24
+    factors[5] = 0.50
+    factors[6] = 0.60
+    return WeatherProxyForecast(
+        version=FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
+        forecast_type=FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
+        service_date="2025-09-01",
+        station_id="44132",
+        station_name="東京",
+        analog_date="2025-08-31",
+        analog_selection_score=0.0,
+        analog_selection_method="solcast_typical_capacity_factor_curve_v1",
+        weather_label="Solcast代表晴れPV",
+        tmax_c=None,
+        tmin_c=None,
+        mean_temp_c=None,
+        sunshine_hours=6.0,
+        precipitation_mm=None,
+        sun_score=0.75,
+        rain_risk=0.10,
+        heat_load_score=0.0,
+        midday_recovery_expectation="high",
+        operation_mode="aggressive",
+        no_future_leakage=True,
+        metadata={
+            "typical_weather_class": "sunny",
+            "requested_weather_class": "sunny",
+            "weather_class_selection_reason": "manual",
+            "forecast_issue_date": "2025-08-31",
+            "slot_minutes": 60,
+            "capacity_factor_by_slot": factors,
+            "source_dates": ["2025-08-01", "2025-08-02"],
+            "source_profile_count": 2,
+            "representative_curve_version": "solcast_typical_pv_representative_curve_v1",
+            "classification": {
+                "method": "fixed_threshold_daily_cf_hours_fallback",
+                "thresholds": {"rainy_daily_cf_hours_max": 4.0, "sunny_daily_cf_hours_min": 5.5},
+            },
+        },
+    )
+
+
 def _problem() -> CanonicalOptimizationProblem:
     return CanonicalOptimizationProblem(
         scenario=OptimizationScenario(scenario_id="scenario-weather"),
@@ -64,6 +123,33 @@ def _problem() -> CanonicalOptimizationProblem:
             ),
         ),
         metadata={"service_date": "2025-08-21"},
+    )
+
+
+def _pv_problem() -> CanonicalOptimizationProblem:
+    price_slots = tuple(EnergyPriceSlot(slot_index=idx, grid_buy_yen_per_kwh=20.0) for idx in range(24))
+    return CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="scenario-weather-pv",
+            horizon_start="05:00",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        price_slots=price_slots,
+        pv_slots=tuple(PVSlot(slot_index=idx, pv_available_kw=0.0) for idx in range(24)),
+        depot_energy_assets={
+            "DEPOT": DepotEnergyAsset(
+                depot_id="DEPOT",
+                pv_enabled=True,
+                pv_capacity_kw=100.0,
+                depot_area_m2=1428.5714,
+                pv_generation_kwh_by_slot=tuple(0.0 for _ in range(24)),
+                capacity_factor_by_slot=tuple(0.0 for _ in range(24)),
+            )
+        },
+        metadata={"service_date": "2025-09-01", "horizon_start_min": 5 * 60},
     )
 
 
@@ -93,6 +179,94 @@ def test_apply_weather_policy_to_problem_is_non_destructive_and_reproducible():
     assert updated_a.vehicles[0].initial_soc == updated_b.vehicles[0].initial_soc
     assert 0.55 <= updated_a.vehicles[0].initial_soc <= 0.95
     assert updated_a.vehicles[1].initial_soc is None
+
+
+def test_typical_solcast_curve_replaces_problem_pv_by_clock_not_position():
+    forecast = _typical_forecast()
+    profile = build_operation_profile(forecast)
+    problem = _pv_problem()
+
+    updated = apply_weather_policy_to_problem(problem, forecast, profile, random_seed=42)
+
+    assert problem.pv_slots[0].pv_available_kw == 0.0
+    assert updated.metadata["weather_pv_forecast_applied"] is True
+    assert updated.metadata["weather_pv_representative_curve"]["typical_weather_class"] == "sunny"
+    assert updated.depot_energy_assets["DEPOT"].capacity_factor_by_slot[0] == 0.50
+    assert updated.depot_energy_assets["DEPOT"].pv_generation_kwh_by_slot[0] == 50.0
+    assert updated.pv_slots[0].pv_available_kw == 50.0
+    assert updated.pv_slots[1].pv_available_kw == 60.0
+
+
+def test_weather_strategy_term_changes_objective_not_accounting_cost():
+    forecast = _forecast()
+    profile = build_operation_profile(forecast)
+    trip = Trip(
+        trip_id="t1",
+        route_id="r1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="08:30",
+        distance_km=5.0,
+        allowed_vehicle_types=("BEV", "ICE"),
+    )
+    duty = VehicleDuty(
+        duty_id="duty-1",
+        vehicle_type="BEV",
+        legs=(DutyLeg(trip=trip),),
+    )
+    base_problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="scenario-weather", objective_mode="total_cost"),
+        dispatch_context=None,
+        trips=(
+            ProblemTrip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_min=480,
+                arrival_min=510,
+                distance_km=5.0,
+                allowed_vehicle_types=("BEV", "ICE"),
+                energy_kwh=5.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="BEV_001",
+                vehicle_type="BEV",
+                home_depot_id="DEPOT",
+                battery_capacity_kwh=100.0,
+                reserve_soc=10.0,
+            ),
+        ),
+        metadata={
+            "service_date": "2025-08-21",
+            "cost_component_flags": {"driver_cost": False, "vehicle_fixed_cost": False},
+        },
+    )
+    problem = apply_weather_policy_to_problem(base_problem, forecast, profile, random_seed=42)
+    plan = AssignmentPlan(
+        duties=(duty,),
+        served_trip_ids=("t1",),
+        metadata={"duty_vehicle_map": {"duty-1": "BEV_001"}},
+    )
+
+    breakdown = CostEvaluator().evaluate(problem, plan)
+
+    assert breakdown.weather_strategy_objective_term_jpy_equivalent == -45.0
+    assert breakdown.total_cost == 0.0
+    assert breakdown.objective_value == -45.0
+
+
+def test_vehicle_timeline_activity_includes_charge_and_refuel_only_vehicles():
+    ids = vehicle_ids_with_timeline_activity(
+        {},
+        (ChargingSlot(vehicle_id="BEV_002", slot_index=1, charger_id="C1", charge_kw=50.0),),
+        (RefuelSlot(vehicle_id="ICE_003", slot_index=2, refuel_liters=20.0),),
+    )
+
+    assert ids == ("BEV_002", "ICE_003")
 
 
 def test_persist_rich_outputs_writes_weather_artifacts_and_manifest(tmp_path: Path):

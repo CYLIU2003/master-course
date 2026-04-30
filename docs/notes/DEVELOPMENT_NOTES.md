@@ -39,6 +39,63 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### 2026-04-30 EV Electricity / ICE Fuel Cost Ledger Separation
+
+- 問題: 最新run `output/2026-04-29/run_20260429_1657` では、`cost_breakdown_detail.json` の `energy_cost=79211.7827` にICEの暫定燃料費が含まれている一方で `fuel_cost=0` だった。`objective_breakdown.json` では `provisional_ice_drive_cost=61829.5672` と `leftover_ice_provisional_cost=61829.5672` が確認できたため、ICE燃料費が電力費表示へ混入していた。
+- 対応:
+  - `OptimizationObjectiveWeights` に `fuel` を追加し、MILP のICE燃料 objective term は `electricity_cost` 重みではなく `fuel_cost` 重みで評価するようにした。ALNS/GA/ABC/MILP の solver metadata にも `objective_weights.fuel_cost` を出す。
+  - `CostBreakdown` に `electricity_cost` と `fuel_cost` を追加した。`electricity_cost` はEV電力商品費のみ、`fuel_cost` は液体燃料費のみ、`energy_cost` は後方互換の推進費合計（`electricity_cost + fuel_cost`）とする。
+  - 燃料側にも電力側と同じ監査粒度を追加し、`fuel_cost_provisional_jpy`（走行量から推定した暫定燃料費）、`fuel_cost_refueled_jpy`（実給油イベントで確定した燃料費）、`fuel_cost_provisional_leftover_jpy`（まだ実給油で置換されていない暫定残）、`fuel_cost_final_jpy`（最終燃料ledger）を rich output / KPI / serializer / Tk summary に出すようにした。
+  - `contract_overage_cost` は電力商品費に加算せず、需要料金・契約超過ペナルティと同じく別費目として `total_cost` に加える。これにより `electricity_cost_jpy` は「EVが買った電気代」を表す。
+  - BFF rich output / canonical graph output / Tk summary を更新し、`charging_summary.json` と `kpi_summary.json` の `electricity_cost_jpy` からICE燃料を除外し、`fuel_cost_jpy` と `propulsion_energy_cost_jpy` を明示出力する。
+  - `simulation_conditions_vehicle_costs.csv` は ICE 車両の `fuelCostPerL` または scenario の `diesel_price_per_l` を拾うようにし、燃料単価が 0 に見える出力を防いだ。
+  - `ResultSerializer` の weighted component 出力で weight=0 を `1.0` に戻す既存バグを修正した。これにより cost flag OFF / CO2 mode の監査出力が目的重みと一致する。
+- 自分で上げて潰した追加問題:
+  - `energy_cost` だけを見て「電力費」と表示する旧UI/CSVが残ると同じ誤読が再発するため、表示名を `推進費合計(EV電力+ICE燃料)` に変更し、`EV電力コスト` と `燃料コスト` を先に出すようにした。
+  - BFF で車両コストCSV用の `cost_cfg` を誤った helper scope に置くと実行時 `NameError` になるため、`_persist_rich_run_outputs()` 内へ移動した。
+- 検証:
+  - `python -m py_compile src\optimization\common\evaluator.py src\optimization\common\result.py src\optimization\common\problem.py src\objective_modes.py src\optimization\common\builder.py src\optimization\milp\solver_adapter.py src\optimization\abc\engine.py src\optimization\alns\engine.py src\optimization\ga\engine.py src\optimization\milp\engine.py bff\routers\optimization.py tools\scenario_backup_tk.py` → pass
+  - `python -m pytest tests\test_objective_modes.py tests\test_bev_energy_accounting.py tests\test_problem_builder_cost_component_toggles.py tests\test_canonical_result_to_simulation_bridge.py tests\test_canonical_graph_export_parity.py tests\test_optimization_result_serializer.py -q` → `46 passed`
+
+### 2026-04-29 Solcast PV Proxy Forecast
+
+- 問題: `data/derived/pv_profiles/*_YYYY-MM-DD_60min.json` には Solcast 由来の発電形状があるが、従来は PV 充電フロー用の時系列としてのみ使っていた。天気運用ポリシーへ入れるには、PV発電形状を「当日朝に見えている発電見込み proxy」として `WeatherProxyForecast` に変換する入口が必要だった。
+- 対応:
+  - `src/preprocess/weather/solcast_pv_proxy.py` を追加し、Solcast PV profile JSON の `capacity_factor_by_slot` または `pv_generation_kwh_by_slot` から `sun_score`、低PV回復リスクとしての `rain_risk`、`midday_recovery_expectation`、`operation_mode` を作るようにした。
+  - `WeatherProxyForecast` の `forecast_type` / `version` に `solcast_pv_proxy_v1` を追加した。後方互換のため既存フィールド `analog_date` は残し、Solcast版では `forecast_issue_date` と同じ日付を入れる。
+  - 未来情報リーク防止として、`forecast_issue_date < service_date` を必須にした。service date 当日のPV形状を使う場合でも、予報として扱うには issue date が前日以前である必要がある。issue date を証明できない ex-post データは optimizer 入力ではなく oracle/reference 扱いに分ける。
+  - Python dataclass 側でも `version` / `forecast_type` の許可値と一致を検証し、JSON schema を通らないロード経路でも forecast 種別の混線を拒否する。
+  - `scripts/weather/build_solcast_pv_proxy_forecast.py` を追加し、ローカルPV profile JSONから WeatherProxyForecast JSON を生成できるようにした。optimizer 実行中のWebアクセスは行わない。
+  - Tk の `PV/予報` タブに「Solcast PVから予報JSON生成」を追加し、選択営業所と運行日から `data/derived/pv_profiles/{depot_id}_{service_date}_60min.json` を探して forecast JSON を生成し、既存の weather policy 反映導線に接続する。
+- 自分で上げて潰した追加問題:
+  - PV発電量[kWh]と capacity factor を混同すると営業所面積によるPV規模が weather policy を過剰に左右するため、`sun_score` は capacity factor の日積算から計算し、面積/容量は最適化のPV供給量側に残した。
+  - `rain_risk` は実降雨ではなく「低PV回復リスク」の proxy であるため、metadata に `rain_risk_source=inferred_from_low_pv_recovery` と `rain_risk_basis` を残すようにした。
+  - 既存BFFの未来情報リーク診断は `analog_date` だけを名指ししていたため、`analog_date/forecast_issue_date` という表現に更新した。
+- 検証:
+  - `python -m py_compile src\preprocess\weather\daily_weather_schema.py src\preprocess\weather\solcast_pv_proxy.py src\preprocess\weather\operation_policy.py scripts\weather\build_solcast_pv_proxy_forecast.py scripts\weather\inspect_weather_proxy.py tools\scenario_backup_tk.py bff\routers\optimization.py` → pass
+  - `python -m pytest tests\preprocess\test_solcast_pv_proxy.py tests\preprocess\test_weather_daily_schema.py tests\preprocess\test_weather_proxy_builder.py tests\optimization\test_weather_policy_problem_integration.py tests\test_scenario_backup_tk_dataset_options.py -q` → `47 passed`
+  - PowerShell で `$out = Join-Path $env:TEMP 'solcast_pv_proxy_forecast.json'; python scripts\weather\build_solcast_pv_proxy_forecast.py --service-date 2025-08-21 --station-id aobadai --station-name Aobadai --pv-profile-json data\derived\pv_profiles\aobadai_2025-08-21_60min.json --forecast-issue-date 2025-08-20 --out $out; python scripts\weather\inspect_weather_proxy.py --forecast-json $out` を実行し、`forecast_type=solcast_pv_proxy_v1`, `sun_score=0.90`, `operation_mode=aggressive`, `no_future_leakage=true` を確認
+  - `python -m pytest tests -q` → `483 passed`
+
+### 2026-04-29 Weather Proxy MILP Runtime Guard
+
+- 問題: Solcast PV proxy を有効にして `mode_milp_only` を実行した直近 run は、`time_limit_seconds_requested=3000`、`solve_time_seconds=3107.75` で時間上限まで走った。job は `completed` だが、UI上は「最適化計算が終わらない」に見える。対象 run は `output/2026-04-29/run_20260429_1555`、job は `output/jobs/46c05c82-2e9b-405b-bde0-75916c756cc3.json`。
+- 検証した実行経路:
+  - `tools/scenario_backup_tk.py` の `run_selected_execution()` が `time_limit_var=3000` を `run-optimization` payload へ渡す。
+  - BFF の `bff/routers/optimization.py` は weather proxy を読み、`final_soc_floor_percent` / `final_soc_target_percent` を scenario `simulation_config` へ注入する。
+  - `ProblemBuilder` は `final_soc_target_percent != None` を契機に単日でも 24h power/PV horizon と post-return SOC target を有効化する。
+  - solver は `mode_milp_only` のまま `time_limit=3000` で走り、最終的に `truthful_baseline_guardrail` で export された。
+- 対応:
+  - Tk の `_effective_optimization_time_limit_seconds()` に runtime guard を追加し、Weather proxy 有効かつ `mode_milp_only` で `time_limit > 300` の場合、既定では 300 秒に制限する。
+  - 長時間MILPを研究目的で明示実行したい場合は、環境変数 `MC_ALLOW_LONG_WEATHER_MILP=1` を設定するとユーザー指定の time limit をそのまま通す。
+  - 通常の `mode_alns_only` はこの guard の対象外とし、Weather proxy enabled の比較実験でも heuristic 系の探索時間は壊さない。
+- 自分で上げて潰した追加問題:
+  - 通常実行だけでなく `再最適化` 分岐も直接 `time_limit_var` を読んでいたため、同じ `_effective_optimization_time_limit_seconds()` を使うようにした。
+- 検証:
+  - `python -m py_compile tools\scenario_backup_tk.py` → pass
+  - `python -m pytest tests\test_scenario_backup_tk_dataset_options.py -q` → `37 passed`
+  - `python -m pytest tests -q` → `486 passed`
+
 ### 2026-04-28 Weather Proxy Frontend Integration
 
 - 問題: backend / BFF には Historical Analog Weather Proxy v1 が入ったが、Tk フロントでは既存の `weather_mode` が PV 形状/係数用の「天気モード」に見え、擬似予報を運用ポリシーとして最適化へ渡す導線がなかった。ユーザーは予報JSONを生成・選択しても、SOC floor/target へどう反映されるかを画面上で確認できなかった。

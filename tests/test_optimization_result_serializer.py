@@ -110,6 +110,34 @@ def test_result_serializer_includes_objective_components_and_limits() -> None:
     assert payload["refueling_schedule"][0]["refuel_liters"] == 12.5
 
 
+def test_result_serializer_keeps_fuel_weight_and_electricity_split() -> None:
+    result = OptimizationEngineResult(
+        mode=OptimizationMode.ALNS,
+        solver_status="feasible",
+        objective_value=78.0,
+        plan=AssignmentPlan(),
+        feasible=True,
+        cost_breakdown={
+            "energy_cost": 78.0,
+            "fuel_cost": 61.0,
+        },
+        solver_metadata={
+            "objective_weights": {
+                "electricity_cost": 2.0,
+                "fuel_cost": 0.0,
+            }
+        },
+    )
+
+    payload = ResultSerializer.serialize_result(result)
+
+    assert payload["objective_components_raw"]["electricity_cost"] == 17.0
+    assert payload["objective_components_raw"]["fuel_cost"] == 61.0
+    assert payload["objective_components_weighted"]["electricity_cost"] == 34.0
+    assert payload["objective_components_weighted"]["fuel_cost"] == 0.0
+    assert payload["objective_components_weighted"]["energy_cost"] == 34.0
+
+
 def test_result_serializer_includes_charging_depot_coordinates() -> None:
     plan = AssignmentPlan(
         charging_slots=(
@@ -181,6 +209,7 @@ def test_result_serializer_includes_cost_ledgers_and_operating_splits() -> None:
             "provisional_ev_drive_cost": 700.0,
             "realized_ev_charge_cost": 300.0,
             "leftover_ev_provisional_cost": 100.0,
+            "fuel_cost": 250.0,
             "provisional_ice_drive_cost": 500.0,
             "realized_ice_refuel_cost": 200.0,
             "leftover_ice_provisional_cost": 50.0,
@@ -191,6 +220,11 @@ def test_result_serializer_includes_cost_ledgers_and_operating_splits() -> None:
     payload = ResultSerializer.serialize_result(result)
     assert payload["operating_cost_provisional_jpy"] == 1200.0
     assert payload["ev_realized_charge_cost_jpy"] == 300.0
+    assert payload["fuel_cost_final_jpy"] == 250.0
+    assert payload["fuel_cost_provisional_jpy"] == 500.0
+    assert payload["fuel_cost_refueled_jpy"] == 200.0
+    assert payload["fuel_cost_realized_jpy"] == 200.0
+    assert payload["fuel_cost_provisional_leftover_jpy"] == 50.0
     assert payload["ice_leftover_provisional_cost_jpy"] == 50.0
     assert payload["vehicle_cost_ledger"][0]["vehicle_id"] == "veh-1"
     assert payload["daily_cost_ledger"][0]["service_date"] == "2026-03-27"

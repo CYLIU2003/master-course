@@ -27,8 +27,20 @@
     "metadata"
   ],
   "properties": {
-    "version": { "const": "historical_analog_v1" },
-    "forecast_type": { "const": "historical_analog_v1" },
+    "version": {
+      "enum": [
+        "historical_analog_v1",
+        "solcast_pv_proxy_v1",
+        "solcast_typical_pv_proxy_v1"
+      ]
+    },
+    "forecast_type": {
+      "enum": [
+        "historical_analog_v1",
+        "solcast_pv_proxy_v1",
+        "solcast_typical_pv_proxy_v1"
+      ]
+    },
     "service_date": { "type": "string", "format": "date" },
     "station_id": { "type": "string", "minLength": 1 },
     "station_name": { "type": "string", "minLength": 1 },

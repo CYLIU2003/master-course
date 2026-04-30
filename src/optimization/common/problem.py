@@ -200,6 +200,7 @@ class LockedOperation:
 @dataclass(frozen=True)
 class OptimizationObjectiveWeights:
     energy: float = 1.0
+    fuel: float = 1.0
     demand: float = 1.0
     vehicle: float = 1.0
     unserved: float = 10000.0

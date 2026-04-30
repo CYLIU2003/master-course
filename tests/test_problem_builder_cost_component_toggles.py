@@ -67,8 +67,12 @@ def test_cost_component_toggles_flow_into_problem_and_cost_breakdown() -> None:
     assert full_problem.baseline_plan is not None
     full_breakdown = evaluator.evaluate(full_problem, full_problem.baseline_plan)
 
+    assert full_problem.objective_weights.energy == 1.0
+    assert full_problem.objective_weights.fuel == 1.0
     assert full_breakdown.vehicle_cost > 0.0
     assert full_breakdown.driver_cost > 0.0
+    assert full_breakdown.electricity_cost == 0.0
+    assert full_breakdown.fuel_cost > 0.0
     assert full_breakdown.energy_cost > 0.0
 
     toggled_problem = builder.build_from_scenario(
@@ -104,6 +108,7 @@ def test_cost_component_toggles_flow_into_problem_and_cost_breakdown() -> None:
     assert toggled_problem.metadata["cost_component_flags"]["fuel_cost"] is False
     assert toggled_problem.objective_weights.vehicle == 0.0
     assert toggled_problem.objective_weights.energy == 0.0
+    assert toggled_problem.objective_weights.fuel == 0.0
     assert toggled_problem.objective_weights.demand == 0.0
     assert toggled_problem.objective_weights.unserved == 0.0
     assert toggled_breakdown.vehicle_cost == 0.0
@@ -113,3 +118,38 @@ def test_cost_component_toggles_flow_into_problem_and_cost_breakdown() -> None:
     assert toggled_breakdown.co2_cost == 0.0
     assert toggled_breakdown.total_cost == 0.0
     assert toggled_breakdown.total_co2_kg >= 0.0
+
+
+def test_electricity_and_fuel_cost_flags_are_independent() -> None:
+    builder = ProblemBuilder()
+    evaluator = CostEvaluator()
+
+    fuel_only_problem = builder.build_from_scenario(
+        _scenario(
+            cost_component_flags={
+                "electricity_cost": False,
+                "fuel_cost": True,
+                "demand_charge_cost": False,
+                "contract_overage_penalty": False,
+                "charge_session_start_penalty": False,
+                "slot_concurrency_penalty": False,
+                "early_charge_penalty": False,
+                "soc_upper_buffer_penalty": False,
+                "grid_to_bus_priority_penalty": False,
+                "grid_to_bess_priority_penalty": False,
+                "vehicle_fixed_cost": False,
+                "driver_cost": False,
+                "co2_cost": False,
+            },
+        ),
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+    )
+    assert fuel_only_problem.baseline_plan is not None
+    fuel_only_breakdown = evaluator.evaluate(fuel_only_problem, fuel_only_problem.baseline_plan)
+
+    assert fuel_only_problem.objective_weights.energy == 0.0
+    assert fuel_only_problem.objective_weights.fuel == 1.0
+    assert fuel_only_breakdown.electricity_cost == 0.0
+    assert fuel_only_breakdown.fuel_cost > 0.0
+    assert fuel_only_breakdown.energy_cost == fuel_only_breakdown.fuel_cost

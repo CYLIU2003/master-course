@@ -462,6 +462,8 @@ class TestCostBreakdownKeyMapping:
         
         # Canonical keys
         assert d["energy_cost"] == 1000.0
+        assert d["electricity_cost"] == 0.0
+        assert d["fuel_cost"] == 0.0
         assert d["demand_cost"] == 500.0
         assert d["degradation_cost"] == 200.0
         assert d["co2_cost"] == 100.0
@@ -499,6 +501,8 @@ class TestCostBreakdownKeyMapping:
         
         # Values should be correct
         assert cb["energy_cost"] == 1000.0
+        assert cb["electricity_cost"] == 1000.0
+        assert cb["fuel_cost"] == 0.0
         assert cb["demand_charge"] == 500.0
         assert cb["total_demand_charge"] == 500.0
         assert cb["battery_degradation_cost"] == 200.0
@@ -508,6 +512,49 @@ class TestCostBreakdownKeyMapping:
         assert cb["pv_to_bus_kwh"] == 50.0
         assert cb["contract_over_limit_kwh"] == 2.0
         assert cb["contract_overage_cost"] == 1000.0
+
+    def test_cost_breakdown_keeps_electricity_and_fuel_separate(self):
+        """_cost_breakdown() should not relabel ICE fuel as electricity."""
+        from bff.routers.optimization import _cost_breakdown
+
+        result_payload = {
+            "obj_breakdown": {
+                "electricity_cost": 17.0,
+                "fuel_cost": 61.0,
+                "fuel_cost_provisional": 100.0,
+                "fuel_cost_refueled": 40.0,
+                "fuel_cost_provisional_leftover": 21.0,
+                "energy_cost": 78.0,
+            }
+        }
+
+        cb = _cost_breakdown(result_payload, sim_payload=None)
+
+        assert cb["electricity_cost"] == 17.0
+        assert cb["fuel_cost"] == 61.0
+        assert cb["fuel_cost_final"] == 61.0
+        assert cb["fuel_cost_provisional"] == 100.0
+        assert cb["fuel_cost_refueled"] == 40.0
+        assert cb["fuel_cost_realized"] == 40.0
+        assert cb["fuel_cost_provisional_leftover"] == 21.0
+        assert cb["energy_cost"] == 78.0
+
+    def test_cost_breakdown_legacy_aggregate_minus_explicit_fuel(self):
+        """When only aggregate energy_cost and fuel_cost are present, derive electricity by subtraction."""
+        from bff.routers.optimization import _cost_breakdown
+
+        result_payload = {
+            "obj_breakdown": {
+                "energy_cost": 78.0,
+                "fuel_cost": 61.0,
+            }
+        }
+
+        cb = _cost_breakdown(result_payload, sim_payload=None)
+
+        assert cb["electricity_cost"] == 17.0
+        assert cb["fuel_cost"] == 61.0
+        assert cb["energy_cost"] == 78.0
     
     def test_cost_breakdown_aliases_electricity_to_energy(self):
         """_cost_breakdown() should accept electricity_cost as energy_cost alias."""

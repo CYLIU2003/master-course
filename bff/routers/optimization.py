@@ -50,6 +50,7 @@ from bff.services.run_preparation import (
     load_prepared_input,
     materialize_scenario_from_prepared_input,
 )
+from bff.services.optimization_run.vehicle_timeline import vehicle_ids_with_timeline_activity
 from bff.store import job_store, output_paths, scenario_store as store
 from src.dispatch.models import hhmm_to_min
 from src.optimization import (
@@ -631,7 +632,7 @@ def _preflight_weather_proxy_request(
         raise _weather_proxy_http_error(
             409,
             "WEATHER_PROXY_FUTURE_LEAKAGE",
-            "Weather proxy analog_date must be earlier than service_date.",
+            "Weather proxy analog_date/forecast_issue_date must be earlier than service_date.",
             service_date=forecast.service_date,
             analog_date=forecast.analog_date,
         )
@@ -687,7 +688,7 @@ def _prepare_weather_policy_for_scenario(
         )
     if forecast.analog_date >= forecast.service_date or not forecast.no_future_leakage:
         raise ValueError(
-            "WEATHER_PROXY_FUTURE_LEAKAGE: analog_date must be before service_date"
+            "WEATHER_PROXY_FUTURE_LEAKAGE: analog_date/forecast_issue_date must be before service_date"
         )
     profile = build_operation_profile(forecast)
     updated = dict(scenario)
@@ -699,6 +700,11 @@ def _prepare_weather_policy_for_scenario(
             "final_soc_floor_percent": float(profile.final_soc_floor_percent),
             "final_soc_target_percent": float(profile.final_soc_target_percent),
             "weather_operation_mode": profile.operation_mode,
+            "bev_duty_bias": float(profile.bev_duty_bias),
+            "ice_backup_bias": float(profile.ice_backup_bias),
+            "midday_charge_priority": float(profile.midday_charge_priority),
+            "grid_risk_penalty_multiplier": float(profile.grid_risk_penalty_multiplier),
+            "weather_strategy_bias_base_jpy_per_trip": 300.0,
         }
     )
     updated["simulation_config"] = sim_cfg
@@ -713,6 +719,7 @@ def _weather_policy_payload_from_problem_metadata(
         return None
     profile = dict(metadata.get("weather_operation_profile") or {})
     initial_soc_policy = dict(metadata.get("weather_initial_soc_policy") or {})
+    pv_curve = dict(metadata.get("weather_pv_representative_curve") or {})
     audit = {
         "enabled": True,
         "forecast_type": forecast.get("forecast_type"),
@@ -735,12 +742,23 @@ def _weather_policy_payload_from_problem_metadata(
             if key in metadata
         ],
         "pv_marginal_charge_cost_policy": metadata.get("pv_marginal_charge_cost_policy"),
+        "weather_strategy_bias_base_jpy_per_trip": metadata.get(
+            "weather_strategy_bias_base_jpy_per_trip"
+        ),
+        "weather_pv_forecast_applied": bool(metadata.get("weather_pv_forecast_applied")),
+        "weather_pv_forecast_skip_reason": metadata.get("weather_pv_forecast_skip_reason"),
+        "typical_weather_class": pv_curve.get("typical_weather_class"),
+        "typical_pv_source_dates": list(pv_curve.get("source_dates") or ()),
+        "typical_pv_thresholds": dict(
+            (pv_curve.get("classification") or {}).get("thresholds") or {}
+        ),
     }
     return {
         "enabled": True,
         "forecast": forecast,
         "operation_profile": profile,
         "initial_soc_policy": initial_soc_policy,
+        "representative_curve": pv_curve,
         "audit": audit,
     }
 
@@ -1105,6 +1123,18 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
         if breakdown
         else overall_contract_over_kwh * penalty_yen_per_kwh
     )
+    fuel_cost_jpy = float(breakdown.get("fuel_cost", 0.0) or 0.0)
+    aggregate_energy_cost_jpy = float(breakdown.get("energy_cost", 0.0) or 0.0)
+    if breakdown.get("electricity_cost") is not None:
+        electricity_cost_jpy = float(breakdown.get("electricity_cost") or 0.0)
+    elif breakdown.get("electricity_cost_final") is not None:
+        electricity_cost_jpy = float(breakdown.get("electricity_cost_final") or 0.0)
+    else:
+        electricity_cost_jpy = (
+            max(aggregate_energy_cost_jpy - fuel_cost_jpy, 0.0)
+            if fuel_cost_jpy > 0.0
+            else aggregate_energy_cost_jpy
+        )
     overall_by_slot_grid_peak = 0.0
     overall_by_slot_charge_peak = 0.0
     for slot_idx in sorted(all_slot_indices):
@@ -1147,7 +1177,7 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                 "demand_charge_cost_jpy": float(breakdown.get("demand_cost", 0.0) or 0.0),
                 "grid_purchase_cost_jpy": float(breakdown.get("grid_purchase_cost", 0.0) or 0.0),
                 "bess_discharge_cost_jpy": float(breakdown.get("bess_discharge_cost", 0.0) or 0.0),
-                "electricity_cost_jpy": float(breakdown.get("energy_cost", 0.0) or 0.0),
+                "electricity_cost_jpy": electricity_cost_jpy,
             },
         },
         "rows": rows,
@@ -1173,12 +1203,19 @@ def _persist_rich_run_outputs(
         "objective_value": "JPY",
         "solve_time_seconds": "s",
         "energy_cost": "JPY",
+        "electricity_cost": "JPY",
         "demand_charge": "JPY",
         "vehicle_cost": "JPY",
         "driver_cost": "JPY",
         "fuel_cost": "JPY",
+        "fuel_cost_final": "JPY",
+        "fuel_cost_provisional": "JPY",
+        "fuel_cost_refueled": "JPY",
+        "fuel_cost_realized": "JPY",
+        "fuel_cost_provisional_leftover": "JPY",
         "penalty_unserved": "JPY",
         "return_leg_bonus": "JPY",
+        "weather_strategy_objective_term_jpy_equivalent": "JPY-equivalent",
         "total_cost": "JPY",
         "co2_cost": "JPY",
         "total_co2_kg": "kg-CO2",
@@ -1328,6 +1365,7 @@ def _persist_rich_run_outputs(
     )
 
     sim_cfg = dict(scenario.get("simulation_config") or {})
+    cost_cfg = dict(((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {}))
     (run_dir / "simulation_conditions.json").write_text(
         json.dumps(sim_cfg, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -1336,6 +1374,7 @@ def _persist_rich_run_outputs(
         forecast_payload = dict(weather_policy.get("forecast") or {})
         profile_payload = dict(weather_policy.get("operation_profile") or {})
         audit_payload = dict(weather_policy.get("audit") or {})
+        representative_curve_payload = dict(weather_policy.get("representative_curve") or {})
         (run_dir / "weather_proxy_forecast.json").write_text(
             json.dumps(forecast_payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -1348,6 +1387,11 @@ def _persist_rich_run_outputs(
             json.dumps(audit_payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        if representative_curve_payload:
+            (run_dir / "weather_pv_representative_curve.json").write_text(
+                json.dumps(representative_curve_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
     # Legacy-compatible simulation condition tables.
     vehicles = list(scenario.get("vehicles") or [])
@@ -1355,14 +1399,23 @@ def _persist_rich_run_outputs(
     for vehicle in vehicles:
         if not isinstance(vehicle, dict):
             continue
+        vehicle_type = str(vehicle.get("vehicle_type") or vehicle.get("type") or "").upper()
+        fuel_unit_price = (
+            vehicle.get("fuel_cost_coeff_yen_per_liter")
+            or vehicle.get("fuelCostPerL")
+            or vehicle.get("fuel_price_yen_per_liter")
+            or vehicle.get("fuelPriceYenPerLiter")
+        )
+        if fuel_unit_price in (None, "") and vehicle_type not in {"BEV", "PHEV", "FCEV"}:
+            fuel_unit_price = cost_cfg.get("diesel_price_per_l") or sim_cfg.get("diesel_price_per_l") or 0.0
         vehicle_cost_rows.append(
             {
                 "vehicle_id": vehicle.get("vehicle_id") or vehicle.get("id") or vehicle.get("name") or "",
-                "vehicle_type": vehicle.get("vehicle_type") or vehicle.get("type") or "",
+                "vehicle_type": vehicle_type,
                 "fixed_use_cost_yen": vehicle.get("fixed_use_cost_yen") or vehicle.get("fixed_cost_yen") or 0.0,
-                "fuel_cost_coeff_yen_per_liter": vehicle.get("fuel_cost_coeff_yen_per_liter") or vehicle.get("fuel_price_yen_per_liter") or 0.0,
+                "fuel_cost_coeff_yen_per_liter": fuel_unit_price or 0.0,
                 "battery_degradation_cost_coeff_yen_per_kwh": vehicle.get("battery_degradation_cost_coeff_yen_per_kwh") or 0.0,
-                "co2_emission_coeff_kg_per_liter": vehicle.get("co2_emission_coeff_kg_per_liter") or 0.0,
+                "co2_emission_coeff_kg_per_liter": vehicle.get("co2_emission_coeff_kg_per_liter") or vehicle.get("co2EmissionKgPerL") or 0.0,
             }
         )
     _write_csv_rows(
@@ -1711,7 +1764,19 @@ def _persist_rich_run_outputs(
 
     kpi_summary = {
         "total_cost_jpy": float(cost_breakdown.get("total_cost", 0.0) or 0.0),
-        "electricity_cost_jpy": float(cost_breakdown.get("energy_cost", 0.0) or 0.0),
+        "electricity_cost_jpy": float(
+            cost_breakdown.get("electricity_cost", cost_breakdown.get("electricity_cost_final", 0.0))
+            or 0.0
+        ),
+        "fuel_cost_jpy": float(cost_breakdown.get("fuel_cost", 0.0) or 0.0),
+        "fuel_cost_final_jpy": float(cost_breakdown.get("fuel_cost_final", cost_breakdown.get("fuel_cost", 0.0)) or 0.0),
+        "fuel_cost_provisional_jpy": float(cost_breakdown.get("fuel_cost_provisional", cost_breakdown.get("provisional_ice_drive_cost", 0.0)) or 0.0),
+        "fuel_cost_refueled_jpy": float(cost_breakdown.get("fuel_cost_refueled", cost_breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
+        "fuel_cost_provisional_leftover_jpy": float(cost_breakdown.get("fuel_cost_provisional_leftover", cost_breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
+        "propulsion_energy_cost_jpy": float(cost_breakdown.get("energy_cost", 0.0) or 0.0),
+        "weather_strategy_objective_term_jpy_equivalent": float(
+            cost_breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
+        ),
         "grid_import_total_kwh": float(
             dict((charging_summary_payload or {}).get("totals") or {}).get("grid_import_total_kwh", 0.0)
             or (float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0) + float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0))
@@ -1790,6 +1855,21 @@ def _persist_rich_run_outputs(
             if weather_policy.get("enabled")
             else None
         ),
+        "weather_typical_class": (
+            (weather_policy.get("representative_curve") or {}).get("typical_weather_class")
+            if weather_policy.get("enabled")
+            else None
+        ),
+        "weather_pv_curve_applied": (
+            bool((weather_policy.get("audit") or {}).get("weather_pv_forecast_applied"))
+            if weather_policy.get("enabled")
+            else False
+        ),
+        "weather_pv_source_dates": (
+            list((weather_policy.get("representative_curve") or {}).get("source_dates") or ())
+            if weather_policy.get("enabled")
+            else []
+        ),
         "graph": {
             "manifest_path": "graph/manifest.json",
             "route_band_diagrams_manifest": str(
@@ -1835,7 +1915,13 @@ def _canonical_vehicle_timeline_rows(
     for slot in engine_result.plan.refuel_slots:
         refuel_slots_by_vehicle[str(slot.vehicle_id)].append(slot)
 
-    for vehicle_id, duties in duties_by_vehicle.items():
+    active_vehicle_ids = vehicle_ids_with_timeline_activity(
+        duties_by_vehicle,
+        engine_result.plan.charging_slots,
+        engine_result.plan.refuel_slots,
+    )
+    for vehicle_id in active_vehicle_ids:
+        duties = list(duties_by_vehicle.get(str(vehicle_id), []))
         vehicle = vehicle_by_id.get(str(vehicle_id))
         depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
         depot_label = depot_name_by_id.get(depot_id) or depot_id
@@ -2510,7 +2596,15 @@ def _canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) 
             or 0.0
         ),
         "components": {
-            "electricity_energy_cost": float(breakdown.get("energy_cost", 0.0) or 0.0),
+            "electricity_energy_cost": float(
+                breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", 0.0))
+                or 0.0
+            ),
+            "propulsion_energy_cost": float(breakdown.get("energy_cost", 0.0) or 0.0),
+            "fuel_cost_final": float(breakdown.get("fuel_cost_final", breakdown.get("fuel_cost", 0.0)) or 0.0),
+            "fuel_cost_provisional": float(breakdown.get("fuel_cost_provisional", breakdown.get("provisional_ice_drive_cost", 0.0)) or 0.0),
+            "fuel_cost_refueled": float(breakdown.get("fuel_cost_refueled", breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
+            "fuel_cost_provisional_leftover": float(breakdown.get("fuel_cost_provisional_leftover", breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
             "demand_charge_cost": float(breakdown.get("demand_cost", 0.0) or 0.0),
             "diesel_cost": float(breakdown.get("fuel_cost", 0.0) or 0.0),
             "vehicle_fixed_cost": float(breakdown.get("vehicle_cost", 0.0) or 0.0),
@@ -2522,6 +2616,9 @@ def _canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) 
             "ess_cost": float(breakdown.get("bess_asset_cost", 0.0) or 0.0),
             "unserved_trip_penalty": float(breakdown.get("unserved_penalty", 0.0) or 0.0),
             "return_leg_bonus": float(breakdown.get("return_leg_bonus", 0.0) or 0.0),
+            "weather_strategy_objective_term_jpy_equivalent": float(
+                breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
+            ),
         },
         "meta": {
             "objective_mode": str((engine_result.solver_metadata or {}).get("objective_mode") or problem.scenario.objective_mode or "total_cost"),
@@ -2641,10 +2738,25 @@ def _canonical_kpi_summary_json(
             else engine_result.objective_value
             or 0.0
         ),
-        "electricity_cost_jpy": float(breakdown.get("energy_cost", 0.0) or 0.0),
+        "electricity_cost_jpy": float(
+            breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", 0.0))
+            or 0.0
+        ),
+        "fuel_cost_jpy": float(breakdown.get("fuel_cost", 0.0) or 0.0),
+        "fuel_cost_final_jpy": float(breakdown.get("fuel_cost_final", breakdown.get("fuel_cost", 0.0)) or 0.0),
+        "fuel_cost_provisional_jpy": float(breakdown.get("fuel_cost_provisional", breakdown.get("provisional_ice_drive_cost", 0.0)) or 0.0),
+        "fuel_cost_refueled_jpy": float(breakdown.get("fuel_cost_refueled", breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
+        "fuel_cost_provisional_leftover_jpy": float(breakdown.get("fuel_cost_provisional_leftover", breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
+        "propulsion_energy_cost_jpy": float(breakdown.get("energy_cost", 0.0) or 0.0),
         "electricity_cost_basis": "canonical_plan",
-        "electricity_cost_provisional_jpy": float(breakdown.get("operating_cost_provisional_total", 0.0) or 0.0),
-        "electricity_cost_charged_jpy": float(breakdown.get("realized_ev_charge_cost", breakdown.get("energy_cost", 0.0)) or 0.0),
+        "electricity_cost_provisional_jpy": float(breakdown.get("provisional_ev_drive_cost", 0.0) or 0.0),
+        "electricity_cost_charged_jpy": float(
+            breakdown.get(
+                "realized_ev_charge_cost",
+                breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", 0.0)),
+            )
+            or 0.0
+        ),
         "grid_energy_provisional_kwh": float(sum(float(value or 0.0) for depot_map in (plan.grid_to_bus_kwh_by_depot_slot or {}).values() for value in (depot_map or {}).values())),
         "grid_energy_charged_kwh": grid_import_total_kwh,
         "pv_to_bus_kwh": float(breakdown.get("pv_to_bus_kwh", 0.0) or 0.0),
@@ -2928,37 +3040,80 @@ def _cost_breakdown(
     result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None
 ) -> Dict[str, float]:
     obj_breakdown = dict(result_payload.get("obj_breakdown") or {})
+    sim_values = dict(sim_payload or {})
+
+    def _first_float(*values: Any, default: float = 0.0) -> float:
+        for value in values:
+            if value is None or value == "":
+                continue
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return float(default)
+
+    explicit_fuel_cost = (
+        obj_breakdown.get("fuel_cost")
+        if obj_breakdown.get("fuel_cost") is not None
+        else obj_breakdown.get("total_fuel_cost")
+    )
+    fuel_cost_provisional = _first_float(
+        sim_values.get("fuel_cost_provisional_jpy"),
+        obj_breakdown.get("fuel_cost_provisional"),
+        obj_breakdown.get("provisional_ice_drive_cost"),
+    )
+    fuel_cost_refueled = _first_float(
+        sim_values.get("fuel_cost_refueled_jpy"),
+        sim_values.get("fuel_cost_realized_jpy"),
+        obj_breakdown.get("fuel_cost_refueled"),
+        obj_breakdown.get("fuel_cost_realized"),
+        obj_breakdown.get("realized_ice_refuel_cost"),
+    )
+    fuel_cost_leftover = _first_float(
+        sim_values.get("fuel_cost_provisional_leftover_jpy"),
+        obj_breakdown.get("fuel_cost_provisional_leftover"),
+        obj_breakdown.get("leftover_ice_provisional_cost"),
+    )
+    fuel_cost = _first_float(
+        sim_values.get("total_fuel_cost"),
+        sim_values.get("fuel_cost_final_jpy"),
+        explicit_fuel_cost,
+        obj_breakdown.get("fuel_cost_final"),
+        fuel_cost_refueled + fuel_cost_leftover,
+    )
     total_cost_value = (
-        (sim_payload or {}).get("total_operating_cost")
-        if (sim_payload or {}).get("total_operating_cost") is not None
+        sim_values.get("total_operating_cost")
+        if sim_values.get("total_operating_cost") is not None
         else obj_breakdown.get("total_cost")
     )
     provisional_energy = float(
-        (sim_payload or {}).get("electricity_cost_provisional_jpy", 0.0)
+        sim_values.get("electricity_cost_provisional_jpy", 0.0)
         or 0.0
     )
     charged_energy = float(
-        (sim_payload or {}).get("electricity_cost_charged_jpy", 0.0)
+        sim_values.get("electricity_cost_charged_jpy", 0.0)
         or 0.0
     )
-    final_energy_cost = float(
-        (sim_payload or {}).get("total_energy_cost", obj_breakdown.get("electricity_cost_final"))
-        or obj_breakdown.get("electricity_cost")
-        or obj_breakdown.get("energy_cost")
-        or charged_energy
-        or 0.0
-    )
+    aggregate_energy_source = float(obj_breakdown.get("energy_cost", 0.0) or 0.0)
+    if sim_values.get("total_energy_cost") is not None:
+        final_energy_cost = float(sim_values.get("total_energy_cost") or 0.0)
+    elif obj_breakdown.get("electricity_cost") is not None:
+        final_energy_cost = float(obj_breakdown.get("electricity_cost") or 0.0)
+    elif obj_breakdown.get("electricity_cost_final") is not None:
+        final_energy_cost = float(obj_breakdown.get("electricity_cost_final") or 0.0)
+    elif explicit_fuel_cost is not None:
+        final_energy_cost = max(aggregate_energy_source - fuel_cost, 0.0)
+    else:
+        final_energy_cost = float(aggregate_energy_source or charged_energy or 0.0)
     provisional_leftover = float(
         (sim_payload or {}).get("electricity_cost_provisional_leftover_jpy", 0.0)
         or obj_breakdown.get("electricity_cost_provisional_leftover")
         or max(provisional_energy - final_energy_cost, 0.0)
     )
+    aggregate_energy_cost = final_energy_cost + fuel_cost
     return {
-        "energy_cost": float(
-            (sim_payload or {}).get("total_energy_cost", obj_breakdown.get("electricity_cost", 0.0))
-            or obj_breakdown.get("energy_cost", 0.0)
-            or 0.0
-        ),
+        "energy_cost": aggregate_energy_cost,
+        "electricity_cost": final_energy_cost,
         "electricity_cost_final": final_energy_cost,
         "electricity_cost_provisional": provisional_energy,
         "electricity_cost_charged": charged_energy,
@@ -2982,14 +3137,13 @@ def _cost_breakdown(
             or 0.0
         ),
         "deadhead_cost": float(obj_breakdown.get("deadhead_cost", 0.0) or 0.0),
-        "fuel_cost": float(
-            (sim_payload or {}).get("total_fuel_cost", obj_breakdown.get("fuel_cost", 0.0))
-            or 0.0
-        ),
-        "total_fuel_cost": float(
-            (sim_payload or {}).get("total_fuel_cost", obj_breakdown.get("fuel_cost", 0.0))
-            or 0.0
-        ),
+        "fuel_cost": fuel_cost,
+        "fuel_cost_final": fuel_cost,
+        "fuel_cost_provisional": fuel_cost_provisional,
+        "fuel_cost_refueled": fuel_cost_refueled,
+        "fuel_cost_realized": fuel_cost_refueled,
+        "fuel_cost_provisional_leftover": fuel_cost_leftover,
+        "total_fuel_cost": fuel_cost,
         "battery_degradation_cost": float(
             (sim_payload or {}).get("total_degradation_cost", obj_breakdown.get("battery_degradation_cost", 0.0))
             or obj_breakdown.get("degradation_cost", 0.0)
@@ -3026,6 +3180,9 @@ def _cost_breakdown(
         "co2_cost": float(obj_breakdown.get("emission_cost", 0.0) or obj_breakdown.get("co2_cost", 0.0) or 0.0),
         "penalty_unserved": float(obj_breakdown.get("unserved_penalty", 0.0) or 0.0),
         "return_leg_bonus": float(obj_breakdown.get("return_leg_bonus", 0.0) or 0.0),
+        "weather_strategy_objective_term_jpy_equivalent": float(
+            obj_breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
+        ),
         "total_co2_kg": float(
             (sim_payload or {}).get("total_co2_kg", obj_breakdown.get("total_co2_kg", 0.0))
             or 0.0
@@ -3318,7 +3475,8 @@ def _run_optimization(
                 smeta["warnings"] = warnings_list
             _cb = dict(engine_result.cost_breakdown or {})
             # Alias keys so _cost_breakdown() can read both naming conventions
-            _cb.setdefault("electricity_cost", _cb.get("energy_cost", 0.0))
+            _cb.setdefault("electricity_cost", _cb.get("electricity_cost_final", _cb.get("energy_cost", 0.0)))
+            _cb.setdefault("fuel_cost", _cb.get("fuel_cost", 0.0))
             _cb.setdefault("demand_charge_cost", _cb.get("demand_cost", 0.0))
             _cb.setdefault("battery_degradation_cost", _cb.get("degradation_cost", 0.0))
             _cb.setdefault("emission_cost", _cb.get("co2_cost", 0.0))

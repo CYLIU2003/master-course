@@ -106,6 +106,9 @@ def test_cost_evaluator_uses_total_cost_objective_by_default() -> None:
 
     breakdown = CostEvaluator().evaluate(problem, plan)
 
+    assert breakdown.electricity_cost == 0.0
+    assert breakdown.fuel_cost == 200.0
+    assert breakdown.energy_cost == 200.0
     assert breakdown.total_co2_kg == 4.0
     assert breakdown.total_cost > breakdown.total_co2_kg
     assert breakdown.objective_value == breakdown.total_cost
@@ -179,6 +182,9 @@ def test_cost_evaluator_uses_co2_objective_when_requested() -> None:
 
     breakdown = CostEvaluator().evaluate(problem, plan)
 
+    assert breakdown.electricity_cost == 0.0
+    assert breakdown.fuel_cost == 200.0
+    assert breakdown.energy_cost == 200.0
     assert breakdown.total_co2_kg == 4.0
     assert breakdown.objective_value == breakdown.total_co2_kg
     assert breakdown.total_cost > breakdown.objective_value

@@ -16,8 +16,17 @@ def main() -> int:
     parser.add_argument("--forecast-json", required=True)
     args = parser.parse_args()
     forecast = load_weather_proxy_forecast_json(args.forecast_json)
+    print(f"forecast_type: {forecast.forecast_type}")
     print(f"service_date: {forecast.service_date}")
     print(f"analog_date: {forecast.analog_date}")
+    if forecast.forecast_type == "solcast_pv_proxy_v1":
+        print(f"forecast_issue_date: {forecast.metadata.get('forecast_issue_date')}")
+        print(f"pv_profile_date: {forecast.metadata.get('pv_profile_date')}")
+    if forecast.forecast_type == "solcast_typical_pv_proxy_v1":
+        print(f"forecast_issue_date: {forecast.metadata.get('forecast_issue_date')}")
+        print(f"typical_weather_class: {forecast.metadata.get('typical_weather_class')}")
+        print(f"source_profile_count: {forecast.metadata.get('source_profile_count')}")
+        print(f"representative_curve: {forecast.metadata.get('representative_curve_json_path')}")
     print(f"weather_label: {forecast.weather_label or ''}")
     print(f"sunshine_hours: {forecast.sunshine_hours}")
     print(f"precipitation_mm: {forecast.precipitation_mm}")

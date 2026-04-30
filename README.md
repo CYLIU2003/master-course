@@ -163,6 +163,9 @@ flowchart LR
 - 2026-04-24: Historical Analog Weather Proxy v1 を追加した。`data/weather/processed/*.csv` の過去日別気象から `service_date` より前の類似日を選び、その実気象を当日朝の擬似予報として `operation_mode=aggressive/normal/conservative` へ変換する。最適化本体は外部サイトへアクセスせず、BFF は `weatherProxyForecastPath` と `enableWeatherOperationPolicy=true` を受けた場合だけ forecast JSON を検証し、`final_soc_floor_percent` / `final_soc_target_percent` / 初期SOCランダム化 / weather policy metadata を canonical problem へ渡す。対象日当日の実績は類似日選択に使わず、`analog_date < service_date` と `no_future_leakage=true` を必須にする。run 出力には `weather_proxy_forecast.json`, `weather_operation_policy.json`, `weather_policy_audit.json` と `run_manifest.json` の weather proxy 要約を残す。PV の運用限界費用は 0 円/kWh とするが、PV 設備費・保守費・減価償却費は `total_cost_with_assets` 等の会計KPIから消さない
 - 2026-04-28: Tk フロントにも Historical Analog Weather Proxy v1 の導線を追加した。`PV天気モード` はPV発電形状/係数用、`Historical analog予報` は最適化ポリシー用として分離表示し、ローカル予報JSONの選択・検証・SOC floor/target反映、日別気象CSVからの予報JSON生成、Quick Setup/Prepare/run-optimization への `enableWeatherOperationPolicy` / `weatherProxyForecastPath` 伝播を行う。無効時は stale な予報パスを実行しない。併せて Quick Setup 読込時に `0` のSOC/係数値を fallback で潰す表示不具合と、Prepare開始表示が入力検証前に出る不具合を修正した
 - 2026-04-28: Tk の実行パラメータ編集導線をタブ化した。編集できる `StringVar` / quick-setup / prepare / run-optimization payload は維持したまま、よく使う料金・SOC・ペナルティ、SOC/燃料詳細、料金/CO2と cost flags、PV/予報、目的/ソルバー詳細へ分け、最適化前に確認すべき順で辿れるようにした。外側キャンバスの mouse wheel binding も子ウィジェットへ張り直し、長い設定画面をスクロールしやすくした
+- 2026-04-30: EV/ICE 混成費用の ledger を厳密化した。`electricity_cost` / `electricity_cost_final` はEVの電力商品費のみ、`fuel_cost` はICE/PHEV等の液体燃料費のみ、`energy_cost` は後方互換の推進費合計（EV電力+ICE燃料）として扱う。`charging_summary.json` と `kpi_summary.json` の `electricity_cost_jpy` からICE燃料を除外し、`fuel_cost_jpy` と `propulsion_energy_cost_jpy` を別出力する。MILP 目的関数も `electricity_cost` 重みと `fuel_cost` 重みを分け、需要料金・契約超過ペナルティは電力商品費に混ぜない。燃料側も `fuel_cost_provisional_jpy`（走行から推定した暫定費）、`fuel_cost_refueled_jpy`（実給油で確定した費用）、`fuel_cost_provisional_leftover_jpy`（未給油分の暫定残）、`fuel_cost_final_jpy`（最終燃料ledger）を出力する
+- 2026-04-29: Solcast 由来の `data/derived/pv_profiles/*_YYYY-MM-DD_60min.json` を `WeatherProxyForecast` に変換する `solcast_pv_proxy_v1` を追加した。PV の capacity factor 列から発電回復見込みを `sun_score`、低PV回復リスクを `rain_risk` proxy として計算し、既存の `operation_mode` / SOC floor/target / 初期SOCランダム化ポリシーへ接続する。未来情報リーク防止のため `forecast_issue_date < service_date` を必須とし、Solcast版では後方互換の `analog_date` 欄に issue date を入れる。CLI は `scripts/weather/build_solcast_pv_proxy_forecast.py`、Tk は `PV/予報` タブの「Solcast PVから予報JSON生成」から使える
+- 2026-04-29: Weather proxy 有効時に `mode_milp_only` へ長い `time_limit_seconds` を渡すと、post-return SOC target と 24h horizon により小規模 scope でも時間上限まで走り切るため、Tk からの実行では既定で 300 秒に制限するようにした。長時間MILPを意図して実行する場合は環境変数 `MC_ALLOW_LONG_WEATHER_MILP=1` を設定する
 - 2026-04-05: `bff/routers/simulation.py` の canonical bridge は旧 `plan.vehicle_paths` 前提で current canonical output の top-level `vehicle_paths` を落としていたため修正し、`src/simulator.py` は `feasible` / `time_limit_baseline` を valid status として扱うよう更新した。slot 境界の back-to-back trip を overlap 扱いする fallback も修正し、ALNS best run の prepared simulation は `served=974`, `vehicle_count_used=88`, `simulation_total_cost=3245610.92`, `simulation_total_co2_kg=3845.7289`, residual `time_connection=21` まで改善した
 - 2026-04-01: canonical 最適化の保存先を拡張し、従来の feed/snapshot スコープ出力に加えて `output/<YYYY-MM-DD>/run_YYYYMMDD_HHMM/` を同時生成するようにした。run 配下には `summary.json`, `solver_result.json`, `canonical_solver_result.json`, `cost_breakdown_detail.(json/csv)`, `objective_breakdown.(json/csv)`, `kpi_summary.json`, `site_power_balance.csv`, `depot_energy_flows.(json/csv)`, `graph/manifest.json`, `graph/route_band_diagrams/manifest.json` など単位付き成果物を出力し、系統受電量（`grid_to_bus_kwh`, `grid_to_bess_kwh`, `grid_import_total_kwh`）を明示確認できるようにした
 - 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
@@ -473,16 +476,20 @@ Tkinter + FastAPI BFF のみで東急全体の最適化を再現実行できる�
 > O2（電気代）だけを最小化すれば「BEV を 1 台も充電しない（ICE のみ運用）」が自明な最適解となります。
 > それぞれを単独で扱っても研究上の意味はありません。
 >
-> O1 と O2 を同一式で合算することで、「ICE を使えば燃料費（O1）が増え、BEV を充電すれば電気代（O2）が増える」
+> O1 と O2 は同じ目的関数内で比較するが、ledger と出力では分離する。「ICE を使えば燃料費（O1）が増え、BEV を充電すれば電気代（O2）が増える」
 > というトレードオフが内在化され、ソルバーが **ICE と BEV の最適な混合比率** を自動決定します。
 >
-> **欠便ペナルティは常に有効**です（O1〜O4・CO₂費・劣化費のいずれの設定にも関わらず、
-> すべての項の後に無条件で加算されます — [L425–426](src/optimization/milp/solver_adapter.py#L425)）。
+> **費用 ledger の契約**: `electricity_cost` はEV電力商品費のみ、`fuel_cost` はICE燃料費のみ、`energy_cost` は後方互換の推進費合計（`electricity_cost + fuel_cost`）です。
+> デマンド料金と契約超過ペナルティは電力商品費ではなく、`demand_cost` / `contract_overage_cost` として別費目です。
+> 燃料費も電力費と同様に、暫定走行費 `fuel_cost_provisional_jpy`、実給油費 `fuel_cost_refueled_jpy`、暫定残 `fuel_cost_provisional_leftover_jpy`、最終値 `fuel_cost_final_jpy` を出します。
+>
+> **欠便ペナルティは通常ON**です。研究上の ablation で `cost_component_flags.unserved_penalty=false` にした場合だけ目的関数から外れます。
+> strict coverage の可否判定や `solution_validity` は、この費用重みとは別に評価します。
 
 #### 目的関数の全体式
 
 $$
-\min \quad C_{total} = \underbrace{O1 + O2 + O3 + O4}_{\text{常に有効}} + \underbrace{\sum_j \pi \cdot u_j}_{\text{欠便ペナルティ（常に有効）}} + \underbrace{C_{CO_2}^{*} + C_{degr}^{*}}_{\text{パラメータ設定時のみ有効}}
+\min \quad C_{total} = w_f O1 + w_e O2 + w_d O3 + w_v O4 + w_u \sum_j \pi \cdot u_j + \underbrace{C_{CO_2}^{*} + C_{degr}^{*}}_{\text{パラメータ設定時のみ有効}}
 $$
 
 各項の展開式：
@@ -514,12 +521,12 @@ $$
 
 | 費目 | 記号 | 有効化条件 | コード行 |
 |------|------|-----------|---------|
-| ICE 燃料費（便走行） | $O1_{\text{trip}}$ | **常に有効**（ICE 車両が 0 台なら自動的に 0） | [L336–348](src/optimization/milp/solver_adapter.py#L336) |
-| ICE 燃料費（回送） | $O1_{\text{dh}}$ | **常に有効**（同上） | [L350–362](src/optimization/milp/solver_adapter.py#L350) |
-| 電気代（TOU） | $O2$ | **常に有効**（系統買電量が 0 なら自動的に 0） | [L332–334](src/optimization/milp/solver_adapter.py#L332) |
-| デマンド料金 | $O3$ | **常に有効**（単価を 0 に設定すれば実質無効化可） | [L364–367](src/optimization/milp/solver_adapter.py#L364) |
+| ICE 燃料費（便走行） | $O1_{\text{trip}}$ | `cost_component_flags.fuel_cost=true`（既定ON、ICE車両が0台なら0） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
+| ICE 燃料費（回送） | $O1_{\text{dh}}$ | `cost_component_flags.fuel_cost=true`（同上） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
+| 電気代（TOU） | $O2$ | `cost_component_flags.electricity_cost=true`（既定ON、系統買電量が0なら0） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
+| デマンド料金 | $O3$ | `cost_component_flags.demand_charge_cost=true`（既定ON） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
 | 車両固定費 | $O4$ | **常に有効**（`fixed_use_cost_jpy = 0` で実質無効化可） | [L369–370](src/optimization/milp/solver_adapter.py#L369) |
-| 欠便ペナルティ | $\pi \cdot u_j$ | **常に有効・無条件**（O1〜O4・オプション項の設定に関わらず必ず加算） | [L425–426](src/optimization/milp/solver_adapter.py#L425) |
+| 欠便ペナルティ | $\pi \cdot u_j$ | `cost_component_flags.unserved_penalty=true`（既定ON） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
 | CO₂ 費用 | $C_{CO_2}^{*}$ | `co2_price_per_kg > 0` のときのみ加算 | [L372–407](src/optimization/milp/solver_adapter.py#L372) |
 | 電池劣化費 | $C_{degr}^{*}$ | `degradation_weight > 0` のときのみ加算 | [L409–423](src/optimization/milp/solver_adapter.py#L409) |
 
@@ -590,16 +597,16 @@ ALNS・GA・ABC は共通評価器 `src/optimization/common/evaluator.py` で O1
 
 | 費目 | 状態 | 条件 |
 |------|------|------|
-| O1：ICE 燃料費（便 + 回送） | ✅ 実装済み | 常時有効 |
-| O2：TOU 電気代 | ✅ 実装済み | 常時有効 |
-| O3：デマンド料金 | ✅ 実装済み | 常時有効 |
+| O1：ICE 燃料費（便 + 回送） | ✅ 実装済み | `fuel_cost` flag / weight で制御 |
+| O2：TOU 電気代 | ✅ 実装済み | `electricity_cost` flag / weight で制御 |
+| O3：デマンド料金 | ✅ 実装済み | `demand_charge_cost` flag / weight で制御 |
 | O4：車両固定費 | ✅ 実装済み | 車両設定がある場合 |
 | 欠便ペナルティ | ✅ 実装済み | 常時有効 |
 | CO₂ 費用 | ✅ 実装済み | `co2_price_per_kg > 0` で有効 |
 | 電池劣化費 | ✅ 実装済み | `weights.degradation > 0` で有効 |
 | PV 余剰売電 | ❌ 未実装 | 将来拡張 |
 
-MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同一条件で同一費目を計算します。
+MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同一条件で同一費目を計算します。EV電力費とICE燃料費は目的重みも出力KPIも分離し、`energy_cost` は旧互換の推進費合計としてのみ扱います。
 
 ### 3.4 研究フェーズ別の実装計画
 
@@ -798,7 +805,7 @@ route-band 可視化の仕様：
 | Graph Exports | `.../run_YYYYMMDD_HHMM/graph/` | `manifest.json`、`vehicle_timeline.csv`、`soc_events.csv` など |
 | route-band 図 | `.../run_YYYYMMDD_HHMM/graph/route_band_diagrams/` | `manifest.json` と `*.svg` |
 | 車両別横棒図 | `.../run_YYYYMMDD_HHMM/graph/vehicle_operation_diagrams/` | `all_vehicles.svg` と `manifest.json` |
-| 充電内訳サマリ | `.../run_YYYYMMDD_HHMM/charging_summary.json` | depot 別 / 全体の grid・PV・BESS 内訳、契約超過、電力コスト |
+| 充電内訳サマリ | `.../run_YYYYMMDD_HHMM/charging_summary.json` | depot 別 / 全体の grid・PV・BESS 内訳、契約超過、EV電力コスト（ICE燃料は含めない） |
 | 充電内訳時系列 | `.../run_YYYYMMDD_HHMM/depot_energy_flows.csv` | depot-slot ごとの grid/PV/BESS/curtail/SOC/contract over を一覧化 |
 | 充電契約監視 | `.../run_YYYYMMDD_HHMM/graph/depot_power_timeseries_5min.csv` | `grid_import_kw`, `contract_limit_kw`, `contract_over_limit_kwh`, `contract_limit_exceeded` を 5 分粒度で確認 |
 | weather proxy forecast | `.../run_YYYYMMDD_HHMM/weather_proxy_forecast.json` | historical analog v1 の擬似予報。`analog_date < service_date` と `no_future_leakage=true` を監査 |
@@ -1100,6 +1107,8 @@ $$arrival(i) + turnaround(dest_i) + deadhead(dest_i, origin_j) \leq departure(j)
 - `Optimization結果` / `Simulation結果` の Summary タブは、`総コスト`、`担当便数`、`未担当便数`、`使用車両数` と主要な非ゼロ内訳を先頭表示する。
 - `Cost Breakdown` タブは、`総コスト` を先頭に非ゼロ項目を上段へ並べ、構成比 (`share`) も確認できる。
 - 2026-04-17 以降、`総コスト` は純粋な会計値、`目的関数値` は復路ボーナス (`return_leg_bonus`) を含む solver score として分離表示する。したがって `目的関数値` は負になり得るが、`総コスト` は reward を差し引かない。
+- 2026-04-30 以降、`EV電力コスト` と `燃料コスト` は別行で表示する。`推進費合計(EV電力+ICE燃料)` は後方互換の集計であり、電力費として読まない。
+- 燃料費は `確定燃料コスト`、`暫定燃料コスト`、`実給油燃料コスト`、`暫定燃料コスト残` を表示する。実給油がない run では、最終燃料費は暫定走行費として残る。
 - 2026-03-31 時点では、シナリオ `237d5623-aa94-4f72-9da1-17b9070264be` の最新 `optimization_result` に非ゼロ内訳が保存済みであり、`energy_cost=202,796.50054309692`, `vehicle_cost=483,447.4885844756`, `driver_cost=2,006,683.333333335`, `penalty_unserved=3,360,000.0`, `total_cost=6,052,927.3224609075` を結果画面から確認できる前提とする。
 
 ### 9.8 コスト成分トグル

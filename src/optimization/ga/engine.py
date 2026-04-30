@@ -259,6 +259,7 @@ class GAOptimizer:
                 },
                 "objective_weights": {
                     "electricity_cost": float(problem.objective_weights.energy),
+                    "fuel_cost": float(problem.objective_weights.fuel),
                     "demand_charge_cost": float(problem.objective_weights.demand),
                     "vehicle_fixed_cost": float(problem.objective_weights.vehicle),
                     "unserved_penalty": float(problem.objective_weights.unserved),

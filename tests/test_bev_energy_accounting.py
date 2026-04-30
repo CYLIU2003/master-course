@@ -252,6 +252,8 @@ def test_cost_evaluator_counts_bev_trip_energy_without_charging_slots() -> None:
 
     breakdown = CostEvaluator().evaluate(problem, plan)
 
+    assert breakdown.electricity_cost == 300.0
+    assert breakdown.fuel_cost == 0.0
     assert breakdown.energy_cost == 300.0
     assert breakdown.demand_cost == 0.0
     assert breakdown.grid_import_kwh == 0.0

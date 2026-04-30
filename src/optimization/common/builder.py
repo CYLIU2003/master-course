@@ -58,6 +58,10 @@ from .pv_area import (
     safe_optional_float,
 )
 from .vehicle_assignment import assign_duty_fragments_to_vehicles, merge_duty_vehicle_maps
+from .weather_strategy import (
+    weather_assignment_objective_bias,
+    weather_vehicle_type_sort_key,
+)
 
 
 @dataclass(frozen=True)
@@ -342,6 +346,21 @@ class ProblemBuilder:
             cost_cfg.get("co2_price_per_kg"),
         )
         ice_co2_kg_per_l = float(cost_cfg.get("ice_co2_kg_per_l") or 2.64)
+        weather_strategy_metadata = {
+            "weather_proxy": (
+                {"enabled": True}
+                if bool(simulation_cfg.get("enable_weather_operation_policy"))
+                else {}
+            ),
+            "weather_operation_profile": {
+                "bev_duty_bias": simulation_cfg.get("bev_duty_bias", 1.0),
+                "ice_backup_bias": simulation_cfg.get("ice_backup_bias", 1.0),
+            },
+            "weather_strategy_bias_base_jpy_per_trip": simulation_cfg.get(
+                "weather_strategy_bias_base_jpy_per_trip",
+                300.0,
+            ),
+        }
         return self.build_from_dispatch(
             context,
             scenario_id=str((scenario.get("meta") or {}).get("id") or ""),
@@ -409,6 +428,7 @@ class ProblemBuilder:
             scenario_vehicles=scenario_vehicles,
             disable_vehicle_acquisition_cost=disable_acquisition_cost,
             cost_component_flags=cost_component_flags,
+            weather_strategy_metadata=weather_strategy_metadata,
         )
 
     def build_from_dispatch(
@@ -477,6 +497,7 @@ class ProblemBuilder:
         enable_driver_cost: bool = True,
         enable_other_cost: bool = True,
         cost_component_flags: Optional[Mapping[str, Any]] = None,
+        weather_strategy_metadata: Optional[Mapping[str, Any]] = None,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -735,6 +756,7 @@ class ProblemBuilder:
                 allow_overnight_depot_moves=allow_overnight_depot_moves,
                 overnight_window_start=overnight_window_start,
                 overnight_window_end=overnight_window_end,
+                weather_strategy_metadata=weather_strategy_metadata,
             )
         return CanonicalOptimizationProblem(
             scenario=OptimizationScenario(
@@ -1898,6 +1920,7 @@ class ProblemBuilder:
         allow_overnight_depot_moves: str = "forbid",
         overnight_window_start: str = "23:00",
         overnight_window_end: str = "05:00",
+        weather_strategy_metadata: Optional[Mapping[str, Any]] = None,
     ) -> AssignmentPlan:
         baseline_all_trip_ids = all_trip_ids or {trip.trip_id for trip in context.trips}
 
@@ -1918,6 +1941,7 @@ class ProblemBuilder:
                 allow_overnight_depot_moves=allow_overnight_depot_moves,
                 overnight_window_start=overnight_window_start,
                 overnight_window_end=overnight_window_end,
+                weather_strategy_metadata=weather_strategy_metadata,
             )
             if len(pooled_plan.unserved_trip_ids) == 0:
                 return pooled_plan
@@ -1952,6 +1976,7 @@ class ProblemBuilder:
                 vehicle_type: len(type_vehicles)
                 for vehicle_type, type_vehicles in vehicles_by_type.items()
             },
+            weather_strategy_metadata=weather_strategy_metadata,
         ):
             # filter context.trips to those eligible for this vehicle type and
             # not yet assigned
@@ -2055,6 +2080,7 @@ class ProblemBuilder:
         allow_overnight_depot_moves: str = "forbid",
         overnight_window_start: str = "23:00",
         overnight_window_end: str = "05:00",
+        weather_strategy_metadata: Optional[Mapping[str, Any]] = None,
     ) -> AssignmentPlan:
         trip_map = context.trips_by_id()
         trip_ids = {trip.trip_id for trip in context.trips}
@@ -2170,6 +2196,7 @@ class ProblemBuilder:
                     allow_overnight_depot_moves=allow_overnight_depot_moves,
                     overnight_window_start=overnight_window_start,
                     overnight_window_end=overnight_window_end,
+                    weather_strategy_metadata=weather_strategy_metadata,
                 )
                 if vehicle is None:
                     skipped_trip_ids.extend(trip.trip_id for trip in remaining_chain)
@@ -2242,13 +2269,14 @@ class ProblemBuilder:
         allow_overnight_depot_moves: str = "forbid",
         overnight_window_start: str = "23:00",
         overnight_window_end: str = "05:00",
+        weather_strategy_metadata: Optional[Mapping[str, Any]] = None,
     ) -> Optional[ProblemVehicle]:
         if not chain or not vehicles:
             return None
         first_trip = chain[0]
         origin_key = str(first_trip.origin_stop_id or first_trip.origin)
         best_vehicle: Optional[ProblemVehicle] = None
-        best_score: Optional[Tuple[int, int, int, float, str]] = None
+        best_score: Optional[Tuple[int, float, int, int, float, str]] = None
         for vehicle in vehicles:
             if str(vehicle.vehicle_type) not in first_trip.allowed_vehicle_types:
                 continue
@@ -2276,6 +2304,7 @@ class ProblemBuilder:
                 continue
             score = (
                 feasible_prefix_len,
+                -weather_assignment_objective_bias(weather_strategy_metadata, vehicle.vehicle_type),
                 int(vehicle_type_counts.get(str(vehicle.vehicle_type), 0) or 0),
                 -deadhead_min,
                 -float(vehicle.fixed_use_cost_jpy or 0.0),
@@ -2712,13 +2741,21 @@ class ProblemBuilder:
         context: DispatchContext,
         *,
         available_vehicle_counts: Optional[Mapping[str, int]] = None,
+        weather_strategy_metadata: Optional[Mapping[str, Any]] = None,
     ) -> List[str]:
         vehicle_types = list(context.vehicle_profiles.keys())
         if not available_vehicle_counts:
-            return vehicle_types
+            return sorted(
+                vehicle_types,
+                key=lambda vehicle_type: (
+                    weather_vehicle_type_sort_key(weather_strategy_metadata, vehicle_type),
+                    vehicle_type,
+                ),
+            )
         return sorted(
             vehicle_types,
             key=lambda vehicle_type: (
+                weather_vehicle_type_sort_key(weather_strategy_metadata, vehicle_type),
                 -max(int(available_vehicle_counts.get(vehicle_type, 0) or 0), 0),
                 vehicle_type,
             ),
@@ -3197,11 +3234,10 @@ class ProblemBuilder:
             ),
             explicit_weights=explicit_weights if isinstance(explicit_weights, dict) else {},
         )
-        energy_terms_enabled = any(
+        electricity_terms_enabled = any(
             bool(component_flags.get(key, True))
             for key in (
                 "electricity_cost",
-                "fuel_cost",
                 "contract_overage_penalty",
                 "charge_session_start_penalty",
                 "slot_concurrency_penalty",
@@ -3213,8 +3249,10 @@ class ProblemBuilder:
         )
         if not component_flags["vehicle_fixed_cost"]:
             objective_weights["vehicle_fixed_cost"] = 0.0
-        if not energy_terms_enabled:
+        if not electricity_terms_enabled:
             objective_weights["electricity_cost"] = 0.0
+        if not component_flags["fuel_cost"]:
+            objective_weights["fuel_cost"] = 0.0
         if not component_flags["demand_charge_cost"]:
             objective_weights["demand_charge_cost"] = 0.0
         if not component_flags["unserved_penalty"]:
@@ -3227,6 +3265,7 @@ class ProblemBuilder:
             objective_weights["deviation_cost"] = 0.0
         return OptimizationObjectiveWeights(
             energy=float(objective_weights.get("electricity_cost", 1.0)),
+            fuel=float(objective_weights.get("fuel_cost", 1.0)),
             demand=float(objective_weights.get("demand_charge_cost", 1.0)),
             vehicle=float(objective_weights.get("vehicle_fixed_cost", 1.0)),
             unserved=float(objective_weights.get("unserved_penalty", 10000.0)),

@@ -7,6 +7,13 @@ from datetime import date
 from typing import Any, Dict, Mapping, Optional
 
 FORECAST_TYPE_HISTORICAL_ANALOG_V1 = "historical_analog_v1"
+FORECAST_TYPE_SOLCAST_PV_PROXY_V1 = "solcast_pv_proxy_v1"
+FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1 = "solcast_typical_pv_proxy_v1"
+FORECAST_TYPES = {
+    FORECAST_TYPE_HISTORICAL_ANALOG_V1,
+    FORECAST_TYPE_SOLCAST_PV_PROXY_V1,
+    FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
+}
 QUALITY_FLAGS = {"ok", "missing", "estimated", "partial"}
 OPERATION_MODES = {"aggressive", "normal", "conservative"}
 
@@ -103,12 +110,17 @@ class WeatherProxyForecast:
         object.__setattr__(self, "station_id", _required_str(self.station_id, "station_id"))
         object.__setattr__(self, "station_name", _required_str(self.station_name, "station_name"))
         object.__setattr__(self, "version", _required_str(self.version, "version"))
-        if self.forecast_type != FORECAST_TYPE_HISTORICAL_ANALOG_V1:
-            raise WeatherSchemaError(
-                f"forecast_type must be {FORECAST_TYPE_HISTORICAL_ANALOG_V1!r}"
-            )
+        if self.version not in FORECAST_TYPES:
+            raise WeatherSchemaError(f"version must be one of {sorted(FORECAST_TYPES)}")
+        if self.forecast_type not in FORECAST_TYPES:
+            raise WeatherSchemaError(f"forecast_type must be one of {sorted(FORECAST_TYPES)}")
+        if self.version != self.forecast_type:
+            raise WeatherSchemaError("version must match forecast_type")
         if analog_date >= service_date:
-            raise WeatherSchemaError("analog_date must be earlier than service_date")
+            raise WeatherSchemaError(
+                "analog_date must be earlier than service_date "
+                "(for Solcast PV proxy this is the forecast issue date)"
+            )
         if self.operation_mode not in OPERATION_MODES:
             raise WeatherSchemaError(f"operation_mode must be one of {sorted(OPERATION_MODES)}")
         if self.midday_recovery_expectation not in {"high", "medium", "low"}:

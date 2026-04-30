@@ -40,7 +40,20 @@ from src.optimization.common.pv_area import (
     estimate_depot_pv_from_area,
     positive_or_none,
 )
+from src.preprocess.weather.daily_weather_schema import (
+    FORECAST_TYPE_SOLCAST_PV_PROXY_V1,
+    FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
+)
 from src.preprocess.weather.operation_policy import build_operation_profile
+from src.preprocess.weather.solcast_pv_proxy import (
+    build_solcast_pv_proxy_forecast,
+    default_forecast_issue_date,
+)
+from src.preprocess.weather.solcast_typical import (
+    build_representative_curve_payload,
+    load_solcast_daily_pv_profiles,
+)
+from src.preprocess.weather.solcast_typical.forecast import build_solcast_typical_proxy_forecast
 from src.preprocess.weather.weather_proxy_builder import (
     build_weather_proxy_forecast,
     load_weather_proxy_forecast_json,
@@ -58,6 +71,10 @@ _SOLCAST_AVG_PROFILE_ID = "solcast_avg_2025_08_60min"
 _ACTUAL_DATE_PV_PROFILE_ID = "actual_date_profile"
 _WEATHER_MODE_OPTIONS = (
     _ACTUAL_DATE_PV_PROFILE_ID,
+    "solcast_typical_sunny",
+    "solcast_typical_cloudy",
+    "solcast_typical_rainy",
+    "solcast_typical_auto",
     "sunny",
     "cloudy",
     "rainy",
@@ -81,9 +98,14 @@ _RESULT_METRIC_LABELS = {
     "unserved_trips": "未担当便数",
     "vehicle_count_used": "使用車両数",
     "solve_time_seconds": "計算時間[s]",
-    "energy_cost": "電力コスト",
+    "energy_cost": "推進費合計(EV電力+ICE燃料)",
+    "electricity_cost": "EV電力コスト",
     "electricity_cost_final": "確定電力コスト",
     "electricity_cost_provisional_leftover": "暫定電力コスト残",
+    "fuel_cost_final": "確定燃料コスト",
+    "fuel_cost_provisional": "暫定燃料コスト",
+    "fuel_cost_refueled": "実給油燃料コスト",
+    "fuel_cost_provisional_leftover": "暫定燃料コスト残",
     "vehicle_cost": "車両コスト",
     "driver_cost": "乗務員コスト",
     "penalty_unserved": "未担当ペナルティ",
@@ -97,13 +119,18 @@ _PRIMARY_COST_BREAKDOWN_KEYS = (
     "total_cost",
     "total_cost_with_assets",
     "return_leg_bonus",
-    "energy_cost",
+    "electricity_cost",
     "electricity_cost_final",
+    "fuel_cost",
+    "fuel_cost_final",
+    "fuel_cost_provisional",
+    "fuel_cost_refueled",
+    "fuel_cost_provisional_leftover",
+    "energy_cost",
     "vehicle_cost",
     "driver_cost",
     "penalty_unserved",
     "demand_charge",
-    "fuel_cost",
     "battery_degradation_cost",
     "co2_cost",
 )
@@ -118,13 +145,18 @@ _RESULT_COMPARE_KEYS = (
     "unserved_trips",
     "vehicle_count_used",
     "solve_time_seconds",
-    "energy_cost",
+    "electricity_cost",
     "vehicle_cost",
     "driver_cost",
     "penalty_unserved",
     "electricity_cost_final",
     "electricity_cost_provisional_leftover",
     "fuel_cost",
+    "fuel_cost_final",
+    "fuel_cost_provisional",
+    "fuel_cost_refueled",
+    "fuel_cost_provisional_leftover",
+    "energy_cost",
     "demand_charge",
     "battery_degradation_cost",
     "co2_cost",
@@ -1756,7 +1788,10 @@ class App:
         self.weather_daily_csv_path_var = tk.StringVar(value="")
         self.weather_proxy_station_id_var = tk.StringVar(value="44132")
         self.weather_proxy_station_name_var = tk.StringVar(value="東京")
-        self.weather_proxy_summary_var = tk.StringVar(value="Historical analog予報: disabled")
+        self.solcast_proxy_issue_date_var = tk.StringVar(value="")
+        self.solcast_typical_curve_path_var = tk.StringVar(value="")
+        self.solcast_typical_weather_class_var = tk.StringVar(value="auto")
+        self.weather_proxy_summary_var = tk.StringVar(value="Weather proxy: disabled")
         self.depot_energy_assets_json_var = tk.StringVar(value="")
         self.co2_price_source_var = tk.StringVar(value="manual")
         self.co2_reference_date_var = tk.StringVar(value="")
@@ -1996,7 +2031,7 @@ class App:
         weather_label.pack(side=tk.LEFT)
         _Tooltip(
             weather_label,
-            "PV発電形状/係数用の天気指定です。Historical analog予報による運用ポリシーとは別です。\n"
+            "PV発電形状/係数用の天気指定です。Weather proxy による運用ポリシーとは別です。\n"
             "actual_date_profile は運行日と計画日数で選ばれた実日のPVを使います。",
         )
         self.weather_mode_combo = ttk.Combobox(
@@ -2023,7 +2058,7 @@ class App:
             command=self.sync_selected_depot_pv_assets,
         ).pack(side=tk.LEFT, padx=(6, 0))
 
-        proxy_grp = ttk.LabelFrame(pv_grp, text="Historical analog予報 → 最適化ポリシー", padding=4)
+        proxy_grp = ttk.LabelFrame(pv_grp, text="予報proxy → 最適化ポリシー", padding=4)
         proxy_grp.pack(fill=tk.X, pady=(6, 0))
         proxy_enable = ttk.Checkbutton(
             proxy_grp,
@@ -2034,13 +2069,13 @@ class App:
         _Tooltip(
             proxy_enable,
             "有効時、ローカルの WeatherProxyForecast JSON をBFFへ渡します。\n"
-            "最適化中にWebアクセスは行わず、analog_date < service_date を検証します。",
+            "最適化中にWebアクセスは行わず、analog_date/forecast_issue_date < service_date を検証します。",
         )
         forecast_row = self._labeled_entry(
             proxy_grp,
             "予報JSON",
             self.weather_proxy_forecast_path_var,
-            tooltip="scripts/weather/build_weather_proxy_forecast.py または下のCSV生成ボタンで作ったJSONを指定します。",
+            tooltip="Historical analog または Solcast PV proxy で作った WeatherProxyForecast JSON を指定します。",
         )
         ttk.Button(
             forecast_row,
@@ -2077,6 +2112,60 @@ class App:
             text="CSVから予報JSON生成",
             command=self.build_weather_proxy_forecast_from_csv,
         ).pack(side=tk.LEFT)
+        solcast_row = ttk.Frame(proxy_grp)
+        solcast_row.pack(fill=tk.X, pady=1)
+        ttk.Label(solcast_row, text="Solcast issue日", width=18).pack(side=tk.LEFT)
+        ttk.Entry(solcast_row, textvariable=self.solcast_proxy_issue_date_var, width=12).pack(
+            side=tk.LEFT, padx=(2, 6)
+        )
+        ttk.Button(
+            solcast_row,
+            text="Solcast PVから予報JSON生成",
+            command=self.build_weather_proxy_forecast_from_solcast_pv,
+        ).pack(side=tk.LEFT)
+        _Tooltip(
+            solcast_row,
+            "data/derived/pv_profiles/{depot_id}_{service_date}_60min.json を読み、"
+            "PV回復見込みから sun_score/rain_risk を作ります。\n"
+            "実日PVを使うため検証用/Oracle寄りです。通常の予報シミュレーションは代表カーブを使ってください。\n"
+            "issue日が空欄なら運行日前日を使います。issue日は運行日より前である必要があります。",
+        )
+        typical_curve_row = self._labeled_entry(
+            proxy_grp,
+            "代表PVカーブJSON",
+            self.solcast_typical_curve_path_var,
+            tooltip="Solcast過去PVを sunny/cloudy/rainy に分類して平均した代表カーブJSON。",
+        )
+        ttk.Button(
+            typical_curve_row,
+            text="選択...",
+            command=self.browse_solcast_typical_curve_path,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(
+            typical_curve_row,
+            text="代表カーブ生成",
+            command=self.build_solcast_typical_curves_from_local_profiles,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        typical_row = ttk.Frame(proxy_grp)
+        typical_row.pack(fill=tk.X, pady=1)
+        ttk.Label(typical_row, text="代表天気種別", width=18).pack(side=tk.LEFT)
+        ttk.Combobox(
+            typical_row,
+            textvariable=self.solcast_typical_weather_class_var,
+            state="readonly",
+            values=("auto", "sunny", "cloudy", "rainy"),
+            width=10,
+        ).pack(side=tk.LEFT, padx=(2, 6))
+        ttk.Button(
+            typical_row,
+            text="代表PVから予報JSON生成",
+            command=self.build_weather_proxy_forecast_from_solcast_typical,
+        ).pack(side=tk.LEFT)
+        _Tooltip(
+            typical_row,
+            "代表カーブはSolcast形状だけを使い、PV容量は営業所面積から再スケールします。\n"
+            "天気種別はBEV/ICEを禁止せず、SOC policyと小さなobjective biasとして反映します。",
+        )
         ttk.Label(
             proxy_grp,
             textvariable=self.weather_proxy_summary_var,
@@ -3117,6 +3206,61 @@ class App:
             / f"{station_key}_{service_date}_historical_analog_v1.json"
         )
 
+    def _default_solcast_proxy_out_path(self, service_date: str, depot_id: str) -> Path:
+        station_id = re.sub(r"[^0-9A-Za-z_-]+", "_", self.weather_proxy_station_id_var.get().strip())
+        station_key = station_id or re.sub(r"[^0-9A-Za-z_-]+", "_", depot_id.strip()) or "station"
+        return (
+            _REPO_ROOT
+            / "data"
+            / "weather"
+            / "proxy_forecasts"
+            / f"{station_key}_{service_date}_solcast_pv_proxy_v1.json"
+        )
+
+    def _default_solcast_typical_curve_path(self, depot_id: str) -> Path:
+        safe_depot = re.sub(r"[^0-9A-Za-z_-]+", "_", depot_id.strip()) or "depot"
+        return (
+            _REPO_ROOT
+            / "data"
+            / "weather"
+            / "processed"
+            / f"{safe_depot}_solcast_typical_pv_representative_curve_v1.json"
+        )
+
+    def _default_solcast_typical_proxy_out_path(
+        self,
+        service_date: str,
+        depot_id: str,
+        weather_class: str,
+    ) -> Path:
+        station_id = re.sub(r"[^0-9A-Za-z_-]+", "_", self.weather_proxy_station_id_var.get().strip())
+        station_key = station_id or re.sub(r"[^0-9A-Za-z_-]+", "_", depot_id.strip()) or "station"
+        safe_class = re.sub(r"[^0-9A-Za-z_-]+", "_", weather_class.strip() or "auto")
+        return (
+            _REPO_ROOT
+            / "data"
+            / "weather"
+            / "proxy_forecasts"
+            / f"{station_key}_{service_date}_solcast_typical_{safe_class}_pv_proxy_v1.json"
+        )
+
+    def _selected_depot_id_for_solcast_proxy(self) -> str:
+        depots = sorted(str(value).strip() for value in self._selected_depot_ids() if str(value).strip())
+        return depots[0] if depots else ""
+
+    def _default_solcast_pv_profile_path(self, service_date: str, depot_id: str) -> Path:
+        safe_depot = re.sub(r"[^0-9A-Za-z_-]+", "_", depot_id.strip())
+        return _DERIVED_PV_PROFILE_DIR / f"{safe_depot}_{service_date}_60min.json"
+
+    def browse_solcast_typical_curve_path(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Solcast代表PVカーブJSONを選択",
+            filetypes=[("JSON", "*.json"), ("All files", "*.*")],
+            initialdir=str(_REPO_ROOT / "data" / "weather" / "processed"),
+        )
+        if path:
+            self.solcast_typical_curve_path_var.set(self._repo_relative_path(Path(path)))
+
     def _weather_proxy_quick_setup_payload(self) -> dict[str, Any]:
         return {
             "enableWeatherOperationPolicy": bool(self.enable_weather_operation_policy_var.get()),
@@ -3124,6 +3268,8 @@ class App:
             "weatherProxyDailyCsvPath": self.weather_daily_csv_path_var.get().strip(),
             "weatherProxyStationId": self.weather_proxy_station_id_var.get().strip(),
             "weatherProxyStationName": self.weather_proxy_station_name_var.get().strip(),
+            "solcastTypicalCurvePath": self.solcast_typical_curve_path_var.get().strip(),
+            "solcastTypicalWeatherClass": self.solcast_typical_weather_class_var.get().strip(),
         }
 
     def _weather_proxy_prepare_payload(self) -> dict[str, Any]:
@@ -3135,6 +3281,8 @@ class App:
             "weather_proxy_daily_csv_path": self.weather_daily_csv_path_var.get().strip() or None,
             "weather_proxy_station_id": self.weather_proxy_station_id_var.get().strip() or None,
             "weather_proxy_station_name": self.weather_proxy_station_name_var.get().strip() or None,
+            "solcast_typical_curve_path": self.solcast_typical_curve_path_var.get().strip() or None,
+            "solcast_typical_weather_class": self.solcast_typical_weather_class_var.get().strip() or None,
         }
 
     def _weather_proxy_optimization_payload(self) -> dict[str, Any]:
@@ -3161,7 +3309,7 @@ class App:
             )
         if forecast.analog_date >= forecast.service_date or not forecast.no_future_leakage:
             raise ValueError(
-                "WEATHER_PROXY_FUTURE_LEAKAGE: analog_date must be before service_date"
+                "WEATHER_PROXY_FUTURE_LEAKAGE: analog_date/forecast_issue_date must be before service_date"
             )
         return forecast
 
@@ -3187,9 +3335,21 @@ class App:
             finally:
                 if not mark_stale:
                     self._suspend_prepare_watchers = previous_suspend
+        if forecast.forecast_type == FORECAST_TYPE_SOLCAST_PV_PROXY_V1:
+            proxy_label = "Solcast実日PV予報proxy(検証用)"
+            date_label = f"issue={forecast.metadata.get('forecast_issue_date') or forecast.analog_date}"
+        elif forecast.forecast_type == FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1:
+            proxy_label = "Solcast代表PV予報proxy"
+            date_label = (
+                f"class={forecast.metadata.get('typical_weather_class')} "
+                f"issue={forecast.metadata.get('forecast_issue_date') or forecast.analog_date}"
+            )
+        else:
+            proxy_label = "Historical analog予報"
+            date_label = f"analog={forecast.analog_date}"
         summary = (
-            "Historical analog予報: "
-            f"mode={forecast.operation_mode} analog={forecast.analog_date} "
+            f"{proxy_label}: "
+            f"mode={forecast.operation_mode} {date_label} "
             f"sun={forecast.sun_score:.2f} rain={forecast.rain_risk:.2f} "
             f"SOC floor/target={profile.final_soc_floor_percent:g}/{profile.final_soc_target_percent:g}%"
         )
@@ -3203,8 +3363,9 @@ class App:
             self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=True)
             self.enable_weather_operation_policy_var.set(True)
             self.log_line(
-                "Historical analog予報を反映: "
-                f"service_date={forecast.service_date} analog_date={forecast.analog_date} "
+                "Weather proxyを反映: "
+                f"type={forecast.forecast_type} service_date={forecast.service_date} "
+                f"analog_or_issue_date={forecast.analog_date} "
                 f"mode={forecast.operation_mode}"
             )
         except Exception as exc:
@@ -3245,10 +3406,142 @@ class App:
         except Exception as exc:
             messagebox.showwarning("Weather proxy生成失敗", str(exc))
 
+    def build_weather_proxy_forecast_from_solcast_pv(self) -> None:
+        service_date = self._selected_service_date_for_weather_proxy()
+        if not service_date:
+            messagebox.showwarning("入力不足", "予報生成前に運行日を入力してください")
+            return
+        depot_id = self._selected_depot_id_for_solcast_proxy()
+        if not depot_id:
+            messagebox.showwarning("入力不足", "Solcast PV proxy 生成前に営業所を選択してください")
+            return
+        issue_date = self.solcast_proxy_issue_date_var.get().strip() or default_forecast_issue_date(
+            service_date
+        )
+        self.solcast_proxy_issue_date_var.set(issue_date)
+        station_id = self.weather_proxy_station_id_var.get().strip() or depot_id
+        station_name = self.weather_proxy_station_name_var.get().strip() or depot_id
+        profile_path = self._default_solcast_pv_profile_path(service_date, depot_id)
+        if not profile_path.exists():
+            messagebox.showwarning(
+                "Solcast PV profileなし",
+                f"PV profile JSON が見つかりません: {profile_path}",
+            )
+            return
+        try:
+            forecast = build_solcast_pv_proxy_forecast(
+                service_date=service_date,
+                station_id=station_id,
+                station_name=station_name,
+                pv_profile_json_path=profile_path,
+                forecast_issue_date=issue_date,
+            )
+            out_path = self._default_solcast_proxy_out_path(service_date, depot_id)
+            write_weather_proxy_forecast_json(out_path, forecast)
+            self.weather_proxy_forecast_path_var.set(self._repo_relative_path(out_path))
+            self.enable_weather_operation_policy_var.set(True)
+            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=True)
+            self.log_line(
+                "Solcast PV予報proxy JSONを生成: "
+                f"{self.weather_proxy_forecast_path_var.get()} "
+                f"(issue_date={forecast.analog_date}, mode={forecast.operation_mode})"
+            )
+        except Exception as exc:
+            messagebox.showwarning("Solcast PV proxy生成失敗", str(exc))
+
+    def build_solcast_typical_curves_from_local_profiles(self) -> None:
+        depot_id = self._selected_depot_id_for_solcast_proxy()
+        if not depot_id:
+            messagebox.showwarning("入力不足", "代表カーブ生成前に営業所を選択してください")
+            return
+        try:
+            profiles = load_solcast_daily_pv_profiles(
+                profile_dir=_DERIVED_PV_PROFILE_DIR,
+                glob_pattern=f"{re.sub(r'[^0-9A-Za-z_-]+', '_', depot_id)}_*_60min.json",
+                depot_id=depot_id,
+            )
+            payload = build_representative_curve_payload(
+                profiles,
+                station_id=self.weather_proxy_station_id_var.get().strip(),
+                station_name=self.weather_proxy_station_name_var.get().strip(),
+                depot_id=depot_id,
+            )
+            out_path = self._default_solcast_typical_curve_path(depot_id)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            self.solcast_typical_curve_path_var.set(self._repo_relative_path(out_path))
+            counts = {
+                key: (value or {}).get("source_profile_count")
+                for key, value in dict(payload.get("curves") or {}).items()
+            }
+            self.log_line(
+                "Solcast代表PVカーブを生成: "
+                f"{self.solcast_typical_curve_path_var.get()} counts={counts}"
+            )
+        except Exception as exc:
+            messagebox.showwarning("Solcast代表PVカーブ生成失敗", str(exc))
+
+    def build_weather_proxy_forecast_from_solcast_typical(self) -> None:
+        service_date = self._selected_service_date_for_weather_proxy()
+        if not service_date:
+            messagebox.showwarning("入力不足", "予報生成前に運行日を入力してください")
+            return
+        depot_id = self._selected_depot_id_for_solcast_proxy()
+        if not depot_id:
+            messagebox.showwarning("入力不足", "代表PV proxy 生成前に営業所を選択してください")
+            return
+        curve_path_text = self.solcast_typical_curve_path_var.get().strip()
+        if not curve_path_text:
+            default_path = self._default_solcast_typical_curve_path(depot_id)
+            if default_path.exists():
+                curve_path_text = self._repo_relative_path(default_path)
+                self.solcast_typical_curve_path_var.set(curve_path_text)
+            else:
+                messagebox.showwarning("入力不足", "代表PVカーブJSONを指定または生成してください")
+                return
+        issue_date = self.solcast_proxy_issue_date_var.get().strip() or default_forecast_issue_date(
+            service_date
+        )
+        self.solcast_proxy_issue_date_var.set(issue_date)
+        weather_class = self.solcast_typical_weather_class_var.get().strip() or "auto"
+        station_id = self.weather_proxy_station_id_var.get().strip() or depot_id
+        station_name = self.weather_proxy_station_name_var.get().strip() or depot_id
+        try:
+            forecast = build_solcast_typical_proxy_forecast(
+                service_date=service_date,
+                station_id=station_id,
+                station_name=station_name,
+                representative_curve_json_path=self._resolve_local_path(curve_path_text),
+                weather_class=weather_class,
+                forecast_issue_date=issue_date,
+            )
+            out_path = self._default_solcast_typical_proxy_out_path(
+                service_date,
+                depot_id,
+                str(forecast.metadata.get("typical_weather_class") or weather_class),
+            )
+            write_weather_proxy_forecast_json(out_path, forecast)
+            self.weather_proxy_forecast_path_var.set(self._repo_relative_path(out_path))
+            self.enable_weather_operation_policy_var.set(True)
+            self.weather_mode_var.set(
+                f"solcast_typical_{forecast.metadata.get('typical_weather_class') or weather_class}"
+            )
+            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=True)
+            self.log_line(
+                "Solcast代表PV予報proxy JSONを生成: "
+                f"{self.weather_proxy_forecast_path_var.get()} "
+                f"(class={forecast.metadata.get('typical_weather_class')}, mode={forecast.operation_mode})"
+            )
+        except Exception as exc:
+            messagebox.showwarning("Solcast代表PV proxy生成失敗", str(exc))
+
     def _ensure_weather_proxy_ready_for_optimization(self) -> bool:
         if not bool(self.enable_weather_operation_policy_var.get()):
             if hasattr(self, "weather_proxy_summary_var"):
-                self.weather_proxy_summary_var.set("Historical analog予報: disabled")
+                self.weather_proxy_summary_var.set("Weather proxy: disabled")
             return True
         try:
             forecast = self._load_weather_proxy_forecast_from_ui()
@@ -4771,14 +5064,18 @@ class App:
                 resp.get("solve_time_seconds"),
             ),
             "energy_cost": self._pick_number(
-                costs.get("total_energy_cost"),
-                costs.get("electricity_cost_final"),
                 costs.get("energy_cost"),
+                resp.get("total_energy_cost"),
+            ),
+            "electricity_cost": self._pick_number(
+                costs.get("electricity_cost"),
+                costs.get("electricity_cost_final"),
+                simulation_summary.get("total_energy_cost"),
                 resp.get("total_energy_cost"),
             ),
             "electricity_cost_final": self._pick_number(
                 costs.get("electricity_cost_final"),
-                costs.get("energy_cost"),
+                costs.get("electricity_cost"),
                 simulation_summary.get("total_energy_cost"),
             ),
             "vehicle_cost": self._pick_number(
@@ -4815,6 +5112,33 @@ class App:
                 costs.get("total_fuel_cost"),
                 costs.get("fuel_cost"),
                 resp.get("total_fuel_cost"),
+            ),
+            "fuel_cost_final": self._pick_number(
+                costs.get("fuel_cost_final"),
+                costs.get("fuel_cost"),
+                simulation_summary.get("fuel_cost_final_jpy"),
+                simulation_summary.get("fuel_cost_jpy"),
+                resp.get("total_fuel_cost"),
+            ),
+            "fuel_cost_provisional": self._pick_number(
+                costs.get("fuel_cost_provisional"),
+                costs.get("provisional_ice_drive_cost"),
+                simulation_summary.get("fuel_cost_provisional_jpy"),
+                solver_result.get("ice_provisional_drive_cost_jpy"),
+            ),
+            "fuel_cost_refueled": self._pick_number(
+                costs.get("fuel_cost_refueled"),
+                costs.get("fuel_cost_realized"),
+                costs.get("realized_ice_refuel_cost"),
+                simulation_summary.get("fuel_cost_refueled_jpy"),
+                simulation_summary.get("fuel_cost_realized_jpy"),
+                solver_result.get("ice_realized_refuel_cost_jpy"),
+            ),
+            "fuel_cost_provisional_leftover": self._pick_number(
+                costs.get("fuel_cost_provisional_leftover"),
+                costs.get("leftover_ice_provisional_cost"),
+                simulation_summary.get("fuel_cost_provisional_leftover_jpy"),
+                solver_result.get("ice_leftover_provisional_cost_jpy"),
             ),
             "demand_charge": self._pick_number(
                 costs.get("total_demand_charge"),
@@ -4883,7 +5207,7 @@ class App:
                 continue
             tags = ()
             numeric = _result_numeric(value)
-            if key in {"total_cost", "energy_cost", "vehicle_cost", "driver_cost", "penalty_unserved", "return_leg_bonus"} and numeric is not None and abs(numeric) > 1e-9:
+            if key in {"total_cost", "energy_cost", "electricity_cost", "fuel_cost", "fuel_cost_final", "fuel_cost_provisional", "fuel_cost_refueled", "fuel_cost_provisional_leftover", "vehicle_cost", "driver_cost", "penalty_unserved", "return_leg_bonus"} and numeric is not None and abs(numeric) > 1e-9:
                 tags = ("nonzero",)
             if key == "solution_validity_badge" and str(value).startswith("暫定/無効"):
                 tags = ("invalid",)
@@ -5245,12 +5569,16 @@ class App:
             self.weather_daily_csv_path_var.set(str(sim.get("weatherProxyDailyCsvPath") or ""))
             self.weather_proxy_station_id_var.set(str(sim.get("weatherProxyStationId") or "44132"))
             self.weather_proxy_station_name_var.set(str(sim.get("weatherProxyStationName") or "東京"))
+            self.solcast_typical_curve_path_var.set(str(sim.get("solcastTypicalCurvePath") or ""))
+            self.solcast_typical_weather_class_var.set(
+                str(sim.get("solcastTypicalWeatherClass") or "auto")
+            )
             if self.enable_weather_operation_policy_var.get() and self.weather_proxy_forecast_path_var.get().strip():
                 try:
                     forecast = self._load_weather_proxy_forecast_from_ui()
                     self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=False)
                 except Exception as exc:
-                    self.weather_proxy_summary_var.set(f"Historical analog予報: invalid ({exc})")
+                    self.weather_proxy_summary_var.set(f"Weather proxy: invalid ({exc})")
             self.tou_text_var.set(self._format_tou_text(sim.get("touPricing") or []))
             depot_energy_assets = sim.get("depotEnergyAssets")
             if isinstance(depot_energy_assets, list):
@@ -6699,7 +7027,7 @@ class App:
                 ),
                 "allow_partial_service": self.allow_partial_service_var.get(),
                 "unserved_penalty": self._parse_float(self.unserved_penalty_var.get(), 10000.0),
-                "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
+                "time_limit_seconds": self._effective_optimization_time_limit_seconds(),
                 "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
                 "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
                 "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),
@@ -7136,6 +7464,8 @@ class App:
 
     # ソルバー側ハードキャップ（bff 側の _MAX_TIME_LIMIT_SECONDS と同値）
     _SOLVER_HARD_CAP_SECONDS = 86400  # 1 日
+    _WEATHER_PROXY_MILP_SOFT_CAP_SECONDS = 300
+    _WEATHER_PROXY_MILP_SLOW_MODES = {"mode_milp_only"}
 
     def _effective_optimization_time_limit_seconds(self) -> int:
         # 「終了まで待つ」チェックはUI監視の継続を意味するだけで、
@@ -7143,6 +7473,21 @@ class App:
         # （以前は wait_until_finish=True のとき 86400s を渡していたため
         #   MILP が24時間ブロックする事故が発生したため修正）
         raw = self._parse_int(self.time_limit_var.get(), 300)
+        solver_mode = str(self.solver_mode_var.get() or "").strip()
+        weather_proxy_enabled = bool(self.enable_weather_operation_policy_var.get())
+        if (
+            weather_proxy_enabled
+            and solver_mode in self._WEATHER_PROXY_MILP_SLOW_MODES
+            and raw > self._WEATHER_PROXY_MILP_SOFT_CAP_SECONDS
+            and os.environ.get("MC_ALLOW_LONG_WEATHER_MILP") != "1"
+        ):
+            self.log_line(
+                "[警告] Weather proxy 有効時の mode_milp_only は post-return SOC target と "
+                f"24h horizon で長時間化しやすいため、time_limit {raw}s を "
+                f"{self._WEATHER_PROXY_MILP_SOFT_CAP_SECONDS}s に制限します。"
+                " 長時間MILPを明示実行する場合は MC_ALLOW_LONG_WEATHER_MILP=1 を設定してください。"
+            )
+            return self._WEATHER_PROXY_MILP_SOFT_CAP_SECONDS
         if raw > self._SOLVER_HARD_CAP_SECONDS:
             self.log_line(
                 f"[警告] time_limit {raw}s はハードキャップ {self._SOLVER_HARD_CAP_SECONDS}s を超えています。"
@@ -7247,6 +7592,8 @@ class App:
             (self.weather_daily_csv_path_var, "Weather proxy日別CSVを変更"),
             (self.weather_proxy_station_id_var, "Weather proxy地点IDを変更"),
             (self.weather_proxy_station_name_var, "Weather proxy地点名を変更"),
+            (self.solcast_typical_curve_path_var, "Solcast代表PVカーブを変更"),
+            (self.solcast_typical_weather_class_var, "Solcast代表天気種別を変更"),
             (self.depot_energy_assets_json_var, "営業所エネルギー資産設定を変更"),
             (self.co2_price_source_var, "CO2価格ソースを変更"),
             (self.co2_reference_date_var, "CO2参照日を変更"),
@@ -7855,7 +8202,7 @@ class App:
 ③ ソルバー設定（中パネル）
   - 燃料単価・電気代・SOC上下限などを確認・変更
   - 詳細パラメータ（CO₂・劣化費）は下へスクロール
-  - Historical analog予報を使う場合は、ローカルJSONを選択または日別気象CSVから生成し、
+  - Weather proxyを使う場合は、ローカルJSONを選択、日別気象CSV、またはSolcast PVから生成し、
     「確認/反映」でSOC floor/targetへ反映してから Quick Setup 保存
   - 「② ソルバー設定」を押してソルバー種別・時間上限・反復回数を設定
   - ソルバー設定を変えたら Prepare は stale になるため、次の手順で再作成します
@@ -7899,14 +8246,16 @@ class App:
   final_soc_target_tolerance_percent
                           目標 SOC の許容誤差（例: 0.05）。0 = 厳密な等式制約
 
-■ Historical analog weather proxy
+■ Weather proxy
   enable_weather_operation_policy
                           ローカル WeatherProxyForecast JSON を最適化へ反映するスイッチ
   weather_proxy_forecast_path
                           擬似予報JSONのパス。最適化中にWebアクセスは行わない
   反映内容                  operation_mode から終了SOC floor/target、初期SOCランダム化、
                           BEV duty bias、ICE backup bias 等を metadata として渡す
-  禁止条件                  analog_date >= service_date は未来情報リークとして拒否する
+  Solcast PV proxy         data/derived/pv_profiles の発電形状を予報proxyへ変換する。
+                          forecast_issue_date は service_date より前であること
+  禁止条件                  analog_date/forecast_issue_date >= service_date は未来情報リークとして拒否する
 
 ■ 充電器・電力
   depot_power_limit_kw    営業所の系統受電契約電力上限 [kW]（例: 500）

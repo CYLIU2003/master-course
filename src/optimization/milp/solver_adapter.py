@@ -11,6 +11,7 @@ from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.optimization.milp.model_builder import MILPModelBuilder
+from src.optimization.common.weather_strategy import weather_assignment_objective_bias
 from src.route_code_utils import extract_route_series_from_candidates
 
 from src.optimization.common.problem import (
@@ -1192,6 +1193,7 @@ class GurobiMILPAdapter:
         unserved_penalty_weight = max(problem.objective_weights.unserved, 0.0)
         objective_mode = normalize_objective_mode(problem.scenario.objective_mode)
         energy_weight = max(problem.objective_weights.energy, 0.0)
+        fuel_weight = max(problem.objective_weights.fuel, 0.0)
         demand_weight = max(problem.objective_weights.demand, 0.0)
         vehicle_weight = max(problem.objective_weights.vehicle, 0.0)
         charge_session_start_penalty = self._safe_nonnegative_float(
@@ -1287,7 +1289,7 @@ class GurobiMILPAdapter:
                 if trip is None:
                     continue
                 fuel_l = self._trip_fuel_l(problem, vehicle, trip_id)
-                objective += energy_weight * diesel_price * fuel_l * var
+                objective += fuel_weight * diesel_price * fuel_l * var
 
             for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
                 vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
@@ -1301,7 +1303,7 @@ class GurobiMILPAdapter:
                     trip_by_id[to_trip_id].origin,
                 )
                 deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
-                objective += energy_weight * diesel_price * deadhead_km * fuel_rate * var
+                objective += fuel_weight * diesel_price * deadhead_km * fuel_rate * var
 
         # O3: demand charge cost.
         if (
@@ -1357,6 +1359,21 @@ class GurobiMILPAdapter:
                         day_end_expr - day_start_expr + _DRIVER_PREP_TIME_MIN * day_start_count
                     )
                     objective += driver_overtime_surcharge_per_minute * day_overtime_min
+
+        # Weather strategy bias is an objective-only policy term. It is not an
+        # accounting fuel/electricity/asset cost and never changes eligibility.
+        weather_bias_by_vehicle_type: Dict[str, float] = {}
+        for vehicle in problem.vehicles:
+            weather_bias_by_vehicle_type[str(vehicle.vehicle_type)] = weather_assignment_objective_bias(
+                problem.metadata,
+                vehicle.vehicle_type,
+            )
+        if any(abs(value) > 1.0e-9 for value in weather_bias_by_vehicle_type.values()):
+            for (vehicle_id, _trip_id), var in y.items():
+                vehicle = vehicle_by_id.get(str(vehicle_id))
+                if vehicle is None:
+                    continue
+                objective += weather_bias_by_vehicle_type.get(str(vehicle.vehicle_type), 0.0) * var
 
         # CO₂ objective/cost: in CO2 mode, co2_price_per_kg is treated as a
         # positive scaling factor (defaulted to 1.0 upstream when omitted).

@@ -199,7 +199,16 @@ def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(t
                 "vehicle_count_used": 1,
                 "trip_count_by_type": {"BEV": 1},
             },
-            "cost_breakdown": {"total_cost": 123.0, "energy_cost": 10.0, "grid_to_bus_kwh": 1.0, "grid_to_bess_kwh": 0.0},
+            "cost_breakdown": {
+                "total_cost": 123.0,
+                "energy_cost": 10.0,
+                "fuel_cost": 4.0,
+                "fuel_cost_provisional": 7.0,
+                "fuel_cost_refueled": 2.0,
+                "fuel_cost_provisional_leftover": 2.0,
+                "grid_to_bus_kwh": 1.0,
+                "grid_to_bess_kwh": 0.0,
+            },
             "graph_artifacts": artifacts,
         },
         optimization_audit={},
@@ -229,6 +238,59 @@ def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(t
     charging_summary_json = json.loads((run_dir / "charging_summary.json").read_text(encoding="utf-8"))
     assert charging_summary_json["totals"]["grid_to_bus_kwh"] == 1.0
     assert charging_summary_json["totals"]["pv_to_bus_kwh"] == 0.5
+    kpi_summary_json = json.loads((run_dir / "kpi_summary.json").read_text(encoding="utf-8"))
+    assert kpi_summary_json["fuel_cost_jpy"] == 4.0
+    assert kpi_summary_json["fuel_cost_final_jpy"] == 4.0
+    assert kpi_summary_json["fuel_cost_provisional_jpy"] == 7.0
+    assert kpi_summary_json["fuel_cost_refueled_jpy"] == 2.0
+    assert kpi_summary_json["fuel_cost_provisional_leftover_jpy"] == 2.0
+
+
+def test_charging_summary_reports_electricity_cost_not_propulsion_aggregate() -> None:
+    problem, result, _scenario = _problem_and_result()
+    result = replace(
+        result,
+        cost_breakdown={
+            "energy_cost": 100.0,
+            "electricity_cost": 12.0,
+            "fuel_cost": 88.0,
+            "total_cost": 100.0,
+        },
+    )
+
+    payload = optimization._canonical_charging_output_payload(problem, result)
+
+    assert payload["summary"]["totals"]["electricity_cost_jpy"] == 12.0
+
+
+def test_canonical_kpi_summary_reports_fuel_provisional_and_final_costs() -> None:
+    problem, result, scenario = _problem_and_result()
+    result = replace(
+        result,
+        cost_breakdown={
+            "total_cost": 200.0,
+            "energy_cost": 150.0,
+            "electricity_cost": 50.0,
+            "fuel_cost": 100.0,
+            "fuel_cost_provisional": 160.0,
+            "fuel_cost_refueled": 40.0,
+            "fuel_cost_provisional_leftover": 60.0,
+        },
+    )
+
+    payload = optimization._canonical_kpi_summary_json(
+        problem=problem,
+        engine_result=result,
+        scenario_id="scenario-1",
+        soc_rows=[],
+    )
+
+    assert payload["electricity_cost_jpy"] == 50.0
+    assert payload["fuel_cost_jpy"] == 100.0
+    assert payload["fuel_cost_final_jpy"] == 100.0
+    assert payload["fuel_cost_provisional_jpy"] == 160.0
+    assert payload["fuel_cost_refueled_jpy"] == 40.0
+    assert payload["fuel_cost_provisional_leftover_jpy"] == 60.0
 
 
 def test_canonical_graph_exports_enable_route_band_diagrams_when_fixed_mode_is_on(tmp_path: Path) -> None:

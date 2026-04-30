@@ -179,6 +179,11 @@ def test_evaluator_keeps_ice_provisional_leftover_without_refuel() -> None:
     assert breakdown.provisional_ice_drive_cost == 800.0
     assert breakdown.realized_ice_refuel_cost == 0.0
     assert breakdown.leftover_ice_provisional_cost == 800.0
+    payload = breakdown.to_dict()
+    assert payload["fuel_cost_provisional"] == 800.0
+    assert payload["fuel_cost_refueled"] == 0.0
+    assert payload["fuel_cost_provisional_leftover"] == 800.0
+    assert payload["fuel_cost_final"] == 800.0
 
 
 def test_evaluator_fallback_keeps_provisional_energy_without_fake_demand_charge() -> None:
@@ -336,6 +341,12 @@ def test_evaluator_overwrites_ice_provisional_with_refuel_event_cost() -> None:
     assert breakdown.provisional_ice_drive_cost == 800.0
     assert breakdown.realized_ice_refuel_cost == 400.0
     assert breakdown.leftover_ice_provisional_cost == 480.0
+    payload = breakdown.to_dict()
+    assert payload["fuel_cost_provisional"] == 800.0
+    assert payload["fuel_cost_refueled"] == 400.0
+    assert payload["fuel_cost_realized"] == 400.0
+    assert payload["fuel_cost_provisional_leftover"] == 480.0
+    assert payload["fuel_cost_final"] == 880.0
 
 
 def test_evaluator_separates_accounting_total_cost_from_return_leg_bonus() -> None:

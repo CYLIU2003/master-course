@@ -19,11 +19,15 @@ from .soc_helpers import (
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
 )
+from .weather_strategy import weather_strategy_objective_term
 
 
 @dataclass(frozen=True)
 class CostBreakdown:
+    # Backward-compatible aggregate of EV electricity and ICE fuel costs.
     energy_cost: float = 0.0
+    electricity_cost: float = 0.0
+    fuel_cost: float = 0.0
     demand_cost: float = 0.0
     vehicle_cost: float = 0.0
     driver_cost: float = 0.0
@@ -67,10 +71,13 @@ class CostBreakdown:
     objective_value: float = 0.0
     evaluation_feasible: bool = True
     return_leg_bonus: float = 0.0
+    weather_strategy_objective_term_jpy_equivalent: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
         return {
             "energy_cost": self.energy_cost,
+            "electricity_cost": self.electricity_cost,
+            "fuel_cost": self.fuel_cost,
             "demand_cost": self.demand_cost,
             "vehicle_cost": self.vehicle_cost,
             "driver_cost": self.driver_cost,
@@ -94,6 +101,11 @@ class CostBreakdown:
             "contract_over_limit_kwh": self.contract_over_limit_kwh,
             "electricity_cost_final": self.electricity_cost_final,
             "electricity_cost_provisional_leftover": self.electricity_cost_provisional_leftover,
+            "fuel_cost_final": self.fuel_cost,
+            "fuel_cost_provisional": self.provisional_ice_drive_cost,
+            "fuel_cost_refueled": self.realized_ice_refuel_cost,
+            "fuel_cost_realized": self.realized_ice_refuel_cost,
+            "fuel_cost_provisional_leftover": self.leftover_ice_provisional_cost,
             "provisional_ev_drive_cost": self.provisional_ev_drive_cost,
             "realized_ev_charge_cost": self.realized_ev_charge_cost,
             "leftover_ev_provisional_cost": self.leftover_ev_provisional_cost,
@@ -114,6 +126,9 @@ class CostBreakdown:
             "objective_value": self.objective_value,
             "evaluation_feasible": float(1.0 if self.evaluation_feasible else 0.0),
             "return_leg_bonus": self.return_leg_bonus,
+            "weather_strategy_objective_term_jpy_equivalent": (
+                self.weather_strategy_objective_term_jpy_equivalent
+            ),
         }
 
 
@@ -297,7 +312,6 @@ class CostEvaluator:
         fuel_cost_final = float(fuel_cost_components.get("fuel_cost_final", 0.0))
 
         if not component_flags.get("contract_overage_penalty", True):
-            electricity_cost_final = max(electricity_cost_final - contract_overage_cost, 0.0)
             contract_overage_cost = 0.0
 
         if not component_flags.get("electricity_cost", True):
@@ -323,7 +337,9 @@ class CostEvaluator:
             realized_ice_refuel_cost = 0.0
             leftover_ice_provisional_cost = 0.0
 
-        energy_cost = electricity_cost_final + fuel_cost_final
+        electricity_cost = electricity_cost_final
+        fuel_cost = fuel_cost_final
+        energy_cost = electricity_cost + fuel_cost
         demand_cost = 0.0
         if component_flags.get("demand_charge_cost", True):
             if grid_import_by_slot:
@@ -350,6 +366,7 @@ class CostEvaluator:
 
         objective_weights = {
             "electricity_cost": float(weights.energy),
+            "fuel_cost": float(weights.fuel),
             "demand_charge_cost": float(weights.demand),
             "vehicle_fixed_cost": float(weights.vehicle),
             "unserved_penalty": float(weights.unserved),
@@ -363,10 +380,13 @@ class CostEvaluator:
         return_leg_bonus = self._compute_return_leg_bonus(
             problem, plan, weights.return_leg_bonus
         )
+        weather_strategy_term = weather_strategy_objective_term(problem, plan)
 
         accounting_total_cost = (
-            energy_cost
+            electricity_cost
+            + fuel_cost
             + demand_cost
+            + contract_overage_cost
             + vehicle_cost
             + driver_cost
             + unserved_penalty
@@ -375,11 +395,13 @@ class CostEvaluator:
             + deviation_cost
             + co2_cost
         )
-        objective_cost_term = accounting_total_cost - return_leg_bonus
+        objective_cost_term = accounting_total_cost - return_leg_bonus + weather_strategy_term
         total_cost_with_assets = accounting_total_cost + pv_asset_cost + bess_asset_cost
         if service_coverage_mode == "strict" and plan.unserved_trip_ids:
             return CostBreakdown(
                 energy_cost=energy_cost,
+                electricity_cost=electricity_cost,
+                fuel_cost=fuel_cost,
                 demand_cost=demand_cost,
                 vehicle_cost=vehicle_cost,
                 driver_cost=driver_cost,
@@ -423,6 +445,7 @@ class CostEvaluator:
                 objective_value=float("inf"),
                 evaluation_feasible=False,
                 return_leg_bonus=return_leg_bonus,
+                weather_strategy_objective_term_jpy_equivalent=weather_strategy_term,
             )
         objective_value = objective_value_for_mode(
             objective_mode=problem.scenario.objective_mode,
@@ -437,6 +460,8 @@ class CostEvaluator:
         )
         return CostBreakdown(
             energy_cost=energy_cost,
+            electricity_cost=electricity_cost,
+            fuel_cost=fuel_cost,
             demand_cost=demand_cost,
             vehicle_cost=vehicle_cost,
             driver_cost=driver_cost,
@@ -479,6 +504,7 @@ class CostEvaluator:
             total_cost=accounting_total_cost,
             objective_value=objective_value,
             return_leg_bonus=return_leg_bonus,
+            weather_strategy_objective_term_jpy_equivalent=weather_strategy_term,
         )
 
     def _evaluate_electricity_with_overwrite(
@@ -634,8 +660,6 @@ class CostEvaluator:
             if enable_contract_overage_penalty
             else 0.0
         )
-        electricity_cost_final += contract_overage_cost
-
         stationary_battery_degradation_cost = 0.0
         pv_asset_cost = 0.0
         bess_asset_cost = 0.0

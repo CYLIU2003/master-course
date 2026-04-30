@@ -200,8 +200,29 @@ class ResultSerializer:
         cost_breakdown = dict(result.cost_breakdown)
         solver_metadata = dict(result.solver_metadata)
         objective_weights = dict(solver_metadata.get("objective_weights") or {})
+        fuel_cost = float(cost_breakdown.get("fuel_cost", 0.0) or 0.0)
+        aggregate_energy_cost = float(
+            cost_breakdown.get("energy_cost", 0.0) or 0.0
+        )
+        if cost_breakdown.get("electricity_cost") is not None:
+            electricity_cost = float(cost_breakdown.get("electricity_cost") or 0.0)
+        elif cost_breakdown.get("electricity_cost_final") is not None:
+            electricity_cost = float(cost_breakdown.get("electricity_cost_final") or 0.0)
+        else:
+            electricity_cost = max(aggregate_energy_cost - fuel_cost, 0.0) if fuel_cost > 0.0 else aggregate_energy_cost
+        if aggregate_energy_cost <= 0.0:
+            aggregate_energy_cost = electricity_cost + fuel_cost
+
+        def _objective_weight(key: str, default: float = 1.0) -> float:
+            try:
+                return float(objective_weights.get(key, default))
+            except (TypeError, ValueError):
+                return float(default)
+
         raw_components = {
-            "energy_cost": float(cost_breakdown.get("energy_cost", 0.0) or 0.0),
+            "energy_cost": aggregate_energy_cost,
+            "electricity_cost": electricity_cost,
+            "fuel_cost": fuel_cost,
             "demand_cost": float(cost_breakdown.get("demand_cost", 0.0) or 0.0),
             "vehicle_cost": float(cost_breakdown.get("vehicle_cost", 0.0) or 0.0),
             "driver_cost": float(cost_breakdown.get("driver_cost", 0.0) or 0.0),
@@ -214,17 +235,22 @@ class ResultSerializer:
             "return_leg_bonus": float(cost_breakdown.get("return_leg_bonus", 0.0) or 0.0),
         }
         weighted_components = {
-            "energy_cost": raw_components["energy_cost"] * float(objective_weights.get("electricity_cost", 1.0) or 1.0),
-            "demand_cost": raw_components["demand_cost"] * float(objective_weights.get("demand_charge_cost", 1.0) or 1.0),
-            "vehicle_cost": raw_components["vehicle_cost"] * float(objective_weights.get("vehicle_fixed_cost", 1.0) or 1.0),
+            "energy_cost": (
+                raw_components["electricity_cost"] * _objective_weight("electricity_cost")
+                + raw_components["fuel_cost"] * _objective_weight("fuel_cost")
+            ),
+            "electricity_cost": raw_components["electricity_cost"] * _objective_weight("electricity_cost"),
+            "fuel_cost": raw_components["fuel_cost"] * _objective_weight("fuel_cost"),
+            "demand_cost": raw_components["demand_cost"] * _objective_weight("demand_charge_cost"),
+            "vehicle_cost": raw_components["vehicle_cost"] * _objective_weight("vehicle_fixed_cost"),
             "driver_cost": raw_components["driver_cost"],
-            "unserved_penalty": raw_components["unserved_penalty"] * float(objective_weights.get("unserved_penalty", 1.0) or 1.0),
-            "switch_cost": raw_components["switch_cost"] * float(objective_weights.get("switch_cost", 1.0) or 1.0),
-            "deviation_cost": raw_components["deviation_cost"] * float(objective_weights.get("deviation_cost", 1.0) or 1.0),
-            "degradation_cost": raw_components["degradation_cost"] * float(objective_weights.get("degradation", 1.0) or 1.0),
-            "co2_cost": raw_components["co2_cost"] * float(objective_weights.get("emission_cost", 1.0) or 1.0),
+            "unserved_penalty": raw_components["unserved_penalty"] * _objective_weight("unserved_penalty"),
+            "switch_cost": raw_components["switch_cost"] * _objective_weight("switch_cost"),
+            "deviation_cost": raw_components["deviation_cost"] * _objective_weight("deviation_cost"),
+            "degradation_cost": raw_components["degradation_cost"] * _objective_weight("degradation"),
+            "co2_cost": raw_components["co2_cost"] * _objective_weight("emission_cost"),
             "contract_overage_cost": raw_components["contract_overage_cost"],
-            "return_leg_bonus": raw_components["return_leg_bonus"] * float(objective_weights.get("return_leg_bonus", 1.0) or 1.0),
+            "return_leg_bonus": raw_components["return_leg_bonus"] * _objective_weight("return_leg_bonus"),
         }
         fleet_size = len(result.plan.vehicle_paths())
         used_vehicle_count = sum(1 for trip_ids in result.plan.vehicle_paths().values() if trip_ids)
@@ -254,6 +280,11 @@ class ResultSerializer:
             "ev_provisional_drive_cost_jpy": float(cost_breakdown.get("provisional_ev_drive_cost", 0.0) or 0.0),
             "ev_realized_charge_cost_jpy": float(cost_breakdown.get("realized_ev_charge_cost", 0.0) or 0.0),
             "ev_leftover_provisional_cost_jpy": float(cost_breakdown.get("leftover_ev_provisional_cost", 0.0) or 0.0),
+            "fuel_cost_final_jpy": float(cost_breakdown.get("fuel_cost_final", cost_breakdown.get("fuel_cost", 0.0)) or 0.0),
+            "fuel_cost_provisional_jpy": float(cost_breakdown.get("fuel_cost_provisional", cost_breakdown.get("provisional_ice_drive_cost", 0.0)) or 0.0),
+            "fuel_cost_refueled_jpy": float(cost_breakdown.get("fuel_cost_refueled", cost_breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
+            "fuel_cost_realized_jpy": float(cost_breakdown.get("fuel_cost_realized", cost_breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
+            "fuel_cost_provisional_leftover_jpy": float(cost_breakdown.get("fuel_cost_provisional_leftover", cost_breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
             "ice_provisional_drive_cost_jpy": float(cost_breakdown.get("provisional_ice_drive_cost", 0.0) or 0.0),
             "ice_realized_refuel_cost_jpy": float(cost_breakdown.get("realized_ice_refuel_cost", 0.0) or 0.0),
             "ice_leftover_provisional_cost_jpy": float(cost_breakdown.get("leftover_ice_provisional_cost", 0.0) or 0.0),
