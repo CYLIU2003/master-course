@@ -165,6 +165,7 @@ flowchart LR
 - 2026-04-28: Tk の実行パラメータ編集導線をタブ化した。編集できる `StringVar` / quick-setup / prepare / run-optimization payload は維持したまま、よく使う料金・SOC・ペナルティ、SOC/燃料詳細、料金/CO2と cost flags、PV/予報、目的/ソルバー詳細へ分け、最適化前に確認すべき順で辿れるようにした。外側キャンバスの mouse wheel binding も子ウィジェットへ張り直し、長い設定画面をスクロールしやすくした
 - 2026-04-30: EV/ICE 混成費用の ledger を厳密化した。`electricity_cost` / `electricity_cost_final` はEVの電力商品費のみ、`fuel_cost` はICE/PHEV等の液体燃料費のみ、`energy_cost` は後方互換の推進費合計（EV電力+ICE燃料）として扱う。`charging_summary.json` と `kpi_summary.json` の `electricity_cost_jpy` からICE燃料を除外し、`fuel_cost_jpy` と `propulsion_energy_cost_jpy` を別出力する。MILP 目的関数も `electricity_cost` 重みと `fuel_cost` 重みを分け、需要料金・契約超過ペナルティは電力商品費に混ぜない。燃料側も `fuel_cost_provisional_jpy`（走行から推定した暫定費）、`fuel_cost_refueled_jpy`（実給油で確定した費用）、`fuel_cost_provisional_leftover_jpy`（未給油分の暫定残）、`fuel_cost_final_jpy`（最終燃料ledger）を出力する
 - 2026-04-29: Solcast 由来の `data/derived/pv_profiles/*_YYYY-MM-DD_60min.json` を `WeatherProxyForecast` に変換する `solcast_pv_proxy_v1` を追加した。PV の capacity factor 列から発電回復見込みを `sun_score`、低PV回復リスクを `rain_risk` proxy として計算し、既存の `operation_mode` / SOC floor/target / 初期SOCランダム化ポリシーへ接続する。未来情報リーク防止のため `forecast_issue_date < service_date` を必須とし、Solcast版では後方互換の `analog_date` 欄に issue date を入れる。CLI は `scripts/weather/build_solcast_pv_proxy_forecast.py`、Tk は `PV/予報` タブの「Solcast PVから予報JSON生成」から使える
+- 2026-04-30: `solcast_pv_proxy_v1` は運行日当日の実PV形状を読むため検証用/Oracle寄りとして明示し、通常の予報シミュレーション用に `solcast_typical_pv_proxy_v1` を追加した。`scripts/weather/build_solcast_typical_curves.py` は過去 Solcast profile を日積算 capacity factor hours で rainy/cloudy/sunny に分類し、各時刻の平均24h capacity factor曲線を作る。`scripts/weather/build_solcast_typical_proxy_forecast.py` はその代表曲線から forecast JSON を作り、BFF は weather policy 有効時に代表曲線を canonical `depot_energy_assets` のPV列へ時刻対応で反映する。PV規模は従来どおり `depot_area_m2 * 0.35 * 0.20`、Solcastは形状だけに使う。EV/ICE の天気戦略 bias は `weather_strategy_objective_term_jpy_equivalent` として `objective_value` にのみ入れ、`total_cost` / `electricity_cost` / `fuel_cost` / `total_cost_with_assets` には混ぜない。充電または給油だけを行った未運用車両も `graph/vehicle_timeline.csv` と `vehicle_operation_diagrams/all_vehicles.svg` に出力する
 - 2026-04-29: Weather proxy 有効時に `mode_milp_only` へ長い `time_limit_seconds` を渡すと、post-return SOC target と 24h horizon により小規模 scope でも時間上限まで走り切るため、Tk からの実行では既定で 300 秒に制限するようにした。長時間MILPを意図して実行する場合は環境変数 `MC_ALLOW_LONG_WEATHER_MILP=1` を設定する
 - 2026-04-05: `bff/routers/simulation.py` の canonical bridge は旧 `plan.vehicle_paths` 前提で current canonical output の top-level `vehicle_paths` を落としていたため修正し、`src/simulator.py` は `feasible` / `time_limit_baseline` を valid status として扱うよう更新した。slot 境界の back-to-back trip を overlap 扱いする fallback も修正し、ALNS best run の prepared simulation は `served=974`, `vehicle_count_used=88`, `simulation_total_cost=3245610.92`, `simulation_total_co2_kg=3845.7289`, residual `time_connection=21` まで改善した
 - 2026-04-01: canonical 最適化の保存先を拡張し、従来の feed/snapshot スコープ出力に加えて `output/<YYYY-MM-DD>/run_YYYYMMDD_HHMM/` を同時生成するようにした。run 配下には `summary.json`, `solver_result.json`, `canonical_solver_result.json`, `cost_breakdown_detail.(json/csv)`, `objective_breakdown.(json/csv)`, `kpi_summary.json`, `site_power_balance.csv`, `depot_energy_flows.(json/csv)`, `graph/manifest.json`, `graph/route_band_diagrams/manifest.json` など単位付き成果物を出力し、系統受電量（`grid_to_bus_kwh`, `grid_to_bess_kwh`, `grid_import_total_kwh`）を明示確認できるようにした
@@ -604,9 +605,10 @@ ALNS・GA・ABC は共通評価器 `src/optimization/common/evaluator.py` で O1
 | 欠便ペナルティ | ✅ 実装済み | 常時有効 |
 | CO₂ 費用 | ✅ 実装済み | `co2_price_per_kg > 0` で有効 |
 | 電池劣化費 | ✅ 実装済み | `weights.degradation > 0` で有効 |
+| 天気戦略 bias | ✅ 実装済み | `weather_strategy_objective_term_jpy_equivalent`。目的関数専用で実コストledgerには入れない |
 | PV 余剰売電 | ❌ 未実装 | 将来拡張 |
 
-MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同一条件で同一費目を計算します。EV電力費とICE燃料費は目的重みも出力KPIも分離し、`energy_cost` は旧互換の推進費合計としてのみ扱います。
+MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同一条件で同一費目を計算します。EV電力費とICE燃料費は目的重みも出力KPIも分離し、`energy_cost` は旧互換の推進費合計としてのみ扱います。天気戦略 bias は BEV/ICE の割当を強制する hard constraint ではなく、`objective_value` の探索スコアだけに入る監査可能な soft term です。
 
 ### 3.4 研究フェーズ別の実装計画
 
@@ -780,7 +782,7 @@ route-band 可視化の仕様：
 - 時間軸は常に `00:00` から `23:59` の 1 日固定です。`simulation_config.start_time` 起点の slot index を実時刻へ補正してから `vehicle_timeline.csv` / `trip_assignment.csv` / SVG に反映するため、夕方以降の便が軸外へ飛ぶことはありません。
 - SVG では vehicle ごとの日内最初の便に対する `depot_out`、最後の便の後の `depot_in`、および同一 band 内の長い空き時間や charge row を挟む区間の temporary depot stay を推定描画します。depot が当該路線の stopSequence に含まれない場合は side lane にのみ出します。
 - `fixed_route_band_mode=true` の run では、そのまま路線専属ダイヤ図として使えます。通常 run でも出力しますが、`route_band_diagrams/manifest.json` の `mixed_event_route_band_detected=true` は「その route graph に出てくる車両が同日に他 band の trip も担当した」ことを意味します。
-- `vehicle_operation_diagrams/all_vehicles.svg` は、縦軸を車両、横軸を時刻とした全車両横棒図です。`service` は運用、`deadhead` は回送、`charge` は充電、`refuel` は給油を表し、運用バー内ラベルで路線系統を確認できます。
+- `vehicle_operation_diagrams/all_vehicles.svg` は、縦軸を車両、横軸を時刻とした全車両横棒図です。`service` は運用、`deadhead` は回送、`charge` は充電、`refuel` は給油を表し、運用バー内ラベルで路線系統を確認できます。運用便がなくても、充電または給油イベントだけを持つ車両は `graph/vehicle_timeline.csv` と `all_vehicles.svg` に出ます。
 
 補足：
 - タイムゾーンは `Asia/Tokyo`、時刻は ISO 8601 形式です。
@@ -808,9 +810,10 @@ route-band 可視化の仕様：
 | 充電内訳サマリ | `.../run_YYYYMMDD_HHMM/charging_summary.json` | depot 別 / 全体の grid・PV・BESS 内訳、契約超過、EV電力コスト（ICE燃料は含めない） |
 | 充電内訳時系列 | `.../run_YYYYMMDD_HHMM/depot_energy_flows.csv` | depot-slot ごとの grid/PV/BESS/curtail/SOC/contract over を一覧化 |
 | 充電契約監視 | `.../run_YYYYMMDD_HHMM/graph/depot_power_timeseries_5min.csv` | `grid_import_kw`, `contract_limit_kw`, `contract_over_limit_kwh`, `contract_limit_exceeded` を 5 分粒度で確認 |
-| weather proxy forecast | `.../run_YYYYMMDD_HHMM/weather_proxy_forecast.json` | historical analog v1 の擬似予報。`analog_date < service_date` と `no_future_leakage=true` を監査 |
+| weather proxy forecast | `.../run_YYYYMMDD_HHMM/weather_proxy_forecast.json` | historical analog v1 / Solcast proxy v1 の擬似予報。`analog_date` または `forecast_issue_date < service_date` と `no_future_leakage=true` を監査 |
 | weather operation policy | `.../run_YYYYMMDD_HHMM/weather_operation_policy.json` | `operation_mode` から solver 入力へ渡した SOC 目標・初期SOC範囲・soft bias metadata |
-| weather policy audit | `.../run_YYYYMMDD_HHMM/weather_policy_audit.json` | 初期SOCランダム化、metadata keys、PV 限界費用 0 円/kWh方針の監査 |
+| weather policy audit | `.../run_YYYYMMDD_HHMM/weather_policy_audit.json` | 初期SOCランダム化、metadata keys、PV 限界費用 0 円/kWh方針、代表PV曲線の適用有無、`weather_strategy_objective_term_jpy_equivalent` の監査 |
+| weather PV representative curve | `.../run_YYYYMMDD_HHMM/weather_pv_representative_curve.json` | `solcast_typical_pv_proxy_v1` 使用時の sunny/cloudy/rainy 代表24h capacity factor曲線、分類閾値、source dates |
 | report bundle | `output/reports/<bundle_name>/` | `comparison.json/csv`、`professor_report.md`、比較図、simulation 要約 |
 | report bundle route-band 図 | `output/reports/<bundle_name>/graph/route_band_diagrams/` | best run を旧 run 互換で複製した図 |
 | report bundle per-solver route-band 図 | `output/reports/<bundle_name>/solver_route_band_diagrams/<mode>_<run_id>/` | solver ごとの route-band 図一式 |
@@ -931,6 +934,8 @@ python catalog_update_app.py refresh gtfs-pipeline `
 - 路線一覧の基本は `data/catalog-fast/normalized/routes.jsonl`（存在する場合優先）
 - `営業所別充電器管理` の `営業所面積 [m²]` が営業所別PVの規模入力で、`simulationSettings.depotEnergyAssets` / `simulation_config.depot_energy_assets` には `depot_area_m2` と Solcast由来の容量係数・発電列が保存される
 - `depot_area_m2 <= 0` または未設定の営業所はPV無効。`pv_capacity_kw` は `depot_area_m2 * 0.35 * 0.20` から再計算される
+- `solcast_pv_proxy_v1` / `actual_date_profile` は運行日当日の実PV形状を使う検証用。通常の予報シミュレーションでは `PV/予報` タブで「代表カーブ生成」→ `solcast_typical_sunny/cloudy/rainy/auto` →「代表PVから予報JSON生成」→ weather policy 有効化の順に使う
+- `solcast_typical_pv_proxy_v1` は代表24h capacity factor曲線を時刻対応で切り出し、営業所面積由来のPV容量で再スケールする。天気クラスは BEV/ICE を禁止・強制せず、SOC policy と objective 専用の小さい strategy bias にだけ使う
 
 > [!WARNING]
 > **`Prepare` 後に `tripCount=0`** → 「選択 route × dayType × service_date」に該当 trip なし。

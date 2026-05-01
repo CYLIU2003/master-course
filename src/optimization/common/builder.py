@@ -346,21 +346,21 @@ class ProblemBuilder:
             cost_cfg.get("co2_price_per_kg"),
         )
         ice_co2_kg_per_l = float(cost_cfg.get("ice_co2_kg_per_l") or 2.64)
-        weather_strategy_metadata = {
-            "weather_proxy": (
-                {"enabled": True}
-                if bool(simulation_cfg.get("enable_weather_operation_policy"))
-                else {}
-            ),
-            "weather_operation_profile": {
-                "bev_duty_bias": simulation_cfg.get("bev_duty_bias", 1.0),
-                "ice_backup_bias": simulation_cfg.get("ice_backup_bias", 1.0),
-            },
-            "weather_strategy_bias_base_jpy_per_trip": simulation_cfg.get(
-                "weather_strategy_bias_base_jpy_per_trip",
-                300.0,
-            ),
-        }
+        weather_strategy_metadata = (
+            {
+                "weather_proxy": {"enabled": True},
+                "weather_operation_profile": {
+                    "bev_duty_bias": simulation_cfg.get("bev_duty_bias", 1.0),
+                    "ice_backup_bias": simulation_cfg.get("ice_backup_bias", 1.0),
+                },
+                "weather_strategy_bias_base_jpy_per_trip": simulation_cfg.get(
+                    "weather_strategy_bias_base_jpy_per_trip",
+                    300.0,
+                ),
+            }
+            if bool(simulation_cfg.get("enable_weather_operation_policy"))
+            else {}
+        )
         return self.build_from_dispatch(
             context,
             scenario_id=str((scenario.get("meta") or {}).get("id") or ""),

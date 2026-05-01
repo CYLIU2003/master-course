@@ -39,6 +39,28 @@ tests/       回帰テスト
 
 ## 実験記録
 
+### 2026-04-30 Solcast Typical PV Proxy Forecast v1
+
+- 問題: `solcast_pv_proxy_v1` は `data/derived/pv_profiles/*_YYYY-MM-DD_60min.json` の実日PV形状を使うため、通常の「当日朝の予報」ではなく検証用/Oracle寄りである。晴れ・曇り・雨を大まかに仮定して運用戦略を比較するには、過去Solcast profileから代表的な24h capacity factor曲線を作り、運行日の実PV形状を見ない入口が必要だった。
+- 対応:
+  - `src/preprocess/weather/solcast_typical/` を追加し、loader / classify / aggregate / forecast に分割した。分類指標は `daily_cf_hours = sum(capacity_factor_by_slot) * slot_hours` とし、`nonzero_slots < 3` または `daily_cf_hours <= 0.1` の日は代表曲線から除外する。
+  - 有効日が15日以上なら33%/67%分位点で rainy/cloudy/sunny を分類し、不足時は固定閾値（rainy `< 4.0`, sunny `>= 5.5`, それ以外 cloudy）へフォールバックする。代表曲線JSONには平均24h capacity factor、標準偏差、source dates、excluded dates、thresholdを残す。
+  - `WeatherProxyForecast` に `solcast_typical_pv_proxy_v1` を追加した。後方互換の `analog_date` は `forecast_issue_date` とし、`forecast_issue_date < service_date` と、選択代表クラスの source dates が service date より過去であることを検証する。
+  - `scripts/weather/build_solcast_typical_curves.py` と `scripts/weather/build_solcast_typical_proxy_forecast.py` を追加した。Tk の `PV/予報` タブにも「代表カーブ生成」「代表PVから予報JSON生成」、および `solcast_typical_sunny/cloudy/rainy/auto` を追加した。
+  - BFF は weather policy 有効時に代表PV曲線を canonical `depot_energy_assets` の capacity factor / PV発電列へ反映する。PV容量は従来どおり `depot_area_m2 * 0.35 * 0.20` で、Solcastは形状だけに使う。
+  - `weather_strategy_objective_term_jpy_equivalent` を追加した。`base * (1 - bias)` を BEV/PHEV/FCEV には `bev_duty_bias`、ICE系には `ice_backup_bias` で評価し、MILP objective、ALNS/GA/ABC evaluator、fallback baseline の車種順序へ soft bias として入れる。ただし `allowed_vehicle_types` は変更せず、`total_cost` / `electricity_cost` / `fuel_cost` / `total_cost_with_assets` には混ぜない。
+  - `weather_pv_representative_curve.json` を run 出力に追加し、`weather_policy_audit.json` と `run_manifest.json` に typical class、source dates、threshold、PV curve適用有無を残す。
+  - `graph/vehicle_timeline.csv` と `vehicle_operation_diagrams/all_vehicles.svg` は duties だけでなく charging/refuel slots の vehicle_id も union し、運用便がなく充電または給油だけ行った車両を出す。
+- 自分で上げて潰した追加問題:
+  - 代表カーブを単純に先頭slotへ詰めると、05:00開始 horizon で深夜PVが朝PVとして入るため、`horizon_start` と `timestep_min` に基づいて24h代表曲線を時刻対応で切り出すようにした。
+  - 天気 bias を実コストへ混ぜると EV電力費・ICE燃料費の ledger 分離を壊すため、目的関数専用の監査項目として独立出力する設計にした。
+  - weather policy 無効時に strategy metadata が残ると既存実験比較を汚すため、BFF/Builder 側で有効時だけ `bev_duty_bias` / `ice_backup_bias` / `weather_strategy_bias_base_jpy_per_trip` を渡すようにした。
+- 検証:
+  - `python -m compileall src/preprocess/weather src/optimization/common/weather_strategy.py src/optimization/common/evaluator.py src/optimization/milp/solver_adapter.py bff/routers/optimization.py bff/services/optimization_run tools/scenario_backup_tk.py scripts/weather/build_solcast_typical_curves.py scripts/weather/build_solcast_typical_proxy_forecast.py` → pass
+  - `$env:PYTHONPATH='.'; pytest -q tests/preprocess/test_solcast_typical.py tests/preprocess/test_solcast_pv_proxy.py tests/optimization/test_weather_policy_problem_integration.py tests/test_graph_export_vehicle_operation_diagrams.py` → `18 passed`
+  - `$env:PYTHONPATH='.'; pytest -q tests/test_bev_energy_accounting.py tests/test_evaluator_provisional_overwrite.py tests/test_optimization_result_serializer.py tests/test_objective_modes.py tests/test_problem_builder_cost_component_toggles.py tests/preprocess/test_weather_daily_schema.py` → `24 passed`
+  - `$env:PYTHONPATH='.'; pytest -q tests/test_canonical_graph_export_parity.py tests/test_scenario_backup_tk_dataset_options.py` → `43 passed`
+
 ### 2026-04-30 EV Electricity / ICE Fuel Cost Ledger Separation
 
 - 問題: 最新run `output/2026-04-29/run_20260429_1657` では、`cost_breakdown_detail.json` の `energy_cost=79211.7827` にICEの暫定燃料費が含まれている一方で `fuel_cost=0` だった。`objective_breakdown.json` では `provisional_ice_drive_cost=61829.5672` と `leftover_ice_provisional_cost=61829.5672` が確認できたため、ICE燃料費が電力費表示へ混入していた。

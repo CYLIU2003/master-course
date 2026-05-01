@@ -269,6 +269,42 @@ def test_vehicle_timeline_activity_includes_charge_and_refuel_only_vehicles():
     assert ids == ("BEV_002", "ICE_003")
 
 
+def test_canonical_vehicle_timeline_rows_emit_charge_refuel_only_vehicles():
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="scenario-timeline",
+            horizon_start="05:00",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(
+            ProblemVehicle(vehicle_id="BEV_002", vehicle_type="BEV", home_depot_id="DEPOT"),
+            ProblemVehicle(vehicle_id="ICE_003", vehicle_type="ICE", home_depot_id="DEPOT"),
+        ),
+        depots=(ProblemDepot(depot_id="DEPOT", name="営業所"),),
+        price_slots=tuple(EnergyPriceSlot(slot_index=idx) for idx in range(4)),
+        metadata={"service_date": "2025-09-01"},
+    )
+    plan = AssignmentPlan(
+        charging_slots=(ChargingSlot(vehicle_id="BEV_002", slot_index=1, charger_id="C1", charge_kw=50.0),),
+        refuel_slots=(RefuelSlot(vehicle_id="ICE_003", slot_index=2, refuel_liters=20.0, location_id="DEPOT"),),
+    )
+    engine_result = SimpleNamespace(plan=plan)
+
+    rows = _canonical_vehicle_timeline_rows(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id="scenario-timeline",
+        graph_context=None,
+    )
+
+    assert {(row["vehicle_id"], row["state"]) for row in rows} == {
+        ("BEV_002", "charge"),
+        ("ICE_003", "refuel"),
+    }
+
+
 def test_persist_rich_outputs_writes_weather_artifacts_and_manifest(tmp_path: Path):
     forecast = _forecast()
     profile = build_operation_profile(forecast)

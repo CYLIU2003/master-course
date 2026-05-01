@@ -45,6 +45,39 @@ from bff.routers.graph import (
     _build_trips_payload,
 )
 from bff.services.experiment_reports import log_optimization_experiment
+from bff.services.optimization_run.canonical_graph import (
+    canonical_datetime_from_min as _canonical_datetime_from_min,
+    canonical_deadhead_distance_km as _canonical_deadhead_distance_km,
+    canonical_estimated_deadhead_energy_kwh as _canonical_estimated_deadhead_energy_kwh,
+    canonical_horizon_start_min as _canonical_horizon_start_min,
+    canonical_output_base_date as _canonical_output_base_date,
+    canonical_slot_datetime as _canonical_slot_datetime,
+    canonical_vehicle_initial_soc_kwh as _canonical_vehicle_initial_soc_kwh,
+)
+from bff.services.optimization_run.cost_breakdown import (
+    canonical_cost_breakdown_json as _canonical_cost_breakdown_json,
+    cost_breakdown as _cost_breakdown,
+)
+from bff.services.optimization_run.execute import (
+    normalize_solver_mode as _normalize_solver_mode,
+    parse_optimization_mode as _parse_optimization_mode,
+)
+from bff.services.optimization_run.rich_outputs import (
+    persist_json_outputs as _persist_json_outputs,
+    run_stamp as _run_stamp,
+    service_date_for_output as _service_date_for_output,
+    write_csv_rows as _write_csv_rows,
+)
+from bff.services.optimization_run.weather import (
+    configured_service_date as _configured_service_date,
+    load_weather_proxy_for_bff as _load_weather_proxy_for_bff,
+    preflight_weather_proxy_request as _preflight_weather_proxy_request,
+    prepare_weather_policy_for_scenario as _prepare_weather_policy_for_scenario,
+    resolve_weather_proxy_path as _resolve_weather_proxy_path,
+    weather_policy_payload_from_problem_metadata as _weather_policy_payload_from_problem_metadata,
+    weather_policy_requested as _weather_policy_requested,
+    weather_proxy_http_error as _weather_proxy_http_error,
+)
 from bff.services.run_preparation import (
     get_or_build_run_preparation,
     load_prepared_input,
@@ -56,21 +89,11 @@ from src.dispatch.models import hhmm_to_min
 from src.optimization import (
     OptimizationConfig,
     OptimizationEngine,
-    OptimizationMode,
     ProblemBuilder,
     ResultSerializer,
 )
 from src.optimization.rolling.reoptimizer import RollingReoptimizer
-from src.preprocess.weather.daily_weather_schema import (
-    WeatherProxyForecast,
-    WeatherSchemaError,
-)
-from src.preprocess.weather.operation_policy import (
-    WeatherOperationProfile,
-    apply_weather_policy_to_problem,
-    build_operation_profile,
-)
-from src.preprocess.weather.weather_proxy_builder import load_weather_proxy_forecast_json
+from src.preprocess.weather.operation_policy import apply_weather_policy_to_problem
 from src.run_output_layout import allocate_run_dir
 from src.pipeline.solve import solve_problem_data
 
@@ -512,257 +535,6 @@ def _scoped_output_dir(
     return str(allocate_run_dir(root))
 
 
-def _persist_json_outputs(output_dir: str, payloads: Dict[str, Dict[str, Any]]) -> None:
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-    for name, payload in payloads.items():
-        (output_path / name).write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-
-def _run_stamp() -> str:
-    return datetime.now().strftime("run_%Y%m%d_%H%M")
-
-
-def _service_date_for_output(scenario: Dict[str, Any]) -> str:
-    sim = dict(scenario.get("simulation_config") or {})
-    primary = str(sim.get("service_date") or "").strip()
-    if primary:
-        return primary[:10]
-    dates = [str(v).strip() for v in list(sim.get("service_dates") or []) if str(v).strip()]
-    if dates:
-        return dates[0][:10]
-    return datetime.now().strftime("%Y-%m-%d")
-
-
-def _configured_service_date(scenario: Dict[str, Any]) -> Optional[str]:
-    sim = dict(scenario.get("simulation_config") or {})
-    primary = str(sim.get("service_date") or "").strip()
-    if primary:
-        return primary[:10]
-    dates = [str(v).strip() for v in list(sim.get("service_dates") or []) if str(v).strip()]
-    if dates:
-        return dates[0][:10]
-    prepared = dict(scenario.get("prepared_scope_summary") or {})
-    prepared_date = str(prepared.get("service_date") or "").strip()
-    return prepared_date[:10] if prepared_date else None
-
-
-def _weather_proxy_http_error(
-    status_code: int,
-    code: str,
-    message: str,
-    **extra: Any,
-) -> HTTPException:
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": code, "message": message, **extra},
-    )
-
-
-def _resolve_weather_proxy_path(raw_path: str) -> Path:
-    text = str(raw_path or "").strip()
-    if not text:
-        raise FileNotFoundError("weather proxy forecast path is empty")
-    candidate = Path(text)
-    if not candidate.is_absolute():
-        candidate = Path.cwd() / candidate
-    return candidate
-
-
-def _load_weather_proxy_for_bff(raw_path: str) -> WeatherProxyForecast:
-    forecast_path = _resolve_weather_proxy_path(raw_path)
-    if not forecast_path.exists():
-        raise FileNotFoundError(str(forecast_path))
-    try:
-        return load_weather_proxy_forecast_json(forecast_path)
-    except WeatherSchemaError:
-        raise
-    except Exception as exc:
-        raise WeatherSchemaError(str(exc)) from exc
-
-
-def _preflight_weather_proxy_request(
-    *,
-    scenario: Dict[str, Any],
-    enable_weather_operation_policy: Optional[bool] = None,
-    weather_proxy_forecast_path: Optional[str] = None,
-) -> None:
-    enabled, effective_path = _weather_policy_requested(
-        scenario,
-        enable_weather_operation_policy,
-        weather_proxy_forecast_path,
-    )
-    if not enabled:
-        return
-    if enabled and not effective_path:
-        raise _weather_proxy_http_error(
-            400,
-            "WEATHER_PROXY_NOT_FOUND",
-            "enableWeatherOperationPolicy is true but weatherProxyForecastPath is not set.",
-        )
-    if not effective_path:
-        return
-    try:
-        forecast = _load_weather_proxy_for_bff(effective_path)
-    except FileNotFoundError as exc:
-        raise _weather_proxy_http_error(
-            400,
-            "WEATHER_PROXY_NOT_FOUND",
-            f"Weather proxy forecast JSON was not found: {exc}",
-        ) from exc
-    except WeatherSchemaError as exc:
-        raise _weather_proxy_http_error(
-            400,
-            "WEATHER_PROXY_SCHEMA_INVALID",
-            f"Weather proxy forecast JSON is invalid: {exc}",
-        ) from exc
-    configured_date = _configured_service_date(scenario)
-    if configured_date and configured_date != forecast.service_date:
-        raise _weather_proxy_http_error(
-            409,
-            "WEATHER_PROXY_SERVICE_DATE_MISMATCH",
-            "Weather proxy service_date does not match scenario service_date.",
-            scenario_service_date=configured_date,
-            forecast_service_date=forecast.service_date,
-        )
-    if forecast.analog_date >= forecast.service_date or not forecast.no_future_leakage:
-        raise _weather_proxy_http_error(
-            409,
-            "WEATHER_PROXY_FUTURE_LEAKAGE",
-            "Weather proxy analog_date/forecast_issue_date must be earlier than service_date.",
-            service_date=forecast.service_date,
-            analog_date=forecast.analog_date,
-        )
-
-
-def _weather_policy_requested(
-    scenario: Dict[str, Any],
-    enable_weather_operation_policy: Optional[bool],
-    weather_proxy_forecast_path: Optional[str],
-) -> tuple[bool, Optional[str]]:
-    sim_cfg = dict(scenario.get("simulation_config") or {})
-    enabled_raw = (
-        enable_weather_operation_policy
-        if enable_weather_operation_policy is not None
-        else sim_cfg.get("enable_weather_operation_policy", sim_cfg.get("enableWeatherOperationPolicy"))
-    )
-    path_raw = (
-        weather_proxy_forecast_path
-        or sim_cfg.get("weather_proxy_forecast_path")
-        or sim_cfg.get("weatherProxyForecastPath")
-    )
-    return bool(enabled_raw), (str(path_raw).strip() if path_raw else None)
-
-
-def _prepare_weather_policy_for_scenario(
-    scenario: Dict[str, Any],
-    *,
-    enable_weather_operation_policy: Optional[bool],
-    weather_proxy_forecast_path: Optional[str],
-) -> tuple[Dict[str, Any], Optional[WeatherProxyForecast], Optional[WeatherOperationProfile]]:
-    enabled, path_raw = _weather_policy_requested(
-        scenario,
-        enable_weather_operation_policy,
-        weather_proxy_forecast_path,
-    )
-    if not enabled:
-        return scenario, None, None
-    if not path_raw:
-        raise ValueError(
-            "WEATHER_PROXY_NOT_FOUND: enableWeatherOperationPolicy is true but forecast path is not set"
-        )
-    try:
-        forecast = _load_weather_proxy_for_bff(path_raw)
-    except FileNotFoundError as exc:
-        raise ValueError(f"WEATHER_PROXY_NOT_FOUND: {exc}") from exc
-    except WeatherSchemaError as exc:
-        raise ValueError(f"WEATHER_PROXY_SCHEMA_INVALID: {exc}") from exc
-    configured_date = _configured_service_date(scenario)
-    if configured_date and configured_date != forecast.service_date:
-        raise ValueError(
-            "WEATHER_PROXY_SERVICE_DATE_MISMATCH: "
-            f"scenario={configured_date} forecast={forecast.service_date}"
-        )
-    if forecast.analog_date >= forecast.service_date or not forecast.no_future_leakage:
-        raise ValueError(
-            "WEATHER_PROXY_FUTURE_LEAKAGE: analog_date/forecast_issue_date must be before service_date"
-        )
-    profile = build_operation_profile(forecast)
-    updated = dict(scenario)
-    sim_cfg = dict(updated.get("simulation_config") or {})
-    sim_cfg.update(
-        {
-            "enable_weather_operation_policy": True,
-            "weather_proxy_forecast_path": path_raw,
-            "final_soc_floor_percent": float(profile.final_soc_floor_percent),
-            "final_soc_target_percent": float(profile.final_soc_target_percent),
-            "weather_operation_mode": profile.operation_mode,
-            "bev_duty_bias": float(profile.bev_duty_bias),
-            "ice_backup_bias": float(profile.ice_backup_bias),
-            "midday_charge_priority": float(profile.midday_charge_priority),
-            "grid_risk_penalty_multiplier": float(profile.grid_risk_penalty_multiplier),
-            "weather_strategy_bias_base_jpy_per_trip": 300.0,
-        }
-    )
-    updated["simulation_config"] = sim_cfg
-    return updated, forecast, profile
-
-
-def _weather_policy_payload_from_problem_metadata(
-    metadata: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    forecast = dict(metadata.get("weather_proxy") or {})
-    if not forecast:
-        return None
-    profile = dict(metadata.get("weather_operation_profile") or {})
-    initial_soc_policy = dict(metadata.get("weather_initial_soc_policy") or {})
-    pv_curve = dict(metadata.get("weather_pv_representative_curve") or {})
-    audit = {
-        "enabled": True,
-        "forecast_type": forecast.get("forecast_type"),
-        "service_date": forecast.get("service_date"),
-        "analog_date": forecast.get("analog_date"),
-        "no_future_leakage": bool(forecast.get("no_future_leakage")),
-        "operation_mode": forecast.get("operation_mode"),
-        "initial_soc_randomized": bool(initial_soc_policy.get("initial_soc_randomized")),
-        "vehicle_initial_soc_ratio": dict(
-            initial_soc_policy.get("vehicle_initial_soc_ratio") or {}
-        ),
-        "optimizer_metadata_keys": [
-            key
-            for key in (
-                "weather_proxy",
-                "weather_operation_profile",
-                "final_soc_floor_percent",
-                "final_soc_target_percent",
-            )
-            if key in metadata
-        ],
-        "pv_marginal_charge_cost_policy": metadata.get("pv_marginal_charge_cost_policy"),
-        "weather_strategy_bias_base_jpy_per_trip": metadata.get(
-            "weather_strategy_bias_base_jpy_per_trip"
-        ),
-        "weather_pv_forecast_applied": bool(metadata.get("weather_pv_forecast_applied")),
-        "weather_pv_forecast_skip_reason": metadata.get("weather_pv_forecast_skip_reason"),
-        "typical_weather_class": pv_curve.get("typical_weather_class"),
-        "typical_pv_source_dates": list(pv_curve.get("source_dates") or ()),
-        "typical_pv_thresholds": dict(
-            (pv_curve.get("classification") or {}).get("thresholds") or {}
-        ),
-    }
-    return {
-        "enabled": True,
-        "forecast": forecast,
-        "operation_profile": profile,
-        "initial_soc_policy": initial_soc_policy,
-        "representative_curve": pv_curve,
-        "audit": audit,
-    }
-
-
 def _dated_scenario_run_dir(
     *,
     scenario: Dict[str, Any],
@@ -773,15 +545,6 @@ def _dated_scenario_run_dir(
 ) -> Path:
     root = output_paths.outputs_root()
     return allocate_run_dir(root)
-
-
-def _write_csv_rows(path: Path, rows: List[Dict[str, Any]], fieldnames: List[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({k: row.get(k, "") for k in fieldnames})
 
 
 def _normalize_depot_slot_mapping(raw: Any) -> Dict[str, Dict[int, float]]:
@@ -2163,67 +1926,6 @@ def _canonical_vehicle_timeline_rows(
     return rows
 
 
-def _canonical_output_base_date(problem, graph_context: Optional[Dict[str, Any]]) -> date:
-    service_date = str((problem.metadata or {}).get("service_date") or "").strip()
-    if service_date:
-        try:
-            return datetime.fromisoformat(service_date[:10]).date()
-        except ValueError:
-            pass
-    return datetime.now().date()
-
-
-def _canonical_datetime_from_min(base_date, minute_from_midnight: int) -> datetime:
-    return datetime.combine(base_date, datetime.min.time()) + timedelta(minutes=int(minute_from_midnight))
-
-
-def _canonical_horizon_start_min(problem) -> int:
-    try:
-        hh_text, mm_text = str(getattr(problem.scenario, "horizon_start", None) or "00:00").split(":", 1)
-        return int(hh_text) * 60 + int(mm_text)
-    except ValueError:
-        return 0
-
-
-def _canonical_slot_datetime(problem, base_date: date, slot_index: int) -> datetime:
-    timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
-    absolute_min = _canonical_horizon_start_min(problem) + int(slot_index) * timestep_min
-    return _canonical_datetime_from_min(base_date, absolute_min)
-
-
-def _canonical_deadhead_distance_km(problem, deadhead_min: int) -> float:
-    try:
-        speed_kmh = float((problem.metadata or {}).get("deadhead_speed_kmh") or 18.0)
-    except (TypeError, ValueError):
-        speed_kmh = 18.0
-    return max(float(deadhead_min or 0), 0.0) * max(speed_kmh, 0.0) / 60.0
-
-
-def _canonical_estimated_deadhead_energy_kwh(
-    problem,
-    *,
-    deadhead_min: int,
-    trip_energy_kwh: float,
-    trip_distance_km: float,
-) -> float:
-    if deadhead_min <= 0:
-        return 0.0
-    safe_distance = max(float(trip_distance_km or 0.0), 1.0e-6)
-    energy_per_km = max(float(trip_energy_kwh or 0.0), 0.0) / safe_distance
-    return _canonical_deadhead_distance_km(problem, deadhead_min) * energy_per_km
-
-
-def _canonical_vehicle_initial_soc_kwh(vehicle: Any) -> float:
-    capacity = max(float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0), 0.0)
-    value = getattr(vehicle, "initial_soc", None)
-    if value is None:
-        return capacity
-    parsed = float(value)
-    if parsed <= 1.0 and capacity > 0.0:
-        return parsed * capacity
-    return parsed
-
-
 def _canonical_charge_segments(
     problem,
     charging_slots: List[Any],
@@ -2582,50 +2284,6 @@ def _canonical_depot_power_rows_5min(
             )
     rows.sort(key=lambda row: (str(row.get("depot_id", "")), str(row.get("timestamp", ""))))
     return rows
-
-
-def _canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -> Dict[str, Any]:
-    breakdown = dict(engine_result.cost_breakdown or {})
-    return {
-        "scenario_id": scenario_id,
-        "currency": "JPY",
-        "total_cost": float(
-            breakdown.get("total_cost")
-            if breakdown.get("total_cost") is not None
-            else engine_result.objective_value
-            or 0.0
-        ),
-        "components": {
-            "electricity_energy_cost": float(
-                breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", 0.0))
-                or 0.0
-            ),
-            "propulsion_energy_cost": float(breakdown.get("energy_cost", 0.0) or 0.0),
-            "fuel_cost_final": float(breakdown.get("fuel_cost_final", breakdown.get("fuel_cost", 0.0)) or 0.0),
-            "fuel_cost_provisional": float(breakdown.get("fuel_cost_provisional", breakdown.get("provisional_ice_drive_cost", 0.0)) or 0.0),
-            "fuel_cost_refueled": float(breakdown.get("fuel_cost_refueled", breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
-            "fuel_cost_provisional_leftover": float(breakdown.get("fuel_cost_provisional_leftover", breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
-            "demand_charge_cost": float(breakdown.get("demand_cost", 0.0) or 0.0),
-            "diesel_cost": float(breakdown.get("fuel_cost", 0.0) or 0.0),
-            "vehicle_fixed_cost": float(breakdown.get("vehicle_cost", 0.0) or 0.0),
-            "driver_cost": float(breakdown.get("driver_cost", 0.0) or 0.0),
-            "co2_cost": float(breakdown.get("co2_cost", 0.0) or 0.0),
-            "battery_degradation_cost": float(breakdown.get("degradation_cost", 0.0) or 0.0),
-            "charger_operation_cost": 0.0,
-            "pv_capex_daily_equivalent": float(breakdown.get("pv_asset_cost", 0.0) or 0.0),
-            "ess_cost": float(breakdown.get("bess_asset_cost", 0.0) or 0.0),
-            "unserved_trip_penalty": float(breakdown.get("unserved_penalty", 0.0) or 0.0),
-            "return_leg_bonus": float(breakdown.get("return_leg_bonus", 0.0) or 0.0),
-            "weather_strategy_objective_term_jpy_equivalent": float(
-                breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
-            ),
-        },
-        "meta": {
-            "objective_mode": str((engine_result.solver_metadata or {}).get("objective_mode") or problem.scenario.objective_mode or "total_cost"),
-            "solver_mode": str(getattr(getattr(engine_result, "mode", None), "value", "") or ""),
-            "includes_pv": bool(problem.depot_energy_assets),
-        },
-    }
 
 
 def _canonical_vehicle_timelines_payload(timeline_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3033,166 +2691,6 @@ def _persist_canonical_graph_exports(
         "kpi_summary_path": "graph/kpi_summary.json",
         "refuel_events_path": "graph/refuel_events.csv",
         "planning_days": planning_days,
-    }
-
-
-def _cost_breakdown(
-    result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None
-) -> Dict[str, float]:
-    obj_breakdown = dict(result_payload.get("obj_breakdown") or {})
-    sim_values = dict(sim_payload or {})
-
-    def _first_float(*values: Any, default: float = 0.0) -> float:
-        for value in values:
-            if value is None or value == "":
-                continue
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                continue
-        return float(default)
-
-    explicit_fuel_cost = (
-        obj_breakdown.get("fuel_cost")
-        if obj_breakdown.get("fuel_cost") is not None
-        else obj_breakdown.get("total_fuel_cost")
-    )
-    fuel_cost_provisional = _first_float(
-        sim_values.get("fuel_cost_provisional_jpy"),
-        obj_breakdown.get("fuel_cost_provisional"),
-        obj_breakdown.get("provisional_ice_drive_cost"),
-    )
-    fuel_cost_refueled = _first_float(
-        sim_values.get("fuel_cost_refueled_jpy"),
-        sim_values.get("fuel_cost_realized_jpy"),
-        obj_breakdown.get("fuel_cost_refueled"),
-        obj_breakdown.get("fuel_cost_realized"),
-        obj_breakdown.get("realized_ice_refuel_cost"),
-    )
-    fuel_cost_leftover = _first_float(
-        sim_values.get("fuel_cost_provisional_leftover_jpy"),
-        obj_breakdown.get("fuel_cost_provisional_leftover"),
-        obj_breakdown.get("leftover_ice_provisional_cost"),
-    )
-    fuel_cost = _first_float(
-        sim_values.get("total_fuel_cost"),
-        sim_values.get("fuel_cost_final_jpy"),
-        explicit_fuel_cost,
-        obj_breakdown.get("fuel_cost_final"),
-        fuel_cost_refueled + fuel_cost_leftover,
-    )
-    total_cost_value = (
-        sim_values.get("total_operating_cost")
-        if sim_values.get("total_operating_cost") is not None
-        else obj_breakdown.get("total_cost")
-    )
-    provisional_energy = float(
-        sim_values.get("electricity_cost_provisional_jpy", 0.0)
-        or 0.0
-    )
-    charged_energy = float(
-        sim_values.get("electricity_cost_charged_jpy", 0.0)
-        or 0.0
-    )
-    aggregate_energy_source = float(obj_breakdown.get("energy_cost", 0.0) or 0.0)
-    if sim_values.get("total_energy_cost") is not None:
-        final_energy_cost = float(sim_values.get("total_energy_cost") or 0.0)
-    elif obj_breakdown.get("electricity_cost") is not None:
-        final_energy_cost = float(obj_breakdown.get("electricity_cost") or 0.0)
-    elif obj_breakdown.get("electricity_cost_final") is not None:
-        final_energy_cost = float(obj_breakdown.get("electricity_cost_final") or 0.0)
-    elif explicit_fuel_cost is not None:
-        final_energy_cost = max(aggregate_energy_source - fuel_cost, 0.0)
-    else:
-        final_energy_cost = float(aggregate_energy_source or charged_energy or 0.0)
-    provisional_leftover = float(
-        (sim_payload or {}).get("electricity_cost_provisional_leftover_jpy", 0.0)
-        or obj_breakdown.get("electricity_cost_provisional_leftover")
-        or max(provisional_energy - final_energy_cost, 0.0)
-    )
-    aggregate_energy_cost = final_energy_cost + fuel_cost
-    return {
-        "energy_cost": aggregate_energy_cost,
-        "electricity_cost": final_energy_cost,
-        "electricity_cost_final": final_energy_cost,
-        "electricity_cost_provisional": provisional_energy,
-        "electricity_cost_charged": charged_energy,
-        "electricity_cost_provisional_leftover": provisional_leftover,
-        "demand_charge": float(
-            (sim_payload or {}).get("total_demand_charge", obj_breakdown.get("demand_charge_cost", 0.0))
-            or obj_breakdown.get("demand_cost", 0.0)
-            or 0.0
-        ),
-        "total_demand_charge": float(
-            (sim_payload or {}).get("total_demand_charge", obj_breakdown.get("demand_charge_cost", 0.0))
-            or obj_breakdown.get("demand_cost", 0.0)
-            or 0.0
-        ),
-        "vehicle_cost": float(
-            (sim_payload or {}).get("total_vehicle_fixed_cost", obj_breakdown.get("vehicle_cost", 0.0))
-            or 0.0
-        ),
-        "driver_cost": float(
-            (sim_payload or {}).get("total_driver_cost", obj_breakdown.get("driver_cost", 0.0))
-            or 0.0
-        ),
-        "deadhead_cost": float(obj_breakdown.get("deadhead_cost", 0.0) or 0.0),
-        "fuel_cost": fuel_cost,
-        "fuel_cost_final": fuel_cost,
-        "fuel_cost_provisional": fuel_cost_provisional,
-        "fuel_cost_refueled": fuel_cost_refueled,
-        "fuel_cost_realized": fuel_cost_refueled,
-        "fuel_cost_provisional_leftover": fuel_cost_leftover,
-        "total_fuel_cost": fuel_cost,
-        "battery_degradation_cost": float(
-            (sim_payload or {}).get("total_degradation_cost", obj_breakdown.get("battery_degradation_cost", 0.0))
-            or obj_breakdown.get("degradation_cost", 0.0)
-            or 0.0
-        ),
-        "degradation_cost": float(
-            (sim_payload or {}).get("total_degradation_cost", obj_breakdown.get("battery_degradation_cost", 0.0))
-            or obj_breakdown.get("degradation_cost", 0.0)
-            or 0.0
-        ),
-        "total_degradation_cost": float(
-            (sim_payload or {}).get("total_degradation_cost", obj_breakdown.get("battery_degradation_cost", 0.0))
-            or obj_breakdown.get("degradation_cost", 0.0)
-            or 0.0
-        ),
-        "grid_purchase_cost": float(obj_breakdown.get("grid_purchase_cost", 0.0) or 0.0),
-        "bess_discharge_cost": float(obj_breakdown.get("bess_discharge_cost", 0.0) or 0.0),
-        "grid_import_kwh": float(obj_breakdown.get("grid_import_kwh", 0.0) or 0.0),
-        "peak_grid_kw": float(obj_breakdown.get("peak_grid_kw", 0.0) or 0.0),
-        "grid_to_bus_kwh": float(obj_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0),
-        "pv_to_bus_kwh": float(obj_breakdown.get("pv_to_bus_kwh", 0.0) or 0.0),
-        "bess_to_bus_kwh": float(obj_breakdown.get("bess_to_bus_kwh", 0.0) or 0.0),
-        "pv_to_bess_kwh": float(obj_breakdown.get("pv_to_bess_kwh", 0.0) or 0.0),
-        "grid_to_bess_kwh": float(obj_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0),
-        "pv_curtail_kwh": float(obj_breakdown.get("pv_curtailed_kwh", 0.0) or obj_breakdown.get("pv_curtail_kwh", 0.0) or 0.0),
-        "contract_over_limit_kwh": float(obj_breakdown.get("contract_over_limit_kwh", 0.0) or 0.0),
-        "contract_overage_cost": float(obj_breakdown.get("contract_overage_cost", 0.0) or 0.0),
-        "stationary_battery_degradation_cost": float(
-            obj_breakdown.get("stationary_battery_degradation_cost", 0.0) or 0.0
-        ),
-        "pv_asset_cost": float(obj_breakdown.get("pv_asset_cost", 0.0) or 0.0),
-        "bess_asset_cost": float(obj_breakdown.get("bess_asset_cost", 0.0) or 0.0),
-        "total_cost_with_assets": float(obj_breakdown.get("total_cost_with_assets", 0.0) or 0.0),
-        "co2_cost": float(obj_breakdown.get("emission_cost", 0.0) or obj_breakdown.get("co2_cost", 0.0) or 0.0),
-        "penalty_unserved": float(obj_breakdown.get("unserved_penalty", 0.0) or 0.0),
-        "return_leg_bonus": float(obj_breakdown.get("return_leg_bonus", 0.0) or 0.0),
-        "weather_strategy_objective_term_jpy_equivalent": float(
-            obj_breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
-        ),
-        "total_co2_kg": float(
-            (sim_payload or {}).get("total_co2_kg", obj_breakdown.get("total_co2_kg", 0.0))
-            or 0.0
-        ),
-        "total_cost": float(
-            total_cost_value
-            if total_cost_value is not None
-            else result_payload.get("objective_value", 0.0)
-            or 0.0
-        ),
     }
 
 
@@ -4004,80 +3502,6 @@ def _run_optimization(
                 mode=mode,
             ),
         )
-
-
-def _parse_optimization_mode(mode: str) -> OptimizationMode:
-    normalized = (mode or "").strip().lower()
-    if normalized in {"milp", "mode_milp_only", "exact"}:
-        return OptimizationMode.MILP
-    if normalized in {"alns", "mode_alns_only", "heuristic"}:
-        return OptimizationMode.ALNS
-    if normalized in {"ga", "mode_ga_only"}:
-        return OptimizationMode.GA
-    if normalized in {"abc", "mode_abc_only"}:
-        return OptimizationMode.ABC
-    return OptimizationMode.HYBRID
-
-
-def _normalize_solver_mode(mode: str) -> str:
-    """Normalize and validate solver mode.
-    
-    Canonical modes use src/optimization/ engine stack.
-    Legacy modes are DEPRECATED and will raise errors unless explicitly allowed.
-    """
-    normalized = (mode or "").strip().lower()
-    alias_map = {
-        "milp": "mode_milp_only",
-        "exact": "mode_milp_only",
-        "alns": "mode_alns_only",
-        "heuristic": "mode_alns_only",
-        "ga": "mode_ga_only",
-        "genetic": "mode_ga_only",
-        "abc": "mode_abc_only",
-        "colony": "mode_abc_only",
-        "hybrid": "mode_hybrid",
-    }
-    
-    resolved_mode = alias_map.get(normalized, normalized or "mode_milp_only")
-    
-    # Hard-gate legacy modes
-    _LEGACY_MODES = {
-        "thesis_mode",
-        "mode_a_journey_charge",
-        "mode_a",
-        "mode_b_optimistic",
-        "mode_b",
-        "mode_alns_milp",  # Deprecated: use mode_hybrid instead
-    }
-    
-    if resolved_mode.lower() in _LEGACY_MODES:
-        legacy_to_canonical = {
-            "mode_alns_milp": "mode_hybrid",
-            "thesis_mode": None,
-            "mode_a_journey_charge": None,
-            "mode_a": None,
-            "mode_b_optimistic": None,
-            "mode_b": None,
-        }
-        canonical_replacement = legacy_to_canonical.get(resolved_mode.lower())
-        if canonical_replacement:
-            import warnings
-            warnings.warn(
-                f"Solver mode '{mode}' is deprecated. "
-                f"Auto-routing to canonical mode '{canonical_replacement}'.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            return canonical_replacement
-        else:
-            raise ValueError(
-                f"Solver mode '{mode}' (normalized: '{resolved_mode}') is no longer supported. "
-                f"Legacy thesis modes have been deprecated. "
-                f"Supported modes: mode_milp_only, mode_alns_only, mode_ga_only, mode_abc_only, mode_hybrid. "
-                f"These use the canonical optimization engine (src/optimization/)."
-            )
-    
-    return resolved_mode
 
 
 def _apply_reoptimization_inputs(

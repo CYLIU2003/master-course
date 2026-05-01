@@ -1,0 +1,207 @@
+from __future__ import annotations
+
+from typing import Any, Dict
+
+
+def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -> Dict[str, Any]:
+    breakdown = dict(engine_result.cost_breakdown or {})
+    return {
+        "scenario_id": scenario_id,
+        "currency": "JPY",
+        "total_cost": float(
+            breakdown.get("total_cost")
+            if breakdown.get("total_cost") is not None
+            else engine_result.objective_value
+            or 0.0
+        ),
+        "components": {
+            "electricity_energy_cost": float(
+                breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", 0.0))
+                or 0.0
+            ),
+            "propulsion_energy_cost": float(breakdown.get("energy_cost", 0.0) or 0.0),
+            "fuel_cost_final": float(breakdown.get("fuel_cost_final", breakdown.get("fuel_cost", 0.0)) or 0.0),
+            "fuel_cost_provisional": float(breakdown.get("fuel_cost_provisional", breakdown.get("provisional_ice_drive_cost", 0.0)) or 0.0),
+            "fuel_cost_refueled": float(breakdown.get("fuel_cost_refueled", breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
+            "fuel_cost_provisional_leftover": float(breakdown.get("fuel_cost_provisional_leftover", breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
+            "demand_charge_cost": float(breakdown.get("demand_cost", 0.0) or 0.0),
+            "diesel_cost": float(breakdown.get("fuel_cost", 0.0) or 0.0),
+            "vehicle_fixed_cost": float(breakdown.get("vehicle_cost", 0.0) or 0.0),
+            "driver_cost": float(breakdown.get("driver_cost", 0.0) or 0.0),
+            "co2_cost": float(breakdown.get("co2_cost", 0.0) or 0.0),
+            "battery_degradation_cost": float(breakdown.get("degradation_cost", 0.0) or 0.0),
+            "charger_operation_cost": 0.0,
+            "pv_capex_daily_equivalent": float(breakdown.get("pv_asset_cost", 0.0) or 0.0),
+            "ess_cost": float(breakdown.get("bess_asset_cost", 0.0) or 0.0),
+            "unserved_trip_penalty": float(breakdown.get("unserved_penalty", 0.0) or 0.0),
+            "return_leg_bonus": float(breakdown.get("return_leg_bonus", 0.0) or 0.0),
+            "weather_strategy_objective_term_jpy_equivalent": float(
+                breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
+            ),
+        },
+        "meta": {
+            "objective_mode": str((engine_result.solver_metadata or {}).get("objective_mode") or problem.scenario.objective_mode or "total_cost"),
+            "solver_mode": str(getattr(getattr(engine_result, "mode", None), "value", "") or ""),
+            "includes_pv": bool(problem.depot_energy_assets),
+        },
+    }
+
+
+def cost_breakdown(
+    result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None
+) -> Dict[str, float]:
+    obj_breakdown = dict(result_payload.get("obj_breakdown") or {})
+    sim_values = dict(sim_payload or {})
+
+    def first_float(*values: Any, default: float = 0.0) -> float:
+        for value in values:
+            if value is None or value == "":
+                continue
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return float(default)
+
+    explicit_fuel_cost = (
+        obj_breakdown.get("fuel_cost")
+        if obj_breakdown.get("fuel_cost") is not None
+        else obj_breakdown.get("total_fuel_cost")
+    )
+    fuel_cost_provisional = first_float(
+        sim_values.get("fuel_cost_provisional_jpy"),
+        obj_breakdown.get("fuel_cost_provisional"),
+        obj_breakdown.get("provisional_ice_drive_cost"),
+    )
+    fuel_cost_refueled = first_float(
+        sim_values.get("fuel_cost_refueled_jpy"),
+        sim_values.get("fuel_cost_realized_jpy"),
+        obj_breakdown.get("fuel_cost_refueled"),
+        obj_breakdown.get("fuel_cost_realized"),
+        obj_breakdown.get("realized_ice_refuel_cost"),
+    )
+    fuel_cost_leftover = first_float(
+        sim_values.get("fuel_cost_provisional_leftover_jpy"),
+        obj_breakdown.get("fuel_cost_provisional_leftover"),
+        obj_breakdown.get("leftover_ice_provisional_cost"),
+    )
+    fuel_cost = first_float(
+        sim_values.get("total_fuel_cost"),
+        sim_values.get("fuel_cost_final_jpy"),
+        explicit_fuel_cost,
+        obj_breakdown.get("fuel_cost_final"),
+        fuel_cost_refueled + fuel_cost_leftover,
+    )
+    total_cost_value = (
+        sim_values.get("total_operating_cost")
+        if sim_values.get("total_operating_cost") is not None
+        else obj_breakdown.get("total_cost")
+    )
+    provisional_energy = float(
+        sim_values.get("electricity_cost_provisional_jpy", 0.0)
+        or 0.0
+    )
+    charged_energy = float(
+        sim_values.get("electricity_cost_charged_jpy", 0.0)
+        or 0.0
+    )
+    aggregate_energy_source = float(obj_breakdown.get("energy_cost", 0.0) or 0.0)
+    if sim_values.get("total_energy_cost") is not None:
+        final_energy_cost = float(sim_values.get("total_energy_cost") or 0.0)
+    elif obj_breakdown.get("electricity_cost") is not None:
+        final_energy_cost = float(obj_breakdown.get("electricity_cost") or 0.0)
+    elif obj_breakdown.get("electricity_cost_final") is not None:
+        final_energy_cost = float(obj_breakdown.get("electricity_cost_final") or 0.0)
+    elif explicit_fuel_cost is not None:
+        final_energy_cost = max(aggregate_energy_source - fuel_cost, 0.0)
+    else:
+        final_energy_cost = float(aggregate_energy_source or charged_energy or 0.0)
+    provisional_leftover = float(
+        (sim_payload or {}).get("electricity_cost_provisional_leftover_jpy", 0.0)
+        or obj_breakdown.get("electricity_cost_provisional_leftover")
+        or max(provisional_energy - final_energy_cost, 0.0)
+    )
+    aggregate_energy_cost = final_energy_cost + fuel_cost
+    return {
+        "energy_cost": aggregate_energy_cost,
+        "electricity_cost": final_energy_cost,
+        "electricity_cost_final": final_energy_cost,
+        "electricity_cost_provisional": provisional_energy,
+        "electricity_cost_charged": charged_energy,
+        "electricity_cost_provisional_leftover": provisional_leftover,
+        "demand_charge": float(
+            (sim_payload or {}).get("total_demand_charge", obj_breakdown.get("demand_charge_cost", 0.0))
+            or obj_breakdown.get("demand_cost", 0.0)
+            or 0.0
+        ),
+        "total_demand_charge": float(
+            (sim_payload or {}).get("total_demand_charge", obj_breakdown.get("demand_charge_cost", 0.0))
+            or obj_breakdown.get("demand_cost", 0.0)
+            or 0.0
+        ),
+        "vehicle_cost": float(
+            (sim_payload or {}).get("total_vehicle_fixed_cost", obj_breakdown.get("vehicle_cost", 0.0))
+            or 0.0
+        ),
+        "driver_cost": float(
+            (sim_payload or {}).get("total_driver_cost", obj_breakdown.get("driver_cost", 0.0))
+            or 0.0
+        ),
+        "deadhead_cost": float(obj_breakdown.get("deadhead_cost", 0.0) or 0.0),
+        "fuel_cost": fuel_cost,
+        "fuel_cost_final": fuel_cost,
+        "fuel_cost_provisional": fuel_cost_provisional,
+        "fuel_cost_refueled": fuel_cost_refueled,
+        "fuel_cost_realized": fuel_cost_refueled,
+        "fuel_cost_provisional_leftover": fuel_cost_leftover,
+        "total_fuel_cost": fuel_cost,
+        "battery_degradation_cost": float(
+            (sim_payload or {}).get("total_degradation_cost", obj_breakdown.get("battery_degradation_cost", 0.0))
+            or obj_breakdown.get("degradation_cost", 0.0)
+            or 0.0
+        ),
+        "degradation_cost": float(
+            (sim_payload or {}).get("total_degradation_cost", obj_breakdown.get("battery_degradation_cost", 0.0))
+            or obj_breakdown.get("degradation_cost", 0.0)
+            or 0.0
+        ),
+        "total_degradation_cost": float(
+            (sim_payload or {}).get("total_degradation_cost", obj_breakdown.get("battery_degradation_cost", 0.0))
+            or obj_breakdown.get("degradation_cost", 0.0)
+            or 0.0
+        ),
+        "grid_purchase_cost": float(obj_breakdown.get("grid_purchase_cost", 0.0) or 0.0),
+        "bess_discharge_cost": float(obj_breakdown.get("bess_discharge_cost", 0.0) or 0.0),
+        "grid_import_kwh": float(obj_breakdown.get("grid_import_kwh", 0.0) or 0.0),
+        "peak_grid_kw": float(obj_breakdown.get("peak_grid_kw", 0.0) or 0.0),
+        "grid_to_bus_kwh": float(obj_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0),
+        "pv_to_bus_kwh": float(obj_breakdown.get("pv_to_bus_kwh", 0.0) or 0.0),
+        "bess_to_bus_kwh": float(obj_breakdown.get("bess_to_bus_kwh", 0.0) or 0.0),
+        "pv_to_bess_kwh": float(obj_breakdown.get("pv_to_bess_kwh", 0.0) or 0.0),
+        "grid_to_bess_kwh": float(obj_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0),
+        "pv_curtail_kwh": float(obj_breakdown.get("pv_curtailed_kwh", 0.0) or obj_breakdown.get("pv_curtail_kwh", 0.0) or 0.0),
+        "contract_over_limit_kwh": float(obj_breakdown.get("contract_over_limit_kwh", 0.0) or 0.0),
+        "contract_overage_cost": float(obj_breakdown.get("contract_overage_cost", 0.0) or 0.0),
+        "stationary_battery_degradation_cost": float(
+            obj_breakdown.get("stationary_battery_degradation_cost", 0.0) or 0.0
+        ),
+        "pv_asset_cost": float(obj_breakdown.get("pv_asset_cost", 0.0) or 0.0),
+        "bess_asset_cost": float(obj_breakdown.get("bess_asset_cost", 0.0) or 0.0),
+        "total_cost_with_assets": float(obj_breakdown.get("total_cost_with_assets", 0.0) or 0.0),
+        "co2_cost": float(obj_breakdown.get("emission_cost", 0.0) or obj_breakdown.get("co2_cost", 0.0) or 0.0),
+        "penalty_unserved": float(obj_breakdown.get("unserved_penalty", 0.0) or 0.0),
+        "return_leg_bonus": float(obj_breakdown.get("return_leg_bonus", 0.0) or 0.0),
+        "weather_strategy_objective_term_jpy_equivalent": float(
+            obj_breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
+        ),
+        "total_co2_kg": float(
+            (sim_payload or {}).get("total_co2_kg", obj_breakdown.get("total_co2_kg", 0.0))
+            or 0.0
+        ),
+        "total_cost": float(
+            total_cost_value
+            if total_cost_value is not None
+            else result_payload.get("objective_value", 0.0)
+            or 0.0
+        ),
+    }
