@@ -159,3 +159,17 @@ def test_canonical_problem_builder_uses_saved_soc_overrides_for_vehicle_state() 
     assert abs(float(vehicle.initial_soc or 0.0) - 270.0) < 1.0e-9
     assert abs(float(vehicle.reserve_soc or 0.0) - 60.0) < 1.0e-9
     assert problem.metadata.get("final_soc_target_percent") == 35.0
+    assert problem.metadata.get("charge_upper_buffer_ratio") == 0.9
+
+
+def test_canonical_problem_builder_preserves_explicit_zero_upper_buffer_ratio() -> None:
+    scenario = _scenario()
+    scenario["simulation_config"]["soc_max"] = 0.0
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep1",
+        service_id="WEEKDAY",
+    )
+
+    assert problem.metadata.get("charge_upper_buffer_ratio") == 0.0

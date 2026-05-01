@@ -846,6 +846,7 @@ route-band 可視化の仕様：
 > [!NOTE]
 > **台数について：** Prepare 時は「選択した営業所に登録済みの車両台数・充電器台数」をそのまま利用します。
 > 手入力は不要です。SOC 設定は車両ごとの `initialSoc` を優先し、未設定車両は `Cost / Tariff Parameters` の `initial_soc` / `soc_min` / `soc_max` を既定値として使います。
+> `soc_max` / `socMax` は canonical metadata の `charge_upper_buffer_ratio` にも使われ、営業所待機中の追加充電は実費、`demand_charge_cost`、`vehicle_timeline.csv`、`all_vehicles.svg` に反映されます。以前の結果と KPI を比較する場合は、buffer 充電の有無を揃えてください。
 
 > [!NOTE]
 > **保存先：** `Quick Setup 保存` では route/depot 選択を `dispatch_scope` と `scenario_overlay` の両方へ同期します。

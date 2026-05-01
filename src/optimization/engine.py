@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from src.optimization.abc.engine import ABCOptimizer
 from src.optimization.alns.engine import ALNSOptimizer
+from src.optimization.common.charging_topup import apply_opportunistic_topup
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
@@ -166,7 +167,7 @@ class OptimizationEngine:
         problem: CanonicalOptimizationProblem,
         result: OptimizationEngineResult,
     ) -> OptimizationEngineResult:
-        plan, assignment_rebuilt, charging_recomputed, soc_repaired = self._normalize_postsolve_plan(
+        plan, assignment_rebuilt, charging_recomputed, soc_repaired, opportunistic_topup_applied = self._normalize_postsolve_plan(
             problem,
             result.plan,
         )
@@ -185,6 +186,19 @@ class OptimizationEngine:
         solver_metadata["postsolve_assignment_rebuilt"] = bool(assignment_rebuilt)
         solver_metadata["postsolve_charging_recomputed"] = bool(charging_recomputed)
         solver_metadata["postsolve_soc_repair_applied"] = bool(soc_repaired)
+        solver_metadata["postsolve_opportunistic_topup_applied"] = bool(opportunistic_topup_applied)
+        solver_metadata["postsolve_opportunistic_topup_added_slot_count"] = int(
+            plan.metadata.get("opportunistic_topup_added_slot_count", 0) or 0
+        )
+        solver_metadata["postsolve_opportunistic_topup_added_kwh"] = float(
+            plan.metadata.get("opportunistic_topup_added_kwh", 0.0) or 0.0
+        )
+        solver_metadata["postsolve_opportunistic_topup_unfilled_kwh"] = float(
+            plan.metadata.get("opportunistic_topup_unfilled_kwh", 0.0) or 0.0
+        )
+        solver_metadata["postsolve_opportunistic_topup_unfilled_vehicle_day_ids"] = tuple(
+            plan.metadata.get("opportunistic_topup_unfilled_vehicle_day_ids", ()) or ()
+        )
         solver_metadata["postsolve_feasible"] = bool(report.feasible)
         solver_metadata["postsolve_objective_value"] = float(
             costs.get("objective_value", result.objective_value)
@@ -203,6 +217,10 @@ class OptimizationEngine:
         if soc_repaired:
             warnings.append(
                 "Post-solve SOC repair adjusted charging to restore battery feasibility."
+            )
+        if opportunistic_topup_applied:
+            warnings.append(
+                "Post-solve opportunistic top-up added depot waiting charge to available EVs."
             )
 
         if result.mode == OptimizationMode.MILP and problem.baseline_plan is not None:
@@ -246,7 +264,7 @@ class OptimizationEngine:
         self,
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
-    ) -> tuple[AssignmentPlan, bool, bool, bool]:
+    ) -> tuple[AssignmentPlan, bool, bool, bool, bool]:
         rebuilt_plan = self._reassign_vehicle_fragments(problem, plan)
         assignment_rebuilt = rebuilt_plan != plan
         charging_recomputed = False
@@ -262,7 +280,16 @@ class OptimizationEngine:
             soc_repaired = repaired_plan != rebuilt_plan
             rebuilt_plan = repaired_plan
 
-        return rebuilt_plan, assignment_rebuilt, charging_recomputed, soc_repaired
+        topped_up_plan = apply_opportunistic_topup(problem, rebuilt_plan)
+        opportunistic_topup_applied = int(topped_up_plan.metadata.get("opportunistic_topup_added_slot_count", 0) or 0) > 0
+
+        return (
+            topped_up_plan,
+            assignment_rebuilt,
+            charging_recomputed,
+            soc_repaired,
+            opportunistic_topup_applied,
+        )
 
     def _apply_milp_truthful_baseline_guardrail(
         self,
@@ -275,7 +302,7 @@ class OptimizationEngine:
         solver_metadata: dict,
         warnings: list[str],
     ) -> tuple[AssignmentPlan, object, dict, dict, list[str]]:
-        baseline_plan, baseline_assignment_rebuilt, baseline_charge_recomputed, baseline_soc_repaired = (
+        baseline_plan, baseline_assignment_rebuilt, baseline_charge_recomputed, baseline_soc_repaired, _baseline_topup_applied = (
             self._normalize_postsolve_plan(problem, problem.baseline_plan or AssignmentPlan())
         )
         baseline_report = self._feasibility.evaluate(problem, baseline_plan)

@@ -126,6 +126,17 @@ class ProblemBuilder:
                 charging_cfg.get("final_soc_target_percent"),
             )
         )
+        charge_upper_buffer_raw = self._first_present(
+            simulation_cfg.get("soc_max"),
+            simulation_cfg.get("socMax"),
+            simulation_cfg.get("charge_upper_buffer_ratio"),
+            charging_cfg.get("soc_max"),
+            charging_cfg.get("socMax"),
+            charging_cfg.get("charge_upper_buffer_ratio"),
+        )
+        charge_upper_buffer_ratio = self._normalize_percent_like_to_ratio(charge_upper_buffer_raw)
+        if charge_upper_buffer_ratio is None:
+            charge_upper_buffer_ratio = 0.9
         final_soc_target_tolerance_percent = self._safe_float(
             self._first_present(
                 simulation_cfg.get("final_soc_target_tolerance_percent"),
@@ -134,7 +145,7 @@ class ProblemBuilder:
         )
         planning_days_effective = max(int(planning_days or 1), 1)
         full_day_slots = (24 * 60) // max(timestep_min, 1)
-        force_full_day_power_horizon = final_soc_target_percent is not None
+        force_full_day_power_horizon = final_soc_target_percent is not None or charge_upper_buffer_ratio > 0.0
         chargers = self._build_chargers_from_scenario(scenario, depot_id)
         price_slots = self._build_price_slots_from_scenario(
             scenario,
@@ -401,6 +412,7 @@ class ProblemBuilder:
             final_soc_floor_percent=final_soc_floor_percent,
             final_soc_target_percent=final_soc_target_percent,
             final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+            charge_upper_buffer_ratio=charge_upper_buffer_ratio,
             initial_ice_fuel_percent=initial_ice_fuel_percent,
             min_ice_fuel_percent=min_ice_fuel_percent,
             max_ice_fuel_percent=max_ice_fuel_percent,
@@ -469,6 +481,7 @@ class ProblemBuilder:
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
         final_soc_target_tolerance_percent: Optional[float] = None,
+        charge_upper_buffer_ratio: Optional[float] = None,
         initial_ice_fuel_percent: Optional[float] = None,
         min_ice_fuel_percent: Optional[float] = None,
         max_ice_fuel_percent: Optional[float] = None,
@@ -514,6 +527,18 @@ class ProblemBuilder:
         allow_partial_service = service_coverage_allows_partial_service(
             service_coverage_mode
         )
+        charge_upper_buffer_ratio = self._normalize_percent_like_to_ratio(charge_upper_buffer_ratio)
+        if charge_upper_buffer_ratio is None:
+            metadata_source = scenario_metadata or {}
+            charge_upper_buffer_ratio = self._normalize_percent_like_to_ratio(
+                self._first_present(
+                    metadata_source.get("soc_max"),
+                    metadata_source.get("socMax"),
+                    metadata_source.get("charge_upper_buffer_ratio"),
+                )
+            )
+        if charge_upper_buffer_ratio is None:
+            charge_upper_buffer_ratio = 0.9
         normalized_cost_component_flags = normalize_cost_component_flags(
             cost_component_flags,
             legacy_disable_vehicle_acquisition_cost=disable_vehicle_acquisition_cost,
@@ -846,6 +871,7 @@ class ProblemBuilder:
                 "final_soc_floor_percent": final_soc_floor_percent,
                 "final_soc_target_percent": final_soc_target_percent,
                 "final_soc_target_tolerance_percent": final_soc_target_tolerance_percent,
+                "charge_upper_buffer_ratio": charge_upper_buffer_ratio,
                 "required_soc_departure_unit": "percent_0_100",
                 "initial_ice_fuel_percent": initial_ice_fuel_percent,
                 "min_ice_fuel_percent": min_ice_fuel_percent,

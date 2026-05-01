@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from bff.services.optimization_run.vehicle_timeline import vehicle_ids_with_timeline_activity
 from src.dispatch.models import DeadheadRule, DispatchContext, DutyLeg, Trip, VehicleDuty, VehicleProfile
 from src.optimization.alns.operators_repair import _with_recomputed_charging
+from src.optimization.common.charging_topup import apply_opportunistic_topup
 from src.optimization.common.builder import ProblemBuilder
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
@@ -335,3 +337,150 @@ def test_feasibility_rejects_target_charge_before_return_deadhead_completion() -
 
     assert not report.feasible
     assert any("charges before return deadhead completion" in error for error in report.errors)
+
+
+def test_opportunistic_topup_adds_buffer_charge_after_return() -> None:
+    context = _dispatch_context()
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s_buffer_after_return",
+            horizon_start="05:00",
+            horizon_end="05:00",
+            timestep_min=60,
+            demand_charge_on_peak_yen_per_kw=3000.0,
+            demand_charge_off_peak_yen_per_kw=3000.0,
+        ),
+        dispatch_context=context,
+        trips=(
+            ProblemTrip(
+                trip_id="t1",
+                route_id="r1",
+                origin="DEPOT",
+                destination="B",
+                departure_min=480,
+                arrival_min=540,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=10.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="bev-1",
+                vehicle_type="BEV",
+                home_depot_id="DEPOT",
+                initial_soc=80.0,
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        depots=(ProblemDepot(depot_id="DEPOT", name="Depot", charger_ids=("chg-1",), import_limit_kw=100.0),),
+        chargers=(ChargerDefinition("chg-1", "DEPOT", 60.0),),
+        price_slots=tuple(
+            EnergyPriceSlot(slot_index=idx, grid_buy_yen_per_kwh=10.0, demand_charge_weight=1.0)
+            for idx in range(24)
+        ),
+        metadata={
+            "charge_upper_buffer_ratio": 0.9,
+            "final_soc_floor_percent": 20.0,
+            "final_soc_target_percent": 80.0,
+            "final_soc_target_tolerance_percent": 0.0,
+            "operation_end_time": "23:00",
+        },
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="bev-1",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trip=context.trips[0], deadhead_from_prev_min=0),),
+            ),
+        ),
+        served_trip_ids=("t1",),
+        unserved_trip_ids=(),
+        metadata={"duty_vehicle_map": {"bev-1": "bev-1"}},
+    )
+
+    base = _with_recomputed_charging(problem, plan)
+    topped_up = apply_opportunistic_topup(problem, base)
+    base_costs = CostEvaluator().evaluate(problem, base)
+    topped_up_costs = CostEvaluator().evaluate(problem, topped_up)
+
+    assert topped_up.metadata["opportunistic_topup_applied"] is True
+    assert topped_up.metadata["opportunistic_topup_added_slot_count"] > 0
+    assert len(topped_up.charging_slots) > len(base.charging_slots)
+    assert topped_up_costs.realized_ev_charge_cost > base_costs.realized_ev_charge_cost
+
+
+def test_opportunistic_topup_adds_charging_for_unused_available_vehicle_from_horizon_start() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s_unused_topup",
+            horizon_start="05:00",
+            horizon_end="05:00",
+            timestep_min=60,
+            planning_days=1,
+        ),
+        dispatch_context=DispatchContext(
+            service_date="2026-04-24",
+            trips=[],
+            turnaround_rules={},
+            deadhead_rules={},
+            vehicle_profiles={
+                "BEV": VehicleProfile(
+                    vehicle_type="BEV",
+                    battery_capacity_kwh=100.0,
+                    energy_consumption_kwh_per_km=1.0,
+                )
+            },
+        ),
+        trips=(),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="bev-unused",
+                vehicle_type="BEV",
+                home_depot_id="DEPOT",
+                initial_soc=20.0,
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        depots=(ProblemDepot(depot_id="DEPOT", name="Depot", charger_ids=("chg-1",), import_limit_kw=100.0),),
+        chargers=(ChargerDefinition("chg-1", "DEPOT", 50.0),),
+        price_slots=tuple(EnergyPriceSlot(slot_index=idx, grid_buy_yen_per_kwh=10.0) for idx in range(24)),
+        metadata={
+            "charge_upper_buffer_ratio": 0.9,
+            "operation_end_time": "23:00",
+        },
+    )
+    plan = AssignmentPlan(metadata={})
+
+    topped_up = apply_opportunistic_topup(problem, plan)
+    breakdown = CostEvaluator().evaluate(problem, topped_up)
+
+    assert topped_up.charging_slots
+    assert min(slot.slot_index for slot in topped_up.charging_slots) == 0
+    assert topped_up.metadata["opportunistic_topup_applied"] is True
+    assert topped_up.metadata["opportunistic_topup_added_slot_count"] > 0
+    assert vehicle_ids_with_timeline_activity({}, topped_up.charging_slots, ()) == ("bev-unused",)
+    assert breakdown.realized_ev_charge_cost > 0.0

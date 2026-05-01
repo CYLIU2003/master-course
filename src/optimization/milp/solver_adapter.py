@@ -269,12 +269,26 @@ class GurobiMILPAdapter:
             vehicle.vehicle_id: model.addVar(vtype=GRB.BINARY)
             for vehicle in problem.vehicles
         }
-        day_indices = sorted(set(trip_day_index_by_trip_id.values()))
+        planning_days = max(int(problem.metadata.get("planning_days") or problem.scenario.planning_days or 1), 1)
+        slots_per_day = max(1, (24 * 60) // max(problem.scenario.timestep_min, 1))
+        day_indices = sorted(set(range(planning_days)) | set(trip_day_index_by_trip_id.values()))
         used_vehicle_day: Dict[Tuple[str, int], Any] = {
             (vehicle.vehicle_id, day_idx): model.addVar(vtype=GRB.BINARY)
             for vehicle in problem.vehicles
             for day_idx in day_indices
         }
+
+        assignment_day_indices_by_vehicle: Dict[str, Set[int]] = {}
+        for vehicle_id, trip_ids in assignment_trip_ids_by_vehicle.items():
+            for trip_id in trip_ids:
+                assignment_day_indices_by_vehicle.setdefault(vehicle_id, set()).add(
+                    int(trip_day_index_by_trip_id.get(trip_id, 0))
+                )
+
+        upper_buffer_ratio = self._percent_to_ratio(problem.metadata.get("charge_upper_buffer_ratio"))
+        if upper_buffer_ratio is None:
+            upper_buffer_ratio = 0.9
+        buffer_topup_enabled = upper_buffer_ratio > 0.0
 
         # Each trip must be assigned exactly once or marked as unserved.
         for trip in problem.trips:
@@ -506,6 +520,7 @@ class GurobiMILPAdapter:
         bess_charge_mode_var: Dict[Tuple[str, int], Any] = {}
         bess_discharge_mode_var: Dict[Tuple[str, int], Any] = {}
         end_soc_excess_dev_var: Dict[str, Any] = {}
+        opportunistic_topup_deficit_var: Dict[Tuple[str, int], Any] = {}
         charge_session_start_var: Dict[Tuple[str, int], Any] = {}
         soc_upper_excess_var: Dict[Tuple[str, int], Any] = {}
         slot_concurrency_excess_var: Dict[Tuple[str, int], Any] = {}
@@ -599,7 +614,7 @@ class GurobiMILPAdapter:
                         home_depot_slot_proxy_terms.setdefault((vehicle_id, slot_idx), []).append(
                             day_use_var
                         )
-                if final_target_enabled:
+                if final_target_enabled or buffer_topup_enabled:
                     for trip in problem.trips:
                         key = (vehicle_id, trip.trip_id)
                         if key not in end_arc:
@@ -635,6 +650,7 @@ class GurobiMILPAdapter:
             for vehicle in problem.vehicles:
                 if vehicle.vehicle_id not in bev_ids:
                     continue
+                vehicle_available = bool(getattr(vehicle, "available", True))
                 cap = max(vehicle.battery_capacity_kwh or 300.0, 1.0)
                 reserve = vehicle.reserve_soc
                 if reserve is None:
@@ -727,10 +743,7 @@ class GurobiMILPAdapter:
                             )
                         continue
 
-                upper_buffer_ratio = self._percent_to_ratio(
-                    problem.metadata.get("charge_upper_buffer_ratio")
-                )
-                if upper_buffer_ratio is not None:
+                if upper_buffer_ratio is not None and upper_buffer_ratio > 0.0:
                     upper_buffer_kwh = min(max(upper_buffer_ratio * cap, soc_min), cap)
                     for slot_idx in slot_indices:
                         excess_key = (vehicle.vehicle_id, slot_idx)
@@ -740,6 +753,34 @@ class GurobiMILPAdapter:
                             >= s_var[excess_key]
                             - upper_buffer_kwh
                             - cap * (1 - used_vehicle[vehicle.vehicle_id])
+                        )
+
+                if buffer_topup_enabled and vehicle_available:
+                    opportunistic_target_kwh = min(
+                        cap,
+                        max(
+                            max(float(upper_buffer_ratio or 0.0), 0.0) * cap,
+                            max(float(effective_final_soc_target_kwh(problem, vehicle, cap_kwh=cap) or 0.0), 0.0),
+                        ),
+                    )
+                    for day_idx in day_indices:
+                        day_soc_key = (vehicle.vehicle_id, self._day_end_slot_index(
+                            problem,
+                            day_idx=day_idx,
+                            operation_start_min=operation_start_min,
+                            operation_end_min=operation_end_min,
+                        ))
+                        if day_soc_key not in s_var:
+                            continue
+                        deficit_key = (vehicle.vehicle_id, day_idx)
+                        opportunistic_topup_deficit_var[deficit_key] = model.addVar(
+                            lb=0.0,
+                            vtype=GRB.CONTINUOUS,
+                            name=f"opportunistic_topup_deficit_{vehicle.vehicle_id}_{day_idx}",
+                        )
+                        model.addConstr(
+                            opportunistic_topup_deficit_var[deficit_key]
+                            >= opportunistic_target_kwh - s_var[day_soc_key]
                         )
 
                 # C10 (departure readiness): each assigned BEV trip must start with sufficient SOC.
@@ -828,13 +869,17 @@ class GurobiMILPAdapter:
                     )
                     model.addConstr(charge_on_var[(vehicle.vehicle_id, slot_idx)] <= 1 - running_expr)
                     proxy_terms = home_depot_slot_proxy_terms.get((vehicle.vehicle_id, slot_idx), [])
-                    if final_target_enabled:
+                    slot_day_idx = slot_idx // slots_per_day
+                    assigned_day_indices = assignment_day_indices_by_vehicle.get(vehicle.vehicle_id, set())
+                    if final_target_enabled or buffer_topup_enabled:
                         if not self._is_replenishment_slot_allowed(problem, slot_idx):
                             model.addConstr(charge_on_var[(vehicle.vehicle_id, slot_idx)] == 0)
                         elif proxy_terms:
                             model.addConstr(
                                 charge_on_var[(vehicle.vehicle_id, slot_idx)] <= gp.quicksum(proxy_terms)
                             )
+                        elif bool(getattr(vehicle, "available", True)) and slot_day_idx not in assigned_day_indices:
+                            pass
                         else:
                             model.addConstr(charge_on_var[(vehicle.vehicle_id, slot_idx)] == 0)
                     elif proxy_terms:
@@ -1212,6 +1257,10 @@ class GurobiMILPAdapter:
             problem.metadata.get("charge_to_upper_buffer_penalty_yen_per_kwh"),
             default=0.2,
         )
+        opportunistic_topup_deficit_penalty_per_kwh = self._safe_nonnegative_float(
+            problem.metadata.get("opportunistic_topup_deficit_penalty_yen_per_kwh"),
+            default=500.0,
+        )
 
         objective = gp.LinExpr()
         # O2: electricity cost based on actual charging source flows.
@@ -1478,6 +1527,14 @@ class GurobiMILPAdapter:
         ):
             for var in soc_upper_excess_var.values():
                 objective += charge_upper_buffer_penalty_per_kwh * var
+
+        if (
+            opportunistic_topup_deficit_penalty_per_kwh > 0.0
+            and opportunistic_topup_deficit_var
+            and component_flags.get("opportunistic_topup_deficit_penalty", True)
+        ):
+            for var in opportunistic_topup_deficit_var.values():
+                objective += opportunistic_topup_deficit_penalty_per_kwh * var
         
         # SOC bound violation penalty (moderate penalty for better solvability)
         soc_violation_penalty_per_kwh = self._safe_nonnegative_float(
@@ -1898,6 +1955,27 @@ class GurobiMILPAdapter:
         for (depot_id, slot_idx), var in contract_over_limit_var.items():
             contract_over_limit_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
 
+        opportunistic_topup_deficit_kwh_by_vehicle_day: Dict[Tuple[str, int], float] = {}
+        for (vehicle_id, day_idx), var in opportunistic_topup_deficit_var.items():
+            opportunistic_topup_deficit_kwh_by_vehicle_day[(vehicle_id, day_idx)] = max(_var_val(var), 0.0)
+        opportunistic_topup_unfilled_kwh = sum(opportunistic_topup_deficit_kwh_by_vehicle_day.values())
+        opportunistic_topup_unfilled_vehicle_day_ids = tuple(
+            sorted(
+                f"{vehicle_id}:d{day_idx}"
+                for (vehicle_id, day_idx), value in opportunistic_topup_deficit_kwh_by_vehicle_day.items()
+                if value > 1.0e-6
+            )
+        )
+        opportunistic_topup_unfilled_vehicle_ids = tuple(
+            sorted(
+                {
+                    vehicle_id
+                    for (vehicle_id, _day_idx), value in opportunistic_topup_deficit_kwh_by_vehicle_day.items()
+                    if value > 1.0e-6
+                }
+            )
+        )
+
         if c_var and bev_ids:
             vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
             for slot_idx in slot_indices:
@@ -2033,6 +2111,10 @@ class GurobiMILPAdapter:
                 "slot_concurrency_penalty_yen": slot_concurrency_penalty,
                 "early_charge_penalty_yen_per_kwh": early_charge_penalty_per_kwh,
                 "charge_to_upper_buffer_penalty_yen_per_kwh": charge_upper_buffer_penalty_per_kwh,
+                "opportunistic_topup_deficit_penalty_yen_per_kwh": opportunistic_topup_deficit_penalty_per_kwh,
+                "opportunistic_topup_unfilled_kwh": round(opportunistic_topup_unfilled_kwh, 6),
+                "opportunistic_topup_unfilled_vehicle_day_ids": opportunistic_topup_unfilled_vehicle_day_ids,
+                "opportunistic_topup_unfilled_vehicle_ids": opportunistic_topup_unfilled_vehicle_ids,
                 "service_coverage_mode": service_coverage_mode,
                 "allow_partial_service": bool(allow_partial_service),
                 "strict_coverage_enforced": service_coverage_mode == "strict",
