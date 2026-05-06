@@ -165,6 +165,15 @@ def test_main_initial_soc_ratio_prefers_percent_field() -> None:
     assert App._main_initial_soc_ratio(app) == 0.25
 
 
+def test_final_soc_ui_normalizes_ratio_inputs_to_percent() -> None:
+    app = App.__new__(App)
+
+    assert App._soc_percent_for_ui(0.2, 20.0) == "20"
+    assert App._soc_percent_for_ui(80.0, 20.0) == "80"
+    assert App._parse_soc_percent_for_payload(app, "0.8", 80.0) == 80.0
+    assert App._parse_soc_percent_for_payload(app, "80", 80.0) == 80.0
+
+
 def test_weather_proxy_forecast_application_updates_visible_soc_policy() -> None:
     app = App.__new__(App)
     app.final_soc_floor_percent_var = DummyVar("0.2")

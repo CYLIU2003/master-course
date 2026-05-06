@@ -1802,8 +1802,8 @@ class App:
         self.max_end_fragments_var = tk.StringVar(value="100")
         self.initial_soc_percent_var = tk.StringVar(value="0.8")
         self.apply_initial_soc_percent_to_selected_bevs_var = tk.BooleanVar(value=False)
-        self.final_soc_floor_percent_var = tk.StringVar(value="0.2")
-        self.final_soc_target_percent_var = tk.StringVar(value="0.8")
+        self.final_soc_floor_percent_var = tk.StringVar(value="20.0")
+        self.final_soc_target_percent_var = tk.StringVar(value="80.0")
         self.final_soc_target_tolerance_percent_var = tk.StringVar(value="0.0")
         self.initial_ice_fuel_percent_var = tk.StringVar(value="100.0")
         self.min_ice_fuel_percent_var = tk.StringVar(value="10.0")
@@ -1862,11 +1862,28 @@ class App:
         ).pack(anchor="w", fill=tk.X, pady=(0, 4))
         ttk.Label(
             soc_fuel_tab,
-            text="BEVの帰庫後SOCとICE燃料の安全余裕を設定します。Weather proxyの確認/反映は終了SOC目標を上書きすることがあります。",
+            text=(
+                "BEVの帰庫後SOCとICE燃料の安全余裕を設定します。SOCは % 表示です "
+                "(20 = 20%)。旧形式の 0.2 / 0.8 入力も保存時に 20% / 80% として扱います。"
+            ),
             foreground="#555",
             wraplength=560,
             justify=tk.LEFT,
         ).pack(anchor="w", fill=tk.X, pady=(0, 4))
+        soc_fuel_save_row = ttk.Frame(soc_fuel_tab)
+        soc_fuel_save_row.pack(fill=tk.X, pady=(0, 6))
+        soc_fuel_save_btn = ttk.Button(
+            soc_fuel_save_row,
+            text="SOC/燃料設定を保存",
+            command=self.save_quick_setup,
+        )
+        soc_fuel_save_btn.pack(side=tk.LEFT)
+        self._register_quick_setup_save_button(soc_fuel_save_btn)
+        ttk.Label(
+            soc_fuel_save_row,
+            text="このタブの変更も Quick Setup と同じ保存対象です。",
+            foreground="#555",
+        ).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Label(
             price_tab,
             text="料金、CO2、目的関数に含める費目を設定します。TOU帯は30分スロット、需要料金はピークkW単価です。",
@@ -2083,12 +2100,21 @@ class App:
         soc_detail_grp.pack(fill=tk.X, pady=(0, 4))
         self._param_row2(
             soc_detail_grp,
-            "終了SOC目標", self.final_soc_target_percent_var,
-            label1="終了SOC床", var1=self.final_soc_floor_percent_var,
+            "帰庫後SOC目標 [%]", self.final_soc_target_percent_var,
+            tip0=(
+                "運行終了後に戻しておきたいSOC目標です。例: 80 = 80%。\n"
+                "目標許容幅を設定すると、目標-許容幅を下限として扱います。"
+            ),
+            label1="帰庫後SOC下限 [%]", var1=self.final_soc_floor_percent_var,
+            tip1=(
+                "運行終了時に必ず残す最低SOCです。既存の車両reserve SOCより低い値は実質的にreserve SOCで上書きされます。\n"
+                "以前の『終了SOC床』です。例: 20 = 20%。"
+            ),
         )
         self._param_row2(
             soc_detail_grp,
-            "目標許容±", self.final_soc_target_tolerance_percent_var,
+            "目標許容幅± [%]", self.final_soc_target_tolerance_percent_var,
+            tip0="帰庫後SOC目標からどれだけ下回ってよいかを % で指定します。例: 5 = 目標80%なら75%以上。",
         )
 
         # ── PV・天候 ──
@@ -3226,6 +3252,22 @@ class App:
         except Exception:
             return default
 
+    @staticmethod
+    def _soc_percent_for_ui(value: Any, default: float) -> str:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            numeric = float(default)
+        if 0.0 <= numeric <= 1.0:
+            numeric *= 100.0
+        return f"{max(0.0, min(numeric, 100.0)):g}"
+
+    def _parse_soc_percent_for_payload(self, value: str, default: float) -> float:
+        numeric = self._parse_float(value, default)
+        if 0.0 <= numeric <= 1.0:
+            numeric *= 100.0
+        return max(0.0, min(numeric, 100.0))
+
     def _parse_optional_float(self, value: str) -> float | None:
         v = value.strip()
         if not v:
@@ -3437,7 +3479,7 @@ class App:
             f"{proxy_label}: "
             f"mode={forecast.operation_mode} {date_label} "
             f"sun={forecast.sun_score:.2f} rain={forecast.rain_risk:.2f} "
-            f"SOC floor/target={profile.final_soc_floor_percent:g}/{profile.final_soc_target_percent:g}%"
+            f"帰庫後SOC下限/目標={profile.final_soc_floor_percent:g}/{profile.final_soc_target_percent:g}%"
         )
         if hasattr(self, "weather_proxy_summary_var"):
             self.weather_proxy_summary_var.set(summary)
@@ -5620,23 +5662,28 @@ class App:
             self._set_cost_component_flags_from_payload(sim)
             self.initial_soc_percent_var.set(str(initial_soc_default))
             self.final_soc_floor_percent_var.set(
-                str(self._first_present_value(sim.get("finalSocFloorPercent"), default=0.2))
+                self._soc_percent_for_ui(
+                    self._first_present_value(sim.get("finalSocFloorPercent"), default=20.0),
+                    20.0,
+                )
             )
             self.final_soc_target_percent_var.set(
-                str(
+                self._soc_percent_for_ui(
                     self._first_present_value(
                         sim.get("finalSocTargetPercent"),
                         sim.get("finalSocFloorPercent"),
-                        default=0.8,
-                    )
+                        default=80.0,
+                    ),
+                    80.0,
                 )
             )
             self.final_soc_target_tolerance_percent_var.set(
-                str(
+                self._soc_percent_for_ui(
                     self._first_present_value(
                         sim.get("finalSocTargetTolerancePercent"),
                         default=0.0,
-                    )
+                    ),
+                    0.0,
                 )
             )
             self.initial_ice_fuel_percent_var.set(str(sim.get("initialIceFuelPercent") or 100.0))
@@ -5817,9 +5864,15 @@ class App:
             "depotPowerLimitKw": self._parse_float(self.depot_power_limit_var.get(), 500.0),
             "degradationWeight": self._parse_float(self.degradation_weight_var.get(), 0.0),
             "initialSocPercent": self._main_initial_soc_ratio(),
-            "finalSocFloorPercent": self._parse_float(self.final_soc_floor_percent_var.get(), 0.2),
-            "finalSocTargetPercent": self._parse_float(self.final_soc_target_percent_var.get(), 0.8),
-            "finalSocTargetTolerancePercent": self._parse_float(
+            "finalSocFloorPercent": self._parse_soc_percent_for_payload(
+                self.final_soc_floor_percent_var.get(),
+                20.0,
+            ),
+            "finalSocTargetPercent": self._parse_soc_percent_for_payload(
+                self.final_soc_target_percent_var.get(),
+                80.0,
+            ),
+            "finalSocTargetTolerancePercent": self._parse_soc_percent_for_payload(
                 self.final_soc_target_tolerance_percent_var.get(),
                 0.0,
             ),
@@ -7143,15 +7196,15 @@ class App:
                 "tou_pricing": self._parse_tou_text(),
                 "objective_weights": objective_weights,
                 "depot_energy_assets": depot_energy_assets,
-                "final_soc_floor_percent": self._parse_float(
+                "final_soc_floor_percent": self._parse_soc_percent_for_payload(
                     self.final_soc_floor_percent_var.get(),
-                    0.2,
+                    20.0,
                 ),
-                "final_soc_target_percent": self._parse_float(
+                "final_soc_target_percent": self._parse_soc_percent_for_payload(
                     self.final_soc_target_percent_var.get(),
-                    0.8,
+                    80.0,
                 ),
-                "final_soc_target_tolerance_percent": self._parse_float(
+                "final_soc_target_tolerance_percent": self._parse_soc_percent_for_payload(
                     self.final_soc_target_tolerance_percent_var.get(),
                     0.0,
                 ),
@@ -7708,9 +7761,9 @@ class App:
                 self.apply_initial_soc_percent_to_selected_bevs_var,
                 "初期SOC比の一斉反映設定を変更",
             ),
-            (self.final_soc_floor_percent_var, "終了SOC床を変更"),
-            (self.final_soc_target_percent_var, "終了SOC目標を変更"),
-            (self.final_soc_target_tolerance_percent_var, "終了SOC目標許容幅を変更"),
+            (self.final_soc_floor_percent_var, "帰庫後SOC下限を変更"),
+            (self.final_soc_target_percent_var, "帰庫後SOC目標を変更"),
+            (self.final_soc_target_tolerance_percent_var, "帰庫後SOC目標許容幅を変更"),
             (self.initial_ice_fuel_percent_var, "ICE初期燃料比を変更"),
             (self.min_ice_fuel_percent_var, "ICE最低燃料バッファを変更"),
             (self.max_ice_fuel_percent_var, "ICE燃料バッファ上限を変更"),
@@ -8334,12 +8387,12 @@ class App:
 ③ ソルバー設定（中パネル）
   - タブを左から順に確認: よく使う → SOC/燃料 → 料金/CO2 → PV/予報 → 目的/詳細
   - よく使う: 燃料単価、電気代、需要単価、契約上限、初期SOC、欠便ペナルティ
-  - SOC/燃料: 帰庫後SOC目標、SOC床、ICE燃料バッファ
+  - SOC/燃料: 帰庫後SOC目標[%]、帰庫後SOC下限[%]、ICE燃料バッファ
   - 料金/CO2: TOU帯、CO2係数、CO2単価、目的関数に含める費目
   - PV/予報: PVプロファイル、PV天気モード、営業所エネルギー資産、Weather proxy
   - 目的/詳細: 目的プリセット、開始/終了断片、拡張重み、ソルバー詳細
   - Weather proxyを使う場合は、対象日を決めてからローカルJSONを選択、日別気象CSV、
-    Solcast PV、または代表PVから対象日用JSONを生成し、「確認/反映」でSOC floor/targetへ反映
+    Solcast PV、または代表PVから対象日用JSONを生成し、「確認/反映」で帰庫後SOC下限/目標へ反映
   - 対象日を変えた場合は、予報JSONも対象日用に再生成または選択し直してください
   - 「② ソルバー設定」を押してソルバー種別・時間上限・反復回数を設定
   - ソルバー設定を変えたら Prepare は stale になるため、次の手順で再作成します
@@ -8379,10 +8432,12 @@ class App:
   initial_soc_percent     メイン画面で編集する開始SOC比（0〜1）
                           「選択営業所の全BEVへ Save/Prepare 時に一斉反映」を ON にすると
                           選択営業所の BEV `initialSoc` をこの値へ一括更新してから保存/Prepareする
-  final_soc_floor_percent 帰庫後の SOC 最低保証（翌日分の確保）。例: 0.2
-  final_soc_target_percent 帰庫後 SOC の目標値（可能な範囲で目指す）。例: 0.8
+  final_soc_floor_percent 帰庫後に必ず残す最低SOC[%]。例: 20
+                          旧UIの 0.2 入力も 20% として扱う
+  final_soc_target_percent 帰庫後 SOC の目標値[%]（可能な範囲で目指す）。例: 80
+                           旧UIの 0.8 入力も 80% として扱う
   final_soc_target_tolerance_percent
-                          目標 SOC の許容誤差（例: 0.05）。0 = 厳密な等式制約
+                          目標 SOC の許容幅[%]（例: 5）。0 = 目標値を下回らない
 
 ■ Weather proxy
   enable_weather_operation_policy
@@ -8391,10 +8446,10 @@ class App:
                           擬似予報JSONのパス。最適化中にWebアクセスは行わない
   操作手順                  1) 左パネルで運行日を設定
                            2) 予報JSONを選択、またはCSV/Solcast/代表PVから生成
-                           3) 「確認/反映」でSOC floor/targetへ反映
+                           3) 「確認/反映」で帰庫後SOC下限/目標へ反映
                            4) Quick Setup 保存
                            5) Solver対応 Prepare
-  反映内容                  operation_mode から終了SOC floor/target、初期SOCランダム化、
+  反映内容                  operation_mode から帰庫後SOC下限/目標、初期SOCランダム化、
                           BEV duty bias、ICE backup bias 等を metadata として渡す
   Solcast PV proxy         data/derived/pv_profiles の発電形状を予報proxyへ変換する。
                           forecast_issue_date は service_date より前であること
