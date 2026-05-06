@@ -510,6 +510,7 @@ class ProblemBuilder:
         contract_overage_penalty_yen_per_kwh: Optional[float] = None,
         grid_to_bus_priority_penalty_yen_per_kwh: Optional[float] = None,
         grid_to_bess_priority_penalty_yen_per_kwh: Optional[float] = None,
+        pv_marginal_charge_cost_yen_per_kwh: float = 0.0,
         selected_depot_record: Optional[Dict[str, Any]] = None,
         depot_coordinates_by_id: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
         canonical_depot_id: str = "depot_default",
@@ -557,6 +558,10 @@ class ProblemBuilder:
             legacy_enable_vehicle_cost=enable_vehicle_cost,
             legacy_enable_driver_cost=enable_driver_cost,
             legacy_enable_other_cost=enable_other_cost,
+        )
+        pv_marginal_charge_cost_yen_per_kwh = max(
+            float(pv_marginal_charge_cost_yen_per_kwh or 0.0),
+            0.0,
         )
         if home_depot_charge_pre_window_min is None:
             home_depot_charge_pre_window_min = float(timestep_min)

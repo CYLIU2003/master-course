@@ -1786,6 +1786,7 @@ class App:
         self.diesel_price_var = tk.StringVar(value="145")
         self.demand_charge_var = tk.StringVar(value="1500")
         self.depot_power_limit_var = tk.StringVar(value="500")
+        self.pv_marginal_charge_cost_var = tk.StringVar(value="0")
         self.deadhead_speed_kmh_var = tk.StringVar(value="18")
         self.tou_text_var = tk.StringVar(value="0-12:15,12-20:40,20-48:20")
         self.grid_sell_price_var = tk.StringVar(value="0")
@@ -1919,6 +1920,15 @@ class App:
             tip1=(
                 "営業所↔停留所間の回送推定速度 [km/h]。\n"
                 "便連結の接続可否判定（到着+折返+回送 ≤ 出発）に使用。例: 18"
+            ),
+        )
+        self._param_row2(
+            energy_grp,
+            "PV自家消費単価 [円/kWh]", self.pv_marginal_charge_cost_var,
+            tip0=(
+                "営業所PVで発電した電力をバス充電・蓄電池充電に使う場合の内部評価単価です。\n"
+                "0円にすると、PV電力は限界費用ゼロとして扱います。設備償却や保守費を\n"
+                "含めたい場合は任意の単価を設定してください。入力目安: 0〜200 円/kWh。"
             ),
         )
         self._labeled_entry(
@@ -5587,6 +5597,7 @@ class App:
             self.grid_flat_price_var.set(str(sim.get("gridFlatPricePerKwh") or 30))
             self.grid_sell_price_var.set(str(sim.get("gridSellPricePerKwh") or 0))
             self.demand_charge_var.set(str(sim.get("demandChargeCostPerKw") or 1500))
+            self.pv_marginal_charge_cost_var.set(str(sim.get("pvMarginalChargeCostYenPerKwh") or 0))
             self.diesel_price_var.set(str(sim.get("dieselPricePerL") or 145))
             self.grid_co2_var.set(str(sim.get("gridCo2KgPerKwh") or 0))
             self.co2_price_var.set(str(sim.get("co2PricePerKg") or 0))
@@ -5792,6 +5803,10 @@ class App:
             "gridFlatPricePerKwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
             "gridSellPricePerKwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
             "demandChargeCostPerKw": self._parse_float(self.demand_charge_var.get(), 0.0),
+            "pvMarginalChargeCostYenPerKwh": self._parse_float(
+                self.pv_marginal_charge_cost_var.get(),
+                0.0,
+            ),
             "dieselPricePerL": self._parse_float(self.diesel_price_var.get(), 145.0),
             "gridCo2KgPerKwh": self._parse_float(self.grid_co2_var.get(), 0.0),
             "co2PricePerKg": self._parse_float(self.co2_price_var.get(), 0.0),
@@ -7116,6 +7131,10 @@ class App:
                 "grid_flat_price_per_kwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
                 "grid_sell_price_per_kwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
                 "demand_charge_cost_per_kw": self._parse_float(self.demand_charge_var.get(), 0.0),
+                "pv_marginal_charge_cost_yen_per_kwh": self._parse_float(
+                    self.pv_marginal_charge_cost_var.get(),
+                    0.0,
+                ),
                 "diesel_price_per_l": self._parse_float(self.diesel_price_var.get(), 145.0),
                 "grid_co2_kg_per_kwh": self._parse_float(self.grid_co2_var.get(), 0.0),
                 "co2_price_per_kg": self._parse_float(self.co2_price_var.get(), 0.0),
@@ -7673,6 +7692,7 @@ class App:
             (self.unserved_penalty_var, "未配車ペナルティを変更"),
             (self.grid_flat_price_var, "電気料金を変更"),
             (self.grid_sell_price_var, "売電単価を変更"),
+            (self.pv_marginal_charge_cost_var, "PV自家消費単価を変更"),
             (self.demand_charge_var, "需要料金を変更"),
             (self.diesel_price_var, "軽油単価を変更"),
             (self.deadhead_speed_kmh_var, "回送速度を変更"),

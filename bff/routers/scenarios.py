@@ -383,6 +383,7 @@ class UpdateScenarioBody(BaseModel):
     socMax: Optional[float] = None
     deadheadSpeedKmh: Optional[float] = None
     pvProfileId: Optional[str] = None
+    pvMarginalChargeCostYenPerKwh: Optional[float] = None
     weatherMode: Optional[str] = None
     weatherFactorScalar: Optional[float] = None
     enableWeatherOperationPolicy: Optional[bool] = None
@@ -443,6 +444,7 @@ class UpdateQuickSetupBody(BaseModel):
     dieselPricePerL: Optional[float] = None
     gridCo2KgPerKwh: Optional[float] = None
     co2PricePerKg: Optional[float] = None
+    pvMarginalChargeCostYenPerKwh: Optional[float] = None
     iceCo2KgPerL: Optional[float] = None
     depotPowerLimitKw: Optional[float] = None
     degradationWeight: Optional[float] = None
@@ -570,6 +572,11 @@ def _apply_scenario_simulation_settings(
         simulation_config["deadhead_speed_kmh"] = float(body.deadheadSpeedKmh)
     if body.pvProfileId is not None:
         simulation_config["pv_profile_id"] = str(body.pvProfileId)
+    if body.pvMarginalChargeCostYenPerKwh is not None:
+        simulation_config["pv_marginal_charge_cost_yen_per_kwh"] = max(
+            float(body.pvMarginalChargeCostYenPerKwh),
+            0.0,
+        )
     if body.weatherMode is not None:
         simulation_config["weather_mode"] = str(body.weatherMode)
     if body.weatherFactorScalar is not None:
@@ -1389,6 +1396,10 @@ def _builder_defaults(
         "dieselPricePerL": overlay_cost.get("diesel_price_per_l"),
         "gridCo2KgPerKwh": overlay_cost.get("grid_co2_kg_per_kwh"),
         "co2PricePerKg": overlay_cost.get("co2_price_per_kg"),
+        "pvMarginalChargeCostYenPerKwh": overlay_cost.get(
+            "pv_marginal_charge_cost_yen_per_kwh",
+            simulation_config.get("pv_marginal_charge_cost_yen_per_kwh", 0.0),
+        ),
         "co2PriceSource": simulation_config.get("co2_price_source") or "manual",
         "co2ReferenceDate": simulation_config.get("co2_reference_date"),
         "iceCo2KgPerL": overlay_cost.get("ice_co2_kg_per_l"),
@@ -1895,6 +1906,9 @@ def _build_quick_setup_payload(
             "dieselPricePerL": builder_defaults.get("dieselPricePerL"),
             "gridCo2KgPerKwh": builder_defaults.get("gridCo2KgPerKwh"),
             "co2PricePerKg": builder_defaults.get("co2PricePerKg"),
+            "pvMarginalChargeCostYenPerKwh": builder_defaults.get(
+                "pvMarginalChargeCostYenPerKwh"
+            ),
             "co2PriceSource": builder_defaults.get("co2PriceSource"),
             "co2ReferenceDate": builder_defaults.get("co2ReferenceDate"),
             "iceCo2KgPerL": builder_defaults.get("iceCo2KgPerL"),
@@ -2352,6 +2366,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             overlay_cost["grid_co2_kg_per_kwh"] = float(body.gridCo2KgPerKwh)
         if body.co2PricePerKg is not None:
             overlay_cost["co2_price_per_kg"] = float(body.co2PricePerKg)
+        if body.pvMarginalChargeCostYenPerKwh is not None:
+            overlay_cost["pv_marginal_charge_cost_yen_per_kwh"] = max(
+                float(body.pvMarginalChargeCostYenPerKwh),
+                0.0,
+            )
         if body.iceCo2KgPerL is not None:
             overlay_cost["ice_co2_kg_per_l"] = float(body.iceCo2KgPerL)
         if body.touPricing is not None:
@@ -2485,6 +2504,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["objective_preset"] = str(body.objectivePreset)
         if body.pvProfileId is not None:
             simulation_config["pv_profile_id"] = str(body.pvProfileId)
+        if body.pvMarginalChargeCostYenPerKwh is not None:
+            simulation_config["pv_marginal_charge_cost_yen_per_kwh"] = max(
+                float(body.pvMarginalChargeCostYenPerKwh),
+                0.0,
+            )
         if body.weatherMode is not None:
             simulation_config["weather_mode"] = str(body.weatherMode)
         if body.weatherFactorScalar is not None:

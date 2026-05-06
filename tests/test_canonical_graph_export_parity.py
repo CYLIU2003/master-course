@@ -271,6 +271,8 @@ def test_canonical_kpi_summary_reports_fuel_provisional_and_final_costs() -> Non
             "total_cost": 200.0,
             "energy_cost": 150.0,
             "electricity_cost": 50.0,
+            "pv_marginal_charge_cost_yen_per_kwh": 4.25,
+            "pv_self_consumption_cost_jpy": 2.0,
             "fuel_cost": 100.0,
             "fuel_cost_provisional": 160.0,
             "fuel_cost_refueled": 40.0,
@@ -294,7 +296,8 @@ def test_canonical_kpi_summary_reports_fuel_provisional_and_final_costs() -> Non
     assert payload["objective_value_jpy"] == 123.0
     assert payload["objective_is_actual_cost"] is False
     assert payload["supports_exact_milp"] is False
-    assert payload["pv_self_consumption_cost_jpy"] == 0.0
+    assert payload["pv_self_consumption_cost_jpy"] == 2.0
+    assert payload["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
 
 
 def test_canonical_graph_exports_enable_route_band_diagrams_when_fixed_mode_is_on(tmp_path: Path) -> None:
@@ -367,11 +370,18 @@ def test_canonical_graph_exports_fallback_grid_import_and_contract_exceedance(tm
         rows = list(csv.DictReader(handle))
 
     assert rows
+    assert "slot_minutes" in rows[0]
+    assert "grid_to_bus_slot_kwh" in rows[0]
+    assert "grid_to_bus_hourly_source_kwh" in rows[0]
+    assert "contract_over_limit_slot_kwh" in rows[0]
     charged_rows = [row for row in rows if float(row["grid_to_bus_kwh"]) > 0.0]
     assert charged_rows
     assert sum(float(row["grid_to_bus_kwh"]) for row in rows) == 10.0
+    assert sum(float(row["grid_to_bus_slot_kwh"]) for row in rows) == 10.0
     assert sum(float(row["pv_to_bus_kwh"]) for row in rows) == 0.0
     assert float(charged_rows[0]["contract_limit_kw"]) == 15.0
+    assert float(charged_rows[0]["slot_minutes"]) == 5.0
+    assert float(charged_rows[0]["grid_to_bus_hourly_source_kwh"]) == 10.0
     assert float(charged_rows[0]["contract_over_limit_kwh"]) > 0.0
     assert charged_rows[0]["contract_limit_exceeded"] == "True"
     assert charged_rows[0]["source_provenance_exact"] == "False"

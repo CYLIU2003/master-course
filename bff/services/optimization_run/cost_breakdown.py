@@ -7,6 +7,13 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
     breakdown = dict(engine_result.cost_breakdown or {})
     grid_energy_cost = float(breakdown.get("grid_purchase_cost", 0.0) or 0.0)
     pv_self_consumption_cost = float(breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0)
+    pv_marginal_charge_cost = float(
+        breakdown.get(
+            "pv_marginal_charge_cost_yen_per_kwh",
+            getattr(problem, "metadata", {}).get("pv_marginal_charge_cost_yen_per_kwh", 0.0),
+        )
+        or 0.0
+    )
     bess_discharge_cost = float(breakdown.get("bess_discharge_cost", 0.0) or 0.0)
     electricity_energy_cost = grid_energy_cost + pv_self_consumption_cost + bess_discharge_cost
     gross_cost = float(
@@ -23,6 +30,7 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
         "components": {
             "grid_energy_cost_jpy": grid_energy_cost,
             "pv_self_consumption_cost_jpy": pv_self_consumption_cost,
+            "pv_marginal_charge_cost_yen_per_kwh": pv_marginal_charge_cost,
             "bess_discharge_cost_jpy": bess_discharge_cost,
             "electricity_energy_cost": float(
                 breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", electricity_energy_cost))
@@ -56,6 +64,7 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
             "objective_mode": str((engine_result.solver_metadata or {}).get("objective_mode") or problem.scenario.objective_mode or "total_cost"),
             "solver_mode": str(getattr(getattr(engine_result, "mode", None), "value", "") or ""),
             "includes_pv": bool(problem.depot_energy_assets),
+            "pv_marginal_charge_cost_yen_per_kwh": pv_marginal_charge_cost,
         },
     }
 
@@ -184,6 +193,12 @@ def cost_breakdown(
             or 0.0
         ),
         "grid_purchase_cost": float(obj_breakdown.get("grid_purchase_cost", 0.0) or 0.0),
+        "pv_self_consumption_cost_jpy": float(
+            obj_breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0
+        ),
+        "pv_marginal_charge_cost_yen_per_kwh": float(
+            obj_breakdown.get("pv_marginal_charge_cost_yen_per_kwh", 0.0) or 0.0
+        ),
         "bess_discharge_cost": float(obj_breakdown.get("bess_discharge_cost", 0.0) or 0.0),
         "grid_import_kwh": float(obj_breakdown.get("grid_import_kwh", 0.0) or 0.0),
         "peak_grid_kw": float(obj_breakdown.get("peak_grid_kw", 0.0) or 0.0),

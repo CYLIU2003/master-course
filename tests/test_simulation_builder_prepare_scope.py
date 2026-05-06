@@ -68,6 +68,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             weather_proxy_daily_csv_path="data/weather/processed/tokyo.csv",
             weather_proxy_station_id="44132",
             weather_proxy_station_name="東京",
+            pv_marginal_charge_cost_yen_per_kwh=4.25,
             depot_energy_assets=[
                 {
                     "depot_id": "dep1",
@@ -130,6 +131,8 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["simulation_config"]["weather_proxy_daily_csv_path"] == "data/weather/processed/tokyo.csv"
     assert updated["simulation_config"]["weather_proxy_station_id"] == "44132"
     assert updated["simulation_config"]["weather_proxy_station_name"] == "東京"
+    assert updated["simulation_config"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
+    assert updated["scenario_overlay"]["cost_coefficients"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
     assert updated["simulation_config"]["depot_energy_assets"] == [
         {
             "depot_id": "dep1",

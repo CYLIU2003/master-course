@@ -28,6 +28,7 @@ class CostBreakdown:
     energy_cost: float = 0.0
     electricity_cost: float = 0.0
     pv_self_consumption_cost_jpy: float = 0.0
+    pv_marginal_charge_cost_yen_per_kwh: float = 0.0
     fuel_cost: float = 0.0
     demand_cost: float = 0.0
     vehicle_cost: float = 0.0
@@ -81,6 +82,7 @@ class CostBreakdown:
             "energy_cost": self.energy_cost,
             "electricity_cost": self.electricity_cost,
             "pv_self_consumption_cost_jpy": self.pv_self_consumption_cost_jpy,
+            "pv_marginal_charge_cost_yen_per_kwh": self.pv_marginal_charge_cost_yen_per_kwh,
             "fuel_cost": self.fuel_cost,
             "demand_cost": self.demand_cost,
             "vehicle_cost": self.vehicle_cost,
@@ -347,6 +349,7 @@ class CostEvaluator:
             bess_discharge_cost = 0.0
             contract_overage_cost = 0.0
             stationary_battery_degradation_cost = 0.0
+            pv_self_consumption_cost_jpy = 0.0
             pv_generated_kwh = 0.0
             pv_used_direct_kwh = 0.0
             pv_curtailed_kwh = 0.0
@@ -425,7 +428,8 @@ class CostEvaluator:
             return CostBreakdown(
                 energy_cost=energy_cost,
                 electricity_cost=electricity_cost,
-            pv_self_consumption_cost_jpy=pv_self_consumption_cost_jpy,
+                pv_self_consumption_cost_jpy=pv_self_consumption_cost_jpy,
+                pv_marginal_charge_cost_yen_per_kwh=pv_marginal_charge_cost,
                 fuel_cost=fuel_cost,
                 demand_cost=demand_cost,
                 vehicle_cost=vehicle_cost,
@@ -489,6 +493,7 @@ class CostEvaluator:
             energy_cost=energy_cost,
             electricity_cost=electricity_cost,
             pv_self_consumption_cost_jpy=pv_self_consumption_cost_jpy,
+            pv_marginal_charge_cost_yen_per_kwh=pv_marginal_charge_cost,
             fuel_cost=fuel_cost,
             demand_cost=demand_cost,
             vehicle_cost=vehicle_cost,

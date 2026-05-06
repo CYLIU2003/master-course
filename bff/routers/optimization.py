@@ -971,6 +971,8 @@ def _persist_rich_run_outputs(
         "solve_time_seconds": "s",
         "energy_cost": "JPY",
         "electricity_cost": "JPY",
+        "pv_self_consumption_cost_jpy": "JPY",
+        "pv_marginal_charge_cost_yen_per_kwh": "JPY/kWh",
         "demand_charge": "JPY",
         "vehicle_cost": "JPY",
         "driver_cost": "JPY",
@@ -1556,6 +1558,9 @@ def _persist_rich_run_outputs(
         "fuel_cost_provisional_leftover_jpy": float(cost_breakdown.get("fuel_cost_provisional_leftover", cost_breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
         "propulsion_energy_cost_jpy": float(cost_breakdown.get("energy_cost", 0.0) or 0.0),
         "pv_self_consumption_cost_jpy": float(cost_breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0),
+        "pv_marginal_charge_cost_yen_per_kwh": float(
+            cost_breakdown.get("pv_marginal_charge_cost_yen_per_kwh", 0.0) or 0.0
+        ),
         "weather_strategy_objective_term_jpy_equivalent": float(
             cost_breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
         ),
@@ -2223,7 +2228,9 @@ def _canonical_depot_power_rows_5min(
         return []
     timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
     timestep_h = timestep_min / 60.0
-    slot_scale = 5.0 / float(timestep_min)
+    output_slot_min = 5.0
+    output_slot_h = output_slot_min / 60.0
+    slot_scale = output_slot_min / float(timestep_min)
 
     slot_values_by_depot: Dict[str, Dict[int, Dict[str, float]]] = defaultdict(dict)
     for depot_id in list(flow_ctx["depot_ids"]):
@@ -2268,6 +2275,21 @@ def _canonical_depot_power_rows_5min(
         for minute in five_min_points:
             slot_idx = min(int(minute // timestep_min), max(slot_count - 1, 0))
             values = slot_map.get(slot_idx, {})
+            grid_import_kw = float(values.get("grid_import_kw", 0.0) or 0.0)
+            pv_generation_kw = float(values.get("pv_generation_kw", 0.0) or 0.0)
+            pv_curtailed_kw = float(values.get("pv_curtailed_kw", 0.0) or 0.0)
+            grid_to_bus_hourly_source_kwh = float(values.get("grid_to_bus_kwh", 0.0) or 0.0)
+            pv_to_bus_hourly_source_kwh = float(values.get("pv_to_bus_kwh", 0.0) or 0.0)
+            bess_to_bus_hourly_source_kwh = float(values.get("bess_to_bus_kwh", 0.0) or 0.0)
+            pv_to_bess_hourly_source_kwh = float(values.get("pv_to_bess_kwh", 0.0) or 0.0)
+            grid_to_bess_hourly_source_kwh = float(values.get("grid_to_bess_kwh", 0.0) or 0.0)
+            contract_over_limit_hourly_source_kwh = float(values.get("contract_over_limit_kwh", 0.0) or 0.0)
+            grid_to_bus_slot_kwh = grid_to_bus_hourly_source_kwh * slot_scale
+            pv_to_bus_slot_kwh = pv_to_bus_hourly_source_kwh * slot_scale
+            bess_to_bus_slot_kwh = bess_to_bus_hourly_source_kwh * slot_scale
+            pv_to_bess_slot_kwh = pv_to_bess_hourly_source_kwh * slot_scale
+            grid_to_bess_slot_kwh = grid_to_bess_hourly_source_kwh * slot_scale
+            contract_over_limit_slot_kwh = contract_over_limit_hourly_source_kwh * slot_scale
             timestamp = (
                 datetime.combine(base_date, datetime.min.time(), timezone(timedelta(hours=9)))
                 + timedelta(minutes=_canonical_horizon_start_min(problem) + minute)
@@ -2277,23 +2299,40 @@ def _canonical_depot_power_rows_5min(
                     "scenario_id": scenario_id,
                     "timestamp": timestamp,
                     "depot_id": depot_id,
+                    "slot_minutes": output_slot_min,
                     "total_charge_kw": float(values.get("total_charge_kw", 0.0) or 0.0),
-                    "grid_import_kw": float(values.get("grid_import_kw", 0.0) or 0.0),
-                    "grid_to_bus_kwh": float(values.get("grid_to_bus_kwh", 0.0) or 0.0) * slot_scale,
-                    "pv_to_bus_kwh": float(values.get("pv_to_bus_kwh", 0.0) or 0.0) * slot_scale,
-                    "bess_to_bus_kwh": float(values.get("bess_to_bus_kwh", 0.0) or 0.0) * slot_scale,
-                    "pv_to_bess_kwh": float(values.get("pv_to_bess_kwh", 0.0) or 0.0) * slot_scale,
-                    "grid_to_bess_kwh": float(values.get("grid_to_bess_kwh", 0.0) or 0.0) * slot_scale,
-                    "pv_generation_kw": float(values.get("pv_generation_kw", 0.0) or 0.0),
+                    "grid_import_kw": grid_import_kw,
+                    "grid_import_slot_kwh": grid_import_kw * output_slot_h,
+                    "grid_import_hourly_source_kwh": grid_to_bus_hourly_source_kwh + grid_to_bess_hourly_source_kwh,
+                    "grid_to_bus_kwh": grid_to_bus_slot_kwh,
+                    "grid_to_bus_slot_kwh": grid_to_bus_slot_kwh,
+                    "grid_to_bus_hourly_source_kwh": grid_to_bus_hourly_source_kwh,
+                    "pv_to_bus_kwh": pv_to_bus_slot_kwh,
+                    "pv_to_bus_slot_kwh": pv_to_bus_slot_kwh,
+                    "pv_to_bus_hourly_source_kwh": pv_to_bus_hourly_source_kwh,
+                    "bess_to_bus_kwh": bess_to_bus_slot_kwh,
+                    "bess_to_bus_slot_kwh": bess_to_bus_slot_kwh,
+                    "bess_to_bus_hourly_source_kwh": bess_to_bus_hourly_source_kwh,
+                    "pv_to_bess_kwh": pv_to_bess_slot_kwh,
+                    "pv_to_bess_slot_kwh": pv_to_bess_slot_kwh,
+                    "pv_to_bess_hourly_source_kwh": pv_to_bess_hourly_source_kwh,
+                    "grid_to_bess_kwh": grid_to_bess_slot_kwh,
+                    "grid_to_bess_slot_kwh": grid_to_bess_slot_kwh,
+                    "grid_to_bess_hourly_source_kwh": grid_to_bess_hourly_source_kwh,
+                    "pv_generation_kw": pv_generation_kw,
+                    "pv_generation_slot_kwh": pv_generation_kw * output_slot_h,
                     "pv_used_for_charging_kw": float(values.get("pv_used_for_charging_kw", 0.0) or 0.0),
                     "pv_used_for_building_kw": float(values.get("pv_used_for_building_kw", 0.0) or 0.0),
-                    "pv_curtailed_kw": float(values.get("pv_curtailed_kw", 0.0) or 0.0),
+                    "pv_curtailed_kw": pv_curtailed_kw,
+                    "pv_curtailed_slot_kwh": pv_curtailed_kw * output_slot_h,
                     "building_load_kw": float(values.get("building_load_kw", 0.0) or 0.0),
                     "battery_storage_charge_kw": float(values.get("battery_storage_charge_kw", 0.0) or 0.0),
                     "battery_storage_discharge_kw": float(values.get("battery_storage_discharge_kw", 0.0) or 0.0),
                     "net_load_kw": float(values.get("net_load_kw", 0.0) or 0.0),
                     "contract_limit_kw": float(values.get("contract_limit_kw", 0.0) or 0.0),
-                    "contract_over_limit_kwh": float(values.get("contract_over_limit_kwh", 0.0) or 0.0) * slot_scale,
+                    "contract_over_limit_kwh": contract_over_limit_slot_kwh,
+                    "contract_over_limit_slot_kwh": contract_over_limit_slot_kwh,
+                    "contract_over_limit_hourly_source_kwh": contract_over_limit_hourly_source_kwh,
                     "contract_over_limit_kw": float(values.get("contract_over_limit_kw", 0.0) or 0.0),
                     "contract_limit_exceeded": float(values.get("contract_over_limit_kwh", 0.0) or 0.0) > 1.0e-9,
                     "demand_peak_candidate": abs(float(values.get("grid_import_kw", 0.0) or 0.0) - peak_grid) <= 1.0e-9,
@@ -2430,6 +2469,11 @@ def _canonical_kpi_summary_json(
         "fuel_cost_refueled_jpy": float(breakdown.get("fuel_cost_refueled", breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
         "fuel_cost_provisional_leftover_jpy": float(breakdown.get("fuel_cost_provisional_leftover", breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
         "pv_self_consumption_cost_jpy": float(breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0),
+        "pv_marginal_charge_cost_yen_per_kwh": float(
+            breakdown.get("pv_marginal_charge_cost_yen_per_kwh", 0.0)
+            or getattr(problem, "metadata", {}).get("pv_marginal_charge_cost_yen_per_kwh", 0.0)
+            or 0.0
+        ),
         "propulsion_energy_cost_jpy": float(breakdown.get("energy_cost", 0.0) or 0.0),
         "electricity_cost_basis": "canonical_plan",
         "electricity_cost_provisional_jpy": float(breakdown.get("provisional_ev_drive_cost", 0.0) or 0.0),

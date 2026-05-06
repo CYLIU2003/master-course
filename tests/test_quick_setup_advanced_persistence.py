@@ -43,6 +43,7 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
         "vehicle_templates": [],
         "scenario_overlay": {
             "solver_config": {"objective_weights": {"battery_degradation_cost": 0.25}},
+            "cost_coefficients": {"pv_marginal_charge_cost_yen_per_kwh": 3.5},
         },
         "simulation_config": {
             "service_date": "2025-08-10",
@@ -112,6 +113,7 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
     assert payload["simulationSettings"]["solcastProxyIssueDate"] == "2025-08-09"
     assert payload["simulationSettings"]["solcastTypicalCurvePath"] == "data/weather/processed/typical.json"
     assert payload["simulationSettings"]["solcastTypicalWeatherClass"] == "cloudy"
+    assert payload["simulationSettings"]["pvMarginalChargeCostYenPerKwh"] == 3.5
 
 
 def test_update_quick_setup_persists_cost_component_toggles() -> None:
@@ -145,6 +147,9 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     def _capture_set_field(_scenario_id: str, field: str, value) -> None:
         captured[field] = value
 
+    def _capture_set_overlay(_scenario_id: str, value) -> None:
+        captured["scenario_overlay"] = value
+
     body = scenarios.UpdateQuickSetupBody(
         selectedDepotIds=["dep1"],
         selectedRouteIds=["route-a"],
@@ -155,6 +160,7 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
             "electricity_cost": True,
             "fuel_cost": False,
         },
+        pvMarginalChargeCostYenPerKwh=4.25,
     )
 
     with (
@@ -165,7 +171,7 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
         mock.patch.object(scenarios.store, "set_dispatch_scope", return_value=current_scope),
         mock.patch.object(scenarios.store, "get_scenario_overlay", return_value={}),
         mock.patch.object(scenarios.store, "get_field", return_value={}),
-        mock.patch.object(scenarios.store, "set_scenario_overlay"),
+        mock.patch.object(scenarios.store, "set_scenario_overlay", side_effect=_capture_set_overlay),
         mock.patch.object(scenarios.store, "set_field", side_effect=_capture_set_field),
         mock.patch.object(scenarios.store, "get_scenario", return_value=scenario),
         mock.patch.object(scenarios, "_build_quick_setup_payload", return_value={"ok": True}),
@@ -178,6 +184,9 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     assert simulation_config["cost_component_flags"]["driver_cost"] is False
     assert simulation_config["cost_component_flags"]["electricity_cost"] is True
     assert simulation_config["cost_component_flags"]["fuel_cost"] is False
+    scenario_overlay = captured["scenario_overlay"]
+    assert isinstance(scenario_overlay, dict)
+    assert scenario_overlay["cost_coefficients"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
 
 
 def test_update_quick_setup_persists_weather_proxy_state_without_validation() -> None:
