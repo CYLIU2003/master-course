@@ -5,26 +5,37 @@ from typing import Any, Dict
 
 def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -> Dict[str, Any]:
     breakdown = dict(engine_result.cost_breakdown or {})
+    grid_energy_cost = float(breakdown.get("grid_purchase_cost", 0.0) or 0.0)
+    pv_self_consumption_cost = float(breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0)
+    bess_discharge_cost = float(breakdown.get("bess_discharge_cost", 0.0) or 0.0)
+    electricity_energy_cost = grid_energy_cost + pv_self_consumption_cost + bess_discharge_cost
+    gross_cost = float(
+        breakdown.get("total_cost")
+        if breakdown.get("total_cost") is not None
+        else engine_result.objective_value
+        or 0.0
+    )
     return {
         "scenario_id": scenario_id,
         "currency": "JPY",
-        "total_cost": float(
-            breakdown.get("total_cost")
-            if breakdown.get("total_cost") is not None
-            else engine_result.objective_value
-            or 0.0
-        ),
+        "total_cost": gross_cost,
+        "gross_cost_jpy": gross_cost,
         "components": {
+            "grid_energy_cost_jpy": grid_energy_cost,
+            "pv_self_consumption_cost_jpy": pv_self_consumption_cost,
+            "bess_discharge_cost_jpy": bess_discharge_cost,
             "electricity_energy_cost": float(
-                breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", 0.0))
-                or 0.0
+                breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", electricity_energy_cost))
+                or electricity_energy_cost
             ),
+            "electricity_total_cost_jpy": electricity_energy_cost,
             "propulsion_energy_cost": float(breakdown.get("energy_cost", 0.0) or 0.0),
             "fuel_cost_final": float(breakdown.get("fuel_cost_final", breakdown.get("fuel_cost", 0.0)) or 0.0),
             "fuel_cost_provisional": float(breakdown.get("fuel_cost_provisional", breakdown.get("provisional_ice_drive_cost", 0.0)) or 0.0),
             "fuel_cost_refueled": float(breakdown.get("fuel_cost_refueled", breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
             "fuel_cost_provisional_leftover": float(breakdown.get("fuel_cost_provisional_leftover", breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
             "demand_charge_cost": float(breakdown.get("demand_cost", 0.0) or 0.0),
+            "contract_overage_cost_jpy": float(breakdown.get("contract_overage_cost", 0.0) or 0.0),
             "diesel_cost": float(breakdown.get("fuel_cost", 0.0) or 0.0),
             "vehicle_fixed_cost": float(breakdown.get("vehicle_cost", 0.0) or 0.0),
             "driver_cost": float(breakdown.get("driver_cost", 0.0) or 0.0),
@@ -38,6 +49,8 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
             "weather_strategy_objective_term_jpy_equivalent": float(
                 breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
             ),
+            "fuel_cost_final_source": str(breakdown.get("fuel_cost_final_source", "provisional_distance_based") or "provisional_distance_based"),
+            "objective_is_actual_cost": bool(breakdown.get("objective_is_actual_cost", False)),
         },
         "meta": {
             "objective_mode": str((engine_result.solver_metadata or {}).get("objective_mode") or problem.scenario.objective_mode or "total_cost"),

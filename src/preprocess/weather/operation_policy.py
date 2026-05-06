@@ -410,6 +410,13 @@ def apply_weather_policy_to_problem(
     )
     metadata = dict(problem.metadata or {})
     profile_payload = weather_operation_profile_to_dict(profile)
+    pv_marginal_charge_cost_yen_per_kwh = float(
+        metadata.get(
+            "pv_marginal_charge_cost_yen_per_kwh",
+            profile.pv_marginal_charge_cost_yen_per_kwh,
+        )
+        or 0.0
+    )
     metadata.update(
         {
             "weather_proxy": _weather_proxy_metadata(forecast),
@@ -424,9 +431,7 @@ def apply_weather_policy_to_problem(
             "weather_strategy_bias_base_jpy_per_trip": (
                 DEFAULT_WEATHER_STRATEGY_BIAS_BASE_JPY_PER_TRIP
             ),
-            "pv_marginal_charge_cost_yen_per_kwh": float(
-                profile.pv_marginal_charge_cost_yen_per_kwh
-            ),
+            "pv_marginal_charge_cost_yen_per_kwh": pv_marginal_charge_cost_yen_per_kwh,
             "pv_marginal_charge_cost_policy": PV_MARGINAL_COST_POLICY,
         }
     )

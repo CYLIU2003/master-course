@@ -390,6 +390,9 @@ class UpdateScenarioBody(BaseModel):
     weatherProxyDailyCsvPath: Optional[str] = None
     weatherProxyStationId: Optional[str] = None
     weatherProxyStationName: Optional[str] = None
+    solcastProxyIssueDate: Optional[str] = None
+    solcastTypicalCurvePath: Optional[str] = None
+    solcastTypicalWeatherClass: Optional[str] = None
     depotEnergyAssets: Optional[List[Dict[str, Any]]] = None
     co2PriceSource: Optional[str] = None
     co2ReferenceDate: Optional[str] = None
@@ -475,6 +478,9 @@ class UpdateQuickSetupBody(BaseModel):
     weatherProxyDailyCsvPath: Optional[str] = None
     weatherProxyStationId: Optional[str] = None
     weatherProxyStationName: Optional[str] = None
+    solcastProxyIssueDate: Optional[str] = None
+    solcastTypicalCurvePath: Optional[str] = None
+    solcastTypicalWeatherClass: Optional[str] = None
     depotEnergyAssets: Optional[List[Dict[str, Any]]] = None
     co2PriceSource: Optional[str] = None
     co2ReferenceDate: Optional[str] = None
@@ -587,6 +593,18 @@ def _apply_scenario_simulation_settings(
     if body.weatherProxyStationName is not None:
         simulation_config["weather_proxy_station_name"] = str(
             body.weatherProxyStationName
+        ).strip()
+    if body.solcastProxyIssueDate is not None:
+        simulation_config["solcast_proxy_issue_date"] = str(
+            body.solcastProxyIssueDate
+        ).strip()
+    if body.solcastTypicalCurvePath is not None:
+        simulation_config["solcast_typical_curve_path"] = str(
+            body.solcastTypicalCurvePath
+        ).strip()
+    if body.solcastTypicalWeatherClass is not None:
+        simulation_config["solcast_typical_weather_class"] = str(
+            body.solcastTypicalWeatherClass
         ).strip()
     if body.depotEnergyAssets is not None:
         simulation_config["depot_energy_assets"] = [
@@ -1428,6 +1446,21 @@ def _builder_defaults(
             or simulation_config.get("weatherProxyStationName")
             or "東京"
         ),
+        "solcastProxyIssueDate": (
+            simulation_config.get("solcast_proxy_issue_date")
+            or simulation_config.get("solcastProxyIssueDate")
+            or ""
+        ),
+        "solcastTypicalCurvePath": (
+            simulation_config.get("solcast_typical_curve_path")
+            or simulation_config.get("solcastTypicalCurvePath")
+            or ""
+        ),
+        "solcastTypicalWeatherClass": (
+            simulation_config.get("solcast_typical_weather_class")
+            or simulation_config.get("solcastTypicalWeatherClass")
+            or "auto"
+        ),
         "depotEnergyAssets": list(simulation_config.get("depot_energy_assets") or []),
         "objectiveWeights": raw_objective_weights,
         "degradationWeight": (
@@ -1895,6 +1928,9 @@ def _build_quick_setup_payload(
             "weatherProxyDailyCsvPath": builder_defaults.get("weatherProxyDailyCsvPath") or "",
             "weatherProxyStationId": builder_defaults.get("weatherProxyStationId") or "44132",
             "weatherProxyStationName": builder_defaults.get("weatherProxyStationName") or "東京",
+            "solcastProxyIssueDate": builder_defaults.get("solcastProxyIssueDate") or "",
+            "solcastTypicalCurvePath": builder_defaults.get("solcastTypicalCurvePath") or "",
+            "solcastTypicalWeatherClass": builder_defaults.get("solcastTypicalWeatherClass") or "auto",
             "depotEnergyAssets": list(builder_defaults.get("depotEnergyAssets") or []),
             "objectiveWeights": dict(builder_defaults.get("objectiveWeights") or {}),
             "touPricing": list(builder_defaults.get("touPricing") or []),
@@ -2472,6 +2508,18 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         if body.weatherProxyStationName is not None:
             simulation_config["weather_proxy_station_name"] = str(
                 body.weatherProxyStationName
+            ).strip()
+        if body.solcastProxyIssueDate is not None:
+            simulation_config["solcast_proxy_issue_date"] = str(
+                body.solcastProxyIssueDate
+            ).strip()
+        if body.solcastTypicalCurvePath is not None:
+            simulation_config["solcast_typical_curve_path"] = str(
+                body.solcastTypicalCurvePath
+            ).strip()
+        if body.solcastTypicalWeatherClass is not None:
+            simulation_config["solcast_typical_weather_class"] = str(
+                body.solcastTypicalWeatherClass
             ).strip()
         if body.depotEnergyAssets is not None:
             simulation_config["depot_energy_assets"] = [

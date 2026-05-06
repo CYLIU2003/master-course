@@ -90,6 +90,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     vehicle_template_id: Optional[str] = None
     vehicle_count: int = 10
     initial_soc: float = 0.8
+    initial_soc_percent: Optional[float] = None
     soc_min: Optional[float] = None
     soc_max: Optional[float] = None
     battery_kwh: Optional[float] = None
@@ -144,8 +145,20 @@ class PrepareSimulationSettingsBody(BaseModel):
     no_improvement_limit: int = 100
     destroy_fraction: float = 0.25
     objective_weights: Dict[str, float] = Field(default_factory=dict)
+    final_soc_floor_percent: Optional[float] = None
+    final_soc_target_percent: Optional[float] = None
+    final_soc_target_tolerance_percent: Optional[float] = None
+    initial_ice_fuel_percent: Optional[float] = None
+    min_ice_fuel_percent: Optional[float] = None
+    max_ice_fuel_percent: Optional[float] = None
+    default_ice_tank_capacity_l: Optional[float] = None
+    co2_price_source: Optional[str] = None
+    co2_reference_date: Optional[str] = None
     max_start_fragments_per_vehicle: Optional[int] = None
     max_end_fragments_per_vehicle: Optional[int] = None
+    solcast_proxy_issue_date: Optional[str] = None
+    solcast_typical_curve_path: Optional[str] = None
+    solcast_typical_weather_class: Optional[str] = None
     random_seed: Optional[int] = None
     experiment_method: Optional[str] = None
     experiment_notes: Optional[str] = None

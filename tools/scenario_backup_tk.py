@@ -1515,6 +1515,14 @@ class App:
             cell.pack(side=tk.LEFT, padx=(0, 14))
             ttk.Label(cell, text=num, foreground=color, font=("TkDefaultFont", 9, "bold")).pack(side=tk.LEFT)
             ttk.Label(cell, text=f" {text}", foreground=color).pack(side=tk.LEFT)
+        ttk.Label(
+            guide,
+            text=(
+                "迷ったら ①保存 → ③Prepare → ④実行 の順です。保存は全タブの状態保存、"
+                "Prepare は最適化へ渡す入力検証と prepared_input 作成です。"
+            ),
+            foreground="#555",
+        ).pack(anchor="w", pady=(2, 0))
 
         # ── メインエリア（垂直 Paned：上=パネル群, 下=ログ）──
         vpane = ttk.Panedwindow(self.root, orient=tk.VERTICAL)
@@ -1551,6 +1559,16 @@ class App:
         quick_setup_save_btn = ttk.Button(top, text="Quick Setup 保存", command=self.save_quick_setup)
         quick_setup_save_btn.pack(side=tk.LEFT, padx=6)
         self._register_quick_setup_save_button(quick_setup_save_btn)
+        ttk.Label(
+            scope,
+            text=(
+                "ここで運行日・計画日数・営業所・路線を決めます。変更後は必ず Quick Setup 保存し、"
+                "右パネルで Solver対応 Prepare を再実行してください。"
+            ),
+            foreground="#555",
+            wraplength=520,
+            justify=tk.LEFT,
+        ).pack(anchor="w", fill=tk.X, pady=(0, 4))
 
         # ── 運行設定（常時表示）── canvas より上に置くことで常に見える
         self.day_type_var = tk.StringVar(value="WEEKDAY")
@@ -1693,6 +1711,16 @@ class App:
             foreground="#1a5276",
             font=("TkDefaultFont", 9, "bold"),
         ).pack(anchor="w", pady=(0, 4))
+        ttk.Label(
+            action_bar,
+            text=(
+                "①保存: UI全体を保存します。③Prepare: 保存済み/画面上の設定を最適化入力へ変換し、"
+                "Weather proxy の日付不一致などを検証します。"
+            ),
+            foreground="#555",
+            wraplength=760,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(0, 4))
 
         btn_row = ttk.Frame(action_bar)
         btn_row.pack(fill=tk.X)
@@ -1823,6 +1851,42 @@ class App:
             _RUN_PARAMETER_TAB_LABELS,
         ):
             self.run_parameter_notebook.add(tab, text=label)
+
+        ttk.Label(
+            quick_tab,
+            text="最初に確認する項目です。料金、SOC初期値、欠便ペナルティを決めたら ①シナリオ保存します。",
+            foreground="#555",
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", fill=tk.X, pady=(0, 4))
+        ttk.Label(
+            soc_fuel_tab,
+            text="BEVの帰庫後SOCとICE燃料の安全余裕を設定します。Weather proxyの確認/反映は終了SOC目標を上書きすることがあります。",
+            foreground="#555",
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", fill=tk.X, pady=(0, 4))
+        ttk.Label(
+            price_tab,
+            text="料金、CO2、目的関数に含める費目を設定します。TOU帯は30分スロット、需要料金はピークkW単価です。",
+            foreground="#555",
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", fill=tk.X, pady=(0, 4))
+        ttk.Label(
+            weather_tab,
+            text="PV形状と予報proxyを設定します。対象日を変えた後は、その対象日用の予報JSONを再生成または選択してください。",
+            foreground="#555",
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", fill=tk.X, pady=(0, 4))
+        ttk.Label(
+            objective_tab,
+            text="目的プリセット、拡張重み、ソルバー詳細を設定します。ここを変えたら Prepare は stale になるため再Prepareしてください。",
+            foreground="#555",
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", fill=tk.X, pady=(0, 4))
 
         # ── エネルギー単価 ──
         energy_grp = ttk.LabelFrame(quick_tab, text="よく使う料金・電力", padding=4)
@@ -2060,6 +2124,16 @@ class App:
 
         proxy_grp = ttk.LabelFrame(pv_grp, text="予報proxy → 最適化ポリシー", padding=4)
         proxy_grp.pack(fill=tk.X, pady=(6, 0))
+        ttk.Label(
+            proxy_grp,
+            text=(
+                "使い方: 左パネルで運行日を決める → 予報JSONを選択/生成 → 確認/反映 → ①保存 → ③Prepare。"
+                "保存は日付不一致でも通りますが、Prepare/実行では予報JSONの service_date と運行日が一致しないと止まります。"
+            ),
+            foreground="#7d6608",
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", fill=tk.X, pady=(0, 4))
         proxy_enable = ttk.Checkbutton(
             proxy_grp,
             text="擬似予報をSOC/初期SOC/運用ポリシーとして最適化へ反映",
@@ -3268,6 +3342,7 @@ class App:
             "weatherProxyDailyCsvPath": self.weather_daily_csv_path_var.get().strip(),
             "weatherProxyStationId": self.weather_proxy_station_id_var.get().strip(),
             "weatherProxyStationName": self.weather_proxy_station_name_var.get().strip(),
+            "solcastProxyIssueDate": self.solcast_proxy_issue_date_var.get().strip(),
             "solcastTypicalCurvePath": self.solcast_typical_curve_path_var.get().strip(),
             "solcastTypicalWeatherClass": self.solcast_typical_weather_class_var.get().strip(),
         }
@@ -3281,6 +3356,7 @@ class App:
             "weather_proxy_daily_csv_path": self.weather_daily_csv_path_var.get().strip() or None,
             "weather_proxy_station_id": self.weather_proxy_station_id_var.get().strip() or None,
             "weather_proxy_station_name": self.weather_proxy_station_name_var.get().strip() or None,
+            "solcast_proxy_issue_date": self.solcast_proxy_issue_date_var.get().strip() or None,
             "solcast_typical_curve_path": self.solcast_typical_curve_path_var.get().strip() or None,
             "solcast_typical_weather_class": self.solcast_typical_weather_class_var.get().strip() or None,
         }
@@ -5500,6 +5576,11 @@ class App:
             self.objective_preset_var.set(str(solver.get("objectivePreset") or sim.get("objectivePreset") or "cost"))
             self.max_start_fragments_var.set(str(solver.get("maxStartFragmentsPerVehicle") or 100))
             self.max_end_fragments_var.set(str(solver.get("maxEndFragmentsPerVehicle") or 100))
+            self.milp_max_successors_var.set(
+                ""
+                if solver.get("milpMaxSuccessorsPerTrip") is None
+                else str(solver.get("milpMaxSuccessorsPerTrip"))
+            )
             self.enable_vehicle_diagram_output_var.set(bool(solver.get("enableVehicleDiagramOutput", True)))
             self.allow_partial_service_var.set(bool(sim.get("allowPartialService", False)))
             self.unserved_penalty_var.set(str(sim.get("unservedPenalty") or 10000))
@@ -5569,6 +5650,7 @@ class App:
             self.weather_daily_csv_path_var.set(str(sim.get("weatherProxyDailyCsvPath") or ""))
             self.weather_proxy_station_id_var.set(str(sim.get("weatherProxyStationId") or "44132"))
             self.weather_proxy_station_name_var.set(str(sim.get("weatherProxyStationName") or "東京"))
+            self.solcast_proxy_issue_date_var.set(str(sim.get("solcastProxyIssueDate") or ""))
             self.solcast_typical_curve_path_var.set(str(sim.get("solcastTypicalCurvePath") or ""))
             self.solcast_typical_weather_class_var.set(
                 str(sim.get("solcastTypicalWeatherClass") or "auto")
@@ -5676,9 +5758,6 @@ class App:
                 "初期SOC比を一斉反映するには営業所を選択してください",
             )
             return
-        if not self._ensure_weather_proxy_ready_for_optimization():
-            return
-
         payload = {
             "selectedDepotIds": self._selected_depot_ids(),
             "selectedRouteIds": self._selected_route_ids(),
@@ -5702,6 +5781,7 @@ class App:
             "destroyFraction": self._parse_float(self.destroy_fraction_var.get(), 0.25),
             "maxStartFragmentsPerVehicle": self._parse_int(self.max_start_fragments_var.get(), 100),
             "maxEndFragmentsPerVehicle": self._parse_int(self.max_end_fragments_var.get(), 100),
+            "milpMaxSuccessorsPerTrip": self._parse_int(self.milp_max_successors_var.get(), None) or None,
             "enableVehicleDiagramOutput": self.enable_vehicle_diagram_output_var.get(),
             "allowPartialService": self.allow_partial_service_var.get(),
             "unservedPenalty": self._parse_float(self.unserved_penalty_var.get(), 10000.0),
@@ -7044,10 +7124,41 @@ class App:
                 "tou_pricing": self._parse_tou_text(),
                 "objective_weights": objective_weights,
                 "depot_energy_assets": depot_energy_assets,
+                "final_soc_floor_percent": self._parse_float(
+                    self.final_soc_floor_percent_var.get(),
+                    0.2,
+                ),
+                "final_soc_target_percent": self._parse_float(
+                    self.final_soc_target_percent_var.get(),
+                    0.8,
+                ),
+                "final_soc_target_tolerance_percent": self._parse_float(
+                    self.final_soc_target_tolerance_percent_var.get(),
+                    0.0,
+                ),
+                "initial_ice_fuel_percent": self._parse_float(
+                    self.initial_ice_fuel_percent_var.get(),
+                    100.0,
+                ),
+                "min_ice_fuel_percent": self._parse_float(self.min_ice_fuel_percent_var.get(), 10.0),
+                "max_ice_fuel_percent": self._parse_float(self.max_ice_fuel_percent_var.get(), 90.0),
+                "default_ice_tank_capacity_l": self._parse_float(
+                    self.default_ice_tank_capacity_l_var.get(),
+                    300.0,
+                ),
+                "co2_price_source": self.co2_price_source_var.get().strip() or "manual",
+                "co2_reference_date": self.co2_reference_date_var.get().strip() or None,
                 "pv_profile_id": self.pv_profile_id_var.get().strip() or None,
                 "weather_mode": self.weather_mode_var.get().strip() or _ACTUAL_DATE_PV_PROFILE_ID,
                 "weather_factor_scalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
+                "start_time": self._normalize_hhmm_text(
+                    self.operation_start_time_var.get(),
+                    default="05:00",
+                ),
+                "end_time": self._normalize_hhmm_text(self.operation_end_time_var.get(), default="23:00"),
                 "planning_horizon_hours": minimum_horizon_hours,
+                "max_start_fragments_per_vehicle": self._parse_int(self.max_start_fragments_var.get(), 100),
+                "max_end_fragments_per_vehicle": self._parse_int(self.max_end_fragments_var.get(), 100),
                 "random_seed": self._parse_int(self.random_seed_var.get(), 42),
                 **weather_proxy_payload,
             },
@@ -8198,17 +8309,24 @@ class App:
   - 対象の営業所にチェックを入れ、▶ で路線を展開して選択
   - 運行種別（WEEKDAY/SATURDAY/HOLIDAYなど）と運行日を設定
   - 設定が決まったら「Quick Setup 保存」
+  - 保存は全タブの状態保存です。Weather proxy の日付不一致だけで保存は止めません
 
 ③ ソルバー設定（中パネル）
-  - 燃料単価・電気代・SOC上下限などを確認・変更
-  - 詳細パラメータ（CO₂・劣化費）は下へスクロール
-  - Weather proxyを使う場合は、ローカルJSONを選択、日別気象CSV、またはSolcast PVから生成し、
-    「確認/反映」でSOC floor/targetへ反映してから Quick Setup 保存
+  - タブを左から順に確認: よく使う → SOC/燃料 → 料金/CO2 → PV/予報 → 目的/詳細
+  - よく使う: 燃料単価、電気代、需要単価、契約上限、初期SOC、欠便ペナルティ
+  - SOC/燃料: 帰庫後SOC目標、SOC床、ICE燃料バッファ
+  - 料金/CO2: TOU帯、CO2係数、CO2単価、目的関数に含める費目
+  - PV/予報: PVプロファイル、PV天気モード、営業所エネルギー資産、Weather proxy
+  - 目的/詳細: 目的プリセット、開始/終了断片、拡張重み、ソルバー詳細
+  - Weather proxyを使う場合は、対象日を決めてからローカルJSONを選択、日別気象CSV、
+    Solcast PV、または代表PVから対象日用JSONを生成し、「確認/反映」でSOC floor/targetへ反映
+  - 対象日を変えた場合は、予報JSONも対象日用に再生成または選択し直してください
   - 「② ソルバー設定」を押してソルバー種別・時間上限・反復回数を設定
   - ソルバー設定を変えたら Prepare は stale になるため、次の手順で再作成します
 
 ④ Solver対応 Prepare
   - 「③ Solver対応 Prepare」をクリック
+  - ここで Weather proxy の service_date と運行日の一致、future leakage なしを検証します
   - prepared_input_id と solver profile が表示されれば完了
 
 ⑤ 実行
@@ -8251,11 +8369,18 @@ class App:
                           ローカル WeatherProxyForecast JSON を最適化へ反映するスイッチ
   weather_proxy_forecast_path
                           擬似予報JSONのパス。最適化中にWebアクセスは行わない
+  操作手順                  1) 左パネルで運行日を設定
+                           2) 予報JSONを選択、またはCSV/Solcast/代表PVから生成
+                           3) 「確認/反映」でSOC floor/targetへ反映
+                           4) Quick Setup 保存
+                           5) Solver対応 Prepare
   反映内容                  operation_mode から終了SOC floor/target、初期SOCランダム化、
                           BEV duty bias、ICE backup bias 等を metadata として渡す
   Solcast PV proxy         data/derived/pv_profiles の発電形状を予報proxyへ変換する。
                           forecast_issue_date は service_date より前であること
   禁止条件                  analog_date/forecast_issue_date >= service_date は未来情報リークとして拒否する
+  日付不一致                保存はできますが、Prepare/実行では UI の運行日と JSON の service_date が
+                           一致しない場合 WEATHER_PROXY_SERVICE_DATE_MISMATCH で停止する
 
 ■ 充電器・電力
   depot_power_limit_kw    営業所の系統受電契約電力上限 [kW]（例: 500）
@@ -8348,6 +8473,12 @@ class App:
 ■ Quick Setup 読込後に選択が空になる
   → stale な保存選択が runtime 補正で外れた可能性
   → 営業所を選択し直してから Quick Setup 保存 → Prepare を再実行
+
+■ WEATHER_PROXY_SERVICE_DATE_MISMATCH
+  → 運行日を変えた後、古い予報JSONが残っている状態
+  → PV/予報タブで対象日用の予報JSONを選び直す、またはCSV/Solcast/代表PVから再生成
+  → 「確認/反映」で service_date を確認してから Prepare を再実行
+  → Quick Setup 保存だけなら通るが、Prepare/実行では研究妥当性保護のため停止する
 """)
 
         ttk.Button(win, text="閉じる", command=win.destroy).pack(pady=6)

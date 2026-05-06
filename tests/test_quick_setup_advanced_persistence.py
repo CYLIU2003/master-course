@@ -45,6 +45,7 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
             "solver_config": {"objective_weights": {"battery_degradation_cost": 0.25}},
         },
         "simulation_config": {
+            "service_date": "2025-08-10",
             "objective_weights": {
                 "switch_cost": 2.5,
                 "slack_penalty": 123456.0,
@@ -56,6 +57,14 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
                 "electricity_cost": False,
                 "fuel_cost": True,
             },
+            "enable_weather_operation_policy": True,
+            "weather_proxy_forecast_path": "data/weather/proxy_forecasts/old.json",
+            "weather_proxy_daily_csv_path": "data/weather/processed/tokyo.csv",
+            "weather_proxy_station_id": "44132",
+            "weather_proxy_station_name": "東京",
+            "solcast_proxy_issue_date": "2025-08-09",
+            "solcast_typical_curve_path": "data/weather/processed/typical.json",
+            "solcast_typical_weather_class": "cloudy",
         },
     }
     scenario = {
@@ -95,6 +104,14 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
     assert payload["simulationSettings"]["costComponentFlags"]["driver_cost"] is True
     assert payload["simulationSettings"]["costComponentFlags"]["electricity_cost"] is False
     assert payload["simulationSettings"]["costComponentFlags"]["fuel_cost"] is True
+    assert payload["simulationSettings"]["enableWeatherOperationPolicy"] is True
+    assert payload["simulationSettings"]["weatherProxyForecastPath"] == "data/weather/proxy_forecasts/old.json"
+    assert payload["simulationSettings"]["weatherProxyDailyCsvPath"] == "data/weather/processed/tokyo.csv"
+    assert payload["simulationSettings"]["weatherProxyStationId"] == "44132"
+    assert payload["simulationSettings"]["weatherProxyStationName"] == "東京"
+    assert payload["simulationSettings"]["solcastProxyIssueDate"] == "2025-08-09"
+    assert payload["simulationSettings"]["solcastTypicalCurvePath"] == "data/weather/processed/typical.json"
+    assert payload["simulationSettings"]["solcastTypicalWeatherClass"] == "cloudy"
 
 
 def test_update_quick_setup_persists_cost_component_toggles() -> None:
@@ -161,6 +178,80 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     assert simulation_config["cost_component_flags"]["driver_cost"] is False
     assert simulation_config["cost_component_flags"]["electricity_cost"] is True
     assert simulation_config["cost_component_flags"]["fuel_cost"] is False
+
+
+def test_update_quick_setup_persists_weather_proxy_state_without_validation() -> None:
+    current_scope = {
+        "serviceId": "WEEKDAY",
+        "depotSelection": {"depotIds": ["dep1"], "primaryDepotId": "dep1"},
+        "routeSelection": {"mode": "refine", "includeRouteIds": ["route-a"], "excludeRouteIds": []},
+        "serviceSelection": {"serviceIds": ["WEEKDAY"]},
+        "tripSelection": {"includeDeadhead": True},
+    }
+    doc = {
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [{"id": "route-a", "depotId": "dep1", "routeCode": "黒01"}],
+        "route_depot_assignments": [],
+        "vehicles": [],
+        "chargers": [],
+        "vehicle_templates": [],
+    }
+    scenario = {
+        "id": "scenario-1",
+        "name": "Scenario 1",
+        "operatorId": "tokyu",
+        "datasetVersion": "v1",
+        "datasetId": "tokyu_full",
+        "status": "draft",
+        "feedContext": {},
+        "stats": {},
+    }
+    captured: dict[str, object] = {}
+
+    def _capture_set_field(_scenario_id: str, field: str, value) -> None:
+        captured[field] = value
+
+    body = scenarios.UpdateQuickSetupBody(
+        selectedDepotIds=["dep1"],
+        selectedRouteIds=["route-a"],
+        dayType="WEEKDAY",
+        serviceDate="2025-08-10",
+        enableWeatherOperationPolicy=True,
+        weatherProxyForecastPath="data/weather/proxy_forecasts/2025-08-05.json",
+        weatherProxyDailyCsvPath="data/weather/processed/tokyo.csv",
+        weatherProxyStationId="44132",
+        weatherProxyStationName="東京",
+        solcastProxyIssueDate="2025-08-09",
+        solcastTypicalCurvePath="data/weather/processed/typical.json",
+        solcastTypicalWeatherClass="rainy",
+    )
+
+    with (
+        mock.patch.object(scenarios, "_ensure_runtime_master_data"),
+        mock.patch.object(scenarios, "_quick_setup_route_selection_patch", return_value=current_scope["routeSelection"]),
+        mock.patch.object(scenarios.store, "get_dispatch_scope", return_value=current_scope),
+        mock.patch.object(scenarios.store, "get_scenario_document_shallow", return_value=doc),
+        mock.patch.object(scenarios.store, "set_dispatch_scope", return_value=current_scope),
+        mock.patch.object(scenarios.store, "get_scenario_overlay", return_value={}),
+        mock.patch.object(scenarios.store, "get_field", return_value={}),
+        mock.patch.object(scenarios.store, "set_scenario_overlay"),
+        mock.patch.object(scenarios.store, "set_field", side_effect=_capture_set_field),
+        mock.patch.object(scenarios.store, "get_scenario", return_value=scenario),
+        mock.patch.object(scenarios, "_build_quick_setup_payload", return_value={"ok": True}),
+    ):
+        scenarios.update_quick_setup("scenario-1", body)
+
+    simulation_config = captured["simulation_config"]
+    assert isinstance(simulation_config, dict)
+    assert simulation_config["service_date"] == "2025-08-10"
+    assert simulation_config["enable_weather_operation_policy"] is True
+    assert simulation_config["weather_proxy_forecast_path"] == "data/weather/proxy_forecasts/2025-08-05.json"
+    assert simulation_config["weather_proxy_daily_csv_path"] == "data/weather/processed/tokyo.csv"
+    assert simulation_config["weather_proxy_station_id"] == "44132"
+    assert simulation_config["weather_proxy_station_name"] == "東京"
+    assert simulation_config["solcast_proxy_issue_date"] == "2025-08-09"
+    assert simulation_config["solcast_typical_curve_path"] == "data/weather/processed/typical.json"
+    assert simulation_config["solcast_typical_weather_class"] == "rainy"
 
 
 def test_update_quick_setup_forces_fixed_route_band_when_intra_swap_is_disabled() -> None:

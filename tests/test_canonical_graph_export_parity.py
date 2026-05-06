@@ -291,6 +291,10 @@ def test_canonical_kpi_summary_reports_fuel_provisional_and_final_costs() -> Non
     assert payload["fuel_cost_provisional_jpy"] == 160.0
     assert payload["fuel_cost_refueled_jpy"] == 40.0
     assert payload["fuel_cost_provisional_leftover_jpy"] == 60.0
+    assert payload["objective_value_jpy"] == 123.0
+    assert payload["objective_is_actual_cost"] is False
+    assert payload["supports_exact_milp"] is False
+    assert payload["pv_self_consumption_cost_jpy"] == 0.0
 
 
 def test_canonical_graph_exports_enable_route_band_diagrams_when_fixed_mode_is_on(tmp_path: Path) -> None:
@@ -365,6 +369,8 @@ def test_canonical_graph_exports_fallback_grid_import_and_contract_exceedance(tm
     assert rows
     charged_rows = [row for row in rows if float(row["grid_to_bus_kwh"]) > 0.0]
     assert charged_rows
+    assert sum(float(row["grid_to_bus_kwh"]) for row in rows) == 10.0
+    assert sum(float(row["pv_to_bus_kwh"]) for row in rows) == 0.0
     assert float(charged_rows[0]["contract_limit_kw"]) == 15.0
     assert float(charged_rows[0]["contract_over_limit_kwh"]) > 0.0
     assert charged_rows[0]["contract_limit_exceeded"] == "True"

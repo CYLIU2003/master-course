@@ -27,6 +27,7 @@ class CostBreakdown:
     # Backward-compatible aggregate of EV electricity and ICE fuel costs.
     energy_cost: float = 0.0
     electricity_cost: float = 0.0
+    pv_self_consumption_cost_jpy: float = 0.0
     fuel_cost: float = 0.0
     demand_cost: float = 0.0
     vehicle_cost: float = 0.0
@@ -72,11 +73,14 @@ class CostBreakdown:
     evaluation_feasible: bool = True
     return_leg_bonus: float = 0.0
     weather_strategy_objective_term_jpy_equivalent: float = 0.0
+    fuel_cost_final_source: str = "provisional_distance_based"
+    objective_is_actual_cost: bool = False
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "energy_cost": self.energy_cost,
             "electricity_cost": self.electricity_cost,
+            "pv_self_consumption_cost_jpy": self.pv_self_consumption_cost_jpy,
             "fuel_cost": self.fuel_cost,
             "demand_cost": self.demand_cost,
             "vehicle_cost": self.vehicle_cost,
@@ -129,6 +133,8 @@ class CostBreakdown:
             "weather_strategy_objective_term_jpy_equivalent": (
                 self.weather_strategy_objective_term_jpy_equivalent
             ),
+            "fuel_cost_final_source": self.fuel_cost_final_source,
+            "objective_is_actual_cost": self.objective_is_actual_cost,
         }
 
 
@@ -310,6 +316,23 @@ class CostEvaluator:
         pv_asset_cost = float(energy_cost_components.get("pv_asset_cost", 0.0))
         bess_asset_cost = float(energy_cost_components.get("bess_asset_cost", 0.0))
         fuel_cost_final = float(fuel_cost_components.get("fuel_cost_final", 0.0))
+        fuel_cost_final_source = str(
+            fuel_cost_components.get(
+                "fuel_cost_final_source",
+                "actual_refuel" if float(fuel_cost_components.get("realized_refuel_cost", 0.0) or 0.0) > 0.0 and float(fuel_cost_components.get("fuel_cost_provisional", 0.0) or 0.0) <= 1.0e-9 else "provisional_distance_based",
+            )
+            or "provisional_distance_based"
+        )
+        pv_marginal_charge_cost = max(
+            float(problem.metadata.get("pv_marginal_charge_cost_yen_per_kwh", 0.0) or 0.0),
+            0.0,
+        )
+        pv_self_consumption_cost_jpy = pv_marginal_charge_cost * (
+            max(float(energy_cost_components.get("pv_to_bus_kwh", 0.0) or 0.0), 0.0)
+            + max(float(energy_cost_components.get("pv_to_bess_kwh", 0.0) or 0.0), 0.0)
+        )
+
+        electricity_cost_final += pv_self_consumption_cost_jpy
 
         if not component_flags.get("contract_overage_penalty", True):
             contract_overage_cost = 0.0
@@ -397,10 +420,12 @@ class CostEvaluator:
         )
         objective_cost_term = accounting_total_cost - return_leg_bonus + weather_strategy_term
         total_cost_with_assets = accounting_total_cost + pv_asset_cost + bess_asset_cost
+        objective_is_actual_cost = abs(objective_cost_term - accounting_total_cost) <= 1.0e-6
         if service_coverage_mode == "strict" and plan.unserved_trip_ids:
             return CostBreakdown(
                 energy_cost=energy_cost,
                 electricity_cost=electricity_cost,
+            pv_self_consumption_cost_jpy=pv_self_consumption_cost_jpy,
                 fuel_cost=fuel_cost,
                 demand_cost=demand_cost,
                 vehicle_cost=vehicle_cost,
@@ -446,6 +471,8 @@ class CostEvaluator:
                 evaluation_feasible=False,
                 return_leg_bonus=return_leg_bonus,
                 weather_strategy_objective_term_jpy_equivalent=weather_strategy_term,
+                fuel_cost_final_source=fuel_cost_final_source,
+                objective_is_actual_cost=objective_is_actual_cost,
             )
         objective_value = objective_value_for_mode(
             objective_mode=problem.scenario.objective_mode,
@@ -461,6 +488,7 @@ class CostEvaluator:
         return CostBreakdown(
             energy_cost=energy_cost,
             electricity_cost=electricity_cost,
+            pv_self_consumption_cost_jpy=pv_self_consumption_cost_jpy,
             fuel_cost=fuel_cost,
             demand_cost=demand_cost,
             vehicle_cost=vehicle_cost,
@@ -505,6 +533,8 @@ class CostEvaluator:
             objective_value=objective_value,
             return_leg_bonus=return_leg_bonus,
             weather_strategy_objective_term_jpy_equivalent=weather_strategy_term,
+            fuel_cost_final_source=fuel_cost_final_source,
+            objective_is_actual_cost=objective_is_actual_cost,
         )
 
     def _evaluate_electricity_with_overwrite(

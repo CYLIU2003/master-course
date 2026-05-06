@@ -48,6 +48,7 @@ class CostConfig(BaseModel):
     grid_flat_price_per_kwh: float = Field(default=0.0, ge=0.0)
     grid_sell_price_per_kwh: float = Field(default=0.0, ge=0.0)
     demand_charge_cost_per_kw: float = Field(default=0.0, ge=0.0)
+    pv_marginal_charge_cost_yen_per_kwh: float = Field(default=0.0, ge=0.0)
     pv_enabled: bool = False
     pv_scale: float = Field(default=1.0, ge=0.0)
     diesel_price_per_l: float = Field(default=0.0, ge=0.0)

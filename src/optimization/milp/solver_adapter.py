@@ -1281,6 +1281,10 @@ class GurobiMILPAdapter:
             problem.metadata.get("pv_curtail_penalty_yen_per_kwh"),
             default=0.0,
         )
+        pv_marginal_charge_cost = self._safe_nonnegative_float(
+            problem.metadata.get("pv_marginal_charge_cost_yen_per_kwh"),
+            default=0.0,
+        )
         if g2bus_var or g2bess_var or bess2bus_var:
             if component_flags.get("electricity_cost", True):
                 for (depot_id, slot_idx), var in g2bus_var.items():
@@ -1309,6 +1313,11 @@ class GurobiMILPAdapter:
                     asset = effective_depot_energy_assets.get(depot_id) or (problem.depot_energy_assets or {}).get(depot_id)
                     bess_marginal = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
                     objective += energy_weight * bess_marginal * var
+                if pv_marginal_charge_cost > 0.0:
+                    for var in pv2bus_var.values():
+                        objective += energy_weight * pv_marginal_charge_cost * var
+                    for var in pv2bess_var.values():
+                        objective += energy_weight * pv_marginal_charge_cost * var
             if curtail_penalty > 0.0 and component_flags.get("electricity_cost", True):
                 for var in pv_curt_var.values():
                     objective += energy_weight * curtail_penalty * var

@@ -940,7 +940,11 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                 "demand_charge_cost_jpy": float(breakdown.get("demand_cost", 0.0) or 0.0),
                 "grid_purchase_cost_jpy": float(breakdown.get("grid_purchase_cost", 0.0) or 0.0),
                 "bess_discharge_cost_jpy": float(breakdown.get("bess_discharge_cost", 0.0) or 0.0),
+                "pv_self_consumption_cost_jpy": float(breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0),
                 "electricity_cost_jpy": electricity_cost_jpy,
+                "objective_value_jpy": float(engine_result.objective_value or 0.0),
+                "objective_is_actual_cost": bool(breakdown.get("objective_is_actual_cost", False)),
+                "supports_exact_milp": bool((engine_result.solver_metadata or {}).get("supports_exact_milp", False)),
             },
         },
         "rows": rows,
@@ -1015,6 +1019,16 @@ def _persist_rich_run_outputs(
         "objective_mode": optimization_result.get("objective_mode"),
         "objective_value": optimization_result.get("objective_value"),
         "objective_value_unit": "JPY",
+        "objective_value_jpy": float(optimization_result.get("objective_value", 0.0) or 0.0),
+        "total_cost_jpy": float(
+            (optimization_result.get("cost_breakdown") or {}).get(
+                "total_cost",
+                optimization_result.get("objective_value", 0.0),
+            )
+            or 0.0
+        ),
+        "objective_is_actual_cost": bool((optimization_result.get("cost_breakdown") or {}).get("objective_is_actual_cost", False)),
+        "supports_exact_milp": bool((optimization_result.get("solver_metadata") or {}).get("supports_exact_milp", False)),
         "solve_time_seconds": optimization_result.get("solve_time_seconds"),
         "solve_time_unit": "s",
         "trip_count_served": (optimization_result.get("summary") or {}).get("trip_count_served"),
@@ -1527,16 +1541,21 @@ def _persist_rich_run_outputs(
 
     kpi_summary = {
         "total_cost_jpy": float(cost_breakdown.get("total_cost", 0.0) or 0.0),
+        "objective_value_jpy": float(optimization_result.get("objective_value", 0.0) or 0.0),
+        "objective_is_actual_cost": bool(cost_breakdown.get("objective_is_actual_cost", False)),
+        "supports_exact_milp": bool((optimization_result.get("solver_metadata") or {}).get("supports_exact_milp", False)),
         "electricity_cost_jpy": float(
             cost_breakdown.get("electricity_cost", cost_breakdown.get("electricity_cost_final", 0.0))
             or 0.0
         ),
         "fuel_cost_jpy": float(cost_breakdown.get("fuel_cost", 0.0) or 0.0),
         "fuel_cost_final_jpy": float(cost_breakdown.get("fuel_cost_final", cost_breakdown.get("fuel_cost", 0.0)) or 0.0),
+        "fuel_cost_final_source": str(cost_breakdown.get("fuel_cost_final_source", "provisional_distance_based") or "provisional_distance_based"),
         "fuel_cost_provisional_jpy": float(cost_breakdown.get("fuel_cost_provisional", cost_breakdown.get("provisional_ice_drive_cost", 0.0)) or 0.0),
         "fuel_cost_refueled_jpy": float(cost_breakdown.get("fuel_cost_refueled", cost_breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
         "fuel_cost_provisional_leftover_jpy": float(cost_breakdown.get("fuel_cost_provisional_leftover", cost_breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
         "propulsion_energy_cost_jpy": float(cost_breakdown.get("energy_cost", 0.0) or 0.0),
+        "pv_self_consumption_cost_jpy": float(cost_breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0),
         "weather_strategy_objective_term_jpy_equivalent": float(
             cost_breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
         ),
@@ -2204,6 +2223,7 @@ def _canonical_depot_power_rows_5min(
         return []
     timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
     timestep_h = timestep_min / 60.0
+    slot_scale = 5.0 / float(timestep_min)
 
     slot_values_by_depot: Dict[str, Dict[int, Dict[str, float]]] = defaultdict(dict)
     for depot_id in list(flow_ctx["depot_ids"]):
@@ -2259,11 +2279,11 @@ def _canonical_depot_power_rows_5min(
                     "depot_id": depot_id,
                     "total_charge_kw": float(values.get("total_charge_kw", 0.0) or 0.0),
                     "grid_import_kw": float(values.get("grid_import_kw", 0.0) or 0.0),
-                    "grid_to_bus_kwh": float(values.get("grid_to_bus_kwh", 0.0) or 0.0),
-                    "pv_to_bus_kwh": float(values.get("pv_to_bus_kwh", 0.0) or 0.0),
-                    "bess_to_bus_kwh": float(values.get("bess_to_bus_kwh", 0.0) or 0.0),
-                    "pv_to_bess_kwh": float(values.get("pv_to_bess_kwh", 0.0) or 0.0),
-                    "grid_to_bess_kwh": float(values.get("grid_to_bess_kwh", 0.0) or 0.0),
+                    "grid_to_bus_kwh": float(values.get("grid_to_bus_kwh", 0.0) or 0.0) * slot_scale,
+                    "pv_to_bus_kwh": float(values.get("pv_to_bus_kwh", 0.0) or 0.0) * slot_scale,
+                    "bess_to_bus_kwh": float(values.get("bess_to_bus_kwh", 0.0) or 0.0) * slot_scale,
+                    "pv_to_bess_kwh": float(values.get("pv_to_bess_kwh", 0.0) or 0.0) * slot_scale,
+                    "grid_to_bess_kwh": float(values.get("grid_to_bess_kwh", 0.0) or 0.0) * slot_scale,
                     "pv_generation_kw": float(values.get("pv_generation_kw", 0.0) or 0.0),
                     "pv_used_for_charging_kw": float(values.get("pv_used_for_charging_kw", 0.0) or 0.0),
                     "pv_used_for_building_kw": float(values.get("pv_used_for_building_kw", 0.0) or 0.0),
@@ -2273,7 +2293,7 @@ def _canonical_depot_power_rows_5min(
                     "battery_storage_discharge_kw": float(values.get("battery_storage_discharge_kw", 0.0) or 0.0),
                     "net_load_kw": float(values.get("net_load_kw", 0.0) or 0.0),
                     "contract_limit_kw": float(values.get("contract_limit_kw", 0.0) or 0.0),
-                    "contract_over_limit_kwh": float(values.get("contract_over_limit_kwh", 0.0) or 0.0),
+                    "contract_over_limit_kwh": float(values.get("contract_over_limit_kwh", 0.0) or 0.0) * slot_scale,
                     "contract_over_limit_kw": float(values.get("contract_over_limit_kw", 0.0) or 0.0),
                     "contract_limit_exceeded": float(values.get("contract_over_limit_kwh", 0.0) or 0.0) > 1.0e-9,
                     "demand_peak_candidate": abs(float(values.get("grid_import_kw", 0.0) or 0.0) - peak_grid) <= 1.0e-9,
@@ -2396,15 +2416,20 @@ def _canonical_kpi_summary_json(
             else engine_result.objective_value
             or 0.0
         ),
+        "objective_value_jpy": float(engine_result.objective_value or 0.0),
+        "objective_is_actual_cost": bool(breakdown.get("objective_is_actual_cost", False)),
+        "supports_exact_milp": bool((engine_result.solver_metadata or {}).get("supports_exact_milp", False)),
         "electricity_cost_jpy": float(
             breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", 0.0))
             or 0.0
         ),
         "fuel_cost_jpy": float(breakdown.get("fuel_cost", 0.0) or 0.0),
         "fuel_cost_final_jpy": float(breakdown.get("fuel_cost_final", breakdown.get("fuel_cost", 0.0)) or 0.0),
+        "fuel_cost_final_source": str(breakdown.get("fuel_cost_final_source", "provisional_distance_based") or "provisional_distance_based"),
         "fuel_cost_provisional_jpy": float(breakdown.get("fuel_cost_provisional", breakdown.get("provisional_ice_drive_cost", 0.0)) or 0.0),
         "fuel_cost_refueled_jpy": float(breakdown.get("fuel_cost_refueled", breakdown.get("realized_ice_refuel_cost", 0.0)) or 0.0),
         "fuel_cost_provisional_leftover_jpy": float(breakdown.get("fuel_cost_provisional_leftover", breakdown.get("leftover_ice_provisional_cost", 0.0)) or 0.0),
+        "pv_self_consumption_cost_jpy": float(breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0),
         "propulsion_energy_cost_jpy": float(breakdown.get("energy_cost", 0.0) or 0.0),
         "electricity_cost_basis": "canonical_plan",
         "electricity_cost_provisional_jpy": float(breakdown.get("provisional_ev_drive_cost", 0.0) or 0.0),

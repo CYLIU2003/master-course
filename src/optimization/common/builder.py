@@ -342,6 +342,14 @@ class ProblemBuilder:
             grid_to_bess_priority_penalty_yen_per_kwh = self._safe_float(
                 cost_cfg.get("grid_to_bess_priority_penalty_yen_per_kwh")
             )
+        pv_marginal_charge_cost_yen_per_kwh = self._safe_float(
+            self._first_present(
+                simulation_cfg.get("pv_marginal_charge_cost_yen_per_kwh"),
+                cost_cfg.get("pv_marginal_charge_cost_yen_per_kwh"),
+            )
+        )
+        if pv_marginal_charge_cost_yen_per_kwh is None:
+            pv_marginal_charge_cost_yen_per_kwh = 0.0
         selected_depot_record = self._find_selected_depot_record(scenario, depot_id)
         depot_coordinates_by_id = self._depot_coordinates_by_id(scenario)
         depot_import_limit_kw = self._safe_float(
@@ -367,6 +375,9 @@ class ProblemBuilder:
                 "weather_strategy_bias_base_jpy_per_trip": simulation_cfg.get(
                     "weather_strategy_bias_base_jpy_per_trip",
                     300.0,
+                ),
+                "pv_marginal_charge_cost_yen_per_kwh": float(
+                    pv_marginal_charge_cost_yen_per_kwh
                 ),
             }
             if bool(simulation_cfg.get("enable_weather_operation_policy"))
@@ -431,6 +442,7 @@ class ProblemBuilder:
             contract_overage_penalty_yen_per_kwh=contract_overage_penalty_yen_per_kwh,
             grid_to_bus_priority_penalty_yen_per_kwh=grid_to_bus_priority_penalty_yen_per_kwh,
             grid_to_bess_priority_penalty_yen_per_kwh=grid_to_bess_priority_penalty_yen_per_kwh,
+            pv_marginal_charge_cost_yen_per_kwh=pv_marginal_charge_cost_yen_per_kwh,
             selected_depot_record=selected_depot_record,
             depot_coordinates_by_id=depot_coordinates_by_id,
             canonical_depot_id=str(depot_id or "depot_default"),
@@ -920,6 +932,7 @@ class ProblemBuilder:
                 "driver_fragment_start_cost_yen": (
                     0.0 if not normalized_cost_component_flags.get("driver_cost", True) else None
                 ),
+                "pv_marginal_charge_cost_yen_per_kwh": float(pv_marginal_charge_cost_yen_per_kwh),
                 "cost_component_flags": dict(normalized_cost_component_flags),
                 "depot_coordinates_by_id": dict(depot_coordinates_by_id or {}),
             },
