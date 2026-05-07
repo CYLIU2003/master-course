@@ -169,9 +169,67 @@ def test_final_soc_ui_normalizes_ratio_inputs_to_percent() -> None:
     app = App.__new__(App)
 
     assert App._soc_percent_for_ui(0.2, 20.0) == "20"
+    assert App._soc_percent_for_ui(20.0, 20.0) == "20"
     assert App._soc_percent_for_ui(80.0, 20.0) == "80"
     assert App._parse_soc_percent_for_payload(app, "0.8", 80.0) == 80.0
     assert App._parse_soc_percent_for_payload(app, "80", 80.0) == 80.0
+
+
+def test_sync_prepared_state_from_response_keeps_soc_fields_unchanged() -> None:
+    app = App.__new__(App)
+    app.prepared_var = DummyVar("")
+    app.prepared_input_id = ""
+    app.prepared_ready = False
+    app.prepared_trip_count = 0
+    app.prepared_dirty_reason = ""
+    app.prepared_profile_name = ""
+    app.final_soc_floor_percent_var = DummyVar("20")
+    app.final_soc_target_percent_var = DummyVar("80")
+    app.final_soc_target_tolerance_percent_var = DummyVar("0")
+
+    App._sync_prepared_state_from_response(
+        app,
+        {
+            "preparedInputId": "prepared-123",
+            "ready": True,
+            "tripCount": 456,
+            "prepareProfile": {"profile": "solver-ready"},
+        },
+    )
+
+    assert app.prepared_input_id == "prepared-123"
+    assert app.prepared_ready is True
+    assert app.prepared_trip_count == 456
+    assert app.prepared_profile_name == "solver-ready"
+    assert app.final_soc_floor_percent_var.get() == "20"
+    assert app.final_soc_target_percent_var.get() == "80"
+    assert app.final_soc_target_tolerance_percent_var.get() == "0"
+
+
+def test_prepare_weather_proxy_validation_does_not_overwrite_soc_fields() -> None:
+    app = App.__new__(App)
+    app.enable_weather_operation_policy_var = DummyVar(True)
+    app.weather_proxy_summary_var = DummyVar("Weather proxy: disabled")
+    app.final_soc_floor_percent_var = DummyVar("20")
+    app.final_soc_target_percent_var = DummyVar("80")
+    app.final_soc_target_tolerance_percent_var = DummyVar("0")
+    app._load_weather_proxy_forecast_from_ui = lambda: _weather_forecast()
+
+    seen: dict[str, object] = {}
+
+    def _fake_apply(forecast, *, update_soc_fields: bool, mark_stale: bool):
+        seen["update_soc_fields"] = update_soc_fields
+        seen["mark_stale"] = mark_stale
+        app.weather_proxy_summary_var.set(f"reflected:{forecast.forecast_type}")
+        return forecast
+
+    app._apply_weather_proxy_forecast_to_ui = _fake_apply
+
+    assert App._ensure_weather_proxy_ready_for_optimization(app) is True
+    assert seen == {"update_soc_fields": False, "mark_stale": False}
+    assert app.final_soc_floor_percent_var.get() == "20"
+    assert app.final_soc_target_percent_var.get() == "80"
+    assert app.final_soc_target_tolerance_percent_var.get() == "0"
 
 
 def test_weather_proxy_forecast_application_updates_visible_soc_policy() -> None:

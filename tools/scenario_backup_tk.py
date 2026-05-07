@@ -3525,7 +3525,7 @@ class App:
             write_weather_proxy_forecast_json(out_path, forecast)
             self.weather_proxy_forecast_path_var.set(self._repo_relative_path(out_path))
             self.enable_weather_operation_policy_var.set(True)
-            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=True)
+            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=False)
             self.log_line(
                 "Historical analog予報JSONを生成: "
                 f"{self.weather_proxy_forecast_path_var.get()} "
@@ -3568,7 +3568,7 @@ class App:
             write_weather_proxy_forecast_json(out_path, forecast)
             self.weather_proxy_forecast_path_var.set(self._repo_relative_path(out_path))
             self.enable_weather_operation_policy_var.set(True)
-            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=True)
+            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=False)
             self.log_line(
                 "Solcast PV予報proxy JSONを生成: "
                 f"{self.weather_proxy_forecast_path_var.get()} "
@@ -3657,7 +3657,7 @@ class App:
             self.weather_mode_var.set(
                 f"solcast_typical_{forecast.metadata.get('typical_weather_class') or weather_class}"
             )
-            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=True)
+            self._apply_weather_proxy_forecast_to_ui(forecast, update_soc_fields=False)
             self.log_line(
                 "Solcast代表PV予報proxy JSONを生成: "
                 f"{self.weather_proxy_forecast_path_var.get()} "
@@ -3675,7 +3675,7 @@ class App:
             forecast = self._load_weather_proxy_forecast_from_ui()
             self._apply_weather_proxy_forecast_to_ui(
                 forecast,
-                update_soc_fields=True,
+                update_soc_fields=False,
                 mark_stale=False,
             )
             return True
