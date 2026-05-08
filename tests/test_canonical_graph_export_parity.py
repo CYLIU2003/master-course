@@ -4,6 +4,8 @@ import csv
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from bff.routers import optimization
 from src.dispatch.models import DispatchContext, DutyLeg, Trip, VehicleDuty
@@ -20,6 +22,7 @@ from src.optimization.common.problem import (
     ProblemTrip,
     ProblemVehicle,
 )
+from src.optimization.engine import OptimizationEngine
 from src.optimization.common.result import ResultSerializer
 
 
@@ -114,6 +117,7 @@ def _problem_and_result() -> tuple[CanonicalOptimizationProblem, OptimizationEng
         grid_to_bus_kwh_by_depot_slot={"dep1": {0: 1.0}},
         pv_to_bus_kwh_by_depot_slot={"dep1": {0: 0.5}},
         pv_to_bess_kwh_by_depot_slot={"dep1": {1: 0.2}},
+        vehicle_soc_kwh_by_vehicle_slot={"veh-1": {0: 200.0, 1: 194.0}},
         served_trip_ids=("t1",),
         unserved_trip_ids=(),
         metadata={"duty_vehicle_map": {"veh-1": "veh-1"}},
@@ -144,6 +148,96 @@ def _problem_and_result() -> tuple[CanonicalOptimizationProblem, OptimizationEng
     return problem, result, scenario
 
 
+def test_normalize_postsolve_plan_preserves_pre_postsolve_source_flow_context() -> None:
+    engine = OptimizationEngine()
+    problem = SimpleNamespace(
+        scenario=SimpleNamespace(timestep_min=30),
+        metadata={},
+        vehicles=(),
+        chargers=(),
+    )
+    plan = AssignmentPlan(
+        charging_slots=(
+            ChargingSlot(
+                vehicle_id="veh-1",
+                slot_index=0,
+                charger_id="grid:dep1",
+                charge_kw=10.0,
+                charging_depot_id="dep1",
+            ),
+        ),
+        grid_to_bus_kwh_by_depot_slot={"dep1": {0: 1.0}},
+        pv_to_bus_kwh_by_depot_slot={"dep1": {0: 0.5}},
+        metadata={},
+    )
+
+    with (
+        mock.patch.object(engine, "_reassign_vehicle_fragments", return_value=plan),
+        mock.patch("src.optimization.engine.apply_opportunistic_topup", side_effect=lambda _problem, current_plan: current_plan),
+    ):
+        normalized_plan, *_rest = engine._normalize_postsolve_plan(problem, plan)
+
+    snapshot = normalized_plan.metadata["canonical_source_flow_context"]
+    assert snapshot["source_provenance_exact"] is True
+    assert snapshot["grid_to_bus_kwh_by_depot_slot"] == {"dep1": {0: 1.0}}
+    assert snapshot["pv_to_bus_kwh_by_depot_slot"] == {"dep1": {0: 0.5}}
+    assert snapshot["charging_slot_signatures"] == (("veh-1", 0, "grid:dep1", "dep1"),)
+
+
+def test_canonical_charging_output_payload_uses_preserved_source_flow_context() -> None:
+    problem, result, _scenario = _problem_and_result()
+    preserved_context = {
+        "grid_to_bus_kwh_by_depot_slot": {"dep1": {0: 1.0}},
+        "pv_to_bus_kwh_by_depot_slot": {"dep1": {0: 0.5}},
+        "bess_to_bus_kwh_by_depot_slot": {},
+        "pv_to_bess_kwh_by_depot_slot": {},
+        "grid_to_bess_kwh_by_depot_slot": {},
+        "pv_curtail_kwh_by_depot_slot": {},
+        "bess_soc_kwh_by_depot_slot": {},
+        "contract_over_limit_kwh_by_depot_slot": {},
+        "source_provenance_exact": True,
+        "charging_slot_signatures": (("veh-1", 0, "grid:dep1", "dep1"),),
+    }
+    plan = replace(
+        result.plan,
+        charging_slots=(
+            ChargingSlot(
+                vehicle_id="veh-1",
+                slot_index=0,
+                charger_id="grid:dep1",
+                charge_kw=20.0,
+                charging_depot_id="dep1",
+            ),
+            ChargingSlot(
+                vehicle_id="veh-1",
+                slot_index=1,
+                charger_id="chg-topup",
+                charge_kw=10.0,
+                charging_depot_id="dep1",
+            ),
+        ),
+        grid_to_bus_kwh_by_depot_slot={},
+        pv_to_bus_kwh_by_depot_slot={},
+        bess_to_bus_kwh_by_depot_slot={},
+        pv_to_bess_kwh_by_depot_slot={},
+        grid_to_bess_kwh_by_depot_slot={},
+        pv_curtail_kwh_by_depot_slot={},
+        bess_soc_kwh_by_depot_slot={},
+        contract_over_limit_kwh_by_depot_slot={},
+        metadata={
+            **dict(result.plan.metadata or {}),
+            "canonical_source_flow_context": preserved_context,
+        },
+    )
+    result = replace(result, plan=plan)
+
+    payload = optimization._canonical_charging_output_payload(problem, result)
+
+    assert payload["summary"]["totals"]["grid_to_bus_kwh"] == 6.0
+    assert payload["summary"]["totals"]["pv_to_bus_kwh"] == 0.5
+    assert payload["summary"]["source_provenance_exact"] is False
+
+
 def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_disabled(tmp_path: Path) -> None:
     problem, result, scenario = _problem_and_result()
 
@@ -159,6 +253,12 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert (tmp_path / "graph" / "vehicle_timeline.csv").exists()
     assert (tmp_path / "graph" / "soc_events.csv").exists()
     assert (tmp_path / "graph" / "depot_power_timeseries_5min.csv").exists()
+    assert (tmp_path / "graph" / "grid_import_timeseries.csv").exists()
+    assert (tmp_path / "graph" / "pv_generation_timeseries.csv").exists()
+    assert (tmp_path / "graph" / "energy_flow_timeseries.csv").exists()
+    assert (tmp_path / "graph" / "bus_charging_total_timeseries.csv").exists()
+    assert (tmp_path / "graph" / "vehicle_soc_timeseries.csv").exists()
+    assert (tmp_path / "graph" / "fuel_summary.csv").exists()
     assert (tmp_path / "graph" / "trip_assignment.csv").exists()
     assert (tmp_path / "graph" / "cost_breakdown.json").exists()
     assert (tmp_path / "graph" / "kpi_summary.json").exists()
@@ -168,6 +268,14 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert route_band_manifest["entries"]
     assert route_band_manifest["diagram_count"] == len(route_band_manifest["entries"])
     assert (tmp_path / "graph" / "vehicle_operation_diagrams" / "manifest.json").exists()
+    soc_rows = list(csv.DictReader((tmp_path / "graph" / "vehicle_soc_timeseries.csv").open(encoding="utf-8")))
+    assert soc_rows[0]["time"] == "00:00"
+    assert soc_rows[-1]["time"] == "23:55"
+    assert len(soc_rows) == 288
+    grid_rows = list(csv.DictReader((tmp_path / "graph" / "grid_import_timeseries.csv").open(encoding="utf-8")))
+    assert grid_rows[0]["time"] == "00:00"
+    assert grid_rows[-1]["time"] == "23:55"
+    assert len(grid_rows) == 288
 
 
 def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(tmp_path: Path) -> None:

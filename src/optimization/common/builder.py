@@ -350,6 +350,14 @@ class ProblemBuilder:
         )
         if pv_marginal_charge_cost_yen_per_kwh is None:
             pv_marginal_charge_cost_yen_per_kwh = 0.0
+        pv_curtail_penalty_yen_per_kwh = self._safe_float(
+            self._first_present(
+                simulation_cfg.get("pv_curtail_penalty_yen_per_kwh"),
+                cost_cfg.get("pv_curtail_penalty_yen_per_kwh"),
+            )
+        )
+        if pv_curtail_penalty_yen_per_kwh is None:
+            pv_curtail_penalty_yen_per_kwh = 0.0
         selected_depot_record = self._find_selected_depot_record(scenario, depot_id)
         depot_coordinates_by_id = self._depot_coordinates_by_id(scenario)
         depot_import_limit_kw = self._safe_float(
@@ -443,6 +451,7 @@ class ProblemBuilder:
             grid_to_bus_priority_penalty_yen_per_kwh=grid_to_bus_priority_penalty_yen_per_kwh,
             grid_to_bess_priority_penalty_yen_per_kwh=grid_to_bess_priority_penalty_yen_per_kwh,
             pv_marginal_charge_cost_yen_per_kwh=pv_marginal_charge_cost_yen_per_kwh,
+            pv_curtail_penalty_yen_per_kwh=pv_curtail_penalty_yen_per_kwh,
             selected_depot_record=selected_depot_record,
             depot_coordinates_by_id=depot_coordinates_by_id,
             canonical_depot_id=str(depot_id or "depot_default"),
@@ -511,6 +520,7 @@ class ProblemBuilder:
         grid_to_bus_priority_penalty_yen_per_kwh: Optional[float] = None,
         grid_to_bess_priority_penalty_yen_per_kwh: Optional[float] = None,
         pv_marginal_charge_cost_yen_per_kwh: float = 0.0,
+        pv_curtail_penalty_yen_per_kwh: float = 0.0,
         selected_depot_record: Optional[Dict[str, Any]] = None,
         depot_coordinates_by_id: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
         canonical_depot_id: str = "depot_default",
@@ -561,6 +571,10 @@ class ProblemBuilder:
         )
         pv_marginal_charge_cost_yen_per_kwh = max(
             float(pv_marginal_charge_cost_yen_per_kwh or 0.0),
+            0.0,
+        )
+        pv_curtail_penalty_yen_per_kwh = max(
+            float(pv_curtail_penalty_yen_per_kwh or 0.0),
             0.0,
         )
         if home_depot_charge_pre_window_min is None:
@@ -938,6 +952,7 @@ class ProblemBuilder:
                     0.0 if not normalized_cost_component_flags.get("driver_cost", True) else None
                 ),
                 "pv_marginal_charge_cost_yen_per_kwh": float(pv_marginal_charge_cost_yen_per_kwh),
+                "pv_curtail_penalty_yen_per_kwh": float(pv_curtail_penalty_yen_per_kwh),
                 "cost_component_flags": dict(normalized_cost_component_flags),
                 "depot_coordinates_by_id": dict(depot_coordinates_by_id or {}),
             },
@@ -1054,6 +1069,22 @@ class ProblemBuilder:
             else:
                 capacity_factor_series = tuple(0.0 for _ in range(slot_count))
                 pv_series = tuple(0.0 for _ in range(slot_count))
+            bess_enabled = bool(raw.get("bess_enabled", False))
+            bess_energy_kwh = max(float(raw.get("bess_energy_kwh") or 0.0), 0.0)
+            bess_soc_min_kwh = max(float(raw.get("bess_soc_min_kwh") or 0.0), 0.0)
+            bess_soc_max_kwh = max(float(raw.get("bess_soc_max_kwh") or 0.0), 0.0)
+            if bess_enabled and bess_energy_kwh > 0.0 and bess_soc_max_kwh <= 0.0:
+                bess_soc_max_kwh = bess_energy_kwh
+            if bess_soc_max_kwh > 0.0:
+                bess_soc_min_kwh = min(bess_soc_min_kwh, bess_soc_max_kwh)
+            bess_initial_soc_kwh = max(float(raw.get("bess_initial_soc_kwh") or 0.0), 0.0)
+            if bess_soc_max_kwh > 0.0:
+                bess_initial_soc_kwh = min(bess_initial_soc_kwh, bess_soc_max_kwh)
+            bess_initial_soc_kwh = max(bess_initial_soc_kwh, bess_soc_min_kwh)
+            bess_terminal_soc_min_kwh = max(float(raw.get("bess_terminal_soc_min_kwh") or 0.0), 0.0)
+            if bess_soc_max_kwh > 0.0:
+                bess_terminal_soc_min_kwh = min(bess_terminal_soc_min_kwh, bess_soc_max_kwh)
+
             asset = DepotEnergyAsset(
                 depot_id=depot.depot_id,
                 pv_enabled=pv_enabled,
@@ -1069,12 +1100,12 @@ class ProblemBuilder:
                 usable_area_ratio=estimate.usable_area_ratio,
                 panel_power_density_kw_m2=estimate.panel_power_density_kw_m2,
                 performance_ratio=performance_ratio,
-                bess_enabled=bool(raw.get("bess_enabled", False)),
-                bess_energy_kwh=float(raw.get("bess_energy_kwh") or 0.0),
+                bess_enabled=bess_enabled,
+                bess_energy_kwh=bess_energy_kwh,
                 bess_power_kw=float(raw.get("bess_power_kw") or 0.0),
-                bess_initial_soc_kwh=float(raw.get("bess_initial_soc_kwh") or 0.0),
-                bess_soc_min_kwh=float(raw.get("bess_soc_min_kwh") or 0.0),
-                bess_soc_max_kwh=float(raw.get("bess_soc_max_kwh") or 0.0),
+                bess_initial_soc_kwh=bess_initial_soc_kwh,
+                bess_soc_min_kwh=bess_soc_min_kwh,
+                bess_soc_max_kwh=bess_soc_max_kwh,
                 bess_charge_efficiency=float(raw.get("bess_charge_efficiency") or 0.95),
                 bess_discharge_efficiency=float(raw.get("bess_discharge_efficiency") or 0.95),
                 bess_cycle_cost_yen_per_kwh=float(raw.get("bess_cycle_cost_yen_per_kwh") or 0.0),
@@ -1092,7 +1123,7 @@ class ProblemBuilder:
                     if str(v).strip() != ""
                 ),
                 bess_priority_mode=str(raw.get("bess_priority_mode") or "cost_driven"),
-                bess_terminal_soc_min_kwh=float(raw.get("bess_terminal_soc_min_kwh") or 0.0),
+                bess_terminal_soc_min_kwh=bess_terminal_soc_min_kwh,
                 provisional_energy_cost_yen_per_kwh=float(raw.get("provisional_energy_cost_yen_per_kwh") or 0.0),
             )
             assets[depot.depot_id] = asset

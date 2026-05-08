@@ -25,6 +25,70 @@ from src.optimization.hybrid.hybrid_engine import HybridOptimizer
 from src.optimization.milp.engine import MILPOptimizer
 
 
+def _normalize_depot_slot_flow_mapping(raw: object) -> dict[str, dict[int, float]]:
+    normalized: dict[str, dict[int, float]] = {}
+    if not isinstance(raw, dict):
+        return normalized
+    for depot_id, slot_map in raw.items():
+        depot_key = str(depot_id or "").strip()
+        if not depot_key:
+            continue
+        normalized_slot_map: dict[int, float] = {}
+        items = slot_map.items() if isinstance(slot_map, dict) else dict(slot_map or {}).items()
+        for slot_idx, value in items:
+            try:
+                slot_key = int(slot_idx)
+            except (TypeError, ValueError):
+                continue
+            try:
+                amount = float(value or 0.0)
+            except (TypeError, ValueError):
+                amount = 0.0
+            if amount > 0.0:
+                normalized_slot_map[slot_key] = amount
+        if normalized_slot_map:
+            normalized[depot_key] = normalized_slot_map
+    return normalized
+
+
+def _charging_slot_signature(charging_slot) -> tuple[str, int, str, str]:
+    return (
+        str(getattr(charging_slot, "vehicle_id", "") or ""),
+        int(getattr(charging_slot, "slot_index", 0) or 0),
+        str(getattr(charging_slot, "charger_id", "") or ""),
+        str(getattr(charging_slot, "charging_depot_id", "") or ""),
+    )
+
+
+def _capture_source_flow_context(plan: AssignmentPlan) -> dict[str, object]:
+    grid_to_bus = _normalize_depot_slot_flow_mapping(getattr(plan, "grid_to_bus_kwh_by_depot_slot", {}))
+    pv_to_bus = _normalize_depot_slot_flow_mapping(getattr(plan, "pv_to_bus_kwh_by_depot_slot", {}))
+    bess_to_bus = _normalize_depot_slot_flow_mapping(getattr(plan, "bess_to_bus_kwh_by_depot_slot", {}))
+    pv_to_bess = _normalize_depot_slot_flow_mapping(getattr(plan, "pv_to_bess_kwh_by_depot_slot", {}))
+    grid_to_bess = _normalize_depot_slot_flow_mapping(getattr(plan, "grid_to_bess_kwh_by_depot_slot", {}))
+    pv_curtail = _normalize_depot_slot_flow_mapping(getattr(plan, "pv_curtail_kwh_by_depot_slot", {}))
+    bess_soc = _normalize_depot_slot_flow_mapping(getattr(plan, "bess_soc_kwh_by_depot_slot", {}))
+    contract_over_limit = _normalize_depot_slot_flow_mapping(getattr(plan, "contract_over_limit_kwh_by_depot_slot", {}))
+    explicit_source_split = any(
+        max(float(value or 0.0), 0.0) > 0.0
+        for mapping in (grid_to_bus, pv_to_bus, bess_to_bus, pv_to_bess, grid_to_bess, pv_curtail)
+        for slot_map in mapping.values()
+        for value in slot_map.values()
+    )
+    return {
+        "grid_to_bus_kwh_by_depot_slot": grid_to_bus,
+        "pv_to_bus_kwh_by_depot_slot": pv_to_bus,
+        "bess_to_bus_kwh_by_depot_slot": bess_to_bus,
+        "pv_to_bess_kwh_by_depot_slot": pv_to_bess,
+        "grid_to_bess_kwh_by_depot_slot": grid_to_bess,
+        "pv_curtail_kwh_by_depot_slot": pv_curtail,
+        "bess_soc_kwh_by_depot_slot": bess_soc,
+        "contract_over_limit_kwh_by_depot_slot": contract_over_limit,
+        "source_provenance_exact": explicit_source_split,
+        "charging_slot_signatures": tuple(_charging_slot_signature(slot) for slot in list(getattr(plan, "charging_slots", ()) or ())),
+    }
+
+
 class OptimizationEngine:
     def __init__(self) -> None:
         self._milp = MILPOptimizer()
@@ -265,6 +329,12 @@ class OptimizationEngine:
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
     ) -> tuple[AssignmentPlan, bool, bool, bool, bool]:
+        existing_source_flow_context = dict(getattr(plan, "metadata", {}) or {}).get("canonical_source_flow_context")
+        if isinstance(existing_source_flow_context, dict) and existing_source_flow_context:
+            source_flow_context = dict(existing_source_flow_context)
+        else:
+            source_flow_context = _capture_source_flow_context(plan)
+
         rebuilt_plan = self._reassign_vehicle_fragments(problem, plan)
         assignment_rebuilt = rebuilt_plan != plan
         charging_recomputed = False
@@ -282,6 +352,10 @@ class OptimizationEngine:
 
         topped_up_plan = apply_opportunistic_topup(problem, rebuilt_plan)
         opportunistic_topup_applied = int(topped_up_plan.metadata.get("opportunistic_topup_added_slot_count", 0) or 0) > 0
+        if bool(source_flow_context.get("source_provenance_exact")):
+            metadata = dict(topped_up_plan.metadata or {})
+            metadata.setdefault("canonical_source_flow_context", source_flow_context)
+            topped_up_plan = replace(topped_up_plan, metadata=metadata)
 
         return (
             topped_up_plan,

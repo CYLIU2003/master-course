@@ -692,6 +692,7 @@ def _default_depot_energy_asset_row(depot_id: str) -> dict[str, Any]:
         "bess_initial_soc_kwh": 0.0,
         "bess_soc_min_kwh": 0.0,
         "bess_soc_max_kwh": 0.0,
+        "bess_cycle_cost_yen_per_kwh": 0.0,
         "allow_grid_to_bess": False,
         "grid_to_bess_price_mode": "tou",
         "grid_to_bess_price_threshold_yen_per_kwh": 0.0,
@@ -1787,6 +1788,8 @@ class App:
         self.demand_charge_var = tk.StringVar(value="1500")
         self.depot_power_limit_var = tk.StringVar(value="500")
         self.pv_marginal_charge_cost_var = tk.StringVar(value="0")
+        self.pv_curtail_penalty_var = tk.StringVar(value="0")
+        self.bess_discharge_cost_var = tk.StringVar(value="0")
         self.deadhead_speed_kmh_var = tk.StringVar(value="18")
         self.tou_text_var = tk.StringVar(value="0-12:15,12-20:40,20-48:20")
         self.grid_sell_price_var = tk.StringVar(value="0")
@@ -1946,6 +1949,20 @@ class App:
                 "営業所PVで発電した電力をバス充電・蓄電池充電に使う場合の内部評価単価です。\n"
                 "0円にすると、PV電力は限界費用ゼロとして扱います。設備償却や保守費を\n"
                 "含めたい場合は任意の単価を設定してください。入力目安: 0〜200 円/kWh。"
+            ),
+            label1="PV余剰抑制ペナルティ [円/kWh]", var1=self.pv_curtail_penalty_var,
+            tip1=(
+                "PVを捨てることへの目的関数ペナルティです。0なら余剰PVの廃棄を許容します。\n"
+                "PV→BESSを促したい場合は、PV自家消費単価やBESS→Bus単価より高めに設定してください。"
+            ),
+        )
+        self._labeled_entry(
+            energy_grp,
+            "BESS→Bus単価 [円/kWh]",
+            self.bess_discharge_cost_var,
+            tooltip=(
+                "営業所定置型蓄電池からEVバスへ放電する電力の内部評価単価です。\n"
+                "保存/Prepare時に選択営業所の depot_energy_assets.bess_cycle_cost_yen_per_kwh へ反映します。"
             ),
         )
         self._labeled_entry(
@@ -4406,6 +4423,14 @@ class App:
             service_dates,
             depot_area_by_id=depot_area_by_id,
         )
+        bess_cost_var = getattr(self, "bess_discharge_cost_var", None)
+        bess_discharge_cost = self._parse_float(
+            bess_cost_var.get() if bess_cost_var is not None else "0",
+            0.0,
+        )
+        for row in merged_rows:
+            if isinstance(row, dict) and str(row.get("depot_id") or row.get("depotId") or "") in set(selected_depot_ids):
+                row["bess_cycle_cost_yen_per_kwh"] = max(float(bess_discharge_cost or 0.0), 0.0)
         if not synced_ids and not current_rows:
             if announce:
                 messagebox.showwarning(
@@ -4494,6 +4519,7 @@ class App:
             "bess_enabled",
             "bess_energy_kwh",
             "bess_power_kw",
+            "bess_cycle_cost_yen_per_kwh",
             "allow_grid_to_bess",
             "grid_to_bess_price_threshold_yen_per_kwh",
             "bess_terminal_soc_min_kwh",
@@ -4510,6 +4536,7 @@ class App:
             "bess_enabled": "BESS有効",
             "bess_energy_kwh": "BESS容量[kWh]",
             "bess_power_kw": "BESS出力[kW]",
+            "bess_cycle_cost_yen_per_kwh": "BESS→Bus単価[円/kWh]",
             "allow_grid_to_bess": "Grid→BESS",
             "grid_to_bess_price_threshold_yen_per_kwh": "Grid→BESS閾値[円/kWh]",
             "bess_terminal_soc_min_kwh": "終端SOC下限[kWh]",
@@ -4525,6 +4552,7 @@ class App:
             "bess_enabled": 80,
             "bess_energy_kwh": 120,
             "bess_power_kw": 120,
+            "bess_cycle_cost_yen_per_kwh": 150,
             "allow_grid_to_bess": 90,
             "grid_to_bess_price_threshold_yen_per_kwh": 170,
             "bess_terminal_soc_min_kwh": 140,
@@ -4551,6 +4579,7 @@ class App:
         bess_initial_soc_kwh_var = tk.StringVar(value="0")
         bess_soc_min_kwh_var = tk.StringVar(value="0")
         bess_soc_max_kwh_var = tk.StringVar(value="0")
+        bess_cycle_cost_var = tk.StringVar(value="0")
         allow_grid_to_bess_var = tk.BooleanVar(value=False)
         grid_to_bess_price_threshold_var = tk.StringVar(value="0")
         grid_to_bess_allowed_slots_var = tk.StringVar(value="")
@@ -4583,6 +4612,7 @@ class App:
         self._labeled_entry(editor, "BESS初期SOC[kWh] bess_initial_soc_kwh", bess_initial_soc_kwh_var)
         self._labeled_entry(editor, "BESS最小SOC[kWh] bess_soc_min_kwh", bess_soc_min_kwh_var)
         self._labeled_entry(editor, "BESS最大SOC[kWh] bess_soc_max_kwh", bess_soc_max_kwh_var)
+        self._labeled_entry(editor, "BESS→Bus単価[円/kWh] bess_cycle_cost_yen_per_kwh", bess_cycle_cost_var)
         self._labeled_entry(editor, "Grid→BESS閾値[円/kWh]", grid_to_bess_price_threshold_var)
         self._labeled_entry(editor, "Grid→BESS許可スロット(カンマ区切り)", grid_to_bess_allowed_slots_var)
         self._labeled_entry(editor, "終端SOC下限[kWh]", bess_terminal_soc_min_kwh_var)
@@ -4614,6 +4644,7 @@ class App:
                 bool(row.get("bess_enabled", False)),
                 row.get("bess_energy_kwh", 0.0),
                 row.get("bess_power_kw", 0.0),
+                row.get("bess_cycle_cost_yen_per_kwh", 0.0),
                 bool(row.get("allow_grid_to_bess", False)),
                 row.get("grid_to_bess_price_threshold_yen_per_kwh", 0.0),
                 row.get("bess_terminal_soc_min_kwh", 0.0),
@@ -4636,6 +4667,7 @@ class App:
             bess_initial_soc_kwh_var.set(str(row.get("bess_initial_soc_kwh", 0.0)))
             bess_soc_min_kwh_var.set(str(row.get("bess_soc_min_kwh", 0.0)))
             bess_soc_max_kwh_var.set(str(row.get("bess_soc_max_kwh", 0.0)))
+            bess_cycle_cost_var.set(str(row.get("bess_cycle_cost_yen_per_kwh", 0.0)))
             allow_grid_to_bess_var.set(bool(row.get("allow_grid_to_bess", False)))
             grid_to_bess_price_threshold_var.set(
                 str(row.get("grid_to_bess_price_threshold_yen_per_kwh", 0.0))
@@ -4664,6 +4696,7 @@ class App:
             row["bess_initial_soc_kwh"] = self._parse_float(bess_initial_soc_kwh_var.get(), 0.0)
             row["bess_soc_min_kwh"] = self._parse_float(bess_soc_min_kwh_var.get(), 0.0)
             row["bess_soc_max_kwh"] = self._parse_float(bess_soc_max_kwh_var.get(), 0.0)
+            row["bess_cycle_cost_yen_per_kwh"] = self._parse_float(bess_cycle_cost_var.get(), 0.0)
             row["allow_grid_to_bess"] = bool(allow_grid_to_bess_var.get())
             row["grid_to_bess_price_threshold_yen_per_kwh"] = self._parse_float(
                 grid_to_bess_price_threshold_var.get(),
@@ -4696,6 +4729,7 @@ class App:
             bess_initial_soc_kwh_var.set("0")
             bess_soc_min_kwh_var.set("0")
             bess_soc_max_kwh_var.set("0")
+            bess_cycle_cost_var.set("0")
             allow_grid_to_bess_var.set(False)
             grid_to_bess_price_threshold_var.set("0")
             grid_to_bess_allowed_slots_var.set("")
@@ -5640,6 +5674,7 @@ class App:
             self.grid_sell_price_var.set(str(sim.get("gridSellPricePerKwh") or 0))
             self.demand_charge_var.set(str(sim.get("demandChargeCostPerKw") or 1500))
             self.pv_marginal_charge_cost_var.set(str(sim.get("pvMarginalChargeCostYenPerKwh") or 0))
+            self.pv_curtail_penalty_var.set(str(sim.get("pvCurtailPenaltyYenPerKwh") or 0))
             self.diesel_price_var.set(str(sim.get("dieselPricePerL") or 145))
             self.grid_co2_var.set(str(sim.get("gridCo2KgPerKwh") or 0))
             self.co2_price_var.set(str(sim.get("co2PricePerKg") or 0))
@@ -5725,8 +5760,16 @@ class App:
                 self.depot_energy_assets_json_var.set(
                     json.dumps(depot_energy_assets, ensure_ascii=True, separators=(",", ":"))
                 )
+                self.bess_discharge_cost_var.set("0")
+                for asset in depot_energy_assets:
+                    if not isinstance(asset, dict):
+                        continue
+                    if asset.get("bess_cycle_cost_yen_per_kwh") is not None:
+                        self.bess_discharge_cost_var.set(str(asset.get("bess_cycle_cost_yen_per_kwh") or 0))
+                        break
             else:
                 self.depot_energy_assets_json_var.set("")
+                self.bess_discharge_cost_var.set("0")
             objective_weights_raw, slack_penalty, degradation_weight = _split_saved_objective_weights(
                 sim.get("objectiveWeights") or {}
             )
@@ -5852,6 +5895,10 @@ class App:
             "demandChargeCostPerKw": self._parse_float(self.demand_charge_var.get(), 0.0),
             "pvMarginalChargeCostYenPerKwh": self._parse_float(
                 self.pv_marginal_charge_cost_var.get(),
+                0.0,
+            ),
+            "pvCurtailPenaltyYenPerKwh": self._parse_float(
+                self.pv_curtail_penalty_var.get(),
                 0.0,
             ),
             "dieselPricePerL": self._parse_float(self.diesel_price_var.get(), 145.0),
@@ -7188,6 +7235,10 @@ class App:
                     self.pv_marginal_charge_cost_var.get(),
                     0.0,
                 ),
+                "pv_curtail_penalty_yen_per_kwh": self._parse_float(
+                    self.pv_curtail_penalty_var.get(),
+                    0.0,
+                ),
                 "diesel_price_per_l": self._parse_float(self.diesel_price_var.get(), 145.0),
                 "grid_co2_kg_per_kwh": self._parse_float(self.grid_co2_var.get(), 0.0),
                 "co2_price_per_kg": self._parse_float(self.co2_price_var.get(), 0.0),
@@ -7746,6 +7797,8 @@ class App:
             (self.grid_flat_price_var, "電気料金を変更"),
             (self.grid_sell_price_var, "売電単価を変更"),
             (self.pv_marginal_charge_cost_var, "PV自家消費単価を変更"),
+            (self.pv_curtail_penalty_var, "PV余剰抑制ペナルティを変更"),
+            (self.bess_discharge_cost_var, "BESS→Bus単価を変更"),
             (self.demand_charge_var, "需要料金を変更"),
             (self.diesel_price_var, "軽油単価を変更"),
             (self.deadhead_speed_kmh_var, "回送速度を変更"),

@@ -548,6 +548,11 @@ def apply_builder_configuration(
             float(body.simulation_settings.pv_marginal_charge_cost_yen_per_kwh),
             0.0,
         )
+    if body.simulation_settings.pv_curtail_penalty_yen_per_kwh is not None:
+        overlay.cost_coefficients.pv_curtail_penalty_yen_per_kwh = max(
+            float(body.simulation_settings.pv_curtail_penalty_yen_per_kwh),
+            0.0,
+        )
     if body.simulation_settings.pv_profile_id is not None:
         overlay.cost_coefficients.pv_profile_id = str(
             body.simulation_settings.pv_profile_id
@@ -723,6 +728,9 @@ def apply_builder_configuration(
         "deadhead_speed_kmh": body.simulation_settings.deadhead_speed_kmh,
         "pv_marginal_charge_cost_yen_per_kwh": (
             overlay.cost_coefficients.pv_marginal_charge_cost_yen_per_kwh
+        ),
+        "pv_curtail_penalty_yen_per_kwh": (
+            overlay.cost_coefficients.pv_curtail_penalty_yen_per_kwh
         ),
         "final_soc_floor_percent": body.simulation_settings.final_soc_floor_percent,
         "final_soc_target_percent": body.simulation_settings.final_soc_target_percent,

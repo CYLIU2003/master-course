@@ -1740,6 +1740,7 @@ def materialize_scenario_from_prepared_input(
         "co2_price_source",
         "co2_reference_date",
         "pv_marginal_charge_cost_yen_per_kwh",
+        "pv_curtail_penalty_yen_per_kwh",
         "start_time",
         "end_time",
         "planning_horizon_hours",

@@ -338,6 +338,7 @@ class AssignmentPlan:
     pv_curtail_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     bess_soc_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     contract_over_limit_kwh_by_depot_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
+    vehicle_soc_kwh_by_vehicle_slot: Mapping[str, Mapping[int, float]] = field(default_factory=dict)
     vehicle_cost_ledger: Tuple[VehicleCostLedgerEntry, ...] = ()
     daily_cost_ledger: Tuple[DailyCostLedgerEntry, ...] = ()
     served_trip_ids: Tuple[str, ...] = ()

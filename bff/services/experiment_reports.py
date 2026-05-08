@@ -26,6 +26,7 @@ def log_optimization_experiment(
             ),
             method=method,
             mode=optimization_result.get("mode"),
+            result_summary=dict(optimization_result.get("summary") or {}),
         ),
         result=_optimization_result_payload(optimization_result),
         method=method,
@@ -63,6 +64,7 @@ def log_simulation_experiment(
             ),
             method=method,
             mode=mode,
+            result_summary=dict(simulation_result.get("summary") or {}),
         ),
         result=_simulation_result_payload(simulation_result),
         method=method,
@@ -121,6 +123,99 @@ def _method_label(scenario_doc: Dict[str, Any], mode: Any) -> str:
     return str(mode or "MILP")
 
 
+def _vehicle_type_label(item: Dict[str, Any]) -> str:
+    return str(
+        item.get("vehicle_type")
+        or item.get("vehicleType")
+        or item.get("powertrain_type")
+        or item.get("powertrainType")
+        or item.get("type")
+        or "UNKNOWN"
+    ).strip().upper() or "UNKNOWN"
+
+
+def _first_present_text(item: Dict[str, Any], fields: tuple[str, ...]) -> str:
+    for field in fields:
+        value = str(item.get(field) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _aggregate_fleet_entries(
+    items: Any,
+    *,
+    default_count: int,
+    count_fields: tuple[str, ...],
+    name_fields: tuple[str, ...],
+    id_fields: tuple[str, ...],
+) -> list[Dict[str, Any]]:
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for item in list(items or []):
+        if not isinstance(item, dict):
+            continue
+        vehicle_type = _vehicle_type_label(item)
+        if not vehicle_type or vehicle_type == "UNKNOWN":
+            continue
+        count = default_count
+        for field in count_fields:
+            candidate = item.get(field)
+            if candidate is None or candidate == "":
+                continue
+            try:
+                count = max(int(candidate), 0)
+                break
+            except (TypeError, ValueError):
+                continue
+        if count <= 0:
+            continue
+        bucket = grouped.setdefault(
+            vehicle_type,
+            {
+                "vehicle_type": vehicle_type,
+                "vehicle_count": 0,
+                "template_names": [],
+                "template_ids": [],
+            },
+        )
+        bucket["vehicle_count"] = int(bucket["vehicle_count"] or 0) + int(count)
+        name = _first_present_text(item, name_fields)
+        if name and name not in bucket["template_names"]:
+            bucket["template_names"].append(name)
+        template_id = _first_present_text(item, id_fields)
+        if template_id and template_id not in bucket["template_ids"]:
+            bucket["template_ids"].append(template_id)
+
+    entries: list[Dict[str, Any]] = []
+    for vehicle_type in sorted(grouped.keys()):
+        bucket = grouped[vehicle_type]
+        template_names = list(bucket.pop("template_names") or [])
+        template_ids = list(bucket.pop("template_ids") or [])
+        if not template_names:
+            template_name = vehicle_type
+        elif len(template_names) == 1:
+            template_name = template_names[0]
+        elif len(template_names) == 2:
+            template_name = " + ".join(template_names)
+        else:
+            template_name = f"{template_names[0]} + {len(template_names) - 1} more"
+        if not template_ids:
+            template_id = vehicle_type.lower()
+        elif len(template_ids) == 1:
+            template_id = template_ids[0]
+        else:
+            template_id = f"{vehicle_type.lower()}_fleet"
+        entries.append(
+            {
+                "vehicle_template_id": template_id,
+                "template_name": template_name,
+                "vehicle_type": vehicle_type,
+                "vehicle_count": int(bucket["vehicle_count"] or 0),
+            }
+        )
+    return entries
+
+
 def _solver_name(mode: Any) -> str:
     normalized = str(mode or "").strip().lower()
     if normalized in {"mode_alns_only", "alns"}:
@@ -130,7 +225,10 @@ def _solver_name(mode: Any) -> str:
     return "gurobi"
 
 
-def _fleet_template_entries(scenario_doc: Dict[str, Any]) -> list[Dict[str, Any]]:
+def _fleet_template_entries(
+    scenario_doc: Dict[str, Any],
+    result_summary: Dict[str, Any] | None = None,
+) -> list[Dict[str, Any]]:
     simulation_config = _simulation_config(scenario_doc)
     templates_by_id = {
         str(item.get("id") or ""): dict(item)
@@ -154,7 +252,50 @@ def _fleet_template_entries(scenario_doc: Dict[str, Any]) -> list[Dict[str, Any]
                 "charge_power_kw": item.get("charge_power_kw"),
             }
         )
-    return [item for item in entries if item["vehicle_count"] > 0]
+    entries = [item for item in entries if item["vehicle_count"] > 0]
+    if entries:
+        return entries
+
+    fallback_sources = (
+        simulation_config.get("vehicles") or [],
+        scenario_doc.get("vehicles") or [],
+        simulation_config.get("vehicle_templates") or [],
+        scenario_doc.get("vehicle_templates") or [],
+    )
+    for fallback_items in fallback_sources:
+        fallback_entries = _aggregate_fleet_entries(
+            fallback_items,
+            default_count=1,
+            count_fields=("vehicle_count", "count", "quantity", "num_vehicles", "fleet_count"),
+            name_fields=("name", "modelName", "model_name", "vehicle_template_id", "id", "vehicle_id"),
+            id_fields=("vehicle_template_id", "vehicleTemplateId", "id", "vehicle_id"),
+        )
+        if fallback_entries:
+            return fallback_entries
+
+    summary_counts = dict((result_summary or {}).get("vehicle_count_by_type") or {})
+    if summary_counts:
+        summary_entries: list[Dict[str, Any]] = []
+        for vehicle_type, count in sorted(summary_counts.items()):
+            vehicle_type_label = str(vehicle_type or "UNKNOWN").strip().upper() or "UNKNOWN"
+            try:
+                vehicle_count = int(count)
+            except (TypeError, ValueError):
+                continue
+            if vehicle_type_label == "UNKNOWN" or vehicle_count <= 0:
+                continue
+            summary_entries.append(
+                {
+                    "vehicle_template_id": vehicle_type_label.lower(),
+                    "template_name": vehicle_type_label,
+                    "vehicle_type": vehicle_type_label,
+                    "vehicle_count": vehicle_count,
+                }
+            )
+        if summary_entries:
+            return summary_entries
+
+    return []
 
 
 def _fleet_summary(entries: list[Dict[str, Any]], vehicle_type: str) -> tuple[str, int]:
@@ -222,10 +363,11 @@ def _logger_scenario_payload(
     objective: str,
     method: str,
     mode: Any,
+    result_summary: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     overlay = _scenario_overlay(scenario_doc)
     simulation_config = _simulation_config(scenario_doc)
-    fleet_entries = _fleet_template_entries(scenario_doc)
+    fleet_entries = _fleet_template_entries(scenario_doc, result_summary=result_summary)
     bev_model, bev_count = _fleet_summary(fleet_entries, "BEV")
     ice_model, ice_count = _fleet_summary(fleet_entries, "ICE")
     cost_coefficients = dict(overlay.get("cost_coefficients") or {})
@@ -260,7 +402,7 @@ def _logger_scenario_payload(
             "max_kw": float(charging_constraints.get("depot_power_limit_kw") or 0.0),
         },
         "pv": {
-            "capacity_kw": float(cost_coefficients.get("pv_scale") or 0.0),
+            "capacity_kw": _pv_capacity_kw(scenario_doc),
         },
         "solver": {
             "name": _solver_name(mode),
@@ -269,6 +411,35 @@ def _logger_scenario_payload(
             "seed": _random_seed(scenario_doc),
         },
     }
+
+
+def _pv_capacity_kw(scenario_doc: Dict[str, Any]) -> float:
+    simulation_config = _simulation_config(scenario_doc)
+    asset_sources = (
+        simulation_config.get("depot_energy_assets") or [],
+        scenario_doc.get("depot_energy_assets") or [],
+    )
+    for assets in asset_sources:
+        total_capacity_kw = 0.0
+        has_capacity = False
+        for asset in list(assets or []):
+            if not isinstance(asset, dict):
+                continue
+            for field in ("derived_pv_capacity_kw", "pv_capacity_kw", "legacy_pv_capacity_kw"):
+                candidate = asset.get(field)
+                if candidate is None or candidate == "":
+                    continue
+                try:
+                    total_capacity_kw += float(candidate)
+                    has_capacity = True
+                    break
+                except (TypeError, ValueError):
+                    continue
+        if has_capacity and total_capacity_kw > 0.0:
+            return total_capacity_kw
+
+    cost_coefficients = dict(_scenario_overlay(scenario_doc).get("cost_coefficients") or {})
+    return float(cost_coefficients.get("pv_scale") or 0.0)
 
 
 def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -362,9 +533,10 @@ def _experiment_report_payload(
     scenario_doc: Dict[str, Any],
     method: str,
     mode: Any,
+    result_summary: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     simulation_cfg = _simulation_config(scenario_doc)
-    fleet_entries = _fleet_template_entries(scenario_doc)
+    fleet_entries = _fleet_template_entries(scenario_doc, result_summary=result_summary)
     payload = _to_jsonable(report)
     return {
         "report_type": report_type,

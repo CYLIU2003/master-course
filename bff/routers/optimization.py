@@ -604,7 +604,171 @@ def _canonical_charging_source_and_depot(
     return "grid", fallback_depot or "depot_default"
 
 
+def _canonical_charging_slot_signature(charging_slot) -> tuple[str, int, str, str]:
+    return (
+        str(getattr(charging_slot, "vehicle_id", "") or ""),
+        int(getattr(charging_slot, "slot_index", 0) or 0),
+        str(getattr(charging_slot, "charger_id", "") or ""),
+        str(getattr(charging_slot, "charging_depot_id", "") or ""),
+    )
+
+
+def _merge_depot_slot_flow_maps(
+    base: Dict[str, Dict[int, float]],
+    additions: Dict[str, Dict[int, float]],
+) -> Dict[str, Dict[int, float]]:
+    merged = {depot_id: dict(slot_map) for depot_id, slot_map in base.items()}
+    for depot_id, slot_map in additions.items():
+        if not slot_map:
+            continue
+        target = merged.setdefault(depot_id, {})
+        for slot_idx, value in slot_map.items():
+            target[slot_idx] = float(target.get(slot_idx, 0.0) or 0.0) + float(value or 0.0)
+    return merged
+
+
+def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_context) -> Dict[str, Any]:
+    timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
+    timestep_h = timestep_min / 60.0
+
+    raw_grid_to_bus = _normalize_depot_slot_mapping(
+        preserved_context.get("grid_to_bus_kwh_by_depot_slot", {})
+    )
+    raw_pv_to_bus = _normalize_depot_slot_mapping(
+        preserved_context.get("pv_to_bus_kwh_by_depot_slot", {})
+    )
+    raw_bess_to_bus = _normalize_depot_slot_mapping(
+        preserved_context.get("bess_to_bus_kwh_by_depot_slot", {})
+    )
+    raw_pv_to_bess = _normalize_depot_slot_mapping(
+        preserved_context.get("pv_to_bess_kwh_by_depot_slot", {})
+    )
+    raw_grid_to_bess = _normalize_depot_slot_mapping(
+        preserved_context.get("grid_to_bess_kwh_by_depot_slot", {})
+    )
+    raw_pv_curtail = _normalize_depot_slot_mapping(
+        preserved_context.get("pv_curtail_kwh_by_depot_slot", {})
+    )
+    raw_bess_soc = _normalize_depot_slot_mapping(
+        preserved_context.get("bess_soc_kwh_by_depot_slot", {})
+    )
+    raw_contract_over_limit = _normalize_depot_slot_mapping(
+        preserved_context.get("contract_over_limit_kwh_by_depot_slot", {})
+    )
+
+    preserved_slot_signatures = {
+        tuple(item)
+        for item in list(preserved_context.get("charging_slot_signatures") or [])
+        if isinstance(item, (list, tuple)) and len(item) >= 4
+    }
+
+    derived_grid_to_bus: Dict[str, Dict[int, float]] = {}
+    derived_pv_to_bus: Dict[str, Dict[int, float]] = {}
+    derived_bess_to_bus: Dict[str, Dict[int, float]] = {}
+    derived_depots: set[str] = set()
+    for charging_slot in list(getattr(plan, "charging_slots", ()) or ()):
+        if _canonical_charging_slot_signature(charging_slot) in preserved_slot_signatures:
+            continue
+        charge_kw = max(float(getattr(charging_slot, "charge_kw", 0.0) or 0.0), 0.0)
+        discharge_kw = max(float(getattr(charging_slot, "discharge_kw", 0.0) or 0.0), 0.0)
+        net_charge_kwh = max(charge_kw - discharge_kw, 0.0) * timestep_h
+        if net_charge_kwh <= 0.0:
+            continue
+        source, depot_id = _canonical_charging_source_and_depot(problem, charging_slot)
+        if source == "pv":
+            target = derived_pv_to_bus
+        elif source == "bess":
+            target = derived_bess_to_bus
+        else:
+            target = derived_grid_to_bus
+        slot_map = target.setdefault(str(depot_id), {})
+        slot_idx = int(getattr(charging_slot, "slot_index", 0) or 0)
+        slot_map[slot_idx] = slot_map.get(slot_idx, 0.0) + net_charge_kwh
+        derived_depots.add(str(depot_id))
+
+    effective_grid_to_bus = _merge_depot_slot_flow_maps(raw_grid_to_bus, derived_grid_to_bus)
+    effective_pv_to_bus = _merge_depot_slot_flow_maps(raw_pv_to_bus, derived_pv_to_bus)
+    effective_bess_to_bus = _merge_depot_slot_flow_maps(raw_bess_to_bus, derived_bess_to_bus)
+
+    depot_limit_kw = {
+        str(getattr(depot, "depot_id", "") or ""): float(getattr(depot, "import_limit_kw", 0.0) or 0.0)
+        for depot in list(getattr(problem, "depots", ()) or ())
+        if str(getattr(depot, "depot_id", "") or "")
+    }
+    depot_ids = set(depot_limit_kw.keys())
+    for mapping in (
+        effective_grid_to_bus,
+        effective_pv_to_bus,
+        effective_bess_to_bus,
+        raw_pv_to_bess,
+        raw_grid_to_bess,
+        raw_pv_curtail,
+        raw_bess_soc,
+        raw_contract_over_limit,
+    ):
+        depot_ids.update(mapping.keys())
+    depot_ids.update(
+        str(getattr(vehicle, "home_depot_id", "") or "")
+        for vehicle in list(getattr(problem, "vehicles", ()) or ())
+        if str(getattr(vehicle, "home_depot_id", "") or "")
+    )
+    depot_ids.update(str(key) for key in dict(getattr(problem, "depot_energy_assets", {}) or {}).keys())
+
+    pv_generation_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+    for depot_id, asset in dict(getattr(problem, "depot_energy_assets", {}) or {}).items():
+        generation = {}
+        for slot_idx, value in enumerate(list(getattr(asset, "pv_generation_kwh_by_slot", ()) or ())):
+            generation[int(slot_idx)] = max(float(value or 0.0), 0.0)
+        pv_generation_kwh_by_depot_slot[str(depot_id)] = generation
+
+    price_by_slot = {
+        int(getattr(slot, "slot_index", 0) or 0): float(getattr(slot, "grid_buy_yen_per_kwh", 0.0) or 0.0)
+        for slot in list(getattr(problem, "price_slots", ()) or ())
+    }
+    demand_flag_by_slot = {
+        int(getattr(slot, "slot_index", 0) or 0): bool(float(getattr(slot, "demand_charge_weight", 0.0) or 0.0) > 0.0)
+        for slot in list(getattr(problem, "price_slots", ()) or ())
+    }
+
+    derived_from_charging_slots = any(
+        _mapping_has_positive_flow(mapping)
+        for mapping in (derived_grid_to_bus, derived_pv_to_bus, derived_bess_to_bus)
+    )
+    provenance_note = (
+        "Preserved per-source depot/slot energy-flow maps from the pre-postsolve plan; added postsolve charging slots were derived from the current charging slots."
+        if derived_from_charging_slots
+        else "Preserved per-source depot/slot energy-flow maps are present in the assignment plan."
+    )
+
+    return {
+        "timestep_min": timestep_min,
+        "timestep_h": timestep_h,
+        "depot_ids": sorted(item for item in depot_ids if item),
+        "grid_to_bus_kwh_by_depot_slot": effective_grid_to_bus,
+        "pv_to_bus_kwh_by_depot_slot": effective_pv_to_bus,
+        "bess_to_bus_kwh_by_depot_slot": effective_bess_to_bus,
+        "pv_to_bess_kwh_by_depot_slot": raw_pv_to_bess,
+        "grid_to_bess_kwh_by_depot_slot": raw_grid_to_bess,
+        "pv_curtail_kwh_by_depot_slot": raw_pv_curtail,
+        "bess_soc_kwh_by_depot_slot": raw_bess_soc,
+        "contract_over_limit_kwh_by_depot_slot": raw_contract_over_limit,
+        "pv_generation_kwh_by_depot_slot": pv_generation_kwh_by_depot_slot,
+        "depot_limit_kw": depot_limit_kw,
+        "price_by_slot": price_by_slot,
+        "demand_flag_by_slot": demand_flag_by_slot,
+        "source_provenance_exact": bool(preserved_context.get("source_provenance_exact")) and not derived_from_charging_slots,
+        "source_provenance_note": provenance_note,
+        "derived_from_charging_slots": derived_from_charging_slots,
+        "derived_depots": sorted(derived_depots),
+    }
+
+
 def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
+    metadata = dict(getattr(plan, "metadata", {}) or {})
+    preserved_context = dict(metadata.get("canonical_source_flow_context") or {})
+    if preserved_context and bool(preserved_context.get("source_provenance_exact")):
+        return _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_context)
+
     timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
     timestep_h = timestep_min / 60.0
 
@@ -973,6 +1137,7 @@ def _persist_rich_run_outputs(
         "electricity_cost": "JPY",
         "pv_self_consumption_cost_jpy": "JPY",
         "pv_marginal_charge_cost_yen_per_kwh": "JPY/kWh",
+        "pv_curtail_penalty_yen_per_kwh": "JPY/kWh",
         "demand_charge": "JPY",
         "vehicle_cost": "JPY",
         "driver_cost": "JPY",
@@ -2242,6 +2407,7 @@ def _canonical_depot_power_rows_5min(
             grid_to_bess = float((flow_ctx["grid_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             pv_curtail = float((flow_ctx["pv_curtail_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             pv_generation = float((flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            bess_soc_kwh = float((flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_over_limit_kwh = float((flow_ctx["contract_over_limit_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_limit_kw = float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0)
             if contract_over_limit_kwh <= 1.0e-9 and contract_limit_kw > 0.0:
@@ -2262,6 +2428,7 @@ def _canonical_depot_power_rows_5min(
                 "bess_to_bus_kwh": bess_to_bus,
                 "pv_to_bess_kwh": pv_to_bess,
                 "grid_to_bess_kwh": grid_to_bess,
+                "bess_soc_kwh": bess_soc_kwh,
                 "contract_limit_kw": contract_limit_kw,
                 "contract_over_limit_kwh": contract_over_limit_kwh,
                 "contract_over_limit_kw": contract_over_limit_kwh / timestep_h if timestep_h > 0.0 else 0.0,
@@ -2319,6 +2486,7 @@ def _canonical_depot_power_rows_5min(
                     "grid_to_bess_kwh": grid_to_bess_slot_kwh,
                     "grid_to_bess_slot_kwh": grid_to_bess_slot_kwh,
                     "grid_to_bess_hourly_source_kwh": grid_to_bess_hourly_source_kwh,
+                    "bess_soc_kwh": float(values.get("bess_soc_kwh", 0.0) or 0.0),
                     "pv_generation_kw": pv_generation_kw,
                     "pv_generation_slot_kwh": pv_generation_kw * output_slot_h,
                     "pv_used_for_charging_kw": float(values.get("pv_used_for_charging_kw", 0.0) or 0.0),
@@ -2342,6 +2510,204 @@ def _canonical_depot_power_rows_5min(
                 }
             )
     rows.sort(key=lambda row: (str(row.get("depot_id", "")), str(row.get("timestamp", ""))))
+    return rows
+
+
+def _research_timestamp_parts(timestamp: Any) -> tuple[str, str]:
+    try:
+        parsed = datetime.fromisoformat(str(timestamp))
+        return parsed.date().isoformat(), parsed.strftime("%H:%M")
+    except ValueError:
+        text = str(timestamp or "")
+        return text[:10], text[11:16]
+
+
+def _research_rows_from_depot_power(
+    depot_power_rows: List[Dict[str, Any]],
+    *,
+    base_date: date,
+) -> Dict[str, List[Dict[str, Any]]]:
+    rows_by_depot_time: Dict[tuple[str, str], Dict[str, Any]] = {}
+    depot_ids = sorted({str(row.get("depot_id") or "") for row in depot_power_rows if str(row.get("depot_id") or "")})
+    for row in depot_power_rows:
+        _out_date, out_time = _research_timestamp_parts(row.get("timestamp"))
+        depot_id = str(row.get("depot_id") or "")
+        if depot_id:
+            rows_by_depot_time[(depot_id, out_time)] = row
+    grid_rows: List[Dict[str, Any]] = []
+    pv_rows: List[Dict[str, Any]] = []
+    flow_rows: List[Dict[str, Any]] = []
+    charge_rows: List[Dict[str, Any]] = []
+    for depot_id in depot_ids:
+        for minute in range(0, 24 * 60, 5):
+            out_time = f"{minute // 60:02d}:{minute % 60:02d}"
+            row = rows_by_depot_time.get((depot_id, out_time), {})
+            out_date = base_date.isoformat()
+            base = {
+                "date": out_date,
+                "time": out_time,
+                "depot_id": depot_id,
+            }
+            grid_import_kw = float(row.get("grid_import_kw", 0.0) or 0.0)
+            contract_limit_kw = float(row.get("contract_limit_kw", 0.0) or 0.0)
+            grid_rows.append(
+                {
+                    **base,
+                    "grid_import_kw": grid_import_kw,
+                    "grid_import_slot_kwh": float(row.get("grid_import_slot_kwh", 0.0) or 0.0),
+                    "contract_limit_kw": contract_limit_kw,
+                    "contract_over_limit_slot_kwh": float(row.get("contract_over_limit_slot_kwh", 0.0) or 0.0),
+                }
+            )
+            pv_rows.append(
+                {
+                    **base,
+                    "pv_generation_kw": float(row.get("pv_generation_kw", 0.0) or 0.0),
+                    "pv_generation_slot_kwh": float(row.get("pv_generation_slot_kwh", 0.0) or 0.0),
+                    "pv_curtailed_slot_kwh": float(row.get("pv_curtailed_slot_kwh", 0.0) or 0.0),
+                }
+            )
+            flow_rows.append(
+                {
+                    **base,
+                    "grid_to_bus_slot_kwh": float(row.get("grid_to_bus_slot_kwh", 0.0) or 0.0),
+                    "pv_to_bus_slot_kwh": float(row.get("pv_to_bus_slot_kwh", 0.0) or 0.0),
+                    "pv_to_bess_slot_kwh": float(row.get("pv_to_bess_slot_kwh", 0.0) or 0.0),
+                    "bess_to_bus_slot_kwh": float(row.get("bess_to_bus_slot_kwh", 0.0) or 0.0),
+                    "grid_to_bess_slot_kwh": float(row.get("grid_to_bess_slot_kwh", 0.0) or 0.0),
+                    "bess_soc_kwh": float(row.get("bess_soc_kwh", 0.0) or 0.0),
+                }
+            )
+            total_charge_kw = float(row.get("total_charge_kw", 0.0) or 0.0)
+            charge_rows.append(
+                {
+                    **base,
+                    "total_bus_charge_kw": total_charge_kw,
+                    "total_bus_charge_slot_kwh": total_charge_kw * (float(row.get("slot_minutes", 5.0) or 5.0) / 60.0),
+                }
+            )
+    return {
+        "grid_import_timeseries.csv": grid_rows,
+        "pv_generation_timeseries.csv": pv_rows,
+        "energy_flow_timeseries.csv": flow_rows,
+        "bus_charging_total_timeseries.csv": charge_rows,
+    }
+
+
+def _research_vehicle_soc_timeseries_rows(
+    *,
+    problem,
+    engine_result,
+    base_date: date,
+    timeline_rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    soc_by_vehicle = _normalize_depot_slot_mapping(
+        getattr(engine_result.plan, "vehicle_soc_kwh_by_vehicle_slot", {})
+    )
+    if not soc_by_vehicle:
+        return []
+    vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+    timeline_by_vehicle: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for item in timeline_rows:
+        timeline_by_vehicle[str(item.get("vehicle_id") or "")].append(item)
+
+    timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
+    points = list(range(0, 24 * 60, 5))
+    rows: List[Dict[str, Any]] = []
+    for vehicle_id, slot_map in sorted(soc_by_vehicle.items()):
+        vehicle = vehicle_by_id.get(vehicle_id)
+        capacity = max(float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0), 0.0) if vehicle is not None else 0.0
+        depot_id = str(getattr(vehicle, "home_depot_id", "") or "") if vehicle is not None else ""
+        max_slot = max(slot_map.keys(), default=0)
+        for minute in points:
+            slot_idx = min(int(minute // timestep_min), max_slot)
+            soc_kwh = float(slot_map.get(slot_idx, 0.0) or 0.0)
+            timestamp = datetime.combine(base_date, datetime.min.time()) + timedelta(minutes=minute)
+            state = "idle"
+            for event in timeline_by_vehicle.get(vehicle_id, []):
+                try:
+                    start = datetime.fromisoformat(str(event.get("start_time")))
+                    end = datetime.fromisoformat(str(event.get("end_time")))
+                except ValueError:
+                    continue
+                if start <= timestamp < end:
+                    state = str(event.get("state") or "idle")
+                    break
+            rows.append(
+                {
+                    "date": base_date.isoformat(),
+                    "time": timestamp.strftime("%H:%M"),
+                    "vehicle_id": vehicle_id,
+                    "soc_kwh": soc_kwh,
+                    "soc_percent": (soc_kwh / capacity * 100.0) if capacity > 0.0 else 0.0,
+                    "state": state,
+                    "depot_id": depot_id,
+                }
+            )
+    return rows
+
+
+def _research_fuel_summary_rows(
+    *,
+    problem,
+    timeline_rows: List[Dict[str, Any]],
+    refuel_rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+    refuel_by_vehicle: Dict[str, float] = defaultdict(float)
+    for row in refuel_rows:
+        refuel_by_vehicle[str(row.get("vehicle_id") or "")] += float(row.get("refuel_liters", 0.0) or 0.0)
+
+    accum: Dict[str, Dict[str, float]] = defaultdict(lambda: {"trip_fuel_liters": 0.0, "deadhead_fuel_liters": 0.0})
+    for row in timeline_rows:
+        vehicle_id = str(row.get("vehicle_id") or "")
+        vehicle = vehicle_by_id.get(vehicle_id)
+        if vehicle is None or str(getattr(vehicle, "vehicle_type", "") or "").upper() in {"BEV", "PHEV", "FCEV"}:
+            continue
+        fuel_rate = max(float(getattr(vehicle, "fuel_consumption_l_per_km", 0.0) or 0.0), 0.0)
+        if fuel_rate <= 0.0:
+            continue
+        liters = max(float(row.get("distance_km", 0.0) or 0.0), 0.0) * fuel_rate
+        if bool(row.get("is_service")):
+            accum[vehicle_id]["trip_fuel_liters"] += liters
+        elif bool(row.get("is_deadhead")):
+            accum[vehicle_id]["deadhead_fuel_liters"] += liters
+
+    rows: List[Dict[str, Any]] = []
+    totals = {"trip_fuel_liters": 0.0, "deadhead_fuel_liters": 0.0, "refuel_liters": 0.0}
+    for vehicle_id in sorted(set(accum.keys()) | set(refuel_by_vehicle.keys())):
+        vehicle = vehicle_by_id.get(vehicle_id)
+        vehicle_type = str(getattr(vehicle, "vehicle_type", "UNKNOWN") or "UNKNOWN") if vehicle is not None else "UNKNOWN"
+        trip_l = float(accum.get(vehicle_id, {}).get("trip_fuel_liters", 0.0) or 0.0)
+        deadhead_l = float(accum.get(vehicle_id, {}).get("deadhead_fuel_liters", 0.0) or 0.0)
+        refuel_l = float(refuel_by_vehicle.get(vehicle_id, 0.0) or 0.0)
+        fuel_l = trip_l + deadhead_l
+        rows.append(
+            {
+                "vehicle_id": vehicle_id,
+                "vehicle_type": vehicle_type,
+                "fuel_liters": fuel_l,
+                "trip_fuel_liters": trip_l,
+                "deadhead_fuel_liters": deadhead_l,
+                "refuel_liters": refuel_l,
+                "unit": "L",
+            }
+        )
+        totals["trip_fuel_liters"] += trip_l
+        totals["deadhead_fuel_liters"] += deadhead_l
+        totals["refuel_liters"] += refuel_l
+    if rows:
+        rows.append(
+            {
+                "vehicle_id": "TOTAL",
+                "vehicle_type": "ALL_ICE",
+                "fuel_liters": totals["trip_fuel_liters"] + totals["deadhead_fuel_liters"],
+                "trip_fuel_liters": totals["trip_fuel_liters"],
+                "deadhead_fuel_liters": totals["deadhead_fuel_liters"],
+                "refuel_liters": totals["refuel_liters"],
+                "unit": "L",
+            }
+        )
     return rows
 
 
@@ -2617,11 +2983,30 @@ def _persist_canonical_graph_exports(
         }
         for slot in engine_result.plan.refuel_slots
     ]
+    research_energy_exports = _research_rows_from_depot_power(
+        depot_power_rows,
+        base_date=base_date,
+    )
+    vehicle_soc_timeseries_rows = _research_vehicle_soc_timeseries_rows(
+        problem=problem,
+        engine_result=engine_result,
+        base_date=base_date,
+        timeline_rows=timeline_rows,
+    )
+    fuel_summary_rows = _research_fuel_summary_rows(
+        problem=problem,
+        timeline_rows=timeline_rows,
+        refuel_rows=refuel_rows,
+    )
     graph_dir = Path(output_dir) / "graph"
     graph_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(graph_dir / "vehicle_timeline.csv", timeline_rows)
     _write_csv(graph_dir / "soc_events.csv", soc_rows)
     _write_csv(graph_dir / "depot_power_timeseries_5min.csv", depot_power_rows)
+    for filename, rows in research_energy_exports.items():
+        _write_csv(graph_dir / filename, rows)
+    _write_csv(graph_dir / "vehicle_soc_timeseries.csv", vehicle_soc_timeseries_rows)
+    _write_csv(graph_dir / "fuel_summary.csv", fuel_summary_rows)
     _write_csv(graph_dir / "trip_assignment.csv", trip_assignment_rows)
     _write_csv(graph_dir / "refuel_events.csv", refuel_rows)
     deadhead_ratio_rows = _canonical_deadhead_ratio_by_band(timeline_rows)
@@ -2707,6 +3092,12 @@ def _persist_canonical_graph_exports(
             "vehicle_timeline.csv",
             "soc_events.csv",
             "depot_power_timeseries_5min.csv",
+            "grid_import_timeseries.csv",
+            "pv_generation_timeseries.csv",
+            "energy_flow_timeseries.csv",
+            "bus_charging_total_timeseries.csv",
+            "vehicle_soc_timeseries.csv",
+            "fuel_summary.csv",
             "trip_assignment.csv",
             "refuel_events.csv",
             "deadhead_ratio_by_band.csv",
@@ -2756,6 +3147,12 @@ def _persist_canonical_graph_exports(
         "deadhead_ratio_by_band_path": "graph/deadhead_ratio_by_band.csv",
         "soc_events_path": "graph/soc_events.csv",
         "depot_power_timeseries_path": "graph/depot_power_timeseries_5min.csv",
+        "grid_import_timeseries_path": "graph/grid_import_timeseries.csv",
+        "pv_generation_timeseries_path": "graph/pv_generation_timeseries.csv",
+        "energy_flow_timeseries_path": "graph/energy_flow_timeseries.csv",
+        "bus_charging_total_timeseries_path": "graph/bus_charging_total_timeseries.csv",
+        "vehicle_soc_timeseries_path": "graph/vehicle_soc_timeseries.csv",
+        "fuel_summary_path": "graph/fuel_summary.csv",
         "cost_breakdown_path": "graph/cost_breakdown.json",
         "kpi_summary_path": "graph/kpi_summary.json",
         "refuel_events_path": "graph/refuel_events.csv",

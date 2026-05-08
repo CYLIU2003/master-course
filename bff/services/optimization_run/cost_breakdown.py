@@ -14,6 +14,13 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
         )
         or 0.0
     )
+    pv_curtail_penalty = float(
+        breakdown.get(
+            "pv_curtail_penalty_yen_per_kwh",
+            getattr(problem, "metadata", {}).get("pv_curtail_penalty_yen_per_kwh", 0.0),
+        )
+        or 0.0
+    )
     bess_discharge_cost = float(breakdown.get("bess_discharge_cost", 0.0) or 0.0)
     electricity_energy_cost = grid_energy_cost + pv_self_consumption_cost + bess_discharge_cost
     gross_cost = float(
@@ -31,6 +38,7 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
             "grid_energy_cost_jpy": grid_energy_cost,
             "pv_self_consumption_cost_jpy": pv_self_consumption_cost,
             "pv_marginal_charge_cost_yen_per_kwh": pv_marginal_charge_cost,
+            "pv_curtail_penalty_yen_per_kwh": pv_curtail_penalty,
             "bess_discharge_cost_jpy": bess_discharge_cost,
             "electricity_energy_cost": float(
                 breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", electricity_energy_cost))
@@ -65,6 +73,7 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
             "solver_mode": str(getattr(getattr(engine_result, "mode", None), "value", "") or ""),
             "includes_pv": bool(problem.depot_energy_assets),
             "pv_marginal_charge_cost_yen_per_kwh": pv_marginal_charge_cost,
+            "pv_curtail_penalty_yen_per_kwh": pv_curtail_penalty,
         },
     }
 

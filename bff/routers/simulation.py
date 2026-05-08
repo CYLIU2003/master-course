@@ -125,6 +125,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     grid_co2_kg_per_kwh: Optional[float] = None
     co2_price_per_kg: Optional[float] = None
     pv_marginal_charge_cost_yen_per_kwh: Optional[float] = None
+    pv_curtail_penalty_yen_per_kwh: Optional[float] = None
     depot_power_limit_kw: Optional[float] = None
     tou_pricing: list[PrepareTimeOfUseBandBody] = Field(default_factory=list)
     service_date: Optional[str] = None

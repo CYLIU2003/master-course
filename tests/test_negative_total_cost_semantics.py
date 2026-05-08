@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from bff.routers.optimization import _canonical_cost_breakdown_json, _cost_breakdown
-from bff.services.experiment_reports import _optimization_result_payload
+from bff.services.experiment_reports import _logger_scenario_payload, _optimization_result_payload
 
 
 def test_cost_breakdown_prefers_accounting_total_cost_over_objective_value() -> None:
@@ -70,3 +70,31 @@ def test_experiment_report_payload_exposes_return_leg_bonus_and_demand_charge() 
     assert payload["total_cost_jpy"] == 61781.96300393706
     assert payload["return_leg_bonus_jpy"] == 111500.0
     assert payload["demand_charge_jpy"] == 4321.0
+
+
+def test_logger_scenario_payload_uses_vehicle_and_depot_asset_fallbacks() -> None:
+    payload = _logger_scenario_payload(
+        scenario_doc={
+            "dispatch_scope": {"depotSelection": {"primaryDepotId": "dep1"}},
+            "simulation_config": {
+                "fleet_templates": [],
+                "depot_energy_assets": [
+                    {"depot_id": "dep1", "derived_pv_capacity_kw": 12.5},
+                    {"depot_id": "dep2", "pv_capacity_kw": 7.5},
+                ],
+            },
+            "vehicles": [
+                {"id": "bev-1", "type": "BEV"},
+                {"id": "bev-2", "type": "BEV"},
+                {"id": "ice-1", "type": "ICE"},
+            ],
+            "routes": [{"id": "route-1"}],
+        },
+        objective="total_cost",
+        method="MILP",
+        mode="mode_milp_only",
+    )
+
+    fleet_counts = {item["vehicle_type"]: item["count"] for item in payload["fleet"]}
+    assert fleet_counts == {"BEV": 2, "ICE": 1}
+    assert payload["pv"]["capacity_kw"] == 20.0

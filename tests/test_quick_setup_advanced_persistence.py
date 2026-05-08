@@ -43,7 +43,10 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
         "vehicle_templates": [],
         "scenario_overlay": {
             "solver_config": {"objective_weights": {"battery_degradation_cost": 0.25}},
-            "cost_coefficients": {"pv_marginal_charge_cost_yen_per_kwh": 3.5},
+            "cost_coefficients": {
+                "pv_marginal_charge_cost_yen_per_kwh": 3.5,
+                "pv_curtail_penalty_yen_per_kwh": 6.5,
+            },
         },
         "simulation_config": {
             "service_date": "2025-08-10",
@@ -114,6 +117,7 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
     assert payload["simulationSettings"]["solcastTypicalCurvePath"] == "data/weather/processed/typical.json"
     assert payload["simulationSettings"]["solcastTypicalWeatherClass"] == "cloudy"
     assert payload["simulationSettings"]["pvMarginalChargeCostYenPerKwh"] == 3.5
+    assert payload["simulationSettings"]["pvCurtailPenaltyYenPerKwh"] == 6.5
 
 
 def test_update_quick_setup_persists_cost_component_toggles() -> None:
@@ -161,6 +165,7 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
             "fuel_cost": False,
         },
         pvMarginalChargeCostYenPerKwh=4.25,
+        pvCurtailPenaltyYenPerKwh=7.5,
     )
 
     with (
@@ -187,6 +192,8 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     scenario_overlay = captured["scenario_overlay"]
     assert isinstance(scenario_overlay, dict)
     assert scenario_overlay["cost_coefficients"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
+    assert scenario_overlay["cost_coefficients"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
+    assert simulation_config["pv_curtail_penalty_yen_per_kwh"] == 7.5
 
 
 def test_update_quick_setup_persists_weather_proxy_state_without_validation() -> None:

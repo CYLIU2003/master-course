@@ -384,6 +384,7 @@ class UpdateScenarioBody(BaseModel):
     deadheadSpeedKmh: Optional[float] = None
     pvProfileId: Optional[str] = None
     pvMarginalChargeCostYenPerKwh: Optional[float] = None
+    pvCurtailPenaltyYenPerKwh: Optional[float] = None
     weatherMode: Optional[str] = None
     weatherFactorScalar: Optional[float] = None
     enableWeatherOperationPolicy: Optional[bool] = None
@@ -445,6 +446,7 @@ class UpdateQuickSetupBody(BaseModel):
     gridCo2KgPerKwh: Optional[float] = None
     co2PricePerKg: Optional[float] = None
     pvMarginalChargeCostYenPerKwh: Optional[float] = None
+    pvCurtailPenaltyYenPerKwh: Optional[float] = None
     iceCo2KgPerL: Optional[float] = None
     depotPowerLimitKw: Optional[float] = None
     degradationWeight: Optional[float] = None
@@ -575,6 +577,11 @@ def _apply_scenario_simulation_settings(
     if body.pvMarginalChargeCostYenPerKwh is not None:
         simulation_config["pv_marginal_charge_cost_yen_per_kwh"] = max(
             float(body.pvMarginalChargeCostYenPerKwh),
+            0.0,
+        )
+    if body.pvCurtailPenaltyYenPerKwh is not None:
+        simulation_config["pv_curtail_penalty_yen_per_kwh"] = max(
+            float(body.pvCurtailPenaltyYenPerKwh),
             0.0,
         )
     if body.weatherMode is not None:
@@ -1400,6 +1407,10 @@ def _builder_defaults(
             "pv_marginal_charge_cost_yen_per_kwh",
             simulation_config.get("pv_marginal_charge_cost_yen_per_kwh", 0.0),
         ),
+        "pvCurtailPenaltyYenPerKwh": overlay_cost.get(
+            "pv_curtail_penalty_yen_per_kwh",
+            simulation_config.get("pv_curtail_penalty_yen_per_kwh", 0.0),
+        ),
         "co2PriceSource": simulation_config.get("co2_price_source") or "manual",
         "co2ReferenceDate": simulation_config.get("co2_reference_date"),
         "iceCo2KgPerL": overlay_cost.get("ice_co2_kg_per_l"),
@@ -1909,6 +1920,9 @@ def _build_quick_setup_payload(
             "pvMarginalChargeCostYenPerKwh": builder_defaults.get(
                 "pvMarginalChargeCostYenPerKwh"
             ),
+            "pvCurtailPenaltyYenPerKwh": builder_defaults.get(
+                "pvCurtailPenaltyYenPerKwh"
+            ),
             "co2PriceSource": builder_defaults.get("co2PriceSource"),
             "co2ReferenceDate": builder_defaults.get("co2ReferenceDate"),
             "iceCo2KgPerL": builder_defaults.get("iceCo2KgPerL"),
@@ -2371,6 +2385,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
                 float(body.pvMarginalChargeCostYenPerKwh),
                 0.0,
             )
+        if body.pvCurtailPenaltyYenPerKwh is not None:
+            overlay_cost["pv_curtail_penalty_yen_per_kwh"] = max(
+                float(body.pvCurtailPenaltyYenPerKwh),
+                0.0,
+            )
         if body.iceCo2KgPerL is not None:
             overlay_cost["ice_co2_kg_per_l"] = float(body.iceCo2KgPerL)
         if body.touPricing is not None:
@@ -2507,6 +2526,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         if body.pvMarginalChargeCostYenPerKwh is not None:
             simulation_config["pv_marginal_charge_cost_yen_per_kwh"] = max(
                 float(body.pvMarginalChargeCostYenPerKwh),
+                0.0,
+            )
+        if body.pvCurtailPenaltyYenPerKwh is not None:
+            simulation_config["pv_curtail_penalty_yen_per_kwh"] = max(
+                float(body.pvCurtailPenaltyYenPerKwh),
                 0.0,
             )
         if body.weatherMode is not None:

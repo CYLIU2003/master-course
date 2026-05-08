@@ -1267,7 +1267,7 @@ class GurobiMILPAdapter:
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
         grid_to_bus_priority_penalty = self._safe_nonnegative_float(
             problem.metadata.get("grid_to_bus_priority_penalty_yen_per_kwh"),
-            default=10.0,
+            default=1000.0,
         )
         grid_to_bess_priority_penalty = self._safe_nonnegative_float(
             problem.metadata.get("grid_to_bess_priority_penalty_yen_per_kwh"),
@@ -1285,6 +1285,31 @@ class GurobiMILPAdapter:
             problem.metadata.get("pv_marginal_charge_cost_yen_per_kwh"),
             default=0.0,
         )
+        pv_curtail_penalty_auto_defaulted = False
+        has_pv_enabled_bess = any(
+            bool(getattr(asset, "bess_enabled", False))
+            and bool(getattr(asset, "pv_enabled", False))
+            and any(float(value or 0.0) > 0.0 for value in (getattr(asset, "pv_generation_kwh_by_slot", ()) or ()))
+            for asset in effective_depot_energy_assets.values()
+        )
+        if curtail_penalty <= 0.0 and has_pv_enabled_bess:
+            max_grid_price = max(
+                (max(float(value or 0.0), 0.0) for value in price_by_slot.values()),
+                default=0.0,
+            )
+            max_bess_marginal = max(
+                (
+                    max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
+                    for asset in effective_depot_energy_assets.values()
+                    if bool(getattr(asset, "bess_enabled", False))
+                ),
+                default=0.0,
+            )
+            curtail_penalty = max(
+                1000.0,
+                pv_marginal_charge_cost + max_bess_marginal + max_grid_price + grid_to_bus_priority_penalty + 1.0,
+            )
+            pv_curtail_penalty_auto_defaulted = True
         if g2bus_var or g2bess_var or bess2bus_var:
             if component_flags.get("electricity_cost", True):
                 for (depot_id, slot_idx), var in g2bus_var.items():
@@ -1947,6 +1972,7 @@ class GurobiMILPAdapter:
         pv_curtail_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         bess_soc_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         contract_over_limit_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
+        vehicle_soc_kwh_by_vehicle_slot: Dict[str, Dict[int, float]] = {}
         for (depot_id, slot_idx), var in g2bus_var.items():
             grid_to_bus_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
         for (depot_id, slot_idx), var in pv2bus_var.items():
@@ -1963,6 +1989,8 @@ class GurobiMILPAdapter:
             bess_soc_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
         for (depot_id, slot_idx), var in contract_over_limit_var.items():
             contract_over_limit_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        for (vehicle_id, slot_idx), var in s_var.items():
+            vehicle_soc_kwh_by_vehicle_slot.setdefault(vehicle_id, {})[slot_idx] = max(_var_val(var), 0.0)
 
         opportunistic_topup_deficit_kwh_by_vehicle_day: Dict[Tuple[str, int], float] = {}
         for (vehicle_id, day_idx), var in opportunistic_topup_deficit_var.items():
@@ -2103,6 +2131,7 @@ class GurobiMILPAdapter:
             pv_curtail_kwh_by_depot_slot=pv_curtail_kwh_by_depot_slot,
             bess_soc_kwh_by_depot_slot=bess_soc_kwh_by_depot_slot,
             contract_over_limit_kwh_by_depot_slot=contract_over_limit_kwh_by_depot_slot,
+            vehicle_soc_kwh_by_vehicle_slot=vehicle_soc_kwh_by_vehicle_slot,
             served_trip_ids=tuple(sorted(served_set)),
             unserved_trip_ids=tuple(unserved_trip_ids),
             metadata={
@@ -2116,6 +2145,8 @@ class GurobiMILPAdapter:
                 "contract_overage_penalty_yen_per_kwh": contract_overage_penalty,
                 "grid_to_bus_priority_penalty_yen_per_kwh": grid_to_bus_priority_penalty,
                 "grid_to_bess_priority_penalty_yen_per_kwh": grid_to_bess_priority_penalty,
+                "pv_curtail_penalty_yen_per_kwh": curtail_penalty,
+                "pv_curtail_penalty_auto_defaulted": pv_curtail_penalty_auto_defaulted,
                 "charge_session_start_penalty_yen": charge_session_start_penalty,
                 "slot_concurrency_penalty_yen": slot_concurrency_penalty,
                 "early_charge_penalty_yen_per_kwh": early_charge_penalty_per_kwh,
