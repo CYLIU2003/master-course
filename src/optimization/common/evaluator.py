@@ -39,6 +39,9 @@ class CostBreakdown:
     deviation_cost: float = 0.0
     co2_cost: float = 0.0
     total_co2_kg: float = 0.0
+    ice_co2_kg: float = 0.0
+    grid_electricity_co2_kg: float = 0.0
+    pv_co2_kg: float = 0.0
     utilization_score: float = 0.0
     pv_generated_kwh: float = 0.0
     pv_used_direct_kwh: float = 0.0
@@ -93,6 +96,11 @@ class CostBreakdown:
             "deviation_cost": self.deviation_cost,
             "co2_cost": self.co2_cost,
             "total_co2_kg": self.total_co2_kg,
+            "ice_co2_kg": self.ice_co2_kg,
+            "grid_electricity_co2_kg": self.grid_electricity_co2_kg,
+            "pv_co2_kg": self.pv_co2_kg,
+            "engine_bus_co2_kg": self.ice_co2_kg,
+            "power_generation_co2_kg": self.grid_electricity_co2_kg,
             "utilization_score": self.utilization_score,
             "pv_generated_kwh": self.pv_generated_kwh,
             "pv_used_direct_kwh": self.pv_used_direct_kwh,
@@ -285,8 +293,12 @@ class CostEvaluator:
         deviation_count = len(set(plan.served_trip_ids).symmetric_difference(baseline_ids))
         deviation_cost = weights.deviation * deviation_count
 
-        # CO₂ metrics: calculate from ICE fuel and grid electricity.
-        total_co2_kg = self._total_co2_kg(problem, plan, operating_slot_totals)
+        # CO₂ metrics: calculate from ICE fuel, grid electricity, and PV (zero by default).
+        co2_breakdown = self._co2_breakdown_kg(problem, plan, operating_slot_totals)
+        ice_co2_kg = float(co2_breakdown.get("ice_co2_kg", 0.0) or 0.0)
+        grid_electricity_co2_kg = float(co2_breakdown.get("grid_electricity_co2_kg", 0.0) or 0.0)
+        pv_co2_kg = float(co2_breakdown.get("pv_co2_kg", 0.0) or 0.0)
+        total_co2_kg = ice_co2_kg + grid_electricity_co2_kg + pv_co2_kg
         co2_cost = max(problem.scenario.co2_price_per_kg, 0.0) * total_co2_kg
 
         total_vehicle_count = max(
@@ -440,6 +452,9 @@ class CostEvaluator:
                 deviation_cost=deviation_cost,
                 co2_cost=co2_cost,
                 total_co2_kg=total_co2_kg,
+                ice_co2_kg=ice_co2_kg,
+                grid_electricity_co2_kg=grid_electricity_co2_kg,
+                pv_co2_kg=pv_co2_kg,
                 utilization_score=utilization_score,
                 pv_generated_kwh=pv_generated_kwh,
                 pv_used_direct_kwh=pv_used_direct_kwh,
@@ -504,6 +519,9 @@ class CostEvaluator:
             deviation_cost=deviation_cost,
             co2_cost=co2_cost,
             total_co2_kg=total_co2_kg,
+            ice_co2_kg=ice_co2_kg,
+            grid_electricity_co2_kg=grid_electricity_co2_kg,
+            pv_co2_kg=pv_co2_kg,
             utilization_score=utilization_score,
             pv_generated_kwh=pv_generated_kwh,
             pv_used_direct_kwh=pv_used_direct_kwh,
@@ -677,6 +695,36 @@ class CostEvaluator:
                     new_queue.append((rest, prov_price))
                 remaining -= matched
             debts[vehicle_id] = new_queue
+
+        if (
+            self._mapping_has_positive_flow(grid_to_bus)
+            or self._mapping_has_positive_flow(pv_to_bus)
+            or self._mapping_has_positive_flow(bess_to_bus)
+            or self._mapping_has_positive_flow(grid_to_bess)
+        ):
+            flow_grid_purchase_cost = 0.0
+            for by_slot in (effective_grid_to_bus or {}).values():
+                for slot_idx, energy_kwh in by_slot.items():
+                    flow_grid_purchase_cost += max(float(energy_kwh or 0.0), 0.0) * self._slot_buy_price(problem, int(slot_idx))
+            for by_slot in (grid_to_bess or {}).values():
+                for slot_idx, energy_kwh in by_slot.items():
+                    flow_grid_purchase_cost += max(float(energy_kwh or 0.0), 0.0) * self._slot_buy_price(problem, int(slot_idx))
+
+            flow_bess_discharge_cost = 0.0
+            for depot_id, by_slot in (effective_bess_to_bus or {}).items():
+                asset = (problem.depot_energy_assets or {}).get(str(depot_id))
+                bess_unit = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
+                flow_bess_discharge_cost += _sum_flow({str(depot_id): by_slot}) * bess_unit
+
+            old_realized_total = sum(max(float(value or 0.0), 0.0) for value in realized_by_vehicle.values())
+            grid_purchase_cost = flow_grid_purchase_cost
+            bess_discharge_cost = flow_bess_discharge_cost
+            new_realized_total = grid_purchase_cost + bess_discharge_cost
+            if old_realized_total > 1.0e-9:
+                realized_by_vehicle = {
+                    vehicle_id: value * new_realized_total / old_realized_total
+                    for vehicle_id, value in realized_by_vehicle.items()
+                }
 
         provisional_leftover = sum(kwh * price for queue in debts.values() for kwh, price in queue)
         leftover_by_vehicle = {
@@ -1739,9 +1787,19 @@ class CostEvaluator:
         plan: AssignmentPlan,
         slot_totals_kwh: Dict[int, float],
     ) -> float:
+        breakdown = self._co2_breakdown_kg(problem, plan, slot_totals_kwh)
+        return sum(float(value or 0.0) for value in breakdown.values())
+
+    def _co2_breakdown_kg(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        slot_totals_kwh: Dict[int, float],
+    ) -> Dict[str, float]:
         ice_co2_kg_per_l = max(problem.scenario.ice_co2_kg_per_l, 0.0)
         vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
-        total_co2_kg = 0.0
+        ice_co2_kg = 0.0
+        grid_electricity_co2_kg = 0.0
 
         # ICE trip and deadhead fuel CO₂.
         for duty in plan.duties:
@@ -1755,11 +1813,11 @@ class CostEvaluator:
                     fuel_l = max(trip.fuel_l, 0.0)
                     if fuel_l <= 0 and fuel_rate > 0:
                         fuel_l = max(trip.distance_km, 0.0) * fuel_rate
-                    total_co2_kg += ice_co2_kg_per_l * fuel_l
+                    ice_co2_kg += ice_co2_kg_per_l * fuel_l
                 # Deadhead fuel CO₂.
                 if leg.deadhead_from_prev_min > 0 and fuel_rate > 0:
                     dh_km = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min)
-                    total_co2_kg += ice_co2_kg_per_l * dh_km * fuel_rate
+                    ice_co2_kg += ice_co2_kg_per_l * dh_km * fuel_rate
 
         # BEV electricity CO2: prefer actual grid-import flows (Grid->Bus + Grid->BESS).
         grid_import_by_slot = self._grid_import_kwh_by_slot_from_plan(plan)
@@ -1769,7 +1827,7 @@ class CostEvaluator:
                 co2_factor = co2_factor_map.get(slot_idx, 0.0)
                 if co2_factor <= 0:
                     continue
-                total_co2_kg += co2_factor * max(imported_kwh, 0.0)
+                grid_electricity_co2_kg += co2_factor * max(imported_kwh, 0.0)
         # Backward-compatible fallback.
         elif slot_totals_kwh and problem.price_slots:
             co2_factor_map = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
@@ -1777,9 +1835,13 @@ class CostEvaluator:
                 co2_factor = co2_factor_map.get(slot_idx, 0.0)
                 if co2_factor <= 0:
                     continue
-                total_co2_kg += co2_factor * max(energy_kwh, 0.0)
+                grid_electricity_co2_kg += co2_factor * max(energy_kwh, 0.0)
 
-        return total_co2_kg
+        return {
+            "ice_co2_kg": ice_co2_kg,
+            "grid_electricity_co2_kg": grid_electricity_co2_kg,
+            "pv_co2_kg": 0.0,
+        }
 
     def _collect_ev_drive_events(
         self,

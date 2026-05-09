@@ -734,11 +734,13 @@ def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_contex
         _mapping_has_positive_flow(mapping)
         for mapping in (derived_grid_to_bus, derived_pv_to_bus, derived_bess_to_bus)
     )
-    provenance_note = (
-        "Preserved per-source depot/slot energy-flow maps from the pre-postsolve plan; added postsolve charging slots were derived from the current charging slots."
-        if derived_from_charging_slots
-        else "Preserved per-source depot/slot energy-flow maps are present in the assignment plan."
-    )
+    provenance_note = str(preserved_context.get("source_provenance_note") or "").strip()
+    if not provenance_note:
+        provenance_note = (
+            "Preserved per-source depot/slot energy-flow maps from the pre-postsolve plan; added postsolve charging slots were derived from the current charging slots."
+            if derived_from_charging_slots
+            else "Preserved per-source depot/slot energy-flow maps are present in the assignment plan."
+        )
 
     return {
         "timestep_min": timestep_min,
@@ -766,7 +768,7 @@ def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_contex
 def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
     metadata = dict(getattr(plan, "metadata", {}) or {})
     preserved_context = dict(metadata.get("canonical_source_flow_context") or {})
-    if preserved_context and bool(preserved_context.get("source_provenance_exact")):
+    if preserved_context:
         return _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_context)
 
     timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
@@ -910,17 +912,20 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
     flow_ctx = _canonical_energy_flow_context(problem, plan)
     timestep_h = float(flow_ctx["timestep_h"] or 1.0)
     breakdown = dict(engine_result.cost_breakdown or {})
+    plan_metadata = dict(getattr(plan, "metadata", {}) or {})
+    solver_metadata = dict(engine_result.solver_metadata or {})
     penalty_enabled = bool(
-        (dict(getattr(plan, "metadata", {}) or {}).get("enable_contract_overage_penalty"))
-        if getattr(plan, "metadata", None)
-        else dict(engine_result.solver_metadata or {}).get("enable_contract_overage_penalty", True)
+        plan_metadata.get(
+            "enable_contract_overage_penalty",
+            solver_metadata.get("enable_contract_overage_penalty", True),
+        )
     )
-    raw_penalty_yen_per_kwh = (
-        dict(getattr(plan, "metadata", {}) or {}).get("contract_overage_penalty_yen_per_kwh")
-        if getattr(plan, "metadata", None)
-        else dict(engine_result.solver_metadata or {}).get("contract_overage_penalty_yen_per_kwh", 0.0)
+    raw_penalty_yen_per_kwh = plan_metadata.get(
+        "contract_overage_penalty_yen_per_kwh",
+        solver_metadata.get("contract_overage_penalty_yen_per_kwh", 0.0),
     )
     penalty_yen_per_kwh = float(raw_penalty_yen_per_kwh or 0.0)
+    contract_overage_policy = "soft_penalty" if penalty_enabled and penalty_yen_per_kwh > 0.0 else "warning_only"
 
     rows: List[Dict[str, Any]] = []
     per_depot: List[Dict[str, Any]] = []
@@ -971,9 +976,13 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
             total_bess_charge_kwh = pv_to_bess + grid_to_bess
             grid_import_kw = grid_import_total_kwh / timestep_h if timestep_h > 0.0 else 0.0
             total_charge_kw = total_bus_charge_kwh / timestep_h if timestep_h > 0.0 else 0.0
-            if contract_over_limit_kwh <= 1.0e-9 and contract_limit_kw > 0.0:
+            if contract_limit_kw > 0.0:
                 contract_limit_kwh = contract_limit_kw * timestep_h
-                contract_over_limit_kwh = max(grid_import_total_kwh - contract_limit_kwh, 0.0)
+                contract_over_limit_kwh = max(
+                    contract_over_limit_kwh,
+                    grid_import_total_kwh - contract_limit_kwh,
+                    0.0,
+                )
             contract_over_limit_kw = contract_over_limit_kwh / timestep_h if timestep_h > 0.0 else 0.0
             peak_grid_kw = max(peak_grid_kw, grid_import_kw)
             peak_total_charge_kw = max(peak_total_charge_kw, total_charge_kw)
@@ -1040,16 +1049,16 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                 "contract_overage_penalty_enabled": penalty_enabled,
                 "contract_overage_penalty_yen_per_kwh": penalty_yen_per_kwh,
                 "contract_overage_cost_jpy": contract_overage_cost,
+                "contract_overage_policy": contract_overage_policy,
             }
         )
 
     overall_grid_import_total_kwh = sum(float(row["grid_import_total_kwh"]) for row in per_depot)
     overall_contract_over_kwh = sum(float(row["contract_over_limit_kwh"]) for row in per_depot)
-    overall_contract_over_cost = (
-        float(breakdown.get("contract_overage_cost", 0.0) or 0.0)
-        if breakdown
-        else overall_contract_over_kwh * penalty_yen_per_kwh
-    )
+    expected_contract_over_cost = overall_contract_over_kwh * penalty_yen_per_kwh if penalty_enabled else 0.0
+    overall_contract_over_cost = float(breakdown.get("contract_overage_cost", expected_contract_over_cost) or 0.0)
+    if abs(overall_contract_over_cost - expected_contract_over_cost) <= 1.0e-6:
+        overall_contract_over_cost = expected_contract_over_cost
     fuel_cost_jpy = float(breakdown.get("fuel_cost", 0.0) or 0.0)
     aggregate_energy_cost_jpy = float(breakdown.get("energy_cost", 0.0) or 0.0)
     if breakdown.get("electricity_cost") is not None:
@@ -1101,6 +1110,12 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                 "contract_overage_penalty_enabled": penalty_enabled,
                 "contract_overage_penalty_yen_per_kwh": penalty_yen_per_kwh,
                 "contract_overage_cost_jpy": overall_contract_over_cost,
+                "contract_overage_policy": contract_overage_policy,
+                "contract_overage_warning": (
+                    "Contract limit exceeded but no overage cost was applied; policy is warning_only."
+                    if overall_contract_over_kwh > 1.0e-9 and contract_overage_policy == "warning_only"
+                    else ""
+                ),
                 "demand_charge_cost_jpy": float(breakdown.get("demand_cost", 0.0) or 0.0),
                 "grid_purchase_cost_jpy": float(breakdown.get("grid_purchase_cost", 0.0) or 0.0),
                 "bess_discharge_cost_jpy": float(breakdown.get("bess_discharge_cost", 0.0) or 0.0),
@@ -1432,10 +1447,21 @@ def _persist_rich_run_outputs(
         ],
     )
 
+    ice_co2_kg = float(
+        cost_breakdown.get("ice_co2_kg", cost_breakdown.get("engine_bus_co2_kg", 0.0)) or 0.0
+    )
+    grid_co2_kg = float(
+        cost_breakdown.get("grid_electricity_co2_kg", cost_breakdown.get("power_generation_co2_kg", 0.0)) or 0.0
+    )
+    pv_co2_kg = float(cost_breakdown.get("pv_co2_kg", 0.0) or 0.0)
+    total_co2_kg = float(cost_breakdown.get("total_co2_kg", ice_co2_kg + grid_co2_kg + pv_co2_kg) or 0.0)
+    if abs(total_co2_kg - (ice_co2_kg + grid_co2_kg + pv_co2_kg)) > 1.0e-6 and ice_co2_kg == 0.0 and grid_co2_kg == 0.0 and pv_co2_kg == 0.0:
+        grid_co2_kg = total_co2_kg
     co2_rows = [
-        {"component": "engine_bus_co2_kg", "value": float(cost_breakdown.get("engine_bus_co2_kg", 0.0) or 0.0)},
-        {"component": "power_generation_co2_kg", "value": float(cost_breakdown.get("power_generation_co2_kg", 0.0) or 0.0)},
-        {"component": "total_co2_kg", "value": float(cost_breakdown.get("total_co2_kg", 0.0) or 0.0)},
+        {"component": "ice_bus_co2_kg", "value": ice_co2_kg},
+        {"component": "grid_electricity_co2_kg", "value": grid_co2_kg},
+        {"component": "pv_co2_kg", "value": pv_co2_kg},
+        {"component": "total_co2_kg", "value": ice_co2_kg + grid_co2_kg + pv_co2_kg},
     ]
     (run_dir / "co2_breakdown.json").write_text(
         json.dumps({"rows": co2_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -2410,8 +2436,12 @@ def _canonical_depot_power_rows_5min(
             bess_soc_kwh = float((flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_over_limit_kwh = float((flow_ctx["contract_over_limit_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_limit_kw = float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0)
-            if contract_over_limit_kwh <= 1.0e-9 and contract_limit_kw > 0.0:
-                contract_over_limit_kwh = max((grid_to_bus + grid_to_bess) - (contract_limit_kw * timestep_h), 0.0)
+            if contract_limit_kw > 0.0:
+                contract_over_limit_kwh = max(
+                    contract_over_limit_kwh,
+                    (grid_to_bus + grid_to_bess) - (contract_limit_kw * timestep_h),
+                    0.0,
+                )
             slot_values_by_depot[depot_id][slot_idx] = {
                 "grid_import_kw": (grid_to_bus + grid_to_bess) / timestep_h,
                 "pv_generation_kw": pv_generation / timestep_h,

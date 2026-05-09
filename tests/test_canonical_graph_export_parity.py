@@ -238,6 +238,83 @@ def test_canonical_charging_output_payload_uses_preserved_source_flow_context() 
     assert payload["summary"]["source_provenance_exact"] is False
 
 
+def test_normalize_postsolve_plan_derives_pv_bess_source_split_without_milp_flow() -> None:
+    problem, result, _scenario = _problem_and_result()
+    asset = replace(
+        problem.depot_energy_assets["dep1"],
+        pv_generation_kwh_by_slot=(10.0, 0.0),
+        bess_enabled=True,
+        bess_energy_kwh=10.0,
+        bess_power_kw=10.0,
+        bess_initial_soc_kwh=0.0,
+        bess_soc_min_kwh=0.0,
+        bess_soc_max_kwh=10.0,
+        bess_charge_efficiency=1.0,
+        bess_discharge_efficiency=1.0,
+    )
+    problem = replace(
+        problem,
+        scenario=replace(problem.scenario, timestep_min=60),
+        price_slots=(
+            EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=20.0),
+            EnergyPriceSlot(slot_index=1, grid_buy_yen_per_kwh=20.0),
+        ),
+        depot_energy_assets={"dep1": asset},
+    )
+    plan = AssignmentPlan(
+        charging_slots=(
+            ChargingSlot(
+                vehicle_id="veh-1",
+                slot_index=1,
+                charger_id="grid:dep1",
+                charge_kw=6.0,
+                charging_depot_id="dep1",
+            ),
+        ),
+        metadata=dict(result.plan.metadata or {}),
+    )
+    engine = OptimizationEngine()
+
+    with (
+        mock.patch.object(engine, "_reassign_vehicle_fragments", return_value=plan),
+        mock.patch("src.optimization.engine.apply_opportunistic_topup", side_effect=lambda _problem, current_plan: current_plan),
+    ):
+        normalized_plan, *_rest = engine._normalize_postsolve_plan(problem, plan)
+
+    assert normalized_plan.pv_to_bess_kwh_by_depot_slot == {"dep1": {0: 10.0}}
+    assert normalized_plan.bess_to_bus_kwh_by_depot_slot == {"dep1": {1: 6.0}}
+    assert normalized_plan.grid_to_bus_kwh_by_depot_slot == {}
+    assert normalized_plan.metadata["derived_source_split"] is True
+    assert normalized_plan.metadata["canonical_source_flow_context"]["source_provenance_exact"] is False
+
+
+def test_canonical_charging_output_reports_warning_only_contract_overage_when_penalty_zero() -> None:
+    problem, result, _scenario = _problem_and_result()
+    plan = AssignmentPlan(
+        grid_to_bus_kwh_by_depot_slot={"dep1": {0: 10.0}},
+        served_trip_ids=("t1",),
+        metadata={"duty_vehicle_map": {"veh-1": "veh-1"}},
+    )
+    result = replace(
+        result,
+        plan=plan,
+        cost_breakdown={"contract_overage_cost": 0.0},
+        solver_metadata={
+            **dict(result.solver_metadata or {}),
+            "enable_contract_overage_penalty": True,
+            "contract_overage_penalty_yen_per_kwh": 0.0,
+        },
+    )
+
+    payload = optimization._canonical_charging_output_payload(problem, result)
+    totals = payload["summary"]["totals"]
+
+    assert totals["contract_limit_exceeded"] is True
+    assert totals["contract_overage_policy"] == "warning_only"
+    assert totals["contract_overage_cost_jpy"] == 0.0
+    assert "warning_only" in totals["contract_overage_warning"]
+
+
 def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_disabled(tmp_path: Path) -> None:
     problem, result, scenario = _problem_and_result()
 

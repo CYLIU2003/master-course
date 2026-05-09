@@ -89,6 +89,267 @@ def _capture_source_flow_context(plan: AssignmentPlan) -> dict[str, object]:
     }
 
 
+def _source_flow_context_has_positive_flow(source_flow_context: dict[str, object]) -> bool:
+    return any(
+        max(float(value or 0.0), 0.0) > 0.0
+        for key in (
+            "grid_to_bus_kwh_by_depot_slot",
+            "pv_to_bus_kwh_by_depot_slot",
+            "bess_to_bus_kwh_by_depot_slot",
+            "pv_to_bess_kwh_by_depot_slot",
+            "grid_to_bess_kwh_by_depot_slot",
+            "pv_curtail_kwh_by_depot_slot",
+        )
+        for slot_map in _normalize_depot_slot_flow_mapping(source_flow_context.get(key, {})).values()
+        for value in slot_map.values()
+    )
+
+
+def _vehicle_home_depot_by_id(problem: CanonicalOptimizationProblem) -> dict[str, str]:
+    return {
+        str(getattr(vehicle, "vehicle_id", "") or ""): str(getattr(vehicle, "home_depot_id", "") or "")
+        for vehicle in list(getattr(problem, "vehicles", ()) or ())
+        if str(getattr(vehicle, "vehicle_id", "") or "")
+    }
+
+
+def _fallback_depot_id(problem: CanonicalOptimizationProblem) -> str:
+    for depot in list(getattr(problem, "depots", ()) or ()):
+        depot_id = str(getattr(depot, "depot_id", "") or "").strip()
+        if depot_id:
+            return depot_id
+    for depot_id in dict(getattr(problem, "depot_energy_assets", {}) or {}).keys():
+        depot_key = str(depot_id or "").strip()
+        if depot_key:
+            return depot_key
+    return "depot_default"
+
+
+def _charging_source_and_depot(
+    problem: CanonicalOptimizationProblem,
+    charging_slot,
+    vehicle_home_depot: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    fallback_depot = (
+        dict(vehicle_home_depot or {}).get(str(getattr(charging_slot, "vehicle_id", "") or ""))
+        or str(getattr(charging_slot, "charging_depot_id", "") or "")
+        or _fallback_depot_id(problem)
+    )
+    charger_id = str(getattr(charging_slot, "charger_id", "") or "").strip()
+    if ":" in charger_id:
+        source, depot_id = charger_id.split(":", 1)
+        source_key = source.strip().lower()
+        if source_key in {"grid", "pv", "bess"}:
+            return source_key, depot_id.strip() or fallback_depot
+    depot_id = str(getattr(charging_slot, "charging_depot_id", "") or "").strip()
+    return "grid", depot_id or fallback_depot
+
+
+def _merge_source_context_with_added_charging(
+    problem: CanonicalOptimizationProblem,
+    plan: AssignmentPlan,
+    source_flow_context: dict[str, object],
+) -> AssignmentPlan:
+    timestep_h = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1) / 60.0
+    vehicle_home_depot = _vehicle_home_depot_by_id(problem)
+    charging_signatures = {
+        tuple(item)
+        for item in list(source_flow_context.get("charging_slot_signatures") or [])
+        if isinstance(item, (list, tuple)) and len(item) >= 4
+    }
+    grid_to_bus = _normalize_depot_slot_flow_mapping(source_flow_context.get("grid_to_bus_kwh_by_depot_slot", {}))
+    pv_to_bus = _normalize_depot_slot_flow_mapping(source_flow_context.get("pv_to_bus_kwh_by_depot_slot", {}))
+    bess_to_bus = _normalize_depot_slot_flow_mapping(source_flow_context.get("bess_to_bus_kwh_by_depot_slot", {}))
+    added_kwh = 0.0
+    for charging_slot in list(getattr(plan, "charging_slots", ()) or ()):
+        if _charging_slot_signature(charging_slot) in charging_signatures:
+            continue
+        charge_kw = max(float(getattr(charging_slot, "charge_kw", 0.0) or 0.0), 0.0)
+        discharge_kw = max(float(getattr(charging_slot, "discharge_kw", 0.0) or 0.0), 0.0)
+        net_charge_kwh = max(charge_kw - discharge_kw, 0.0) * timestep_h
+        if net_charge_kwh <= 1.0e-9:
+            continue
+        source, depot_id = _charging_source_and_depot(problem, charging_slot, vehicle_home_depot)
+        target = grid_to_bus
+        if source == "pv":
+            target = pv_to_bus
+        elif source == "bess":
+            target = bess_to_bus
+        slot_idx = int(getattr(charging_slot, "slot_index", 0) or 0)
+        slot_map = target.setdefault(str(depot_id), {})
+        slot_map[slot_idx] = slot_map.get(slot_idx, 0.0) + net_charge_kwh
+        added_kwh += net_charge_kwh
+    source_provenance_exact = bool(source_flow_context.get("source_provenance_exact")) and added_kwh <= 1.0e-9
+    metadata = dict(plan.metadata or {})
+    metadata["source_provenance_exact"] = source_provenance_exact
+    metadata["derived_source_split"] = not source_provenance_exact
+    metadata["canonical_source_flow_context"] = {
+        **source_flow_context,
+        "grid_to_bus_kwh_by_depot_slot": grid_to_bus,
+        "pv_to_bus_kwh_by_depot_slot": pv_to_bus,
+        "bess_to_bus_kwh_by_depot_slot": bess_to_bus,
+        "source_provenance_exact": source_provenance_exact,
+        "source_provenance_note": (
+            "Preserved exact pre-postsolve per-source flow maps."
+            if source_provenance_exact
+            else "Preserved pre-postsolve flow maps and added postsolve charging as derived source flow."
+        ),
+        "charging_slot_signatures": tuple(
+            _charging_slot_signature(slot) for slot in list(getattr(plan, "charging_slots", ()) or ())
+        ),
+    }
+    return replace(
+        plan,
+        grid_to_bus_kwh_by_depot_slot=grid_to_bus,
+        pv_to_bus_kwh_by_depot_slot=pv_to_bus,
+        bess_to_bus_kwh_by_depot_slot=bess_to_bus,
+        pv_to_bess_kwh_by_depot_slot=_normalize_depot_slot_flow_mapping(source_flow_context.get("pv_to_bess_kwh_by_depot_slot", {})),
+        grid_to_bess_kwh_by_depot_slot=_normalize_depot_slot_flow_mapping(source_flow_context.get("grid_to_bess_kwh_by_depot_slot", {})),
+        pv_curtail_kwh_by_depot_slot=_normalize_depot_slot_flow_mapping(source_flow_context.get("pv_curtail_kwh_by_depot_slot", {})),
+        bess_soc_kwh_by_depot_slot=_normalize_depot_slot_flow_mapping(source_flow_context.get("bess_soc_kwh_by_depot_slot", {})),
+        contract_over_limit_kwh_by_depot_slot=_normalize_depot_slot_flow_mapping(source_flow_context.get("contract_over_limit_kwh_by_depot_slot", {})),
+        metadata=metadata,
+    )
+
+
+def _derive_depot_energy_source_split(
+    problem: CanonicalOptimizationProblem,
+    plan: AssignmentPlan,
+) -> AssignmentPlan:
+    timestep_h = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1) / 60.0
+    vehicle_home_depot = _vehicle_home_depot_by_id(problem)
+    bus_demand_by_depot_slot: dict[str, dict[int, float]] = {}
+    for charging_slot in list(getattr(plan, "charging_slots", ()) or ()):
+        charge_kw = max(float(getattr(charging_slot, "charge_kw", 0.0) or 0.0), 0.0)
+        discharge_kw = max(float(getattr(charging_slot, "discharge_kw", 0.0) or 0.0), 0.0)
+        net_charge_kwh = max(charge_kw - discharge_kw, 0.0) * timestep_h
+        if net_charge_kwh <= 1.0e-9:
+            continue
+        _source, depot_id = _charging_source_and_depot(problem, charging_slot, vehicle_home_depot)
+        slot_idx = int(getattr(charging_slot, "slot_index", 0) or 0)
+        slot_map = bus_demand_by_depot_slot.setdefault(str(depot_id), {})
+        slot_map[slot_idx] = slot_map.get(slot_idx, 0.0) + net_charge_kwh
+
+    depot_ids = set(bus_demand_by_depot_slot.keys())
+    depot_ids.update(str(key) for key in dict(getattr(problem, "depot_energy_assets", {}) or {}).keys())
+    depot_ids.update(str(getattr(depot, "depot_id", "") or "") for depot in list(getattr(problem, "depots", ()) or ()))
+    depot_ids = {item for item in depot_ids if item}
+    if not depot_ids:
+        return plan
+
+    depot_limit_kw = {
+        str(getattr(depot, "depot_id", "") or ""): float(getattr(depot, "import_limit_kw", 0.0) or 0.0)
+        for depot in list(getattr(problem, "depots", ()) or ())
+        if str(getattr(depot, "depot_id", "") or "")
+    }
+    max_slot = max((int(slot.slot_index) for slot in list(getattr(problem, "price_slots", ()) or ())), default=-1)
+    for slot_map in bus_demand_by_depot_slot.values():
+        max_slot = max(max_slot, max((int(slot_idx) for slot_idx in slot_map.keys()), default=-1))
+    for asset in dict(getattr(problem, "depot_energy_assets", {}) or {}).values():
+        max_slot = max(max_slot, len(tuple(getattr(asset, "pv_generation_kwh_by_slot", ()) or ())) - 1)
+    if max_slot < 0:
+        return plan
+
+    grid_to_bus: dict[str, dict[int, float]] = {}
+    pv_to_bus: dict[str, dict[int, float]] = {}
+    bess_to_bus: dict[str, dict[int, float]] = {}
+    pv_to_bess: dict[str, dict[int, float]] = {}
+    grid_to_bess: dict[str, dict[int, float]] = {}
+    pv_curtail: dict[str, dict[int, float]] = {}
+    bess_soc: dict[str, dict[int, float]] = {}
+    contract_over_limit: dict[str, dict[int, float]] = {}
+
+    for depot_id in sorted(depot_ids):
+        asset = dict(getattr(problem, "depot_energy_assets", {}) or {}).get(depot_id)
+        pv_generation = tuple(getattr(asset, "pv_generation_kwh_by_slot", ()) or ()) if asset is not None else ()
+        bess_enabled = bool(getattr(asset, "bess_enabled", False)) if asset is not None else False
+        max_soc = max(
+            float(getattr(asset, "bess_soc_max_kwh", 0.0) or 0.0),
+            float(getattr(asset, "bess_energy_kwh", 0.0) or 0.0),
+        ) if asset is not None else 0.0
+        min_soc = min(max(float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0), 0.0), max_soc)
+        initial_soc = min(max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), min_soc), max_soc)
+        power_kwh = max(float(getattr(asset, "bess_power_kw", 0.0) or 0.0), 0.0) * timestep_h if asset is not None else 0.0
+        charge_eff = min(max(float(getattr(asset, "bess_charge_efficiency", 0.95) or 0.95), 1.0e-9), 1.0)
+        discharge_eff = min(max(float(getattr(asset, "bess_discharge_efficiency", 0.95) or 0.95), 1.0e-9), 1.0)
+        if max_soc <= 1.0e-9 or power_kwh <= 1.0e-9:
+            bess_enabled = False
+        soc = initial_soc
+        for slot_idx in range(max_slot + 1):
+            bus_demand = max(float(bus_demand_by_depot_slot.get(depot_id, {}).get(slot_idx, 0.0) or 0.0), 0.0)
+            pv_available = max(float(pv_generation[slot_idx] if slot_idx < len(pv_generation) else 0.0), 0.0)
+            bess_to_bus_kwh = 0.0
+            if bess_enabled and bus_demand > 1.0e-9:
+                available_to_bus = max((soc - min_soc) * discharge_eff, 0.0)
+                bess_to_bus_kwh = min(bus_demand, power_kwh, available_to_bus)
+                if bess_to_bus_kwh > 1.0e-9:
+                    soc = max(min_soc, soc - (bess_to_bus_kwh / discharge_eff))
+                    bus_demand -= bess_to_bus_kwh
+            pv_to_bus_kwh = min(bus_demand, pv_available)
+            if pv_to_bus_kwh > 1.0e-9:
+                bus_demand -= pv_to_bus_kwh
+                pv_available -= pv_to_bus_kwh
+            grid_to_bus_kwh = max(bus_demand, 0.0)
+            pv_to_bess_kwh = 0.0
+            if bess_enabled and pv_available > 1.0e-9:
+                available_input = max((max_soc - soc) / charge_eff, 0.0)
+                pv_to_bess_kwh = min(pv_available, power_kwh, available_input)
+                if pv_to_bess_kwh > 1.0e-9:
+                    soc = min(max_soc, soc + pv_to_bess_kwh * charge_eff)
+                    pv_available -= pv_to_bess_kwh
+            pv_curtail_kwh = max(pv_available, 0.0)
+            contract_limit = max(float(depot_limit_kw.get(depot_id, 0.0) or 0.0), 0.0) * timestep_h
+            contract_over_kwh = max(grid_to_bus_kwh - contract_limit, 0.0) if contract_limit > 0.0 else 0.0
+
+            def _set(mapping: dict[str, dict[int, float]], value: float) -> None:
+                if value > 1.0e-9:
+                    mapping.setdefault(depot_id, {})[slot_idx] = value
+
+            _set(grid_to_bus, grid_to_bus_kwh)
+            _set(pv_to_bus, pv_to_bus_kwh)
+            _set(bess_to_bus, bess_to_bus_kwh)
+            _set(pv_to_bess, pv_to_bess_kwh)
+            _set(pv_curtail, pv_curtail_kwh)
+            _set(contract_over_limit, contract_over_kwh)
+            if bess_enabled:
+                bess_soc.setdefault(depot_id, {})[slot_idx] = soc
+
+    metadata = dict(plan.metadata or {})
+    metadata["derived_source_split"] = True
+    metadata["source_provenance_exact"] = False
+    metadata["canonical_source_flow_context"] = {
+        "grid_to_bus_kwh_by_depot_slot": grid_to_bus,
+        "pv_to_bus_kwh_by_depot_slot": pv_to_bus,
+        "bess_to_bus_kwh_by_depot_slot": bess_to_bus,
+        "pv_to_bess_kwh_by_depot_slot": pv_to_bess,
+        "grid_to_bess_kwh_by_depot_slot": grid_to_bess,
+        "pv_curtail_kwh_by_depot_slot": pv_curtail,
+        "bess_soc_kwh_by_depot_slot": bess_soc,
+        "contract_over_limit_kwh_by_depot_slot": contract_over_limit,
+        "source_provenance_exact": False,
+        "derived_source_split": True,
+        "source_provenance_note": (
+            "Deterministic postsolve source split derived from charging demand, PV generation, and BESS limits. "
+            "It is not a MILP decision trace."
+        ),
+        "charging_slot_signatures": tuple(
+            _charging_slot_signature(slot) for slot in list(getattr(plan, "charging_slots", ()) or ())
+        ),
+    }
+    return replace(
+        plan,
+        grid_to_bus_kwh_by_depot_slot=grid_to_bus,
+        pv_to_bus_kwh_by_depot_slot=pv_to_bus,
+        bess_to_bus_kwh_by_depot_slot=bess_to_bus,
+        pv_to_bess_kwh_by_depot_slot=pv_to_bess,
+        grid_to_bess_kwh_by_depot_slot=grid_to_bess,
+        pv_curtail_kwh_by_depot_slot=pv_curtail,
+        bess_soc_kwh_by_depot_slot=bess_soc,
+        contract_over_limit_kwh_by_depot_slot=contract_over_limit,
+        metadata=metadata,
+    )
+
+
 class OptimizationEngine:
     def __init__(self) -> None:
         self._milp = MILPOptimizer()
@@ -263,6 +524,12 @@ class OptimizationEngine:
         solver_metadata["postsolve_opportunistic_topup_unfilled_vehicle_day_ids"] = tuple(
             plan.metadata.get("opportunistic_topup_unfilled_vehicle_day_ids", ()) or ()
         )
+        solver_metadata["source_provenance_exact"] = bool(
+            dict(plan.metadata or {}).get("source_provenance_exact", False)
+        )
+        solver_metadata["derived_source_split"] = bool(
+            dict(plan.metadata or {}).get("derived_source_split", False)
+        )
         solver_metadata["postsolve_feasible"] = bool(report.feasible)
         solver_metadata["postsolve_objective_value"] = float(
             costs.get("objective_value", result.objective_value)
@@ -352,10 +619,14 @@ class OptimizationEngine:
 
         topped_up_plan = apply_opportunistic_topup(problem, rebuilt_plan)
         opportunistic_topup_applied = int(topped_up_plan.metadata.get("opportunistic_topup_added_slot_count", 0) or 0) > 0
-        if bool(source_flow_context.get("source_provenance_exact")):
-            metadata = dict(topped_up_plan.metadata or {})
-            metadata.setdefault("canonical_source_flow_context", source_flow_context)
-            topped_up_plan = replace(topped_up_plan, metadata=metadata)
+        if _source_flow_context_has_positive_flow(source_flow_context):
+            topped_up_plan = _merge_source_context_with_added_charging(
+                problem,
+                topped_up_plan,
+                source_flow_context,
+            )
+        else:
+            topped_up_plan = _derive_depot_energy_source_split(problem, topped_up_plan)
 
         return (
             topped_up_plan,

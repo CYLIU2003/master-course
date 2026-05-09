@@ -7611,7 +7611,7 @@ class App:
                 "mode": self.solver_mode_var.get().strip(),
                 "prepared_input_id": self.prepared_input_id,
                 "current_time": datetime.now().strftime("%H:%M"),
-                "time_limit_seconds": self._parse_int(self.time_limit_var.get(), 300),
+                "time_limit_seconds": self._effective_optimization_time_limit_seconds(),
                 "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
                 "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
                 "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),
@@ -7698,7 +7698,6 @@ class App:
 
     # ソルバー側ハードキャップ（bff 側の _MAX_TIME_LIMIT_SECONDS と同値）
     _SOLVER_HARD_CAP_SECONDS = 86400  # 1 日
-    _WEATHER_PROXY_MILP_SOFT_CAP_SECONDS = 300
     _WEATHER_PROXY_MILP_SLOW_MODES = {"mode_milp_only"}
 
     def _effective_optimization_time_limit_seconds(self) -> int:
@@ -7712,16 +7711,13 @@ class App:
         if (
             weather_proxy_enabled
             and solver_mode in self._WEATHER_PROXY_MILP_SLOW_MODES
-            and raw > self._WEATHER_PROXY_MILP_SOFT_CAP_SECONDS
+            and raw > 300
             and os.environ.get("MC_ALLOW_LONG_WEATHER_MILP") != "1"
         ):
             self.log_line(
                 "[警告] Weather proxy 有効時の mode_milp_only は post-return SOC target と "
-                f"24h horizon で長時間化しやすいため、time_limit {raw}s を "
-                f"{self._WEATHER_PROXY_MILP_SOFT_CAP_SECONDS}s に制限します。"
-                " 長時間MILPを明示実行する場合は MC_ALLOW_LONG_WEATHER_MILP=1 を設定してください。"
+                f"24h horizon で長時間化しやすい設定です。time_limit {raw}s をそのまま送信します。"
             )
-            return self._WEATHER_PROXY_MILP_SOFT_CAP_SECONDS
         if raw > self._SOLVER_HARD_CAP_SECONDS:
             self.log_line(
                 f"[警告] time_limit {raw}s はハードキャップ {self._SOLVER_HARD_CAP_SECONDS}s を超えています。"

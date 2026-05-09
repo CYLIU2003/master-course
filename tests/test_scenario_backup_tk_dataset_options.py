@@ -275,7 +275,7 @@ def test_weather_proxy_optimization_payload_includes_path_only_when_enabled() ->
     }
 
 
-def test_weather_proxy_milp_caps_long_time_limit_by_default(monkeypatch) -> None:
+def test_weather_proxy_milp_warns_but_keeps_long_time_limit_by_default(monkeypatch) -> None:
     monkeypatch.delenv("MC_ALLOW_LONG_WEATHER_MILP", raising=False)
     app = App.__new__(App)
     app.time_limit_var = DummyVar("3000")
@@ -284,7 +284,7 @@ def test_weather_proxy_milp_caps_long_time_limit_by_default(monkeypatch) -> None
     logs: list[str] = []
     app.log_line = logs.append
 
-    assert App._effective_optimization_time_limit_seconds(app) == 300
+    assert App._effective_optimization_time_limit_seconds(app) == 3000
     assert "Weather proxy" in logs[0]
     assert "3000s" in logs[0]
 
