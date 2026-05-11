@@ -692,15 +692,24 @@ def _default_depot_energy_asset_row(depot_id: str) -> dict[str, Any]:
         "bess_initial_soc_kwh": 0.0,
         "bess_soc_min_kwh": 0.0,
         "bess_soc_max_kwh": 0.0,
+        "bess_charge_efficiency": 0.95,
+        "bess_discharge_efficiency": 0.95,
         "bess_cycle_cost_yen_per_kwh": 0.0,
         "allow_grid_to_bess": False,
         "grid_to_bess_price_mode": "tou",
         "grid_to_bess_price_threshold_yen_per_kwh": 0.0,
         "grid_to_bess_allowed_slot_indices": [],
-        "bess_priority_mode": "cost_driven",
+        "bess_priority_mode": "pv_self_consumption",
         "bess_terminal_soc_min_kwh": 0.0,
         "provisional_energy_cost_yen_per_kwh": 0.0,
     }
+
+
+def _manual_pv_capacity_kw_or_none(row: dict[str, Any]) -> float | None:
+    if not bool(row.get("pv_capacity_kw_manual_override", row.get("pvCapacityKwManualOverride", False))):
+        return None
+    value = positive_or_none(row.get("pv_capacity_kw", row.get("pvCapacityKw")))
+    return float(value) if value is not None else None
 
 
 def _coerce_float_list(values: Any) -> list[float]:
@@ -859,8 +868,13 @@ def _apply_area_pv_estimate_to_row(row: dict[str, Any]) -> float:
         performance_ratio = DEFAULT_PERFORMANCE_RATIO
     row["performance_ratio"] = performance_ratio
     row["estimated_installable_area_m2"] = round(estimate.installable_area_m2, 6)
-    row["pv_capacity_kw"] = round(estimate.capacity_kw, 6) if estimate.depot_area_m2 is not None else 0.0
-    row["pv_enabled"] = estimate.depot_area_m2 is not None and estimate.capacity_kw > 0.0
+    manual_capacity_kw = _manual_pv_capacity_kw_or_none(row)
+    if manual_capacity_kw is not None:
+        row["pv_capacity_kw"] = round(manual_capacity_kw, 6)
+        row["pv_enabled"] = manual_capacity_kw > 0.0
+    else:
+        row["pv_capacity_kw"] = round(estimate.capacity_kw, 6) if estimate.depot_area_m2 is not None else 0.0
+        row["pv_enabled"] = estimate.depot_area_m2 is not None and estimate.capacity_kw > 0.0
     return float(row["pv_capacity_kw"])
 
 
@@ -1022,12 +1036,23 @@ def _merge_selected_depot_pv_assets(
             }
             for item in profile.get("pvCapacityFactorByDate") or []
         ]
+        manual_capacity_kw = _manual_pv_capacity_kw_or_none(row)
+        if manual_capacity_kw is not None:
+            combined_slots, generation_rows = _compose_pv_generation_from_capacity_factors(
+                manual_capacity_kw,
+                row["pv_capacity_factor_by_date"],
+            )
+            row["pv_generation_kwh_by_slot"] = combined_slots
+            row["pv_generation_kwh_by_date"] = generation_rows
+            row["pv_capacity_kw"] = round(manual_capacity_kw, 6)
+            row["pv_enabled"] = manual_capacity_kw > 0.0
         row["depot_area_m2"] = profile.get("depotAreaM2")
         row["estimated_installable_area_m2"] = profile.get("estimatedInstallableAreaM2")
         row["usable_area_ratio"] = DEFAULT_USABLE_AREA_RATIO
         row["panel_power_density_kw_m2"] = DEFAULT_PANEL_POWER_DENSITY_KW_M2
         row["performance_ratio"] = DEFAULT_PERFORMANCE_RATIO
-        row["pv_capacity_kw"] = float(profile.get("capacityKw") or 0.0)
+        if manual_capacity_kw is None:
+            row["pv_capacity_kw"] = float(profile.get("capacityKw") or 0.0)
         rows_by_depot[depot_id] = row
         synced_ids.append(depot_id)
 
@@ -4490,7 +4515,7 @@ class App:
 
         win = tk.Toplevel(self.root)
         win.title("営業所エネルギー資産 行編集")
-        win.geometry("1160x640")
+        win.geometry("1320x760")
 
         rows: list[dict[str, Any]] = [dict(item) for item in current_rows]
         service_dates = self._selected_service_dates(announce=False) or []
@@ -4519,9 +4544,16 @@ class App:
             "bess_enabled",
             "bess_energy_kwh",
             "bess_power_kw",
+            "bess_initial_soc_kwh",
+            "bess_soc_min_kwh",
+            "bess_soc_max_kwh",
+            "bess_charge_efficiency",
+            "bess_discharge_efficiency",
             "bess_cycle_cost_yen_per_kwh",
             "allow_grid_to_bess",
+            "grid_to_bess_price_mode",
             "grid_to_bess_price_threshold_yen_per_kwh",
+            "bess_priority_mode",
             "bess_terminal_soc_min_kwh",
         )
         tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=10)
@@ -4536,9 +4568,16 @@ class App:
             "bess_enabled": "BESS有効",
             "bess_energy_kwh": "BESS容量[kWh]",
             "bess_power_kw": "BESS出力[kW]",
+            "bess_initial_soc_kwh": "初期SOC[kWh]",
+            "bess_soc_min_kwh": "最小SOC[kWh]",
+            "bess_soc_max_kwh": "最大SOC[kWh]",
+            "bess_charge_efficiency": "充電効率",
+            "bess_discharge_efficiency": "放電効率",
             "bess_cycle_cost_yen_per_kwh": "BESS→Bus単価[円/kWh]",
             "allow_grid_to_bess": "Grid→BESS",
+            "grid_to_bess_price_mode": "Grid→BESSモード",
             "grid_to_bess_price_threshold_yen_per_kwh": "Grid→BESS閾値[円/kWh]",
+            "bess_priority_mode": "BESS優先モード",
             "bess_terminal_soc_min_kwh": "終端SOC下限[kWh]",
         }
         widths = {
@@ -4552,9 +4591,16 @@ class App:
             "bess_enabled": 80,
             "bess_energy_kwh": 120,
             "bess_power_kw": 120,
+            "bess_initial_soc_kwh": 110,
+            "bess_soc_min_kwh": 110,
+            "bess_soc_max_kwh": 110,
+            "bess_charge_efficiency": 90,
+            "bess_discharge_efficiency": 90,
             "bess_cycle_cost_yen_per_kwh": 150,
             "allow_grid_to_bess": 90,
+            "grid_to_bess_price_mode": 130,
             "grid_to_bess_price_threshold_yen_per_kwh": 170,
+            "bess_priority_mode": 150,
             "bess_terminal_soc_min_kwh": 140,
         }
         for col in cols:
@@ -4579,10 +4625,14 @@ class App:
         bess_initial_soc_kwh_var = tk.StringVar(value="0")
         bess_soc_min_kwh_var = tk.StringVar(value="0")
         bess_soc_max_kwh_var = tk.StringVar(value="0")
+        bess_charge_efficiency_var = tk.StringVar(value="0.95")
+        bess_discharge_efficiency_var = tk.StringVar(value="0.95")
         bess_cycle_cost_var = tk.StringVar(value="0")
         allow_grid_to_bess_var = tk.BooleanVar(value=False)
+        grid_to_bess_price_mode_var = tk.StringVar(value="tou")
         grid_to_bess_price_threshold_var = tk.StringVar(value="0")
         grid_to_bess_allowed_slots_var = tk.StringVar(value="")
+        bess_priority_mode_var = tk.StringVar(value="pv_self_consumption")
         bess_terminal_soc_min_kwh_var = tk.StringVar(value="0")
         provisional_energy_cost_var = tk.StringVar(value="0")
         pv_dates_info_var = tk.StringVar(value="")
@@ -4603,6 +4653,7 @@ class App:
         ttk.Checkbutton(flag_row, text="PV有効(面積>0で自動)", variable=pv_enabled_var).pack(side=tk.LEFT)
         ttk.Checkbutton(flag_row, text="BESS有効", variable=bess_enabled_var).pack(side=tk.LEFT, padx=(12, 0))
         ttk.Checkbutton(flag_row, text="Grid→BESS許可", variable=allow_grid_to_bess_var).pack(side=tk.LEFT, padx=(12, 0))
+        ttk.Button(flag_row, text="容量からBESS既定値補完", command=lambda: _apply_bess_capacity_defaults()).pack(side=tk.LEFT, padx=(12, 0))
 
         self._labeled_entry(editor, "営業所面積[m²] depot_area_m2", depot_area_m2_var)
         self._labeled_entry(editor, "推定PV設置可能面積[m²]", estimated_installable_area_var, readonly=True)
@@ -4612,9 +4663,29 @@ class App:
         self._labeled_entry(editor, "BESS初期SOC[kWh] bess_initial_soc_kwh", bess_initial_soc_kwh_var)
         self._labeled_entry(editor, "BESS最小SOC[kWh] bess_soc_min_kwh", bess_soc_min_kwh_var)
         self._labeled_entry(editor, "BESS最大SOC[kWh] bess_soc_max_kwh", bess_soc_max_kwh_var)
+        self._labeled_entry(editor, "BESS充電効率 bess_charge_efficiency", bess_charge_efficiency_var)
+        self._labeled_entry(editor, "BESS放電効率 bess_discharge_efficiency", bess_discharge_efficiency_var)
         self._labeled_entry(editor, "BESS→Bus単価[円/kWh] bess_cycle_cost_yen_per_kwh", bess_cycle_cost_var)
+        grid_to_bess_mode_row = ttk.Frame(editor)
+        grid_to_bess_mode_row.pack(fill=tk.X, pady=2)
+        ttk.Label(grid_to_bess_mode_row, text="Grid→BESS価格モード", width=34).pack(side=tk.LEFT)
+        ttk.Combobox(
+            grid_to_bess_mode_row,
+            textvariable=grid_to_bess_price_mode_var,
+            state="readonly",
+            values=("tou", "threshold", "disabled"),
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
         self._labeled_entry(editor, "Grid→BESS閾値[円/kWh]", grid_to_bess_price_threshold_var)
         self._labeled_entry(editor, "Grid→BESS許可スロット(カンマ区切り)", grid_to_bess_allowed_slots_var)
+        bess_priority_row = ttk.Frame(editor)
+        bess_priority_row.pack(fill=tk.X, pady=2)
+        ttk.Label(bess_priority_row, text="BESS優先モード", width=34).pack(side=tk.LEFT)
+        ttk.Combobox(
+            bess_priority_row,
+            textvariable=bess_priority_mode_var,
+            state="readonly",
+            values=("pv_self_consumption", "cost_driven", "peak_shaving"),
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
         self._labeled_entry(editor, "終端SOC下限[kWh]", bess_terminal_soc_min_kwh_var)
         self._labeled_entry(editor, "仮コスト単価[円/kWh]", provisional_energy_cost_var)
         self._labeled_entry(editor, "PV対象日(読取専用)", pv_dates_info_var, readonly=True)
@@ -4630,6 +4701,34 @@ class App:
 
         depot_area_m2_var.trace_add("write", _refresh_pv_area_preview)
 
+        def _row_value(row: dict[str, Any], snake_key: str, camel_key: str | None = None, default: Any = "") -> Any:
+            if snake_key in row:
+                return row.get(snake_key)
+            if camel_key and camel_key in row:
+                return row.get(camel_key)
+            return default
+
+        def _format_float(value: float) -> str:
+            return f"{float(value):.6f}".rstrip("0").rstrip(".")
+
+        def _apply_bess_capacity_defaults(*_args: Any) -> None:
+            capacity = max(self._parse_float(bess_energy_kwh_var.get(), 0.0), 0.0)
+            if capacity <= 0.0:
+                messagebox.showwarning("入力不足", "BESS容量[kWh]を正の値で入力してください", parent=win)
+                return
+            bess_enabled_var.set(True)
+            bess_power_kw_var.set(_format_float(capacity * 0.5))
+            bess_soc_min_kwh_var.set(_format_float(capacity * 0.1))
+            bess_initial_soc_kwh_var.set(_format_float(capacity * 0.5))
+            bess_soc_max_kwh_var.set(_format_float(capacity))
+            bess_terminal_soc_min_kwh_var.set(_format_float(capacity * 0.5))
+            if not str(bess_charge_efficiency_var.get() or "").strip():
+                bess_charge_efficiency_var.set("0.95")
+            if not str(bess_discharge_efficiency_var.get() or "").strip():
+                bess_discharge_efficiency_var.set("0.95")
+            if not str(bess_priority_mode_var.get() or "").strip():
+                bess_priority_mode_var.set("pv_self_consumption")
+
         def _row_to_values(row: dict[str, Any]) -> tuple[Any, ...]:
             pv_dates = list(row.get("pv_profile_dates") or [])
             pv_slots = list(row.get("pv_generation_kwh_by_slot") or [])
@@ -4641,13 +4740,20 @@ class App:
                 row.get("estimated_installable_area_m2", 0.0),
                 bool(row.get("pv_enabled", False)),
                 row.get("pv_capacity_kw", 0.0),
-                bool(row.get("bess_enabled", False)),
-                row.get("bess_energy_kwh", 0.0),
-                row.get("bess_power_kw", 0.0),
-                row.get("bess_cycle_cost_yen_per_kwh", 0.0),
-                bool(row.get("allow_grid_to_bess", False)),
-                row.get("grid_to_bess_price_threshold_yen_per_kwh", 0.0),
-                row.get("bess_terminal_soc_min_kwh", 0.0),
+                bool(_row_value(row, "bess_enabled", "bessEnabled", False)),
+                _row_value(row, "bess_energy_kwh", "bessEnergyKwh", 0.0),
+                _row_value(row, "bess_power_kw", "bessPowerKw", 0.0),
+                _row_value(row, "bess_initial_soc_kwh", "bessInitialSocKwh", 0.0),
+                _row_value(row, "bess_soc_min_kwh", "bessSocMinKwh", 0.0),
+                _row_value(row, "bess_soc_max_kwh", "bessSocMaxKwh", 0.0),
+                _row_value(row, "bess_charge_efficiency", "bessChargeEfficiency", 0.95),
+                _row_value(row, "bess_discharge_efficiency", "bessDischargeEfficiency", 0.95),
+                _row_value(row, "bess_cycle_cost_yen_per_kwh", "bessCycleCostYenPerKwh", 0.0),
+                bool(_row_value(row, "allow_grid_to_bess", "allowGridToBess", False)),
+                _row_value(row, "grid_to_bess_price_mode", "gridToBessPriceMode", "tou"),
+                _row_value(row, "grid_to_bess_price_threshold_yen_per_kwh", "gridToBessPriceThresholdYenPerKwh", 0.0),
+                _row_value(row, "bess_priority_mode", "bessPriorityMode", "pv_self_consumption"),
+                _row_value(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh", 0.0),
             )
 
         def _refresh_tree() -> None:
@@ -4661,25 +4767,116 @@ class App:
             depot_area = row.get("depot_area_m2", row.get("depotAreaM2"))
             depot_area_m2_var.set("" if depot_area is None else str(depot_area))
             _refresh_pv_area_preview()
-            bess_enabled_var.set(bool(row.get("bess_enabled", False)))
-            bess_energy_kwh_var.set(str(row.get("bess_energy_kwh", 0.0)))
-            bess_power_kw_var.set(str(row.get("bess_power_kw", 0.0)))
-            bess_initial_soc_kwh_var.set(str(row.get("bess_initial_soc_kwh", 0.0)))
-            bess_soc_min_kwh_var.set(str(row.get("bess_soc_min_kwh", 0.0)))
-            bess_soc_max_kwh_var.set(str(row.get("bess_soc_max_kwh", 0.0)))
-            bess_cycle_cost_var.set(str(row.get("bess_cycle_cost_yen_per_kwh", 0.0)))
-            allow_grid_to_bess_var.set(bool(row.get("allow_grid_to_bess", False)))
+            bess_enabled_var.set(bool(_row_value(row, "bess_enabled", "bessEnabled", False)))
+            bess_energy_kwh_var.set(str(_row_value(row, "bess_energy_kwh", "bessEnergyKwh", 0.0)))
+            bess_power_kw_var.set(str(_row_value(row, "bess_power_kw", "bessPowerKw", 0.0)))
+            bess_initial_soc_kwh_var.set(str(_row_value(row, "bess_initial_soc_kwh", "bessInitialSocKwh", 0.0)))
+            bess_soc_min_kwh_var.set(str(_row_value(row, "bess_soc_min_kwh", "bessSocMinKwh", 0.0)))
+            bess_soc_max_kwh_var.set(str(_row_value(row, "bess_soc_max_kwh", "bessSocMaxKwh", 0.0)))
+            bess_charge_efficiency_var.set(str(_row_value(row, "bess_charge_efficiency", "bessChargeEfficiency", 0.95)))
+            bess_discharge_efficiency_var.set(str(_row_value(row, "bess_discharge_efficiency", "bessDischargeEfficiency", 0.95)))
+            bess_cycle_cost_var.set(str(_row_value(row, "bess_cycle_cost_yen_per_kwh", "bessCycleCostYenPerKwh", 0.0)))
+            allow_grid_to_bess_var.set(bool(_row_value(row, "allow_grid_to_bess", "allowGridToBess", False)))
+            grid_to_bess_price_mode_var.set(str(_row_value(row, "grid_to_bess_price_mode", "gridToBessPriceMode", "tou") or "tou"))
             grid_to_bess_price_threshold_var.set(
-                str(row.get("grid_to_bess_price_threshold_yen_per_kwh", 0.0))
+                str(_row_value(row, "grid_to_bess_price_threshold_yen_per_kwh", "gridToBessPriceThresholdYenPerKwh", 0.0))
             )
             grid_to_bess_allowed_slots_var.set(
-                ",".join(str(v) for v in (row.get("grid_to_bess_allowed_slot_indices") or []))
+                ",".join(
+                    str(v)
+                    for v in (
+                        row.get("grid_to_bess_allowed_slot_indices")
+                        or row.get("gridToBessAllowedSlotIndices")
+                        or []
+                    )
+                )
             )
-            bess_terminal_soc_min_kwh_var.set(str(row.get("bess_terminal_soc_min_kwh", 0.0)))
+            bess_priority_mode_var.set(str(_row_value(row, "bess_priority_mode", "bessPriorityMode", "pv_self_consumption") or "pv_self_consumption"))
+            bess_terminal_soc_min_kwh_var.set(str(_row_value(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh", 0.0)))
             provisional_energy_cost_var.set(str(row.get("provisional_energy_cost_yen_per_kwh", 0.0)))
             pv_dates = list(row.get("pv_profile_dates") or [])
             pv_dates_info_var.set(_format_service_dates_summary(pv_dates))
             pv_slot_count_info_var.set(str(len(row.get("pv_generation_kwh_by_slot") or [])))
+
+        def _validate_bess_row(row: dict[str, Any]) -> dict[str, Any] | None:
+            enabled = bool(_row_value(row, "bess_enabled", "bessEnabled", False))
+            try:
+                capacity = float(_row_value(row, "bess_energy_kwh", "bessEnergyKwh", 0.0) or 0.0)
+                power = float(_row_value(row, "bess_power_kw", "bessPowerKw", 0.0) or 0.0)
+                soc_min = float(_row_value(row, "bess_soc_min_kwh", "bessSocMinKwh", 0.0) or 0.0)
+                soc_initial = float(_row_value(row, "bess_initial_soc_kwh", "bessInitialSocKwh", 0.0) or 0.0)
+                soc_max = float(_row_value(row, "bess_soc_max_kwh", "bessSocMaxKwh", 0.0) or 0.0)
+                terminal_min = float(_row_value(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh", 0.0) or 0.0)
+                charge_eff = float(_row_value(row, "bess_charge_efficiency", "bessChargeEfficiency", 0.95) or 0.95)
+                discharge_eff = float(_row_value(row, "bess_discharge_efficiency", "bessDischargeEfficiency", 0.95) or 0.95)
+                cycle_cost = float(_row_value(row, "bess_cycle_cost_yen_per_kwh", "bessCycleCostYenPerKwh", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                messagebox.showwarning("入力エラー", "BESS数値項目は数値で入力してください", parent=win)
+                return None
+
+            if any(value < 0.0 for value in (capacity, power, soc_min, soc_initial, soc_max, terminal_min, cycle_cost)):
+                messagebox.showwarning("入力エラー", "BESS数値項目に負値は入力できません", parent=win)
+                return None
+
+            if enabled:
+                if capacity <= 0.0:
+                    messagebox.showwarning("入力エラー", "BESS有効時は BESS容量[kWh] を正の値にしてください", parent=win)
+                    return None
+                if power <= 0.0:
+                    power = capacity * 0.5
+                if soc_min <= 0.0 and soc_initial <= 0.0 and soc_max <= 0.0:
+                    soc_min = capacity * 0.1
+                    soc_initial = capacity * 0.5
+                    soc_max = capacity
+                elif soc_max <= 0.0:
+                    soc_max = capacity
+                if soc_initial <= 0.0 and soc_min <= 0.0:
+                    soc_initial = capacity * 0.5
+                if terminal_min <= 0.0:
+                    terminal_min = soc_initial
+                if not (0.0 <= soc_min <= soc_initial <= soc_max <= capacity):
+                    messagebox.showwarning(
+                        "入力エラー",
+                        "BESS SOCは 0 <= 最小SOC <= 初期SOC <= 最大SOC <= 容量 を満たしてください",
+                        parent=win,
+                    )
+                    return None
+                if not (0.0 <= terminal_min <= soc_max):
+                    messagebox.showwarning("入力エラー", "終端SOC下限は 0 <= 終端SOC下限 <= 最大SOC にしてください", parent=win)
+                    return None
+            if not (0.0 < charge_eff <= 1.0):
+                messagebox.showwarning("入力エラー", "BESS充電効率は 0 < 値 <= 1 にしてください", parent=win)
+                return None
+            if not (0.0 < discharge_eff <= 1.0):
+                messagebox.showwarning("入力エラー", "BESS放電効率は 0 < 値 <= 1 にしてください", parent=win)
+                return None
+
+            price_mode = str(_row_value(row, "grid_to_bess_price_mode", "gridToBessPriceMode", "tou") or "tou").strip().lower()
+            if price_mode not in {"tou", "threshold", "disabled"}:
+                messagebox.showwarning("入力エラー", "Grid→BESS価格モードは tou / threshold / disabled から選択してください", parent=win)
+                return None
+            priority_mode = str(_row_value(row, "bess_priority_mode", "bessPriorityMode", "pv_self_consumption") or "pv_self_consumption").strip().lower()
+            if priority_mode not in {"pv_self_consumption", "cost_driven", "peak_shaving"}:
+                messagebox.showwarning("入力エラー", "BESS優先モードは pv_self_consumption / cost_driven / peak_shaving から選択してください", parent=win)
+                return None
+            allow_grid_to_bess = bool(_row_value(row, "allow_grid_to_bess", "allowGridToBess", False))
+            if price_mode == "disabled":
+                allow_grid_to_bess = False
+
+            row["bess_enabled"] = enabled
+            row["bess_energy_kwh"] = capacity
+            row["bess_power_kw"] = power
+            row["bess_soc_min_kwh"] = soc_min
+            row["bess_initial_soc_kwh"] = soc_initial
+            row["bess_soc_max_kwh"] = soc_max
+            row["bess_terminal_soc_min_kwh"] = terminal_min
+            row["bess_charge_efficiency"] = charge_eff
+            row["bess_discharge_efficiency"] = discharge_eff
+            row["bess_cycle_cost_yen_per_kwh"] = cycle_cost
+            row["allow_grid_to_bess"] = allow_grid_to_bess
+            row["grid_to_bess_price_mode"] = price_mode
+            row["bess_priority_mode"] = priority_mode
+            return row
 
         def _read_form_to_row(base: dict[str, Any] | None = None) -> dict[str, Any] | None:
             depot_id = depot_id_var.get().strip()
@@ -4696,8 +4893,11 @@ class App:
             row["bess_initial_soc_kwh"] = self._parse_float(bess_initial_soc_kwh_var.get(), 0.0)
             row["bess_soc_min_kwh"] = self._parse_float(bess_soc_min_kwh_var.get(), 0.0)
             row["bess_soc_max_kwh"] = self._parse_float(bess_soc_max_kwh_var.get(), 0.0)
+            row["bess_charge_efficiency"] = self._parse_float(bess_charge_efficiency_var.get(), 0.95)
+            row["bess_discharge_efficiency"] = self._parse_float(bess_discharge_efficiency_var.get(), 0.95)
             row["bess_cycle_cost_yen_per_kwh"] = self._parse_float(bess_cycle_cost_var.get(), 0.0)
             row["allow_grid_to_bess"] = bool(allow_grid_to_bess_var.get())
+            row["grid_to_bess_price_mode"] = grid_to_bess_price_mode_var.get().strip() or "tou"
             row["grid_to_bess_price_threshold_yen_per_kwh"] = self._parse_float(
                 grid_to_bess_price_threshold_var.get(),
                 0.0,
@@ -4711,8 +4911,20 @@ class App:
                     messagebox.showwarning("入力エラー", f"許可スロット '{item}' は整数で入力してください", parent=win)
                     return None
             row["grid_to_bess_allowed_slot_indices"] = parsed_slots
+            row["bess_priority_mode"] = bess_priority_mode_var.get().strip() or "pv_self_consumption"
             row["bess_terminal_soc_min_kwh"] = self._parse_float(bess_terminal_soc_min_kwh_var.get(), 0.0)
             row["provisional_energy_cost_yen_per_kwh"] = self._parse_float(provisional_energy_cost_var.get(), 0.0)
+            row = _validate_bess_row(row)
+            if row is None:
+                return None
+            bess_power_kw_var.set(str(row["bess_power_kw"]))
+            bess_initial_soc_kwh_var.set(str(row["bess_initial_soc_kwh"]))
+            bess_soc_min_kwh_var.set(str(row["bess_soc_min_kwh"]))
+            bess_soc_max_kwh_var.set(str(row["bess_soc_max_kwh"]))
+            bess_terminal_soc_min_kwh_var.set(str(row["bess_terminal_soc_min_kwh"]))
+            bess_charge_efficiency_var.set(str(row["bess_charge_efficiency"]))
+            bess_discharge_efficiency_var.set(str(row["bess_discharge_efficiency"]))
+            allow_grid_to_bess_var.set(bool(row["allow_grid_to_bess"]))
             row = _rebuild_pv_generation_for_row(row)
             return row
 
@@ -4729,10 +4941,14 @@ class App:
             bess_initial_soc_kwh_var.set("0")
             bess_soc_min_kwh_var.set("0")
             bess_soc_max_kwh_var.set("0")
+            bess_charge_efficiency_var.set("0.95")
+            bess_discharge_efficiency_var.set("0.95")
             bess_cycle_cost_var.set("0")
             allow_grid_to_bess_var.set(False)
+            grid_to_bess_price_mode_var.set("tou")
             grid_to_bess_price_threshold_var.set("0")
             grid_to_bess_allowed_slots_var.set("")
+            bess_priority_mode_var.set("pv_self_consumption")
             bess_terminal_soc_min_kwh_var.set("0")
             provisional_energy_cost_var.set("0")
             pv_dates_info_var.set("")
@@ -4837,9 +5053,15 @@ class App:
         footer.pack(fill=tk.X)
 
         def _apply_to_json() -> None:
-            dumped = json.dumps(rows, ensure_ascii=True, separators=(",", ":"))
+            validated_rows: list[dict[str, Any]] = []
+            for row in rows:
+                validated = _validate_bess_row(dict(row))
+                if validated is None:
+                    return
+                validated_rows.append(validated)
+            dumped = json.dumps(validated_rows, ensure_ascii=True, separators=(",", ":"))
             self.depot_energy_assets_json_var.set(dumped)
-            self.log_line(f"depot_energy_assets を行編集から反映しました: {len(rows)}件")
+            self.log_line(f"depot_energy_assets を行編集から反映しました: {len(validated_rows)}件")
             win.destroy()
 
         ttk.Button(footer, text="JSONへ反映して閉じる", command=_apply_to_json).pack(side=tk.RIGHT)
@@ -8774,7 +8996,7 @@ class App:
         win = tk.Toplevel(self.root)
         self.depot_manager_window = win
         win.title("営業所別充電器管理")
-        win.geometry("980x620")
+        win.geometry("1060x700")
 
         left = ttk.Frame(win, padding=8)
         left.pack(side=tk.LEFT, fill=tk.Y)
@@ -8799,7 +9021,11 @@ class App:
         self.dm_fast_kw_var = tk.StringVar(value="0")
         self.dm_depot_area_m2_var = tk.StringVar(value="")
         self.dm_installable_area_m2_var = tk.StringVar(value="0")
+        self.dm_estimated_pv_capacity_kw_var = tk.StringVar(value="0")
         self.dm_pv_capacity_kw_var = tk.StringVar(value="0")
+        self.dm_bess_enabled_var = tk.BooleanVar(value=False)
+        self.dm_bess_energy_kwh_var = tk.StringVar(value="0")
+        self.dm_bess_power_kw_var = tk.StringVar(value="0")
 
         self._labeled_entry(charger_box, "営業所ID", self.dm_depot_id_var, readonly=True)
         self._labeled_entry(charger_box, "営業所名", self.dm_depot_name_var, readonly=True)
@@ -8809,12 +9035,21 @@ class App:
         self._labeled_entry(charger_box, "急速充電器出力(kW)", self.dm_fast_kw_var)
         self._labeled_entry(charger_box, "営業所面積 [m²]", self.dm_depot_area_m2_var)
         self._labeled_entry(charger_box, "推定PV設置可能面積 [m²]", self.dm_installable_area_m2_var, readonly=True)
-        self._labeled_entry(charger_box, "推定PV設備容量 [kW]", self.dm_pv_capacity_kw_var, readonly=True)
+        self._labeled_entry(charger_box, "面積推定PV設備容量 [kW]", self.dm_estimated_pv_capacity_kw_var, readonly=True)
+        self._labeled_entry(charger_box, "PV定格出力 [kW]（最適化入力）", self.dm_pv_capacity_kw_var)
+        bess_row = ttk.Frame(charger_box)
+        bess_row.pack(fill=tk.X, pady=2)
+        ttk.Label(bess_row, text="BESS有効", width=36).pack(side=tk.LEFT)
+        ttk.Checkbutton(bess_row, variable=self.dm_bess_enabled_var).pack(side=tk.LEFT)
+        self._labeled_entry(charger_box, "BESS容量 [kWh]", self.dm_bess_energy_kwh_var)
+        self._labeled_entry(charger_box, "BESS最大充放電出力 [kW]", self.dm_bess_power_kw_var)
         self.dm_depot_area_m2_var.trace_add("write", lambda *_args: self._refresh_depot_manager_pv_preview())
 
         btn_row = ttk.Frame(charger_box)
         btn_row.pack(fill=tk.X, pady=4)
         ttk.Button(btn_row, text="保存", command=self._save_depot_charger_settings).pack(side=tk.LEFT)
+        ttk.Button(btn_row, text="面積推定値をPV定格へ反映", command=self._apply_depot_manager_estimated_pv_capacity).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(btn_row, text="BESS既定値補完", command=self._apply_depot_manager_bess_defaults).pack(side=tk.LEFT, padx=(6, 0))
 
         ttk.Label(right, text="「車両・テンプレート管理」ボタンで車両管理ウィンドウを開くと連動します。", foreground="#444").pack(anchor="w", pady=(8, 0))
 
@@ -8826,8 +9061,103 @@ class App:
         estimate = estimate_depot_pv_from_area(area_var.get() if area_var is not None else "")
         if hasattr(self, "dm_installable_area_m2_var"):
             self.dm_installable_area_m2_var.set(f"{estimate.installable_area_m2:.3f}")
-        if hasattr(self, "dm_pv_capacity_kw_var"):
-            self.dm_pv_capacity_kw_var.set(f"{estimate.capacity_kw:.3f}" if estimate.depot_area_m2 is not None else "0")
+        if hasattr(self, "dm_estimated_pv_capacity_kw_var"):
+            self.dm_estimated_pv_capacity_kw_var.set(f"{estimate.capacity_kw:.3f}" if estimate.depot_area_m2 is not None else "0")
+
+    def _apply_depot_manager_estimated_pv_capacity(self) -> None:
+        if hasattr(self, "dm_pv_capacity_kw_var") and hasattr(self, "dm_estimated_pv_capacity_kw_var"):
+            self.dm_pv_capacity_kw_var.set(self.dm_estimated_pv_capacity_kw_var.get())
+
+    def _apply_depot_manager_bess_defaults(self) -> None:
+        bess_energy_var = getattr(self, "dm_bess_energy_kwh_var", None)
+        capacity = max(self._parse_float(bess_energy_var.get() if bess_energy_var is not None else "0", 0.0), 0.0)
+        if capacity <= 0.0:
+            messagebox.showwarning("入力不足", "BESS容量[kWh]を正の値で入力してください")
+            return
+        if hasattr(self, "dm_bess_enabled_var"):
+            self.dm_bess_enabled_var.set(True)
+        if hasattr(self, "dm_bess_power_kw_var"):
+            self.dm_bess_power_kw_var.set(f"{capacity * 0.5:.6f}".rstrip("0").rstrip("."))
+
+    def _depot_manager_asset_for_depot(self, depot_id: str) -> dict[str, Any]:
+        try:
+            rows = self._parse_depot_energy_assets_json_or_none() or []
+        except ValueError:
+            rows = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("depot_id") or row.get("depotId") or "").strip() == depot_id:
+                return dict(row)
+        return _default_depot_energy_asset_row(depot_id)
+
+    def _set_depot_manager_energy_asset_fields(self, depot_id: str) -> None:
+        row = self._depot_manager_asset_for_depot(depot_id)
+        estimated = self.dm_estimated_pv_capacity_kw_var.get() if hasattr(self, "dm_estimated_pv_capacity_kw_var") else "0"
+        pv_capacity = row.get("pv_capacity_kw", row.get("pvCapacityKw"))
+        if pv_capacity is None or str(pv_capacity).strip() == "":
+            pv_capacity = estimated
+        self.dm_pv_capacity_kw_var.set(str(pv_capacity or 0.0))
+        self.dm_bess_enabled_var.set(bool(row.get("bess_enabled", row.get("bessEnabled", False))))
+        self.dm_bess_energy_kwh_var.set(str(row.get("bess_energy_kwh", row.get("bessEnergyKwh", 0.0)) or 0.0))
+        self.dm_bess_power_kw_var.set(str(row.get("bess_power_kw", row.get("bessPowerKw", 0.0)) or 0.0))
+
+    def _sync_depot_manager_energy_asset_row(self, depot_id: str) -> bool:
+        try:
+            rows = self._parse_depot_energy_assets_json_or_none() or []
+        except ValueError:
+            return False
+        pv_capacity_kw = max(self._parse_float(self.dm_pv_capacity_kw_var.get(), 0.0), 0.0)
+        bess_energy_kwh = max(self._parse_float(self.dm_bess_energy_kwh_var.get(), 0.0), 0.0)
+        bess_power_kw = max(self._parse_float(self.dm_bess_power_kw_var.get(), 0.0), 0.0)
+        bess_enabled = bool(self.dm_bess_enabled_var.get()) or bess_energy_kwh > 0.0
+        if bess_enabled and bess_energy_kwh <= 0.0:
+            messagebox.showwarning("入力エラー", "BESS有効時は BESS容量[kWh] を正の値にしてください")
+            return False
+        if bess_enabled and bess_power_kw <= 0.0:
+            bess_power_kw = bess_energy_kwh * 0.5
+            self.dm_bess_power_kw_var.set(f"{bess_power_kw:.6f}".rstrip("0").rstrip("."))
+
+        target_idx = None
+        for idx, item in enumerate(rows):
+            if isinstance(item, dict) and str(item.get("depot_id") or item.get("depotId") or "").strip() == depot_id:
+                target_idx = idx
+                break
+        row = dict(rows[target_idx]) if target_idx is not None else _default_depot_energy_asset_row(depot_id)
+        row["depot_id"] = depot_id
+        area_text = self.dm_depot_area_m2_var.get().strip()
+        row["depot_area_m2"] = self._parse_float(area_text, 0.0) if area_text else None
+        row["estimated_installable_area_m2"] = max(self._parse_float(self.dm_installable_area_m2_var.get(), 0.0), 0.0)
+        if pv_capacity_kw > 0.0:
+            row["pv_enabled"] = True
+            row["pv_capacity_kw"] = pv_capacity_kw
+            row["pv_capacity_kw_manual_override"] = True
+        else:
+            row["pv_enabled"] = False
+            row["pv_capacity_kw"] = 0.0
+            row["pv_capacity_kw_manual_override"] = False
+        row["bess_enabled"] = bess_enabled
+        row["bess_energy_kwh"] = bess_energy_kwh
+        row["bess_power_kw"] = bess_power_kw
+        if bess_enabled:
+            if self._parse_float(str(row.get("bess_soc_min_kwh", 0.0)), 0.0) <= 0.0:
+                row["bess_soc_min_kwh"] = bess_energy_kwh * 0.1
+            if self._parse_float(str(row.get("bess_initial_soc_kwh", 0.0)), 0.0) <= 0.0:
+                row["bess_initial_soc_kwh"] = bess_energy_kwh * 0.5
+            if self._parse_float(str(row.get("bess_soc_max_kwh", 0.0)), 0.0) <= 0.0:
+                row["bess_soc_max_kwh"] = bess_energy_kwh
+            if self._parse_float(str(row.get("bess_terminal_soc_min_kwh", 0.0)), 0.0) <= 0.0:
+                row["bess_terminal_soc_min_kwh"] = row.get("bess_initial_soc_kwh", bess_energy_kwh * 0.5)
+            row.setdefault("bess_charge_efficiency", 0.95)
+            row.setdefault("bess_discharge_efficiency", 0.95)
+            row.setdefault("bess_priority_mode", "pv_self_consumption")
+        row = _rebuild_pv_generation_for_row(row)
+        if target_idx is None:
+            rows.append(row)
+        else:
+            rows[target_idx] = row
+        self.depot_energy_assets_json_var.set(json.dumps(rows, ensure_ascii=True, separators=(",", ":")))
+        return True
 
     def _load_depot_manager_data(self, depot_list: tk.Listbox) -> None:
         scenario_id = self._selected_scenario_id()
@@ -8873,6 +9203,7 @@ class App:
             area_value = detail.get("depotAreaM2", detail.get("depot_area_m2"))
             self.dm_depot_area_m2_var.set("" if area_value is None else str(area_value))
             self._refresh_depot_manager_pv_preview()
+            self._set_depot_manager_energy_asset_fields(depot_id)
 
         self.run_bg(lambda: self.client.get_depot(scenario_id, depot_id), done)
 
@@ -8881,6 +9212,8 @@ class App:
         depot_id = self.dm_depot_id_var.get().strip()
         if not scenario_id or not depot_id:
             messagebox.showwarning("入力不足", "先に営業所を選択してください")
+            return
+        if not self._sync_depot_manager_energy_asset_row(depot_id):
             return
 
         payload = {
@@ -8900,7 +9233,9 @@ class App:
                         self.scope_depots[idx] = {**depot, **resp}
                         break
             self.log_line(f"営業所充電器設定を更新: {depot_id}")
+            self.log_line("PV/BESS設定を営業所エネルギー資産へ反映しました。Quick Setup 保存を続けます。")
             self._mark_prepared_stale("営業所充電器/PV面積設定を変更したため再Prepareが必要です", announce=False)
+            self.save_quick_setup()
 
         self.run_bg(lambda: self.client.update_depot(scenario_id, depot_id, payload), done)
 

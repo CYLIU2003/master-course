@@ -1048,6 +1048,11 @@ class ProblemBuilder:
                 usable_area_ratio=usable_area_ratio,
                 panel_power_density_kw_m2=panel_power_density_kw_m2,
             )
+            manual_pv_capacity_kw = None
+            if bool(raw.get("pv_capacity_kw_manual_override", raw.get("pvCapacityKwManualOverride", False))):
+                manual_pv_capacity_kw = self._safe_float(raw.get("pv_capacity_kw", raw.get("pvCapacityKw")))
+                if manual_pv_capacity_kw is not None:
+                    manual_pv_capacity_kw = max(float(manual_pv_capacity_kw), 0.0)
             performance_ratio = positive_ratio_or_default(
                 raw.get("performance_ratio", raw.get("performanceRatio")),
                 DEFAULT_PERFORMANCE_RATIO,
@@ -1060,10 +1065,17 @@ class ProblemBuilder:
                 ),
                 slot_count,
             )
-            pv_enabled = estimate.depot_area_m2 is not None and estimate.capacity_kw > 0.0
+            effective_pv_capacity_kw = (
+                float(manual_pv_capacity_kw)
+                if manual_pv_capacity_kw is not None
+                else float(estimate.capacity_kw)
+            )
+            pv_enabled = effective_pv_capacity_kw > 0.0 and (
+                manual_pv_capacity_kw is not None or estimate.depot_area_m2 is not None
+            )
             if pv_enabled:
                 pv_series = tuple(
-                    round(estimate.capacity_kw * max(float(factor or 0.0), 0.0) * slot_h, 6)
+                    round(effective_pv_capacity_kw * max(float(factor or 0.0), 0.0) * slot_h, 6)
                     for factor in capacity_factor_series
                 )
             else:
@@ -1094,7 +1106,7 @@ class ProblemBuilder:
                 pv_capex_jpy_per_kw=float(raw.get("pv_capex_jpy_per_kw") or 0.0),
                 pv_om_jpy_per_kw_year=float(raw.get("pv_om_jpy_per_kw_year") or 0.0),
                 pv_life_years=int(raw.get("pv_life_years") or 25),
-                pv_capacity_kw=round(estimate.capacity_kw, 6) if pv_enabled else 0.0,
+                pv_capacity_kw=round(effective_pv_capacity_kw, 6) if pv_enabled else 0.0,
                 depot_area_m2=estimate.depot_area_m2,
                 pv_installable_area_m2=round(estimate.installable_area_m2, 6),
                 usable_area_ratio=estimate.usable_area_ratio,

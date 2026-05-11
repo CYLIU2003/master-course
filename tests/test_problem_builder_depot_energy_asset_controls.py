@@ -155,6 +155,31 @@ def test_problem_builder_disables_legacy_pv_when_depot_area_missing() -> None:
     assert tuple(asset.pv_generation_kwh_by_slot) == tuple([0.0] * 24)
 
 
+def test_problem_builder_uses_manual_pv_capacity_override_without_depot_area() -> None:
+    scenario = _scenario()
+    scenario["simulation_config"]["depot_energy_assets"][0] = {
+        "depot_id": "dep-1",
+        "pv_enabled": True,
+        "pv_capacity_kw": 120.0,
+        "pv_capacity_kw_manual_override": True,
+        "pv_capacity_factor_by_date": [
+            {
+                "date": "2025-08-01",
+                "slot_minutes": 60,
+                "capacity_factor_by_slot": [0.25, 0.5],
+            }
+        ],
+    }
+    scenario["energy_price_profiles"] = [{"site_id": "dep-1", "values": [10.0, 20.0]}]
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    asset = problem.depot_energy_assets["dep-1"]
+
+    assert asset.pv_enabled is True
+    assert asset.pv_capacity_kw == 120.0
+    assert tuple(asset.pv_generation_kwh_by_slot) == tuple([30.0] * 12 + [60.0] * 12)
+
+
 def test_problem_builder_area_scaling_doubles_capacity_and_generation() -> None:
     scenario = _scenario()
     scenario["simulation_config"]["depot_energy_assets"][0] = {
