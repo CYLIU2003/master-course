@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from experiment_logger import ExperimentLogger
 from bff.store import output_paths
+from src.optimization.common.energy_flow_accounting import normalize_pv_energy_breakdown
 
 
 def log_optimization_experiment(
@@ -444,6 +445,7 @@ def _pv_capacity_kw(scenario_doc: Dict[str, Any]) -> float:
 
 def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[str, Any]:
     cost_breakdown = dict(optimization_result.get("cost_breakdown") or {})
+    cost_breakdown.update(normalize_pv_energy_breakdown(cost_breakdown))
     summary = dict(optimization_result.get("summary") or {})
     trip_count_by_type = dict(summary.get("trip_count_by_type") or {})
     simulation_summary = dict(optimization_result.get("simulation_summary") or {})

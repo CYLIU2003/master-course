@@ -25,6 +25,7 @@ from typing import Any, Callable, Dict, List, Optional
 from .data_schema import ProblemData
 from .milp_model import MILPResult
 from .model_sets import ModelSets
+from .optimization.common.energy_flow_accounting import normalize_pv_energy_breakdown
 from .parameter_builder import DerivedParams, get_grid_price
 from .run_output_layout import allocate_run_dir
 from .route_code_utils import extract_route_series_from_candidates
@@ -3487,6 +3488,17 @@ def export_objective_breakdown(run_dir: Path, milp: MILPResult, sim: SimulationR
             "vehicle_fixed_cost": sim.total_vehicle_fixed_cost,
             "driver_cost": sim.total_driver_cost,
         }
+    pv_metric_keys = (
+        "pv_generated_kwh",
+        "pv_generation_kwh",
+        "pv_to_bus_kwh",
+        "pv_used_direct_kwh",
+        "pv_to_bess_kwh",
+        "pv_curtailed_kwh",
+        "pv_curtail_kwh",
+    )
+    if any(key in breakdown for key in pv_metric_keys):
+        breakdown.update(normalize_pv_energy_breakdown(breakdown))
     with open(run_dir / "objective_breakdown.json", "w", encoding="utf-8") as f:
         json.dump({"objective_breakdown": breakdown}, f, ensure_ascii=False, indent=2)
     _write_csv(

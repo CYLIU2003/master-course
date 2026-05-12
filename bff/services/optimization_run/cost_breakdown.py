@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from src.optimization.common.energy_flow_accounting import normalize_pv_energy_breakdown
+
 
 def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -> Dict[str, Any]:
     breakdown = dict(engine_result.cost_breakdown or {})
+    breakdown.update(normalize_pv_energy_breakdown(breakdown))
     grid_energy_cost = float(breakdown.get("grid_purchase_cost", 0.0) or 0.0)
     pv_self_consumption_cost = float(breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0)
     pv_marginal_charge_cost = float(
@@ -82,6 +85,7 @@ def cost_breakdown(
     result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None
 ) -> Dict[str, float]:
     obj_breakdown = dict(result_payload.get("obj_breakdown") or {})
+    obj_breakdown.update(normalize_pv_energy_breakdown(obj_breakdown))
     sim_values = dict(sim_payload or {})
 
     def first_float(*values: Any, default: float = 0.0) -> float:
@@ -216,7 +220,7 @@ def cost_breakdown(
         "bess_to_bus_kwh": float(obj_breakdown.get("bess_to_bus_kwh", 0.0) or 0.0),
         "pv_to_bess_kwh": float(obj_breakdown.get("pv_to_bess_kwh", 0.0) or 0.0),
         "grid_to_bess_kwh": float(obj_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0),
-        "pv_curtail_kwh": float(obj_breakdown.get("pv_curtailed_kwh", 0.0) or obj_breakdown.get("pv_curtail_kwh", 0.0) or 0.0),
+        "pv_curtail_kwh": float(obj_breakdown.get("pv_curtail_kwh", obj_breakdown.get("pv_curtailed_kwh", 0.0)) or 0.0),
         "contract_over_limit_kwh": float(obj_breakdown.get("contract_over_limit_kwh", 0.0) or 0.0),
         "contract_overage_cost": float(obj_breakdown.get("contract_overage_cost", 0.0) or 0.0),
         "stationary_battery_degradation_cost": float(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from .energy_flow_accounting import normalize_pv_energy_breakdown
 from .problem import AssignmentPlan, OptimizationEngineResult
 
 
@@ -147,6 +148,7 @@ class ResultSerializer:
         # MILPResult which has obj_breakdown/assignment instead of plan/result metadata.
         if not hasattr(result, "plan"):
             cost_breakdown = dict(getattr(result, "cost_breakdown", {}) or getattr(result, "obj_breakdown", {}) or {})
+            cost_breakdown.update(normalize_pv_energy_breakdown(cost_breakdown))
             assignment = dict(getattr(result, "assignment", {}) or {})
             served_trip_ids = sorted({trip_id for trips in assignment.values() for trip_id in (trips or [])})
             unserved_trip_ids = list(getattr(result, "unserved_tasks", []) or [])
@@ -198,6 +200,7 @@ class ResultSerializer:
             }
 
         cost_breakdown = dict(result.cost_breakdown)
+        cost_breakdown.update(normalize_pv_energy_breakdown(cost_breakdown))
         solver_metadata = dict(result.solver_metadata)
         objective_weights = dict(solver_metadata.get("objective_weights") or {})
         fuel_cost = float(cost_breakdown.get("fuel_cost", 0.0) or 0.0)
@@ -294,9 +297,15 @@ class ResultSerializer:
             "pv_summary": {
                 "pv_generated_kwh": float(cost_breakdown.get("pv_generated_kwh", 0.0) or 0.0),
                 "pv_used_direct_kwh": float(cost_breakdown.get("pv_used_direct_kwh", 0.0) or 0.0),
+                "pv_to_bus_kwh": float(cost_breakdown.get("pv_to_bus_kwh", 0.0) or 0.0),
+                "pv_to_bess_kwh": float(cost_breakdown.get("pv_to_bess_kwh", 0.0) or 0.0),
                 "pv_curtailed_kwh": float(cost_breakdown.get("pv_curtailed_kwh", 0.0) or 0.0),
+                "pv_curtail_kwh": float(cost_breakdown.get("pv_curtail_kwh", 0.0) or 0.0),
                 "grid_import_kwh": float(cost_breakdown.get("grid_import_kwh", 0.0) or 0.0),
                 "peak_grid_kw": float(cost_breakdown.get("peak_grid_kw", 0.0) or 0.0),
+                "pv_used_total_kwh": float(cost_breakdown.get("pv_used_total_kwh", 0.0) or 0.0),
+                "pv_curtail_balance_kwh": float(cost_breakdown.get("pv_curtail_balance_kwh", 0.0) or 0.0),
+                "pv_utilization_rate": float(cost_breakdown.get("pv_utilization_rate", 0.0) or 0.0),
             },
             "utilization_summary": {
                 "fleet_size": fleet_size,

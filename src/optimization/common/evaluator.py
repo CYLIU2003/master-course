@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Set, Tuple
 
 from src.objective_modes import objective_value_for_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
+from .energy_flow_accounting import normalize_pv_energy_breakdown
 
 from .problem import (
     AssignmentPlan,
@@ -83,6 +84,7 @@ class CostBreakdown:
     objective_is_actual_cost: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
+        pv_used_total_kwh = self.pv_used_direct_kwh + self.pv_to_bess_kwh
         return {
             "energy_cost": self.energy_cost,
             "electricity_cost": self.electricity_cost,
@@ -109,7 +111,10 @@ class CostBreakdown:
             "utilization_score": self.utilization_score,
             "pv_generated_kwh": self.pv_generated_kwh,
             "pv_used_direct_kwh": self.pv_used_direct_kwh,
+            "pv_used_total_kwh": pv_used_total_kwh,
             "pv_curtailed_kwh": self.pv_curtailed_kwh,
+            "pv_curtail_kwh": self.pv_curtailed_kwh,
+            "pv_curtail_balance_kwh": max(self.pv_generated_kwh - pv_used_total_kwh, 0.0),
             "grid_import_kwh": self.grid_import_kwh,
             "peak_grid_kw": self.peak_grid_kw,
             "grid_to_bus_kwh": self.grid_to_bus_kwh,
@@ -264,10 +269,13 @@ class CostEvaluator:
             grid_import_kwh = 0.0
             peak_grid_kw = 0.0
             pv_used_direct_kwh = 0.0
-        pv_curtailed_kwh = max(
-            energy_cost_components.get("pv_curtailed_kwh", 0.0),
-            max(pv_generated_kwh - pv_used_direct_kwh, 0.0),
-        )
+        pv_curtailed_kwh = normalize_pv_energy_breakdown(
+            {
+                **energy_cost_components,
+                "pv_generated_kwh": pv_generated_kwh,
+                "pv_used_direct_kwh": pv_used_direct_kwh,
+            }
+        )["pv_curtailed_kwh"]
 
         baseline_map = self._trip_vehicle_type_map(problem.baseline_plan) if problem.baseline_plan else {}
         current_map = self._trip_vehicle_type_map(plan)
@@ -649,6 +657,13 @@ class CostEvaluator:
             # Backward-compatible fallback: operating energy priced by TOU.
             fallback_cost = self._operating_electric_energy_cost(problem, operating_slot_totals)
             pv_generated = self._total_pv_generated_kwh(problem)
+            pv_metrics = normalize_pv_energy_breakdown(
+                {
+                    "pv_generated_kwh": pv_generated,
+                    "pv_to_bus_kwh": 0.0,
+                    "pv_to_bess_kwh": 0.0,
+                }
+            )
             return {
                 "electricity_cost_final": fallback_cost,
                 "electricity_cost_provisional_leftover": fallback_cost,
@@ -665,7 +680,10 @@ class CostEvaluator:
                 "bess_to_bus_kwh": 0.0,
                 "pv_to_bess_kwh": 0.0,
                 "grid_to_bess_kwh": 0.0,
-                "pv_curtailed_kwh": pv_generated,
+                "pv_curtailed_kwh": pv_metrics["pv_curtailed_kwh"],
+                "pv_curtail_kwh": pv_metrics["pv_curtail_kwh"],
+                "pv_curtail_balance_kwh": pv_metrics["pv_curtail_balance_kwh"],
+                "pv_used_total_kwh": pv_metrics["pv_used_total_kwh"],
                 "contract_over_limit_kwh": 0.0,
                 "contract_overage_cost": 0.0,
                 "ev_provisional_by_vehicle": provisional_by_vehicle,
@@ -774,6 +792,17 @@ class CostEvaluator:
                 0.0,
             )
 
+        pv_to_bus_total = _sum_flow(effective_pv_to_bus)
+        pv_to_bess_total = _sum_flow(pv_to_bess)
+        pv_metrics = normalize_pv_energy_breakdown(
+            {
+                "pv_generated_kwh": self._total_pv_generated_kwh(problem),
+                "pv_to_bus_kwh": pv_to_bus_total,
+                "pv_to_bess_kwh": pv_to_bess_total,
+                "pv_curtailed_kwh": _sum_flow(pv_curtail),
+            }
+        )
+
         return {
             "electricity_cost_final": electricity_cost_final,
             "electricity_cost_provisional_leftover": provisional_leftover,
@@ -786,11 +815,15 @@ class CostEvaluator:
             "pv_asset_cost": pv_asset_cost,
             "bess_asset_cost": bess_asset_cost,
             "grid_to_bus_kwh": _sum_flow(effective_grid_to_bus),
-            "pv_to_bus_kwh": _sum_flow(effective_pv_to_bus),
+            "pv_to_bus_kwh": pv_to_bus_total,
             "bess_to_bus_kwh": _sum_flow(effective_bess_to_bus),
-            "pv_to_bess_kwh": _sum_flow(pv_to_bess),
+            "pv_to_bess_kwh": pv_to_bess_total,
             "grid_to_bess_kwh": _sum_flow(grid_to_bess),
-            "pv_curtailed_kwh": _sum_flow(pv_curtail),
+            "pv_curtailed_kwh": pv_metrics["pv_curtailed_kwh"],
+            "pv_curtail_kwh": pv_metrics["pv_curtail_kwh"],
+            "pv_curtail_balance_kwh": pv_metrics["pv_curtail_balance_kwh"],
+            "pv_curtail_reported_raw_kwh": pv_metrics["pv_curtail_reported_raw_kwh"],
+            "pv_used_total_kwh": pv_metrics["pv_used_total_kwh"],
             "contract_over_limit_kwh": contract_over_limit_kwh,
             "contract_overage_cost": contract_overage_cost,
             "ev_provisional_by_vehicle": provisional_by_vehicle,
