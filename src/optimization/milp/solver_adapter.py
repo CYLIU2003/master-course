@@ -189,6 +189,7 @@ class GurobiMILPAdapter:
             str(vehicle.vehicle_id): vehicle
             for vehicle in problem.vehicles
         }
+        vehicle_type_by_id = {str(item.vehicle_type_id): item for item in problem.vehicle_types}
         assignment_trip_ids_by_vehicle: Dict[str, List[str]] = {}
         assignment_vehicle_ids_by_trip: Dict[str, List[str]] = {}
         startup_feasible_by_assignment: Dict[Tuple[str, str], bool] = {}
@@ -1464,6 +1465,15 @@ class GurobiMILPAdapter:
         if objective_mode == "co2" and co2_price <= 0.0:
             co2_price = 1.0
         ice_co2_kg_per_l = max(problem.scenario.ice_co2_kg_per_l, 0.0)
+
+        def _ice_co2_kg_per_l_for_vehicle(vehicle: Any) -> float:
+            vehicle_type = vehicle_type_by_id.get(str(getattr(vehicle, "vehicle_type", "")))
+            if vehicle_type is not None:
+                value = max(float(vehicle_type.co2_emission_kg_per_l or 0.0), 0.0)
+                if value > 0.0:
+                    return value
+            return ice_co2_kg_per_l
+
         if co2_price > 0:
             # ICE CO₂ from trip fuel consumption.
             for (vehicle_id, trip_id), var in y.items():
@@ -1474,7 +1484,7 @@ class GurobiMILPAdapter:
                 if trip is None:
                     continue
                 fuel_l = self._trip_fuel_l(problem, vehicle, trip_id)
-                objective += co2_price * ice_co2_kg_per_l * fuel_l * var
+                objective += co2_price * _ice_co2_kg_per_l_for_vehicle(vehicle) * fuel_l * var
             # ICE CO₂ from deadhead fuel consumption.
             for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
                 vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
@@ -1488,7 +1498,7 @@ class GurobiMILPAdapter:
                     trip_by_id[to_trip_id].origin,
                 )
                 dh_km = self._deadhead_distance_km(problem, dh_min)
-                objective += co2_price * ice_co2_kg_per_l * dh_km * fuel_rate * var
+                objective += co2_price * _ice_co2_kg_per_l_for_vehicle(vehicle) * dh_km * fuel_rate * var
             # BEV electricity CO₂ (grid-sourced only, based on actual depot flows when available).
             co2_by_slot = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
             if g2bus_var or g2bess_var:

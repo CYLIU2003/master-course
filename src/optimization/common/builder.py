@@ -26,6 +26,7 @@ from src.route_family_runtime import (
     normalize_variant_type,
 )
 from .soc_utils import normalize_soc_ratio_like, resolve_soc_kwh
+from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
 from src.preprocess.tariff_loader import build_electricity_prices_from_tariff, load_tariff_csv
 from src.objective_modes import (
     canonical_objective_weights_for_mode,
@@ -145,7 +146,11 @@ class ProblemBuilder:
         )
         planning_days_effective = max(int(planning_days or 1), 1)
         full_day_slots = (24 * 60) // max(timestep_min, 1)
-        force_full_day_power_horizon = final_soc_target_percent is not None or charge_upper_buffer_ratio > 0.0
+        overlay_energy_assets = ((scenario.get("scenario_overlay") or {}).get("depot_energy_assets") or {})
+        force_full_day_power_horizon = (
+            final_soc_target_percent is not None
+            or bool(simulation_cfg.get("depot_energy_assets") or overlay_energy_assets)
+        )
         chargers = self._build_chargers_from_scenario(scenario, depot_id)
         price_slots = self._build_price_slots_from_scenario(
             scenario,
@@ -1006,9 +1011,28 @@ class ProblemBuilder:
         assets: Dict[str, DepotEnergyAsset] = {}
         overlay = (metadata_source.get("scenario_overlay") or {}) if isinstance(metadata_source, dict) else {}
         sim_cfg = metadata_source.get("simulation_config") or {} if isinstance(metadata_source, dict) else {}
-        depot_assets_raw = list(sim_cfg.get("depot_energy_assets") or [])
+        depot_assets_raw: List[Dict[str, Any]] = []
+        sim_assets = sim_cfg.get("depot_energy_assets") or []
+        if isinstance(sim_assets, Mapping):
+            depot_assets_raw.extend(
+                dict(value, depot_id=str(key))
+                for key, value in sim_assets.items()
+                if isinstance(value, Mapping)
+            )
+        else:
+            depot_assets_raw.extend(dict(item) for item in list(sim_assets or []) if isinstance(item, Mapping))
         if isinstance(overlay, dict):
-            depot_assets_raw.extend(list((overlay.get("depot_energy_assets") or [])))
+            overlay_assets = overlay.get("depot_energy_assets") or []
+            if isinstance(overlay_assets, Mapping):
+                depot_assets_raw.extend(
+                    dict(value, depot_id=str(key))
+                    for key, value in overlay_assets.items()
+                    if isinstance(value, Mapping)
+                )
+            else:
+                depot_assets_raw.extend(
+                    dict(item) for item in list(overlay_assets or []) if isinstance(item, Mapping)
+                )
 
         slot_count = len(time_slots)
         slot_h = max(float(timestep_min) / 60.0, 1.0e-9)
@@ -1888,6 +1912,33 @@ class ProblemBuilder:
             explicit_fuel_l_per_km = self._safe_float(vehicle.get("fuelConsumptionLPerKm") or vehicle.get("fuel_consumption_l_per_km"))
             if explicit_fuel_l_per_km is not None:
                 fuel_l_per_km = explicit_fuel_l_per_km
+            co2_emission_kg_per_l = self._safe_float(
+                vehicle.get("co2EmissionKgPerL")
+                or vehicle.get("co2_emission_kg_per_l")
+                or vehicle.get("co2_emission_coeff")
+            )
+            if (fuel_l_per_km is None or co2_emission_kg_per_l is None) and vehicle_type not in {"BEV", "PHEV", "FCEV"}:
+                factor = None
+                for candidate in (
+                    vehicle.get("modelCode"),
+                    vehicle.get("model_code"),
+                    vehicle.get("modelName"),
+                    vehicle.get("model_name"),
+                    vehicle.get("display_name"),
+                    vehicle.get("vehicleType"),
+                    vehicle.get("vehicle_type"),
+                    vehicle.get("name"),
+                    vehicle.get("id"),
+                    vehicle_type,
+                ):
+                    factor = lookup_ice_emission_factor(candidate)
+                    if factor:
+                        break
+                if factor:
+                    if fuel_l_per_km is None:
+                        fuel_l_per_km = self._safe_float(factor.get("fuelConsumptionLPerKm"))
+                    if co2_emission_kg_per_l is None:
+                        co2_emission_kg_per_l = self._safe_float(factor.get("co2EmissionKgPerL"))
             
             fixed_use_cost_jpy = self._vehicle_fixed_use_cost_jpy(
                 vehicle,
@@ -1909,6 +1960,7 @@ class ProblemBuilder:
                     energy_consumption_kwh_per_km=self._safe_float(vehicle.get("energyConsumption")),
                     fuel_tank_capacity_l=fuel_tank_capacity_l,
                     fuel_consumption_l_per_km=fuel_l_per_km,
+                    co2_emission_kg_per_l=co2_emission_kg_per_l,
                     fixed_use_cost_jpy=fixed_use_cost_jpy,
                 ),
             )
@@ -1940,6 +1992,7 @@ class ProblemBuilder:
                     else None,
                     fuel_tank_capacity_l=profile.fuel_tank_capacity_l,
                     fuel_consumption_l_per_km=profile.fuel_consumption_l_per_km,
+                    co2_emission_kg_per_l=profile.co2_emission_kg_per_l,
                     energy_consumption_kwh_per_km=profile.energy_consumption_kwh_per_km,
                     fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
                 )

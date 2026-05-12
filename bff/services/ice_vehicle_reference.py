@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
+
 
 ICE_VEHICLE_REFERENCE: Dict[str, Dict[str, Any]] = {
     "2KG-KV290N4": {
@@ -72,11 +74,20 @@ def lookup_ice_reference(model_name_or_code: Any) -> Optional[Dict[str, Any]]:
     text = normalize_model_code(str(model_name_or_code or ""))
     if not text:
         return None
+    data_reference = lookup_ice_emission_factor(model_name_or_code)
     if text in ICE_VEHICLE_REFERENCE:
-        return dict(ICE_VEHICLE_REFERENCE[text])
+        out = dict(ICE_VEHICLE_REFERENCE[text])
+        if data_reference:
+            out.update({k: v for k, v in data_reference.items() if v not in (None, "")})
+        return out
     for code, row in ICE_VEHICLE_REFERENCE.items():
         if code in text or text in code:
-            return dict(row)
+            out = dict(row)
+            if data_reference:
+                out.update({k: v for k, v in data_reference.items() if v not in (None, "")})
+            return out
+    if data_reference:
+        return dict(data_reference)
     return None
 
 

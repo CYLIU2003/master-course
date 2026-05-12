@@ -119,6 +119,7 @@ class ScenarioOverlay(BaseModel):
     random_seed: int
     depot_ids: list[str] = Field(default_factory=list)
     route_ids: list[str] = Field(default_factory=list)
+    depot_energy_assets: dict[str, dict[str, object]] = Field(default_factory=dict)
     fleet: FleetConfig = Field(default_factory=FleetConfig)
     charging_constraints: ChargingConfig = Field(default_factory=ChargingConfig)
     cost_coefficients: CostConfig = Field(default_factory=CostConfig)

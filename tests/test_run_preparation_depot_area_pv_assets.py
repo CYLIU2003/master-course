@@ -70,3 +70,27 @@ def test_prepare_depot_energy_assets_rescales_legacy_generation_shape() -> None:
     assert rows[0]["legacy_pv_capacity_kw"] == 100.0
     assert rows[0]["capacity_factor_by_slot"] == [0.25, 0.5]
     assert rows[0]["pv_generation_kwh_by_slot"] == [35.0, 70.0]
+
+
+def test_prepare_depot_energy_assets_prefers_overlay_assets() -> None:
+    rows = _prepare_depot_energy_assets(
+        {
+            "depot_energy_assets": [
+                {
+                    "depot_id": "dep-1",
+                    "bess_enabled": True,
+                    "bess_energy_kwh": 100.0,
+                }
+            ]
+        },
+        [{"id": "dep-1", "depotAreaM2": 1000.0}],
+        overlay_depot_energy_assets={
+            "dep-1": {
+                "depot_id": "dep-1",
+                "bess_enabled": True,
+                "bess_energy_kwh": 250.0,
+            }
+        },
+    )
+
+    assert rows[0]["bess_energy_kwh"] == 250.0

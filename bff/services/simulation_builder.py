@@ -23,6 +23,31 @@ def _first_defined(*values: Any, default: Any = None) -> Any:
     return default
 
 
+def _normalize_depot_energy_assets(raw_assets: Any) -> dict[str, dict[str, Any]]:
+    normalized: dict[str, dict[str, Any]] = {}
+    if isinstance(raw_assets, dict):
+        items = raw_assets.items()
+    elif isinstance(raw_assets, list):
+        items = ((None, item) for item in raw_assets)
+    else:
+        return normalized
+    for depot_key, raw_item in items:
+        if not isinstance(raw_item, dict):
+            continue
+        item = dict(raw_item)
+        depot_id = str(
+            item.get("depot_id")
+            or item.get("depotId")
+            or depot_key
+            or ""
+        ).strip()
+        if not depot_id:
+            continue
+        item["depot_id"] = depot_id
+        normalized[depot_id] = item
+    return normalized
+
+
 def _normalized_service_dates(
     service_date: Optional[str],
     *,
@@ -418,6 +443,17 @@ def apply_builder_configuration(
             update=current_overlay.get("solver_config") or {}
         )
 
+    overlay_depot_energy_assets = None
+    current_depot_energy_assets = current_overlay.get("depot_energy_assets")
+    if current_depot_energy_assets is not None:
+        overlay_depot_energy_assets = _normalize_depot_energy_assets(current_depot_energy_assets)
+    if body.simulation_settings.depot_energy_assets is not None:
+        overlay_depot_energy_assets = _normalize_depot_energy_assets(
+            body.simulation_settings.depot_energy_assets
+        )
+    if overlay_depot_energy_assets is not None:
+        overlay.depot_energy_assets = overlay_depot_energy_assets
+
     overlay.random_seed = int(
         _first_defined(
             body.simulation_settings.random_seed,
@@ -758,11 +794,10 @@ def apply_builder_configuration(
         "experiment_method": body.simulation_settings.experiment_method,
         "experiment_notes": body.simulation_settings.experiment_notes,
     }
-    if body.simulation_settings.depot_energy_assets is not None:
+    if overlay_depot_energy_assets is not None:
         doc["simulation_config"]["depot_energy_assets"] = [
             dict(item)
-            for item in body.simulation_settings.depot_energy_assets
-            if isinstance(item, dict)
+            for item in overlay_depot_energy_assets.values()
         ]
     doc["vehicles"] = runtime_vehicles
     doc["chargers"] = runtime_chargers

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.optimization.common.builder import ProblemBuilder
+from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
 
 
 def _scenario() -> dict:
@@ -72,6 +73,30 @@ def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
     assert asset.grid_to_bess_price_threshold_yen_per_kwh == 15.0
     assert tuple(asset.grid_to_bess_allowed_slot_indices) == (0,)
     assert asset.bess_terminal_soc_min_kwh == 20.0
+
+
+def test_problem_builder_prefers_overlay_depot_energy_asset_dict() -> None:
+    scenario = _scenario()
+    scenario["simulation_config"]["depot_energy_assets"][0]["bess_initial_soc_kwh"] = 20.0
+    scenario["scenario_overlay"]["depot_energy_assets"] = {
+        "dep-1": {
+            "bess_enabled": True,
+            "bess_energy_kwh": 100.0,
+            "bess_power_kw": 50.0,
+            "bess_initial_soc_kwh": 70.0,
+            "bess_soc_min_kwh": 15.0,
+            "bess_soc_max_kwh": 95.0,
+            "bess_terminal_soc_min_kwh": 65.0,
+        }
+    }
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    asset = problem.depot_energy_assets["dep-1"]
+
+    assert asset.bess_initial_soc_kwh == 70.0
+    assert asset.bess_soc_min_kwh == 15.0
+    assert asset.bess_soc_max_kwh == 95.0
+    assert asset.bess_terminal_soc_min_kwh == 65.0
 
 
 def test_problem_builder_defaults_bess_soc_max_to_configured_capacity() -> None:
@@ -232,3 +257,25 @@ def test_problem_builder_same_area_keeps_capacity_when_profile_shape_changes() -
     assert day2.depot_energy_assets["dep-1"].pv_capacity_kw == 70.0
     assert tuple(day1.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([14.0] * 12 + [28.0] * 12)
     assert tuple(day2.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([7.0] * 12 + [42.0] * 12)
+
+
+def test_problem_builder_propagates_ice_emission_factor_from_catalog() -> None:
+    scenario = _scenario()
+    scenario["vehicles"] = [
+        {
+            "id": "ice-1",
+            "depotId": "dep-1",
+            "type": "ICE",
+            "modelCode": "2KG-LV290N4",
+            "fuelConsumptionLPerKm": 0.1869,
+            "fuelTankL": 150.0,
+        }
+    ]
+    scenario["timetable_rows"][0]["allowed_vehicle_types"] = ["ICE"]
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    vehicle_type = next(item for item in problem.vehicle_types if item.vehicle_type_id == "ICE")
+    expected = lookup_ice_emission_factor("2KG-LV290N4")
+
+    assert expected is not None
+    assert vehicle_type.co2_emission_kg_per_l == expected["co2EmissionKgPerL"]

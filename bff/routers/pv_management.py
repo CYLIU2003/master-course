@@ -100,6 +100,26 @@ def _depot_area_from_scenario(scenario: Dict[str, Any], depot_id: str) -> Option
     return None
 
 
+def _sync_scenario_overlay_depot_energy_assets(scenario: Dict[str, Any]) -> None:
+    sim_cfg = scenario.get("simulation_config") or {}
+    assets = sim_cfg.get("depot_energy_assets") or []
+    overlay = scenario.get("scenario_overlay")
+    if not isinstance(overlay, dict):
+        overlay = {}
+        scenario["scenario_overlay"] = overlay
+    normalized: dict[str, dict[str, Any]] = {}
+    for item in assets:
+        if not isinstance(item, dict):
+            continue
+        depot_id = str(item.get("depot_id") or item.get("depotId") or "").strip()
+        if not depot_id:
+            continue
+        normalized_item = dict(item)
+        normalized_item["depot_id"] = depot_id
+        normalized[depot_id] = normalized_item
+    overlay["depot_energy_assets"] = normalized
+
+
 @router.get("/pv/available-dates")
 def get_available_pv_dates(depot_id: str) -> Dict[str, Any]:
     """
@@ -340,6 +360,7 @@ def _update_scenario_pv_profile(
     depot_asset["pv_source_date"] = target_date
     depot_asset["capacity_factor_by_slot"] = capacity_factor_by_slot
     depot_asset["pv_generation_kwh_by_slot"] = pv_generation_kwh_by_slot
+    _sync_scenario_overlay_depot_energy_assets(scenario)
 
 
 def _update_depot_asset(
@@ -386,3 +407,4 @@ def _update_depot_asset(
     depot_asset["bess_soc_max_kwh"] = asset_update.bess_soc_max_kwh
     depot_asset["bess_charge_efficiency"] = asset_update.bess_charge_efficiency
     depot_asset["bess_discharge_efficiency"] = asset_update.bess_discharge_efficiency
+    _sync_scenario_overlay_depot_energy_assets(scenario)

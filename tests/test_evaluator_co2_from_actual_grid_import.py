@@ -42,3 +42,14 @@ def test_evaluator_co2_uses_actual_grid_import_flows_when_available() -> None:
 
     expected = (3.0 * 0.2) + ((1.0 + 2.0) * 0.5)
     assert breakdown.total_co2_kg == expected
+    as_dict = breakdown.to_dict()
+    assert as_dict["ice_bus_co2_kg"] == 0.0
+    assert as_dict["grid_electricity_co2_kg"] == expected
+    assert as_dict["pv_operational_co2_kg"] == 0.0
+    assert as_dict["bess_storage_operational_co2_kg"] == 0.0
+    assert as_dict["total_co2_kg"] == (
+        as_dict["ice_bus_co2_kg"]
+        + as_dict["grid_electricity_co2_kg"]
+        + as_dict["pv_operational_co2_kg"]
+        + as_dict["bess_storage_operational_co2_kg"]
+    )

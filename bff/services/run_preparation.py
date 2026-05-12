@@ -770,17 +770,39 @@ def _capacity_factor_from_generation_series(
 def _prepare_depot_energy_assets(
     simulation_config: dict[str, Any],
     depots: list[dict[str, Any]],
+    overlay_depot_energy_assets: Any = None,
 ) -> list[dict[str, Any]]:
     existing_by_depot: dict[str, dict[str, Any]] = {}
     ordered_ids: list[str] = []
-    for item in simulation_config.get("depot_energy_assets") or []:
-        if not isinstance(item, dict):
-            continue
-        depot_id = str(item.get("depot_id") or item.get("depotId") or "").strip()
-        if not depot_id:
-            continue
-        existing_by_depot[depot_id] = dict(item)
-        ordered_ids.append(depot_id)
+
+    def _ingest(raw_assets: Any) -> None:
+        if raw_assets is None:
+            return
+        if isinstance(raw_assets, dict):
+            items = raw_assets.items()
+        elif isinstance(raw_assets, list):
+            items = ((None, item) for item in raw_assets)
+        else:
+            return
+        for depot_key, item in items:
+            if not isinstance(item, dict):
+                continue
+            depot_id = str(
+                item.get("depot_id")
+                or item.get("depotId")
+                or depot_key
+                or ""
+            ).strip()
+            if not depot_id:
+                continue
+            normalized = dict(item)
+            normalized["depot_id"] = depot_id
+            existing_by_depot[depot_id] = normalized
+            if depot_id not in ordered_ids:
+                ordered_ids.append(depot_id)
+
+    _ingest(simulation_config.get("depot_energy_assets"))
+    _ingest(overlay_depot_energy_assets)
 
     depot_area_by_id = {
         str(depot.get("id") or depot.get("depot_id") or depot.get("depotId") or "").strip(): _depot_area_value(depot)
@@ -914,6 +936,7 @@ def _build_canonical_input(
     simulation_config["depot_energy_assets"] = _prepare_depot_energy_assets(
         simulation_config,
         depots,
+        scenario_overlay.get("depot_energy_assets"),
     )
     routes = _select_items_by_ids(
         [dict(item) for item in list(scenario.get("routes") or [])],

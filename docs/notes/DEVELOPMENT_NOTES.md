@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-05-12 BESS終端SOC・PV会計保存則・CO2内訳の契約強化
+
+- 問題として、営業所BESS設定は `simulation_config.depot_energy_assets` 寄りで、`scenario_overlay.depot_energy_assets` が主経路として十分に強くなかった。BFF保存時に camelCase / snake_case の両方を正規化し、SOC `%` 入力は容量 [kWh] へ変換して、後方互換の `simulation_config` と優先経路の `scenario_overlay` の両方へ保存する契約にした。
+- 問題として、postsolve / derived source split は BESS 終端 SOC 下限を破る可能性があった。`src/optimization/engine.py` で終端不足時に後方スロットの `bess_to_bus` を `grid_to_bus` へ戻す repair を追加し、`bess_terminal_soc_violation_kwh` と `bess_terminal_soc_repair_shifted_to_grid_kwh` を metadata に残す。
+- 問題として、レポート側の `pv_curtail_kwh` は plan 値をそのまま読むため、`pv_to_bess` と curtail の二重・混同が起きうる。`pv_curtail_kwh = max(0, pv_generation_kwh - pv_to_bus_kwh - pv_to_bess_kwh)` に再整合し、`pv_balance_residual_kwh` と `pv_utilization_rate` を出力する。
+- CO2は `ice_bus_co2_kg`, `grid_electricity_co2_kg`, `pv_operational_co2_kg=0`, `bess_storage_operational_co2_kg=0` に分離した。ICE由来は軽油消費量 x `ice_co2_kg_per_l`、Grid由来は実際の Grid import x slot別 CO2係数であり、BESSを単独排出源にはしない。
+- `src/preprocess/emission_factor_loader.py` を追加し、国交省燃費・CO2候補は `data/vehicle_catalog.json` を優先し、次に `data/engine_bus/output/engine_bus_simulation_library.json` を参照する。既存の手入力値や scenario overlay の値は引き続き上書き優先。
+- これは出力会計と postsolve repair の数学的意味を変えるため、旧 run の PV curtail / BESS discharge / CO2 KPI とは比較条件が一致しない可能性がある。
+
+---
+
 ## アーキテクチャ方針
 
 ```

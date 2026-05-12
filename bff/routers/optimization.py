@@ -966,10 +966,15 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
             bess_to_bus = float((flow_ctx["bess_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             pv_to_bess = float((flow_ctx["pv_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             grid_to_bess = float((flow_ctx["grid_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
-            pv_curtail = float((flow_ctx["pv_curtail_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            raw_pv_curtail = float((flow_ctx["pv_curtail_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             bess_soc = float((flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_over_limit_kwh = float((flow_ctx["contract_over_limit_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             pv_generation_kwh = float((flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            if pv_generation_kwh > 0.0:
+                pv_curtail = max(pv_generation_kwh - pv_to_bus - pv_to_bess, 0.0)
+            else:
+                pv_curtail = max(raw_pv_curtail, 0.0)
+            pv_balance_residual_kwh = pv_generation_kwh - pv_to_bus - pv_to_bess - pv_curtail
             contract_limit_kw = float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0)
             grid_import_total_kwh = grid_to_bus + grid_to_bess
             total_bus_charge_kwh = grid_to_bus + pv_to_bus + bess_to_bus
@@ -1008,7 +1013,9 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                     "pv_to_bess_kwh": pv_to_bess,
                     "grid_to_bess_kwh": grid_to_bess,
                     "pv_curtail_kwh": pv_curtail,
+                    "pv_curtail_raw_kwh": raw_pv_curtail,
                     "pv_generation_kwh": pv_generation_kwh,
+                    "pv_balance_residual_kwh": pv_balance_residual_kwh,
                     "bess_soc_kwh": bess_soc,
                     "grid_import_total_kwh": grid_import_total_kwh,
                     "grid_import_kw": grid_import_kw,
@@ -1026,6 +1033,20 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
             )
 
         contract_overage_cost = contract_over_total * penalty_yen_per_kwh if penalty_enabled else 0.0
+        asset = dict(getattr(problem, "depot_energy_assets", {}) or {}).get(depot_id)
+        bess_initial_soc = float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0) if asset is not None else 0.0
+        bess_terminal_min = float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0) if asset is not None else 0.0
+        depot_bess_soc_map = dict(flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {})
+        bess_final_soc = (
+            float(depot_bess_soc_map[max(depot_bess_soc_map.keys())])
+            if depot_bess_soc_map
+            else bess_initial_soc
+        )
+        pv_generation_total = sum(
+            float(value or 0.0)
+            for value in dict(flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).values()
+        )
+        pv_used_total = pv_to_bus_total + pv_to_bess_total
         per_depot.append(
             {
                 "depot_id": depot_id,
@@ -1036,9 +1057,15 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                 "pv_to_bess_kwh": pv_to_bess_total,
                 "grid_to_bess_kwh": grid_to_bess_total,
                 "pv_curtail_kwh": pv_curtail_total,
+                "pv_generation_kwh": pv_generation_total,
+                "pv_utilization_rate": float(pv_used_total / pv_generation_total) if pv_generation_total > 0.0 else 0.0,
                 "grid_import_total_kwh": grid_to_bus_total + grid_to_bess_total,
                 "total_bus_charge_kwh": grid_to_bus_total + pv_to_bus_total + bess_to_bus_total,
                 "total_bess_charge_kwh": pv_to_bess_total + grid_to_bess_total,
+                "bess_initial_soc_kwh": bess_initial_soc,
+                "bess_final_soc_kwh": bess_final_soc,
+                "bess_terminal_soc_min_kwh": bess_terminal_min,
+                "bess_terminal_soc_violation_kwh": max(bess_terminal_min - bess_final_soc, 0.0),
                 "peak_grid_import_kw": peak_grid_kw,
                 "peak_total_charge_kw": peak_total_charge_kw,
                 "contract_limit_kw": float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0),
@@ -1098,6 +1125,16 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                 "pv_to_bess_kwh": sum(float(row["pv_to_bess_kwh"]) for row in per_depot),
                 "grid_to_bess_kwh": sum(float(row["grid_to_bess_kwh"]) for row in per_depot),
                 "pv_curtail_kwh": sum(float(row["pv_curtail_kwh"]) for row in per_depot),
+                "pv_generation_kwh": sum(float(row["pv_generation_kwh"]) for row in per_depot),
+                "pv_utilization_rate": (
+                    (
+                        sum(float(row["pv_to_bus_kwh"]) for row in per_depot)
+                        + sum(float(row["pv_to_bess_kwh"]) for row in per_depot)
+                    )
+                    / sum(float(row["pv_generation_kwh"]) for row in per_depot)
+                    if sum(float(row["pv_generation_kwh"]) for row in per_depot) > 0.0
+                    else 0.0
+                ),
                 "grid_import_total_kwh": overall_grid_import_total_kwh,
                 "total_bus_charge_kwh": sum(float(row["total_bus_charge_kwh"]) for row in per_depot),
                 "total_bess_charge_kwh": sum(float(row["total_bess_charge_kwh"]) for row in per_depot),
@@ -1116,6 +1153,18 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                     if overall_contract_over_kwh > 1.0e-9 and contract_overage_policy == "warning_only"
                     else ""
                 ),
+                "bess_terminal_soc_violation_kwh": float(
+                    solver_metadata.get(
+                        "bess_terminal_soc_violation_kwh",
+                        plan_metadata.get("bess_terminal_soc_violation_kwh", 0.0),
+                    )
+                    or 0.0
+                ),
+                "readiness_topup_policy": {
+                    "status": "metadata_only",
+                    "warning": False,
+                    "bess_terminal_soc_min_enforced": True,
+                },
                 "demand_charge_cost_jpy": float(breakdown.get("demand_cost", 0.0) or 0.0),
                 "grid_purchase_cost_jpy": float(breakdown.get("grid_purchase_cost", 0.0) or 0.0),
                 "bess_discharge_cost_jpy": float(breakdown.get("bess_discharge_cost", 0.0) or 0.0),
@@ -1448,20 +1497,24 @@ def _persist_rich_run_outputs(
     )
 
     ice_co2_kg = float(
-        cost_breakdown.get("ice_co2_kg", cost_breakdown.get("engine_bus_co2_kg", 0.0)) or 0.0
+        cost_breakdown.get("ice_bus_co2_kg", cost_breakdown.get("ice_co2_kg", cost_breakdown.get("engine_bus_co2_kg", 0.0))) or 0.0
     )
     grid_co2_kg = float(
         cost_breakdown.get("grid_electricity_co2_kg", cost_breakdown.get("power_generation_co2_kg", 0.0)) or 0.0
     )
-    pv_co2_kg = float(cost_breakdown.get("pv_co2_kg", 0.0) or 0.0)
-    total_co2_kg = float(cost_breakdown.get("total_co2_kg", ice_co2_kg + grid_co2_kg + pv_co2_kg) or 0.0)
-    if abs(total_co2_kg - (ice_co2_kg + grid_co2_kg + pv_co2_kg)) > 1.0e-6 and ice_co2_kg == 0.0 and grid_co2_kg == 0.0 and pv_co2_kg == 0.0:
+    pv_co2_kg = float(cost_breakdown.get("pv_operational_co2_kg", cost_breakdown.get("pv_co2_kg", 0.0)) or 0.0)
+    bess_storage_co2_kg = float(cost_breakdown.get("bess_storage_operational_co2_kg", 0.0) or 0.0)
+    total_components_co2_kg = ice_co2_kg + grid_co2_kg + pv_co2_kg + bess_storage_co2_kg
+    total_co2_kg = float(cost_breakdown.get("total_co2_kg", total_components_co2_kg) or 0.0)
+    if abs(total_co2_kg - total_components_co2_kg) > 1.0e-6 and ice_co2_kg == 0.0 and grid_co2_kg == 0.0 and pv_co2_kg == 0.0 and bess_storage_co2_kg == 0.0:
         grid_co2_kg = total_co2_kg
+        total_components_co2_kg = total_co2_kg
     co2_rows = [
         {"component": "ice_bus_co2_kg", "value": ice_co2_kg},
         {"component": "grid_electricity_co2_kg", "value": grid_co2_kg},
-        {"component": "pv_co2_kg", "value": pv_co2_kg},
-        {"component": "total_co2_kg", "value": ice_co2_kg + grid_co2_kg + pv_co2_kg},
+        {"component": "pv_operational_co2_kg", "value": pv_co2_kg},
+        {"component": "bess_storage_operational_co2_kg", "value": bess_storage_co2_kg},
+        {"component": "total_co2_kg", "value": total_components_co2_kg},
     ]
     (run_dir / "co2_breakdown.json").write_text(
         json.dumps({"rows": co2_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -1620,9 +1673,15 @@ def _persist_rich_run_outputs(
                 "pv_to_bess_kwh",
                 "grid_to_bess_kwh",
                 "pv_curtail_kwh",
+                "pv_generation_kwh",
+                "pv_utilization_rate",
                 "grid_import_total_kwh",
                 "total_bus_charge_kwh",
                 "total_bess_charge_kwh",
+                "bess_initial_soc_kwh",
+                "bess_final_soc_kwh",
+                "bess_terminal_soc_min_kwh",
+                "bess_terminal_soc_violation_kwh",
                 "peak_grid_import_kw",
                 "peak_grid_import_kw_any_depot",
                 "peak_grid_import_kw_all_depots",
@@ -1668,7 +1727,9 @@ def _persist_rich_run_outputs(
                 "pv_to_bess_kwh",
                 "grid_to_bess_kwh",
                 "pv_curtail_kwh",
+                "pv_curtail_raw_kwh",
                 "pv_generation_kwh",
+                "pv_balance_residual_kwh",
                 "bess_soc_kwh",
                 "grid_import_total_kwh",
                 "grid_import_kw",
@@ -1711,6 +1772,9 @@ def _persist_rich_run_outputs(
             {"metric": "pv_to_bess_kwh", "value": float(totals.get("pv_to_bess_kwh", 0.0) or 0.0), "unit": "kWh"},
             {"metric": "grid_to_bess_kwh", "value": float(totals.get("grid_to_bess_kwh", 0.0) or 0.0), "unit": "kWh"},
             {"metric": "pv_curtail_kwh", "value": float(totals.get("pv_curtail_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "pv_generation_kwh", "value": float(totals.get("pv_generation_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "pv_utilization_rate", "value": float(totals.get("pv_utilization_rate", 0.0) or 0.0), "unit": "ratio"},
+            {"metric": "bess_terminal_soc_violation_kwh", "value": float(totals.get("bess_terminal_soc_violation_kwh", 0.0) or 0.0), "unit": "kWh"},
             {"metric": "grid_import_total_kwh", "value": float(totals.get("grid_import_total_kwh", 0.0) or 0.0), "unit": "kWh"},
             {"metric": "peak_grid_import_kw_all_depots", "value": float(totals.get("peak_grid_import_kw_all_depots", 0.0) or 0.0), "unit": "kW"},
             {"metric": "contract_over_limit_kwh", "value": float(totals.get("contract_over_limit_kwh", 0.0) or 0.0), "unit": "kWh"},
@@ -2431,8 +2495,9 @@ def _canonical_depot_power_rows_5min(
             bess_to_bus = float((flow_ctx["bess_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             pv_to_bess = float((flow_ctx["pv_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             grid_to_bess = float((flow_ctx["grid_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
-            pv_curtail = float((flow_ctx["pv_curtail_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            raw_pv_curtail = float((flow_ctx["pv_curtail_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             pv_generation = float((flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            pv_curtail = max(pv_generation - pv_to_bus - pv_to_bess, 0.0) if pv_generation > 0.0 else max(raw_pv_curtail, 0.0)
             bess_soc_kwh = float((flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_over_limit_kwh = float((flow_ctx["contract_over_limit_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_limit_kw = float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0)

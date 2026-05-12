@@ -89,6 +89,226 @@ _CSV_COLUMNS = [
 _MAX_PAGE_LIMIT = 500
 
 
+def _first_present_from_mapping(row: Dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in row and row.get(key) is not None:
+            return row.get(key)
+    return None
+
+
+def _coerce_non_negative_float(value: Any, field_name: str) -> float:
+    try:
+        parsed = float(value if value not in (None, "") else 0.0)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": f"{field_name} must be numeric"},
+        )
+    if parsed < 0.0:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": f"{field_name} must be non-negative"},
+        )
+    return parsed
+
+
+def _coerce_efficiency(value: Any, field_name: str, default: float = 0.95) -> float:
+    parsed = _coerce_non_negative_float(default if value in (None, "") else value, field_name)
+    if not (0.0 < parsed <= 1.0):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": f"{field_name} must satisfy 0 < value <= 1"},
+        )
+    return parsed
+
+
+def _percent_to_kwh(row: Dict[str, Any], capacity_kwh: float, *keys: str) -> Optional[float]:
+    raw = _first_present_from_mapping(row, *keys)
+    if raw is None or raw == "":
+        return None
+    percent = _coerce_non_negative_float(raw, keys[0])
+    if percent > 100.0:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": f"{keys[0]} must be 0..100 percent"},
+        )
+    return round(capacity_kwh * (percent / 100.0), 9)
+
+
+def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "") -> Dict[str, Any]:
+    """Normalize one depot energy asset row for both snake_case and camelCase inputs."""
+    if not isinstance(raw, dict):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "depot energy asset must be an object"},
+        )
+    row = dict(raw)
+    normalized_depot_id = str(
+        _first_present_from_mapping(row, "depot_id", "depotId") or depot_id or ""
+    ).strip()
+    if not normalized_depot_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "depot_id is required"},
+        )
+
+    capacity = _coerce_non_negative_float(
+        _first_present_from_mapping(row, "bess_energy_kwh", "bessEnergyKwh"),
+        "bess_energy_kwh",
+    )
+    initial_soc = _coerce_non_negative_float(
+        _first_present_from_mapping(row, "bess_initial_soc_kwh", "bessInitialSocKwh"),
+        "bess_initial_soc_kwh",
+    )
+    soc_min = _coerce_non_negative_float(
+        _first_present_from_mapping(row, "bess_soc_min_kwh", "bessSocMinKwh"),
+        "bess_soc_min_kwh",
+    )
+    soc_max = _coerce_non_negative_float(
+        _first_present_from_mapping(row, "bess_soc_max_kwh", "bessSocMaxKwh"),
+        "bess_soc_max_kwh",
+    )
+    terminal_min = _coerce_non_negative_float(
+        _first_present_from_mapping(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh"),
+        "bess_terminal_soc_min_kwh",
+    )
+    if capacity > 0.0:
+        percent_value = _percent_to_kwh(row, capacity, "bess_initial_soc_percent", "bessInitialSocPercent")
+        if percent_value is not None:
+            initial_soc = percent_value
+        percent_value = _percent_to_kwh(row, capacity, "bess_soc_min_percent", "bessSocMinPercent")
+        if percent_value is not None:
+            soc_min = percent_value
+        percent_value = _percent_to_kwh(row, capacity, "bess_soc_max_percent", "bessSocMaxPercent")
+        if percent_value is not None:
+            soc_max = percent_value
+        percent_value = _percent_to_kwh(row, capacity, "bess_terminal_soc_min_percent", "bessTerminalSocMinPercent")
+        if percent_value is not None:
+            terminal_min = percent_value
+
+    enabled = bool(_first_present_from_mapping(row, "bess_enabled", "bessEnabled") or False)
+    if enabled:
+        if capacity <= 0.0:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_energy_kwh must be positive when BESS is enabled"},
+            )
+        if soc_max <= 0.0:
+            soc_max = capacity
+        if initial_soc <= 0.0 and soc_min <= 0.0:
+            initial_soc = capacity * 0.5
+        if soc_min <= 0.0 and soc_max <= 0.0:
+            soc_min = capacity * 0.1
+            soc_max = capacity
+        if terminal_min <= 0.0:
+            terminal_min = initial_soc
+        if not (0.0 <= soc_min <= initial_soc <= soc_max <= capacity):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "BESS SOC must satisfy 0 <= min <= initial <= max <= capacity"},
+            )
+        if not (0.0 <= terminal_min <= soc_max):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_terminal_soc_min_kwh must be between 0 and bess_soc_max_kwh"},
+            )
+
+    price_mode = str(
+        _first_present_from_mapping(row, "grid_to_bess_price_mode", "gridToBessPriceMode") or "tou"
+    ).strip().lower()
+    if price_mode not in {"tou", "threshold", "disabled"}:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "grid_to_bess_price_mode must be tou, threshold, or disabled"},
+        )
+    priority_mode = str(
+        _first_present_from_mapping(row, "bess_priority_mode", "bessPriorityMode") or "cost_driven"
+    ).strip().lower()
+    if priority_mode not in {"pv_self_consumption", "cost_driven", "peak_shaving"}:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_priority_mode must be pv_self_consumption, cost_driven, or peak_shaving"},
+        )
+
+    row["depot_id"] = normalized_depot_id
+    row["bess_enabled"] = enabled
+    row["bess_energy_kwh"] = capacity
+    row["bess_power_kw"] = _coerce_non_negative_float(
+        _first_present_from_mapping(row, "bess_power_kw", "bessPowerKw"),
+        "bess_power_kw",
+    )
+    row["bess_initial_soc_kwh"] = initial_soc
+    row["bess_soc_min_kwh"] = soc_min
+    row["bess_soc_max_kwh"] = soc_max
+    row["bess_terminal_soc_min_kwh"] = terminal_min
+    row["bess_charge_efficiency"] = _coerce_efficiency(
+        _first_present_from_mapping(row, "bess_charge_efficiency", "bessChargeEfficiency"),
+        "bess_charge_efficiency",
+    )
+    row["bess_discharge_efficiency"] = _coerce_efficiency(
+        _first_present_from_mapping(row, "bess_discharge_efficiency", "bessDischargeEfficiency"),
+        "bess_discharge_efficiency",
+    )
+    row["bess_cycle_cost_yen_per_kwh"] = _coerce_non_negative_float(
+        _first_present_from_mapping(row, "bess_cycle_cost_yen_per_kwh", "bessCycleCostYenPerKwh"),
+        "bess_cycle_cost_yen_per_kwh",
+    )
+    row["allow_grid_to_bess"] = bool(
+        _first_present_from_mapping(row, "allow_grid_to_bess", "allowGridToBess") or False
+    ) and price_mode != "disabled"
+    row["grid_to_bess_price_mode"] = price_mode
+    row["grid_to_bess_price_threshold_yen_per_kwh"] = _coerce_non_negative_float(
+        _first_present_from_mapping(
+            row,
+            "grid_to_bess_price_threshold_yen_per_kwh",
+            "gridToBessPriceThresholdYenPerKwh",
+        ),
+        "grid_to_bess_price_threshold_yen_per_kwh",
+    )
+    raw_slots = _first_present_from_mapping(
+        row,
+        "grid_to_bess_allowed_slot_indices",
+        "gridToBessAllowedSlotIndices",
+    ) or []
+    row["grid_to_bess_allowed_slot_indices"] = [
+        int(item)
+        for item in (raw_slots if isinstance(raw_slots, list) else [])
+        if str(item).strip() != ""
+    ]
+    row["bess_priority_mode"] = priority_mode
+    return row
+
+
+def _normalize_depot_energy_assets_payload(raw_assets: Any) -> List[Dict[str, Any]]:
+    if raw_assets is None:
+        return []
+    if isinstance(raw_assets, dict):
+        items = []
+        for depot_id, raw in raw_assets.items():
+            if isinstance(raw, dict):
+                items.append(normalize_depot_energy_asset_config(raw, str(depot_id)))
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "depot_energy_assets dict values must be objects"},
+                )
+        return items
+    if not isinstance(raw_assets, list):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "depot_energy_assets must be a list or dict"},
+        )
+    normalized = []
+    for item in raw_assets:
+        if not isinstance(item, dict):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "depot_energy_assets list items must be objects"},
+            )
+        normalized.append(normalize_depot_energy_asset_config(item, ""))
+    return normalized
+
+
 def build_timetable_summary_for_scope(
     *,
     dataset_id: str | None,
@@ -395,7 +615,7 @@ class UpdateScenarioBody(BaseModel):
     solcastProxyIssueDate: Optional[str] = None
     solcastTypicalCurvePath: Optional[str] = None
     solcastTypicalWeatherClass: Optional[str] = None
-    depotEnergyAssets: Optional[List[Dict[str, Any]]] = None
+    depotEnergyAssets: Optional[Any] = None
     co2PriceSource: Optional[str] = None
     co2ReferenceDate: Optional[str] = None
 
@@ -485,7 +705,7 @@ class UpdateQuickSetupBody(BaseModel):
     solcastProxyIssueDate: Optional[str] = None
     solcastTypicalCurvePath: Optional[str] = None
     solcastTypicalWeatherClass: Optional[str] = None
-    depotEnergyAssets: Optional[List[Dict[str, Any]]] = None
+    depotEnergyAssets: Optional[Any] = None
     co2PriceSource: Optional[str] = None
     co2ReferenceDate: Optional[str] = None
     enableVehicleDiagramOutput: Optional[bool] = None
@@ -621,9 +841,9 @@ def _apply_scenario_simulation_settings(
             body.solcastTypicalWeatherClass
         ).strip()
     if body.depotEnergyAssets is not None:
-        simulation_config["depot_energy_assets"] = [
-            dict(item) for item in body.depotEnergyAssets if isinstance(item, dict)
-        ]
+        simulation_config["depot_energy_assets"] = _normalize_depot_energy_assets_payload(
+            body.depotEnergyAssets
+        )
     if body.co2PriceSource is not None:
         simulation_config["co2_price_source"] = str(body.co2PriceSource)
     if body.co2ReferenceDate is not None:
@@ -2570,9 +2790,13 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
                 body.solcastTypicalWeatherClass
             ).strip()
         if body.depotEnergyAssets is not None:
-            simulation_config["depot_energy_assets"] = [
-                dict(item) for item in body.depotEnergyAssets if isinstance(item, dict)
-            ]
+            normalized_assets = _normalize_depot_energy_assets_payload(body.depotEnergyAssets)
+            simulation_config["depot_energy_assets"] = normalized_assets
+            overlay["depot_energy_assets"] = {
+                str(item.get("depot_id")): dict(item)
+                for item in normalized_assets
+                if str(item.get("depot_id") or "").strip()
+            }
         if body.co2PriceSource is not None:
             simulation_config["co2_price_source"] = str(body.co2PriceSource)
         if body.co2ReferenceDate is not None:
@@ -2597,6 +2821,8 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["experiment_method"] = str(body.experimentMethod)
         if body.experimentNotes is not None:
             simulation_config["experiment_notes"] = str(body.experimentNotes)
+        if body.depotEnergyAssets is not None:
+            store.set_scenario_overlay(scenario_id, overlay)
         if simulation_config:
             store.set_field(scenario_id, "simulation_config", simulation_config)
 
@@ -2628,6 +2854,17 @@ def update_scenario(scenario_id: str, body: UpdateScenarioBody) -> Dict[str, Any
         if not isinstance(simulation_config, dict):
             simulation_config = {}
         simulation_config = _apply_scenario_simulation_settings(simulation_config, body)
+        if body.depotEnergyAssets is not None:
+            overlay = store.get_scenario_overlay(scenario_id) or {}
+            if not isinstance(overlay, dict):
+                overlay = {}
+            normalized_assets = list(simulation_config.get("depot_energy_assets") or [])
+            overlay["depot_energy_assets"] = {
+                str(item.get("depot_id")): dict(item)
+                for item in normalized_assets
+                if isinstance(item, dict) and str(item.get("depot_id") or "").strip()
+            }
+            store.set_scenario_overlay(scenario_id, overlay)
         return store.update_scenario(
             scenario_id,
             name=body.name,

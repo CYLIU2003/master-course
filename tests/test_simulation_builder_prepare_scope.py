@@ -136,6 +136,13 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["scenario_overlay"]["cost_coefficients"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
     assert updated["simulation_config"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert updated["scenario_overlay"]["cost_coefficients"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
+    assert updated["scenario_overlay"]["depot_energy_assets"] == {
+        "dep1": {
+            "depot_id": "dep1",
+            "bess_enabled": True,
+            "bess_energy_kwh": 500.0,
+        }
+    }
     assert updated["simulation_config"]["depot_energy_assets"] == [
         {
             "depot_id": "dep1",

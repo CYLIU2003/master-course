@@ -98,6 +98,7 @@ class ProblemVehicleType:
     reserve_soc: Optional[float] = None
     fuel_tank_capacity_l: Optional[float] = None
     fuel_consumption_l_per_km: Optional[float] = None
+    co2_emission_kg_per_l: Optional[float] = None
     energy_consumption_kwh_per_km: Optional[float] = None
     fixed_use_cost_jpy: float = 0.0
 

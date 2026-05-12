@@ -255,6 +255,9 @@ flowchart LR
 > - **C20/C21 ピーク判定**：tariff テーブルが設定されている場合はそれを優先しますが、未設定時は時間帯別価格の中央値で on/off を近似的に分類しています。
 > - **目的関数モード**：`objectiveMode=total_cost` は従来のコスト最小、`objectiveMode=co2` は CO₂排出量最小、`objectiveMode=balanced` はコストと排出の加重和、`objectiveMode=utilization` は運行達成を維持しつつ車両稼働の効率化を重視します。`co2` モードでは `co2_price_per_kg=0` でも排出量そのものを最小化します。
 > - **CO₂費・劣化費**：`total_cost` モードでは、パラメータ（`co2_price_per_kg`・`degradation` 重み）に正の値を設定すると目的関数へ加算されます。
+> - **BESS 終端 SOC**：営業所別 `depot_energy_assets` は `scenario_overlay.depot_energy_assets` を優先し、後方互換として `simulation_config.depot_energy_assets` も維持します。Tk 行編集では BESS 初期 SOC / 運用下限 / 運用上限 / 終端下限を `%` で入力でき、保存時に容量 [kWh] へ変換します。postsolve の derived source split でも終端 SOC 下限を守るため、必要なら後方スロットの `bess_to_bus` を `grid_to_bus` へ戻し、`bess_terminal_soc_violation_kwh` を metadata / レポートへ残します。
+> - **PV 会計保存則**：出力時の `pv_curtail_kwh` は plan の古い値をそのまま信用せず、`max(0, pv_generation_kwh - pv_to_bus_kwh - pv_to_bess_kwh)` で再整合します。`pv_to_bess` は curtail に混ぜず、`pv_utilization_rate = (pv_to_bus + pv_to_bess) / pv_generation` として出力します。
+> - **CO₂ 内訳**：ICE 由来は `diesel_consumption_liter * ice_co2_kg_per_l`、Grid 由来は実際の `grid_import_kwh * grid_co2_factor`、PV と BESS storage 自体の operational CO₂ は 0 として分離します。国交省燃費・CO₂候補は `data/vehicle_catalog.json` を優先し、次に `data/engine_bus/output/engine_bus_simulation_library.json` を参照します。
 > - **MILP fallback の読み方**：`solver_status=time_limit_baseline` または `auto_relaxed_baseline` は、Gurobi で exact incumbent を採れなかったため dispatch baseline を返したことを意味します。この場合 `solver_metadata.supports_exact_milp=false` であり、exact MILP 最適解や proven optimum を主張してはいけません。
 
 実装本体：[`src/optimization/milp/solver_adapter.py`](src/optimization/milp/solver_adapter.py)
@@ -1035,6 +1038,12 @@ python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.s
 `gridFlatPricePerKwh`, `gridSellPricePerKwh`, `demandChargeCostPerKw`,
 `dieselPricePerL`, `gridCo2KgPerKwh`, `co2PricePerKg`, `iceCo2KgPerL`,
 `depotPowerLimitKw`, `degradationWeight`, `tou_pricing`
+
+**営業所エネルギー資産**
+`depotEnergyAssets`, `depot_energy_assets`, `bess_energy_kwh`, `bess_power_kw`,
+`bess_initial_soc_kwh`, `bess_soc_min_kwh`, `bess_soc_max_kwh`,
+`bess_terminal_soc_min_kwh`, `bess_charge_efficiency`, `bess_discharge_efficiency`,
+`bess_cycle_cost_yen_per_kwh`, `allow_grid_to_bess`, `pv_generation_kwh_by_slot`
 
 **車両・テンプレート**
 `type`, `modelCode`, `modelName`, `capacityPassengers`,

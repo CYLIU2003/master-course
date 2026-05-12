@@ -4625,6 +4625,10 @@ class App:
         bess_initial_soc_kwh_var = tk.StringVar(value="0")
         bess_soc_min_kwh_var = tk.StringVar(value="0")
         bess_soc_max_kwh_var = tk.StringVar(value="0")
+        bess_initial_soc_percent_var = tk.StringVar(value="")
+        bess_soc_min_percent_var = tk.StringVar(value="")
+        bess_soc_max_percent_var = tk.StringVar(value="")
+        bess_terminal_soc_min_percent_var = tk.StringVar(value="")
         bess_charge_efficiency_var = tk.StringVar(value="0.95")
         bess_discharge_efficiency_var = tk.StringVar(value="0.95")
         bess_cycle_cost_var = tk.StringVar(value="0")
@@ -4663,6 +4667,10 @@ class App:
         self._labeled_entry(editor, "BESS初期SOC[kWh] bess_initial_soc_kwh", bess_initial_soc_kwh_var)
         self._labeled_entry(editor, "BESS最小SOC[kWh] bess_soc_min_kwh", bess_soc_min_kwh_var)
         self._labeled_entry(editor, "BESS最大SOC[kWh] bess_soc_max_kwh", bess_soc_max_kwh_var)
+        self._labeled_entry(editor, "BESS初期SOC[%] (保存時kWh変換)", bess_initial_soc_percent_var)
+        self._labeled_entry(editor, "BESS運用SOC下限[%] (保存時kWh変換)", bess_soc_min_percent_var)
+        self._labeled_entry(editor, "BESS運用SOC上限[%] (保存時kWh変換)", bess_soc_max_percent_var)
+        self._labeled_entry(editor, "BESS終端SOC下限[%] (保存時kWh変換)", bess_terminal_soc_min_percent_var)
         self._labeled_entry(editor, "BESS充電効率 bess_charge_efficiency", bess_charge_efficiency_var)
         self._labeled_entry(editor, "BESS放電効率 bess_discharge_efficiency", bess_discharge_efficiency_var)
         self._labeled_entry(editor, "BESS→Bus単価[円/kWh] bess_cycle_cost_yen_per_kwh", bess_cycle_cost_var)
@@ -4711,6 +4719,21 @@ class App:
         def _format_float(value: float) -> str:
             return f"{float(value):.6f}".rstrip("0").rstrip(".")
 
+        def _soc_percent_from_kwh(value: Any, capacity: float) -> str:
+            try:
+                if capacity <= 0.0:
+                    return ""
+                return _format_float((float(value or 0.0) / capacity) * 100.0)
+            except (TypeError, ValueError):
+                return ""
+
+        def _soc_kwh_from_percent(percent_text: str, capacity: float, fallback_text: str) -> float:
+            text = str(percent_text or "").strip()
+            if not text:
+                return self._parse_float(fallback_text, 0.0)
+            percent = self._parse_float(text, 0.0)
+            return max(capacity, 0.0) * max(percent, 0.0) / 100.0
+
         def _apply_bess_capacity_defaults(*_args: Any) -> None:
             capacity = max(self._parse_float(bess_energy_kwh_var.get(), 0.0), 0.0)
             if capacity <= 0.0:
@@ -4722,6 +4745,10 @@ class App:
             bess_initial_soc_kwh_var.set(_format_float(capacity * 0.5))
             bess_soc_max_kwh_var.set(_format_float(capacity))
             bess_terminal_soc_min_kwh_var.set(_format_float(capacity * 0.5))
+            bess_soc_min_percent_var.set("10")
+            bess_initial_soc_percent_var.set("50")
+            bess_soc_max_percent_var.set("100")
+            bess_terminal_soc_min_percent_var.set("50")
             if not str(bess_charge_efficiency_var.get() or "").strip():
                 bess_charge_efficiency_var.set("0.95")
             if not str(bess_discharge_efficiency_var.get() or "").strip():
@@ -4770,9 +4797,17 @@ class App:
             bess_enabled_var.set(bool(_row_value(row, "bess_enabled", "bessEnabled", False)))
             bess_energy_kwh_var.set(str(_row_value(row, "bess_energy_kwh", "bessEnergyKwh", 0.0)))
             bess_power_kw_var.set(str(_row_value(row, "bess_power_kw", "bessPowerKw", 0.0)))
-            bess_initial_soc_kwh_var.set(str(_row_value(row, "bess_initial_soc_kwh", "bessInitialSocKwh", 0.0)))
-            bess_soc_min_kwh_var.set(str(_row_value(row, "bess_soc_min_kwh", "bessSocMinKwh", 0.0)))
-            bess_soc_max_kwh_var.set(str(_row_value(row, "bess_soc_max_kwh", "bessSocMaxKwh", 0.0)))
+            capacity = self._parse_float(str(_row_value(row, "bess_energy_kwh", "bessEnergyKwh", 0.0)), 0.0)
+            initial_kwh = _row_value(row, "bess_initial_soc_kwh", "bessInitialSocKwh", 0.0)
+            min_kwh = _row_value(row, "bess_soc_min_kwh", "bessSocMinKwh", 0.0)
+            max_kwh = _row_value(row, "bess_soc_max_kwh", "bessSocMaxKwh", 0.0)
+            terminal_kwh = _row_value(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh", 0.0)
+            bess_initial_soc_kwh_var.set(str(initial_kwh))
+            bess_soc_min_kwh_var.set(str(min_kwh))
+            bess_soc_max_kwh_var.set(str(max_kwh))
+            bess_initial_soc_percent_var.set(str(_row_value(row, "bess_initial_soc_percent", "bessInitialSocPercent", "")) or _soc_percent_from_kwh(initial_kwh, capacity))
+            bess_soc_min_percent_var.set(str(_row_value(row, "bess_soc_min_percent", "bessSocMinPercent", "")) or _soc_percent_from_kwh(min_kwh, capacity))
+            bess_soc_max_percent_var.set(str(_row_value(row, "bess_soc_max_percent", "bessSocMaxPercent", "")) or _soc_percent_from_kwh(max_kwh, capacity))
             bess_charge_efficiency_var.set(str(_row_value(row, "bess_charge_efficiency", "bessChargeEfficiency", 0.95)))
             bess_discharge_efficiency_var.set(str(_row_value(row, "bess_discharge_efficiency", "bessDischargeEfficiency", 0.95)))
             bess_cycle_cost_var.set(str(_row_value(row, "bess_cycle_cost_yen_per_kwh", "bessCycleCostYenPerKwh", 0.0)))
@@ -4792,7 +4827,8 @@ class App:
                 )
             )
             bess_priority_mode_var.set(str(_row_value(row, "bess_priority_mode", "bessPriorityMode", "pv_self_consumption") or "pv_self_consumption"))
-            bess_terminal_soc_min_kwh_var.set(str(_row_value(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh", 0.0)))
+            bess_terminal_soc_min_kwh_var.set(str(terminal_kwh))
+            bess_terminal_soc_min_percent_var.set(str(_row_value(row, "bess_terminal_soc_min_percent", "bessTerminalSocMinPercent", "")) or _soc_percent_from_kwh(terminal_kwh, capacity))
             provisional_energy_cost_var.set(str(row.get("provisional_energy_cost_yen_per_kwh", 0.0)))
             pv_dates = list(row.get("pv_profile_dates") or [])
             pv_dates_info_var.set(_format_service_dates_summary(pv_dates))
@@ -4890,9 +4926,25 @@ class App:
             row["bess_enabled"] = bool(bess_enabled_var.get())
             row["bess_energy_kwh"] = self._parse_float(bess_energy_kwh_var.get(), 0.0)
             row["bess_power_kw"] = self._parse_float(bess_power_kw_var.get(), 0.0)
-            row["bess_initial_soc_kwh"] = self._parse_float(bess_initial_soc_kwh_var.get(), 0.0)
-            row["bess_soc_min_kwh"] = self._parse_float(bess_soc_min_kwh_var.get(), 0.0)
-            row["bess_soc_max_kwh"] = self._parse_float(bess_soc_max_kwh_var.get(), 0.0)
+            capacity = max(row["bess_energy_kwh"], 0.0)
+            row["bess_initial_soc_kwh"] = _soc_kwh_from_percent(
+                bess_initial_soc_percent_var.get(),
+                capacity,
+                bess_initial_soc_kwh_var.get(),
+            )
+            row["bess_soc_min_kwh"] = _soc_kwh_from_percent(
+                bess_soc_min_percent_var.get(),
+                capacity,
+                bess_soc_min_kwh_var.get(),
+            )
+            row["bess_soc_max_kwh"] = _soc_kwh_from_percent(
+                bess_soc_max_percent_var.get(),
+                capacity,
+                bess_soc_max_kwh_var.get(),
+            )
+            row["bess_initial_soc_percent"] = self._parse_float(bess_initial_soc_percent_var.get(), 0.0) if bess_initial_soc_percent_var.get().strip() else None
+            row["bess_soc_min_percent"] = self._parse_float(bess_soc_min_percent_var.get(), 0.0) if bess_soc_min_percent_var.get().strip() else None
+            row["bess_soc_max_percent"] = self._parse_float(bess_soc_max_percent_var.get(), 0.0) if bess_soc_max_percent_var.get().strip() else None
             row["bess_charge_efficiency"] = self._parse_float(bess_charge_efficiency_var.get(), 0.95)
             row["bess_discharge_efficiency"] = self._parse_float(bess_discharge_efficiency_var.get(), 0.95)
             row["bess_cycle_cost_yen_per_kwh"] = self._parse_float(bess_cycle_cost_var.get(), 0.0)
@@ -4912,7 +4964,12 @@ class App:
                     return None
             row["grid_to_bess_allowed_slot_indices"] = parsed_slots
             row["bess_priority_mode"] = bess_priority_mode_var.get().strip() or "pv_self_consumption"
-            row["bess_terminal_soc_min_kwh"] = self._parse_float(bess_terminal_soc_min_kwh_var.get(), 0.0)
+            row["bess_terminal_soc_min_kwh"] = _soc_kwh_from_percent(
+                bess_terminal_soc_min_percent_var.get(),
+                capacity,
+                bess_terminal_soc_min_kwh_var.get(),
+            )
+            row["bess_terminal_soc_min_percent"] = self._parse_float(bess_terminal_soc_min_percent_var.get(), 0.0) if bess_terminal_soc_min_percent_var.get().strip() else None
             row["provisional_energy_cost_yen_per_kwh"] = self._parse_float(provisional_energy_cost_var.get(), 0.0)
             row = _validate_bess_row(row)
             if row is None:
@@ -4922,6 +4979,10 @@ class App:
             bess_soc_min_kwh_var.set(str(row["bess_soc_min_kwh"]))
             bess_soc_max_kwh_var.set(str(row["bess_soc_max_kwh"]))
             bess_terminal_soc_min_kwh_var.set(str(row["bess_terminal_soc_min_kwh"]))
+            bess_initial_soc_percent_var.set(_soc_percent_from_kwh(row["bess_initial_soc_kwh"], capacity))
+            bess_soc_min_percent_var.set(_soc_percent_from_kwh(row["bess_soc_min_kwh"], capacity))
+            bess_soc_max_percent_var.set(_soc_percent_from_kwh(row["bess_soc_max_kwh"], capacity))
+            bess_terminal_soc_min_percent_var.set(_soc_percent_from_kwh(row["bess_terminal_soc_min_kwh"], capacity))
             bess_charge_efficiency_var.set(str(row["bess_charge_efficiency"]))
             bess_discharge_efficiency_var.set(str(row["bess_discharge_efficiency"]))
             allow_grid_to_bess_var.set(bool(row["allow_grid_to_bess"]))
@@ -4941,6 +5002,10 @@ class App:
             bess_initial_soc_kwh_var.set("0")
             bess_soc_min_kwh_var.set("0")
             bess_soc_max_kwh_var.set("0")
+            bess_initial_soc_percent_var.set("")
+            bess_soc_min_percent_var.set("")
+            bess_soc_max_percent_var.set("")
+            bess_terminal_soc_min_percent_var.set("")
             bess_charge_efficiency_var.set("0.95")
             bess_discharge_efficiency_var.set("0.95")
             bess_cycle_cost_var.set("0")

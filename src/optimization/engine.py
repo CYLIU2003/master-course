@@ -198,7 +198,7 @@ def _merge_source_context_with_added_charging(
             _charging_slot_signature(slot) for slot in list(getattr(plan, "charging_slots", ()) or ())
         ),
     }
-    return replace(
+    merged_plan = replace(
         plan,
         grid_to_bus_kwh_by_depot_slot=grid_to_bus,
         pv_to_bus_kwh_by_depot_slot=pv_to_bus,
@@ -210,6 +210,140 @@ def _merge_source_context_with_added_charging(
         contract_over_limit_kwh_by_depot_slot=_normalize_depot_slot_flow_mapping(source_flow_context.get("contract_over_limit_kwh_by_depot_slot", {})),
         metadata=metadata,
     )
+    return _repair_bess_terminal_soc(problem, merged_plan)
+
+
+def _set_positive_slot_value(mapping: dict[str, dict[int, float]], depot_id: str, slot_idx: int, value: float) -> None:
+    slot_map = mapping.setdefault(depot_id, {})
+    if value > 1.0e-9:
+        slot_map[slot_idx] = value
+    else:
+        slot_map.pop(slot_idx, None)
+        if not slot_map:
+            mapping.pop(depot_id, None)
+
+
+def _repair_bess_terminal_soc(
+    problem: CanonicalOptimizationProblem,
+    plan: AssignmentPlan,
+) -> AssignmentPlan:
+    """Shift late BESS discharge back to grid when terminal SOC would be violated."""
+
+    assets = dict(getattr(problem, "depot_energy_assets", {}) or {})
+    if not assets:
+        return plan
+
+    grid_to_bus = _normalize_depot_slot_flow_mapping(getattr(plan, "grid_to_bus_kwh_by_depot_slot", {}))
+    pv_to_bus = _normalize_depot_slot_flow_mapping(getattr(plan, "pv_to_bus_kwh_by_depot_slot", {}))
+    bess_to_bus = _normalize_depot_slot_flow_mapping(getattr(plan, "bess_to_bus_kwh_by_depot_slot", {}))
+    pv_to_bess = _normalize_depot_slot_flow_mapping(getattr(plan, "pv_to_bess_kwh_by_depot_slot", {}))
+    grid_to_bess = _normalize_depot_slot_flow_mapping(getattr(plan, "grid_to_bess_kwh_by_depot_slot", {}))
+    pv_curtail = _normalize_depot_slot_flow_mapping(getattr(plan, "pv_curtail_kwh_by_depot_slot", {}))
+    contract_over_limit = _normalize_depot_slot_flow_mapping(getattr(plan, "contract_over_limit_kwh_by_depot_slot", {}))
+    bess_soc: dict[str, dict[int, float]] = {}
+
+    timestep_h = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1) / 60.0
+    depot_limit_kw = {
+        str(getattr(depot, "depot_id", "") or ""): float(getattr(depot, "import_limit_kw", 0.0) or 0.0)
+        for depot in list(getattr(problem, "depots", ()) or ())
+        if str(getattr(depot, "depot_id", "") or "")
+    }
+    shifted_to_grid_kwh = 0.0
+    remaining_violation_kwh = 0.0
+
+    for depot_id, asset in assets.items():
+        depot_key = str(depot_id)
+        if not bool(getattr(asset, "bess_enabled", False)):
+            continue
+        max_soc = max(
+            float(getattr(asset, "bess_soc_max_kwh", 0.0) or 0.0),
+            float(getattr(asset, "bess_energy_kwh", 0.0) or 0.0),
+        )
+        if max_soc <= 1.0e-9:
+            continue
+        min_soc = min(max(float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0), 0.0), max_soc)
+        initial_soc = min(max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), min_soc), max_soc)
+        terminal_min = min(
+            max(float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0), min_soc),
+            max_soc,
+        )
+        discharge_eff = min(max(float(getattr(asset, "bess_discharge_efficiency", 0.95) or 0.95), 1.0e-9), 1.0)
+        charge_eff = min(max(float(getattr(asset, "bess_charge_efficiency", 0.95) or 0.95), 1.0e-9), 1.0)
+        slot_indices = set()
+        for mapping in (grid_to_bus, pv_to_bus, bess_to_bus, pv_to_bess, grid_to_bess, pv_curtail):
+            slot_indices.update((mapping.get(depot_key, {}) or {}).keys())
+        pv_series = tuple(getattr(asset, "pv_generation_kwh_by_slot", ()) or ())
+        slot_indices.update(range(len(pv_series)))
+        if not slot_indices:
+            continue
+
+        def _recompute_soc() -> tuple[float, dict[int, float]]:
+            soc = initial_soc
+            soc_by_slot: dict[int, float] = {}
+            for slot_idx in sorted(int(idx) for idx in slot_indices):
+                discharge_bus = max(float((bess_to_bus.get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+                charge_input = max(float((pv_to_bess.get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+                charge_input += max(float((grid_to_bess.get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+                soc = max(min_soc, soc - (discharge_bus / discharge_eff))
+                soc = min(max_soc, soc + charge_input * charge_eff)
+                soc_by_slot[slot_idx] = soc
+            return soc, soc_by_slot
+
+        final_soc, soc_by_slot = _recompute_soc()
+        shortage = max(terminal_min - final_soc, 0.0)
+        if shortage > 1.0e-9:
+            for slot_idx in sorted((bess_to_bus.get(depot_key, {}) or {}).keys(), reverse=True):
+                if shortage <= 1.0e-9:
+                    break
+                current_bess_to_bus = max(float((bess_to_bus.get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+                reducible = min(current_bess_to_bus, shortage * discharge_eff)
+                if reducible <= 1.0e-9:
+                    continue
+                _set_positive_slot_value(bess_to_bus, depot_key, slot_idx, current_bess_to_bus - reducible)
+                grid_slot_value = max(float((grid_to_bus.get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+                _set_positive_slot_value(grid_to_bus, depot_key, slot_idx, grid_slot_value + reducible)
+                shifted_to_grid_kwh += reducible
+                shortage -= reducible / discharge_eff
+            final_soc, soc_by_slot = _recompute_soc()
+            shortage = max(terminal_min - final_soc, 0.0)
+        remaining_violation_kwh += shortage
+        for slot_idx, soc_value in soc_by_slot.items():
+            _set_positive_slot_value(bess_soc, depot_key, slot_idx, soc_value)
+            contract_limit_kwh = max(float(depot_limit_kw.get(depot_key, 0.0) or 0.0), 0.0) * timestep_h
+            grid_import_kwh = max(float((grid_to_bus.get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+            grid_import_kwh += max(float((grid_to_bess.get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+            contract_over = max(grid_import_kwh - contract_limit_kwh, 0.0) if contract_limit_kwh > 0.0 else 0.0
+            _set_positive_slot_value(contract_over_limit, depot_key, slot_idx, contract_over)
+
+    metadata = dict(plan.metadata or {})
+    metadata["bess_terminal_soc_repair_shifted_to_grid_kwh"] = float(shifted_to_grid_kwh)
+    metadata["bess_terminal_soc_violation_kwh"] = float(max(remaining_violation_kwh, 0.0))
+    metadata["canonical_source_flow_context"] = {
+        **dict(metadata.get("canonical_source_flow_context") or {}),
+        "grid_to_bus_kwh_by_depot_slot": grid_to_bus,
+        "pv_to_bus_kwh_by_depot_slot": pv_to_bus,
+        "bess_to_bus_kwh_by_depot_slot": bess_to_bus,
+        "pv_to_bess_kwh_by_depot_slot": pv_to_bess,
+        "grid_to_bess_kwh_by_depot_slot": grid_to_bess,
+        "pv_curtail_kwh_by_depot_slot": pv_curtail,
+        "bess_soc_kwh_by_depot_slot": bess_soc,
+        "contract_over_limit_kwh_by_depot_slot": contract_over_limit,
+    }
+    if shifted_to_grid_kwh <= 1.0e-9 and remaining_violation_kwh <= 1.0e-9:
+        return replace(plan, bess_soc_kwh_by_depot_slot=bess_soc or getattr(plan, "bess_soc_kwh_by_depot_slot", {}), metadata=metadata)
+    derived_plan = replace(
+        plan,
+        grid_to_bus_kwh_by_depot_slot=grid_to_bus,
+        pv_to_bus_kwh_by_depot_slot=pv_to_bus,
+        bess_to_bus_kwh_by_depot_slot=bess_to_bus,
+        pv_to_bess_kwh_by_depot_slot=pv_to_bess,
+        grid_to_bess_kwh_by_depot_slot=grid_to_bess,
+        pv_curtail_kwh_by_depot_slot=pv_curtail,
+        bess_soc_kwh_by_depot_slot=bess_soc,
+        contract_over_limit_kwh_by_depot_slot=contract_over_limit,
+        metadata=metadata,
+    )
+    return derived_plan
 
 
 def _derive_depot_energy_source_split(
@@ -336,7 +470,7 @@ def _derive_depot_energy_source_split(
             _charging_slot_signature(slot) for slot in list(getattr(plan, "charging_slots", ()) or ())
         ),
     }
-    return replace(
+    derived_plan = replace(
         plan,
         grid_to_bus_kwh_by_depot_slot=grid_to_bus,
         pv_to_bus_kwh_by_depot_slot=pv_to_bus,
@@ -348,6 +482,7 @@ def _derive_depot_energy_source_split(
         contract_over_limit_kwh_by_depot_slot=contract_over_limit,
         metadata=metadata,
     )
+    return _repair_bess_terminal_soc(problem, derived_plan)
 
 
 class OptimizationEngine:
@@ -523,6 +658,12 @@ class OptimizationEngine:
         )
         solver_metadata["postsolve_opportunistic_topup_unfilled_vehicle_day_ids"] = tuple(
             plan.metadata.get("opportunistic_topup_unfilled_vehicle_day_ids", ()) or ()
+        )
+        solver_metadata["bess_terminal_soc_repair_shifted_to_grid_kwh"] = float(
+            plan.metadata.get("bess_terminal_soc_repair_shifted_to_grid_kwh", 0.0) or 0.0
+        )
+        solver_metadata["bess_terminal_soc_violation_kwh"] = float(
+            plan.metadata.get("bess_terminal_soc_violation_kwh", 0.0) or 0.0
         )
         solver_metadata["source_provenance_exact"] = bool(
             dict(plan.metadata or {}).get("source_provenance_exact", False)

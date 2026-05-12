@@ -217,10 +217,16 @@ def _build_vehicle_profiles(
 
         ice_rows = vehicles[vehicles["_norm_type"] == "ICE"]
         if len(ice_rows) > 0:
+            co2_emission_kg_per_l = None
+            if "co2_emission_coeff" in ice_rows.columns:
+                co2_values = pd.to_numeric(ice_rows["co2_emission_coeff"], errors="coerce").dropna()
+                if len(co2_values) > 0:
+                    co2_emission_kg_per_l = float(co2_values.mean())
             profiles["ICE"] = VehicleProfile(
                 vehicle_type="ICE",
                 fuel_tank_capacity_l=150.0,
                 fuel_consumption_l_per_km=0.2,
+                co2_emission_kg_per_l=co2_emission_kg_per_l,
             )
 
     for vehicle_type in default_vehicle_types:

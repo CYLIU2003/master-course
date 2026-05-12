@@ -42,6 +42,8 @@ class CostBreakdown:
     ice_co2_kg: float = 0.0
     grid_electricity_co2_kg: float = 0.0
     pv_co2_kg: float = 0.0
+    pv_operational_co2_kg: float = 0.0
+    bess_storage_operational_co2_kg: float = 0.0
     utilization_score: float = 0.0
     pv_generated_kwh: float = 0.0
     pv_used_direct_kwh: float = 0.0
@@ -97,8 +99,11 @@ class CostBreakdown:
             "co2_cost": self.co2_cost,
             "total_co2_kg": self.total_co2_kg,
             "ice_co2_kg": self.ice_co2_kg,
+            "ice_bus_co2_kg": self.ice_co2_kg,
             "grid_electricity_co2_kg": self.grid_electricity_co2_kg,
             "pv_co2_kg": self.pv_co2_kg,
+            "pv_operational_co2_kg": self.pv_operational_co2_kg,
+            "bess_storage_operational_co2_kg": self.bess_storage_operational_co2_kg,
             "engine_bus_co2_kg": self.ice_co2_kg,
             "power_generation_co2_kg": self.grid_electricity_co2_kg,
             "utilization_score": self.utilization_score,
@@ -297,8 +302,9 @@ class CostEvaluator:
         co2_breakdown = self._co2_breakdown_kg(problem, plan, operating_slot_totals)
         ice_co2_kg = float(co2_breakdown.get("ice_co2_kg", 0.0) or 0.0)
         grid_electricity_co2_kg = float(co2_breakdown.get("grid_electricity_co2_kg", 0.0) or 0.0)
-        pv_co2_kg = float(co2_breakdown.get("pv_co2_kg", 0.0) or 0.0)
-        total_co2_kg = ice_co2_kg + grid_electricity_co2_kg + pv_co2_kg
+        pv_co2_kg = float(co2_breakdown.get("pv_operational_co2_kg", co2_breakdown.get("pv_co2_kg", 0.0)) or 0.0)
+        bess_storage_operational_co2_kg = float(co2_breakdown.get("bess_storage_operational_co2_kg", 0.0) or 0.0)
+        total_co2_kg = ice_co2_kg + grid_electricity_co2_kg + pv_co2_kg + bess_storage_operational_co2_kg
         co2_cost = max(problem.scenario.co2_price_per_kg, 0.0) * total_co2_kg
 
         total_vehicle_count = max(
@@ -455,6 +461,8 @@ class CostEvaluator:
                 ice_co2_kg=ice_co2_kg,
                 grid_electricity_co2_kg=grid_electricity_co2_kg,
                 pv_co2_kg=pv_co2_kg,
+                pv_operational_co2_kg=pv_co2_kg,
+                bess_storage_operational_co2_kg=bess_storage_operational_co2_kg,
                 utilization_score=utilization_score,
                 pv_generated_kwh=pv_generated_kwh,
                 pv_used_direct_kwh=pv_used_direct_kwh,
@@ -522,6 +530,8 @@ class CostEvaluator:
             ice_co2_kg=ice_co2_kg,
             grid_electricity_co2_kg=grid_electricity_co2_kg,
             pv_co2_kg=pv_co2_kg,
+            pv_operational_co2_kg=pv_co2_kg,
+            bess_storage_operational_co2_kg=bess_storage_operational_co2_kg,
             utilization_score=utilization_score,
             pv_generated_kwh=pv_generated_kwh,
             pv_used_direct_kwh=pv_used_direct_kwh,
@@ -1801,10 +1811,19 @@ class CostEvaluator:
         ice_co2_kg = 0.0
         grid_electricity_co2_kg = 0.0
 
+        def _ice_co2_kg_per_l_for_vehicle_type(vehicle_type_id: str) -> float:
+            vehicle_type = vehicle_type_by_id.get(str(vehicle_type_id))
+            if vehicle_type is not None:
+                value = max(float(vehicle_type.co2_emission_kg_per_l or 0.0), 0.0)
+                if value > 0.0:
+                    return value
+            return ice_co2_kg_per_l
+
         # ICE trip and deadhead fuel CO₂.
         for duty in plan.duties:
             if not self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
                 continue
+            vehicle_ice_co2_kg_per_l = _ice_co2_kg_per_l_for_vehicle_type(duty.vehicle_type)
             for leg in duty.legs:
                 fuel_rate = self._fuel_rate_l_per_km(problem, duty.vehicle_type)
                 # Trip fuel CO₂.
@@ -1813,11 +1832,11 @@ class CostEvaluator:
                     fuel_l = max(trip.fuel_l, 0.0)
                     if fuel_l <= 0 and fuel_rate > 0:
                         fuel_l = max(trip.distance_km, 0.0) * fuel_rate
-                    ice_co2_kg += ice_co2_kg_per_l * fuel_l
+                    ice_co2_kg += vehicle_ice_co2_kg_per_l * fuel_l
                 # Deadhead fuel CO₂.
                 if leg.deadhead_from_prev_min > 0 and fuel_rate > 0:
                     dh_km = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min)
-                    ice_co2_kg += ice_co2_kg_per_l * dh_km * fuel_rate
+                    ice_co2_kg += vehicle_ice_co2_kg_per_l * dh_km * fuel_rate
 
         # BEV electricity CO2: prefer actual grid-import flows (Grid->Bus + Grid->BESS).
         grid_import_by_slot = self._grid_import_kwh_by_slot_from_plan(plan)
@@ -1839,8 +1858,11 @@ class CostEvaluator:
 
         return {
             "ice_co2_kg": ice_co2_kg,
+            "ice_bus_co2_kg": ice_co2_kg,
             "grid_electricity_co2_kg": grid_electricity_co2_kg,
             "pv_co2_kg": 0.0,
+            "pv_operational_co2_kg": 0.0,
+            "bess_storage_operational_co2_kg": 0.0,
         }
 
     def _collect_ev_drive_events(

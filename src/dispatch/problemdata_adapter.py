@@ -114,10 +114,18 @@ def _build_vehicle_profiles(data: ProblemData) -> dict[str, VehicleProfile]:
 
         if vehicle_type in profiles:
             continue
+        co2_emission_kg_per_l = getattr(vehicle, "co2_emission_coeff", None)
+        try:
+            co2_emission_kg_per_l = (
+                float(co2_emission_kg_per_l) if co2_emission_kg_per_l is not None else None
+            )
+        except (TypeError, ValueError):
+            co2_emission_kg_per_l = None
         profiles[vehicle_type] = VehicleProfile(
             vehicle_type="ICE",
             fuel_tank_capacity_l=vehicle.fuel_tank_capacity or 150.0,
             fuel_consumption_l_per_km=0.2,
+            co2_emission_kg_per_l=co2_emission_kg_per_l,
         )
 
     if not profiles:

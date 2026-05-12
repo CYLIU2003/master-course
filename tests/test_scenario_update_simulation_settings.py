@@ -28,6 +28,12 @@ def test_update_scenario_persists_simulation_settings() -> None:
                 "depot_id": "tsurumaki",
                 "pv_enabled": True,
                 "pv_capacity_kw": 120.0,
+                "bess_enabled": True,
+                "bess_energy_kwh": 100.0,
+                "bessInitialSocPercent": 50.0,
+                "bessSocMinPercent": 10.0,
+                "bessSocMaxPercent": 90.0,
+                "bessTerminalSocMinPercent": 40.0,
             }
         ],
     )
@@ -55,6 +61,8 @@ def test_update_scenario_persists_simulation_settings() -> None:
 
     with (
         mock.patch.object(scenarios.store, "get_field", return_value={"existing_flag": True}),
+        mock.patch.object(scenarios.store, "get_scenario_overlay", return_value={}),
+        mock.patch.object(scenarios.store, "set_scenario_overlay"),
         mock.patch.object(scenarios.store, "update_scenario", side_effect=_capture_update),
     ):
         scenarios.update_scenario("scenario-1", body)
@@ -77,10 +85,35 @@ def test_update_scenario_persists_simulation_settings() -> None:
     assert simulation_config["weather_proxy_daily_csv_path"] == "data/weather/processed/tokyo.csv"
     assert simulation_config["weather_proxy_station_id"] == "44132"
     assert simulation_config["weather_proxy_station_name"] == "東京"
-    assert simulation_config["depot_energy_assets"] == [
-        {
-            "depot_id": "tsurumaki",
-            "pv_enabled": True,
-            "pv_capacity_kw": 120.0,
+    asset = simulation_config["depot_energy_assets"][0]
+    assert asset["depot_id"] == "tsurumaki"
+    assert asset["pv_enabled"] is True
+    assert asset["pv_capacity_kw"] == 120.0
+    assert asset["bess_initial_soc_kwh"] == 50.0
+    assert asset["bess_soc_min_kwh"] == 10.0
+    assert asset["bess_soc_max_kwh"] == 90.0
+    assert asset["bess_terminal_soc_min_kwh"] == 40.0
+
+
+def test_normalize_depot_energy_asset_accepts_dict_and_converts_percent() -> None:
+    payload = {
+        "tsurumaki": {
+            "bessEnabled": True,
+            "bessEnergyKwh": 200.0,
+            "bessPowerKw": 50.0,
+            "bessInitialSocPercent": 60.0,
+            "bessSocMinPercent": 20.0,
+            "bessSocMaxPercent": 90.0,
+            "bessTerminalSocMinPercent": 55.0,
+            "allowGridToBess": True,
         }
-    ]
+    }
+
+    assets = scenarios._normalize_depot_energy_assets_payload(payload)
+
+    assert assets[0]["depot_id"] == "tsurumaki"
+    assert assets[0]["bess_initial_soc_kwh"] == 120.0
+    assert assets[0]["bess_soc_min_kwh"] == 40.0
+    assert assets[0]["bess_soc_max_kwh"] == 180.0
+    assert assets[0]["bess_terminal_soc_min_kwh"] == 110.0
+    assert assets[0]["allow_grid_to_bess"] is True

@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from src.dispatch.models import DeadheadRule, DispatchContext, DutyLeg, Trip, VehicleDuty, VehicleProfile
 from src.optimization.common.builder import ProblemBuilder
-from src.optimization.common.problem import AssignmentPlan, OptimizationConfig, OptimizationEngineResult, OptimizationMode
-from src.optimization.engine import OptimizationEngine
+from src.optimization.common.problem import (
+    AssignmentPlan,
+    CanonicalOptimizationProblem,
+    DepotEnergyAsset,
+    EnergyPriceSlot,
+    OptimizationConfig,
+    OptimizationEngineResult,
+    OptimizationMode,
+    OptimizationScenario,
+    ProblemDepot,
+)
+from src.optimization.engine import OptimizationEngine, _repair_bess_terminal_soc
 
 
 class _FakeMILPOptimizer:
@@ -12,6 +22,45 @@ class _FakeMILPOptimizer:
 
     def solve(self, problem, config) -> OptimizationEngineResult:  # noqa: ANN001
         return self._result
+
+
+def test_postsolve_bess_terminal_soc_repair_shifts_late_discharge_to_grid() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-bess", timestep_min=60),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        price_slots=(
+            EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),
+            EnergyPriceSlot(slot_index=1, grid_buy_yen_per_kwh=20.0),
+        ),
+        depot_energy_assets={
+            "dep-1": DepotEnergyAsset(
+                depot_id="dep-1",
+                bess_enabled=True,
+                bess_energy_kwh=100.0,
+                bess_power_kw=100.0,
+                bess_initial_soc_kwh=50.0,
+                bess_soc_min_kwh=0.0,
+                bess_soc_max_kwh=100.0,
+                bess_discharge_efficiency=1.0,
+                bess_terminal_soc_min_kwh=30.0,
+            )
+        },
+    )
+    plan = AssignmentPlan(
+        bess_to_bus_kwh_by_depot_slot={"dep-1": {0: 10.0, 1: 30.0}},
+    )
+
+    repaired = _repair_bess_terminal_soc(problem, plan)
+
+    assert repaired.bess_to_bus_kwh_by_depot_slot["dep-1"][0] == 10.0
+    assert repaired.bess_to_bus_kwh_by_depot_slot["dep-1"].get(1, 0.0) == 10.0
+    assert repaired.grid_to_bus_kwh_by_depot_slot["dep-1"][1] == 20.0
+    assert repaired.bess_soc_kwh_by_depot_slot["dep-1"][1] == 30.0
+    assert repaired.metadata["bess_terminal_soc_violation_kwh"] == 0.0
+    assert repaired.metadata["bess_terminal_soc_repair_shifted_to_grid_kwh"] == 20.0
 
 
 def test_optimization_engine_rebuilds_impossible_fragment_sequence() -> None:
