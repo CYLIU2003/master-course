@@ -3226,6 +3226,10 @@ def export_co2_breakdown(
 
     payload = {
         "total_co2_kg": sim.total_co2_kg,
+        "ice_bus_co2_kg": round(co2_ice, 4),
+        "grid_electricity_co2_kg": round(co2_grid, 4) if co2_grid is not None else None,
+        "pv_operational_co2_kg": 0.0,
+        "bess_storage_operational_co2_kg": 0.0,
         "engine_bus_co2_kg": round(co2_ice, 4),
         "power_generation_co2_kg": round(co2_grid, 4) if co2_grid is not None else None,
         "power_generation_co2_note": (
@@ -3239,8 +3243,10 @@ def export_co2_breakdown(
     _write_csv(
         run_dir / "co2_breakdown.csv",
         [
-            {"component": "engine_bus_co2_kg", "value": payload["engine_bus_co2_kg"]},
-            {"component": "power_generation_co2_kg", "value": payload["power_generation_co2_kg"]},
+            {"component": "ice_bus_co2_kg", "value": payload["ice_bus_co2_kg"]},
+            {"component": "grid_electricity_co2_kg", "value": payload["grid_electricity_co2_kg"]},
+            {"component": "pv_operational_co2_kg", "value": payload["pv_operational_co2_kg"]},
+            {"component": "bess_storage_operational_co2_kg", "value": payload["bess_storage_operational_co2_kg"]},
             {"component": "total_co2_kg", "value": payload["total_co2_kg"]},
         ],
     )
@@ -3884,15 +3890,22 @@ def export_depot_energy_flows(
         total_grid_import_kw = 0.0
         total_pv_used_kw = 0.0
         for t_idx in ms.T:
+            grid_to_bus_kwh = float(grid_to_bus.get(depot_id, {}).get(t_idx, 0.0))
+            bess_to_bus_kwh = float(bess_to_bus.get(depot_id, {}).get(t_idx, 0.0))
+            grid_to_bess_kwh = float(grid_to_bess.get(depot_id, {}).get(t_idx, 0.0))
+            grid_import_for_contract_kwh = grid_to_bus_kwh + grid_to_bess_kwh
             row = {
                 "depot_id": depot_id,
                 "time_idx": t_idx,
                 "grid_import_kw": float(grid_import_kw.get(depot_id, {}).get(t_idx, 0.0)),
                 "pv_used_kw": float(pv_used_kw.get(depot_id, {}).get(t_idx, 0.0)),
-                "grid_to_bus_kwh": float(grid_to_bus.get(depot_id, {}).get(t_idx, 0.0)),
-                "bess_to_bus_kwh": float(bess_to_bus.get(depot_id, {}).get(t_idx, 0.0)),
+                "grid_to_bus_kwh": grid_to_bus_kwh,
+                "bess_to_bus_kwh": bess_to_bus_kwh,
                 "pv_to_bess_kwh": float(pv_to_bess.get(depot_id, {}).get(t_idx, 0.0)),
-                "grid_to_bess_kwh": float(grid_to_bess.get(depot_id, {}).get(t_idx, 0.0)),
+                "grid_to_bess_kwh": grid_to_bess_kwh,
+                "grid_import_for_contract_kwh": grid_import_for_contract_kwh,
+                "bus_charge_from_grid_kwh": grid_to_bus_kwh,
+                "bus_charge_from_bess_kwh": bess_to_bus_kwh,
                 "pv_curtail_kwh": float(pv_curtail.get(depot_id, {}).get(t_idx, 0.0)),
                 "bess_soc_kwh": float(bess_soc.get(depot_id, {}).get(t_idx, 0.0)),
                 "contract_over_limit_kwh": float(contract_over_limit.get(depot_id, {}).get(t_idx, 0.0)),
@@ -3915,6 +3928,9 @@ def export_depot_energy_flows(
                 "bess_to_bus_kwh_sum": total_bess_to_bus,
                 "pv_to_bess_kwh_sum": total_pv_to_bess,
                 "grid_to_bess_kwh_sum": total_grid_to_bess,
+                "grid_import_for_contract_kwh_sum": total_grid_to_bus + total_grid_to_bess,
+                "bus_charge_from_grid_kwh_sum": total_grid_to_bus,
+                "bus_charge_from_bess_kwh_sum": total_bess_to_bus,
                 "pv_curtail_kwh_sum": total_pv_curtail,
                 "contract_over_limit_kwh_sum": sum(float(v) for v in contract_over_limit.get(depot_id, {}).values()),
             }

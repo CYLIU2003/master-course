@@ -982,6 +982,7 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
             pv_balance_residual_kwh = pv_generation_kwh - pv_to_bus - pv_to_bess - pv_curtail
             contract_limit_kw = float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0)
             grid_import_total_kwh = grid_to_bus + grid_to_bess
+            grid_import_for_contract_kwh = grid_import_total_kwh
             total_bus_charge_kwh = grid_to_bus + pv_to_bus + bess_to_bus
             total_bess_charge_kwh = pv_to_bess + grid_to_bess
             grid_import_kw = grid_import_total_kwh / timestep_h if timestep_h > 0.0 else 0.0
@@ -1023,7 +1024,11 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                     "pv_balance_residual_kwh": pv_balance_residual_kwh,
                     "bess_soc_kwh": bess_soc,
                     "grid_import_total_kwh": grid_import_total_kwh,
+                    "grid_import_for_contract_kwh": grid_import_for_contract_kwh,
                     "grid_import_kw": grid_import_kw,
+                    "grid_import_for_contract_kw": grid_import_kw,
+                    "bus_charge_from_grid_kwh": grid_to_bus,
+                    "bus_charge_from_bess_kwh": bess_to_bus,
                     "total_bus_charge_kwh": total_bus_charge_kwh,
                     "total_bess_charge_kwh": total_bess_charge_kwh,
                     "total_charge_kw": total_charge_kw,
@@ -1069,7 +1074,10 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                     pv_to_bess_total,
                 ),
                 "grid_import_total_kwh": grid_to_bus_total + grid_to_bess_total,
+                "grid_import_for_contract_kwh": grid_to_bus_total + grid_to_bess_total,
                 "total_bus_charge_kwh": grid_to_bus_total + pv_to_bus_total + bess_to_bus_total,
+                "bus_charge_from_grid_kwh": grid_to_bus_total,
+                "bus_charge_from_bess_kwh": bess_to_bus_total,
                 "total_bess_charge_kwh": pv_to_bess_total + grid_to_bess_total,
                 "bess_initial_soc_kwh": bess_initial_soc,
                 "bess_final_soc_kwh": bess_final_soc,
@@ -1141,7 +1149,10 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                     sum(float(row["pv_to_bess_kwh"]) for row in per_depot),
                 ),
                 "grid_import_total_kwh": overall_grid_import_total_kwh,
+                "grid_import_for_contract_kwh": overall_grid_import_total_kwh,
                 "total_bus_charge_kwh": sum(float(row["total_bus_charge_kwh"]) for row in per_depot),
+                "bus_charge_from_grid_kwh": sum(float(row["bus_charge_from_grid_kwh"]) for row in per_depot),
+                "bus_charge_from_bess_kwh": sum(float(row["bus_charge_from_bess_kwh"]) for row in per_depot),
                 "total_bess_charge_kwh": sum(float(row["total_bess_charge_kwh"]) for row in per_depot),
                 "peak_grid_import_kw_any_depot": overall_peak_grid_kw,
                 "peak_grid_import_kw_all_depots": overall_by_slot_grid_peak,
@@ -1229,6 +1240,9 @@ def _persist_rich_run_outputs(
         "pv_to_bess_kwh": "kWh",
         "pv_curtail_kwh": "kWh",
         "grid_import_total_kwh": "kWh",
+        "grid_import_for_contract_kwh": "kWh",
+        "bus_charge_from_grid_kwh": "kWh",
+        "bus_charge_from_bess_kwh": "kWh",
         "contract_over_limit_kwh": "kWh",
         "contract_overage_cost": "JPY",
         "peak_grid_kw": "kW",
@@ -1280,6 +1294,10 @@ def _persist_rich_run_outputs(
     }
     (run_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    solver_settings = dict(optimization_result.get("solver_settings") or {})
+    (run_dir / "solver_settings.json").write_text(
+        json.dumps(solver_settings, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
     cost_breakdown = dict(optimization_result.get("cost_breakdown") or {})
@@ -1737,7 +1755,11 @@ def _persist_rich_run_outputs(
                 "pv_balance_residual_kwh",
                 "bess_soc_kwh",
                 "grid_import_total_kwh",
+                "grid_import_for_contract_kwh",
                 "grid_import_kw",
+                "grid_import_for_contract_kw",
+                "bus_charge_from_grid_kwh",
+                "bus_charge_from_bess_kwh",
                 "total_bus_charge_kwh",
                 "total_bess_charge_kwh",
                 "total_charge_kw",
@@ -1752,12 +1774,16 @@ def _persist_rich_run_outputs(
         )
     else:
         grid_to_bus_kwh = float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0)
+        bess_to_bus_kwh = float(cost_breakdown.get("bess_to_bus_kwh", 0.0) or 0.0)
         grid_to_bess_kwh = float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0)
         grid_import_total_kwh = grid_to_bus_kwh + grid_to_bess_kwh
         fallback_rows = [
             {"metric": "grid_to_bus_kwh", "value": grid_to_bus_kwh, "unit": "kWh"},
             {"metric": "grid_to_bess_kwh", "value": grid_to_bess_kwh, "unit": "kWh"},
             {"metric": "grid_import_total_kwh", "value": grid_import_total_kwh, "unit": "kWh"},
+            {"metric": "grid_import_for_contract_kwh", "value": grid_import_total_kwh, "unit": "kWh"},
+            {"metric": "bus_charge_from_grid_kwh", "value": grid_to_bus_kwh, "unit": "kWh"},
+            {"metric": "bus_charge_from_bess_kwh", "value": bess_to_bus_kwh, "unit": "kWh"},
         ]
         (run_dir / "depot_energy_flows.json").write_text(
             json.dumps({"rows": fallback_rows}, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -1781,6 +1807,9 @@ def _persist_rich_run_outputs(
             {"metric": "pv_utilization_rate", "value": float(totals.get("pv_utilization_rate", 0.0) or 0.0), "unit": "ratio"},
             {"metric": "bess_terminal_soc_violation_kwh", "value": float(totals.get("bess_terminal_soc_violation_kwh", 0.0) or 0.0), "unit": "kWh"},
             {"metric": "grid_import_total_kwh", "value": float(totals.get("grid_import_total_kwh", 0.0) or 0.0), "unit": "kWh"},
+            {"metric": "grid_import_for_contract_kwh", "value": float(totals.get("grid_import_for_contract_kwh", totals.get("grid_import_total_kwh", 0.0)) or 0.0), "unit": "kWh"},
+            {"metric": "bus_charge_from_grid_kwh", "value": float(totals.get("bus_charge_from_grid_kwh", totals.get("grid_to_bus_kwh", 0.0)) or 0.0), "unit": "kWh"},
+            {"metric": "bus_charge_from_bess_kwh", "value": float(totals.get("bus_charge_from_bess_kwh", totals.get("bess_to_bus_kwh", 0.0)) or 0.0), "unit": "kWh"},
             {"metric": "peak_grid_import_kw_all_depots", "value": float(totals.get("peak_grid_import_kw_all_depots", 0.0) or 0.0), "unit": "kW"},
             {"metric": "contract_over_limit_kwh", "value": float(totals.get("contract_over_limit_kwh", 0.0) or 0.0), "unit": "kWh"},
             {"metric": "contract_overage_cost_jpy", "value": float(totals.get("contract_overage_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
@@ -1792,12 +1821,16 @@ def _persist_rich_run_outputs(
         ]
     else:
         grid_to_bus_kwh = float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0)
+        bess_to_bus_kwh = float(cost_breakdown.get("bess_to_bus_kwh", 0.0) or 0.0)
         grid_to_bess_kwh = float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0)
         grid_import_total_kwh = grid_to_bus_kwh + grid_to_bess_kwh
         site_rows = [
             {"metric": "grid_to_bus_kwh", "value": grid_to_bus_kwh, "unit": "kWh"},
             {"metric": "grid_to_bess_kwh", "value": grid_to_bess_kwh, "unit": "kWh"},
             {"metric": "grid_import_total_kwh", "value": grid_import_total_kwh, "unit": "kWh"},
+            {"metric": "grid_import_for_contract_kwh", "value": grid_import_total_kwh, "unit": "kWh"},
+            {"metric": "bus_charge_from_grid_kwh", "value": grid_to_bus_kwh, "unit": "kWh"},
+            {"metric": "bus_charge_from_bess_kwh", "value": bess_to_bus_kwh, "unit": "kWh"},
         ]
     _write_csv_rows(run_dir / "site_power_balance.csv", site_rows, ["metric", "value", "unit"])
 
@@ -1828,9 +1861,28 @@ def _persist_rich_run_outputs(
             dict((charging_summary_payload or {}).get("totals") or {}).get("grid_import_total_kwh", 0.0)
             or (float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0) + float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0))
         ),
+        "grid_import_for_contract_kwh": float(
+            dict((charging_summary_payload or {}).get("totals") or {}).get("grid_import_for_contract_kwh", 0.0)
+            or dict((charging_summary_payload or {}).get("totals") or {}).get("grid_import_total_kwh", 0.0)
+            or (float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0) + float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0))
+        ),
+        "bus_charge_from_grid_kwh": float(
+            dict((charging_summary_payload or {}).get("totals") or {}).get("bus_charge_from_grid_kwh", 0.0)
+            or float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0)
+        ),
+        "bus_charge_from_bess_kwh": float(
+            dict((charging_summary_payload or {}).get("totals") or {}).get("bus_charge_from_bess_kwh", 0.0)
+            or float(cost_breakdown.get("bess_to_bus_kwh", 0.0) or 0.0)
+        ),
         "served_trip_count": int(summary_payload.get("trip_count_served") or 0),
         "unserved_trip_count": int(summary_payload.get("trip_count_unserved") or 0),
         "solver_runtime_sec": float(optimization_result.get("solve_time_seconds") or 0.0),
+        "time_limit_seconds_requested": solver_settings.get("time_limit_seconds_requested"),
+        "time_limit_seconds_effective": solver_settings.get("time_limit_seconds_effective"),
+        "mip_gap_requested_ratio": solver_settings.get("mip_gap_requested_ratio"),
+        "mip_gap_requested_percent": solver_settings.get("mip_gap_requested_percent"),
+        "mip_gap_achieved_ratio": solver_settings.get("mip_gap_achieved_ratio"),
+        "mip_gap_achieved_percent": solver_settings.get("mip_gap_achieved_percent"),
     }
     if charging_summary_payload:
         totals = dict(charging_summary_payload.get("totals") or {})
@@ -1839,6 +1891,9 @@ def _persist_rich_run_outputs(
                 "pv_to_bus_kwh": float(totals.get("pv_to_bus_kwh", 0.0) or 0.0),
                 "bess_to_bus_kwh": float(totals.get("bess_to_bus_kwh", 0.0) or 0.0),
                 "grid_to_bess_kwh": float(totals.get("grid_to_bess_kwh", 0.0) or 0.0),
+                "grid_import_for_contract_kwh": float(totals.get("grid_import_for_contract_kwh", totals.get("grid_import_total_kwh", 0.0)) or 0.0),
+                "bus_charge_from_grid_kwh": float(totals.get("bus_charge_from_grid_kwh", totals.get("grid_to_bus_kwh", 0.0)) or 0.0),
+                "bus_charge_from_bess_kwh": float(totals.get("bus_charge_from_bess_kwh", totals.get("bess_to_bus_kwh", 0.0)) or 0.0),
                 "pv_to_bess_kwh": float(totals.get("pv_to_bess_kwh", 0.0) or 0.0),
                 "contract_over_limit_kwh": float(totals.get("contract_over_limit_kwh", 0.0) or 0.0),
                 "contract_overage_cost_jpy": float(totals.get("contract_overage_cost_jpy", 0.0) or 0.0),
@@ -1917,6 +1972,7 @@ def _persist_rich_run_outputs(
             if weather_policy.get("enabled")
             else []
         ),
+        "solver_settings": solver_settings,
         "graph": {
             "manifest_path": "graph/manifest.json",
             "route_band_diagrams_manifest": str(
@@ -2506,14 +2562,17 @@ def _canonical_depot_power_rows_5min(
             bess_soc_kwh = float((flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_over_limit_kwh = float((flow_ctx["contract_over_limit_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_limit_kw = float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0)
+            grid_import_for_contract_kwh = grid_to_bus + grid_to_bess
             if contract_limit_kw > 0.0:
                 contract_over_limit_kwh = max(
                     contract_over_limit_kwh,
-                    (grid_to_bus + grid_to_bess) - (contract_limit_kw * timestep_h),
+                    grid_import_for_contract_kwh - (contract_limit_kw * timestep_h),
                     0.0,
                 )
             slot_values_by_depot[depot_id][slot_idx] = {
-                "grid_import_kw": (grid_to_bus + grid_to_bess) / timestep_h,
+                "grid_import_kw": grid_import_for_contract_kwh / timestep_h,
+                "grid_import_for_contract_kwh": grid_import_for_contract_kwh,
+                "grid_import_for_contract_kw": grid_import_for_contract_kwh / timestep_h,
                 "pv_generation_kw": pv_generation / timestep_h,
                 "pv_used_for_charging_kw": pv_to_bus / timestep_h,
                 "pv_used_for_building_kw": 0.0,
@@ -2528,6 +2587,8 @@ def _canonical_depot_power_rows_5min(
                 "bess_to_bus_kwh": bess_to_bus,
                 "pv_to_bess_kwh": pv_to_bess,
                 "grid_to_bess_kwh": grid_to_bess,
+                "bus_charge_from_grid_kwh": grid_to_bus,
+                "bus_charge_from_bess_kwh": bess_to_bus,
                 "bess_soc_kwh": bess_soc_kwh,
                 "contract_limit_kw": contract_limit_kw,
                 "contract_over_limit_kwh": contract_over_limit_kwh,
@@ -2550,12 +2611,18 @@ def _canonical_depot_power_rows_5min(
             bess_to_bus_hourly_source_kwh = float(values.get("bess_to_bus_kwh", 0.0) or 0.0)
             pv_to_bess_hourly_source_kwh = float(values.get("pv_to_bess_kwh", 0.0) or 0.0)
             grid_to_bess_hourly_source_kwh = float(values.get("grid_to_bess_kwh", 0.0) or 0.0)
+            grid_import_for_contract_hourly_source_kwh = float(values.get("grid_import_for_contract_kwh", 0.0) or 0.0)
+            bus_charge_from_grid_hourly_source_kwh = float(values.get("bus_charge_from_grid_kwh", 0.0) or 0.0)
+            bus_charge_from_bess_hourly_source_kwh = float(values.get("bus_charge_from_bess_kwh", 0.0) or 0.0)
             contract_over_limit_hourly_source_kwh = float(values.get("contract_over_limit_kwh", 0.0) or 0.0)
             grid_to_bus_slot_kwh = grid_to_bus_hourly_source_kwh * slot_scale
             pv_to_bus_slot_kwh = pv_to_bus_hourly_source_kwh * slot_scale
             bess_to_bus_slot_kwh = bess_to_bus_hourly_source_kwh * slot_scale
             pv_to_bess_slot_kwh = pv_to_bess_hourly_source_kwh * slot_scale
             grid_to_bess_slot_kwh = grid_to_bess_hourly_source_kwh * slot_scale
+            grid_import_for_contract_slot_kwh = grid_import_for_contract_hourly_source_kwh * slot_scale
+            bus_charge_from_grid_slot_kwh = bus_charge_from_grid_hourly_source_kwh * slot_scale
+            bus_charge_from_bess_slot_kwh = bus_charge_from_bess_hourly_source_kwh * slot_scale
             contract_over_limit_slot_kwh = contract_over_limit_hourly_source_kwh * slot_scale
             timestamp = (
                 datetime.combine(base_date, datetime.min.time(), timezone(timedelta(hours=9)))
@@ -2569,8 +2636,17 @@ def _canonical_depot_power_rows_5min(
                     "slot_minutes": output_slot_min,
                     "total_charge_kw": float(values.get("total_charge_kw", 0.0) or 0.0),
                     "grid_import_kw": grid_import_kw,
+                    "grid_import_for_contract_kw": float(values.get("grid_import_for_contract_kw", grid_import_kw) or 0.0),
                     "grid_import_slot_kwh": grid_import_kw * output_slot_h,
+                    "grid_import_for_contract_slot_kwh": grid_import_for_contract_slot_kwh,
                     "grid_import_hourly_source_kwh": grid_to_bus_hourly_source_kwh + grid_to_bess_hourly_source_kwh,
+                    "grid_import_for_contract_hourly_source_kwh": grid_import_for_contract_hourly_source_kwh,
+                    "bus_charge_from_grid_kwh": bus_charge_from_grid_slot_kwh,
+                    "bus_charge_from_grid_slot_kwh": bus_charge_from_grid_slot_kwh,
+                    "bus_charge_from_grid_hourly_source_kwh": bus_charge_from_grid_hourly_source_kwh,
+                    "bus_charge_from_bess_kwh": bus_charge_from_bess_slot_kwh,
+                    "bus_charge_from_bess_slot_kwh": bus_charge_from_bess_slot_kwh,
+                    "bus_charge_from_bess_hourly_source_kwh": bus_charge_from_bess_hourly_source_kwh,
                     "grid_to_bus_kwh": grid_to_bus_slot_kwh,
                     "grid_to_bus_slot_kwh": grid_to_bus_slot_kwh,
                     "grid_to_bus_hourly_source_kwh": grid_to_bus_hourly_source_kwh,
@@ -2649,12 +2725,15 @@ def _research_rows_from_depot_power(
                 "depot_id": depot_id,
             }
             grid_import_kw = float(row.get("grid_import_kw", 0.0) or 0.0)
+            grid_import_for_contract_kw = float(row.get("grid_import_for_contract_kw", grid_import_kw) or 0.0)
             contract_limit_kw = float(row.get("contract_limit_kw", 0.0) or 0.0)
             grid_rows.append(
                 {
                     **base,
                     "grid_import_kw": grid_import_kw,
+                    "grid_import_for_contract_kw": grid_import_for_contract_kw,
                     "grid_import_slot_kwh": float(row.get("grid_import_slot_kwh", 0.0) or 0.0),
+                    "grid_import_for_contract_slot_kwh": float(row.get("grid_import_for_contract_slot_kwh", row.get("grid_import_slot_kwh", 0.0)) or 0.0),
                     "contract_limit_kw": contract_limit_kw,
                     "contract_over_limit_slot_kwh": float(row.get("contract_over_limit_slot_kwh", 0.0) or 0.0),
                 }
@@ -2675,6 +2754,9 @@ def _research_rows_from_depot_power(
                     "pv_to_bess_slot_kwh": float(row.get("pv_to_bess_slot_kwh", 0.0) or 0.0),
                     "bess_to_bus_slot_kwh": float(row.get("bess_to_bus_slot_kwh", 0.0) or 0.0),
                     "grid_to_bess_slot_kwh": float(row.get("grid_to_bess_slot_kwh", 0.0) or 0.0),
+                    "grid_import_for_contract_slot_kwh": float(row.get("grid_import_for_contract_slot_kwh", row.get("grid_import_slot_kwh", 0.0)) or 0.0),
+                    "bus_charge_from_grid_slot_kwh": float(row.get("bus_charge_from_grid_slot_kwh", row.get("grid_to_bus_slot_kwh", 0.0)) or 0.0),
+                    "bus_charge_from_bess_slot_kwh": float(row.get("bus_charge_from_bess_slot_kwh", row.get("bess_to_bus_slot_kwh", 0.0)) or 0.0),
                     "bess_soc_kwh": float(row.get("bess_soc_kwh", 0.0) or 0.0),
                 }
             )
@@ -3275,6 +3357,10 @@ def _solution_validity_payload(
         blocking_reasons.append("baseline_fallback")
     if status_upper == "PARTIAL_BASELINE_FALLBACK":
         blocking_reasons.append("partial_baseline_fallback")
+    if status_upper == "TRUTHFUL_BASELINE_GUARDRAIL":
+        blocking_reasons.append("truthful_baseline_guardrail")
+    if status_upper == "POSTSOLVE_REPAIRED":
+        blocking_reasons.append("postsolve_repaired")
     if not bool(feasible):
         blocking_reasons.append("postsolve_infeasible")
     if reasons:
@@ -3290,19 +3376,71 @@ def _solution_validity_payload(
     validated_no_cancellation = bool(validated_feasible and unserved == 0)
     if not blocking_reasons:
         status_reason = "validated_feasible_no_cancellation" if validated_no_cancellation else "validated_feasible"
+        result_class = "exact_or_validated"
     elif "partial_baseline_fallback" in blocking_reasons:
         status_reason = "partial_baseline_fallback"
+        result_class = "baseline_fallback"
+    elif "truthful_baseline_guardrail" in blocking_reasons:
+        status_reason = "truthful_baseline_guardrail"
+        result_class = "truthful_baseline_guardrail"
+    elif "postsolve_repaired" in blocking_reasons:
+        status_reason = "postsolve_repaired"
+        result_class = "postsolve_repaired"
     elif "baseline_fallback" in blocking_reasons or "postsolve_infeasible" in blocking_reasons:
         status_reason = "baseline_fallback_or_postsolve_infeasible"
+        result_class = "baseline_fallback" if "baseline_fallback" in blocking_reasons else "postsolve_infeasible"
     elif "unserved_trips_present" in blocking_reasons:
         status_reason = "unserved_trips_present"
+        result_class = "postsolve_infeasible"
     else:
         status_reason = "infeasibility_reasons_present"
+        result_class = "postsolve_infeasible"
     return {
         "validated_no_cancellation": validated_no_cancellation,
         "validated_feasible": bool(validated_feasible),
         "status_reason": status_reason,
+        "result_class": result_class,
         "blocking_reasons": blocking_reasons,
+    }
+
+
+def _solver_settings_payload(
+    *,
+    time_limit_seconds_requested: Any,
+    mip_gap_requested: Any,
+    solver_metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    def _float_or_none(value: Any) -> Optional[float]:
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _int_or_none(value: Any) -> Optional[int]:
+        parsed = _float_or_none(value)
+        return None if parsed is None else int(parsed)
+
+    metadata = dict(solver_metadata or {})
+    effective_limits = dict(metadata.get("effective_limits") or {})
+    requested_gap = _float_or_none(mip_gap_requested)
+    achieved_gap = _float_or_none(metadata.get("final_gap"))
+    effective_time_limit = _int_or_none(
+        effective_limits.get("time_limit_sec", metadata.get("time_limit_sec", time_limit_seconds_requested))
+    )
+    return {
+        "time_limit_seconds_requested": _int_or_none(time_limit_seconds_requested),
+        "time_limit_seconds_effective": effective_time_limit,
+        "mip_gap_requested_ratio": requested_gap,
+        "mip_gap_requested_percent": None if requested_gap is None else requested_gap * 100.0,
+        "mip_gap_achieved_ratio": achieved_gap,
+        "mip_gap_achieved_percent": None if achieved_gap is None else achieved_gap * 100.0,
+        "gurobi_mip_gap_is_ratio": True,
+        "solver_termination_reason": metadata.get("termination_reason"),
+        "supports_exact_milp": bool(metadata.get("supports_exact_milp", False)),
+        "fallback_applied": bool(metadata.get("fallback_applied", False)),
+        "fallback_reason": str(metadata.get("fallback_reason") or ""),
     }
 
 
@@ -3804,6 +3942,11 @@ def _run_optimization(
         weather_policy_payload = _weather_policy_payload_from_problem_metadata(
             dict(problem.metadata or {})
         )
+        solver_settings = _solver_settings_payload(
+            time_limit_seconds_requested=time_limit_seconds,
+            mip_gap_requested=mip_gap,
+            solver_metadata=solver_metadata,
+        )
 
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
@@ -3820,6 +3963,8 @@ def _run_optimization(
             "objective_value": result_payload.get("objective_value"),
             "solve_time_seconds": result_payload.get("solve_time_seconds", 0.0),
             "mip_gap": result_payload.get("mip_gap"),
+            "solver_metadata": solver_metadata,
+            "solver_settings": solver_settings,
             "warnings": result_warnings,
             "infeasibility_reasons": result_infeasibility_reasons,
             "strict_coverage_precheck": strict_coverage_precheck,
@@ -3983,6 +4128,8 @@ def _run_optimization(
             "startup_rejected_vehicle_ids_by_duty": startup_rejected_vehicle_ids_by_duty,
             "time_limit": time_limit_seconds,
             "mip_gap": mip_gap,
+            "solver_settings": solver_settings,
+            **solver_settings,
             "random_seed": random_seed,
             "gurobi_seed": random_seed,
             "alns_iterations": alns_iterations,

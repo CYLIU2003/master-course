@@ -8976,7 +8976,14 @@ class App:
 
         row_gap = ttk.Frame(solver_box)
         row_gap.pack(fill=tk.X, pady=3)
-        ttk.Label(row_gap, text="MILPギャップ", width=24).pack(side=tk.LEFT)
+        lbl_gap = ttk.Label(row_gap, text="MILPギャップ（比率: 0.01 = 1%）", width=32)
+        lbl_gap.pack(side=tk.LEFT)
+        _Tooltip(
+            lbl_gap,
+            "Gurobi MIPGapに渡す比率です。\n"
+            "0.001 = 0.1%、0.01 = 1%、1 = 100%。\n"
+            "厳密な%値ではなく小数比率で入力してください。",
+        )
         ttk.Entry(row_gap, textvariable=self.mip_gap_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         row_successors = ttk.Frame(solver_box)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -570,3 +571,52 @@ def test_canonical_graph_exports_fallback_grid_import_and_contract_exceedance(tm
     assert float(charged_rows[0]["contract_over_limit_kwh"]) > 0.0
     assert charged_rows[0]["contract_limit_exceeded"] == "True"
     assert charged_rows[0]["source_provenance_exact"] == "False"
+
+
+def test_contract_grid_import_columns_exclude_bess_to_bus() -> None:
+    problem, result, _scenario = _problem_and_result()
+    result = replace(
+        result,
+        plan=replace(
+            result.plan,
+            charging_slots=(),
+            grid_to_bus_kwh_by_depot_slot={"dep1": {0: 100.0}},
+            grid_to_bess_kwh_by_depot_slot={"dep1": {0: 20.0}},
+            bess_to_bus_kwh_by_depot_slot={"dep1": {0: 80.0}},
+            pv_to_bus_kwh_by_depot_slot={},
+            pv_to_bess_kwh_by_depot_slot={},
+        ),
+    )
+
+    rows = optimization._canonical_depot_power_rows_5min(
+        problem=problem,
+        engine_result=result,
+        scenario_id="scenario-1",
+        base_date=date(2026, 4, 5),
+    )
+
+    assert rows
+    assert abs(sum(float(row["grid_import_for_contract_slot_kwh"]) for row in rows) - 120.0) < 1.0e-9
+    assert abs(sum(float(row["bus_charge_from_bess_slot_kwh"]) for row in rows) - 80.0) < 1.0e-9
+    first_row = rows[0]
+    assert float(first_row["grid_import_for_contract_hourly_source_kwh"]) == 120.0
+    assert float(first_row["bus_charge_from_bess_hourly_source_kwh"]) == 80.0
+
+
+def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
+    payload = optimization._solver_settings_payload(
+        time_limit_seconds_requested=300,
+        mip_gap_requested=0.01,
+        solver_metadata={
+            "effective_limits": {"time_limit_sec": 300, "mip_gap": 0.01},
+            "final_gap": 0.0025,
+            "supports_exact_milp": True,
+        },
+    )
+
+    assert payload["time_limit_seconds_requested"] == 300
+    assert payload["time_limit_seconds_effective"] == 300
+    assert payload["mip_gap_requested_ratio"] == 0.01
+    assert payload["mip_gap_requested_percent"] == 1.0
+    assert payload["mip_gap_achieved_ratio"] == 0.0025
+    assert payload["mip_gap_achieved_percent"] == 0.25

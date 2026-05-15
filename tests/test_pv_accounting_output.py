@@ -113,6 +113,26 @@ def test_cost_breakdown_detail_recomputes_stale_pv_curtail_from_balance() -> Non
     assert rows["pv_to_bess_kwh"] == pytest.approx(560.873775)
 
 
+def test_cost_breakdown_preserves_ice_and_grid_co2_components() -> None:
+    rows = cost_breakdown(
+        {
+            "objective_value": 0.0,
+            "obj_breakdown": {
+                "ice_co2_kg": 843.4781585725418,
+                "grid_electricity_co2_kg": 2170.0329994704207,
+                "total_co2_kg": 3013.5111580429625,
+            },
+        },
+        None,
+    )
+
+    assert rows["ice_bus_co2_kg"] == pytest.approx(843.4781585725418)
+    assert rows["grid_electricity_co2_kg"] == pytest.approx(2170.0329994704207)
+    assert rows["pv_operational_co2_kg"] == pytest.approx(0.0)
+    assert rows["bess_storage_operational_co2_kg"] == pytest.approx(0.0)
+    assert rows["total_co2_kg"] == pytest.approx(3013.5111580429625)
+
+
 def test_canonical_charging_output_reconciles_pv_curtail_from_generation() -> None:
     problem = CanonicalOptimizationProblem(
         scenario=OptimizationScenario(scenario_id="s-pv", timestep_min=60),

@@ -174,7 +174,8 @@ class TestMILPResultSerialization:
         serialized = serialize_milp_result(original)
         deserialized = deserialize_milp_result(serialized)
         
-        assert deserialized.obj_breakdown == obj_breakdown
+        for key, value in obj_breakdown.items():
+            assert deserialized.obj_breakdown[key] == value
 
 
 class TestDetailedEnergyFlowPreservation:

@@ -1,3 +1,4 @@
+import inspect
 import random
 from pathlib import Path
 
@@ -309,6 +310,13 @@ def test_weather_proxy_time_limit_guard_does_not_affect_alns(monkeypatch) -> Non
     app.log_line = lambda message: None
 
     assert App._effective_optimization_time_limit_seconds(app) == 3000
+
+
+def test_solver_settings_window_labels_mip_gap_as_ratio() -> None:
+    source = inspect.getsource(App.open_solver_settings_window)
+
+    assert "MILPギャップ（比率: 0.01 = 1%）" in source
+    assert "0.001 = 0.1%" in source
 
 
 def test_weather_proxy_json_loader_rejects_service_date_mismatch(tmp_path: Path) -> None:

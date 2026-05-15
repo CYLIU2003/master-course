@@ -156,6 +156,33 @@ def cost_breakdown(
         or obj_breakdown.get("electricity_cost_provisional_leftover")
         or max(provisional_energy - final_energy_cost, 0.0)
     )
+    ice_co2_kg = first_float(
+        obj_breakdown.get("ice_co2_kg"),
+        obj_breakdown.get("ice_bus_co2_kg"),
+        obj_breakdown.get("engine_bus_co2_kg"),
+    )
+    grid_electricity_co2_kg = first_float(
+        obj_breakdown.get("grid_electricity_co2_kg"),
+        obj_breakdown.get("power_generation_co2_kg"),
+    )
+    pv_operational_co2_kg = first_float(
+        obj_breakdown.get("pv_operational_co2_kg"),
+        obj_breakdown.get("pv_co2_kg"),
+    )
+    bess_storage_operational_co2_kg = first_float(
+        obj_breakdown.get("bess_storage_operational_co2_kg"),
+    )
+    component_co2_kg = (
+        ice_co2_kg
+        + grid_electricity_co2_kg
+        + pv_operational_co2_kg
+        + bess_storage_operational_co2_kg
+    )
+    reported_co2_kg = first_float(
+        (sim_payload or {}).get("total_co2_kg"),
+        obj_breakdown.get("total_co2_kg"),
+        default=component_co2_kg,
+    )
     aggregate_energy_cost = final_energy_cost + fuel_cost
     return {
         "energy_cost": aggregate_energy_cost,
@@ -235,10 +262,15 @@ def cost_breakdown(
         "weather_strategy_objective_term_jpy_equivalent": float(
             obj_breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
         ),
-        "total_co2_kg": float(
-            (sim_payload or {}).get("total_co2_kg", obj_breakdown.get("total_co2_kg", 0.0))
-            or 0.0
-        ),
+        "ice_co2_kg": ice_co2_kg,
+        "ice_bus_co2_kg": ice_co2_kg,
+        "engine_bus_co2_kg": ice_co2_kg,
+        "grid_electricity_co2_kg": grid_electricity_co2_kg,
+        "power_generation_co2_kg": grid_electricity_co2_kg,
+        "pv_operational_co2_kg": pv_operational_co2_kg,
+        "pv_co2_kg": pv_operational_co2_kg,
+        "bess_storage_operational_co2_kg": bess_storage_operational_co2_kg,
+        "total_co2_kg": reported_co2_kg,
         "total_cost": float(
             total_cost_value
             if total_cost_value is not None
