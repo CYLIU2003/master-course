@@ -513,6 +513,40 @@ def test_canonical_graph_exports_enable_route_band_diagrams_when_fixed_mode_is_o
     assert (tmp_path / "graph" / "route_band_diagrams" / "manifest.json").exists()
 
 
+def test_canonical_graph_exports_research_timeseries_files(tmp_path: Path) -> None:
+    problem, result, scenario = _problem_and_result()
+
+    optimization._persist_canonical_graph_exports(
+        scenario=scenario,
+        problem=problem,
+        engine_result=result,
+        scenario_id="scenario-1",
+        output_dir=str(tmp_path),
+    )
+
+    graph_dir = tmp_path / "graph"
+    for filename in (
+        "co2_timeseries.csv",
+        "cost_timeseries.csv",
+        "contract_limit_timeseries.csv",
+        "bess_timeseries.csv",
+        "vehicle_charging_source_timeseries.csv",
+        "fuel_timeseries.csv",
+    ):
+        assert (graph_dir / filename).exists()
+
+    with (graph_dir / "contract_limit_timeseries.csv").open("r", encoding="utf-8", newline="") as handle:
+        contract_rows = list(csv.DictReader(handle))
+    assert len(contract_rows) == 288
+    assert "grid_import_for_contract_kw" in contract_rows[0]
+    assert "bess_to_bus_excluded_from_contract_kwh" in contract_rows[0]
+
+    with (graph_dir / "vehicle_charging_source_timeseries.csv").open("r", encoding="utf-8", newline="") as handle:
+        vehicle_source_rows = list(csv.DictReader(handle))
+    assert len(vehicle_source_rows) == 288
+    assert abs(sum(float(row["grid_to_vehicle_kwh"]) for row in vehicle_source_rows) - 10.0) < 1.0e-9
+
+
 def test_canonical_graph_exports_fallback_grid_import_and_contract_exceedance(tmp_path: Path) -> None:
     problem, result, scenario = _problem_and_result()
     result = replace(

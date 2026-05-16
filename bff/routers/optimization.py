@@ -2776,6 +2776,378 @@ def _research_rows_from_depot_power(
     }
 
 
+def _hhmm_to_minute(value: str) -> int:
+    hour, minute = str(value or "00:00").split(":", 1)
+    return (int(hour) % 24) * 60 + (int(minute) % 60)
+
+
+def _research_depot_time_index(
+    depot_power_rows: List[Dict[str, Any]],
+) -> tuple[List[str], Dict[tuple[str, str], Dict[str, Any]]]:
+    rows_by_depot_time: Dict[tuple[str, str], Dict[str, Any]] = {}
+    depot_ids = sorted({str(row.get("depot_id") or "") for row in depot_power_rows if str(row.get("depot_id") or "")})
+    for row in depot_power_rows:
+        _out_date, out_time = _research_timestamp_parts(row.get("timestamp"))
+        depot_id = str(row.get("depot_id") or "")
+        if depot_id:
+            rows_by_depot_time[(depot_id, out_time)] = row
+    return depot_ids, rows_by_depot_time
+
+
+def _research_slot_index_for_time(problem, time_hhmm: str) -> int:
+    timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
+    minute = _hhmm_to_minute(time_hhmm)
+    horizon_start = _canonical_horizon_start_min(problem)
+    if minute < horizon_start:
+        minute += 24 * 60
+    return max((minute - horizon_start) // timestep_min, 0)
+
+
+def _research_vehicle_maps(problem) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    vehicle_by_id = {str(getattr(vehicle, "vehicle_id", "") or ""): vehicle for vehicle in list(getattr(problem, "vehicles", ()) or ())}
+    vehicle_type_by_id = {
+        str(getattr(vehicle_type, "vehicle_type_id", "") or ""): vehicle_type
+        for vehicle_type in list(getattr(problem, "vehicle_types", ()) or ())
+    }
+    return vehicle_by_id, vehicle_type_by_id
+
+
+def _research_vehicle_fuel_rate_l_per_km(vehicle: Any, vehicle_type: Any) -> float:
+    for source in (vehicle, vehicle_type):
+        value = getattr(source, "fuel_consumption_l_per_km", None) if source is not None else None
+        if value is not None:
+            parsed = max(float(value or 0.0), 0.0)
+            if parsed > 0.0:
+                return parsed
+    return 0.0
+
+
+def _research_vehicle_co2_kg_per_l(problem, vehicle_type: Any) -> float:
+    value = getattr(vehicle_type, "co2_emission_kg_per_l", None) if vehicle_type is not None else None
+    parsed = max(float(value or 0.0), 0.0) if value is not None else 0.0
+    return parsed if parsed > 0.0 else max(float(getattr(problem.scenario, "ice_co2_kg_per_l", 0.0) or 0.0), 0.0)
+
+
+def _research_is_electric_vehicle(vehicle: Any, vehicle_type: Any) -> bool:
+    powertrain = str(getattr(vehicle_type, "powertrain_type", "") or getattr(vehicle, "vehicle_type", "") or "").upper()
+    return powertrain in {"BEV", "PHEV", "FCEV"}
+
+
+def _research_spread_event_to_5min(
+    bucket: Dict[tuple[str, str], Dict[str, float]],
+    *,
+    base_date: date,
+    depot_id: str,
+    start_time: Any,
+    end_time: Any,
+    values: Dict[str, float],
+) -> None:
+    try:
+        start = datetime.fromisoformat(str(start_time))
+        end = datetime.fromisoformat(str(end_time))
+    except ValueError:
+        return
+    if end <= start:
+        return
+    base_midnight = datetime.combine(base_date, datetime.min.time(), tzinfo=start.tzinfo)
+    start_min = (start - base_midnight).total_seconds() / 60.0
+    end_min = (end - base_midnight).total_seconds() / 60.0
+    duration = max(end_min - start_min, 1.0e-9)
+    bucket_start = int(start_min // 5) * 5
+    while bucket_start < end_min:
+        bucket_end = bucket_start + 5
+        overlap = max(min(bucket_end, end_min) - max(bucket_start, start_min), 0.0)
+        if overlap > 0.0:
+            out_minute = int(bucket_start % (24 * 60))
+            out_time = f"{out_minute // 60:02d}:{out_minute % 60:02d}"
+            target = bucket.setdefault((str(depot_id), out_time), defaultdict(float))
+            for key, value in values.items():
+                target[key] += float(value or 0.0) * overlap / duration
+        bucket_start += 5
+
+
+def _research_fuel_time_bucket(
+    *,
+    problem,
+    timeline_rows: List[Dict[str, Any]],
+    refuel_rows: List[Dict[str, Any]],
+    base_date: date,
+) -> Dict[tuple[str, str], Dict[str, float]]:
+    vehicle_by_id, vehicle_type_by_id = _research_vehicle_maps(problem)
+    bucket: Dict[tuple[str, str], Dict[str, float]] = {}
+    for row in timeline_rows:
+        vehicle_id = str(row.get("vehicle_id") or "")
+        vehicle = vehicle_by_id.get(vehicle_id)
+        vehicle_type = vehicle_type_by_id.get(str(getattr(vehicle, "vehicle_type", "") or row.get("vehicle_type") or ""))
+        if vehicle is None or _research_is_electric_vehicle(vehicle, vehicle_type):
+            continue
+        fuel_rate = _research_vehicle_fuel_rate_l_per_km(vehicle, vehicle_type)
+        if fuel_rate <= 0.0:
+            continue
+        distance_km = max(float(row.get("distance_km", 0.0) or 0.0), 0.0)
+        fuel_l = distance_km * fuel_rate
+        if fuel_l <= 0.0:
+            continue
+        co2 = fuel_l * _research_vehicle_co2_kg_per_l(problem, vehicle_type)
+        state = str(row.get("state") or "")
+        trip_fuel = fuel_l if state == "service" or bool(row.get("is_service")) else 0.0
+        deadhead_fuel = fuel_l if state == "deadhead" or bool(row.get("is_deadhead")) else 0.0
+        _research_spread_event_to_5min(
+            bucket,
+            base_date=base_date,
+            depot_id=str(row.get("depot_id") or getattr(vehicle, "home_depot_id", "") or "depot_default"),
+            start_time=row.get("start_time"),
+            end_time=row.get("end_time"),
+            values={
+                "trip_fuel_liters": trip_fuel,
+                "deadhead_fuel_liters": deadhead_fuel,
+                "fuel_liters": fuel_l,
+                "ice_bus_co2_kg": co2,
+            },
+        )
+    vehicle_home = _canonical_vehicle_home_depot_map(problem)
+    for row in refuel_rows:
+        liters = max(float(row.get("refuel_liters", 0.0) or 0.0), 0.0)
+        if liters <= 0.0:
+            continue
+        vehicle_id = str(row.get("vehicle_id") or "")
+        depot_id = str(row.get("location_id") or vehicle_home.get(vehicle_id) or "depot_default")
+        time_hhmm = str(row.get("time_hhmm") or "00:00")[:5]
+        target = bucket.setdefault((depot_id, time_hhmm), defaultdict(float))
+        target["refuel_liters"] += liters
+    return bucket
+
+
+def _research_extended_timeseries_exports(
+    *,
+    problem,
+    engine_result,
+    depot_power_rows: List[Dict[str, Any]],
+    timeline_rows: List[Dict[str, Any]],
+    refuel_rows: List[Dict[str, Any]],
+    base_date: date,
+) -> Dict[str, List[Dict[str, Any]]]:
+    depot_ids, rows_by_depot_time = _research_depot_time_index(depot_power_rows)
+    depot_ids = sorted(set(depot_ids) | {str(getattr(depot, "depot_id", "") or "") for depot in list(getattr(problem, "depots", ()) or ()) if str(getattr(depot, "depot_id", "") or "")})
+    if not depot_ids:
+        depot_ids = ["depot_default"]
+    price_by_slot = {
+        int(getattr(slot, "slot_index", 0) or 0): float(getattr(slot, "grid_buy_yen_per_kwh", 0.0) or 0.0)
+        for slot in list(getattr(problem, "price_slots", ()) or ())
+    }
+    co2_by_slot = {
+        int(getattr(slot, "slot_index", 0) or 0): float(getattr(slot, "co2_factor", 0.0) or 0.0)
+        for slot in list(getattr(problem, "price_slots", ()) or ())
+    }
+    demand_flag_by_slot = {
+        int(getattr(slot, "slot_index", 0) or 0): bool(float(getattr(slot, "demand_charge_weight", 0.0) or 0.0) > 0.0)
+        for slot in list(getattr(problem, "price_slots", ()) or ())
+    }
+    assets = dict(getattr(problem, "depot_energy_assets", {}) or {})
+    breakdown = dict(getattr(engine_result, "cost_breakdown", {}) or {})
+    plan_metadata = dict(getattr(engine_result.plan, "metadata", {}) or {})
+    solver_metadata = dict(getattr(engine_result, "solver_metadata", {}) or {})
+    pv_unit = max(float(breakdown.get("pv_marginal_charge_cost_yen_per_kwh", getattr(problem, "metadata", {}).get("pv_marginal_charge_cost_yen_per_kwh", 0.0)) or 0.0), 0.0)
+    contract_penalty = max(float(plan_metadata.get("contract_overage_penalty_yen_per_kwh", solver_metadata.get("contract_overage_penalty_yen_per_kwh", getattr(problem, "metadata", {}).get("contract_overage_penalty_yen_per_kwh", 0.0))) or 0.0), 0.0)
+    fuel_bucket = _research_fuel_time_bucket(
+        problem=problem,
+        timeline_rows=timeline_rows,
+        refuel_rows=refuel_rows,
+        base_date=base_date,
+    )
+    source_exact = bool(_canonical_energy_flow_context(problem, engine_result.plan).get("source_provenance_exact", False))
+
+    co2_rows: List[Dict[str, Any]] = []
+    cost_rows: List[Dict[str, Any]] = []
+    contract_rows: List[Dict[str, Any]] = []
+    bess_rows: List[Dict[str, Any]] = []
+    fuel_rows: List[Dict[str, Any]] = []
+    for depot_id in depot_ids:
+        asset = assets.get(depot_id)
+        bess_capacity = max(float(getattr(asset, "bess_energy_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        bess_min = max(float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        bess_max = max(float(getattr(asset, "bess_soc_max_kwh", 0.0) or 0.0), 0.0) if asset is not None else bess_capacity
+        bess_terminal_min = max(float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        bess_cycle_unit = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        for minute in range(0, 24 * 60, 5):
+            time_hhmm = f"{minute // 60:02d}:{minute % 60:02d}"
+            base = {"date": base_date.isoformat(), "time": time_hhmm, "depot_id": depot_id}
+            row = rows_by_depot_time.get((depot_id, time_hhmm), {})
+            slot_idx = _research_slot_index_for_time(problem, time_hhmm)
+            price = float(row.get("energy_price_yen_per_kwh", price_by_slot.get(slot_idx, 0.0)) or 0.0)
+            co2_factor = float(co2_by_slot.get(slot_idx, 0.0) or 0.0)
+            grid_contract_kwh = float(row.get("grid_import_for_contract_slot_kwh", row.get("grid_import_slot_kwh", 0.0)) or 0.0)
+            grid_to_bus_kwh = float(row.get("grid_to_bus_slot_kwh", row.get("grid_to_bus_kwh", 0.0)) or 0.0)
+            grid_to_bess_kwh = float(row.get("grid_to_bess_slot_kwh", row.get("grid_to_bess_kwh", 0.0)) or 0.0)
+            pv_to_bus_kwh = float(row.get("pv_to_bus_slot_kwh", row.get("pv_to_bus_kwh", 0.0)) or 0.0)
+            pv_to_bess_kwh = float(row.get("pv_to_bess_slot_kwh", row.get("pv_to_bess_kwh", 0.0)) or 0.0)
+            bess_to_bus_kwh = float(row.get("bess_to_bus_slot_kwh", row.get("bess_to_bus_kwh", 0.0)) or 0.0)
+            contract_limit_kw = float(row.get("contract_limit_kw", 0.0) or 0.0)
+            grid_contract_kw = float(row.get("grid_import_for_contract_kw", row.get("grid_import_kw", 0.0)) or 0.0)
+            contract_over_kwh = float(row.get("contract_over_limit_slot_kwh", row.get("contract_over_limit_kwh", 0.0)) or 0.0)
+            contract_over_cost = contract_over_kwh * contract_penalty
+            pv_used_kwh = pv_to_bus_kwh + pv_to_bess_kwh
+            pv_generation_kwh = float(row.get("pv_generation_slot_kwh", 0.0) or 0.0)
+            pv_curtail_kwh = float(row.get("pv_curtailed_slot_kwh", 0.0) or 0.0)
+            grid_co2 = grid_contract_kwh * co2_factor
+            fuel_values = fuel_bucket.get((depot_id, time_hhmm), {})
+            ice_co2 = float(fuel_values.get("ice_bus_co2_kg", 0.0) or 0.0)
+            co2_rows.append(
+                {
+                    **base,
+                    "grid_import_for_contract_kwh": grid_contract_kwh,
+                    "grid_co2_factor_kg_per_kwh": co2_factor,
+                    "grid_electricity_co2_kg": grid_co2,
+                    "ice_bus_co2_kg": ice_co2,
+                    "pv_operational_co2_kg": 0.0,
+                    "bess_storage_operational_co2_kg": 0.0,
+                    "total_co2_kg": grid_co2 + ice_co2,
+                    "source_provenance_exact": source_exact,
+                }
+            )
+            cost_rows.append(
+                {
+                    **base,
+                    "grid_energy_price_yen_per_kwh": price,
+                    "grid_purchase_cost_jpy": (grid_to_bus_kwh + grid_to_bess_kwh) * price,
+                    "bess_discharge_cost_jpy": bess_to_bus_kwh * bess_cycle_unit,
+                    "pv_self_consumption_cost_jpy": pv_used_kwh * pv_unit,
+                    "contract_overage_cost_jpy": contract_over_cost,
+                    "electricity_energy_cost_jpy": ((grid_to_bus_kwh + grid_to_bess_kwh) * price) + (bess_to_bus_kwh * bess_cycle_unit) + (pv_used_kwh * pv_unit),
+                    "demand_charge_window_flag": bool(row.get("demand_charge_window_flag", demand_flag_by_slot.get(slot_idx, False))),
+                    "demand_peak_candidate": bool(row.get("demand_peak_candidate", False)),
+                    "demand_charge_is_peak_based_not_time_additive": True,
+                    "source_provenance_exact": source_exact,
+                }
+            )
+            contract_rows.append(
+                {
+                    **base,
+                    "grid_import_for_contract_kw": grid_contract_kw,
+                    "grid_import_for_contract_kwh": grid_contract_kwh,
+                    "contract_limit_kw": contract_limit_kw,
+                    "contract_margin_kw": contract_limit_kw - grid_contract_kw if contract_limit_kw > 0.0 else 0.0,
+                    "contract_over_limit_kw": float(row.get("contract_over_limit_kw", 0.0) or 0.0),
+                    "contract_over_limit_kwh": contract_over_kwh,
+                    "contract_limit_exceeded": bool(row.get("contract_limit_exceeded", contract_over_kwh > 1.0e-9)),
+                    "contract_overage_cost_jpy": contract_over_cost,
+                    "bess_to_bus_excluded_from_contract_kwh": bess_to_bus_kwh,
+                    "source_provenance_exact": source_exact,
+                }
+            )
+            bess_soc = float(row.get("bess_soc_kwh", 0.0) or 0.0)
+            bess_charge_kwh = pv_to_bess_kwh + grid_to_bess_kwh
+            bess_rows.append(
+                {
+                    **base,
+                    "bess_charge_kwh": bess_charge_kwh,
+                    "bess_charge_kw": bess_charge_kwh / (5.0 / 60.0),
+                    "bess_discharge_kwh": bess_to_bus_kwh,
+                    "bess_discharge_kw": bess_to_bus_kwh / (5.0 / 60.0),
+                    "bess_net_charge_kwh": bess_charge_kwh - bess_to_bus_kwh,
+                    "pv_to_bess_kwh": pv_to_bess_kwh,
+                    "grid_to_bess_kwh": grid_to_bess_kwh,
+                    "bess_to_bus_kwh": bess_to_bus_kwh,
+                    "bess_soc_kwh": bess_soc,
+                    "bess_soc_percent": (bess_soc / bess_capacity * 100.0) if bess_capacity > 0.0 else 0.0,
+                    "bess_soc_min_kwh": bess_min,
+                    "bess_soc_max_kwh": bess_max,
+                    "bess_terminal_soc_min_kwh": bess_terminal_min,
+                    "bess_terminal_soc_violation_kwh": max(bess_terminal_min - bess_soc, 0.0) if minute == 23 * 60 + 55 else 0.0,
+                    "bess_cycle_cost_jpy": bess_to_bus_kwh * bess_cycle_unit,
+                    "source_provenance_exact": source_exact,
+                }
+            )
+            fuel_rows.append(
+                {
+                    **base,
+                    "trip_fuel_liters": float(fuel_values.get("trip_fuel_liters", 0.0) or 0.0),
+                    "deadhead_fuel_liters": float(fuel_values.get("deadhead_fuel_liters", 0.0) or 0.0),
+                    "fuel_liters": float(fuel_values.get("fuel_liters", 0.0) or 0.0),
+                    "refuel_liters": float(fuel_values.get("refuel_liters", 0.0) or 0.0),
+                    "net_fuel_inventory_delta_liters": float(fuel_values.get("refuel_liters", 0.0) or 0.0) - float(fuel_values.get("fuel_liters", 0.0) or 0.0),
+                    "ice_bus_co2_kg": ice_co2,
+                }
+            )
+    return {
+        "co2_timeseries.csv": co2_rows,
+        "cost_timeseries.csv": cost_rows,
+        "contract_limit_timeseries.csv": contract_rows,
+        "bess_timeseries.csv": bess_rows,
+        "fuel_timeseries.csv": fuel_rows,
+    }
+
+
+def _research_vehicle_charging_source_timeseries_rows(
+    *,
+    problem,
+    engine_result,
+    base_date: date,
+) -> List[Dict[str, Any]]:
+    timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
+    timestep_h = timestep_min / 60.0
+    horizon_start = _canonical_horizon_start_min(problem)
+    vehicle_by_id, _vehicle_type_by_id = _research_vehicle_maps(problem)
+    active_vehicle_ids = sorted({str(getattr(slot, "vehicle_id", "") or "") for slot in list(getattr(engine_result.plan, "charging_slots", ()) or ()) if str(getattr(slot, "vehicle_id", "") or "")})
+    if not active_vehicle_ids:
+        return []
+    values: Dict[tuple[str, str], Dict[str, float]] = {}
+    for slot in list(getattr(engine_result.plan, "charging_slots", ()) or ()):
+        vehicle_id = str(getattr(slot, "vehicle_id", "") or "")
+        if not vehicle_id:
+            continue
+        source, depot_id = _canonical_charging_source_and_depot(problem, slot)
+        charge_kw = max(float(getattr(slot, "charge_kw", 0.0) or 0.0), 0.0)
+        discharge_kw = max(float(getattr(slot, "discharge_kw", 0.0) or 0.0), 0.0)
+        net_kw = max(charge_kw - discharge_kw, 0.0)
+        if net_kw <= 0.0:
+            continue
+        start_minute = horizon_start + int(getattr(slot, "slot_index", 0) or 0) * timestep_min
+        for offset in range(0, timestep_min, 5):
+            out_minute = (start_minute + offset) % (24 * 60)
+            out_time = f"{out_minute // 60:02d}:{out_minute % 60:02d}"
+            target = values.setdefault((vehicle_id, out_time), defaultdict(float))
+            target["depot_id_marker"] = 0.0
+            target[f"{source}_to_vehicle_kwh"] += net_kw * (5.0 / 60.0)
+            target["total_charge_kwh"] += net_kw * (5.0 / 60.0)
+            target["charge_kw"] += net_kw
+            target[f"{source}_charge_kw"] += net_kw
+            if source == "grid":
+                target["grid_to_vehicle_kwh"] += 0.0
+            target["_depot_id"] = depot_id  # type: ignore[assignment]
+    source_exact = bool(_canonical_energy_flow_context(problem, engine_result.plan).get("source_provenance_exact", False))
+    rows: List[Dict[str, Any]] = []
+    for vehicle_id in active_vehicle_ids:
+        vehicle = vehicle_by_id.get(vehicle_id)
+        fallback_depot = str(getattr(vehicle, "home_depot_id", "") or "") if vehicle is not None else ""
+        for minute in range(0, 24 * 60, 5):
+            time_hhmm = f"{minute // 60:02d}:{minute % 60:02d}"
+            item = values.get((vehicle_id, time_hhmm), {})
+            depot_id = str(item.get("_depot_id") or fallback_depot)
+            grid_kwh = float(item.get("grid_to_vehicle_kwh", 0.0) or 0.0)
+            pv_kwh = float(item.get("pv_to_vehicle_kwh", 0.0) or 0.0)
+            bess_kwh = float(item.get("bess_to_vehicle_kwh", 0.0) or 0.0)
+            rows.append(
+                {
+                    "date": base_date.isoformat(),
+                    "time": time_hhmm,
+                    "vehicle_id": vehicle_id,
+                    "depot_id": depot_id,
+                    "grid_to_vehicle_kwh": grid_kwh,
+                    "pv_to_vehicle_kwh": pv_kwh,
+                    "bess_to_vehicle_kwh": bess_kwh,
+                    "total_charge_kwh": grid_kwh + pv_kwh + bess_kwh,
+                    "charge_kw": float(item.get("charge_kw", 0.0) or 0.0),
+                    "grid_charge_kw": float(item.get("grid_charge_kw", 0.0) or 0.0),
+                    "pv_charge_kw": float(item.get("pv_charge_kw", 0.0) or 0.0),
+                    "bess_charge_kw": float(item.get("bess_charge_kw", 0.0) or 0.0),
+                    "source_provenance_exact": source_exact,
+                    "vehicle_source_split_note": "Vehicle source split is derived from charging-slot charger_id prefixes when depot-level source maps are not vehicle-specific.",
+                }
+            )
+    return rows
+
+
 def _research_vehicle_soc_timeseries_rows(
     *,
     problem,
@@ -3169,6 +3541,19 @@ def _persist_canonical_graph_exports(
         depot_power_rows,
         base_date=base_date,
     )
+    research_extended_exports = _research_extended_timeseries_exports(
+        problem=problem,
+        engine_result=engine_result,
+        depot_power_rows=depot_power_rows,
+        timeline_rows=timeline_rows,
+        refuel_rows=refuel_rows,
+        base_date=base_date,
+    )
+    vehicle_charging_source_rows = _research_vehicle_charging_source_timeseries_rows(
+        problem=problem,
+        engine_result=engine_result,
+        base_date=base_date,
+    )
     vehicle_soc_timeseries_rows = _research_vehicle_soc_timeseries_rows(
         problem=problem,
         engine_result=engine_result,
@@ -3187,6 +3572,9 @@ def _persist_canonical_graph_exports(
     _write_csv(graph_dir / "depot_power_timeseries_5min.csv", depot_power_rows)
     for filename, rows in research_energy_exports.items():
         _write_csv(graph_dir / filename, rows)
+    for filename, rows in research_extended_exports.items():
+        _write_csv(graph_dir / filename, rows)
+    _write_csv(graph_dir / "vehicle_charging_source_timeseries.csv", vehicle_charging_source_rows)
     _write_csv(graph_dir / "vehicle_soc_timeseries.csv", vehicle_soc_timeseries_rows)
     _write_csv(graph_dir / "fuel_summary.csv", fuel_summary_rows)
     _write_csv(graph_dir / "trip_assignment.csv", trip_assignment_rows)
@@ -3278,6 +3666,12 @@ def _persist_canonical_graph_exports(
             "pv_generation_timeseries.csv",
             "energy_flow_timeseries.csv",
             "bus_charging_total_timeseries.csv",
+            "co2_timeseries.csv",
+            "cost_timeseries.csv",
+            "contract_limit_timeseries.csv",
+            "bess_timeseries.csv",
+            "vehicle_charging_source_timeseries.csv",
+            "fuel_timeseries.csv",
             "vehicle_soc_timeseries.csv",
             "fuel_summary.csv",
             "trip_assignment.csv",
@@ -3333,6 +3727,12 @@ def _persist_canonical_graph_exports(
         "pv_generation_timeseries_path": "graph/pv_generation_timeseries.csv",
         "energy_flow_timeseries_path": "graph/energy_flow_timeseries.csv",
         "bus_charging_total_timeseries_path": "graph/bus_charging_total_timeseries.csv",
+        "co2_timeseries_path": "graph/co2_timeseries.csv",
+        "cost_timeseries_path": "graph/cost_timeseries.csv",
+        "contract_limit_timeseries_path": "graph/contract_limit_timeseries.csv",
+        "bess_timeseries_path": "graph/bess_timeseries.csv",
+        "vehicle_charging_source_timeseries_path": "graph/vehicle_charging_source_timeseries.csv",
+        "fuel_timeseries_path": "graph/fuel_timeseries.csv",
         "vehicle_soc_timeseries_path": "graph/vehicle_soc_timeseries.csv",
         "fuel_summary_path": "graph/fuel_summary.csv",
         "cost_breakdown_path": "graph/cost_breakdown.json",
