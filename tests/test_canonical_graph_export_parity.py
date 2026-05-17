@@ -239,6 +239,72 @@ def test_canonical_charging_output_payload_uses_preserved_source_flow_context() 
     assert payload["summary"]["source_provenance_exact"] is False
 
 
+def test_normalize_postsolve_plan_keeps_feasible_exact_milp_source_trace() -> None:
+    problem, result, _scenario = _problem_and_result()
+    plan = replace(
+        result.plan,
+        metadata={**dict(result.plan.metadata or {}), "source": "milp_gurobi"},
+    )
+    engine = OptimizationEngine()
+
+    with (
+        mock.patch.object(engine._feasibility, "evaluate", return_value=SimpleNamespace(feasible=True)),
+        mock.patch.object(engine, "_reassign_vehicle_fragments") as reassign,
+        mock.patch("src.optimization.engine.apply_opportunistic_topup") as topup,
+    ):
+        normalized_plan, assignment_rebuilt, charging_recomputed, soc_repaired, topup_applied = engine._normalize_postsolve_plan(
+            problem,
+            plan,
+            mode=OptimizationMode.MILP,
+            solver_metadata={"supports_exact_milp": True},
+        )
+
+    reassign.assert_not_called()
+    topup.assert_not_called()
+    assert assignment_rebuilt is False
+    assert charging_recomputed is False
+    assert soc_repaired is False
+    assert topup_applied is False
+    assert normalized_plan.metadata["source_provenance_exact"] is True
+    assert normalized_plan.metadata["derived_source_split"] is False
+    assert normalized_plan.metadata["canonical_source_flow_context"]["source_provenance_exact"] is True
+
+
+def test_vehicle_charging_source_timeseries_uses_vehicle_provenance_flag() -> None:
+    problem, result, _scenario = _problem_and_result()
+    plan = replace(
+        result.plan,
+        charging_slots=(
+            ChargingSlot(
+                vehicle_id="veh-1",
+                slot_index=0,
+                charger_id="grid:dep1",
+                charge_kw=12.0,
+                charging_depot_id="dep1",
+            ),
+        ),
+        grid_to_bus_kwh_by_depot_slot={"dep1": {0: 6.0}},
+        pv_to_bus_kwh_by_depot_slot={},
+        metadata={
+            **dict(result.plan.metadata or {}),
+            "vehicle_source_provenance_exact": True,
+        },
+    )
+    result = replace(result, plan=plan)
+
+    rows = optimization._research_vehicle_charging_source_timeseries_rows(
+        problem=problem,
+        engine_result=result,
+        base_date=date(2026, 4, 5),
+    )
+
+    charged_rows = [row for row in rows if row["time"] == "08:00"]
+    assert charged_rows
+    assert charged_rows[0]["source_provenance_exact"] is True
+    assert charged_rows[0]["depot_source_provenance_exact"] is True
+    assert "exact MILP" in charged_rows[0]["vehicle_source_split_note"]
+
+
 def test_normalize_postsolve_plan_derives_pv_bess_source_split_without_milp_flow() -> None:
     problem, result, _scenario = _problem_and_result()
     asset = replace(

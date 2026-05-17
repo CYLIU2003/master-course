@@ -763,6 +763,7 @@ class ProblemBuilder:
             metadata_source=scenario_metadata or {},
             timestep_min=timestep_min,
             canonical_depot_id=canonical_depot_id,
+            horizon_start_min=int(horizon_start_min or 0),
         )
         feasible_connections: Dict[str, Tuple[str, ...]] = {}
         for vehicle_type in context.vehicle_profiles:
@@ -1006,6 +1007,7 @@ class ProblemBuilder:
         metadata_source: Dict[str, Any],
         timestep_min: int,
         canonical_depot_id: str,
+        horizon_start_min: int = 0,
     ) -> Dict[str, DepotEnergyAsset]:
         del scenario_id
         assets: Dict[str, DepotEnergyAsset] = {}
@@ -1089,6 +1091,12 @@ class ProblemBuilder:
                 ),
                 slot_count,
             )
+            if self._depot_asset_has_full_day_pv_profile(raw):
+                capacity_factor_series = self._rotate_daily_series_from_midnight_to_horizon(
+                    capacity_factor_series,
+                    timestep_min=timestep_min,
+                    horizon_start_min=horizon_start_min,
+                )
             effective_pv_capacity_kw = (
                 float(manual_pv_capacity_kw)
                 if manual_pv_capacity_kw is not None
@@ -1218,6 +1226,63 @@ class ProblemBuilder:
             fallback_generation_kwh_by_slot,
             slot_h=fallback_slot_h,
         )
+
+    def _depot_asset_has_full_day_pv_profile(self, raw: Mapping[str, Any]) -> bool:
+        if not raw:
+            return False
+        row_specs = (
+            (raw.get("pv_capacity_factor_by_date") or raw.get("pvCapacityFactorByDate") or [], "capacity_factor_by_slot", "capacityFactorBySlot"),
+            (raw.get("pv_generation_kwh_by_date") or raw.get("pvGenerationKwhByDate") or [], "pv_generation_kwh_by_slot", "pvGenerationKwhBySlot"),
+        )
+        for rows, snake_key, camel_key in row_specs:
+            if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+                continue
+            for item in rows:
+                if not isinstance(item, Mapping):
+                    continue
+                values = item.get(snake_key) or item.get(camel_key) or []
+                if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+                    continue
+                try:
+                    slot_minutes = max(int(item.get("slot_minutes") or item.get("slotMinutes") or 60), 1)
+                except (TypeError, ValueError):
+                    slot_minutes = 60
+                if len(values) > 0 and len(values) * slot_minutes >= 24 * 60:
+                    return True
+        direct_generation = raw.get("pv_generation_kwh_by_slot") or raw.get("pvGenerationKwhBySlot")
+        if isinstance(direct_generation, Sequence) and not isinstance(direct_generation, (str, bytes)):
+            try:
+                slot_minutes = max(int(raw.get("pv_slot_minutes") or raw.get("pvSlotMinutes") or 60), 1)
+            except (TypeError, ValueError):
+                slot_minutes = 60
+            source = str(raw.get("pv_profile_source") or raw.get("pvProfileSource") or "").strip().lower()
+            if source == "derived_daily" and len(direct_generation) > 0 and len(direct_generation) * slot_minutes >= 24 * 60:
+                return True
+        return False
+
+    def _rotate_daily_series_from_midnight_to_horizon(
+        self,
+        values: Sequence[float],
+        *,
+        timestep_min: int,
+        horizon_start_min: int,
+    ) -> Tuple[float, ...]:
+        series = tuple(float(value or 0.0) for value in values)
+        if not series:
+            return tuple()
+        step = max(int(timestep_min or 60), 1)
+        slots_per_day = max((24 * 60) // step, 1)
+        offset = (int(horizon_start_min or 0) // step) % slots_per_day
+        if offset <= 0 or len(series) < slots_per_day:
+            return series
+        rotated: List[float] = []
+        for start in range(0, len(series), slots_per_day):
+            block = series[start : start + slots_per_day]
+            if len(block) == slots_per_day:
+                rotated.extend(block[offset:] + block[:offset])
+            else:
+                rotated.extend(block)
+        return tuple(rotated)
 
     def _flatten_capacity_factor_rows(self, rows: Sequence[Any]) -> list[float]:
         combined: list[float] = []

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -52,6 +51,14 @@ class SeriesSpec:
     x_column_candidates: tuple[str, ...]
     groups: tuple[SeriesGroup, ...]
     x_label: str = "時刻"
+
+
+@dataclass(frozen=True)
+class DiscoveryResult:
+    specs: tuple[SeriesSpec, ...]
+    skipped_empty: tuple[str, ...]
+    skipped_non_timeseries: tuple[str, ...]
+    skipped_no_numeric: tuple[str, ...]
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -155,85 +162,90 @@ def _parse_datetime_series(df: pd.DataFrame, candidates: tuple[str, ...]) -> tup
     raise ValueError("No datetime-like column found")
 
 
-def _timeseries_specs() -> tuple[SeriesSpec, ...]:
-    return (
-        SeriesSpec(
-            file_name="bus_charging_total_timeseries.csv",
-            title="総充電負荷",
-            x_column_candidates=("timestamp",),
-            groups=(
-                SeriesGroup("充電負荷", ("total_bus_charge_kw",)),
-                SeriesGroup("充電エネルギー", ("total_bus_charge_slot_kwh",)),
-            ),
-        ),
-        SeriesSpec(
-            file_name="depot_power_timeseries_5min.csv",
-            title="受電・PV・BESSの時系列",
-            x_column_candidates=("timestamp",),
-            groups=(
-                SeriesGroup("受電・契約", ("total_charge_kw", "grid_import_kw", "grid_import_for_contract_kw", "contract_limit_kw")),
-                SeriesGroup("PV", ("pv_generation_kw", "pv_used_for_charging_kw", "pv_used_for_building_kw", "pv_curtailed_kw", "building_load_kw", "net_load_kw")),
-                SeriesGroup("エネルギー", ("grid_to_bus_kwh", "pv_to_bus_kwh", "bess_to_bus_kwh", "pv_to_bess_kwh", "grid_to_bess_kwh")),
-                SeriesGroup("BESS / 超過", ("bess_soc_kwh", "contract_over_limit_kwh", "contract_over_limit_kw")),
-            ),
-        ),
-        SeriesSpec(
-            file_name="energy_flow_timeseries.csv",
-            title="エネルギーフロー時系列",
-            x_column_candidates=("timestamp",),
-            groups=(
-                SeriesGroup("バス供給", ("grid_to_bus_slot_kwh", "pv_to_bus_slot_kwh", "bess_to_bus_slot_kwh")),
-                SeriesGroup("BESS 充電", ("pv_to_bess_slot_kwh", "grid_to_bess_slot_kwh")),
-                SeriesGroup("契約/系統", ("grid_import_for_contract_slot_kwh", "bus_charge_from_grid_slot_kwh", "bus_charge_from_bess_slot_kwh")),
-                SeriesGroup("BESS SOC", ("bess_soc_kwh",)),
-            ),
-        ),
-        SeriesSpec(
-            file_name="grid_import_timeseries.csv",
-            title="系統受電の時系列",
-            x_column_candidates=("timestamp",),
-            groups=(
-                SeriesGroup("受電電力", ("grid_import_kw", "grid_import_for_contract_kw", "contract_limit_kw")),
-                SeriesGroup("受電エネルギー", ("grid_import_slot_kwh", "grid_import_for_contract_slot_kwh", "contract_over_limit_slot_kwh")),
-            ),
-        ),
-        SeriesSpec(
-            file_name="pv_generation_timeseries.csv",
-            title="PV 発電の時系列",
-            x_column_candidates=("timestamp",),
-            groups=(
-                SeriesGroup("PV 出力", ("pv_generation_kw",)),
-                SeriesGroup("PV エネルギー", ("pv_generation_slot_kwh", "pv_curtailed_slot_kwh")),
-            ),
-        ),
-        SeriesSpec(
-            file_name="soc_events.csv",
-            title="SOC イベント時系列",
-            x_column_candidates=("event_time",),
-            groups=(
-                SeriesGroup("SOC", ("soc_kwh_before", "soc_kwh_after")),
-                SeriesGroup("エネルギー", ("delta_kwh", "energy_consumed_kwh", "energy_charged_kwh")),
-                SeriesGroup("制約", ("reserve_margin_kwh", "min_soc_constraint_kwh", "max_soc_constraint_kwh")),
-            ),
-        ),
-        SeriesSpec(
-            file_name="trip_assignment.csv",
-            title="便割当の時系列",
-            x_column_candidates=("scheduled_departure", "actual_departure"),
-            groups=(
-                SeriesGroup("遅延", ("delay_departure_min", "delay_arrival_min")),
-                SeriesGroup("距離・電費", ("energy_used_kwh", "distance_km", "deadhead_before_km", "deadhead_after_km")),
-            ),
-        ),
-        SeriesSpec(
-            file_name="vehicle_timeline.csv",
-            title="車両タイムライン",
-            x_column_candidates=("start_time",),
-            groups=(
-                SeriesGroup("運行", ("energy_delta_kwh", "distance_km", "duration_min")),
-                SeriesGroup("充電 / 給油", ("charge_power_kw", "refuel_liters")),
-            ),
-        ),
+def _detect_time_candidates(columns: Iterable[str]) -> tuple[str, ...]:
+    ordered_candidates = [
+        "timestamp",
+        "event_time",
+        "start_time",
+        "scheduled_departure",
+        "actual_departure",
+        "date",
+    ]
+    available = [col for col in ordered_candidates if col in set(columns)]
+    return tuple(available)
+
+
+def _chunk_columns(columns: list[str], size: int = 6) -> tuple[SeriesGroup, ...]:
+    if not columns:
+        return tuple()
+    groups: list[SeriesGroup] = []
+    for i in range(0, len(columns), size):
+        chunk = tuple(columns[i : i + size])
+        groups.append(SeriesGroup(f"series {i // size + 1}", chunk))
+    return tuple(groups)
+
+
+def _discover_timeseries_specs(runs: list[RunBundle]) -> DiscoveryResult:
+    file_names: set[str] = set()
+    for run in runs:
+        graph_dir = run.path / "graph"
+        if not graph_dir.exists():
+            continue
+        for file_path in graph_dir.glob("*.csv"):
+            file_names.add(file_path.name)
+
+    specs: list[SeriesSpec] = []
+    skipped_empty: list[str] = []
+    skipped_non_timeseries: list[str] = []
+    skipped_no_numeric: list[str] = []
+
+    for file_name in sorted(file_names):
+        sample_path: Path | None = None
+        for run in runs:
+            candidate = run.path / "graph" / file_name
+            if candidate.exists() and candidate.stat().st_size > 0:
+                sample_path = candidate
+                break
+        if sample_path is None:
+            skipped_empty.append(file_name)
+            continue
+        try:
+            sample_df = pd.read_csv(sample_path, nrows=400)
+        except Exception:
+            skipped_non_timeseries.append(file_name)
+            continue
+        sample_df = sample_df.rename(columns={col: col.strip() for col in sample_df.columns})
+        time_candidates = _detect_time_candidates(sample_df.columns)
+        if not time_candidates:
+            skipped_non_timeseries.append(file_name)
+            continue
+        x_candidates = tuple(col for col in time_candidates if col != "date")
+        if not x_candidates and {"date", "time"}.issubset(sample_df.columns):
+            x_candidates = ("timestamp",)
+        elif not x_candidates:
+            skipped_non_timeseries.append(file_name)
+            continue
+
+        numeric_cols = _numeric_columns(sample_df, exclude=set(x_candidates) | {"date", "time"})
+        if not numeric_cols:
+            skipped_no_numeric.append(file_name)
+            continue
+        groups = _chunk_columns(numeric_cols, size=6)
+        title = file_name.replace(".csv", "")
+        specs.append(
+            SeriesSpec(
+                file_name=file_name,
+                title=title,
+                x_column_candidates=x_candidates,
+                groups=groups,
+            )
+        )
+
+    return DiscoveryResult(
+        specs=tuple(specs),
+        skipped_empty=tuple(sorted(skipped_empty)),
+        skipped_non_timeseries=tuple(sorted(skipped_non_timeseries)),
+        skipped_no_numeric=tuple(sorted(skipped_no_numeric)),
     )
 
 
@@ -694,6 +706,7 @@ def _build_dashboard(runs: Iterable[RunBundle], title: str) -> go.Figure:
 
 def _write_markdown_report(
     output_dir: Path,
+    report_label: str,
     left: RunBundle,
     right: RunBundle,
     left_metrics: dict[str, Any],
@@ -701,7 +714,7 @@ def _write_markdown_report(
     metric_rows: list[dict[str, Any]],
 ) -> Path:
     report = [
-        "# 2026-05-15 出力フォルダ分析",
+        f"# {report_label} 出力フォルダ分析",
         "",
         f"対象: `{left.label}` / `{right.label}`",
         "",
@@ -748,15 +761,17 @@ def _write_markdown_report(
 
 def _write_full_markdown_report(
     output_dir: Path,
+    report_label: str,
     left: RunBundle,
     right: RunBundle,
     left_metrics: dict[str, Any],
     right_metrics: dict[str, Any],
     metric_rows: list[dict[str, Any]],
     generated_htmls: list[str],
+    discovery: DiscoveryResult,
 ) -> Path:
     report = [
-        "# 2026-05-15 全結果まとめ",
+        f"# {report_label} 全結果まとめ",
         "",
         f"対象: `{left.label}` / `{right.label}`",
         "",
@@ -809,11 +824,29 @@ def _write_full_markdown_report(
     ]
     for html in generated_htmls:
         report.append(f"| {html} | 時系列可視化 |")
+
+    if discovery.skipped_empty or discovery.skipped_non_timeseries or discovery.skipped_no_numeric:
+        report.extend(
+            [
+                "",
+                "## 時系列可視化の除外ファイル",
+                "",
+                "| ファイル | 理由 |",
+                "|---|---|",
+            ]
+        )
+        for name in discovery.skipped_empty:
+            report.append(f"| {name} | 空ファイル |")
+        for name in discovery.skipped_non_timeseries:
+            report.append(f"| {name} | 時刻軸列が無く時系列と判定できない |")
+        for name in discovery.skipped_no_numeric:
+            report.append(f"| {name} | 数値列が無く可視化対象なし |")
+
     report.extend(
         [
             "",
             "## 補足",
-            "- `vehicle_soc_timeseries.csv` と `refuel_events.csv` は空ファイルなので、可視化対象から除外した。",
+            f"- 可視化した時系列CSV: {len(discovery.specs)} ファイル。",
             "- 凡例は図の右外へ逃がしているので、プロット領域との重なりを避けている。",
             "",
             "## アーティファクト一覧",
@@ -866,9 +899,10 @@ def _generate_series_dashboards(
     left: RunBundle,
     right: RunBundle,
     pvg_dir: Path,
-) -> list[str]:
+) -> tuple[list[str], DiscoveryResult]:
     generated: list[str] = []
-    for spec in _timeseries_specs():
+    discovery = _discover_timeseries_specs([left, right])
+    for spec in discovery.specs:
         left_fig = _make_timeseries_figure([left], spec, f"{left.label} - {spec.title}")
         if left_fig is not None:
             left_path = pvg_dir / left.label
@@ -892,7 +926,7 @@ def _generate_series_dashboards(
             html_path = comparison_path / f"{spec.file_name.replace('.csv', '')}.html"
             _write_dashboard(comparison_fig, html_path)
             generated.append(html_path.relative_to(pvg_dir.parent).as_posix())
-    return generated
+    return generated, discovery
 
 
 def main() -> int:
@@ -922,6 +956,7 @@ def main() -> int:
     left = load_run_bundle(args.left)
     right = load_run_bundle(args.right)
     output_dir = args.output_dir
+    report_label = output_dir.parent.name if output_dir.parent.name else output_dir.name
     pvg_dir = output_dir / "pvg"
     output_dir.mkdir(parents=True, exist_ok=True)
     pvg_dir.mkdir(parents=True, exist_ok=True)
@@ -930,7 +965,7 @@ def main() -> int:
     right_metrics = _extract_metrics(right)
     metric_rows = _build_metric_rows(left_metrics, right_metrics)
 
-    report_path = _write_markdown_report(output_dir, left, right, left_metrics, right_metrics, metric_rows)
+    report_path = _write_markdown_report(output_dir, report_label, left, right, left_metrics, right_metrics, metric_rows)
     json_path = _write_json_summary(output_dir, left, right, left_metrics, right_metrics)
 
     left_fig = _build_dashboard([left], f"{left.label} 時系列ダッシュボード")
@@ -952,18 +987,21 @@ def main() -> int:
             (pvg_dir / "comparison_timeseries.html").relative_to(pvg_dir.parent).as_posix(),
         ]
     )
-    generated_htmls.extend(_generate_series_dashboards(left, right, pvg_dir))
+    generated_timeseries_htmls, discovery = _generate_series_dashboards(left, right, pvg_dir)
+    generated_htmls.extend(generated_timeseries_htmls)
 
     metrics_csv = pd.DataFrame(metric_rows)
     metrics_csv.to_csv(output_dir / "comparison_metrics.csv", index=False, encoding="utf-8-sig")
     full_report_path = _write_full_markdown_report(
         output_dir,
+        report_label,
         left,
         right,
         left_metrics,
         right_metrics,
         metric_rows,
         generated_htmls,
+        discovery,
     )
 
     print(f"Wrote: {report_path}")

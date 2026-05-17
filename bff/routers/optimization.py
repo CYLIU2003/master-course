@@ -2955,7 +2955,12 @@ def _research_extended_timeseries_exports(
         refuel_rows=refuel_rows,
         base_date=base_date,
     )
-    source_exact = bool(_canonical_energy_flow_context(problem, engine_result.plan).get("source_provenance_exact", False))
+    flow_ctx = _canonical_energy_flow_context(problem, engine_result.plan)
+    depot_source_exact = bool(flow_ctx.get("source_provenance_exact", False))
+    vehicle_source_exact = bool(
+        depot_source_exact
+        and dict(getattr(engine_result.plan, "metadata", {}) or {}).get("vehicle_source_provenance_exact", False)
+    )
 
     co2_rows: List[Dict[str, Any]] = []
     cost_rows: List[Dict[str, Any]] = []
@@ -3002,7 +3007,7 @@ def _research_extended_timeseries_exports(
                     "pv_operational_co2_kg": 0.0,
                     "bess_storage_operational_co2_kg": 0.0,
                     "total_co2_kg": grid_co2 + ice_co2,
-                    "source_provenance_exact": source_exact,
+                    "source_provenance_exact": depot_source_exact,
                 }
             )
             cost_rows.append(
@@ -3017,7 +3022,7 @@ def _research_extended_timeseries_exports(
                     "demand_charge_window_flag": bool(row.get("demand_charge_window_flag", demand_flag_by_slot.get(slot_idx, False))),
                     "demand_peak_candidate": bool(row.get("demand_peak_candidate", False)),
                     "demand_charge_is_peak_based_not_time_additive": True,
-                    "source_provenance_exact": source_exact,
+                    "source_provenance_exact": depot_source_exact,
                 }
             )
             contract_rows.append(
@@ -3032,7 +3037,7 @@ def _research_extended_timeseries_exports(
                     "contract_limit_exceeded": bool(row.get("contract_limit_exceeded", contract_over_kwh > 1.0e-9)),
                     "contract_overage_cost_jpy": contract_over_cost,
                     "bess_to_bus_excluded_from_contract_kwh": bess_to_bus_kwh,
-                    "source_provenance_exact": source_exact,
+                    "source_provenance_exact": depot_source_exact,
                 }
             )
             bess_soc = float(row.get("bess_soc_kwh", 0.0) or 0.0)
@@ -3055,7 +3060,7 @@ def _research_extended_timeseries_exports(
                     "bess_terminal_soc_min_kwh": bess_terminal_min,
                     "bess_terminal_soc_violation_kwh": max(bess_terminal_min - bess_soc, 0.0) if minute == 23 * 60 + 55 else 0.0,
                     "bess_cycle_cost_jpy": bess_to_bus_kwh * bess_cycle_unit,
-                    "source_provenance_exact": source_exact,
+                    "source_provenance_exact": depot_source_exact,
                 }
             )
             fuel_rows.append(
@@ -3115,7 +3120,12 @@ def _research_vehicle_charging_source_timeseries_rows(
             if source == "grid":
                 target["grid_to_vehicle_kwh"] += 0.0
             target["_depot_id"] = depot_id  # type: ignore[assignment]
-    source_exact = bool(_canonical_energy_flow_context(problem, engine_result.plan).get("source_provenance_exact", False))
+    flow_ctx = _canonical_energy_flow_context(problem, engine_result.plan)
+    depot_source_exact = bool(flow_ctx.get("source_provenance_exact", False))
+    vehicle_source_exact = bool(
+        depot_source_exact
+        and dict(getattr(engine_result.plan, "metadata", {}) or {}).get("vehicle_source_provenance_exact", False)
+    )
     rows: List[Dict[str, Any]] = []
     for vehicle_id in active_vehicle_ids:
         vehicle = vehicle_by_id.get(vehicle_id)
@@ -3141,8 +3151,13 @@ def _research_vehicle_charging_source_timeseries_rows(
                     "grid_charge_kw": float(item.get("grid_charge_kw", 0.0) or 0.0),
                     "pv_charge_kw": float(item.get("pv_charge_kw", 0.0) or 0.0),
                     "bess_charge_kw": float(item.get("bess_charge_kw", 0.0) or 0.0),
-                    "source_provenance_exact": source_exact,
-                    "vehicle_source_split_note": "Vehicle source split is derived from charging-slot charger_id prefixes when depot-level source maps are not vehicle-specific.",
+                    "source_provenance_exact": vehicle_source_exact,
+                    "depot_source_provenance_exact": depot_source_exact,
+                    "vehicle_source_split_note": (
+                        "Vehicle source split is an exact MILP vehicle/source/slot decision trace."
+                        if vehicle_source_exact
+                        else "Vehicle source split is derived from charging-slot charger_id prefixes when per-vehicle source decision variables are not present."
+                    ),
                 }
             )
     return rows

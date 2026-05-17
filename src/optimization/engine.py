@@ -182,6 +182,7 @@ def _merge_source_context_with_added_charging(
     source_provenance_exact = bool(source_flow_context.get("source_provenance_exact")) and added_kwh <= 1.0e-9
     metadata = dict(plan.metadata or {})
     metadata["source_provenance_exact"] = source_provenance_exact
+    metadata["vehicle_source_provenance_exact"] = bool(metadata.get("vehicle_source_provenance_exact")) and source_provenance_exact
     metadata["derived_source_split"] = not source_provenance_exact
     metadata["canonical_source_flow_context"] = {
         **source_flow_context,
@@ -451,6 +452,7 @@ def _derive_depot_energy_source_split(
     metadata = dict(plan.metadata or {})
     metadata["derived_source_split"] = True
     metadata["source_provenance_exact"] = False
+    metadata["vehicle_source_provenance_exact"] = False
     metadata["canonical_source_flow_context"] = {
         "grid_to_bus_kwh_by_depot_slot": grid_to_bus,
         "pv_to_bus_kwh_by_depot_slot": pv_to_bus,
@@ -630,6 +632,8 @@ class OptimizationEngine:
         plan, assignment_rebuilt, charging_recomputed, soc_repaired, opportunistic_topup_applied = self._normalize_postsolve_plan(
             problem,
             result.plan,
+            mode=result.mode,
+            solver_metadata=dict(result.solver_metadata or {}),
         )
         report = self._feasibility.evaluate(problem, plan)
         breakdown = self._evaluator.evaluate(problem, plan)
@@ -696,28 +700,37 @@ class OptimizationEngine:
             )
 
         if result.mode == OptimizationMode.MILP and problem.baseline_plan is not None:
-            (
-                plan,
-                report,
-                costs,
-                solver_metadata,
-                warnings,
-            ) = self._apply_milp_truthful_baseline_guardrail(
-                problem=problem,
-                candidate_plan=candidate_plan,
-                candidate_report=candidate_report,
-                candidate_costs=candidate_costs,
-                solver_status=result.solver_status,
-                solver_metadata=solver_metadata,
-                warnings=warnings,
+            exact_milp_trace_preserved = bool(
+                solver_metadata.get("supports_exact_milp", False)
+                and solver_metadata.get("source_provenance_exact", False)
+                and candidate_report.feasible
             )
-            if bool(solver_metadata.get("truthful_baseline_guardrail_applied")):
-                final_solver_status = "truthful_baseline_guardrail"
-                solver_metadata["fallback_applied"] = True
-                solver_metadata["fallback_reason"] = "truthful_baseline_guardrail"
-                profile = dict(solver_metadata.get("search_profile") or {})
-                profile["fallback_count"] = int(profile.get("fallback_count", 0) or 0) + 1
-                solver_metadata["search_profile"] = profile
+            if exact_milp_trace_preserved:
+                solver_metadata["truthful_baseline_guardrail_skipped"] = True
+                solver_metadata["truthful_baseline_guardrail_skip_reason"] = "exact_milp_decision_trace_preserved"
+            else:
+                (
+                    plan,
+                    report,
+                    costs,
+                    solver_metadata,
+                    warnings,
+                ) = self._apply_milp_truthful_baseline_guardrail(
+                    problem=problem,
+                    candidate_plan=candidate_plan,
+                    candidate_report=candidate_report,
+                    candidate_costs=candidate_costs,
+                    solver_status=result.solver_status,
+                    solver_metadata=solver_metadata,
+                    warnings=warnings,
+                )
+                if bool(solver_metadata.get("truthful_baseline_guardrail_applied")):
+                    final_solver_status = "truthful_baseline_guardrail"
+                    solver_metadata["fallback_applied"] = True
+                    solver_metadata["fallback_reason"] = "truthful_baseline_guardrail"
+                    profile = dict(solver_metadata.get("search_profile") or {})
+                    profile["fallback_count"] = int(profile.get("fallback_count", 0) or 0) + 1
+                    solver_metadata["search_profile"] = profile
         warnings = tuple(dict.fromkeys(str(item) for item in warnings if str(item).strip()))
 
         return replace(
@@ -736,12 +749,52 @@ class OptimizationEngine:
         self,
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
+        *,
+        mode: OptimizationMode | None = None,
+        solver_metadata: dict | None = None,
     ) -> tuple[AssignmentPlan, bool, bool, bool, bool]:
         existing_source_flow_context = dict(getattr(plan, "metadata", {}) or {}).get("canonical_source_flow_context")
         if isinstance(existing_source_flow_context, dict) and existing_source_flow_context:
             source_flow_context = dict(existing_source_flow_context)
         else:
             source_flow_context = _capture_source_flow_context(plan)
+
+        metadata = dict(getattr(plan, "metadata", {}) or {})
+        exact_milp_trace = (
+            mode == OptimizationMode.MILP
+            and bool((solver_metadata or {}).get("supports_exact_milp", False))
+            and str(metadata.get("source") or "").strip() == "milp_gurobi"
+            and _source_flow_context_has_positive_flow(source_flow_context)
+        )
+        if exact_milp_trace:
+            pre_postsolve_report = self._feasibility.evaluate(problem, plan)
+            if pre_postsolve_report.feasible:
+                exact_context = {
+                    **source_flow_context,
+                    "source_provenance_exact": True,
+                    "vehicle_source_provenance_exact": bool(metadata.get("vehicle_source_provenance_exact", False)),
+                    "derived_source_split": False,
+                    "source_provenance_note": "Exact MILP depot/slot energy-flow decision trace preserved without postsolve charging regeneration.",
+                    "charging_slot_signatures": tuple(
+                        _charging_slot_signature(slot) for slot in list(getattr(plan, "charging_slots", ()) or ())
+                    ),
+                }
+                return (
+                    replace(
+                        plan,
+                        metadata={
+                            **metadata,
+                            "source_provenance_exact": True,
+                            "vehicle_source_provenance_exact": bool(metadata.get("vehicle_source_provenance_exact", False)),
+                            "derived_source_split": False,
+                            "canonical_source_flow_context": exact_context,
+                        },
+                    ),
+                    False,
+                    False,
+                    False,
+                    False,
+                )
 
         rebuilt_plan = self._reassign_vehicle_fragments(problem, plan)
         assignment_rebuilt = rebuilt_plan != plan

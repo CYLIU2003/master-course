@@ -166,6 +166,35 @@ def test_problem_builder_prefers_daily_capacity_factor_metadata_for_pv_series() 
     assert tuple(asset.pv_generation_kwh_by_slot) == tuple([7.0] * 6 + [14.0] * 6 + [21.0] * 6 + [28.0] * 6)
 
 
+def test_problem_builder_rotates_full_day_pv_profile_to_horizon_start() -> None:
+    scenario = _scenario()
+    capacity_factors = [0.0] * 24
+    capacity_factors[5] = 0.4
+    capacity_factors[18] = 0.2
+    scenario["simulation_config"]["start_time"] = "05:00"
+    scenario["simulation_config"]["depot_energy_assets"][0] = {
+        "depot_id": "dep-1",
+        "pv_enabled": True,
+        "pv_capacity_kw": 100.0,
+        "pv_capacity_kw_manual_override": True,
+        "pv_capacity_factor_by_date": [
+            {
+                "date": "2025-08-01",
+                "slot_minutes": 60,
+                "capacity_factor_by_slot": capacity_factors,
+            }
+        ],
+    }
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    asset = problem.depot_energy_assets["dep-1"]
+
+    assert problem.scenario.horizon_start == "05:00"
+    assert asset.pv_generation_kwh_by_slot[0] == 40.0
+    assert asset.pv_generation_kwh_by_slot[13] == 20.0
+    assert asset.pv_generation_kwh_by_slot[5] == 0.0
+
+
 def test_problem_builder_disables_legacy_pv_when_depot_area_missing() -> None:
     scenario = _scenario()
     scenario["simulation_config"]["depot_energy_assets"][0].pop("depot_area_m2", None)

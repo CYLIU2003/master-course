@@ -508,6 +508,9 @@ class GurobiMILPAdapter:
         p_avg_var: Dict[int, Any] = {}
         g2bus_var: Dict[Tuple[str, int], Any] = {}
         pv2bus_var: Dict[Tuple[str, int], Any] = {}
+        g2vehicle_var: Dict[Tuple[str, int], Any] = {}
+        pv2vehicle_var: Dict[Tuple[str, int], Any] = {}
+        bess2vehicle_var: Dict[Tuple[str, int], Any] = {}
         g2bess_var: Dict[Tuple[str, int], Any] = {}
         pv2bess_var: Dict[Tuple[str, int], Any] = {}
         bess2bus_var: Dict[Tuple[str, int], Any] = {}
@@ -1137,12 +1140,29 @@ class GurobiMILPAdapter:
                         soc_ub = max(float(asset.bess_soc_max_kwh or 0.0), soc_lb)
                         bess_soc_var[key] = model.addVar(lb=soc_lb, ub=soc_ub, vtype=GRB.CONTINUOUS)
 
-                    charge_kwh_expr = gp.quicksum(
-                        c_var[(vehicle_id, slot_idx)] * timestep_h
-                        for vehicle_id in bev_ids_by_depot.get(depot_id, [])
-                        if (vehicle_id, slot_idx) in c_var
-                    )
-                    model.addConstr(bess2bus_var[key] + g2bus_var[key] + pv2bus_var[key] == charge_kwh_expr)
+                    vehicle_grid_terms = []
+                    vehicle_pv_terms = []
+                    vehicle_bess_terms = []
+                    for vehicle_id in bev_ids_by_depot.get(depot_id, []):
+                        charge_var = c_var.get((vehicle_id, slot_idx))
+                        if charge_var is None:
+                            continue
+                        vehicle_key = (vehicle_id, slot_idx)
+                        g2vehicle_var[vehicle_key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                        pv2vehicle_var[vehicle_key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                        bess2vehicle_var[vehicle_key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                        model.addConstr(
+                            g2vehicle_var[vehicle_key]
+                            + pv2vehicle_var[vehicle_key]
+                            + bess2vehicle_var[vehicle_key]
+                            == charge_var * timestep_h
+                        )
+                        vehicle_grid_terms.append(g2vehicle_var[vehicle_key])
+                        vehicle_pv_terms.append(pv2vehicle_var[vehicle_key])
+                        vehicle_bess_terms.append(bess2vehicle_var[vehicle_key])
+                    model.addConstr(g2bus_var[key] == gp.quicksum(vehicle_grid_terms))
+                    model.addConstr(pv2bus_var[key] == gp.quicksum(vehicle_pv_terms))
+                    model.addConstr(bess2bus_var[key] == gp.quicksum(vehicle_bess_terms))
 
                     pv_gen_kwh = 0.0
                     if asset.pv_enabled and asset.pv_generation_kwh_by_slot:
@@ -2026,8 +2046,6 @@ class GurobiMILPAdapter:
         if c_var and bev_ids:
             vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
             for slot_idx in slot_indices:
-                demand_by_depot_kwh: Dict[str, float] = {}
-                demand_by_vehicle_kw: Dict[Tuple[str, str], float] = {}
                 for vehicle_id in bev_ids:
                     var = c_var.get((vehicle_id, slot_idx))
                     if var is None:
@@ -2037,55 +2055,46 @@ class GurobiMILPAdapter:
                         continue
                     vehicle = vehicle_by_id.get(vehicle_id)
                     depot_id = str(getattr(vehicle, "home_depot_id", "") or "depot_default")
-                    demand_by_depot_kwh[depot_id] = demand_by_depot_kwh.get(depot_id, 0.0) + vehicle_kw * timestep_h
-                    demand_by_vehicle_kw[(vehicle_id, depot_id)] = vehicle_kw
-
-                for (vehicle_id, depot_id), vehicle_kw in demand_by_vehicle_kw.items():
-                    demand_kwh = demand_by_depot_kwh.get(depot_id, 0.0)
-                    if demand_kwh <= 0.0:
-                        continue
-                    bess_kwh = float(bess_to_bus_kwh_by_depot_slot.get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
-                    pv_kwh = float(pv_to_bus_kwh_by_depot_slot.get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
-                    grid_kwh = float(grid_to_bus_kwh_by_depot_slot.get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
-                    bess_ratio = min(max(bess_kwh / demand_kwh, 0.0), 1.0)
-                    pv_ratio = min(max(pv_kwh / demand_kwh, 0.0), 1.0)
-                    grid_ratio = min(max(grid_kwh / demand_kwh, 0.0), 1.0)
-                    if bess_ratio > 0.0:
+                    vehicle_key = (vehicle_id, slot_idx)
+                    bess_kwh = max(_var_val(bess2vehicle_var.get(vehicle_key)), 0.0)
+                    pv_kwh = max(_var_val(pv2vehicle_var.get(vehicle_key)), 0.0)
+                    grid_kwh = max(_var_val(g2vehicle_var.get(vehicle_key)), 0.0)
+                    if bess_kwh > 1.0e-9:
                         lat, lon = _depot_latlon(depot_id)
                         charging_slots.append(
                             ChargingSlot(
                                 vehicle_id=vehicle_id,
                                 slot_index=slot_idx,
                                 charger_id=f"bess:{depot_id}",
-                                charge_kw=vehicle_kw * bess_ratio,
+                                charge_kw=bess_kwh / timestep_h,
                                 discharge_kw=0.0,
                                 charging_depot_id=depot_id,
                                 charging_latitude=lat,
                                 charging_longitude=lon,
                             )
                         )
-                    if pv_ratio > 0.0:
+                    if pv_kwh > 1.0e-9:
                         lat, lon = _depot_latlon(depot_id)
                         charging_slots.append(
                             ChargingSlot(
                                 vehicle_id=vehicle_id,
                                 slot_index=slot_idx,
                                 charger_id=f"pv:{depot_id}",
-                                charge_kw=vehicle_kw * pv_ratio,
+                                charge_kw=pv_kwh / timestep_h,
                                 discharge_kw=0.0,
                                 charging_depot_id=depot_id,
                                 charging_latitude=lat,
                                 charging_longitude=lon,
                             )
                         )
-                    if grid_ratio > 0.0:
+                    if grid_kwh > 1.0e-9:
                         lat, lon = _depot_latlon(depot_id)
                         charging_slots.append(
                             ChargingSlot(
                                 vehicle_id=vehicle_id,
                                 slot_index=slot_idx,
                                 charger_id=f"grid:{depot_id}",
-                                charge_kw=vehicle_kw * grid_ratio,
+                                charge_kw=grid_kwh / timestep_h,
                                 discharge_kw=0.0,
                                 charging_depot_id=depot_id,
                                 charging_latitude=lat,
@@ -2165,6 +2174,10 @@ class GurobiMILPAdapter:
                 "opportunistic_topup_unfilled_kwh": round(opportunistic_topup_unfilled_kwh, 6),
                 "opportunistic_topup_unfilled_vehicle_day_ids": opportunistic_topup_unfilled_vehicle_day_ids,
                 "opportunistic_topup_unfilled_vehicle_ids": opportunistic_topup_unfilled_vehicle_ids,
+                "source_provenance_exact": True,
+                "vehicle_source_provenance_exact": True,
+                "vehicle_source_allocation_policy": "milp_vehicle_source_variables_tied_to_depot_source_totals",
+                "derived_source_split": False,
                 "service_coverage_mode": service_coverage_mode,
                 "allow_partial_service": bool(allow_partial_service),
                 "strict_coverage_enforced": service_coverage_mode == "strict",
