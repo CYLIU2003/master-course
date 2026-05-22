@@ -1262,6 +1262,7 @@ def _persist_rich_run_outputs(
             json.dumps(canonical_solver_result, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
+    accounting_summary = dict((optimization_result.get("graph_artifacts") or {}).get("accounting_summary") or {})
     summary = {
         "scenario_id": optimization_result.get("scenario_id"),
         "mode": optimization_result.get("mode"),
@@ -1269,11 +1270,16 @@ def _persist_rich_run_outputs(
         "objective_mode": optimization_result.get("objective_mode"),
         "objective_value": optimization_result.get("objective_value"),
         "objective_value_unit": "JPY",
-        "objective_value_jpy": float(optimization_result.get("objective_value", 0.0) or 0.0),
+        "objective_value_jpy": float(
+            accounting_summary.get("objective_value_jpy", optimization_result.get("objective_value", 0.0)) or 0.0
+        ),
         "total_cost_jpy": float(
-            (optimization_result.get("cost_breakdown") or {}).get(
-                "total_cost",
-                optimization_result.get("objective_value", 0.0),
+            accounting_summary.get(
+                "total_cost_jpy",
+                (optimization_result.get("cost_breakdown") or {}).get(
+                    "total_cost",
+                    optimization_result.get("objective_value", 0.0),
+                ),
             )
             or 0.0
         ),
@@ -1281,9 +1287,9 @@ def _persist_rich_run_outputs(
         "supports_exact_milp": bool((optimization_result.get("solver_metadata") or {}).get("supports_exact_milp", False)),
         "solve_time_seconds": optimization_result.get("solve_time_seconds"),
         "solve_time_unit": "s",
-        "trip_count_served": (optimization_result.get("summary") or {}).get("trip_count_served"),
-        "trip_count_unserved": (optimization_result.get("summary") or {}).get("trip_count_unserved"),
-        "vehicle_count_used": (optimization_result.get("summary") or {}).get("vehicle_count_used"),
+        "trip_count_served": accounting_summary.get("served_trip_count", (optimization_result.get("summary") or {}).get("trip_count_served")),
+        "trip_count_unserved": accounting_summary.get("unserved_trip_count", (optimization_result.get("summary") or {}).get("trip_count_unserved")),
+        "vehicle_count_used": accounting_summary.get("used_vehicle_count", (optimization_result.get("summary") or {}).get("vehicle_count_used")),
         "same_day_depot_cycles_enabled": (optimization_result.get("summary") or {}).get("same_day_depot_cycles_enabled"),
         "max_depot_cycles_per_vehicle_per_day": (optimization_result.get("summary") or {}).get("max_depot_cycles_per_vehicle_per_day"),
         "vehicle_fragment_counts": (optimization_result.get("summary") or {}).get("vehicle_fragment_counts"),
@@ -1884,6 +1890,65 @@ def _persist_rich_run_outputs(
         "mip_gap_achieved_ratio": solver_settings.get("mip_gap_achieved_ratio"),
         "mip_gap_achieved_percent": solver_settings.get("mip_gap_achieved_percent"),
     }
+    if accounting_summary:
+        def _prefer_accounting_value(key: str, fallback: Any) -> Any:
+            value = accounting_summary.get(key, None)
+            if value in (None, "", 0, 0.0):
+                return fallback
+            return value
+
+        kpi_summary.update(
+            {
+                "total_cost_jpy": float(accounting_summary.get("total_cost_jpy", kpi_summary["total_cost_jpy"]) or 0.0),
+                "objective_value_jpy": float(accounting_summary.get("objective_value_jpy", kpi_summary["objective_value_jpy"]) or 0.0),
+                "energy_cost_jpy": float(accounting_summary.get("energy_cost_jpy", kpi_summary["electricity_cost_jpy"]) or 0.0),
+                "demand_cost_jpy": float(
+                    accounting_summary.get(
+                        "demand_cost_jpy",
+                        kpi_summary.get("demand_charge_cost_jpy", kpi_summary.get("demand_cost_jpy", 0.0)),
+                    )
+                    or 0.0
+                ),
+                "fuel_cost_jpy": float(_prefer_accounting_value("fuel_cost_jpy", kpi_summary["fuel_cost_jpy"]) or 0.0),
+                "co2_cost_jpy": float(_prefer_accounting_value("co2_cost_jpy", kpi_summary.get("co2_cost_jpy", 0.0)) or 0.0),
+                "battery_degradation_cost_jpy": float(_prefer_accounting_value("battery_degradation_cost_jpy", kpi_summary.get("battery_degradation_cost_jpy", 0.0)) or 0.0),
+                "contract_overage_cost_jpy": float(_prefer_accounting_value("contract_overage_cost_jpy", kpi_summary.get("contract_overage_cost_jpy", 0.0)) or 0.0),
+                "served_trip_count": int(accounting_summary.get("served_trip_count", kpi_summary["served_trip_count"]) or 0),
+                "unserved_trip_count": int(accounting_summary.get("unserved_trip_count", kpi_summary["unserved_trip_count"]) or 0),
+                "bev_trip_count": int(accounting_summary.get("bev_trip_count", kpi_summary.get("bev_trip_count", 0)) or 0),
+                "ice_trip_count": int(accounting_summary.get("ice_trip_count", kpi_summary.get("ice_trip_count", 0)) or 0),
+                "used_vehicle_count": int(accounting_summary.get("used_vehicle_count", kpi_summary.get("used_vehicle_count", 0)) or 0),
+                "available_vehicle_count": int(accounting_summary.get("available_vehicle_count", kpi_summary.get("available_vehicle_count", 0)) or 0),
+                "vehicle_utilization_ratio": float(accounting_summary.get("vehicle_utilization_ratio", kpi_summary.get("vehicle_utilization_ratio", 0.0)) or 0.0),
+                "service_km": float(accounting_summary.get("service_km", kpi_summary.get("service_km", 0.0)) or 0.0),
+                "deadhead_before_km": float(accounting_summary.get("deadhead_before_km", kpi_summary.get("deadhead_before_km", 0.0)) or 0.0),
+                "deadhead_after_km": float(accounting_summary.get("deadhead_after_km", kpi_summary.get("deadhead_after_km", 0.0)) or 0.0),
+                "deadhead_total_km": float(accounting_summary.get("deadhead_total_km", kpi_summary.get("deadhead_total_km", 0.0)) or 0.0),
+                "pv_generation_kwh": float(accounting_summary.get("pv_generation_kwh", kpi_summary.get("pv_generation_total_kwh", 0.0)) or 0.0),
+                "pv_to_bus_kwh": float(accounting_summary.get("pv_to_bus_kwh", kpi_summary.get("pv_to_bus_kwh", 0.0)) or 0.0),
+                "pv_to_bess_kwh": float(accounting_summary.get("pv_to_bess_kwh", kpi_summary.get("pv_to_bess_kwh", 0.0)) or 0.0),
+                "bess_to_bus_kwh": float(accounting_summary.get("bess_to_bus_kwh", kpi_summary.get("bess_to_bus_kwh", 0.0)) or 0.0),
+                "pv_curtailed_kwh": float(accounting_summary.get("pv_curtailed_kwh", kpi_summary.get("pv_curtail_kwh", 0.0)) or 0.0),
+                "pv_utilization_ratio": float(accounting_summary.get("pv_utilization_ratio", kpi_summary.get("pv_utilization_ratio", 0.0)) or 0.0),
+                "grid_to_bus_kwh": float(accounting_summary.get("grid_to_bus_kwh", kpi_summary.get("grid_to_bus_kwh", 0.0)) or 0.0),
+                "grid_to_bess_kwh": float(accounting_summary.get("grid_to_bess_kwh", kpi_summary.get("grid_to_bess_kwh", 0.0)) or 0.0),
+                "grid_total_kwh": float(accounting_summary.get("grid_total_kwh", kpi_summary.get("grid_import_total_kwh", 0.0)) or 0.0),
+                "peak_grid_kw": float(accounting_summary.get("peak_grid_kw", kpi_summary.get("peak_grid_import_kw_all_depots", 0.0)) or 0.0),
+                "total_charge_input_kwh": float(accounting_summary.get("total_charge_input_kwh", kpi_summary.get("total_charge_input_kwh", 0.0)) or 0.0),
+                "min_soc_ratio": float(accounting_summary.get("min_soc_ratio", kpi_summary.get("min_soc_pct", 0.0)) or 0.0),
+                "mean_soc_ratio": float(accounting_summary.get("mean_soc_ratio", kpi_summary.get("average_soc_pct", 0.0)) or 0.0),
+                "final_min_soc_ratio": float(accounting_summary.get("final_min_soc_ratio", kpi_summary.get("min_soc_pct", 0.0)) or 0.0),
+                "final_mean_soc_ratio": float(accounting_summary.get("final_mean_soc_ratio", kpi_summary.get("average_soc_pct", 0.0)) or 0.0),
+                "objective_is_actual_cost": bool(accounting_summary.get("objective_is_actual_cost", kpi_summary.get("objective_is_actual_cost", False))),
+                "supports_exact_milp": bool(accounting_summary.get("supports_exact_milp", kpi_summary.get("supports_exact_milp", False))),
+                "fallback_applied": bool(accounting_summary.get("fallback_applied", kpi_summary.get("fallback_applied", False))),
+                "charging_source_provenance_exact": bool(accounting_summary.get("charging_source_provenance_exact", kpi_summary.get("charging_source_provenance_exact", False))),
+                "contract_power_kw": float(accounting_summary.get("contract_power_kw", kpi_summary.get("contract_power_kw", 0.0)) or 0.0),
+                "contract_power_exceeded": bool(accounting_summary.get("contract_power_exceeded", kpi_summary.get("contract_power_exceeded", False))),
+                "contract_overage_kw": float(accounting_summary.get("contract_overage_kw", kpi_summary.get("contract_overage_kw", 0.0)) or 0.0),
+                "contract_power_mode": str(accounting_summary.get("contract_power_mode", kpi_summary.get("contract_power_mode", "report_only")) or "report_only"),
+            }
+        )
     if charging_summary_payload:
         totals = dict(charging_summary_payload.get("totals") or {})
         kpi_summary.update(
@@ -3542,6 +3607,97 @@ def _persist_canonical_graph_exports(
         scenario_id=scenario_id,
         soc_rows=soc_rows,
     )
+    try:
+        from src.optimization.accounting import build_accounting_artifacts
+    except Exception:
+        build_accounting_artifacts = None
+    accounting_artifacts = None
+    if build_accounting_artifacts is not None:
+        vehicle_charging_source_rows = _research_vehicle_charging_source_timeseries_rows(
+            problem=problem,
+            engine_result=engine_result,
+            base_date=base_date,
+        )
+        vehicle_soc_timeseries_rows = _research_vehicle_soc_timeseries_rows(
+            problem=problem,
+            engine_result=engine_result,
+            base_date=base_date,
+            timeline_rows=timeline_rows,
+        )
+        research_energy_exports = _research_rows_from_depot_power(
+            depot_power_rows,
+            base_date=base_date,
+        )
+        available_vehicle_count = sum(
+            1 for vehicle in list(getattr(problem, "vehicles", ()) or []) if bool(getattr(vehicle, "available", True))
+        )
+        demand_rate = 0.0
+        peak_grid_kw = float(kpi_summary.get("peak_grid_import_kw_all_depots", 0.0) or 0.0)
+        demand_cost = float(kpi_summary.get("demand_charge_cost_jpy", 0.0) or 0.0)
+        if peak_grid_kw > 0.0:
+            demand_rate = demand_cost / peak_grid_kw
+        scenario_cost_coeffs = dict(((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {}))
+        accounting_artifacts = build_accounting_artifacts(
+            problem=problem,
+            scenario_id=scenario_id,
+            run_id=str(Path(output_dir).name),
+            service_date=base_date,
+            weather_date=base_date,
+                operator_id=str(scenario.get("operator_id") or scenario.get("operatorId") or scenario.get("service_id") or ""),
+            trip_assignment_rows=trip_assignment_rows,
+            vehicle_soc_timeseries_rows=vehicle_soc_timeseries_rows,
+            vehicle_charging_source_rows=vehicle_charging_source_rows,
+            energy_flow_rows=list(research_energy_exports.get("energy_flow_timeseries.csv") or []),
+            metadata={
+                "scenario_id": scenario_id,
+                "run_id": str(Path(output_dir).name),
+                "service_date": base_date.isoformat(),
+                "weather_date": base_date.isoformat(),
+                "operator_id": str(scenario.get("operator_id") or scenario.get("operatorId") or scenario.get("service_id") or ""),
+                "available_vehicle_count": available_vehicle_count,
+                "objective_value": float(engine_result.objective_value or 0.0),
+                "objective_is_actual_cost": bool(kpi_summary.get("objective_is_actual_cost", False)),
+                "supports_exact_milp": bool((engine_result.solver_metadata or {}).get("supports_exact_milp", False)),
+                "fallback_applied": bool((engine_result.solver_metadata or {}).get("fallback_applied", False)),
+                "charging_source_provenance_exact": bool(
+                    vehicle_charging_source_rows
+                    and all(bool(row.get("source_provenance_exact", False)) for row in vehicle_charging_source_rows)
+                ),
+                "fuel_price_jpy_per_liter": float(
+                    scenario_cost_coeffs.get("diesel_price_per_l", scenario_cost_coeffs.get("fuel_price_yen_per_liter", 0.0)) or 0.0
+                ),
+                "co2_price_jpy_per_kg": float(
+                    scenario_cost_coeffs.get("co2_price_per_kg", scenario_cost_coeffs.get("carbon_price_jpy_per_kg", 0.0)) or 0.0
+                ),
+                "battery_degradation_price_jpy_per_kwh": float(
+                    scenario_cost_coeffs.get("battery_degradation_cost_coeff_yen_per_kwh", 0.0) or 0.0
+                ),
+                "demand_rate_jpy_per_kw": demand_rate,
+                "contract_power_kw": float(
+                    max(
+                        (
+                            float(getattr(depot, "import_limit_kw", 0.0) or 0.0)
+                            for depot in list(getattr(problem, "depots", ()) or [])
+                        ),
+                        default=0.0,
+                    )
+                ),
+                "contract_power_exceeded": bool(kpi_summary.get("contract_limit_exceeded", False)),
+                "contract_overage_kw": float(
+                    kpi_summary.get("contract_over_limit_kwh", 0.0) or 0.0
+                )
+                / max(float(getattr(problem.scenario, "timestep_min", 5) or 5) / 60.0, 1.0e-9),
+                "contract_power_mode": str(
+                    kpi_summary.get("contract_overage_policy", "report_only") or "report_only"
+                ),
+                "solver_status": str(engine_result.solver_status or ""),
+                "mip_gap_requested_ratio": float((engine_result.solver_metadata or {}).get("mip_gap", 0.0) or 0.0),
+                "mip_gap_requested_percent": float((engine_result.solver_metadata or {}).get("mip_gap", 0.0) or 0.0) * 100.0,
+                "mip_gap_achieved_ratio": float((engine_result.solver_metadata or {}).get("mip_gap", 0.0) or 0.0),
+                "mip_gap_achieved_percent": float((engine_result.solver_metadata or {}).get("mip_gap", 0.0) or 0.0) * 100.0,
+            },
+        )
+        kpi_summary = dict(accounting_artifacts.summary)
     refuel_rows = [
         {
             "vehicle_id": str(getattr(slot, "vehicle_id", "") or ""),
@@ -3582,6 +3738,16 @@ def _persist_canonical_graph_exports(
     )
     graph_dir = Path(output_dir) / "graph"
     graph_dir.mkdir(parents=True, exist_ok=True)
+    if accounting_artifacts is not None:
+        try:
+            from src.optimization.accounting import export_accounting_outputs
+
+            accounting_paths = export_accounting_outputs(graph_dir, accounting_artifacts)
+            kpi_summary = dict(accounting_artifacts.summary)
+        except Exception:
+            accounting_paths = {}
+    else:
+        accounting_paths = {}
     _write_csv(graph_dir / "vehicle_timeline.csv", timeline_rows)
     _write_csv(graph_dir / "soc_events.csv", soc_rows)
     _write_csv(graph_dir / "depot_power_timeseries_5min.csv", depot_power_rows)
@@ -3688,6 +3854,10 @@ def _persist_canonical_graph_exports(
             "vehicle_charging_source_timeseries.csv",
             "fuel_timeseries.csv",
             "vehicle_soc_timeseries.csv",
+            "vehicle_slot_ledger.csv",
+            "vehicle_slot_ledger.json",
+            "energy_flow_ledger.csv",
+            "energy_flow_ledger.json",
             "fuel_summary.csv",
             "trip_assignment.csv",
             "refuel_events.csv",
@@ -3752,6 +3922,9 @@ def _persist_canonical_graph_exports(
         "fuel_summary_path": "graph/fuel_summary.csv",
         "cost_breakdown_path": "graph/cost_breakdown.json",
         "kpi_summary_path": "graph/kpi_summary.json",
+        "vehicle_slot_ledger_path": accounting_paths.get("vehicle_slot_ledger_csv", "graph/vehicle_slot_ledger.csv"),
+        "energy_flow_ledger_path": accounting_paths.get("energy_flow_ledger_csv", "graph/energy_flow_ledger.csv"),
+        "accounting_summary": getattr(accounting_artifacts, "summary", {}),
         "refuel_events_path": "graph/refuel_events.csv",
         "planning_days": planning_days,
     }
