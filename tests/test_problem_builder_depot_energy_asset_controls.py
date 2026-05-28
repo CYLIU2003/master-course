@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from src.optimization.common.builder import ProblemBuilder
 from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
 
@@ -120,6 +122,41 @@ def test_problem_builder_propagates_pv_curtail_penalty_metadata() -> None:
     problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
 
     assert problem.metadata["pv_curtail_penalty_yen_per_kwh"] == 7.5
+
+
+def test_problem_builder_rejects_missing_positive_trip_distance() -> None:
+    scenario = _scenario()
+    row = scenario["timetable_rows"][0]
+    row.pop("distance_km")
+
+    with pytest.raises(ValueError, match="Trip distance is required"):
+        ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+
+
+def test_problem_builder_uses_zero_pv_when_no_profile_without_synthetic_fallback() -> None:
+    scenario = _scenario()
+    scenario.pop("pv_profiles")
+    scenario["simulation_config"]["depot_energy_assets"][0].pop("pv_generation_kwh_by_slot")
+    scenario["simulation_config"]["depot_energy_assets"][0].pop("depot_area_m2")
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+
+    assert all(slot.pv_available_kw == 0.0 for slot in problem.pv_slots)
+    assert problem.metadata["synthetic_pv_fallback_applied"] is False
+
+
+def test_problem_builder_synthetic_pv_fallback_requires_explicit_opt_in() -> None:
+    scenario = _scenario()
+    scenario.pop("pv_profiles")
+    scenario["simulation_config"]["allow_synthetic_pv_fallback"] = True
+    scenario["simulation_config"]["depot_energy_assets"][0].pop("pv_generation_kwh_by_slot")
+    scenario["simulation_config"]["depot_energy_assets"][0].pop("depot_area_m2")
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+
+    assert any(slot.pv_available_kw > 0.0 for slot in problem.pv_slots)
+    assert problem.metadata["synthetic_pv_fallback_allowed"] is True
+    assert problem.metadata["synthetic_pv_fallback_applied"] is True
 
 
 def test_problem_builder_resamples_hourly_depot_pv_series_to_price_slot_count() -> None:

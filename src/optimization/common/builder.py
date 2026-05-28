@@ -363,6 +363,13 @@ class ProblemBuilder:
         )
         if pv_curtail_penalty_yen_per_kwh is None:
             pv_curtail_penalty_yen_per_kwh = 0.0
+        allow_synthetic_pv_fallback = bool(
+            self._first_present(
+                simulation_cfg.get("allow_synthetic_pv_fallback"),
+                solver_cfg.get("allow_synthetic_pv_fallback"),
+                False,
+            )
+        )
         selected_depot_record = self._find_selected_depot_record(scenario, depot_id)
         depot_coordinates_by_id = self._depot_coordinates_by_id(scenario)
         depot_import_limit_kw = self._safe_float(
@@ -467,6 +474,7 @@ class ProblemBuilder:
             disable_vehicle_acquisition_cost=disable_acquisition_cost,
             cost_component_flags=cost_component_flags,
             weather_strategy_metadata=weather_strategy_metadata,
+            allow_synthetic_pv_fallback=allow_synthetic_pv_fallback,
         )
 
     def build_from_dispatch(
@@ -539,6 +547,7 @@ class ProblemBuilder:
         enable_other_cost: bool = True,
         cost_component_flags: Optional[Mapping[str, Any]] = None,
         weather_strategy_metadata: Optional[Mapping[str, Any]] = None,
+        allow_synthetic_pv_fallback: bool = False,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -753,8 +762,10 @@ class ProblemBuilder:
                 pv_slots,
                 planning_days=planning_days,
                 align_to_time_slots=post_return_target_enabled,
+                allow_synthetic_fallback=allow_synthetic_pv_fallback,
             )
         )
+        synthetic_pv_fallback_applied = bool(not pv_slots and allow_synthetic_pv_fallback)
         depot_energy_assets = self._build_depot_energy_assets_from_scenario(
             scenario_id=scenario_id,
             time_slots=time_slots,
@@ -959,6 +970,8 @@ class ProblemBuilder:
                 ),
                 "pv_marginal_charge_cost_yen_per_kwh": float(pv_marginal_charge_cost_yen_per_kwh),
                 "pv_curtail_penalty_yen_per_kwh": float(pv_curtail_penalty_yen_per_kwh),
+                "synthetic_pv_fallback_allowed": bool(allow_synthetic_pv_fallback),
+                "synthetic_pv_fallback_applied": bool(synthetic_pv_fallback_applied),
                 "cost_component_flags": dict(normalized_cost_component_flags),
                 "depot_coordinates_by_id": dict(depot_coordinates_by_id or {}),
             },
@@ -1545,7 +1558,13 @@ class ProblemBuilder:
         )
         if runtime_min is not None and runtime_min > 0.0:
             return runtime_min / 60.0 * 17.0
-        return 0.0
+        trip_id = str(row.get("trip_id") or row.get("tripId") or "<unknown>")
+        route_id = str(row.get("route_id") or row.get("routeId") or route_like.get("id") or "<unknown>")
+        raise ValueError(
+            "Trip distance is required and must be positive for research-valid optimization "
+            f"(trip_id={trip_id}, route_id={route_id}). Provide distance_km/distanceKm, "
+            "valid stop coordinates, or a positive runtime_min."
+        )
 
     def _haversine_km(
         self,
@@ -3555,6 +3574,7 @@ class ProblemBuilder:
         pv_slots: Sequence[PVSlot],
         planning_days: int = 1,
         align_to_time_slots: bool = False,
+        allow_synthetic_fallback: bool = False,
     ) -> Iterable[PVSlot]:
         if pv_slots:
             target_count = len(time_slots)
@@ -3585,6 +3605,11 @@ class ProblemBuilder:
                         )
                 return all_pv_slots
             return pv_slots
+        if not allow_synthetic_fallback:
+            return [
+                PVSlot(slot_index=slot.slot_index, pv_available_kw=0.0)
+                for slot in time_slots
+            ]
         return [
             PVSlot(
                 slot_index=slot.slot_index,

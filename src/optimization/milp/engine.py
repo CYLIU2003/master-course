@@ -108,6 +108,23 @@ class MILPOptimizer:
                 "startup_infeasible_vehicle_ids": list(
                     (plan.metadata or {}).get("startup_infeasible_vehicle_ids") or []
                 ),
+                "synthetic_pv_fallback_allowed": bool(
+                    problem.metadata.get("synthetic_pv_fallback_allowed", False)
+                ),
+                "synthetic_pv_fallback_applied": bool(
+                    problem.metadata.get("synthetic_pv_fallback_applied", False)
+                ),
+                "arc_pruning_summary": dict(
+                    (plan.metadata or {}).get("arc_pruning_summary")
+                    or model_stats.get("arc_pruning_summary")
+                    or {}
+                ),
+                "successor_pruning_enabled": bool(
+                    ((plan.metadata or {}).get("arc_pruning_summary") or model_stats.get("arc_pruning_summary") or {}).get(
+                        "successor_pruning_enabled",
+                        False,
+                    )
+                ),
                 **solver_benchmark_eligibility(
                     OptimizationMode.MILP,
                     solver_maturity="core",
@@ -196,6 +213,7 @@ class MILPOptimizer:
         trip_by_id = problem.trip_by_id()
         assignment_pairs = self._builder.enumerate_assignment_pairs(problem)
         arc_pairs = self._builder.enumerate_arc_pairs(problem, trip_by_id)
+        arc_pruning_summary = self._builder.arc_pruning_summary(problem, trip_by_id)
         price_slot_count = len(problem.price_slots)
         bev_vehicle_count = sum(
             1
@@ -225,4 +243,5 @@ class MILPOptimizer:
             "objective_terms": (),
             "variable_samples": [],
             "constraint_samples": [],
+            "arc_pruning_summary": arc_pruning_summary,
         }

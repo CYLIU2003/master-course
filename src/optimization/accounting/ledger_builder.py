@@ -50,13 +50,17 @@ def _split_duration(start: datetime, end: datetime) -> Iterable[tuple[date, int,
     current = start
     while current < end:
         slot_start_minute = (current.hour * 60 + current.minute) // SLOT_MINUTES * SLOT_MINUTES
-        slot_start = datetime.combine(current.date(), datetime.min.time()) + timedelta(minutes=slot_start_minute)
+        slot_start = datetime.combine(
+            current.date(),
+            datetime.min.time(),
+            tzinfo=current.tzinfo,
+        ) + timedelta(minutes=slot_start_minute)
         slot_end = slot_start + timedelta(minutes=SLOT_MINUTES)
         overlap_start = max(start, slot_start)
         overlap_end = min(end, slot_end)
         overlap = max((overlap_end - overlap_start).total_seconds() / 60.0, 0.0)
         if overlap > 0.0:
-            yield current.date(), slot_start_minute // SLOT_MINUTES, overlap / SLOT_MINUTES
+            yield current.date(), slot_start_minute // SLOT_MINUTES, overlap
         current = slot_end
 
 
@@ -166,10 +170,12 @@ def _build_vehicle_slot_ledger(
         end = _parse_dt(trip.get("actual_arrival") or trip.get("scheduled_arrival"), service_date)
         if end <= start:
             end = start + timedelta(minutes=SLOT_MINUTES)
-        for slot_date, slot_index, share in _split_duration(start, end):
+        service_duration_min = max((end - start).total_seconds() / 60.0, 1.0)
+        for slot_date, slot_index, overlap_min in _split_duration(start, end):
             key = (vehicle_id, slot_date, slot_index)
             bucket = rows_by_key[key]
             rows_meta.setdefault(key, dict(trip))
+            share = overlap_min / service_duration_min
             bucket["service_km"] += float(trip.get("distance_km", 0.0) or 0.0) * share
             bucket["bev_drive_energy_kwh"] += float(trip.get("energy_used_kwh", 0.0) or 0.0) * share
             bucket["trip_id"] = str(trip.get("trip_id") or bucket.get("trip_id") or "")
@@ -181,16 +187,16 @@ def _build_vehicle_slot_ledger(
         after_km = max(float(trip.get("deadhead_after_km", 0.0) or 0.0), 0.0)
         before_slot = _parse_dt(trip.get("actual_departure") or trip.get("scheduled_departure"), service_date)
         after_slot = _parse_dt(trip.get("actual_arrival") or trip.get("scheduled_arrival"), service_date)
-        for slot_date, slot_index, share in _split_duration(before_slot - timedelta(minutes=SLOT_MINUTES), before_slot):
+        for slot_date, slot_index, overlap_min in _split_duration(before_slot - timedelta(minutes=SLOT_MINUTES), before_slot):
             key = (vehicle_id, slot_date, slot_index)
             bucket = rows_by_key[key]
-            bucket["deadhead_before_km"] += before_km * share
+            bucket["deadhead_before_km"] += before_km * (overlap_min / SLOT_MINUTES)
             bucket["activity_type"] = bucket.get("activity_type") or "deadhead_before"
             rows_meta.setdefault(key, dict(trip))
-        for slot_date, slot_index, share in _split_duration(after_slot, after_slot + timedelta(minutes=SLOT_MINUTES)):
+        for slot_date, slot_index, overlap_min in _split_duration(after_slot, after_slot + timedelta(minutes=SLOT_MINUTES)):
             key = (vehicle_id, slot_date, slot_index)
             bucket = rows_by_key[key]
-            bucket["deadhead_after_km"] += after_km * share
+            bucket["deadhead_after_km"] += after_km * (overlap_min / SLOT_MINUTES)
             bucket["activity_type"] = bucket.get("activity_type") or "deadhead_after"
             rows_meta.setdefault(key, dict(trip))
 

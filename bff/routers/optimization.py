@@ -4029,6 +4029,12 @@ def _solver_settings_payload(
         "supports_exact_milp": bool(metadata.get("supports_exact_milp", False)),
         "fallback_applied": bool(metadata.get("fallback_applied", False)),
         "fallback_reason": str(metadata.get("fallback_reason") or ""),
+        "source_provenance_exact": bool(metadata.get("source_provenance_exact", False)),
+        "derived_source_split": bool(metadata.get("derived_source_split", False)),
+        "synthetic_pv_fallback_allowed": bool(metadata.get("synthetic_pv_fallback_allowed", False)),
+        "synthetic_pv_fallback_applied": bool(metadata.get("synthetic_pv_fallback_applied", False)),
+        "successor_pruning_enabled": bool(metadata.get("successor_pruning_enabled", False)),
+        "arc_pruning_summary": dict(metadata.get("arc_pruning_summary") or {}),
     }
 
 

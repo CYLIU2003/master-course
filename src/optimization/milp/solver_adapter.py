@@ -185,6 +185,7 @@ class GurobiMILPAdapter:
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         assignment_pairs = builder.enumerate_assignment_pairs(problem)
         arc_pairs = builder.enumerate_arc_pairs(problem, trip_by_id)
+        arc_pruning_summary = builder.arc_pruning_summary(problem, trip_by_id)
         vehicle_by_id = {
             str(vehicle.vehicle_id): vehicle
             for vehicle in problem.vehicles
@@ -1784,6 +1785,7 @@ class GurobiMILPAdapter:
             "num_continuous_vars": model.NumVars - model.NumBinVars - model.NumIntVars,
             "num_assignment_pairs": len(assignment_pairs),
             "num_arc_pairs": len(arc_pairs),
+            "arc_pruning_summary": arc_pruning_summary,
             "num_trips": len(problem.trips),
             "num_vehicles": len(problem.vehicles),
             "time_limit_sec": config.time_limit_sec,
@@ -1955,6 +1957,9 @@ class GurobiMILPAdapter:
                     "startup_infeasible_assignment_count": len(startup_infeasible_trip_ids),
                     "startup_infeasible_trip_ids": tuple(sorted(startup_infeasible_trip_ids)),
                     "startup_infeasible_vehicle_ids": tuple(sorted(startup_infeasible_vehicle_ids)),
+                    "arc_pruning_summary": arc_pruning_summary,
+                    "successor_pruning_enabled": bool(arc_pruning_summary.get("successor_pruning_enabled", False)),
+                    "milp_max_successors_per_trip": arc_pruning_summary.get("milp_max_successors_per_trip"),
                 },
             )
             return (
@@ -2178,6 +2183,9 @@ class GurobiMILPAdapter:
                 "vehicle_source_provenance_exact": True,
                 "vehicle_source_allocation_policy": "milp_vehicle_source_variables_tied_to_depot_source_totals",
                 "derived_source_split": False,
+                "arc_pruning_summary": arc_pruning_summary,
+                "successor_pruning_enabled": bool(arc_pruning_summary.get("successor_pruning_enabled", False)),
+                "milp_max_successors_per_trip": arc_pruning_summary.get("milp_max_successors_per_trip"),
                 "service_coverage_mode": service_coverage_mode,
                 "allow_partial_service": bool(allow_partial_service),
                 "strict_coverage_enforced": service_coverage_mode == "strict",
@@ -2226,6 +2234,10 @@ class GurobiMILPAdapter:
                 "strict_coverage_enforced": service_coverage_mode == "strict",
                 "partial_baseline_fallback": bool(partial_baseline_fallback),
                 "baseline_unserved_trip_count": baseline_unserved_trip_count,
+                "arc_pruning_summary": MILPModelBuilder().arc_pruning_summary(
+                    problem,
+                    problem.trip_by_id(),
+                ),
             }
         )
         return (
