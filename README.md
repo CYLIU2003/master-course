@@ -613,6 +613,26 @@ ALNS・GA・ABC は共通評価器 `src/optimization/common/evaluator.py` で O1
 
 MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同一条件で同一費目を計算します。EV電力費とICE燃料費は目的重みも出力KPIも分離し、`energy_cost` は旧互換の推進費合計としてのみ扱います。天気戦略 bias は BEV/ICE の割当を強制する hard constraint ではなく、`objective_value` の探索スコアだけに入る監査可能な soft term です。
 
+### 3.3.1 Canonical Ledger と出力KPI
+
+最適化・シミュレーション後の研究用出力は、solver result から直接グラフ JSON を個別再計算せず、`src/optimization/accounting/` の canonical ledger を一次ソースにします。基本の動線は `Optimization / Simulation Result -> vehicle_slot_ledger -> vehicle_energy_ledger -> energy_flow_ledger -> kpi_summary / graph / validation` です。
+
+Energy flow の定義は、`energy_flow_ledger.csv` で `pv_generation_kwh = pv_to_bus_kwh + pv_to_bess_kwh + pv_curtailed_kwh + pv_export_kwh`、`grid_import_kwh = grid_to_bus_kwh + grid_to_bess_kwh + facility_load_kwh`、`bus_charging_total_kwh = grid_to_bus_kwh + pv_to_bus_kwh + bess_to_bus_kwh` として検証します。現時点で `pv_export_kwh` と `facility_load_kwh` は 0 として明示します。
+
+車両別の充電源は、MILP の車両・電源・slot 変数が残っている場合は `vehicle_charging_source_allocation_method=solver_native` として出力します。車両別ソース変数がない場合は、同一 depot / timestep の `grid_to_bus_kwh`、`pv_to_bus_kwh`、`bess_to_bus_kwh` 比率を同時刻の車両充電量へ比例配賦し、`vehicle_charging_source_allocation_method=proportional_by_timestep`、`vehicle_charging_source_is_solver_native=false` を出します。
+
+Cost definition は `gross_operating_cost_jpy` と `objective_value` を分離します。`gross_operating_cost_jpy` は電力購入、デマンド、燃料、CO2、電池劣化、車両使用などの実費系 ledger 合計です。`objective_value` は solver 内部目的関数であり、ペナルティやボーナス、天気戦略 bias を含む場合があるため実費とは限りません。UI 用の `reported_total_cost_jpy` は summary metadata の `cost_definition` を参照してください。
+
+`solver_status` が `BASELINE_FALLBACK` または `PARTIAL_BASELINE_FALLBACK` の場合、`is_optimization_result=false`、`result_interpretation=baseline_fallback_result` として扱います。この結果は実行可能性や欠便状況の説明には使えますが、MILP/ALNS が改善解または最適解を得た結果としては扱いません。
+
+`data_flow_validation.csv` は `check_name,status,expected_value,actual_value,difference,tolerance,severity,message,source_files` 形式です。`ERROR` は研究結果として使う前に解消すべき不整合、`WARNING` は解釈上の注意、`INFO` は補助情報を意味します。主要チェックには PV 収支、系統受電収支、バス充電源収支、車両別充電源収支、燃料・CO2・コスト整合、service_date 整合、SOC NaN/範囲、fallback metadata 整合が含まれます。
+
+CO2 の主KPIは `grid_plus_ice` 境界に統一します。`total_co2_kg = grid_co2_kg + ice_co2_kg` であり、ICE単独の排出量は `ice_co2_kg` として別に保持します。現段階では BESS 由来CO2の厳密な充電元追跡は未実装のため、`co2_accounting_method=grid_import_based`、`bess_co2_source_tracking=false` を metadata に出します。
+
+燃料消費の source of truth は vehicle/trip 由来の `fuel_canonical_ledger.csv` です。`graph/fuel_timeseries.csv` はこの台帳から時刻別に集約した派生出力であり、`fuel_timeseries_matches_vehicle_fuel_ledger` などの validation で二重計上や不一致を検出します。
+
+初期SOCは `initial_soc_ledger.csv` に車両別の `initial_soc_ratio` / `initial_soc_kwh` / `initial_soc_source` / random seed / SOC範囲を保存します。低SOCランダム化などで SOC 下限違反や早期便の担当困難がある場合は `initial_soc_precheck.csv` と `physical_feasibility_status` に反映し、SOC違反を含む結果を `PHYSICALLY_FEASIBLE` として扱いません。
+
 ### 3.4 研究フェーズ別の実装計画
 
 | Phase | 位置づけ | 状態 |

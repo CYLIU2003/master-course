@@ -52,6 +52,7 @@ from src.optimization.common.cost_components import (
     legacy_cost_component_flags,
     normalize_cost_component_flags,
 )
+from src.optimization.common.time_axis import normalize_timestep_min
 from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
@@ -652,6 +653,8 @@ class UpdateQuickSetupBody(BaseModel):
     allowInterDepotSwap: Optional[bool] = None
     solverMode: Optional[str] = None
     objectiveMode: Optional[str] = None
+    timeStepMin: Optional[int] = None
+    timestepMin: Optional[int] = None
     timeLimitSeconds: Optional[int] = None
     mipGap: Optional[float] = None
     alnsIterations: Optional[int] = None
@@ -1510,6 +1513,10 @@ def _builder_defaults(
         legacy_enable_other_cost=simulation_config.get("enable_other_cost"),
     )
     legacy_cost_flags = legacy_cost_component_flags(cost_component_flags)
+    timestep_min = normalize_timestep_min(
+        simulation_config.get("timestep_min") or simulation_config.get("time_step_min"),
+        default=30,
+    )
     grouped_fleet_templates: Dict[str, Dict[str, Any]] = {}
     for vehicle in existing_vehicles:
         template_id = str(vehicle.get("vehicleTemplateId") or "")
@@ -1562,6 +1569,8 @@ def _builder_defaults(
             or overlay_solver.get("objective_preset")
             or "cost"
         ),
+        "timeStepMin": timestep_min,
+        "timestepMin": timestep_min,
         "fixedRouteBandMode": bool(
             simulation_config.get("fixed_route_band_mode", overlay_solver.get("fixed_route_band_mode", True))
         ),
@@ -2094,6 +2103,8 @@ def _build_quick_setup_payload(
                 builder_defaults.get("objectiveMode") or "total_cost"
             ),
             "objectivePreset": builder_defaults.get("objectivePreset") or "cost",
+            "timeStepMin": int(builder_defaults.get("timeStepMin") or 30),
+            "timestepMin": int(builder_defaults.get("timestepMin") or builder_defaults.get("timeStepMin") or 30),
             "timeLimitSeconds": int(builder_defaults.get("timeLimitSeconds") or 300),
             "mipGap": float(builder_defaults.get("mipGap") or 0.01),
             "alnsIterations": int(builder_defaults.get("alnsIterations") or 500),
@@ -2126,6 +2137,8 @@ def _build_quick_setup_payload(
             "serviceDate": builder_defaults.get("serviceDate"),
             "serviceDates": list(builder_defaults.get("serviceDates") or []),
             "planningDays": int(builder_defaults.get("planningDays") or 1),
+            "timeStepMin": int(builder_defaults.get("timeStepMin") or 30),
+            "timestepMin": int(builder_defaults.get("timestepMin") or builder_defaults.get("timeStepMin") or 30),
             "vehicleTemplateId": builder_defaults.get("vehicleTemplateId"),
             "vehicleCount": int(builder_defaults.get("vehicleCount") or 0),
             "chargerCount": int(builder_defaults.get("chargerCount") or 0),
@@ -2664,6 +2677,14 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["time_limit_seconds"] = int(body.timeLimitSeconds)
         if body.mipGap is not None:
             simulation_config["mip_gap"] = float(body.mipGap)
+        requested_timestep = body.timestepMin if body.timestepMin is not None else body.timeStepMin
+        if requested_timestep is not None:
+            try:
+                timestep_min = normalize_timestep_min(requested_timestep, default=30)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail={"code": "INVALID_TIMESTEP_MIN", "message": str(exc)})
+            simulation_config["time_step_min"] = timestep_min
+            simulation_config["timestep_min"] = timestep_min
         if body.alnsIterations is not None:
             simulation_config["alns_iterations"] = int(body.alnsIterations)
         if body.noImprovementLimit is not None:

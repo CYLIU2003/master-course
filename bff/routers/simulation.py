@@ -134,6 +134,8 @@ class PrepareSimulationSettingsBody(BaseModel):
     start_time: str = "05:00"
     end_time: str = "23:00"
     planning_horizon_hours: float = 20.0
+    time_step_min: Optional[int] = None
+    timestep_min: Optional[int] = None
     depot_energy_assets: Optional[list[Dict[str, Any]]] = None
     pv_profile_id: Optional[str] = None
     weather_mode: Optional[str] = None

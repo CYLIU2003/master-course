@@ -26,6 +26,7 @@ from src.route_family_runtime import (
     normalize_variant_type,
 )
 from .soc_utils import normalize_soc_ratio_like, resolve_soc_kwh
+from .time_axis import normalize_timestep_min
 from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
 from src.preprocess.tariff_loader import build_electricity_prices_from_tariff, load_tariff_csv
 from src.objective_modes import (
@@ -95,15 +96,15 @@ class ProblemBuilder:
         )
         cost_component_flags = self._cost_component_flags_from_scenario(scenario)
         solver_cfg = ((scenario.get("scenario_overlay") or {}).get("solver_config") or {})
-        timestep_min = int(
-            simulation_cfg.get("timestep_min")
-            or simulation_cfg.get("time_step_min")
-            or solver_cfg.get("timestep_min")
-            or solver_cfg.get("time_step_min")
-            or 60
+        timestep_min = normalize_timestep_min(
+            self._first_present(
+                simulation_cfg.get("timestep_min"),
+                simulation_cfg.get("time_step_min"),
+                solver_cfg.get("timestep_min"),
+                solver_cfg.get("time_step_min"),
+            ),
+            default=30,
         )
-        if timestep_min <= 0:
-            timestep_min = 60
         operation_start_time = str(
             simulation_cfg.get("start_time")
             or solver_cfg.get("start_time")
@@ -363,6 +364,20 @@ class ProblemBuilder:
         )
         if pv_curtail_penalty_yen_per_kwh is None:
             pv_curtail_penalty_yen_per_kwh = 0.0
+        vehicle_usage_cost_jpy_per_used_bus = self._safe_float(
+            self._first_present(
+                cost_cfg.get("vehicle_usage_cost_jpy_per_used_bus"),
+                cost_cfg.get("vehicle_use_cost_jpy_per_bus"),
+                cost_cfg.get("vehicle_usage_cost_jpy_per_vehicle"),
+                cost_cfg.get("used_bus_cost_jpy"),
+                simulation_cfg.get("vehicle_usage_cost_jpy_per_used_bus"),
+                simulation_cfg.get("vehicle_use_cost_jpy_per_bus"),
+                simulation_cfg.get("vehicle_usage_cost_jpy_per_vehicle"),
+                simulation_cfg.get("used_bus_cost_jpy"),
+            )
+        )
+        if vehicle_usage_cost_jpy_per_used_bus is None:
+            vehicle_usage_cost_jpy_per_used_bus = 0.0
         allow_synthetic_pv_fallback = bool(
             self._first_present(
                 simulation_cfg.get("allow_synthetic_pv_fallback"),
@@ -464,6 +479,7 @@ class ProblemBuilder:
             grid_to_bess_priority_penalty_yen_per_kwh=grid_to_bess_priority_penalty_yen_per_kwh,
             pv_marginal_charge_cost_yen_per_kwh=pv_marginal_charge_cost_yen_per_kwh,
             pv_curtail_penalty_yen_per_kwh=pv_curtail_penalty_yen_per_kwh,
+            vehicle_usage_cost_jpy_per_used_bus=vehicle_usage_cost_jpy_per_used_bus,
             selected_depot_record=selected_depot_record,
             depot_coordinates_by_id=depot_coordinates_by_id,
             canonical_depot_id=str(depot_id or "depot_default"),
@@ -534,10 +550,11 @@ class ProblemBuilder:
         grid_to_bess_priority_penalty_yen_per_kwh: Optional[float] = None,
         pv_marginal_charge_cost_yen_per_kwh: float = 0.0,
         pv_curtail_penalty_yen_per_kwh: float = 0.0,
+        vehicle_usage_cost_jpy_per_used_bus: float = 0.0,
         selected_depot_record: Optional[Dict[str, Any]] = None,
         depot_coordinates_by_id: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
         canonical_depot_id: str = "depot_default",
-        timestep_min: int = 60,
+        timestep_min: int = 30,
         operation_start_time: Optional[str] = None,
         operation_end_time: Optional[str] = None,
         scenario_vehicles: Optional[Sequence[Dict[str, Any]]] = None,
@@ -551,7 +568,7 @@ class ProblemBuilder:
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
-        timestep_min = max(int(timestep_min or 60), 1)
+        timestep_min = normalize_timestep_min(timestep_min, default=30)
         context.horizon_start_min = int(horizon_start_min or 0)
         context.fixed_route_band_mode = bool(fixed_route_band_mode)
         if fixed_route_band_mode_requested is None:
@@ -589,6 +606,10 @@ class ProblemBuilder:
         )
         pv_curtail_penalty_yen_per_kwh = max(
             float(pv_curtail_penalty_yen_per_kwh or 0.0),
+            0.0,
+        )
+        vehicle_usage_cost_jpy_per_used_bus = max(
+            float(vehicle_usage_cost_jpy_per_used_bus or 0.0),
             0.0,
         )
         if home_depot_charge_pre_window_min is None:
@@ -970,6 +991,7 @@ class ProblemBuilder:
                 ),
                 "pv_marginal_charge_cost_yen_per_kwh": float(pv_marginal_charge_cost_yen_per_kwh),
                 "pv_curtail_penalty_yen_per_kwh": float(pv_curtail_penalty_yen_per_kwh),
+                "vehicle_usage_cost_jpy_per_used_bus": float(vehicle_usage_cost_jpy_per_used_bus),
                 "synthetic_pv_fallback_allowed": bool(allow_synthetic_pv_fallback),
                 "synthetic_pv_fallback_applied": bool(synthetic_pv_fallback_applied),
                 "cost_component_flags": dict(normalized_cost_component_flags),
@@ -3473,6 +3495,8 @@ class ProblemBuilder:
         )
         if not component_flags["vehicle_fixed_cost"]:
             objective_weights["vehicle_fixed_cost"] = 0.0
+        if not component_flags.get("vehicle_usage_cost", True):
+            objective_weights["vehicle_usage_cost"] = 0.0
         if not electricity_terms_enabled:
             objective_weights["electricity_cost"] = 0.0
         if not component_flags["fuel_cost"]:
@@ -3492,6 +3516,7 @@ class ProblemBuilder:
             fuel=float(objective_weights.get("fuel_cost", 1.0)),
             demand=float(objective_weights.get("demand_charge_cost", 1.0)),
             vehicle=float(objective_weights.get("vehicle_fixed_cost", 1.0)),
+            vehicle_usage=float(objective_weights.get("vehicle_usage_cost", 1.0)),
             unserved=float(objective_weights.get("unserved_penalty", 10000.0)),
             deviation=float(objective_weights.get("deviation_cost", 0.0)),
             switch=float(objective_weights.get("switch_cost", 0.0)),

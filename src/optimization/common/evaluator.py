@@ -33,6 +33,9 @@ class CostBreakdown:
     fuel_cost: float = 0.0
     demand_cost: float = 0.0
     vehicle_cost: float = 0.0
+    vehicle_usage_cost: float = 0.0
+    vehicle_usage_cost_jpy_per_used_bus: float = 0.0
+    used_vehicle_day_count: int = 0
     driver_cost: float = 0.0
     unserved_penalty: float = 0.0
     switch_cost: float = 0.0
@@ -93,6 +96,10 @@ class CostBreakdown:
             "fuel_cost": self.fuel_cost,
             "demand_cost": self.demand_cost,
             "vehicle_cost": self.vehicle_cost,
+            "vehicle_usage_cost": self.vehicle_usage_cost,
+            "vehicle_usage_cost_jpy": self.vehicle_usage_cost,
+            "vehicle_usage_cost_jpy_per_used_bus": self.vehicle_usage_cost_jpy_per_used_bus,
+            "used_vehicle_day_count": self.used_vehicle_day_count,
             "driver_cost": self.driver_cost,
             "unserved_penalty": self.unserved_penalty,
             "switch_cost": self.switch_cost,
@@ -198,6 +205,26 @@ class CostEvaluator:
             for duty in plan.duties
             if duty.legs
         }
+        horizon_start_min = int(problem.metadata.get("horizon_start_min") or 0)
+        used_vehicle_days = {
+            (
+                duty_vehicle_map.get(duty.duty_id, duty.duty_id),
+                day_index_for_minute(int(leg.trip.departure_min), horizon_start_min),
+            )
+            for duty in plan.duties
+            for leg in duty.legs
+        }
+        vehicle_usage_unit_cost = max(
+            float(problem.metadata.get("vehicle_usage_cost_jpy_per_used_bus", 0.0) or 0.0),
+            0.0,
+        )
+        vehicle_usage_cost = (
+            weights.vehicle_usage
+            * vehicle_usage_unit_cost
+            * len(used_vehicle_days)
+        )
+        if not component_flags.get("vehicle_usage_cost", True):
+            vehicle_usage_cost = 0.0
         for vehicle_id in sorted(used_vehicle_ids):
             vehicle = vehicle_by_id.get(vehicle_id)
             if vehicle is not None:
@@ -421,6 +448,7 @@ class CostEvaluator:
             "fuel_cost": float(weights.fuel),
             "demand_charge_cost": float(weights.demand),
             "vehicle_fixed_cost": float(weights.vehicle),
+            "vehicle_usage_cost": float(weights.vehicle_usage),
             "unserved_penalty": float(weights.unserved),
             "switch_cost": float(weights.switch),
             "degradation": float(weights.degradation),
@@ -440,6 +468,7 @@ class CostEvaluator:
             + demand_cost
             + contract_overage_cost
             + vehicle_cost
+            + vehicle_usage_cost
             + driver_cost
             + unserved_penalty
             + switch_cost
@@ -459,6 +488,9 @@ class CostEvaluator:
                 fuel_cost=fuel_cost,
                 demand_cost=demand_cost,
                 vehicle_cost=vehicle_cost,
+                vehicle_usage_cost=vehicle_usage_cost,
+                vehicle_usage_cost_jpy_per_used_bus=vehicle_usage_unit_cost,
+                used_vehicle_day_count=len(used_vehicle_days),
                 driver_cost=driver_cost,
                 unserved_penalty=0.0,
                 switch_cost=switch_cost,
@@ -528,6 +560,9 @@ class CostEvaluator:
             fuel_cost=fuel_cost,
             demand_cost=demand_cost,
             vehicle_cost=vehicle_cost,
+            vehicle_usage_cost=vehicle_usage_cost,
+            vehicle_usage_cost_jpy_per_used_bus=vehicle_usage_unit_cost,
+            used_vehicle_day_count=len(used_vehicle_days),
             driver_cost=driver_cost,
             unserved_penalty=unserved_penalty,
             switch_cost=switch_cost,

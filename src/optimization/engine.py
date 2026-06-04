@@ -585,6 +585,7 @@ class OptimizationEngine:
                 "fuel_cost": float(problem.objective_weights.fuel),
                 "demand_charge_cost": float(problem.objective_weights.demand),
                 "vehicle_fixed_cost": float(problem.objective_weights.vehicle),
+                "vehicle_usage_cost": float(problem.objective_weights.vehicle_usage),
                 "unserved_penalty": float(problem.objective_weights.unserved),
                 "switch_cost": float(problem.objective_weights.switch),
                 "deviation_cost": float(problem.objective_weights.deviation),

@@ -170,7 +170,7 @@ def test_problem_builder_resamples_hourly_depot_pv_series_to_price_slot_count() 
 
     assert len(asset.pv_generation_kwh_by_slot) == len(problem.price_slots)
     assert asset.pv_capacity_kw == 70.0
-    assert tuple(asset.pv_generation_kwh_by_slot) == tuple([3.5] * 12 + [7.0] * 12)
+    assert tuple(asset.pv_generation_kwh_by_slot) == tuple([3.5] * 24 + [7.0] * 24)
 
 
 def test_problem_builder_prefers_daily_capacity_factor_metadata_for_pv_series() -> None:
@@ -199,8 +199,8 @@ def test_problem_builder_prefers_daily_capacity_factor_metadata_for_pv_series() 
     asset = problem.depot_energy_assets["dep-1"]
 
     assert asset.pv_capacity_kw == 70.0
-    assert tuple(asset.capacity_factor_by_slot) == tuple([0.1] * 6 + [0.2] * 6 + [0.3] * 6 + [0.4] * 6)
-    assert tuple(asset.pv_generation_kwh_by_slot) == tuple([7.0] * 6 + [14.0] * 6 + [21.0] * 6 + [28.0] * 6)
+    assert tuple(asset.capacity_factor_by_slot) == tuple([0.1] * 12 + [0.2] * 12 + [0.3] * 12 + [0.4] * 12)
+    assert tuple(asset.pv_generation_kwh_by_slot) == tuple([3.5] * 12 + [7.0] * 12 + [10.5] * 12 + [14.0] * 12)
 
 
 def test_problem_builder_rotates_full_day_pv_profile_to_horizon_start() -> None:
@@ -227,9 +227,10 @@ def test_problem_builder_rotates_full_day_pv_profile_to_horizon_start() -> None:
     asset = problem.depot_energy_assets["dep-1"]
 
     assert problem.scenario.horizon_start == "05:00"
-    assert asset.pv_generation_kwh_by_slot[0] == 40.0
-    assert asset.pv_generation_kwh_by_slot[13] == 20.0
-    assert asset.pv_generation_kwh_by_slot[5] == 0.0
+    assert asset.pv_generation_kwh_by_slot[0] == 20.0
+    assert asset.pv_generation_kwh_by_slot[1] == 20.0
+    assert asset.pv_generation_kwh_by_slot[26] == 10.0
+    assert asset.pv_generation_kwh_by_slot[10] == 0.0
 
 
 def test_problem_builder_disables_legacy_pv_when_depot_area_missing() -> None:
@@ -243,7 +244,7 @@ def test_problem_builder_disables_legacy_pv_when_depot_area_missing() -> None:
     assert asset.depot_area_m2 is None
     assert asset.pv_enabled is False
     assert asset.pv_capacity_kw == 0.0
-    assert tuple(asset.pv_generation_kwh_by_slot) == tuple([0.0] * 24)
+    assert tuple(asset.pv_generation_kwh_by_slot) == tuple([0.0] * 48)
 
 
 def test_problem_builder_uses_manual_pv_capacity_override_without_depot_area() -> None:
@@ -268,7 +269,7 @@ def test_problem_builder_uses_manual_pv_capacity_override_without_depot_area() -
 
     assert asset.pv_enabled is True
     assert asset.pv_capacity_kw == 120.0
-    assert tuple(asset.pv_generation_kwh_by_slot) == tuple([30.0] * 12 + [60.0] * 12)
+    assert tuple(asset.pv_generation_kwh_by_slot) == tuple([15.0] * 24 + [30.0] * 24)
 
 
 def test_problem_builder_area_scaling_doubles_capacity_and_generation() -> None:
@@ -291,8 +292,8 @@ def test_problem_builder_area_scaling_doubles_capacity_and_generation() -> None:
 
     assert base.depot_energy_assets["dep-1"].pv_capacity_kw == 70.0
     assert doubled.depot_energy_assets["dep-1"].pv_capacity_kw == 140.0
-    assert tuple(base.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([0.0] * 12 + [35.0] * 12)
-    assert tuple(doubled.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([0.0] * 12 + [70.0] * 12)
+    assert tuple(base.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([0.0] * 24 + [17.5] * 24)
+    assert tuple(doubled.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([0.0] * 24 + [35.0] * 24)
 
 
 def test_problem_builder_same_area_keeps_capacity_when_profile_shape_changes() -> None:
@@ -321,8 +322,8 @@ def test_problem_builder_same_area_keeps_capacity_when_profile_shape_changes() -
 
     assert day1.depot_energy_assets["dep-1"].pv_capacity_kw == 70.0
     assert day2.depot_energy_assets["dep-1"].pv_capacity_kw == 70.0
-    assert tuple(day1.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([14.0] * 12 + [28.0] * 12)
-    assert tuple(day2.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([7.0] * 12 + [42.0] * 12)
+    assert tuple(day1.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([7.0] * 24 + [14.0] * 24)
+    assert tuple(day2.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot) == tuple([3.5] * 24 + [21.0] * 24)
 
 
 def test_problem_builder_propagates_ice_emission_factor_from_catalog() -> None:

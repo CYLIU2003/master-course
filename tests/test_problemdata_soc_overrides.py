@@ -17,7 +17,7 @@ def _scenario(
         },
         "simulation_config": {
             "start_time": "05:00",
-            "time_step_min": 15,
+            "time_step_min": 30,
             "planning_horizon_hours": 20,
             "default_turnaround_min": 5,
             "initial_soc_percent": initial_soc_percent,

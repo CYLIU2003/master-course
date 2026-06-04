@@ -456,7 +456,7 @@ def export_graph_exports_phase1(
     - manifest.json
     - vehicle_timeline.csv
     - soc_events.csv
-    - depot_power_timeseries_5min.csv
+    - depot_power_timeseries.csv
     - vehicle_charge_energy_sources.csv
     - vehicle_soc_timeseries.csv
     - trip_assignment.csv
@@ -537,12 +537,18 @@ def export_graph_exports_phase1(
         run_id=str(run_dir.name),
         service_date=base_date,
         weather_date=base_date,
-        operator_id=str(getattr(data, "operator_id", "") or ""),
+        operator_id=str(getattr(data, "operator_id", "") or "UNKNOWN_OPERATOR"),
         trip_assignment_rows=trip_assignment_rows,
         vehicle_soc_timeseries_rows=vehicle_soc_timeseries_rows,
         vehicle_charging_source_rows=vehicle_charge_source_rows,
         energy_flow_rows=energy_flow_rows,
-        metadata={"created_by_stage": "result_exporter.export_graph_exports_phase1"},
+        metadata={
+            "created_by_stage": "result_exporter.export_graph_exports_phase1",
+            "operator_id": str(getattr(data, "operator_id", "") or "UNKNOWN_OPERATOR"),
+            "slot_minutes": int(getattr(data, "timestep_min", 30) or 30),
+            "num_periods": int(getattr(data, "num_periods", 0) or 0),
+            "planning_horizon_hours": float(getattr(data, "planning_horizon_hours", 0.0) or 0.0),
+        },
     )
     accounting_paths = export_accounting_outputs(graph_dir, accounting_artifacts)
     kpi_summary = dict(accounting_artifacts.summary)
@@ -607,7 +613,7 @@ def export_graph_exports_phase1(
 
     _write_csv(graph_dir / "vehicle_timeline.csv", vehicle_timeline_rows)
     _write_csv(graph_dir / "soc_events.csv", soc_event_rows)
-    _write_csv(graph_dir / "depot_power_timeseries_5min.csv", depot_power_rows)
+    _write_csv(graph_dir / "depot_power_timeseries.csv", depot_power_rows)
     _write_csv(graph_dir / "vehicle_charge_energy_sources.csv", vehicle_charge_source_rows)
     _write_csv(graph_dir / "vehicle_soc_timeseries.csv", vehicle_soc_timeseries_rows)
     _write_csv(graph_dir / "trip_assignment.csv", trip_assignment_rows)
@@ -626,7 +632,9 @@ def export_graph_exports_phase1(
     files = [
         "vehicle_timeline.csv",
         "soc_events.csv",
-        "depot_power_timeseries_5min.csv",
+        "depot_power_timeseries.csv",
+        "vehicle_energy_ledger.csv",
+        "data_flow_validation.csv",
         "vehicle_slot_ledger.csv",
         "energy_flow_ledger.csv",
         "vehicle_charge_energy_sources.csv",
@@ -640,7 +648,7 @@ def export_graph_exports_phase1(
         "schema_version": "1.0.0",
         "scenario_id": scenario_id,
         "generated_at": _tokyo_now().isoformat(),
-        "time_resolution_minutes": 5,
+        "time_resolution_minutes": int(getattr(data, "timestep_min", 30) or 30),
         "timezone": "Asia/Tokyo",
         "has_pv": bool(data.enable_pv),
         "has_optimization_result": True,
@@ -1245,7 +1253,7 @@ def _build_depot_power_rows_5min(
         return rows
 
     horizon_min = int(round(float(data.num_periods) * float(data.delta_t_min)))
-    five_min_points = list(range(0, max(horizon_min, 1), 5))
+    output_points = list(range(0, max(horizon_min, 1), int(data.delta_t_min)))
     flow_rows = _build_depot_energy_flow_rows(data, ms, dp, milp)
     flow_by_key = {(str(row["depot_id"]), int(row["time_idx"])): row for row in flow_rows}
     charge_kw_by_site_slot: Dict[str, Dict[int, float]] = defaultdict(lambda: defaultdict(float))
@@ -1271,7 +1279,9 @@ def _build_depot_power_rows_5min(
             default=0.0,
         )
         charge_slot_map = charge_kw_by_site_slot.get(site_id, {})
-        for minute in five_min_points:
+        cumulative_grid_kwh = 0.0
+        cumulative_grid_cost = 0.0
+        for minute in output_points:
             slot_idx = min(int(minute // max(float(data.delta_t_min), 1.0)), max(data.num_periods - 1, 0))
             flow_row = dict(flow_by_key.get((site_id, slot_idx), {}))
             grid_import_kw_reported = float(flow_row.get("grid_import_kw_reported", flow_row.get("grid_kw", 0.0)) or 0.0)
@@ -1283,6 +1293,11 @@ def _build_depot_power_rows_5min(
             grid_to_bess_kw = float(flow_row.get("grid_to_bess_kwh", 0.0) or 0.0) / slot_hours
             pv_curtail_kw = float(flow_row.get("pv_curtail_kwh", 0.0) or 0.0) / slot_hours
             total_charge_kw = float(charge_slot_map.get(slot_idx, 0.0) or 0.0)
+            price = float(get_grid_price(dp, site_id, slot_idx, default=0.0) or 0.0)
+            grid_import_kwh = grid_import_kw_from_flow * slot_hours
+            grid_purchase_cost = grid_import_kwh * price
+            cumulative_grid_kwh += grid_import_kwh
+            cumulative_grid_cost += grid_purchase_cost
             building_load_kw = float(dp.base_load_kw.get(site_id, {}).get(slot_idx, 0.0) or 0.0)
             battery_storage_charge_kw = (pv_to_bess_kw + grid_to_bess_kw)
             battery_storage_discharge_kw = bess_to_bus_kw
@@ -1309,21 +1324,38 @@ def _build_depot_power_rows_5min(
                         ).isoformat()
                     )(*_planning_start_components(planning_start_time)),
                     "depot_id": site_id,
+                    "slot_index": slot_idx,
+                    "slot_minutes": int(data.delta_t_min),
                     "total_charge_kw": total_charge_kw,
                     "grid_import_kw": grid_import_kw_reported,
+                    "grid_import_kwh": grid_import_kwh,
+                    "grid_import_cumulative_kwh": cumulative_grid_kwh,
                     "grid_import_kw_reported": grid_import_kw_reported,
                     "grid_import_kw_from_flow": grid_import_kw_from_flow,
                     "grid_import_balance_error_kw": grid_import_kw_reported - grid_import_kw_from_flow,
                     "pv_generation_kw": pv_generation_kw,
+                    "pv_generation_kwh": pv_generation_kw * slot_hours,
                     "pv_used_for_charging_kw": pv_used_for_charging_kw,
                     "pv_used_for_building_kw": 0.0,
                     "pv_curtailed_kw": pv_curtail_kw,
+                    "pv_curtail_kwh": pv_curtail_kw * slot_hours,
                     "building_load_kw": building_load_kw,
                     "battery_storage_charge_kw": battery_storage_charge_kw,
                     "battery_storage_discharge_kw": battery_storage_discharge_kw,
                     "net_load_kw": net_load_kw,
                     "demand_peak_candidate": abs(grid_import_kw_from_flow - peak_grid) <= 1e-9,
-                    "energy_price_yen_per_kwh": float(get_grid_price(dp, site_id, slot_idx, default=0.0) or 0.0),
+                    "grid_to_bus_kwh": float(flow_row.get("grid_to_bus_kwh", 0.0) or 0.0),
+                    "grid_to_bess_kwh": float(flow_row.get("grid_to_bess_kwh", 0.0) or 0.0),
+                    "grid_import_total_kwh": grid_import_kwh,
+                    "pv_to_bus_kwh": float(flow_row.get("pv_to_bus_kwh", 0.0) or 0.0),
+                    "pv_to_bess_kwh": float(flow_row.get("pv_to_bess_kwh", 0.0) or 0.0),
+                    "bess_to_bus_kwh": float(flow_row.get("bess_to_bus_kwh", 0.0) or 0.0),
+                    "bus_charge_total_kwh": float(flow_row.get("grid_to_bus_kwh", 0.0) or 0.0) + float(flow_row.get("pv_to_bus_kwh", 0.0) or 0.0) + float(flow_row.get("bess_to_bus_kwh", 0.0) or 0.0),
+                    "energy_price_yen_per_kwh": price,
+                    "grid_purchase_cost_jpy": grid_purchase_cost,
+                    "grid_purchase_cumulative_cost_jpy": cumulative_grid_cost,
+                    "power_balance_error_kwh": grid_import_kwh - float(flow_row.get("grid_to_bus_kwh", 0.0) or 0.0) - float(flow_row.get("grid_to_bess_kwh", 0.0) or 0.0),
+                    "pv_balance_error_kwh": (pv_generation_kw * slot_hours) - float(flow_row.get("pv_to_bus_kwh", 0.0) or 0.0) - float(flow_row.get("pv_to_bess_kwh", 0.0) or 0.0) - (pv_curtail_kw * slot_hours),
                     "demand_charge_window_flag": bool(data.enable_demand_charge),
                 }
             )

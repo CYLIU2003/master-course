@@ -1263,6 +1263,7 @@ class GurobiMILPAdapter:
         fuel_weight = max(problem.objective_weights.fuel, 0.0)
         demand_weight = max(problem.objective_weights.demand, 0.0)
         vehicle_weight = max(problem.objective_weights.vehicle, 0.0)
+        vehicle_usage_weight = max(problem.objective_weights.vehicle_usage, 0.0)
         charge_session_start_penalty = self._safe_nonnegative_float(
             problem.metadata.get("charge_session_start_penalty_yen"),
             default=2.0,
@@ -1422,6 +1423,14 @@ class GurobiMILPAdapter:
         if component_flags.get("vehicle_fixed_cost", True):
             for vehicle in problem.vehicles:
                 objective += vehicle_weight * vehicle.fixed_use_cost_jpy * used_vehicle[vehicle.vehicle_id]
+
+        vehicle_usage_unit_cost = self._safe_nonnegative_float(
+            problem.metadata.get("vehicle_usage_cost_jpy_per_used_bus"),
+            default=0.0,
+        )
+        if component_flags.get("vehicle_usage_cost", True) and vehicle_usage_unit_cost > 0.0:
+            for var in used_vehicle_day.values():
+                objective += vehicle_usage_weight * vehicle_usage_unit_cost * var
 
         if component_flags.get("driver_cost", True):
             regular_shift_minutes = _DRIVER_REGULAR_HOURS_PER_DAY * 60.0
@@ -2170,6 +2179,7 @@ class GurobiMILPAdapter:
                 "grid_to_bus_priority_penalty_yen_per_kwh": grid_to_bus_priority_penalty,
                 "grid_to_bess_priority_penalty_yen_per_kwh": grid_to_bess_priority_penalty,
                 "pv_curtail_penalty_yen_per_kwh": curtail_penalty,
+                "vehicle_usage_cost_jpy_per_used_bus": vehicle_usage_unit_cost,
                 "pv_curtail_penalty_auto_defaulted": pv_curtail_penalty_auto_defaulted,
                 "charge_session_start_penalty_yen": charge_session_start_penalty,
                 "slot_concurrency_penalty_yen": slot_concurrency_penalty,

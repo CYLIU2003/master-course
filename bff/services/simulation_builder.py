@@ -13,6 +13,7 @@ from src.optimization.common.cost_components import (
     legacy_cost_component_flags,
     normalize_cost_component_flags,
 )
+from src.optimization.common.time_axis import normalize_timestep_min
 from src.scenario_overlay import TimeOfUseBand, default_scenario_overlay
 
 
@@ -704,6 +705,13 @@ def apply_builder_configuration(
         "serviceId": selected_day_type,
     }
     doc["scenario_overlay"] = overlay.model_dump()
+    timestep_min = normalize_timestep_min(
+        _first_defined(
+            getattr(body.simulation_settings, "timestep_min", None),
+            getattr(body.simulation_settings, "time_step_min", None),
+        ),
+        default=30,
+    )
     doc["simulation_config"] = {
         "service_date": service_date,
         "service_dates": list(service_dates),
@@ -719,8 +727,8 @@ def apply_builder_configuration(
         "start_time": body.simulation_settings.start_time,
         "end_time": body.simulation_settings.end_time,
         "planning_horizon_hours": planning_horizon_hours,
-        "time_step_min": 60,
-        "timestep_min": 60,
+        "time_step_min": timestep_min,
+        "timestep_min": timestep_min,
         "vehicle_template_id": primary_template.get("id"),
         "fleet_templates": [
             {

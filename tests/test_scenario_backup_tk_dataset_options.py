@@ -319,6 +319,39 @@ def test_solver_settings_window_labels_mip_gap_as_ratio() -> None:
     assert "0.001 = 0.1%" in source
 
 
+def test_solver_settings_window_exposes_timestep_selector() -> None:
+    source = inspect.getsource(App.open_solver_settings_window)
+
+    assert "計算ステップ" in source
+    assert 'values=["30", "60"]' in source
+    assert "Prepareをやり直してください" in source
+
+
+def test_timestep_payload_uses_30_or_60_only() -> None:
+    app = App.__new__(App)
+    app.timestep_min_var = DummyVar("60")
+
+    assert App._timestep_min_value(app) == 60
+
+    app.timestep_min_var.set("15")
+    assert App._timestep_min_value(app) == 30
+    app.timestep_min_var.set("5")
+    assert App._timestep_min_value(app) == 30
+
+
+def test_timestep_payload_fields_are_wired() -> None:
+    prepare_source = inspect.getsource(App._prepare_payload)
+    execute_source = inspect.getsource(App.run_selected_execution)
+    quick_setup_source = inspect.getsource(App.save_quick_setup)
+
+    assert '"time_step_min": self._timestep_min_value()' in prepare_source
+    assert '"timestep_min": self._timestep_min_value()' in prepare_source
+    assert '"time_step_min": self._timestep_min_value()' in execute_source
+    assert '"timestep_min": self._timestep_min_value()' in execute_source
+    assert '"timeStepMin": self._timestep_min_value()' in quick_setup_source
+    assert '"timestepMin": self._timestep_min_value()' in quick_setup_source
+
+
 def test_weather_proxy_json_loader_rejects_service_date_mismatch(tmp_path: Path) -> None:
     forecast_path = tmp_path / "forecast.json"
     write_weather_proxy_forecast_json(forecast_path, _weather_forecast())

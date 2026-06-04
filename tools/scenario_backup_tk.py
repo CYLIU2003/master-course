@@ -2351,6 +2351,7 @@ class App:
         # ── ソルバー詳細設定 ──
         self.solver_mode_var = tk.StringVar(value="mode_hybrid")  # Default to canonical hybrid mode
         self.objective_mode_var = tk.StringVar(value="total_cost")
+        self.timestep_min_var = tk.StringVar(value="30")
         self.time_limit_var = tk.StringVar(value="300")
         self.mip_gap_var = tk.StringVar(value="0.01")
         self.alns_iter_var = tk.StringVar(value="500")
@@ -3293,6 +3294,10 @@ class App:
             return float(value.strip())
         except Exception:
             return default
+
+    def _timestep_min_value(self) -> int:
+        value = self._parse_int(self.timestep_min_var.get(), 30)
+        return 60 if value == 60 else 30
 
     @staticmethod
     def _soc_percent_for_ui(value: Any, default: float) -> str:
@@ -5936,6 +5941,8 @@ class App:
             self.planning_days_var.set(str(planning_days or 1))
             self.operation_start_time_var.set(str(sim.get("startTime") or "05:00"))
             self.operation_end_time_var.set(str(sim.get("endTime") or "23:00"))
+            timestep_min = sim.get("timeStepMin") or sim.get("timestepMin") or sim.get("time_step_min") or sim.get("timestep_min") or 30
+            self.timestep_min_var.set("60" if str(timestep_min).strip() == "60" else "30")
             self.solver_mode_var.set(str(solver.get("solverMode") or "hybrid"))
             self.objective_mode_var.set(
                 normalize_objective_mode(solver.get("objectiveMode") or "total_cost")
@@ -6162,6 +6169,8 @@ class App:
             "solverMode": self.solver_mode_var.get().strip(),
             "objectiveMode": self.objective_mode_var.get().strip(),
             "objectivePreset": self.objective_preset_var.get().strip() or "cost",
+            "timeStepMin": self._timestep_min_value(),
+            "timestepMin": self._timestep_min_value(),
             "timeLimitSeconds": self._parse_int(self.time_limit_var.get(), 300),
             "mipGap": self._parse_float(self.mip_gap_var.get(), 0.01),
             "alnsIterations": self._parse_int(self.alns_iter_var.get(), 500),
@@ -7500,6 +7509,8 @@ class App:
                 "solver_mode": self.solver_mode_var.get().strip(),
                 "objective_mode": self.objective_mode_var.get().strip(),
                 "objective_preset": self.objective_preset_var.get().strip() or "cost",
+                "time_step_min": self._timestep_min_value(),
+                "timestep_min": self._timestep_min_value(),
                 "planning_days": planning_days,
                 "service_dates": service_dates,
                 "fixed_route_band_mode": fixed_route_band_mode,
@@ -7898,6 +7909,8 @@ class App:
                 "mode": self.solver_mode_var.get().strip(),
                 "prepared_input_id": self.prepared_input_id,
                 "current_time": datetime.now().strftime("%H:%M"),
+                "time_step_min": self._timestep_min_value(),
+                "timestep_min": self._timestep_min_value(),
                 "time_limit_seconds": self._effective_optimization_time_limit_seconds(),
                 "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
                 "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
@@ -7933,6 +7946,8 @@ class App:
         payload = {
             "mode": self.solver_mode_var.get().strip(),
             "prepared_input_id": self.prepared_input_id,
+            "time_step_min": self._timestep_min_value(),
+            "timestep_min": self._timestep_min_value(),
             "time_limit_seconds": effective_time_limit,
             "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
             "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
@@ -8072,6 +8087,7 @@ class App:
             (self.solver_mode_var, "ソルバー種別を変更"),
             (self.objective_mode_var, "目的関数モードを変更"),
             (self.objective_preset_var, "目的プリセットを変更"),
+            (self.timestep_min_var, "計算ステップを変更"),
             (self.allow_partial_service_var, "未配車許容設定を変更"),
             (self.initial_soc_var, "SOC初期値を変更"),
             (self.soc_min_var, "SOC下限を変更"),
@@ -8947,6 +8963,24 @@ class App:
             foreground="#555",
         ).pack(anchor="w")
 
+        row_timestep = ttk.Frame(solver_box)
+        row_timestep.pack(fill=tk.X, pady=3)
+        lbl_timestep = ttk.Label(row_timestep, text="計算ステップ", width=24)
+        lbl_timestep.pack(side=tk.LEFT)
+        _Tooltip(
+            lbl_timestep,
+            "最適化・会計出力の時間粒度です。30分または60分のみ選択できます。\n"
+            "変更後は手順③のPrepareをやり直してください。",
+        )
+        ttk.Combobox(
+            row_timestep,
+            textvariable=self.timestep_min_var,
+            state="readonly",
+            values=["30", "60"],
+            width=10,
+        ).pack(side=tk.LEFT)
+        ttk.Label(row_timestep, text="分", foreground="#555").pack(side=tk.LEFT, padx=(4, 0))
+
         row_tl = ttk.Frame(solver_box)
         row_tl.pack(fill=tk.X, pady=3)
         ttk.Label(row_tl, text="時間上限(秒)", width=24).pack(side=tk.LEFT)
@@ -8987,6 +9021,7 @@ class App:
         ttk.Entry(row_gap, textvariable=self.mip_gap_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         row_successors = ttk.Frame(solver_box)
+        row_successors.pack(fill=tk.X, pady=3)
         lbl_successors = ttk.Label(row_successors, text="MILP後継便上限", width=24)
         lbl_successors.pack(side=tk.LEFT)
         _Tooltip(

@@ -6,6 +6,7 @@ import re
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from src.dispatch.models import VehicleDuty
+from .time_axis import normalize_timestep_min
 
 
 class OptimizationMode(str, Enum):
@@ -204,6 +205,7 @@ class OptimizationObjectiveWeights:
     fuel: float = 1.0
     demand: float = 1.0
     vehicle: float = 1.0
+    vehicle_usage: float = 1.0
     unserved: float = 10000.0
     switch: float = 0.0
     degradation: float = 0.0
@@ -234,6 +236,9 @@ class OptimizationScenario:
     fixed_operations_before_t0: Tuple[LockedOperation, ...] = ()
     uncertainty_flags: Mapping[str, bool] = field(default_factory=dict)
     service_coverage_mode: str = "strict"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "timestep_min", normalize_timestep_min(self.timestep_min, default=30))
     
     @property
     def planning_horizon_hours(self) -> float:

@@ -17,6 +17,20 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
+
+def _normalize_timestep_min(raw: Any, *, default: int = 30) -> int:
+    if raw is None or raw == "":
+        value = default
+    else:
+        text = str(raw).strip().lower()
+        value = {"30": 30, "30.0": 30, "30min": 30, "pt30m": 30, "60": 60, "60.0": 60, "60min": 60, "1h": 60, "pt1h": 60}.get(text)
+        if value is None:
+            value = int(float(text))
+    if value not in {30, 60}:
+        raise ValueError(f"timestep_min must be 30 or 60 minutes, got {value!r}")
+    return value
+
+
 # ---------------------------------------------------------------------------
 # §11.1.1 Vehicle
 # ---------------------------------------------------------------------------
@@ -260,3 +274,19 @@ class ProblemData:
     @property
     def delta_t_min(self) -> float:
         return self.delta_t_hour * 60.0
+
+    @property
+    def timestep_min(self) -> int:
+        return int(round(self.delta_t_min))
+
+    def __post_init__(self) -> None:
+        timestep_min = _normalize_timestep_min(self.delta_t_min, default=30)
+        self.delta_t_hour = timestep_min / 60.0
+        num_periods_was_explicit = self.num_periods != 32
+        horizon_was_explicit = self.planning_horizon_hours != 16.0
+        if num_periods_was_explicit and not horizon_was_explicit:
+            self.planning_horizon_hours = self.num_periods * self.delta_t_hour
+        elif self.planning_horizon_hours > 0:
+            import math
+
+            self.num_periods = int(math.ceil(self.planning_horizon_hours * 60.0 / timestep_min))

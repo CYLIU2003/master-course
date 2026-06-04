@@ -396,7 +396,7 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert artifacts["enabled"] is True
     assert (tmp_path / "graph" / "vehicle_timeline.csv").exists()
     assert (tmp_path / "graph" / "soc_events.csv").exists()
-    assert (tmp_path / "graph" / "depot_power_timeseries_5min.csv").exists()
+    assert (tmp_path / "graph" / "depot_power_timeseries.csv").exists()
     assert (tmp_path / "graph" / "grid_import_timeseries.csv").exists()
     assert (tmp_path / "graph" / "pv_generation_timeseries.csv").exists()
     assert (tmp_path / "graph" / "energy_flow_timeseries.csv").exists()
@@ -414,12 +414,12 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert (tmp_path / "graph" / "vehicle_operation_diagrams" / "manifest.json").exists()
     soc_rows = list(csv.DictReader((tmp_path / "graph" / "vehicle_soc_timeseries.csv").open(encoding="utf-8")))
     assert soc_rows[0]["time"] == "00:00"
-    assert soc_rows[-1]["time"] == "23:55"
-    assert len(soc_rows) == 288
+    assert soc_rows[-1]["time"] == "23:30"
+    assert len(soc_rows) == 48
     grid_rows = list(csv.DictReader((tmp_path / "graph" / "grid_import_timeseries.csv").open(encoding="utf-8")))
     assert grid_rows[0]["time"] == "00:00"
-    assert grid_rows[-1]["time"] == "23:55"
-    assert len(grid_rows) == 288
+    assert grid_rows[-1]["time"] == "23:30"
+    assert len(grid_rows) == 48
 
 
 def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(tmp_path: Path) -> None:
@@ -603,13 +603,13 @@ def test_canonical_graph_exports_research_timeseries_files(tmp_path: Path) -> No
 
     with (graph_dir / "contract_limit_timeseries.csv").open("r", encoding="utf-8", newline="") as handle:
         contract_rows = list(csv.DictReader(handle))
-    assert len(contract_rows) == 288
+    assert len(contract_rows) == 48
     assert "grid_import_for_contract_kw" in contract_rows[0]
     assert "bess_to_bus_excluded_from_contract_kwh" in contract_rows[0]
 
     with (graph_dir / "vehicle_charging_source_timeseries.csv").open("r", encoding="utf-8", newline="") as handle:
         vehicle_source_rows = list(csv.DictReader(handle))
-    assert len(vehicle_source_rows) == 288
+    assert len(vehicle_source_rows) == 48
     assert abs(sum(float(row["grid_to_vehicle_kwh"]) for row in vehicle_source_rows) - 10.0) < 1.0e-9
 
 
@@ -651,7 +651,7 @@ def test_canonical_graph_exports_fallback_grid_import_and_contract_exceedance(tm
         output_dir=str(tmp_path),
     )
 
-    depot_power_path = tmp_path / "graph" / "depot_power_timeseries_5min.csv"
+    depot_power_path = tmp_path / "graph" / "depot_power_timeseries.csv"
     with depot_power_path.open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
 
@@ -666,7 +666,7 @@ def test_canonical_graph_exports_fallback_grid_import_and_contract_exceedance(tm
     assert sum(float(row["grid_to_bus_slot_kwh"]) for row in rows) == 10.0
     assert sum(float(row["pv_to_bus_kwh"]) for row in rows) == 0.0
     assert float(charged_rows[0]["contract_limit_kw"]) == 15.0
-    assert float(charged_rows[0]["slot_minutes"]) == 5.0
+    assert float(charged_rows[0]["slot_minutes"]) == 30.0
     assert float(charged_rows[0]["grid_to_bus_hourly_source_kwh"]) == 10.0
     assert float(charged_rows[0]["contract_over_limit_kwh"]) > 0.0
     assert charged_rows[0]["contract_limit_exceeded"] == "True"

@@ -16,7 +16,7 @@ def _depot_inference_scenario() -> dict:
         },
         "simulation_config": {
             "start_time": "05:00",
-            "time_step_min": 15,
+            "time_step_min": 30,
             "planning_horizon_hours": 16,
             "default_turnaround_min": 5,
         },

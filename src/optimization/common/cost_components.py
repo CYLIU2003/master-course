@@ -21,6 +21,12 @@ COST_COMPONENT_DEFINITIONS: tuple[CostComponentDefinition, ...] = (
         section="主要コスト",
     ),
     CostComponentDefinition(
+        key="vehicle_usage_cost",
+        label="車両使用費（人件費模擬）",
+        description="営業便を担当した vehicle-day ごとの固定費を目的関数へ加算します。車両導入費・拘束時間ベース運転士費とは分離します。",
+        section="主要コスト",
+    ),
+    CostComponentDefinition(
         key="driver_cost",
         label="運転士コスト",
         description="拘束時間ベースの運転士コストを目的関数へ加算します。",
