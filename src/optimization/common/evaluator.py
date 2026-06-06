@@ -73,6 +73,11 @@ class CostBreakdown:
     operating_cost_leftover_total: float = 0.0
     grid_purchase_cost: float = 0.0
     bess_discharge_cost: float = 0.0
+    pv_to_bus_cost_jpy: float = 0.0
+    pv_to_bess_cost_jpy: float = 0.0
+    bess_to_bus_cost_jpy: float = 0.0
+    bess_total_flow_cost_jpy: float = 0.0
+    bess_to_bus_unit_cost_yen_per_kwh: float = 0.0
     contract_overage_cost: float = 0.0
     stationary_battery_degradation_cost: float = 0.0
     pv_asset_cost: float = 0.0
@@ -148,6 +153,12 @@ class CostBreakdown:
             "operating_cost_leftover_total": self.operating_cost_leftover_total,
             "grid_purchase_cost": self.grid_purchase_cost,
             "bess_discharge_cost": self.bess_discharge_cost,
+            "pv_to_bus_cost_jpy": self.pv_to_bus_cost_jpy,
+            "pv_to_bess_cost_jpy": self.pv_to_bess_cost_jpy,
+            "bess_to_bus_cost_jpy": self.bess_to_bus_cost_jpy,
+            "bess_total_flow_cost_jpy": self.bess_total_flow_cost_jpy,
+            "bess_to_bus_unit_cost_yen_per_kwh": self.bess_to_bus_unit_cost_yen_per_kwh,
+            "bess_pv_cost_policy": "bess_cycle_cost_applies_to_pv_to_bus_pv_to_bess_bess_to_bus",
             "contract_overage_cost": self.contract_overage_cost,
             "stationary_battery_degradation_cost": self.stationary_battery_degradation_cost,
             "pv_asset_cost": self.pv_asset_cost,
@@ -364,6 +375,16 @@ class CostEvaluator:
         operating_cost_leftover_total = leftover_ev_provisional_cost + leftover_ice_provisional_cost
         grid_purchase_cost = float(energy_cost_components.get("grid_purchase_cost", 0.0))
         bess_discharge_cost = float(energy_cost_components.get("bess_discharge_cost", 0.0))
+        pv_to_bus_cost_jpy = float(energy_cost_components.get("pv_to_bus_cost_jpy", 0.0))
+        pv_to_bess_cost_jpy = float(energy_cost_components.get("pv_to_bess_cost_jpy", 0.0))
+        bess_to_bus_cost_jpy = float(energy_cost_components.get("bess_to_bus_cost_jpy", bess_discharge_cost))
+        bess_total_flow_cost_jpy = float(
+            energy_cost_components.get(
+                "bess_total_flow_cost_jpy",
+                pv_to_bus_cost_jpy + pv_to_bess_cost_jpy + bess_to_bus_cost_jpy,
+            )
+        )
+        bess_to_bus_unit_cost = float(energy_cost_components.get("bess_to_bus_unit_cost_yen_per_kwh", 0.0))
         contract_overage_cost = float(energy_cost_components.get("contract_overage_cost", 0.0))
         stationary_battery_degradation_cost = float(
             energy_cost_components.get("stationary_battery_degradation_cost", 0.0)
@@ -382,12 +403,7 @@ class CostEvaluator:
             float(problem.metadata.get("pv_marginal_charge_cost_yen_per_kwh", 0.0) or 0.0),
             0.0,
         )
-        pv_self_consumption_cost_jpy = pv_marginal_charge_cost * (
-            max(float(energy_cost_components.get("pv_to_bus_kwh", 0.0) or 0.0), 0.0)
-            + max(float(energy_cost_components.get("pv_to_bess_kwh", 0.0) or 0.0), 0.0)
-        )
-
-        electricity_cost_final += pv_self_consumption_cost_jpy
+        pv_self_consumption_cost_jpy = pv_to_bus_cost_jpy + pv_to_bess_cost_jpy
 
         if not component_flags.get("contract_overage_penalty", True):
             contract_overage_cost = 0.0
@@ -403,6 +419,11 @@ class CostEvaluator:
             contract_overage_cost = 0.0
             stationary_battery_degradation_cost = 0.0
             pv_self_consumption_cost_jpy = 0.0
+            pv_to_bus_cost_jpy = 0.0
+            pv_to_bess_cost_jpy = 0.0
+            bess_to_bus_cost_jpy = 0.0
+            bess_total_flow_cost_jpy = 0.0
+            bess_to_bus_unit_cost = 0.0
             pv_generated_kwh = 0.0
             pv_used_direct_kwh = 0.0
             pv_curtailed_kwh = 0.0
@@ -528,6 +549,11 @@ class CostEvaluator:
                 operating_cost_leftover_total=operating_cost_leftover_total,
                 grid_purchase_cost=grid_purchase_cost,
                 bess_discharge_cost=bess_discharge_cost,
+                pv_to_bus_cost_jpy=pv_to_bus_cost_jpy,
+                pv_to_bess_cost_jpy=pv_to_bess_cost_jpy,
+                bess_to_bus_cost_jpy=bess_to_bus_cost_jpy,
+                bess_total_flow_cost_jpy=bess_total_flow_cost_jpy,
+                bess_to_bus_unit_cost_yen_per_kwh=bess_to_bus_unit_cost,
                 contract_overage_cost=contract_overage_cost,
                 stationary_battery_degradation_cost=stationary_battery_degradation_cost,
                 pv_asset_cost=pv_asset_cost,
@@ -600,6 +626,11 @@ class CostEvaluator:
             operating_cost_leftover_total=operating_cost_leftover_total,
             grid_purchase_cost=grid_purchase_cost,
             bess_discharge_cost=bess_discharge_cost,
+            pv_to_bus_cost_jpy=pv_to_bus_cost_jpy,
+            pv_to_bess_cost_jpy=pv_to_bess_cost_jpy,
+            bess_to_bus_cost_jpy=bess_to_bus_cost_jpy,
+            bess_total_flow_cost_jpy=bess_total_flow_cost_jpy,
+            bess_to_bus_unit_cost_yen_per_kwh=bess_to_bus_unit_cost,
             contract_overage_cost=contract_overage_cost,
             stationary_battery_degradation_cost=stationary_battery_degradation_cost,
             pv_asset_cost=pv_asset_cost,
@@ -623,6 +654,23 @@ class CostEvaluator:
 
         def _sum_flow(mapping: Dict[str, Dict[int, float]]) -> float:
             return sum(max(float(v or 0.0), 0.0) for by_slot in mapping.values() for v in by_slot.values())
+
+        def _bess_unit_for_depot(depot_id: str) -> float:
+            asset = (problem.depot_energy_assets or {}).get(str(depot_id))
+            return max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
+
+        def _flow_cost_at_bess_unit(mapping: Dict[str, Dict[int, float]]) -> float:
+            total = 0.0
+            for depot_id, by_slot in (mapping or {}).items():
+                total += _sum_flow({str(depot_id): by_slot}) * _bess_unit_for_depot(str(depot_id))
+            return total
+
+        def _representative_bess_unit() -> float:
+            depot_ids: Set[str] = set()
+            for mapping in (effective_grid_to_bus, effective_pv_to_bus, effective_bess_to_bus, pv_to_bess):
+                depot_ids.update(str(depot_id) for depot_id in (mapping or {}).keys())
+            units = [_bess_unit_for_depot(depot_id) for depot_id in depot_ids]
+            return max(units, default=0.0)
 
         grid_to_bus = {
             str(k): {int(t): float(v or 0.0) for t, v in by_slot.items()}
@@ -707,6 +755,11 @@ class CostEvaluator:
                 "ev_leftover_provisional_cost": fallback_cost,
                 "grid_purchase_cost": 0.0,
                 "bess_discharge_cost": 0.0,
+                "pv_to_bus_cost_jpy": 0.0,
+                "pv_to_bess_cost_jpy": 0.0,
+                "bess_to_bus_cost_jpy": 0.0,
+                "bess_total_flow_cost_jpy": 0.0,
+                "bess_to_bus_unit_cost_yen_per_kwh": 0.0,
                 "stationary_battery_degradation_cost": 0.0,
                 "pv_asset_cost": 0.0,
                 "bess_asset_cost": 0.0,
@@ -730,15 +783,20 @@ class CostEvaluator:
 
         grid_purchase_cost = 0.0
         bess_discharge_cost = 0.0
+        pv_to_bus_cost_jpy = 0.0
+        pv_to_bess_cost_jpy = 0.0
+        bess_to_bus_cost_jpy = 0.0
         rollback_cost = 0.0
         realized_by_vehicle: Dict[str, float] = {}
         for slot_idx, vehicle_id, source, charge_kwh in charge_events:
             depot_id = vehicle_depot.get(vehicle_id, "depot_default")
             if source == "bess":
-                asset = (problem.depot_energy_assets or {}).get(depot_id)
-                bess_unit = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
-                realized = charge_kwh * bess_unit
+                realized = charge_kwh * _bess_unit_for_depot(depot_id)
                 bess_discharge_cost += realized
+                bess_to_bus_cost_jpy += realized
+            elif source == "pv":
+                realized = charge_kwh * _bess_unit_for_depot(depot_id)
+                pv_to_bus_cost_jpy += realized
             else:
                 realized = charge_kwh * self._slot_buy_price(problem, slot_idx)
                 grid_purchase_cost += realized
@@ -773,16 +831,17 @@ class CostEvaluator:
                 for slot_idx, energy_kwh in by_slot.items():
                     flow_grid_purchase_cost += max(float(energy_kwh or 0.0), 0.0) * self._slot_buy_price(problem, int(slot_idx))
 
-            flow_bess_discharge_cost = 0.0
-            for depot_id, by_slot in (effective_bess_to_bus or {}).items():
-                asset = (problem.depot_energy_assets or {}).get(str(depot_id))
-                bess_unit = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
-                flow_bess_discharge_cost += _sum_flow({str(depot_id): by_slot}) * bess_unit
+            flow_pv_to_bus_cost = _flow_cost_at_bess_unit(effective_pv_to_bus)
+            flow_pv_to_bess_cost = _flow_cost_at_bess_unit(pv_to_bess)
+            flow_bess_discharge_cost = _flow_cost_at_bess_unit(effective_bess_to_bus)
 
             old_realized_total = sum(max(float(value or 0.0), 0.0) for value in realized_by_vehicle.values())
             grid_purchase_cost = flow_grid_purchase_cost
+            pv_to_bus_cost_jpy = flow_pv_to_bus_cost
+            pv_to_bess_cost_jpy = flow_pv_to_bess_cost
             bess_discharge_cost = flow_bess_discharge_cost
-            new_realized_total = grid_purchase_cost + bess_discharge_cost
+            bess_to_bus_cost_jpy = flow_bess_discharge_cost
+            new_realized_total = grid_purchase_cost + pv_to_bus_cost_jpy + pv_to_bess_cost_jpy + bess_discharge_cost
             if old_realized_total > 1.0e-9:
                 realized_by_vehicle = {
                     vehicle_id: value * new_realized_total / old_realized_total
@@ -794,7 +853,8 @@ class CostEvaluator:
             vehicle_id: sum(kwh * price for kwh, price in queue)
             for vehicle_id, queue in debts.items()
         }
-        electricity_cost_final = (provisional_total - rollback_cost) + grid_purchase_cost + bess_discharge_cost
+        bess_total_flow_cost_jpy = pv_to_bus_cost_jpy + pv_to_bess_cost_jpy + bess_to_bus_cost_jpy
+        electricity_cost_final = (provisional_total - rollback_cost) + grid_purchase_cost + bess_total_flow_cost_jpy
         contract_over_limit_kwh = _sum_flow(contract_over_limit)
         enable_contract_overage_penalty = bool(problem.metadata.get("enable_contract_overage_penalty", True))
         contract_overage_penalty = max(
@@ -822,10 +882,6 @@ class CostEvaluator:
                 om_unit_year=asset.bess_om_jpy_per_kwh_year,
                 life_years=asset.bess_life_years,
             )
-            stationary_battery_degradation_cost += _sum_flow({asset.depot_id: effective_bess_to_bus.get(asset.depot_id, {})}) * max(
-                float(asset.bess_cycle_cost_yen_per_kwh or 0.0),
-                0.0,
-            )
 
         pv_to_bus_total = _sum_flow(effective_pv_to_bus)
         pv_to_bess_total = _sum_flow(pv_to_bess)
@@ -842,10 +898,15 @@ class CostEvaluator:
             "electricity_cost_final": electricity_cost_final,
             "electricity_cost_provisional_leftover": provisional_leftover,
             "ev_provisional_drive_cost": provisional_total,
-            "ev_realized_charge_cost": grid_purchase_cost + bess_discharge_cost,
+            "ev_realized_charge_cost": grid_purchase_cost + bess_total_flow_cost_jpy,
             "ev_leftover_provisional_cost": provisional_leftover,
             "grid_purchase_cost": grid_purchase_cost,
             "bess_discharge_cost": bess_discharge_cost,
+            "pv_to_bus_cost_jpy": pv_to_bus_cost_jpy,
+            "pv_to_bess_cost_jpy": pv_to_bess_cost_jpy,
+            "bess_to_bus_cost_jpy": bess_to_bus_cost_jpy,
+            "bess_total_flow_cost_jpy": bess_total_flow_cost_jpy,
+            "bess_to_bus_unit_cost_yen_per_kwh": _representative_bess_unit(),
             "stationary_battery_degradation_cost": stationary_battery_degradation_cost,
             "pv_asset_cost": pv_asset_cost,
             "bess_asset_cost": bess_asset_cost,

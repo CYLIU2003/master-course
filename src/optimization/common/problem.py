@@ -180,7 +180,9 @@ class DepotEnergyAsset:
     bess_capex_jpy_per_kwh: float = 0.0
     bess_om_jpy_per_kwh_year: float = 0.0
     bess_life_years: int = 15
+    allow_pv_to_bess: bool = True
     allow_grid_to_bess: bool = False
+    allow_bess_to_bus: bool = True
     grid_to_bess_price_mode: str = "tou"
     grid_to_bess_price_threshold_yen_per_kwh: float = 0.0
     grid_to_bess_allowed_slot_indices: Tuple[int, ...] = ()

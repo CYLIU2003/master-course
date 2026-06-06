@@ -612,6 +612,22 @@ def test_canonical_graph_exports_research_timeseries_files(tmp_path: Path) -> No
     assert len(vehicle_source_rows) == 48
     assert abs(sum(float(row["grid_to_vehicle_kwh"]) for row in vehicle_source_rows) - 10.0) < 1.0e-9
 
+    with (graph_dir / "pv_generation_timeseries.csv").open("r", encoding="utf-8", newline="") as handle:
+        pv_rows = list(csv.DictReader(handle))
+    with (graph_dir / "energy_flow_ledger.csv").open("r", encoding="utf-8", newline="") as handle:
+        ledger_rows = list(csv.DictReader(handle))
+    kpi_summary = json.loads((graph_dir / "kpi_summary.json").read_text(encoding="utf-8"))
+    pv_timeseries_total = sum(float(row["pv_generation_slot_kwh"]) for row in pv_rows)
+    ledger_total = sum(float(row["pv_generation_kwh"]) for row in ledger_rows)
+    assert pv_timeseries_total == 3.0
+    assert ledger_total == pv_timeseries_total
+    assert kpi_summary["pv_generation_kwh"] == pv_timeseries_total
+
+    with (graph_dir / "data_flow_validation.csv").open("r", encoding="utf-8", newline="") as handle:
+        validation_rows = {row["check_name"]: row for row in csv.DictReader(handle)}
+    assert validation_rows["pv_generation_matches_pv_timeseries"]["status"] == "OK"
+    assert validation_rows["kpi_pv_generation_matches_energy_flow_ledger"]["status"] == "OK"
+
 
 def test_canonical_graph_exports_fallback_grid_import_and_contract_exceedance(tmp_path: Path) -> None:
     problem, result, scenario = _problem_and_result()

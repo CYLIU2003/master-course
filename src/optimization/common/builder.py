@@ -1150,17 +1150,63 @@ class ProblemBuilder:
                 pv_series = tuple(0.0 for _ in range(slot_count))
             bess_enabled = bool(raw.get("bess_enabled", False))
             bess_energy_kwh = max(float(raw.get("bess_energy_kwh") or 0.0), 0.0)
-            bess_soc_min_kwh = max(float(raw.get("bess_soc_min_kwh") or 0.0), 0.0)
-            bess_soc_max_kwh = max(float(raw.get("bess_soc_max_kwh") or 0.0), 0.0)
+
+            def _ratio_from_raw(*keys: str) -> Optional[float]:
+                for key in keys:
+                    if key not in raw or raw.get(key) in (None, ""):
+                        continue
+                    value = self._safe_float(raw.get(key))
+                    if value is None:
+                        continue
+                    if value > 1.0:
+                        value = value / 100.0
+                    return min(max(float(value), 0.0), 1.0)
+                return None
+
+            def _soc_kwh_from_config(kwh_key: str, *ratio_keys: str) -> float:
+                explicit_kwh = self._safe_float(raw.get(kwh_key)) if raw.get(kwh_key) not in (None, "") else None
+                ratio = _ratio_from_raw(*ratio_keys)
+                if explicit_kwh is not None and (explicit_kwh > 0.0 or ratio is None):
+                    return max(float(explicit_kwh), 0.0)
+                if ratio is not None:
+                    return bess_energy_kwh * ratio
+                return 0.0
+
+            bess_soc_min_kwh = _soc_kwh_from_config(
+                "bess_soc_min_kwh",
+                "bess_soc_min_ratio",
+                "bessSocMinRatio",
+                "bess_soc_min_percent",
+                "bessSocMinPercent",
+            )
+            bess_soc_max_kwh = _soc_kwh_from_config(
+                "bess_soc_max_kwh",
+                "bess_soc_max_ratio",
+                "bessSocMaxRatio",
+                "bess_soc_max_percent",
+                "bessSocMaxPercent",
+            )
             if bess_enabled and bess_energy_kwh > 0.0 and bess_soc_max_kwh <= 0.0:
                 bess_soc_max_kwh = bess_energy_kwh
             if bess_soc_max_kwh > 0.0:
                 bess_soc_min_kwh = min(bess_soc_min_kwh, bess_soc_max_kwh)
-            bess_initial_soc_kwh = max(float(raw.get("bess_initial_soc_kwh") or 0.0), 0.0)
+            bess_initial_soc_kwh = _soc_kwh_from_config(
+                "bess_initial_soc_kwh",
+                "bess_initial_soc_ratio",
+                "bessInitialSocRatio",
+                "bess_initial_soc_percent",
+                "bessInitialSocPercent",
+            )
             if bess_soc_max_kwh > 0.0:
                 bess_initial_soc_kwh = min(bess_initial_soc_kwh, bess_soc_max_kwh)
             bess_initial_soc_kwh = max(bess_initial_soc_kwh, bess_soc_min_kwh)
-            bess_terminal_soc_min_kwh = max(float(raw.get("bess_terminal_soc_min_kwh") or 0.0), 0.0)
+            bess_terminal_soc_min_kwh = _soc_kwh_from_config(
+                "bess_terminal_soc_min_kwh",
+                "bess_terminal_soc_min_ratio",
+                "bessTerminalSocMinRatio",
+                "bess_terminal_soc_min_percent",
+                "bessTerminalSocMinPercent",
+            )
             if bess_soc_max_kwh > 0.0:
                 bess_terminal_soc_min_kwh = min(bess_terminal_soc_min_kwh, bess_soc_max_kwh)
 
@@ -1191,7 +1237,9 @@ class ProblemBuilder:
                 bess_capex_jpy_per_kwh=float(raw.get("bess_capex_jpy_per_kwh") or 0.0),
                 bess_om_jpy_per_kwh_year=float(raw.get("bess_om_jpy_per_kwh_year") or 0.0),
                 bess_life_years=int(raw.get("bess_life_years") or 15),
+                allow_pv_to_bess=bool(raw.get("allow_pv_to_bess", True)),
                 allow_grid_to_bess=bool(raw.get("allow_grid_to_bess", False)),
+                allow_bess_to_bus=bool(raw.get("allow_bess_to_bus", True)),
                 grid_to_bess_price_mode=str(raw.get("grid_to_bess_price_mode") or "tou"),
                 grid_to_bess_price_threshold_yen_per_kwh=float(
                     raw.get("grid_to_bess_price_threshold_yen_per_kwh") or 0.0

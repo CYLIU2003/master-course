@@ -454,6 +454,22 @@ def _build_energy_flow_ledger(
         grid_kw = float(row.get("grid_kw", row.get("grid_import_kw", grid_total_kwh / slot_hours if slot_hours > 0 else 0.0)) or 0.0)
         price = float(row.get("energy_price_yen_per_kwh", row.get("tou_energy_price_jpy_per_kwh", 0.0)) or 0.0)
         grid_co2_factor = float(row.get("grid_emission_factor_kg_per_kwh", row.get("grid_co2_factor_kg_per_kwh", _slot_factor(metadata, slot_index))) or 0.0)
+        bess_unit_cost = float(row.get("bess_to_bus_unit_cost_jpy_per_kwh", row.get("bess_to_bus_unit_cost_yen_per_kwh", metadata.get("bess_to_bus_unit_cost_yen_per_kwh", 0.0))) or 0.0)
+        pv_to_bus_cost = float(row.get("pv_to_bus_cost_jpy", pv_to_bus_kwh * bess_unit_cost) or 0.0)
+        pv_to_bess_cost = float(row.get("pv_to_bess_cost_jpy", pv_to_bess_kwh * bess_unit_cost) or 0.0)
+        bess_to_bus_cost = float(row.get("bess_to_bus_cost_jpy", bess_to_bus_kwh * bess_unit_cost) or 0.0)
+        bess_total_flow_cost = float(row.get("bess_total_flow_cost_jpy", pv_to_bus_cost + pv_to_bess_cost + bess_to_bus_cost) or 0.0)
+        bess_soc_start = float(row.get("bess_soc_start_kwh", row.get("bess_soc_kwh", 0.0)) or 0.0)
+        bess_soc_end = float(row.get("bess_soc_end_kwh", row.get("bess_soc_kwh", 0.0)) or 0.0)
+        bess_capacity = float(row.get("bess_capacity_kwh", metadata.get("bess_capacity_kwh", 0.0)) or 0.0)
+        bess_soc_min = float(row.get("bess_soc_min_kwh", metadata.get("bess_soc_min_kwh", 0.0)) or 0.0)
+        bess_soc_max = float(row.get("bess_soc_max_kwh", metadata.get("bess_soc_max_kwh", 0.0)) or 0.0)
+        bess_terminal_soc_min = float(row.get("bess_terminal_soc_min_kwh", metadata.get("bess_terminal_soc_min_kwh", 0.0)) or 0.0)
+        bess_soc_violation = 0.0
+        if bess_soc_max > 0.0:
+            bess_soc_violation += max(bess_soc_start - bess_soc_max, 0.0) + max(bess_soc_end - bess_soc_max, 0.0)
+        if bess_soc_min > 0.0:
+            bess_soc_violation += max(bess_soc_min - bess_soc_start, 0.0) + max(bess_soc_min - bess_soc_end, 0.0)
         energy_cost_jpy = grid_total_kwh * price
         cumulative_grid_kwh_by_depot[depot_id] += grid_total_kwh
         cumulative_cost_by_depot[depot_id] += energy_cost_jpy
@@ -485,8 +501,18 @@ def _build_energy_flow_ledger(
                 bess_to_bus_kwh=bess_to_bus_kwh,
                 bess_charge_kwh=pv_to_bess_kwh + grid_to_bess_kwh,
                 bess_discharge_kwh=bess_to_bus_kwh,
-                bess_soc_start_kwh=float(row.get("bess_soc_kwh", 0.0) or 0.0),
-                bess_soc_end_kwh=float(row.get("bess_soc_kwh", 0.0) or 0.0),
+                bess_soc_start_kwh=bess_soc_start,
+                bess_soc_end_kwh=bess_soc_end,
+                bess_capacity_kwh=bess_capacity,
+                bess_soc_min_kwh=bess_soc_min,
+                bess_soc_max_kwh=bess_soc_max,
+                bess_terminal_soc_min_kwh=bess_terminal_soc_min,
+                bess_to_bus_unit_cost_jpy_per_kwh=bess_unit_cost,
+                pv_to_bess_cost_jpy=pv_to_bess_cost,
+                pv_to_bus_cost_jpy=pv_to_bus_cost,
+                bess_to_bus_cost_jpy=bess_to_bus_cost,
+                bess_total_flow_cost_jpy=bess_total_flow_cost,
+                bess_soc_violation_kwh=bess_soc_violation,
                 grid_to_bus_kwh=grid_to_bus_kwh,
                 grid_to_bess_kwh=grid_to_bess_kwh,
                 depot_aux_grid_kwh=0.0,
@@ -855,15 +881,42 @@ def _build_data_flow_validation(
     add("pv_generation_matches_pv_timeseries", pv_generation, float(summary.get("pv_generation_timeseries_total_kwh", pv_generation) or 0.0), 1.0e-3, source_files="energy_flow_ledger.csv;pv_generation_timeseries.csv")
     add("pv_generation_matches_depot_energy_flows", pv_generation, float(summary.get("depot_energy_flows_pv_generation_total_kwh", pv_generation) or 0.0), 1.0e-3, source_files="energy_flow_ledger.csv;depot_energy_flows.csv")
     add("pv_generation_balance", pv_to_bus + pv_to_bess + pv_curtailed + pv_export, pv_generation, 1.0e-3, source_files="energy_flow_ledger.csv")
+    add("pv_to_bess_matches_pv_balance", pv_to_bus + pv_to_bess + pv_curtailed + pv_export, pv_generation, 1.0e-3, source_files="energy_flow_ledger.csv")
     add("kpi_pv_generation_matches_energy_flow_ledger", float(summary.get("pv_generation_kwh", 0.0) or 0.0), pv_generation, 1.0e-6, source_files="kpi_summary.json;energy_flow_ledger.csv")
     add("grid_import_balance", grid_to_bus + grid_to_bess + aux_grid, grid_import, 1.0e-3, source_files="energy_flow_ledger.csv")
     add("bus_charging_source_balance", bus_charge, float(summary.get("bus_charging_total_kwh", summary.get("total_charge_input_kwh", bus_charge)) or 0.0), 1.0e-3, source_files="energy_flow_ledger.csv;vehicle_energy_ledger.csv")
+    add("bess_to_bus_matches_bus_charging_balance", grid_to_bus + pv_to_bus + bess_to_bus, bus_charge, 1.0e-6, source_files="energy_flow_ledger.csv")
     add("vehicle_total_charge_equals_bus_charging", _sum(vehicle_energy_rows, "charge_input_kwh"), bus_charge, 1.0e-3, source_files="vehicle_energy_ledger.csv;energy_flow_ledger.csv")
     add("vehicle_grid_to_vehicle_equals_grid_to_bus", _sum(vehicle_energy_rows, "grid_to_vehicle_kwh"), grid_to_bus, 1.0e-3, source_files="vehicle_energy_ledger.csv;energy_flow_ledger.csv")
     add("vehicle_pv_to_vehicle_equals_pv_to_bus", _sum(vehicle_energy_rows, "pv_to_vehicle_kwh"), pv_to_bus, 1.0e-3, source_files="vehicle_energy_ledger.csv;energy_flow_ledger.csv")
     add("vehicle_bess_to_vehicle_equals_bess_to_bus", _sum(vehicle_energy_rows, "bess_to_vehicle_kwh"), bess_to_bus, 1.0e-3, source_files="vehicle_energy_ledger.csv;energy_flow_ledger.csv")
     add("bess_charge_balance", _sum(energy_rows, "bess_charge_kwh"), pv_to_bess + grid_to_bess, 1.0e-3, source_files="energy_flow_ledger.csv")
+    add("bess_charge_equals_pv_to_bess_plus_grid_to_bess", _sum(energy_rows, "bess_charge_kwh"), pv_to_bess + grid_to_bess, 1.0e-3, source_files="energy_flow_ledger.csv")
     add("bess_discharge_balance", _sum(energy_rows, "bess_discharge_kwh"), bess_to_bus, 1.0e-3, source_files="energy_flow_ledger.csv")
+    add("bess_discharge_equals_bess_to_bus", _sum(energy_rows, "bess_discharge_kwh"), bess_to_bus, 1.0e-3, source_files="energy_flow_ledger.csv")
+    add("bess_soc_within_buffer", _sum(energy_rows, "bess_soc_violation_kwh"), 0.0, 1.0e-6, source_files="energy_flow_ledger.csv")
+    if any(abs(float(getattr(row, "bess_soc_end_kwh", 0.0) or 0.0) - float(getattr(row, "bess_soc_start_kwh", 0.0) or 0.0)) > 1.0e-9 for row in energy_rows):
+        transition_error = 0.0
+        for row in energy_rows:
+            expected_end = (
+                float(getattr(row, "bess_soc_start_kwh", 0.0) or 0.0)
+                + float(getattr(row, "bess_charge_kwh", 0.0) or 0.0)
+                - float(getattr(row, "bess_discharge_kwh", 0.0) or 0.0)
+            )
+            transition_error += abs(float(getattr(row, "bess_soc_end_kwh", 0.0) or 0.0) - expected_end)
+        add("bess_soc_transition_balance", transition_error, 0.0, 1.0e-6, source_files="energy_flow_ledger.csv")
+    else:
+        skip("bess_soc_transition_balance", message="BESS SOC start/end transition values are not explicit in these rows.", source_files="energy_flow_ledger.csv")
+    terminal_violations = 0.0
+    for row in energy_rows:
+        terminal_min = float(getattr(row, "bess_terminal_soc_min_kwh", 0.0) or 0.0)
+        if terminal_min > 0.0 and float(getattr(row, "slot_index", -1) or -1) == max((float(getattr(r, "slot_index", -1) or -1) for r in energy_rows), default=-1.0):
+            terminal_violations += max(terminal_min - float(getattr(row, "bess_soc_end_kwh", 0.0) or 0.0), 0.0)
+    add("bess_terminal_soc_satisfied", terminal_violations, 0.0, 1.0e-6, source_files="energy_flow_ledger.csv")
+    add("pv_to_bus_cost_applied", _sum(energy_rows, "pv_to_bus_cost_jpy"), sum(float(getattr(row, "pv_to_bus_kwh", 0.0) or 0.0) * float(getattr(row, "bess_to_bus_unit_cost_jpy_per_kwh", 0.0) or 0.0) for row in energy_rows), 1.0e-6, source_files="energy_flow_ledger.csv")
+    add("pv_to_bess_cost_applied", _sum(energy_rows, "pv_to_bess_cost_jpy"), sum(float(getattr(row, "pv_to_bess_kwh", 0.0) or 0.0) * float(getattr(row, "bess_to_bus_unit_cost_jpy_per_kwh", 0.0) or 0.0) for row in energy_rows), 1.0e-6, source_files="energy_flow_ledger.csv")
+    add("bess_to_bus_cost_applied", _sum(energy_rows, "bess_to_bus_cost_jpy"), sum(float(getattr(row, "bess_to_bus_kwh", 0.0) or 0.0) * float(getattr(row, "bess_to_bus_unit_cost_jpy_per_kwh", 0.0) or 0.0) for row in energy_rows), 1.0e-6, source_files="energy_flow_ledger.csv")
+    add("bess_flow_cost_matches_unit_cost", _sum(energy_rows, "bess_total_flow_cost_jpy"), _sum(energy_rows, "pv_to_bus_cost_jpy") + _sum(energy_rows, "pv_to_bess_cost_jpy") + _sum(energy_rows, "bess_to_bus_cost_jpy"), 1.0e-6, source_files="energy_flow_ledger.csv")
     add("fuel_consumption_balance", _sum(vehicle_energy_rows, "fuel_consumed_l"), float(summary.get("ice_fuel_consumed_l", 0.0) or 0.0), 1.0e-6, source_files="vehicle_energy_ledger.csv;kpi_summary.json")
     add("fuel_timeseries_matches_vehicle_fuel_ledger", _sum_dict(fuel_timeseries_rows, "fuel_consumption_l"), _sum(vehicle_energy_rows, "fuel_consumed_l"), 1.0e-6, source_files="fuel_timeseries.csv;vehicle_energy_ledger.csv")
     add("fuel_canonical_matches_vehicle_ledger", _sum_dict(fuel_canonical_rows, "fuel_consumption_l"), _sum(vehicle_energy_rows, "fuel_consumed_l"), 1.0e-6, source_files="fuel_canonical_ledger.csv;vehicle_energy_ledger.csv")
@@ -874,6 +927,7 @@ def _build_data_flow_validation(
     add("co2_balance", _sum_dict(co2_rows, "total_co2_kg"), float(summary.get("total_co2_kg", _sum_dict(co2_rows, "total_co2_kg")) or 0.0), 1.0e-6, source_files="co2_timeseries.csv;kpi_summary.json")
     gross_cost = (
         float(summary.get("grid_purchase_cost_jpy", 0.0) or 0.0)
+        + float(summary.get("bess_total_flow_cost_jpy", 0.0) or 0.0)
         + float(summary.get("demand_charge_cost_jpy", 0.0) or 0.0)
         + float(summary.get("fuel_cost_jpy", 0.0) or 0.0)
         + float(summary.get("co2_cost_jpy", 0.0) or 0.0)

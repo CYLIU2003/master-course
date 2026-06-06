@@ -2874,6 +2874,10 @@ def _research_rows_from_depot_power(
             flow_rows.append(
                 {
                     **base,
+                    "pv_generation_kwh": float(row.get("pv_generation_slot_kwh", row.get("pv_generation_kwh", 0.0)) or 0.0),
+                    "pv_generation_slot_kwh": float(row.get("pv_generation_slot_kwh", row.get("pv_generation_kwh", 0.0)) or 0.0),
+                    "pv_curtailed_kwh": float(row.get("pv_curtailed_slot_kwh", row.get("pv_curtail_kwh", 0.0)) or 0.0),
+                    "pv_curtailed_slot_kwh": float(row.get("pv_curtailed_slot_kwh", row.get("pv_curtail_kwh", 0.0)) or 0.0),
                     "grid_to_bus_slot_kwh": float(row.get("grid_to_bus_slot_kwh", 0.0) or 0.0),
                     "pv_to_bus_slot_kwh": float(row.get("pv_to_bus_slot_kwh", 0.0) or 0.0),
                     "pv_to_bess_slot_kwh": float(row.get("pv_to_bess_slot_kwh", 0.0) or 0.0),
@@ -3266,6 +3270,7 @@ def _research_vehicle_charging_source_timeseries_rows(
                     "time": out_time,
                     "depot_id": depot_id,
                     "charger_id": str(getattr(slot, "charger_id", "") or ""),
+                    "source": source,
                     "charge_kwh": charge_kwh,
                     "charge_kw": net_kw,
                 }
@@ -3279,6 +3284,14 @@ def _research_vehicle_charging_source_timeseries_rows(
             grid_total = float((flow_ctx["grid_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             pv_total = float((flow_ctx["pv_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             bess_total = float((flow_ctx["bess_to_bus_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            if grid_total + pv_total + bess_total <= 1.0e-9:
+                source = str(slot_rows[0].get("source") or "grid") if slot_rows else "grid"
+                if source == "pv":
+                    pv_total = total_charge_kwh
+                elif source == "bess":
+                    bess_total = total_charge_kwh
+                else:
+                    grid_total = total_charge_kwh
             remaining_grid = grid_total
             remaining_pv = pv_total
             remaining_bess = bess_total

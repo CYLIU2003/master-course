@@ -40,6 +40,7 @@ def export_accounting_outputs(output_dir: str | Path, artifacts: AccountingArtif
     vehicle_energy_json = root / "vehicle_energy_ledger.json"
     energy_csv = root / "energy_flow_ledger.csv"
     energy_json = root / "energy_flow_ledger.json"
+    bess_timeseries_csv = root / "bess_timeseries.csv"
     fuel_canonical_csv = root / "fuel_canonical_ledger.csv"
     fuel_timeseries_csv = root / "fuel_timeseries.csv"
     co2_timeseries_csv = root / "co2_timeseries.csv"
@@ -57,10 +58,43 @@ def export_accounting_outputs(output_dir: str | Path, artifacts: AccountingArtif
     initial_soc_rows = [_row_dict(row) for row in artifacts.initial_soc_ledger]
     initial_soc_precheck_rows = [_row_dict(row) for row in artifacts.initial_soc_precheck]
     validation_rows = [_row_dict(row) for row in artifacts.data_flow_validation]
+    bess_rows = [
+        {
+            "timestamp": row.get("timestamp", row.get("slot_start", "")),
+            "service_date": row.get("service_date", ""),
+            "depot_id": row.get("depot_id", ""),
+            "bess_capacity_kwh": row.get("bess_capacity_kwh", 0.0),
+            "bess_soc_start_kwh": row.get("bess_soc_start_kwh", 0.0),
+            "bess_soc_end_kwh": row.get("bess_soc_end_kwh", 0.0),
+            "bess_soc_percent": (
+                (float(row.get("bess_soc_end_kwh", 0.0) or 0.0) / float(row.get("bess_capacity_kwh", 0.0) or 0.0) * 100.0)
+                if float(row.get("bess_capacity_kwh", 0.0) or 0.0) > 0.0
+                else 0.0
+            ),
+            "bess_soc_min_kwh": row.get("bess_soc_min_kwh", 0.0),
+            "bess_soc_max_kwh": row.get("bess_soc_max_kwh", 0.0),
+            "bess_terminal_soc_min_kwh": row.get("bess_terminal_soc_min_kwh", 0.0),
+            "pv_to_bess_kwh": row.get("pv_to_bess_kwh", 0.0),
+            "grid_to_bess_kwh": row.get("grid_to_bess_kwh", 0.0),
+            "bess_charge_kwh": row.get("bess_charge_kwh", 0.0),
+            "bess_discharge_kwh": row.get("bess_discharge_kwh", 0.0),
+            "bess_to_bus_kwh": row.get("bess_to_bus_kwh", 0.0),
+            "bess_charge_kw": float(row.get("bess_charge_kwh", 0.0) or 0.0) / max(float(row.get("slot_minutes", 0.0) or 0.0) / 60.0, 1.0e-9),
+            "bess_discharge_kw": float(row.get("bess_discharge_kwh", 0.0) or 0.0) / max(float(row.get("slot_minutes", 0.0) or 0.0) / 60.0, 1.0e-9),
+            "bess_to_bus_unit_cost_jpy_per_kwh": row.get("bess_to_bus_unit_cost_jpy_per_kwh", 0.0),
+            "pv_to_bess_cost_jpy": row.get("pv_to_bess_cost_jpy", 0.0),
+            "pv_to_bus_cost_jpy": row.get("pv_to_bus_cost_jpy", 0.0),
+            "bess_to_bus_cost_jpy": row.get("bess_to_bus_cost_jpy", 0.0),
+            "bess_total_flow_cost_jpy": row.get("bess_total_flow_cost_jpy", 0.0),
+            "bess_soc_violation_kwh": row.get("bess_soc_violation_kwh", 0.0),
+        }
+        for row in energy_rows
+    ]
 
     _write_csv(vehicle_csv, vehicle_rows)
     _write_csv(vehicle_energy_csv, vehicle_energy_rows)
     _write_csv(energy_csv, energy_rows)
+    _write_csv(bess_timeseries_csv, bess_rows)
     _write_csv(fuel_canonical_csv, fuel_canonical_rows)
     _write_csv(fuel_timeseries_csv, fuel_timeseries_rows)
     _write_csv(co2_timeseries_csv, co2_timeseries_rows)
@@ -78,6 +112,7 @@ def export_accounting_outputs(output_dir: str | Path, artifacts: AccountingArtif
         "vehicle_energy_ledger_json": str(vehicle_energy_json),
         "energy_flow_ledger_csv": str(energy_csv),
         "energy_flow_ledger_json": str(energy_json),
+        "bess_timeseries_csv": str(bess_timeseries_csv),
         "fuel_canonical_ledger_csv": str(fuel_canonical_csv),
         "fuel_timeseries_csv": str(fuel_timeseries_csv),
         "co2_timeseries_csv": str(co2_timeseries_csv),

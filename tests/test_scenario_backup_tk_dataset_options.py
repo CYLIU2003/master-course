@@ -352,6 +352,18 @@ def test_timestep_payload_fields_are_wired() -> None:
     assert '"timestepMin": self._timestep_min_value()' in quick_setup_source
 
 
+def test_depot_charger_manager_exposes_bess_buffer_fields() -> None:
+    manager_source = inspect.getsource(App.open_vehicle_depot_manager)
+    sync_source = inspect.getsource(App._sync_depot_manager_energy_asset_row)
+
+    assert "BESSバッファ下限 [%]" in manager_source
+    assert "BESSバッファ上限 [%]" in manager_source
+    assert "dm_bess_soc_min_percent_var" in manager_source
+    assert "dm_bess_soc_max_percent_var" in manager_source
+    assert 'row["bess_soc_min_ratio"]' in sync_source
+    assert 'row["bess_soc_max_ratio"]' in sync_source
+
+
 def test_weather_proxy_json_loader_rejects_service_date_mismatch(tmp_path: Path) -> None:
     forecast_path = tmp_path / "forecast.json"
     write_weather_proxy_forecast_json(forecast_path, _weather_forecast())

@@ -93,6 +93,16 @@ class EnergyFlowLedgerRow:
     bess_discharge_kwh: float = 0.0
     bess_soc_start_kwh: float = 0.0
     bess_soc_end_kwh: float = 0.0
+    bess_capacity_kwh: float = 0.0
+    bess_soc_min_kwh: float = 0.0
+    bess_soc_max_kwh: float = 0.0
+    bess_terminal_soc_min_kwh: float = 0.0
+    bess_to_bus_unit_cost_jpy_per_kwh: float = 0.0
+    pv_to_bess_cost_jpy: float = 0.0
+    pv_to_bus_cost_jpy: float = 0.0
+    bess_to_bus_cost_jpy: float = 0.0
+    bess_total_flow_cost_jpy: float = 0.0
+    bess_soc_violation_kwh: float = 0.0
     grid_to_bus_kwh: float = 0.0
     grid_to_bess_kwh: float = 0.0
     depot_aux_grid_kwh: float = 0.0

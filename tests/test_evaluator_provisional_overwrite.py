@@ -120,6 +120,61 @@ def test_evaluator_applies_provisional_then_overwrites_with_charge_source_cost()
     assert breakdown.leftover_ev_provisional_cost == 120.0
 
 
+def test_evaluator_applies_bess_unit_cost_to_pv_and_bess_flows() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="scenario-bess-cost",
+            horizon_start="08:00",
+            timestep_min=60,
+            objective_mode="total_cost",
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="bev-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                battery_capacity_kwh=200.0,
+            ),
+        ),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        price_slots=(
+            EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),
+            EnergyPriceSlot(slot_index=1, grid_buy_yen_per_kwh=20.0),
+        ),
+        objective_weights=OptimizationObjectiveWeights(),
+        depot_energy_assets={
+            "dep-1": DepotEnergyAsset(
+                depot_id="dep-1",
+                bess_enabled=True,
+                bess_energy_kwh=100.0,
+                bess_initial_soc_kwh=50.0,
+                bess_soc_min_kwh=20.0,
+                bess_soc_max_kwh=90.0,
+                bess_cycle_cost_yen_per_kwh=5.0,
+            )
+        },
+    )
+    plan = AssignmentPlan(
+        grid_to_bus_kwh_by_depot_slot={"dep-1": {1: 2.0}},
+        grid_to_bess_kwh_by_depot_slot={"dep-1": {0: 3.0}},
+        pv_to_bus_kwh_by_depot_slot={"dep-1": {0: 4.0}},
+        pv_to_bess_kwh_by_depot_slot={"dep-1": {0: 5.0}},
+        bess_to_bus_kwh_by_depot_slot={"dep-1": {1: 6.0}},
+    )
+
+    breakdown = CostEvaluator().evaluate(problem, plan)
+
+    assert breakdown.grid_purchase_cost == 70.0
+    assert breakdown.pv_to_bus_cost_jpy == 20.0
+    assert breakdown.pv_to_bess_cost_jpy == 25.0
+    assert breakdown.bess_to_bus_cost_jpy == 30.0
+    assert breakdown.bess_total_flow_cost_jpy == 75.0
+    assert breakdown.electricity_cost_final == 145.0
+    assert breakdown.to_dict()["bess_pv_cost_policy"] == "bess_cycle_cost_applies_to_pv_to_bus_pv_to_bess_bess_to_bus"
+
+
 def test_evaluator_keeps_ice_provisional_leftover_without_refuel() -> None:
     trip = Trip(
         trip_id="trip-ice-1",

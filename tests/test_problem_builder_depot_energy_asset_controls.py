@@ -115,6 +115,31 @@ def test_problem_builder_defaults_bess_soc_max_to_configured_capacity() -> None:
     assert asset.bess_cycle_cost_yen_per_kwh == 8.5
 
 
+def test_problem_builder_normalizes_bess_ratio_controls_into_kwh() -> None:
+    scenario = _scenario()
+    asset_cfg = scenario["simulation_config"]["depot_energy_assets"][0]
+    asset_cfg.pop("bess_initial_soc_kwh")
+    asset_cfg.pop("bess_soc_min_kwh")
+    asset_cfg.pop("bess_soc_max_kwh")
+    asset_cfg.pop("bess_terminal_soc_min_kwh")
+    asset_cfg["bess_initial_soc_ratio"] = 0.6
+    asset_cfg["bess_soc_min_ratio"] = 0.2
+    asset_cfg["bess_soc_max_ratio"] = 0.9
+    asset_cfg["bess_terminal_soc_min_ratio"] = 0.2
+    asset_cfg["allow_pv_to_bess"] = False
+    asset_cfg["allow_bess_to_bus"] = False
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    asset = problem.depot_energy_assets["dep-1"]
+
+    assert asset.bess_initial_soc_kwh == 60.0
+    assert asset.bess_soc_min_kwh == 20.0
+    assert asset.bess_soc_max_kwh == 90.0
+    assert asset.bess_terminal_soc_min_kwh == 20.0
+    assert asset.allow_pv_to_bess is False
+    assert asset.allow_bess_to_bus is False
+
+
 def test_problem_builder_propagates_pv_curtail_penalty_metadata() -> None:
     scenario = _scenario()
     scenario["simulation_config"]["pv_curtail_penalty_yen_per_kwh"] = 7.5

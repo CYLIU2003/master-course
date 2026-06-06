@@ -38,7 +38,9 @@ def build_accounting_summary(
     fuel_cost_jpy = _sum(vehicle_rows, "fuel_cost_jpy")
     co2_cost_jpy = _sum(vehicle_rows, "co2_cost_jpy")
     battery_degradation_cost_jpy = _sum(vehicle_rows, "battery_degradation_cost_jpy")
-    electricity_cost_jpy = _sum(energy_rows, "energy_cost_jpy")
+    grid_energy_cost_jpy = _sum(energy_rows, "energy_cost_jpy")
+    bess_total_flow_cost_jpy = _sum(energy_rows, "bess_total_flow_cost_jpy")
+    electricity_cost_jpy = grid_energy_cost_jpy + bess_total_flow_cost_jpy
     contract_overage_cost_jpy = _sum(energy_rows, "contract_overage_cost_jpy")
 
     peak_grid_kw = max((float(row.get("grid_kw", 0.0) or 0.0) for row in energy_rows), default=0.0)
@@ -52,6 +54,17 @@ def build_accounting_summary(
     bess_to_bus_kwh = _sum(energy_rows, "bess_to_bus_kwh")
     bess_charge_kwh = _sum(energy_rows, "bess_charge_kwh")
     bess_discharge_kwh = _sum(energy_rows, "bess_discharge_kwh")
+    pv_to_bus_cost_jpy = _sum(energy_rows, "pv_to_bus_cost_jpy")
+    pv_to_bess_cost_jpy = _sum(energy_rows, "pv_to_bess_cost_jpy")
+    bess_to_bus_cost_jpy = _sum(energy_rows, "bess_to_bus_cost_jpy")
+    bess_unit_cost = max((float(row.get("bess_to_bus_unit_cost_jpy_per_kwh", 0.0) or 0.0) for row in energy_rows), default=0.0)
+    bess_soc_violation_kwh = _sum(energy_rows, "bess_soc_violation_kwh")
+    bess_soc_violation_count = sum(1 for row in energy_rows if float(row.get("bess_soc_violation_kwh", 0.0) or 0.0) > 1.0e-9)
+    bess_capacity_kwh = max((float(row.get("bess_capacity_kwh", 0.0) or 0.0) for row in energy_rows), default=0.0)
+    bess_initial_soc_kwh = next((float(row.get("bess_soc_start_kwh", 0.0) or 0.0) for row in energy_rows if float(row.get("bess_soc_start_kwh", 0.0) or 0.0) > 0.0), 0.0)
+    bess_final_soc_kwh = float(energy_rows[-1].get("bess_soc_end_kwh", 0.0) or 0.0) if energy_rows else 0.0
+    bess_soc_min_kwh = max((float(row.get("bess_soc_min_kwh", 0.0) or 0.0) for row in energy_rows), default=0.0)
+    bess_soc_max_kwh = max((float(row.get("bess_soc_max_kwh", 0.0) or 0.0) for row in energy_rows), default=0.0)
     grid_to_bus_kwh = _sum(energy_rows, "grid_to_bus_kwh")
     grid_to_bess_kwh = _sum(energy_rows, "grid_to_bess_kwh")
     grid_total_kwh = _sum(energy_rows, "grid_import_kwh") or _sum(energy_rows, "grid_total_kwh")
@@ -144,12 +157,39 @@ def build_accounting_summary(
         "bess_charge_kwh": bess_charge_kwh,
         "bess_discharge_to_bus_kwh": bess_to_bus_kwh,
         "bess_discharge_kwh": bess_discharge_kwh,
+        "bess_to_bus_unit_cost_jpy_per_kwh": bess_unit_cost,
+        "pv_to_bess_cost_jpy": pv_to_bess_cost_jpy,
+        "pv_to_bus_cost_jpy": pv_to_bus_cost_jpy,
+        "bess_to_bus_cost_jpy": bess_to_bus_cost_jpy,
+        "bess_total_flow_cost_jpy": bess_total_flow_cost_jpy,
+        "bess_soc_violation_count": bess_soc_violation_count,
+        "bess_soc_violation_kwh": bess_soc_violation_kwh,
+        "bess": {
+            "enabled": bool(bess_capacity_kwh > 0.0 or bess_charge_kwh > 0.0 or bess_discharge_kwh > 0.0),
+            "capacity_kwh": bess_capacity_kwh,
+            "initial_soc_kwh": bess_initial_soc_kwh,
+            "final_soc_kwh": bess_final_soc_kwh,
+            "soc_min_kwh": bess_soc_min_kwh,
+            "soc_max_kwh": bess_soc_max_kwh,
+            "pv_to_bess_kwh": pv_to_bess_kwh,
+            "grid_to_bess_kwh": grid_to_bess_kwh,
+            "bess_to_bus_kwh": bess_to_bus_kwh,
+            "bess_charge_kwh": bess_charge_kwh,
+            "bess_discharge_kwh": bess_discharge_kwh,
+            "bess_to_bus_unit_cost_jpy_per_kwh": bess_unit_cost,
+            "pv_to_bess_cost_jpy": pv_to_bess_cost_jpy,
+            "pv_to_bus_cost_jpy": pv_to_bus_cost_jpy,
+            "bess_to_bus_cost_jpy": bess_to_bus_cost_jpy,
+            "bess_total_flow_cost_jpy": bess_total_flow_cost_jpy,
+            "soc_violation_count": bess_soc_violation_count,
+            "soc_violation_kwh": bess_soc_violation_kwh,
+        },
         "grid_to_bus_kwh": grid_to_bus_kwh,
         "grid_to_bess_kwh": grid_to_bess_kwh,
         "grid_total_kwh": grid_total_kwh,
         "grid_import_kwh": grid_total_kwh,
         "facility_load_kwh": 0.0,
-        "grid_purchase_cost_jpy": electricity_cost_jpy,
+        "grid_purchase_cost_jpy": grid_energy_cost_jpy,
         "demand_charge_cost_jpy": demand_cost_jpy,
         "peak_grid_import_kw": peak_grid_kw,
         "peak_grid_kw": peak_grid_kw,

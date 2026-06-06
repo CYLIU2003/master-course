@@ -695,7 +695,9 @@ def _default_depot_energy_asset_row(depot_id: str) -> dict[str, Any]:
         "bess_charge_efficiency": 0.95,
         "bess_discharge_efficiency": 0.95,
         "bess_cycle_cost_yen_per_kwh": 0.0,
+        "allow_pv_to_bess": True,
         "allow_grid_to_bess": False,
+        "allow_bess_to_bus": True,
         "grid_to_bess_price_mode": "tou",
         "grid_to_bess_price_threshold_yen_per_kwh": 0.0,
         "grid_to_bess_allowed_slot_indices": [],
@@ -4555,7 +4557,9 @@ class App:
             "bess_charge_efficiency",
             "bess_discharge_efficiency",
             "bess_cycle_cost_yen_per_kwh",
+            "allow_pv_to_bess",
             "allow_grid_to_bess",
+            "allow_bess_to_bus",
             "grid_to_bess_price_mode",
             "grid_to_bess_price_threshold_yen_per_kwh",
             "bess_priority_mode",
@@ -4579,7 +4583,9 @@ class App:
             "bess_charge_efficiency": "充電効率",
             "bess_discharge_efficiency": "放電効率",
             "bess_cycle_cost_yen_per_kwh": "BESS→Bus単価[円/kWh]",
+            "allow_pv_to_bess": "PV→BESS",
             "allow_grid_to_bess": "Grid→BESS",
+            "allow_bess_to_bus": "BESS→Bus",
             "grid_to_bess_price_mode": "Grid→BESSモード",
             "grid_to_bess_price_threshold_yen_per_kwh": "Grid→BESS閾値[円/kWh]",
             "bess_priority_mode": "BESS優先モード",
@@ -4602,7 +4608,9 @@ class App:
             "bess_charge_efficiency": 90,
             "bess_discharge_efficiency": 90,
             "bess_cycle_cost_yen_per_kwh": 150,
+            "allow_pv_to_bess": 90,
             "allow_grid_to_bess": 90,
+            "allow_bess_to_bus": 90,
             "grid_to_bess_price_mode": 130,
             "grid_to_bess_price_threshold_yen_per_kwh": 170,
             "bess_priority_mode": 150,
@@ -4637,7 +4645,9 @@ class App:
         bess_charge_efficiency_var = tk.StringVar(value="0.95")
         bess_discharge_efficiency_var = tk.StringVar(value="0.95")
         bess_cycle_cost_var = tk.StringVar(value="0")
+        allow_pv_to_bess_var = tk.BooleanVar(value=True)
         allow_grid_to_bess_var = tk.BooleanVar(value=False)
+        allow_bess_to_bus_var = tk.BooleanVar(value=True)
         grid_to_bess_price_mode_var = tk.StringVar(value="tou")
         grid_to_bess_price_threshold_var = tk.StringVar(value="0")
         grid_to_bess_allowed_slots_var = tk.StringVar(value="")
@@ -4661,7 +4671,9 @@ class App:
         flag_row.pack(fill=tk.X, pady=2)
         ttk.Checkbutton(flag_row, text="PV有効(面積>0で自動)", variable=pv_enabled_var).pack(side=tk.LEFT)
         ttk.Checkbutton(flag_row, text="BESS有効", variable=bess_enabled_var).pack(side=tk.LEFT, padx=(12, 0))
+        ttk.Checkbutton(flag_row, text="PV→BESS許可", variable=allow_pv_to_bess_var).pack(side=tk.LEFT, padx=(12, 0))
         ttk.Checkbutton(flag_row, text="Grid→BESS許可", variable=allow_grid_to_bess_var).pack(side=tk.LEFT, padx=(12, 0))
+        ttk.Checkbutton(flag_row, text="BESS→Bus許可", variable=allow_bess_to_bus_var).pack(side=tk.LEFT, padx=(12, 0))
         ttk.Button(flag_row, text="容量からBESS既定値補完", command=lambda: _apply_bess_capacity_defaults()).pack(side=tk.LEFT, padx=(12, 0))
 
         self._labeled_entry(editor, "営業所面積[m²] depot_area_m2", depot_area_m2_var)
@@ -4746,14 +4758,14 @@ class App:
                 return
             bess_enabled_var.set(True)
             bess_power_kw_var.set(_format_float(capacity * 0.5))
-            bess_soc_min_kwh_var.set(_format_float(capacity * 0.1))
+            bess_soc_min_kwh_var.set(_format_float(capacity * 0.2))
             bess_initial_soc_kwh_var.set(_format_float(capacity * 0.5))
-            bess_soc_max_kwh_var.set(_format_float(capacity))
-            bess_terminal_soc_min_kwh_var.set(_format_float(capacity * 0.5))
-            bess_soc_min_percent_var.set("10")
+            bess_soc_max_kwh_var.set(_format_float(capacity * 0.9))
+            bess_terminal_soc_min_kwh_var.set(_format_float(capacity * 0.2))
+            bess_soc_min_percent_var.set("20")
             bess_initial_soc_percent_var.set("50")
-            bess_soc_max_percent_var.set("100")
-            bess_terminal_soc_min_percent_var.set("50")
+            bess_soc_max_percent_var.set("90")
+            bess_terminal_soc_min_percent_var.set("20")
             if not str(bess_charge_efficiency_var.get() or "").strip():
                 bess_charge_efficiency_var.set("0.95")
             if not str(bess_discharge_efficiency_var.get() or "").strip():
@@ -4781,7 +4793,9 @@ class App:
                 _row_value(row, "bess_charge_efficiency", "bessChargeEfficiency", 0.95),
                 _row_value(row, "bess_discharge_efficiency", "bessDischargeEfficiency", 0.95),
                 _row_value(row, "bess_cycle_cost_yen_per_kwh", "bessCycleCostYenPerKwh", 0.0),
+                bool(_row_value(row, "allow_pv_to_bess", "allowPvToBess", True)),
                 bool(_row_value(row, "allow_grid_to_bess", "allowGridToBess", False)),
+                bool(_row_value(row, "allow_bess_to_bus", "allowBessToBus", True)),
                 _row_value(row, "grid_to_bess_price_mode", "gridToBessPriceMode", "tou"),
                 _row_value(row, "grid_to_bess_price_threshold_yen_per_kwh", "gridToBessPriceThresholdYenPerKwh", 0.0),
                 _row_value(row, "bess_priority_mode", "bessPriorityMode", "pv_self_consumption"),
@@ -4816,7 +4830,9 @@ class App:
             bess_charge_efficiency_var.set(str(_row_value(row, "bess_charge_efficiency", "bessChargeEfficiency", 0.95)))
             bess_discharge_efficiency_var.set(str(_row_value(row, "bess_discharge_efficiency", "bessDischargeEfficiency", 0.95)))
             bess_cycle_cost_var.set(str(_row_value(row, "bess_cycle_cost_yen_per_kwh", "bessCycleCostYenPerKwh", 0.0)))
+            allow_pv_to_bess_var.set(bool(_row_value(row, "allow_pv_to_bess", "allowPvToBess", True)))
             allow_grid_to_bess_var.set(bool(_row_value(row, "allow_grid_to_bess", "allowGridToBess", False)))
+            allow_bess_to_bus_var.set(bool(_row_value(row, "allow_bess_to_bus", "allowBessToBus", True)))
             grid_to_bess_price_mode_var.set(str(_row_value(row, "grid_to_bess_price_mode", "gridToBessPriceMode", "tou") or "tou"))
             grid_to_bess_price_threshold_var.set(
                 str(_row_value(row, "grid_to_bess_price_threshold_yen_per_kwh", "gridToBessPriceThresholdYenPerKwh", 0.0))
@@ -4914,7 +4930,9 @@ class App:
             row["bess_charge_efficiency"] = charge_eff
             row["bess_discharge_efficiency"] = discharge_eff
             row["bess_cycle_cost_yen_per_kwh"] = cycle_cost
+            row["allow_pv_to_bess"] = bool(_row_value(row, "allow_pv_to_bess", "allowPvToBess", True))
             row["allow_grid_to_bess"] = allow_grid_to_bess
+            row["allow_bess_to_bus"] = bool(_row_value(row, "allow_bess_to_bus", "allowBessToBus", True))
             row["grid_to_bess_price_mode"] = price_mode
             row["bess_priority_mode"] = priority_mode
             return row
@@ -4953,7 +4971,9 @@ class App:
             row["bess_charge_efficiency"] = self._parse_float(bess_charge_efficiency_var.get(), 0.95)
             row["bess_discharge_efficiency"] = self._parse_float(bess_discharge_efficiency_var.get(), 0.95)
             row["bess_cycle_cost_yen_per_kwh"] = self._parse_float(bess_cycle_cost_var.get(), 0.0)
+            row["allow_pv_to_bess"] = bool(allow_pv_to_bess_var.get())
             row["allow_grid_to_bess"] = bool(allow_grid_to_bess_var.get())
+            row["allow_bess_to_bus"] = bool(allow_bess_to_bus_var.get())
             row["grid_to_bess_price_mode"] = grid_to_bess_price_mode_var.get().strip() or "tou"
             row["grid_to_bess_price_threshold_yen_per_kwh"] = self._parse_float(
                 grid_to_bess_price_threshold_var.get(),
@@ -4975,6 +4995,10 @@ class App:
                 bess_terminal_soc_min_kwh_var.get(),
             )
             row["bess_terminal_soc_min_percent"] = self._parse_float(bess_terminal_soc_min_percent_var.get(), 0.0) if bess_terminal_soc_min_percent_var.get().strip() else None
+            row["bess_initial_soc_ratio"] = (row["bess_initial_soc_kwh"] / capacity) if capacity > 0.0 else 0.0
+            row["bess_soc_min_ratio"] = (row["bess_soc_min_kwh"] / capacity) if capacity > 0.0 else 0.0
+            row["bess_soc_max_ratio"] = (row["bess_soc_max_kwh"] / capacity) if capacity > 0.0 else 0.0
+            row["bess_terminal_soc_min_ratio"] = (row["bess_terminal_soc_min_kwh"] / capacity) if capacity > 0.0 else 0.0
             row["provisional_energy_cost_yen_per_kwh"] = self._parse_float(provisional_energy_cost_var.get(), 0.0)
             row = _validate_bess_row(row)
             if row is None:
@@ -4990,7 +5014,9 @@ class App:
             bess_terminal_soc_min_percent_var.set(_soc_percent_from_kwh(row["bess_terminal_soc_min_kwh"], capacity))
             bess_charge_efficiency_var.set(str(row["bess_charge_efficiency"]))
             bess_discharge_efficiency_var.set(str(row["bess_discharge_efficiency"]))
+            allow_pv_to_bess_var.set(bool(row["allow_pv_to_bess"]))
             allow_grid_to_bess_var.set(bool(row["allow_grid_to_bess"]))
+            allow_bess_to_bus_var.set(bool(row["allow_bess_to_bus"]))
             row = _rebuild_pv_generation_for_row(row)
             return row
 
@@ -5014,7 +5040,9 @@ class App:
             bess_charge_efficiency_var.set("0.95")
             bess_discharge_efficiency_var.set("0.95")
             bess_cycle_cost_var.set("0")
+            allow_pv_to_bess_var.set(True)
             allow_grid_to_bess_var.set(False)
+            allow_bess_to_bus_var.set(True)
             grid_to_bess_price_mode_var.set("tou")
             grid_to_bess_price_threshold_var.set("0")
             grid_to_bess_allowed_slots_var.set("")
@@ -9103,7 +9131,7 @@ class App:
         win = tk.Toplevel(self.root)
         self.depot_manager_window = win
         win.title("営業所別充電器管理")
-        win.geometry("1060x700")
+        win.geometry("1060x820")
 
         left = ttk.Frame(win, padding=8)
         left.pack(side=tk.LEFT, fill=tk.Y)
@@ -9133,6 +9161,10 @@ class App:
         self.dm_bess_enabled_var = tk.BooleanVar(value=False)
         self.dm_bess_energy_kwh_var = tk.StringVar(value="0")
         self.dm_bess_power_kw_var = tk.StringVar(value="0")
+        self.dm_bess_initial_soc_percent_var = tk.StringVar(value="50")
+        self.dm_bess_soc_min_percent_var = tk.StringVar(value="20")
+        self.dm_bess_soc_max_percent_var = tk.StringVar(value="90")
+        self.dm_bess_terminal_soc_min_percent_var = tk.StringVar(value="20")
 
         self._labeled_entry(charger_box, "営業所ID", self.dm_depot_id_var, readonly=True)
         self._labeled_entry(charger_box, "営業所名", self.dm_depot_name_var, readonly=True)
@@ -9150,6 +9182,10 @@ class App:
         ttk.Checkbutton(bess_row, variable=self.dm_bess_enabled_var).pack(side=tk.LEFT)
         self._labeled_entry(charger_box, "BESS容量 [kWh]", self.dm_bess_energy_kwh_var)
         self._labeled_entry(charger_box, "BESS最大充放電出力 [kW]", self.dm_bess_power_kw_var)
+        self._labeled_entry(charger_box, "BESS初期SOC [%]", self.dm_bess_initial_soc_percent_var)
+        self._labeled_entry(charger_box, "BESSバッファ下限 [%]", self.dm_bess_soc_min_percent_var)
+        self._labeled_entry(charger_box, "BESSバッファ上限 [%]", self.dm_bess_soc_max_percent_var)
+        self._labeled_entry(charger_box, "BESS終端SOC下限 [%]", self.dm_bess_terminal_soc_min_percent_var)
         self.dm_depot_area_m2_var.trace_add("write", lambda *_args: self._refresh_depot_manager_pv_preview())
 
         btn_row = ttk.Frame(charger_box)
@@ -9185,6 +9221,45 @@ class App:
             self.dm_bess_enabled_var.set(True)
         if hasattr(self, "dm_bess_power_kw_var"):
             self.dm_bess_power_kw_var.set(f"{capacity * 0.5:.6f}".rstrip("0").rstrip("."))
+        if hasattr(self, "dm_bess_initial_soc_percent_var"):
+            self.dm_bess_initial_soc_percent_var.set("50")
+        if hasattr(self, "dm_bess_soc_min_percent_var"):
+            self.dm_bess_soc_min_percent_var.set("20")
+        if hasattr(self, "dm_bess_soc_max_percent_var"):
+            self.dm_bess_soc_max_percent_var.set("90")
+        if hasattr(self, "dm_bess_terminal_soc_min_percent_var"):
+            self.dm_bess_terminal_soc_min_percent_var.set("20")
+
+    def _depot_manager_soc_percent_from_asset(self, row: dict[str, Any], capacity: float, kwh_key: str, percent_key: str, ratio_key: str, default: float) -> str:
+        raw_percent = row.get(percent_key)
+        if raw_percent not in (None, ""):
+            return str(raw_percent)
+        raw_ratio = row.get(ratio_key)
+        if raw_ratio not in (None, ""):
+            try:
+                ratio = float(raw_ratio)
+                return f"{ratio * 100.0:.6f}".rstrip("0").rstrip(".")
+            except (TypeError, ValueError):
+                pass
+        raw_kwh = row.get(kwh_key)
+        if raw_kwh not in (None, "") and capacity > 0.0:
+            try:
+                return f"{float(raw_kwh) / capacity * 100.0:.6f}".rstrip("0").rstrip(".")
+            except (TypeError, ValueError):
+                pass
+        return f"{default:.6f}".rstrip("0").rstrip(".")
+
+    def _depot_manager_bess_soc_kwh_from_percent(self, percent_text: str, capacity: float, field_name: str) -> tuple[float, float] | None:
+        try:
+            percent = float(str(percent_text or "").strip())
+        except (TypeError, ValueError):
+            messagebox.showwarning("入力エラー", f"{field_name} は数値で入力してください")
+            return None
+        if not (0.0 <= percent <= 100.0):
+            messagebox.showwarning("入力エラー", f"{field_name} は 0〜100% の範囲で入力してください")
+            return None
+        ratio = percent / 100.0
+        return capacity * ratio, ratio
 
     def _depot_manager_asset_for_depot(self, depot_id: str) -> dict[str, Any]:
         try:
@@ -9206,8 +9281,13 @@ class App:
             pv_capacity = estimated
         self.dm_pv_capacity_kw_var.set(str(pv_capacity or 0.0))
         self.dm_bess_enabled_var.set(bool(row.get("bess_enabled", row.get("bessEnabled", False))))
-        self.dm_bess_energy_kwh_var.set(str(row.get("bess_energy_kwh", row.get("bessEnergyKwh", 0.0)) or 0.0))
+        capacity = self._parse_float(str(row.get("bess_energy_kwh", row.get("bessEnergyKwh", 0.0)) or 0.0), 0.0)
+        self.dm_bess_energy_kwh_var.set(str(capacity or 0.0))
         self.dm_bess_power_kw_var.set(str(row.get("bess_power_kw", row.get("bessPowerKw", 0.0)) or 0.0))
+        self.dm_bess_initial_soc_percent_var.set(self._depot_manager_soc_percent_from_asset(row, capacity, "bess_initial_soc_kwh", "bess_initial_soc_percent", "bess_initial_soc_ratio", 50.0))
+        self.dm_bess_soc_min_percent_var.set(self._depot_manager_soc_percent_from_asset(row, capacity, "bess_soc_min_kwh", "bess_soc_min_percent", "bess_soc_min_ratio", 20.0))
+        self.dm_bess_soc_max_percent_var.set(self._depot_manager_soc_percent_from_asset(row, capacity, "bess_soc_max_kwh", "bess_soc_max_percent", "bess_soc_max_ratio", 90.0))
+        self.dm_bess_terminal_soc_min_percent_var.set(self._depot_manager_soc_percent_from_asset(row, capacity, "bess_terminal_soc_min_kwh", "bess_terminal_soc_min_percent", "bess_terminal_soc_min_ratio", 20.0))
 
     def _sync_depot_manager_energy_asset_row(self, depot_id: str) -> bool:
         try:
@@ -9224,6 +9304,25 @@ class App:
         if bess_enabled and bess_power_kw <= 0.0:
             bess_power_kw = bess_energy_kwh * 0.5
             self.dm_bess_power_kw_var.set(f"{bess_power_kw:.6f}".rstrip("0").rstrip("."))
+        initial_soc = self._depot_manager_bess_soc_kwh_from_percent(self.dm_bess_initial_soc_percent_var.get(), bess_energy_kwh, "BESS初期SOC[%]")
+        soc_min = self._depot_manager_bess_soc_kwh_from_percent(self.dm_bess_soc_min_percent_var.get(), bess_energy_kwh, "BESSバッファ下限[%]")
+        soc_max = self._depot_manager_bess_soc_kwh_from_percent(self.dm_bess_soc_max_percent_var.get(), bess_energy_kwh, "BESSバッファ上限[%]")
+        terminal_soc_min = self._depot_manager_bess_soc_kwh_from_percent(self.dm_bess_terminal_soc_min_percent_var.get(), bess_energy_kwh, "BESS終端SOC下限[%]")
+        if None in (initial_soc, soc_min, soc_max, terminal_soc_min):
+            return False
+        initial_soc_kwh, initial_soc_ratio = initial_soc
+        soc_min_kwh, soc_min_ratio = soc_min
+        soc_max_kwh, soc_max_ratio = soc_max
+        terminal_soc_min_kwh, terminal_soc_min_ratio = terminal_soc_min
+        if bess_enabled and not (0.0 <= soc_min_ratio < soc_max_ratio <= 1.0):
+            messagebox.showwarning("入力エラー", "BESSバッファは 0 <= 下限 < 上限 <= 100% を満たしてください")
+            return False
+        if bess_enabled and not (soc_min_ratio <= initial_soc_ratio <= soc_max_ratio):
+            messagebox.showwarning("入力エラー", "BESS初期SOCはバッファ下限〜上限の範囲内にしてください")
+            return False
+        if bess_enabled and not (0.0 <= terminal_soc_min_ratio <= soc_max_ratio):
+            messagebox.showwarning("入力エラー", "BESS終端SOC下限は 0〜バッファ上限[%] の範囲にしてください")
+            return False
 
         target_idx = None
         for idx, item in enumerate(rows):
@@ -9247,17 +9346,30 @@ class App:
         row["bess_energy_kwh"] = bess_energy_kwh
         row["bess_power_kw"] = bess_power_kw
         if bess_enabled:
-            if self._parse_float(str(row.get("bess_soc_min_kwh", 0.0)), 0.0) <= 0.0:
-                row["bess_soc_min_kwh"] = bess_energy_kwh * 0.1
-            if self._parse_float(str(row.get("bess_initial_soc_kwh", 0.0)), 0.0) <= 0.0:
-                row["bess_initial_soc_kwh"] = bess_energy_kwh * 0.5
-            if self._parse_float(str(row.get("bess_soc_max_kwh", 0.0)), 0.0) <= 0.0:
-                row["bess_soc_max_kwh"] = bess_energy_kwh
-            if self._parse_float(str(row.get("bess_terminal_soc_min_kwh", 0.0)), 0.0) <= 0.0:
-                row["bess_terminal_soc_min_kwh"] = row.get("bess_initial_soc_kwh", bess_energy_kwh * 0.5)
+            row["bess_initial_soc_kwh"] = initial_soc_kwh
+            row["bess_soc_min_kwh"] = soc_min_kwh
+            row["bess_soc_max_kwh"] = soc_max_kwh
+            row["bess_terminal_soc_min_kwh"] = terminal_soc_min_kwh
+            row["bess_initial_soc_percent"] = initial_soc_ratio * 100.0
+            row["bess_soc_min_percent"] = soc_min_ratio * 100.0
+            row["bess_soc_max_percent"] = soc_max_ratio * 100.0
+            row["bess_terminal_soc_min_percent"] = terminal_soc_min_ratio * 100.0
+            row["bess_initial_soc_ratio"] = initial_soc_ratio
+            row["bess_soc_min_ratio"] = soc_min_ratio
+            row["bess_soc_max_ratio"] = soc_max_ratio
+            row["bess_terminal_soc_min_ratio"] = terminal_soc_min_ratio
             row.setdefault("bess_charge_efficiency", 0.95)
             row.setdefault("bess_discharge_efficiency", 0.95)
             row.setdefault("bess_priority_mode", "pv_self_consumption")
+        else:
+            row["bess_initial_soc_kwh"] = 0.0
+            row["bess_soc_min_kwh"] = 0.0
+            row["bess_soc_max_kwh"] = 0.0
+            row["bess_terminal_soc_min_kwh"] = 0.0
+            row["bess_initial_soc_ratio"] = 0.0
+            row["bess_soc_min_ratio"] = 0.0
+            row["bess_soc_max_ratio"] = 0.0
+            row["bess_terminal_soc_min_ratio"] = 0.0
         row = _rebuild_pv_generation_for_row(row)
         if target_idx is None:
             rows.append(row)
