@@ -34,6 +34,7 @@ from .optimization.common.energy_flow_accounting import (
 )
 from .optimization.accounting import build_accounting_artifacts, export_accounting_outputs
 from .parameter_builder import DerivedParams, get_grid_price, get_pv_gen
+from .reporting import rebuild_reporting_artifacts_in_place
 from .run_output_layout import allocate_run_dir
 from .route_code_utils import extract_route_series_from_candidates
 from .simulator import SimulationResult
@@ -397,6 +398,7 @@ def export_all(
         export_excel(data, ms, dp, milp_result, sim_result, run_dir, run_label)
     except ImportError:
         pass  # openpyxl 未インストール時はスキップ
+    reporting_result = rebuild_reporting_artifacts_in_place(run_dir)
 
     run_manifest = {
         "generated_at": datetime.now().isoformat(),
@@ -432,6 +434,11 @@ def export_all(
             "peak_grid_kw": "kW",
         },
         "graph": graph_artifacts,
+        "reporting_finalizer": {
+            "updated_files": reporting_result.updated_files,
+            "validation_status": reporting_result.validation_status,
+            "warnings": reporting_result.warnings,
+        },
     }
     (run_dir / "run_manifest.json").write_text(
         json.dumps(run_manifest, ensure_ascii=False, indent=2), encoding="utf-8"

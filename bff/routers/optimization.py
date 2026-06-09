@@ -4100,6 +4100,9 @@ def _persist_canonical_graph_exports(
         json.dumps(graph_manifest, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    from src.reporting import rebuild_reporting_artifacts_in_place
+
+    reporting_result = rebuild_reporting_artifacts_in_place(Path(output_dir))
     manifest_relpath = None
     manifest_relpath = "graph/route_band_diagrams/manifest.json"
     return {
@@ -4139,6 +4142,11 @@ def _persist_canonical_graph_exports(
         "initial_soc_precheck_path": accounting_paths.get("initial_soc_precheck_csv", "graph/initial_soc_precheck.csv"),
         "data_flow_validation_path": accounting_paths.get("data_flow_validation_csv", "graph/data_flow_validation.csv"),
         "accounting_summary": getattr(accounting_artifacts, "summary", {}),
+        "reporting_finalizer": {
+            "updated_files": reporting_result.updated_files,
+            "validation_status": reporting_result.validation_status,
+            "warnings": reporting_result.warnings,
+        },
         "refuel_events_path": "graph/refuel_events.csv",
         "planning_days": planning_days,
     }
